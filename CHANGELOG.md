@@ -1,3 +1,6 @@
+# v2.9.0.7
+- Deleted excessive logging statements in `filter_virus_reads.py` that were causing AWS Batch jobs to hang. See [#469](https://github.com/naobservatory/mgs-workflow/issues/469).
+
 # v2.9.0.6
 - Moved all outputs to main workflow for compatibility with Nextflow 25.04. (backported from v2.10.0.0):
     - Note that we are not compliant with the new strict syntax yet.
