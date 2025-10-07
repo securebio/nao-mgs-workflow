@@ -57,22 +57,14 @@ def filter_virus_reads(input_path, score_threshold, out_path):
             # 1. Are classified by Kraken as host-infecting viruses; or
             # 2. Are classified by Kraken as potentially host-infecting viruses, and have a normalized Bowtie2 score above the threshold
             # 3. Are unclassified by Kraken, but have a normalized Bowtie2 score above the threshold; or
-            msg = f"{kraken_classified}\t{kraken_assigned_host_virus}\t{adj_score}/{score_threshold}"
             if kraken_assigned_host_virus == 1:
-                msg = msg+"\tKEEP"
-                print_log(msg)
                 outf.write("\t".join(fields) + "\n")
             elif adj_score >= score_threshold and kraken_assigned_host_virus > 1:
-                msg = msg+"\tKEEP"
-                print_log(msg)
                 outf.write("\t".join(fields) + "\n")
             elif adj_score >= score_threshold and not kraken_classified:
-                msg = msg+"\tKEEP"
-                print_log(msg)
                 outf.write("\t".join(fields) + "\n")
             else:
-                msg = msg+"\tDISCARD"
-                print_log(msg)
+                pass
 
 def main():
     # Parse arguments
