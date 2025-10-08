@@ -1,0 +1,8 @@
+name: coreutils_gzip_gawk
+label: coreutils_gzip_gawk
+channels:
+  - conda-forge
+dependencies:
+  - conda-forge::coreutils=9.5
+  - conda-forge::gzip=1.13
+  - conda-forge::gawk=5.3.0

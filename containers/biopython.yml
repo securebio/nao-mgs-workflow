@@ -1,0 +1,10 @@
+name: biopython
+label: biopython
+channels:
+  - conda-forge
+  - bioconda
+dependencies:
+  - pip
+  - pip:
+    - biopython
+    - pandas

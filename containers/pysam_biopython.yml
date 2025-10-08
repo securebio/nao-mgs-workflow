@@ -1,0 +1,11 @@
+name: pysam_biopython
+label: pysam_biopython
+channels:
+  - conda-forge
+  - bioconda
+dependencies:
+  - pip
+  - pip:
+    - biopython==1.85
+    - pandas==2.2.3
+    - pysam==0.23.0
