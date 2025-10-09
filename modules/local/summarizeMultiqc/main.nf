@@ -1,6 +1,6 @@
 // Extract MultiQC data into a more usable form (single/interleaved version)
 process SUMMARIZE_MULTIQC {
-    label "R"
+    label "rpkg"
     label "single"
     input:
         tuple val(stage), val(sample), path(multiqc_data)

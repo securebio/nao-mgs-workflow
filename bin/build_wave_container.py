@@ -67,7 +67,7 @@ def build_wave_container(spec: dict) -> str:
 def update_containers_config(config_file: Path, label: str, container_url: str):
     """Update the container URL for a specific label in containers.config."""
     content = config_file.read_text()
-    pattern = rf'(withLabel:\s+{re.escape(label)}\s+{{\s*container\s*=\s*")[^"]+(")'
+    pattern = rf'(withLabel:\s+{re.escape(label)}\s+\{{(?:[^}}]|\n)*?container\s*=\s*")[^"]+(")'
     match = re.search(pattern, content, flags=re.DOTALL)
     if not match:
         print(f"Error: Label '{label}' not found in {config_file}", file=sys.stderr)

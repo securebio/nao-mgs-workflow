@@ -4,7 +4,5 @@ channels:
   - conda-forge
   - bioconda
 dependencies:
-  - pip==25.2
-  - pip:
-    - biopython==1.85
-    - pandas==2.2.3
+  - conda-forge::biopython=1.85
+  - conda-forge::pandas=2.2.3
