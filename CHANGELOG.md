@@ -4,6 +4,7 @@
     - Implemented container dependency scanning with Trivy (`bin/scan_containers.py`) and wrote corresponding Github Actions test (currently expected to fail).
     - Implemented programmatic generation of Wave containers from YAML configuration files (`bin/build_wave_container.py` and `bin/build_wave_containers.py`) and replaced Docker Hub containers with generated Wave Containers.
     - Deleted obsolete container specifications in `docker` directory.
+    - Updated non-results-affecting software versions to reduce vulnerabilities.
 
 # v3.0.1.2
 - `INDEX` workflow now uses daily releases of Virus-Host DB and NCBI taxonomy database, and the Kraken DB was updated to the latest version. (#445)
