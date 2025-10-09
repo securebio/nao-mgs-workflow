@@ -5,8 +5,8 @@ channels:
   - bioconda
 dependencies:
   - conda-forge::coreutils=9.5
-  - conda-forge::curl=8.10.1
+  - conda-forge::curl=8.14.1
   - conda-forge::unzip=6.0
   - conda-forge::awscli=2.31.11
   - bioconda::bowtie2=2.5.4
-  - bioconda::samtools=1.21
+  - bioconda::samtools=1.22.1

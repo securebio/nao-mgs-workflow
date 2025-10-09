@@ -3,4 +3,4 @@ label: python
 channels:
   - conda-forge
 dependencies:
-  - conda-forge::python=3.13.1
+  - conda-forge::python=3.14.0
