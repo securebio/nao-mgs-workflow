@@ -7,7 +7,7 @@ and extract the representative sequences of the top N largest clusters.
 | MODULES AND SUBWORKFLOWS |
 ***************************/
 
-include { MERGE_JOIN_READS } from "../../../subworkflows/local/mergeJoinReads"
+include { MERGE_JOIN_READS_LIST as MERGE_JOIN_READS } from "../../../subworkflows/local/mergeJoinReadsList"
 include { VSEARCH_CLUSTER_LIST as VSEARCH_CLUSTER } from "../../../modules/local/vsearch"
 include { PROCESS_VSEARCH_CLUSTER_OUTPUT_LIST as PROCESS_VSEARCH_CLUSTER_OUTPUT } from "../../../modules/local/processVsearchClusterOutput"
 include { DOWNSAMPLE_FASTN_BY_ID_LIST as DOWNSAMPLE_FASTN_BY_ID } from "../../../modules/local/downsampleFastnById"
