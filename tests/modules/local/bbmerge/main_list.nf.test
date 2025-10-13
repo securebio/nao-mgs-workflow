@@ -1,0 +1,125 @@
+nextflow_process {
+
+    name "Test process BBMERGE_LIST"
+    script "modules/local/bbmerge/main.nf"
+    process "BBMERGE_LIST"
+    config "tests/configs/run.config"
+    tag "module"
+    tag "bbmerge_list"
+
+    setup {
+        run("LOAD_SAMPLESHEET") {
+            script "subworkflows/local/loadSampleSheet/main.nf"
+            process {
+                """
+                input[0] = "${projectDir}/test-data/samplesheet.csv"
+                input[1] = "illumina"
+                input[2] = false
+                """
+            }
+        }
+        run("INTERLEAVE_FASTQ") {
+            script "modules/local/interleaveFastq/main.nf"
+            process {
+                """
+                input[0] = LOAD_SAMPLESHEET.out.samplesheet
+                """
+            }
+        }
+    }
+
+    test("Should process multiple FASTQ files in list format") {
+        tag "list_processing"
+        tag "expect_success"
+        when {
+            params {}
+            process {
+                '''
+                input[0] = INTERLEAVE_FASTQ.out.output
+                    .map { sample, fastq ->
+                        def fastq1 = file(fastq)
+                        def fastq2 = file("${workDir}/test_${sample}_10239_input.fastq.gz")
+                        def fastq3 = file("${workDir}/test_${sample}_186538_input.fastq.gz")
+                        fastq1.copyTo(fastq2)
+                        fastq1.copyTo(fastq3)
+                        [sample, [fastq2, fastq3]]
+                    }
+                '''
+            }
+        }
+        then {
+            // Should run without failures
+            assert process.success
+            def output_reads = process.out.reads[0][1]
+            def output_logs = process.out.log[0][1]
+            def input_files = process.out.input[0][1]
+            assert output_reads.size() == 4
+            assert output_logs.size() == 4
+            assert input_files.size() == 2
+            // Extract species IDs from input filenames and verify they're in output filenames
+            def species_ids = input_files.collect { file ->
+                def matcher = file.toString() =~ /_(\d+)_bbmerge_in/
+                matcher ? matcher[0][1] : null
+            }
+            assert species_ids.every { it != null }
+            def countGzipLines = { file -> path(file).linesGzip.size() }
+            def merged_files = output_reads.findAll { it.toString().contains('merged') && !it.toString().contains('unmerged') }
+            def unmerged_files = output_reads.findAll { it.toString().contains('unmerged') }
+            assert merged_files.size() == 2
+            assert unmerged_files.size() == 2
+            assert merged_files.every { merged ->
+                species_ids.any { species -> merged.toString().contains(species) }
+            }
+            assert unmerged_files.every { unmerged ->
+                species_ids.any { species -> unmerged.toString().contains(species) }
+            }
+            // Merged reads should have a nonzero number of lines divisible by four
+            // Unmerged reads should have a nonzero number of lines divisible by eight
+            for (int i = 0; i < 2; i++) {
+                def lines_merged = countGzipLines(merged_files[i])
+                def lines_unmerged = countGzipLines(unmerged_files[i])
+                assert lines_merged > 0
+                assert lines_unmerged > 0
+                assert lines_merged % 4 == 0
+                assert lines_unmerged % 8 == 0
+            }
+            // Total input and output read counts should match (accounting for merging)
+            def total_input_lines = input_files.collect { countGzipLines(it) }.sum()
+            def total_merged_lines = merged_files.collect { countGzipLines(it) }.sum()
+            def total_unmerged_lines = unmerged_files.collect { countGzipLines(it) }.sum()
+            assert total_input_lines == (total_merged_lines * 2) + total_unmerged_lines
+        }
+    }
+
+    test("Should handle empty input files and produce empty output files") {
+        tag "empty_file"
+        tag "expect_success"
+        when {
+            params {}
+            process {
+                '''
+                input[0] = Channel.of(
+                    ["test", "${projectDir}/test-data/toy-data/empty_file.txt"]
+                ).map { sample, empty ->
+                    def empty_file = file(empty)
+                    def f1 = file("${workDir}/test_${sample}_10239_input_empty.txt")
+                    def f2 = file("${workDir}/test_${sample}_186538_input_empty.txt")
+                    empty_file.copyTo(f1)
+                    empty_file.copyTo(f2)
+                    [sample, [f1, f2]]
+                }
+                '''
+            }
+        }
+        then {
+            // Should run without failures
+            assert process.success
+            def output_reads = process.out.reads[0][1]
+            def countGzipLines = { file -> path(file).linesGzip.size() }
+            // Both output files (merged and unmerged) for each input should be empty
+            for (file in output_reads) {
+                assert countGzipLines(file) == 0
+            }
+        }
+    }
+}

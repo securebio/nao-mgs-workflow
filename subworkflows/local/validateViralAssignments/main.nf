@@ -15,8 +15,8 @@ F. [TODO] Propagate validation information from cluster representatives to other
 
 include { SPLIT_VIRAL_TSV_BY_SELECTED_TAXID } from "../../../subworkflows/local/splitViralTsvBySelectedTaxid"
 include { CLUSTER_VIRAL_ASSIGNMENTS } from "../../../subworkflows/local/clusterViralAssignments"
-include { CONCATENATE_FILES_ACROSS_SELECTED_TAXID } from "../../../subworkflows/local/concatenateFilesAcrossSelectedTaxid"
-include { CONCATENATE_TSVS_ACROSS_SELECTED_TAXID } from "../../../subworkflows/local/concatenateTsvsAcrossSelectedTaxid"
+include { CONCATENATE_FILES_BY_EXTENSION } from "../../../modules/local/concatenateFilesByExtension"
+include { CONCATENATE_TSVS_LABELED } from "../../../modules/local/concatenateTsvs"
 include { BLAST_FASTA } from "../../../subworkflows/local/blastFasta"
 include { VALIDATE_CLUSTER_REPRESENTATIVES } from "../../../subworkflows/local/validateClusterRepresentatives"
 include { PROPAGATE_VALIDATION_INFORMATION } from "../../../subworkflows/local/propagateValidationInformation"
@@ -50,11 +50,11 @@ workflow VALIDATE_VIRAL_ASSIGNMENTS {
         cluster_ch = CLUSTER_VIRAL_ASSIGNMENTS(split_ch.fastq, params_map.validation_cluster_identity,
             params_map.cluster_min_len, params_map.validation_n_clusters, Channel.of(false))
         // 3. Concatenate data across species (prepare for group-level BLAST)
-        concat_fasta_ch = CONCATENATE_FILES_ACROSS_SELECTED_TAXID(cluster_ch.fasta, "cluster_reps")
-        concat_cluster_ch = CONCATENATE_TSVS_ACROSS_SELECTED_TAXID(cluster_ch.tsv, "cluster_info")
+        concat_fasta_ch = CONCATENATE_FILES_BY_EXTENSION(cluster_ch.fasta, "cluster_reps").output
+        concat_cluster_ch = CONCATENATE_TSVS_LABELED(cluster_ch.tsv, "cluster_info")
         // 4. Run BLAST on concatenated cluster representatives (single job per group)
         blast_fasta_params = params_map + [lca_prefix: "validation"]
-        blast_ch = BLAST_FASTA(concat_fasta_ch.output, ref_dir, blast_fasta_params)
+        blast_ch = BLAST_FASTA(concat_fasta_ch, ref_dir, blast_fasta_params)
         // 5. Validate original group hits against concatenated BLAST results
         distance_params = [
             taxid_field_1: "aligner_taxid_lca",
@@ -81,7 +81,7 @@ workflow VALIDATE_VIRAL_ASSIGNMENTS {
         test_split_tsv = split_ch.tsv
         test_cluster_tab = cluster_ch.tsv
         test_reps_fasta = cluster_ch.fasta
-        test_concat_fasta = concat_fasta_ch.output
+        test_concat_fasta = concat_fasta_ch
         test_concat_cluster = concat_cluster_ch.output
         test_blast_db = blast_ch.blast
         test_blast_query = blast_ch.query

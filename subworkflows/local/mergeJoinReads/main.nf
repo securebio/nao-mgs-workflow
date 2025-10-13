@@ -15,9 +15,9 @@ is necessitated by the fact that `single_end` is a channel, not a bare boolean.
 | MODULES AND SUBWORKFLOWS |
 ***************************/
 
-include { BBMERGE } from "../../../modules/local/bbmerge"
-include { JOIN_FASTQ } from "../../../modules/local/joinFastq"
-include { SUMMARIZE_BBMERGE } from "../../../modules/local/summarizeBBMerge"
+include { BBMERGE_LIST as BBMERGE } from "../../../modules/local/bbmerge"
+include { JOIN_FASTQ_LIST as JOIN_FASTQ } from "../../../modules/local/joinFastq"
+include { SUMMARIZE_BBMERGE_LIST as SUMMARIZE_BBMERGE } from "../../../modules/local/summarizeBBMerge"
 
 /***********
 | WORKFLOW |
@@ -39,7 +39,9 @@ workflow MERGE_JOIN_READS {
         // In paired-end case, merge and join
         merged_ch = BBMERGE(reads_ch_paired)
         single_read_ch_paired = JOIN_FASTQ(merged_ch.reads, false).reads
+            .map{ sample, files -> tuple(sample, files instanceof List ? files : [files]) }
         summarize_bbmerge_ch_paired = SUMMARIZE_BBMERGE(merged_ch.reads).summary
+            .map{ sample, files -> tuple(sample, files instanceof List ? files : [files]) }
         // In single-end case, take unmodified reads
         single_read_ch_single = reads_ch_single
         summarize_bbmerge_ch_single = Channel.empty()

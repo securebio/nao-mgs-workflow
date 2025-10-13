@@ -1,0 +1,118 @@
+nextflow_process {
+
+    name "Test process SUMMARIZE_BBMERGE_LIST"
+    script "modules/local/summarizeBBMerge/main.nf"
+    process "SUMMARIZE_BBMERGE_LIST"
+    config "tests/configs/run.config"
+    tag "module"
+    tag "summarize_bbmerge_list"
+
+    setup {
+        run("LOAD_SAMPLESHEET") {
+            script "subworkflows/local/loadSampleSheet/main.nf"
+            process {
+                """
+                input[0] = "${projectDir}/test-data/samplesheet.csv"
+                input[1] = "illumina"
+                input[2] = false
+                """
+            }
+        }
+        run("INTERLEAVE_FASTQ") {
+            script "modules/local/interleaveFastq/main.nf"
+            process {
+                """
+                input[0] = LOAD_SAMPLESHEET.out.samplesheet
+                """
+            }
+        }
+        run("BBMERGE") {
+            script "modules/local/bbmerge/main.nf"
+            process {
+                """
+                input[0] = INTERLEAVE_FASTQ.out.output
+                """
+            }
+        }
+    }
+
+    test("Should process multiple merged files in list format") {
+        tag "list_processing"
+        tag "expect_success"
+        when {
+            params {}
+            process {
+                '''
+                input[0] = BBMERGE.out.reads
+                    .map { sample, reads ->
+                        def merged = file(reads[0])
+                        def m1 = file("${workDir}/${sample}_10239_bbmerge_merged.fastq.gz")
+                        def m2 = file("${workDir}/${sample}_186538_bbmerge_merged.fastq.gz")
+                        merged.copyTo(m1)
+                        merged.copyTo(m2)
+                        [sample, [m1, m2]]
+                    }
+                '''
+            }
+        }
+        then {
+            // Should run without failures
+            assert process.success
+            def output_summaries = process.out.summary[0][1]
+            def input_files = process.out.input[0][1]
+            assert output_summaries.size() == 2
+            assert input_files.size() == 2
+            // Extract species IDs from input filenames and verify they're in output filenames
+            def species_ids = input_files.collect { input ->
+                def matcher = input.toString() =~ /_(\d+)_bbmerge_summary_in_merged/
+                matcher ? matcher[0][1] : null
+            }
+            assert species_ids.every { it != null }
+            assert output_summaries.every { output ->
+                species_ids.any { species -> output.toString().contains(species) }
+            }
+            // Output should have expected dimensions
+            def countGzipLines = { file -> path(file).linesGzip.size() }
+            for (int i = 0; i < 2; i++) {
+                def tab_out = path(output_summaries[i]).csv(sep: "\t", decompress: true)
+                assert tab_out.columnCount == 2
+                assert tab_out.columnNames == ["seq_id", "bbmerge_frag_length"]
+                def input_reads = countGzipLines(input_files[i]) / 4
+                assert tab_out.rowCount == input_reads
+            }
+        }
+    }
+
+    test("Should handle empty input files and produce header-only output files") {
+        tag "empty_file"
+        tag "expect_success"
+        when {
+            params {}
+            process {
+                '''
+                input[0] = Channel.of(
+                    ["test", "${projectDir}/test-data/toy-data/empty_file.txt"]
+                ).map { sample, empty ->
+                    def empty_file = file(empty)
+                    def f1 = file("${workDir}/test_10239_bbmerge_merged.fastq.gz")
+                    def f2 = file("${workDir}/test_186538_bbmerge_merged.fastq.gz")
+                    empty_file.copyTo(f1)
+                    empty_file.copyTo(f2)
+                    [sample, [f1, f2]]
+                }
+                '''
+            }
+        }
+        then {
+            // Should run without failures
+            assert process.success
+            def output_summaries = process.out.summary[0][1]
+            // Each output file should have only the header row (no data rows)
+            for (summary in output_summaries) {
+                def lines = path(summary).linesGzip.toList()
+                assert lines.size() == 1
+                assert lines[0] == "seq_id\tbbmerge_frag_length"
+            }
+        }
+    }
+}
