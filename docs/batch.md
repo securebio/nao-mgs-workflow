@@ -1,5 +1,8 @@
 # Running the pipeline on AWS Batch
 
+> [!IMPORTANT]
+> The instructions on this page do not reflect current best practices for internal SecureBio users. These users should instead refer to instructions in [this private repository](https://github.com/securebio/nao-aws-terraform/tree/main/batch-template) for setting up appropriate infrastructure using Terraform. External users are welcome to continue following these instructions if useful.
+
 This page contains recommendations for running the pipeline on [AWS Batch](https://aws.amazon.com/batch/), a tool which allows you to run Nextflow workflows in a highly parallelized and automated manner[^notebook].
 
 [^notebook]: The original source of this guide is [this notebook](https://data.securebio.org/wills-public-notebook/notebooks/2024-06-11_batch.html). This version will be updated to reflect changes to the pipeline and online resources.
@@ -7,7 +10,6 @@ This page contains recommendations for running the pipeline on [AWS Batch](https
 ## Step 1: Check your AWS permissions
 
 The most common failure modes in setting up Batch to work with Nextflow arise from insufficient AWS permissions. If you run into trouble at any point, make sure you have the following:
-
 
 1. **AWS Batch Permissions:** You need to have appropriate permissions to view, modify and run Batch compute environments and job queues. The simplest way to do this is to have your administrator add you to the `AWSBatchFullAccess` IAM policy.
 2. **S3 Permissions:** You need to have appropriate permissions to read, write and view the S3 bucket where your workflow data is stored, including the ability to list, read, write, and delete objects[^s3].
