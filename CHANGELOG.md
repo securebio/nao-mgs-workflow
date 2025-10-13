@@ -1,3 +1,10 @@
+# v3.0.1.3-dev
+
+- Refactored `VALIDATE_VIRAL_ASSIGNMENT` in `DOWNSTREAM` to iterate through clusters within groups, reducing channel elements from N_groups × N_clusters to N_groups (#477)
+  - Updated modules to run loops internally rather than having Nextflow iterate through individual elements
+  - Created new processes with `_LIST` suffix for backwards compatibility, with tests in `main_list.nf.test` files
+  - Removed `CONCATENATE_FILES_ACROSS_SELECTED_TAXID` and `CONCATENATE_TSVS_ACROSS_SELECTED_TAXID` subworkflows which were reduced to single modules by this refactoring
+
 # v3.0.1.2
 - `INDEX` workflow now uses daily releases of Virus-Host DB and NCBI taxonomy database, and the Kraken DB was updated to the latest version. (#445)
 - Updated virus exclusion list (`ref/hv_patterns_exclude.txt`) used by `INDEX` workflow to exclude additional viruses that were causing false positives. (#445)

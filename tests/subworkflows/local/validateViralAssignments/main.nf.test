@@ -74,7 +74,6 @@ nextflow_workflow {
 
     test("Should run without failures on valid input data") {
         tag "expect_success"
-        tag "bruh"
         setup {
             run("LOAD_DOWNSTREAM_DATA") {
                 script "subworkflows/local/loadDownstreamData/main.nf"
