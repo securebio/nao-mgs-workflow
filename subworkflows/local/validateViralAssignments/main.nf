@@ -2,11 +2,10 @@
 Perform efficient post-hoc validation of putative viral reads identified by the RUN workflow.
 
 A. Partition putative hits by assigned species
-B. Extract into FASTQ and merge read pairs into single sequences
-C. Cluster sequences from each species and identify representative sequences
-D. Align representative sequences against a large reference DB
-E. Compare taxids assigned in (4) to those assigned by RUN workflow
-F. [TODO] Propagate validation information from cluster representatives to other hits
+B. Cluster sequences from each species and identify labeled representative sequences
+C. Align representative sequences against a large reference DB
+D. Compare taxids assigned to those assigned by RUN workflow
+E. Propagate validation information from cluster representatives to other hits
 */
 
 /***************************
@@ -15,7 +14,6 @@ F. [TODO] Propagate validation information from cluster representatives to other
 
 include { SPLIT_VIRAL_TSV_BY_SELECTED_TAXID } from "../../../subworkflows/local/splitViralTsvBySelectedTaxid"
 include { CLUSTER_VIRAL_ASSIGNMENTS } from "../../../subworkflows/local/clusterViralAssignments"
-include { ADD_SAMPLE_COLUMN_LIST as LABEL_GROUP_SPECIES } from "../../../modules/local/addSampleColumn"
 include { CONCATENATE_FILES_BY_EXTENSION } from "../../../modules/local/concatenateFilesByExtension"
 include { CONCATENATE_TSVS_LABELED } from "../../../modules/local/concatenateTsvs"
 include { BLAST_FASTA } from "../../../subworkflows/local/blastFasta"
@@ -50,15 +48,13 @@ workflow VALIDATE_VIRAL_ASSIGNMENTS {
         // 2. Cluster sequences within species and obtain representatives of largest clusters
         cluster_ch = CLUSTER_VIRAL_ASSIGNMENTS(split_ch.fastq, params_map.validation_cluster_identity,
             params_map.cluster_min_len, params_map.validation_n_clusters, Channel.of(false))
-        // 3. Add group_species column to cluster TSVs
-        labeled_cluster_ch = LABEL_GROUP_SPECIES(cluster_ch.tsv, "group_species", "group_species")
-        // 4. Concatenate data across species (prepare for group-level BLAST)
+        // 3. Concatenate data across species (prepare for group-level BLAST)
         concat_fasta_ch = CONCATENATE_FILES_BY_EXTENSION(cluster_ch.fasta, "cluster_reps").output
-        concat_cluster_ch = CONCATENATE_TSVS_LABELED(labeled_cluster_ch.output, "cluster_info")
-        // 5. Run BLAST on concatenated cluster representatives (single job per group)
+        concat_cluster_ch = CONCATENATE_TSVS_LABELED(cluster_ch.tsv, "cluster_info")
+        // 4. Run BLAST on concatenated cluster representatives (single job per group)
         blast_fasta_params = params_map + [lca_prefix: "validation"]
         blast_ch = BLAST_FASTA(concat_fasta_ch, ref_dir, blast_fasta_params)
-        // 6. Validate original group hits against concatenated BLAST results
+        // 5. Validate original group hits against concatenated BLAST results
         distance_params = [
             taxid_field_1: "aligner_taxid_lca",
             taxid_field_2: "validation_staxid_lca",
@@ -67,10 +63,10 @@ workflow VALIDATE_VIRAL_ASSIGNMENTS {
         ]
         validate_ch = VALIDATE_CLUSTER_REPRESENTATIVES(groups, blast_ch.lca,
             ref_dir, distance_params)
-        // 7. Propagate validation information back to individual hits
+        // 6. Propagate validation information back to individual hits
         propagate_ch = PROPAGATE_VALIDATION_INFORMATION(groups, concat_cluster_ch.output,
             validate_ch.output, "aligner_taxid_lca")
-        // 8. Cleanup and generate final outputs
+        // 7. Cleanup and generate final outputs
         regrouped_drop_ch = SELECT_TSV_COLUMNS(propagate_ch.output, "taxid_species,selected_taxid", "drop").output 
         output_hits_ch = COPY_HITS(regrouped_drop_ch, "validation_hits.tsv.gz")
         output_blast_ch = COPY_BLAST(blast_ch.blast, "validation_blast.tsv.gz")

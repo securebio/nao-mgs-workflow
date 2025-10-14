@@ -26,9 +26,12 @@ process DOWNSAMPLE_FASTN_BY_ID_LIST {
         tuple val(sample), path("input_*"), emit: input
     shell:
         '''
-        for reads_file in !{sample}_*_joined.{fastq,fasta}.gz; do
-            [[ -e ${reads_file} ]] || continue
+        for reads_file in !{fastn}; do
             species=$(basename ${reads_file} | grep -oP '!{sample}_\\K\\d+(?=_)')
+            if [ -z "$species" ]; then
+                >&2 echo "Error: Could not extract species from filename: ${reads_file}"
+                exit 1
+            fi
             ids_file="!{sample}_${species}_vsearch_ids.txt"
             output=downsampled_${reads_file}
 

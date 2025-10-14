@@ -39,6 +39,10 @@ process PROCESS_VSEARCH_CLUSTER_OUTPUT_LIST {
         """
         for summary in ${summaries}; do
             species=\$(basename \${summary} | grep -oP '${sample}_\\K\\d+(?=_)')
+            if [ -z "\$species" ]; then
+                >&2 echo "Error: Could not extract species from filename: \${summary}"
+                exit 1
+            fi
             out_db=${sample}_\${species}_vsearch_tab.tsv.gz
             out_id=${sample}_\${species}_vsearch_ids.txt
             par="-n ${n_clusters} ${prefix_string}"

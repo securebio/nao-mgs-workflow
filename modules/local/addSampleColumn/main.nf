@@ -32,11 +32,9 @@ process ADD_SAMPLE_COLUMN_LIST {
         '''
         for tsv_file in !{tsvs}; do
             # Extract species taxid from filename
-            # Pattern: {group}_{species}_vsearch_tab.tsv or {group}_{species}_vsearch_tab.tsv.gz
-            species=$(echo "$tsv_file" | sed -n 's/^!{group}_\\(.*\\)_vsearch_tab\\.tsv\\(\\.gz\\)\\?$/\\1/p')
-
+            species=$(basename ${tsv_file} | grep -oP '!{group}_\\K\\d+(?=_)')
             if [ -z "$species" ]; then
-                echo "Error: Could not extract species from filename: $tsv_file"
+                >&2 echo "Error: Could not extract species from filename: ${tsv_file}"
                 exit 1
             fi
 

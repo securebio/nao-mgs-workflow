@@ -28,6 +28,10 @@ process EXTRACT_VIRAL_HITS_TO_FASTQ_NOREF_LABELED_LIST {
         '''
         for tsv in !{tsvs}; do
             species=$(basename ${tsv} | grep -oP 'partition_\\K\\d+(?=_)')
+            if [ -z "$species" ]; then
+                >&2 echo "Error: Could not extract species from filename: ${tsv}"
+                exit 1
+            fi
             fastq_out=!{sample}_${species}_hits_out.fastq.gz
             extract_viral_hits.py !{drop_unpaired ? "-d" : ""} -i ${tsv} -o ${fastq_out}
             ln -s ${tsv} !{sample}_${species}_hits_in.tsv.gz

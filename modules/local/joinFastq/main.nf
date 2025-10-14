@@ -34,32 +34,36 @@ process JOIN_FASTQ_LIST {
     label "biopython"
     label "single"
     input:
-        tuple val(sample), path(reads)
+        tuple val(sample), path(merged_reads), path(unmerged_reads)
         val(debug)
     output:
         tuple val(sample), path("${sample}_*[0-9]_joined.fastq.gz"), emit: reads
         tuple val(sample), path("${sample}_*_joined_in_{merged,unmerged}.fastq.gz"), emit: input
     shell:
         '''
-        for merged_file in !{sample}_*_bbmerge_merged.fastq.gz; do
-            # Prepare to join unmerged read pairs
-            species=$(basename ${merged_file} | grep -oP '!{sample}_\\K\\d+(?=_)')
-            unmerged_file="!{sample}_${species}_bbmerge_unmerged.fastq.gz"
-            output=!{sample}_${species}_joined.fastq.gz
-            temp_joined=!{sample}_${species}_bbmerge_unmerged_joined.fastq.gz
+        set -euo pipefail
 
-            if [[ ! -f ${unmerged_file} ]]; then
-                >&2 echo "Error: Matching unmerged file not found for ${merged_file}"
+        merged_array=(!{merged_reads})
+        unmerged_array=(!{unmerged_reads})
+ 
+        for i in "${!merged_array[@]}"; do
+            merged_file="${merged_array[$i]}"
+            unmerged_file="${unmerged_array[$i]}"
+
+            species=$(basename ${merged_file} | grep -oP '!{sample}_\\K\\d+(?=_)')
+            if [ -z "$species" ]; then
+                >&2 echo "Error: Could not extract species from filename: ${merged_file}"
                 exit 1
             fi
 
-            # Join unmerged read pairs
+            output=!{sample}_${species}_joined.fastq.gz
+            temp_joined=!{sample}_${species}_bbmerge_unmerged_joined.fastq.gz
+
             join_fastq_interleaved.py ${unmerged_file} ${temp_joined} !{ debug ? "--debug" : "" }
-            # Concatenate single output file
+
             cat ${merged_file} ${temp_joined} > ${output}
             rm ${temp_joined}
 
-            # Link input reads for testing
             ln -s ${merged_file} !{sample}_${species}_joined_in_merged.fastq.gz
             ln -s ${unmerged_file} !{sample}_${species}_joined_in_unmerged.fastq.gz
         done

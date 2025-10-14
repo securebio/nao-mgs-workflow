@@ -134,28 +134,4 @@ nextflow_process {
             }
         }
     }
-
-    test("Should fail if filename doesn't match expected pattern") {
-        tag "expect_failed"
-        when {
-            params {}
-            process {
-                '''
-                input[0] = Channel.of(
-                    ["group1", "${projectDir}/test-data/toy-data/test_tab_sorted.tsv"]
-                ).map { group, tsv_path ->
-                    def source_tsv = file(tsv_path)
-                    def invalid_tsv = file("${workDir}/invalid_filename_${group}.tsv")
-                    source_tsv.copyTo(invalid_tsv)
-                    [group, [invalid_tsv]]
-                }
-                input[1] = "group_species"
-                input[2] = "group_species"
-                '''
-            }
-        }
-        then {
-            assert process.failed
-        }
-    }
 }

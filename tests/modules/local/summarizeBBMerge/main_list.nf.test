@@ -48,9 +48,13 @@ nextflow_process {
                         def merged = file(reads[0])
                         def m1 = file("${workDir}/${sample}_10239_bbmerge_merged.fastq.gz")
                         def m2 = file("${workDir}/${sample}_186538_bbmerge_merged.fastq.gz")
+                        def u1 = file("${workDir}/${sample}_10239_bbmerge_unmerged.fastq.gz")
+                        def u2 = file("${workDir}/${sample}_186538_bbmerge_unmerged.fastq.gz")
                         merged.copyTo(m1)
                         merged.copyTo(m2)
-                        [sample, [m1, m2]]
+                        merged.copyTo(u1)
+                        merged.copyTo(u2)
+                        [sample, [m1, m2], [u1, u2]]
                     }
                 '''
             }
@@ -96,9 +100,13 @@ nextflow_process {
                     def empty_file = file(empty)
                     def f1 = file("${workDir}/test_10239_bbmerge_merged.fastq.gz")
                     def f2 = file("${workDir}/test_186538_bbmerge_merged.fastq.gz")
+                    def u1 = file("${workDir}/test_10239_bbmerge_unmerged.fastq.gz")
+                    def u2 = file("${workDir}/test_186538_bbmerge_unmerged.fastq.gz")
                     empty_file.copyTo(f1)
                     empty_file.copyTo(f2)
-                    [sample, [f1, f2]]
+                    empty_file.copyTo(u1)
+                    empty_file.copyTo(u2)
+                    [sample, [f1, f2], [u1, u2]]
                 }
                 '''
             }

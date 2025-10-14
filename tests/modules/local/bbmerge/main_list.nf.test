@@ -48,14 +48,17 @@ nextflow_process {
             }
         }
         then {
-            // Should run without failures
             assert process.success
-            def output_reads = process.out.reads[0][1]
+            def merged_files = process.out.reads[0][1]
+            def unmerged_files = process.out.reads[0][2]
             def output_logs = process.out.log[0][1]
             def input_files = process.out.input[0][1]
-            assert output_reads.size() == 4
+
+            assert merged_files.size() == 2
+            assert unmerged_files.size() == 2
             assert output_logs.size() == 4
             assert input_files.size() == 2
+
             // Extract species IDs from input filenames and verify they're in output filenames
             def species_ids = input_files.collect { file ->
                 def matcher = file.toString() =~ /_(\d+)_bbmerge_in/
@@ -63,10 +66,6 @@ nextflow_process {
             }
             assert species_ids.every { it != null }
             def countGzipLines = { file -> path(file).linesGzip.size() }
-            def merged_files = output_reads.findAll { it.toString().contains('merged') && !it.toString().contains('unmerged') }
-            def unmerged_files = output_reads.findAll { it.toString().contains('unmerged') }
-            assert merged_files.size() == 2
-            assert unmerged_files.size() == 2
             assert merged_files.every { merged ->
                 species_ids.any { species -> merged.toString().contains(species) }
             }
@@ -112,12 +111,12 @@ nextflow_process {
             }
         }
         then {
-            // Should run without failures
             assert process.success
-            def output_reads = process.out.reads[0][1]
+            def merged_files = process.out.reads[0][1]
+            def unmerged_files = process.out.reads[0][2]
             def countGzipLines = { file -> path(file).linesGzip.size() }
-            // Both output files (merged and unmerged) for each input should be empty
-            for (file in output_reads) {
+
+            for (file in merged_files + unmerged_files) {
                 assert countGzipLines(file) == 0
             }
         }

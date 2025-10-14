@@ -19,7 +19,6 @@ include { JOIN_TSVS } from "../../../modules/local/joinTsvs"
 include { PARTITION_TSV } from "../../../modules/local/partitionTsv"
 include { SORT_TSV as SORT_GROUP_TAXID } from "../../../modules/local/sortTsv"
 include { SORT_TSV as SORT_JOINED_SPECIES } from "../../../modules/local/sortTsv"
-include { EXTRACT_VIRAL_HITS_TO_FASTQ_NOREF_LABELED as EXTRACT_FASTQ } from "../../../modules/local/extractViralHitsToFastqNoref"
 include { EXTRACT_VIRAL_HITS_TO_FASTQ_NOREF_LABELED_LIST as EXTRACT_FASTQ_LIST } from "../../../modules/local/extractViralHitsToFastqNoref"
 include { ADD_CONDITIONAL_TSV_COLUMN } from "../../../modules/local/addConditionalTsvColumn"
 

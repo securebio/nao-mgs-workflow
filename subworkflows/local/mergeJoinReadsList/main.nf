@@ -38,9 +38,13 @@ workflow MERGE_JOIN_READS_LIST {
         reads_ch_paired = single_end_check.paired.combine(reads_ch).map{it -> [it[1], it[2]] }
         // In paired-end case, merge and join
         merged_ch = BBMERGE(reads_ch_paired)
-        single_read_ch_paired = JOIN_FASTQ(merged_ch.reads, false).reads
+        // Sort both merged and unmerged lists to ensure alignment
+        sorted_reads_ch = merged_ch.reads.map { sample, merged, unmerged ->
+            tuple(sample, merged.sort(), unmerged.sort())
+        }
+        single_read_ch_paired = JOIN_FASTQ(sorted_reads_ch, false).reads
             .map{ sample, files -> tuple(sample, files instanceof List ? files : [files]) }
-        summarize_bbmerge_ch_paired = SUMMARIZE_BBMERGE(merged_ch.reads).summary
+        summarize_bbmerge_ch_paired = SUMMARIZE_BBMERGE(sorted_reads_ch).summary
             .map{ sample, files -> tuple(sample, files instanceof List ? files : [files]) }
         // In single-end case, take unmodified reads
         single_read_ch_single = reads_ch_single

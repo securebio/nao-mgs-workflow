@@ -31,8 +31,12 @@ process CONVERT_FASTQ_FASTA_LIST {
         tuple val(sample), path("${sample}_*_in.fastq.gz"), emit: input
     shell:
         '''
-        for fastq in downsampled_!{sample}_*_joined.fastq.gz; do
+        for fastq in !{fastqs}; do
             species=$(basename ${fastq} | grep -oP '!{sample}_\\K\\d+(?=_)')
+            if [ -z "$species" ]; then
+                >&2 echo "Error: Could not extract species from filename: ${fastq}"
+                exit 1
+            fi
             output=!{sample}_${species}_converted.fasta.gz
             # Perform conversion
             zcat ${fastq} | seqtk seq -a | gzip -c > ${output}

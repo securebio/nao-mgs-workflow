@@ -51,6 +51,10 @@ process VSEARCH_CLUSTER_LIST {
         for reads_file in !{reads}; do
             # Define paths and parameters
             species=$(basename ${reads_file} | grep -oP '!{sample}_\\K\\d+(?=_)')
+            if [ -z "$species" ]; then
+                >&2 echo "Error: Could not extract species from filename: ${reads_file}"
+                exit 1
+            fi
             or=!{sample}_${species}_vsearch_reps.fasta
             os=!{sample}_${species}_vsearch_summary.tsv
             log=!{sample}_${species}_vsearch_log.txt

@@ -55,7 +55,7 @@ process BBMERGE_LIST {
     input:
         tuple val(sample), path(reads_interleaved)
     output:
-        tuple val(sample), path("${sample}_*_bbmerge_{merged,unmerged}.fastq.gz"), emit: reads
+        tuple val(sample), path("${sample}_*_bbmerge_merged.fastq.gz"), path("${sample}_*_bbmerge_unmerged.fastq.gz"), emit: reads
         tuple val(sample), path("${sample}_*_bbmerge_{stats,log}.txt"), emit: log
         tuple val(sample), path("${sample}_*_bbmerge_in.fastq.gz"), emit: input
     shell:
@@ -64,6 +64,10 @@ process BBMERGE_LIST {
         for reads in !{reads_interleaved}; do
             # Prepare inputs and outputs
             species=$(basename ${reads} | grep -oP '!{sample}_\\K\\d+(?=_)')
+            if [ -z "$species" ]; then
+                >&2 echo "Error: Could not extract species from filename: ${reads}"
+                exit 1
+            fi
             ou=!{sample}_${species}_bbmerge_unmerged.fastq.gz
             om=!{sample}_${species}_bbmerge_merged.fastq.gz
             stats=!{sample}_${species}_bbmerge_stats.txt
