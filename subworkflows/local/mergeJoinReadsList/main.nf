@@ -39,8 +39,13 @@ workflow MERGE_JOIN_READS_LIST {
         // In paired-end case, merge and join
         merged_ch = BBMERGE(reads_ch_paired)
         // Sort both merged and unmerged lists to ensure alignment
+        // Note: Must wrap single Paths in a list before sorting because calling .sort() on a
+        // single Path treats it as an iterable of path segments, returning ["segment1", "segment2", ...]
+        // instead of preserving the Path object, which causes Nextflow file staging collisions
         sorted_reads_ch = merged_ch.reads.map { sample, merged, unmerged ->
-            tuple(sample, merged.sort(), unmerged.sort())
+            def merged_list = merged instanceof List ? merged : [merged]
+            def unmerged_list = unmerged instanceof List ? unmerged : [unmerged]
+            tuple(sample, merged_list.sort { it.name }, unmerged_list.sort { it.name })
         }
         single_read_ch_paired = JOIN_FASTQ(sorted_reads_ch, false).reads
             .map{ sample, files -> tuple(sample, files instanceof List ? files : [files]) }

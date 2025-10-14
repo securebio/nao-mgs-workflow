@@ -35,8 +35,15 @@ workflow CLUSTER_VIRAL_ASSIGNMENTS {
         // 4. Add group_species column to cluster TSVs
         labeled_cluster_ch = LABEL_GROUP_SPECIES(cluster_info_ch.output, "group_species", "group_species")
         // 5. Extract representative sequences for the N largest clusters for each species
+        // Note: Must wrap single Paths in a list before sorting because calling .sort() on a
+        // single Path treats it as an iterable of path segments, returning ["segment1", "segment2", ...]
+        // instead of preserving the Path object, which causes Nextflow file staging collisions
         id_prep_ch = merge_ch.single_reads.combine(cluster_info_ch.ids, by: 0)
-            .map { sample, reads, ids -> tuple(sample, reads.sort(), ids.sort()) }
+            .map { sample, reads, ids ->
+                def reads_list = reads instanceof List ? reads : [reads]
+                def ids_list = ids instanceof List ? ids : [ids]
+                tuple(sample, reads_list.sort { it.name }, ids_list.sort { it.name })
+            }
         rep_fastq_ch = DOWNSAMPLE_FASTN_BY_ID(id_prep_ch).output
         rep_fasta_ch = CONVERT_FASTQ_FASTA(rep_fastq_ch).output
     emit:
