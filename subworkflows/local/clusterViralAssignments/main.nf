@@ -36,6 +36,7 @@ workflow CLUSTER_VIRAL_ASSIGNMENTS {
         labeled_cluster_ch = LABEL_GROUP_SPECIES(cluster_info_ch.output, "group_species", "group_species")
         // 5. Extract representative sequences for the N largest clusters for each species
         id_prep_ch = merge_ch.single_reads.combine(cluster_info_ch.ids, by: 0)
+            .map { sample, reads, ids -> tuple(sample, reads.sort(), ids.sort()) }
         rep_fastq_ch = DOWNSAMPLE_FASTN_BY_ID(id_prep_ch).output
         rep_fasta_ch = CONVERT_FASTQ_FASTA(rep_fastq_ch).output
     emit:

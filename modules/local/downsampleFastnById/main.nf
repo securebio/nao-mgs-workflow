@@ -26,19 +26,13 @@ process DOWNSAMPLE_FASTN_BY_ID_LIST {
         tuple val(sample), path("input_*"), emit: input
     shell:
         '''
-        for reads_file in !{fastn}; do
-            species=$(basename ${reads_file} | grep -oP '!{sample}_\\K\\d+(?=_)')
-            if [ -z "$species" ]; then
-                >&2 echo "Error: Could not extract species from filename: ${reads_file}"
-                exit 1
-            fi
-            ids_file="!{sample}_${species}_vsearch_ids.txt"
-            output=downsampled_${reads_file}
+        reads_array=(!{fastn})
+        ids_array=(!{ids})
 
-            if [[ ! -f ${ids_file} ]]; then
-                >&2 echo "Error: Matching IDs file not found for ${reads_file}"
-                exit 1
-            fi
+        for i in "${!reads_array[@]}"; do
+            reads_file="${reads_array[$i]}"
+            ids_file="${ids_array[$i]}"
+            output=downsampled_${reads_file}
 
             seqkit grep -f ${ids_file} ${reads_file} | seqkit rmdup | !{fastn.toString().endsWith(".gz") ? 'gzip -c' : 'cat'} > ${output}
 
