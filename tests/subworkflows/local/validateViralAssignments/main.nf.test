@@ -130,17 +130,25 @@ nextflow_workflow {
         then {
             // Should run without failures
             assert workflow.success
-            // Clustering should preserve reads
-            def tabs_split = workflow.out.test_split_tsv.collect{path(it[1]).csv(sep: "\t",decompress: true)}
-            def tabs_clust = workflow.out.test_cluster_tab.collect{path(it[1]).csv(sep: "\t",decompress: true)}
+            // Clustering should preserve reads (test_split_tsv and test_cluster_tab are now list-wrapped)
+            def tabs_split = workflow.out.test_split_tsv.collect{it[1]}.flatten().collect{path(it).csv(sep: "\t",decompress: true)}
+            def tabs_clust = workflow.out.test_cluster_tab.collect{it[1]}.flatten().collect{path(it).csv(sep: "\t",decompress: true)}
             assert tabs_split.size() == tabs_clust.size()
             for (int i = 0; i < tabs_split.size(); i++) {
                 assert tabs_split[i].rowCount == tabs_clust[i].rowCount
             }
-            // Concatenation should work correctly
-            def cluster_fasta = workflow.out.test_reps_fasta.collect{path(it[1]).fasta}
+            // Concatenation should work correctly (test_reps_fasta is list-wrapped, test_concat_fasta is glob)
+            def cluster_fasta = workflow.out.test_reps_fasta.collect{it[1]}.flatten().collect{path(it).fasta}
             def concat_fasta = workflow.out.test_concat_fasta.collect{path(it[1]).fasta}
-            def cluster_labels = workflow.out.test_reps_fasta.collect{it[0]}
+            // Reconstruct group_species labels from filenames (e.g., "gs1_10239_vsearch_reps.fasta.gz")
+            def cluster_labels = workflow.out.test_reps_fasta.collect{sample, files ->
+                files.collect{file ->
+                    def filepath = file.toString()
+                    def basename = filepath.tokenize('/')[-1]
+                    def species = (basename =~ /${sample}_(\d+)_/)[0][1]
+                    "${sample}_${species}"
+                }
+            }.flatten()
             def groups_from_species = cluster_labels.collect { label ->
                 def pattern = /^(.*?)_(\d+)$/
                 def matcher = (label =~ pattern)

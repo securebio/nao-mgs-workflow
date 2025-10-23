@@ -1,0 +1,94 @@
+nextflow_process {
+
+    name "Test process JOIN_FASTQ_LIST"
+    script "modules/local/joinFastq/main.nf"
+    process "JOIN_FASTQ_LIST"
+    config "tests/configs/run.config"
+    tag "module"
+    tag "join_fastq_list"
+
+    setup {
+        run("LOAD_SAMPLESHEET") {
+            script "subworkflows/local/loadSampleSheet/main.nf"
+            process {
+                """
+                input[0] = "${projectDir}/test-data/samplesheet.csv"
+                input[1] = "illumina"
+                input[2] = false
+                """
+            }
+        }
+        run("INTERLEAVE_FASTQ") {
+            script "modules/local/interleaveFastq/main.nf"
+            process {
+                """
+                input[0] = LOAD_SAMPLESHEET.out.samplesheet
+                """
+            }
+        }
+        run("BBMERGE") {
+            script "modules/local/bbmerge/main.nf"
+            process {
+                """
+                input[0] = INTERLEAVE_FASTQ.out.output
+                """
+            }
+        }
+    }
+
+    test("Should process multiple merged/unmerged file pairs in list format") {
+        tag "list_processing"
+        tag "expect_success"
+        when {
+            params {}
+            process {
+                '''
+                input[0] = BBMERGE.out.reads
+                    .map { sample, reads ->
+                        def merged = file(reads[0])
+                        def unmerged = file(reads[1])
+                        def m1 = file("${workDir}/${sample}_10239_bbmerge_merged.fastq.gz")
+                        def m2 = file("${workDir}/${sample}_186538_bbmerge_merged.fastq.gz")
+                        def u1 = file("${workDir}/${sample}_10239_bbmerge_unmerged.fastq.gz")
+                        def u2 = file("${workDir}/${sample}_186538_bbmerge_unmerged.fastq.gz")
+                        merged.copyTo(m1)
+                        merged.copyTo(m2)
+                        unmerged.copyTo(u1)
+                        unmerged.copyTo(u2)
+                        [sample, [m1, m2], [u1, u2]]
+                    }
+                input[1] = true
+                '''
+            }
+        }
+        then {
+            // Should run without failures
+            assert process.success
+            def all_output_reads = process.out.reads[0][1]
+            def output_reads = all_output_reads.findAll { !it.toString().contains('bbmerge_unmerged_joined') }
+            def input_files = process.out.input[0][1]
+            assert output_reads.size() == 2
+            assert input_files.size() == 4
+            def countGzipLines = { file -> path(file).linesGzip.size() }
+            def merged_inputs = input_files.findAll { it.toString().contains('_merged') }
+            def unmerged_inputs = input_files.findAll { it.toString().contains('_unmerged') }
+            assert merged_inputs.size() == 2
+            assert unmerged_inputs.size() == 2
+            // Extract species IDs from input filenames and verify they're in output filenames
+            def species_ids = merged_inputs.collect { merged ->
+                def matcher = merged.toString() =~ /_(\d+)_joined_in_merged/
+                matcher ? matcher[0][1] : null
+            }
+            assert species_ids.every { it != null }
+            assert output_reads.every { output ->
+                species_ids.any { species -> output.toString().contains(species) }
+            }
+            // Output reads should have a nonzero number of lines divisible by four
+            // Total input and output read counts should match (accounting for joining)
+            def total_output_lines = output_reads.collect { countGzipLines(it) }.sum()
+            def total_merged_lines = merged_inputs.collect { countGzipLines(it) }.sum()
+            def total_unmerged_lines = unmerged_inputs.collect { countGzipLines(it) }.sum()
+            assert total_output_lines == total_merged_lines + (total_unmerged_lines / 2)
+        }
+    }
+}

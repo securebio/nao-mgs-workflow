@@ -1,0 +1,187 @@
+nextflow_process {
+
+    name "Test process DOWNSAMPLE_FASTN_BY_ID_LIST"
+    script "modules/local/downsampleFastnById/main.nf"
+    process "DOWNSAMPLE_FASTN_BY_ID_LIST"
+    config "tests/configs/run.config"
+    tag "module"
+    tag "downsample_fastn_by_id_list"
+
+    setup {
+        run("GZIP_FILE") {
+            script "modules/local/gzipFile/main.nf"
+            process {
+                '''
+                input[0] = Channel.of("test")
+                    | combine(Channel.of("${projectDir}/test-data/toy-data/test-random.fastq"))
+                '''
+            }
+        }
+        run("SUBSET_FASTN") {
+            script "modules/local/subsetFastn/main.nf"
+            process {
+                '''
+                input[0] = GZIP_FILE.out
+                input[1] = 0.5
+                input[2] = "98765"
+                '''
+            }
+        }
+        run("EXTRACT_FASTN_IDS") {
+            script "modules/local/extractFastnIds/main.nf"
+            process {
+                '''
+                input[0] = SUBSET_FASTN.out.output
+                '''
+            }
+        }
+    }
+
+    test("Should process multiple FASTQ and ID file pairs in list format"){
+        tag "list_processing"
+        tag "expect_success"
+        when {
+            params {}
+            process {
+                '''
+                input[0] = GZIP_FILE.out
+                    .combine(EXTRACT_FASTN_IDS.out.output, by: 0)
+                    .map { sample, fastq, ids ->
+                        def orig_fastq = file(fastq)
+                        def orig_ids = file(ids)
+                        def f1 = file("${workDir}/${sample}_10239_joined.fastq.gz")
+                        def f2 = file("${workDir}/${sample}_186538_joined.fastq.gz")
+                        def i1 = file("${workDir}/${sample}_10239_vsearch_ids.txt")
+                        def i2 = file("${workDir}/${sample}_186538_vsearch_ids.txt")
+                        orig_fastq.copyTo(f1)
+                        orig_fastq.copyTo(f2)
+                        orig_ids.copyTo(i1)
+                        orig_ids.copyTo(i2)
+                        [sample, [f1, f2], [i1, i2]]
+                    }
+                '''
+            }
+        }
+        then {
+            // Process should run without errors
+            assert process.success
+            def output_files = process.out.output[0][1]
+            def input_files = process.out.input[0][1]
+            assert output_files.size() == 2
+            assert input_files.size() == 4
+            def input_fastqs = input_files.findAll { it.toString().contains('_joined.fastq.gz') }
+            def input_ids = input_files.findAll { it.toString().contains('_vsearch_ids.txt') }
+            assert input_fastqs.size() == 2
+            assert input_ids.size() == 2
+            // Extract species IDs from input filenames and verify they're in output filenames
+            def species_ids = input_fastqs.collect { fastq ->
+                def matcher = fastq.toString() =~ /input_.*?_(\d+)_joined/
+                matcher ? matcher[0][1] : null
+            }
+            assert species_ids.every { it != null }
+            assert output_files.every { output ->
+                species_ids.any { species -> output.toString().contains(species) }
+            }
+            // FASTQ headers should match IDs
+            // FASTQ sequences should match corresponding sequences from input
+            for (int i = 0; i < 2; i++) {
+                def ids_in = path(input_ids[i]).csv(header: false).columns["C0"]
+                def fastq_out = path(output_files[i]).fastq
+                assert ids_in == fastq_out.readNames.collect{it.tokenize(" ")[0]}.unique().toSorted()
+                def fastq_in = path(input_fastqs[i]).fastq
+                for (name in fastq_out.readNames) {
+                    assert name in fastq_in.readNames
+                }
+            }
+        }
+    }
+
+    test("Should process multiple FASTA and ID file pairs in list format"){
+        tag "list_processing"
+        tag "expect_success"
+        setup {
+            run("GZIP_FILE", alias: "GZIP_FASTA") {
+                script "modules/local/gzipFile/main.nf"
+                process {
+                    '''
+                    input[0] = Channel.of("test")
+                        | combine(Channel.of("${projectDir}/test-data/toy-data/test-random.fasta"))
+                    '''
+                }
+            }
+            run("SUBSET_FASTN", alias: "SUBSET_FASTA") {
+                script "modules/local/subsetFastn/main.nf"
+                process {
+                    '''
+                    input[0] = GZIP_FASTA.out
+                    input[1] = 0.5
+                    input[2] = "98765"
+                    '''
+                }
+            }
+            run("EXTRACT_FASTN_IDS", alias: "EXTRACT_FASTA_IDS") {
+                script "modules/local/extractFastnIds/main.nf"
+                process {
+                    '''
+                    input[0] = SUBSET_FASTA.out.output
+                    '''
+                }
+            }
+        }
+        when {
+            params {}
+            process {
+                '''
+                input[0] = GZIP_FASTA.out
+                    .combine(EXTRACT_FASTA_IDS.out.output, by: 0)
+                    .map { sample, fasta, ids ->
+                        def orig_fasta = file(fasta)
+                        def orig_ids = file(ids)
+                        def f1 = file("${workDir}/${sample}_10239_joined.fasta.gz")
+                        def f2 = file("${workDir}/${sample}_186538_joined.fasta.gz")
+                        def i1 = file("${workDir}/${sample}_10239_vsearch_ids.txt")
+                        def i2 = file("${workDir}/${sample}_186538_vsearch_ids.txt")
+                        orig_fasta.copyTo(f1)
+                        orig_fasta.copyTo(f2)
+                        orig_ids.copyTo(i1)
+                        orig_ids.copyTo(i2)
+                        [sample, [f1, f2], [i1, i2]]
+                    }
+                '''
+            }
+        }
+        then {
+            // Process should run without errors
+            assert process.success
+            def output_files = process.out.output[0][1]
+            def input_files = process.out.input[0][1]
+            assert output_files.size() == 2
+            assert input_files.size() == 4
+            def input_fastas = input_files.findAll { it.toString().contains('_joined.fasta.gz') }
+            def input_ids = input_files.findAll { it.toString().contains('_vsearch_ids.txt') }
+            assert input_fastas.size() == 2
+            assert input_ids.size() == 2
+            // Extract species IDs from input filenames and verify they're in output filenames
+            def species_ids = input_fastas.collect { fasta ->
+                def matcher = fasta.toString() =~ /input_.*?_(\d+)_joined/
+                matcher ? matcher[0][1] : null
+            }
+            assert species_ids.every { it != null }
+            assert output_files.every { output ->
+                species_ids.any { species -> output.toString().contains(species) }
+            }
+            // FASTA headers should match IDs
+            // FASTA sequences should match corresponding sequences from input
+            for (int i = 0; i < 2; i++) {
+                def ids_in = path(input_ids[i]).csv(header: false).columns["C0"]
+                def fasta_out = path(output_files[i]).fasta
+                assert ids_in == fasta_out.keySet().collect{it.tokenize(" ")[0]}.unique().toSorted()
+                def fasta_in = path(input_fastas[i]).fasta
+                for (name in fasta_out.keySet()) {
+                    assert name in fasta_in.keySet()
+                    assert fasta_in[name] == fasta_out[name]
+                }
+            }
+        }
+    }
+}
