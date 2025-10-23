@@ -1,0 +1,137 @@
+nextflow_process {
+
+    name "Test process ADD_SAMPLE_COLUMN_LIST"
+    script "modules/local/addSampleColumn/main.nf"
+    process "ADD_SAMPLE_COLUMN_LIST"
+    config "tests/configs/run.config"
+    tag "module"
+    tag "add_sample_column_list"
+
+    test("Should break when sample_column is already present in tsv") {
+        tag "expect_failed"
+        when {
+            params {}
+            process {
+                '''
+                input[0] = Channel.of(
+                    ["group1", "${projectDir}/test-data/toy-data/test_tab_sorted.tsv"]
+                ).map { group, tsv_path ->
+                    def source_tsv = file(tsv_path)
+                    def tsv1 = file("${workDir}/${group}_10239_vsearch_tab.tsv")
+                    def tsv2 = file("${workDir}/${group}_186538_vsearch_tab.tsv")
+                    source_tsv.copyTo(tsv1)
+                    source_tsv.copyTo(tsv2)
+                    [group, [tsv1, tsv2]]
+                }
+                input[1] = "x"
+                input[2] = "test"
+                '''
+            }
+        }
+        then {
+            assert process.failed
+            assert process.exitStatus == 1
+            assert process.errorReport.contains("ValueError: Sample name column already exists")
+        }
+    }
+
+    test("Should run without failures on correct input and produce correct output") {
+        tag "expect_success"
+        when {
+            params {}
+            process {
+                '''
+                input[0] = Channel.of(
+                    ["group1", "${projectDir}/test-data/toy-data/test_tab_sorted.tsv"]
+                ).map { group, tsv_path ->
+                    def source_tsv = file(tsv_path)
+                    def tsv1 = file("${workDir}/${group}_10239_vsearch_tab.tsv")
+                    def tsv2 = file("${workDir}/${group}_186538_vsearch_tab.tsv")
+                    source_tsv.copyTo(tsv1)
+                    source_tsv.copyTo(tsv2)
+                    [group, [tsv1, tsv2]]
+                }
+                input[1] = "group_species"
+                input[2] = "group_species"
+                '''
+            }
+        }
+        then {
+            assert process.success
+            def output_files = process.out.output[0][1]
+            def input_files = process.out.input[0][1]
+            assert output_files.size() == 2
+            assert input_files.size() == 2
+
+            // Extract species IDs from input filenames
+            def species_ids = input_files.collect { file ->
+                def matcher = file.toString() =~ /group1_(\d+)_vsearch_tab\.tsv/
+                matcher ? matcher[0][1] : null
+            }
+            assert species_ids.every { it != null }
+
+            // Verify species IDs are in output filenames
+            assert output_files.every { out ->
+                species_ids.any { species -> out.toString().contains(species) }
+            }
+
+            // Check each output file
+            for (int i = 0; i < output_files.size(); i++) {
+                def tab_in = path(input_files[i]).csv(sep: "\t")
+                def tab_out = path(output_files[i]).csv(sep: "\t")
+
+                // Output should have one more column than input
+                assert tab_out.columnCount == tab_in.columnCount + 1
+                assert tab_out.rowCount == tab_in.rowCount
+
+                // Output should have group_species column
+                assert "group_species" in tab_out.columnNames
+                assert !("group_species" in tab_in.columnNames)
+
+                // Extract species from filename
+                def species_from_filename = input_files[i].toString() =~ /group1_(\d+)_vsearch_tab\.tsv/
+                def expected_species = species_from_filename ? species_from_filename[0][1] : null
+                assert expected_species != null
+
+                // All rows should have correct group_species value
+                for (j in tab_out.columns["group_species"]) {
+                    assert j == "group1_${expected_species}"
+                }
+            }
+        }
+    }
+
+    test("Should handle empty input file and produce empty output file") {
+        tag "expect_success"
+        tag "empty_file"
+        when {
+            params {}
+            process {
+                '''
+                input[0] = Channel.of(
+                    ["group1", "${projectDir}/test-data/toy-data/empty_file.txt"]
+                ).map { group, empty_path ->
+                    def empty_file = file(empty_path)
+                    def tsv1 = file("${workDir}/${group}_10239_vsearch_tab.tsv")
+                    def tsv2 = file("${workDir}/${group}_186538_vsearch_tab.tsv")
+                    empty_file.copyTo(tsv1)
+                    empty_file.copyTo(tsv2)
+                    [group, [tsv1, tsv2]]
+                }
+                input[1] = "group_species"
+                input[2] = "group_species"
+                '''
+            }
+        }
+        then {
+            assert process.success
+            def output_files = process.out.output[0][1]
+
+            // All output files should be empty
+            for (file in output_files) {
+                def content = path(file).text
+                assert content == ""
+            }
+        }
+    }
+}
