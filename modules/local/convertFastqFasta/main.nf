@@ -17,3 +17,31 @@ process CONVERT_FASTQ_FASTA {
         ln -s !{fastq} !{sample}_in.fastq.gz
         '''
 }
+
+// Convert a single FASTQ file (interleaved or single-end) into FASTA format
+// TODO: Expand to work on non-gzipped files
+
+process CONVERT_FASTQ_FASTA_LIST {
+    label "single"
+    label "seqtk"
+    input:
+        tuple val(sample), path(fastqs)
+    output:
+        tuple val(sample), path("${sample}_*_converted.fasta.gz"), emit: output
+        tuple val(sample), path("${sample}_*_in.fastq.gz"), emit: input
+    shell:
+        '''
+        for fastq in !{fastqs}; do
+            species=$(basename ${fastq} | grep -oP '!{sample}_\\K\\d+(?=_)')
+            if [ -z "$species" ]; then
+                >&2 echo "Error: Could not extract species from filename: ${fastq}"
+                exit 1
+            fi
+            output=!{sample}_${species}_converted.fasta.gz
+            # Perform conversion
+            zcat ${fastq} | seqtk seq -a | gzip -c > ${output}
+            # Link input to output for testing
+            ln -s ${fastq} !{sample}_${species}_in.fastq.gz
+        done
+        '''
+}

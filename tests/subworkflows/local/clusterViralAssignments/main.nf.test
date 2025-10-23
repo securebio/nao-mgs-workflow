@@ -30,6 +30,15 @@ nextflow_workflow {
                     '''
                 }
             }
+            run("COPY_FILE_BARE") {
+                script "modules/local/copyFile/main.nf"
+                process {
+                    '''
+                    input[0] = INTERLEAVE_FASTQ.out.output.map{ sample, file -> file }
+                    input[1] = INTERLEAVE_FASTQ.out.output.map{ sample, file -> "${sample}_10239_interleaved.fastq.gz" }
+                    '''
+                }
+            }
         }
         when {
             params {
@@ -40,7 +49,8 @@ nextflow_workflow {
             }
             workflow {
                 '''
-                input[0] = INTERLEAVE_FASTQ.out.output
+                def sample_id = INTERLEAVE_FASTQ.out.output.map{ sample, file -> sample }
+                input[0] = sample_id.combine(COPY_FILE_BARE.out).map{ sample, file -> tuple(sample, [file]) }
                 input[1] = params.cluster_identity
                 input[2] = params.cluster_min_len
                 input[3] = params.n_clusters
@@ -52,11 +62,11 @@ nextflow_workflow {
             // Should run without failures
             assert workflow.success
             // Clustering should work as expected
-            def fastqs_merged = workflow.out.test_merged.collect{path(it[1]).fastq}
+            def fastqs_merged = workflow.out.test_merged.collect{path(it[1][0]).fastq}
             def fastas_clustered = workflow.out.test_cluster_reps.collect{path(it[1]).fasta}
             def tabs_clustered = workflow.out.test_cluster_summ.collect{path(it[1]).csv(sep: "\t",decompress: true, header: false)}
             def tabs_clustered_out = workflow.out.tsv.collect{path(it[1]).csv(sep: "\t",decompress: true)}
-            def tabs_clustered_ids = workflow.out.ids.collect{path(it[1]).csv(header: false)}
+            def tabs_clustered_ids = workflow.out.ids.collect{path(it[1]).csv(sep: "\t", header: false)}
             assert fastas_clustered.size() == fastqs_merged.size()
             assert tabs_clustered.size() == fastas_clustered.size()
             assert tabs_clustered_out.size() == tabs_clustered.size()
@@ -110,7 +120,7 @@ nextflow_workflow {
                 process {
                     """
                     input[0] = LOAD_SAMPLESHEET.out.samplesheet
-                    input[1] = "reads.fastq.gz"
+                    input[1] = "10239_joined.fastq.gz"
                     """
                 }
             }
@@ -124,7 +134,7 @@ nextflow_workflow {
             }
             workflow {
                 '''
-                input[0] = COPY_FILE.out
+                input[0] = COPY_FILE.out.map{ sample, file -> tuple(sample, [file]) }
                 input[1] = params.cluster_identity
                 input[2] = params.cluster_min_len
                 input[3] = params.n_clusters
@@ -136,11 +146,11 @@ nextflow_workflow {
             // Should run without failures
             assert workflow.success
             // Clustering should work as expected
-            def fastqs_merged = workflow.out.test_merged.collect{path(it[1]).fastq}
+            def fastqs_merged = workflow.out.test_merged.collect{path(it[1][0]).fastq}
             def fastas_clustered = workflow.out.test_cluster_reps.collect{path(it[1]).fasta}
             def tabs_clustered = workflow.out.test_cluster_summ.collect{path(it[1]).csv(sep: "\t",decompress: true, header: false)}
             def tabs_clustered_out = workflow.out.tsv.collect{path(it[1]).csv(sep: "\t",decompress: true)}
-            def tabs_clustered_ids = workflow.out.ids.collect{path(it[1]).csv(header: false)}
+            def tabs_clustered_ids = workflow.out.ids.collect{path(it[1]).csv(sep: "\t", header: false)}
             assert fastas_clustered.size() == fastqs_merged.size()
             assert tabs_clustered.size() == fastas_clustered.size()
             assert tabs_clustered_out.size() == tabs_clustered.size()

@@ -19,7 +19,7 @@ include { JOIN_TSVS } from "../../../modules/local/joinTsvs"
 include { PARTITION_TSV } from "../../../modules/local/partitionTsv"
 include { SORT_TSV as SORT_GROUP_TAXID } from "../../../modules/local/sortTsv"
 include { SORT_TSV as SORT_JOINED_SPECIES } from "../../../modules/local/sortTsv"
-include { EXTRACT_VIRAL_HITS_TO_FASTQ_NOREF_LABELED as EXTRACT_FASTQ } from "../../../modules/local/extractViralHitsToFastqNoref"
+include { EXTRACT_VIRAL_HITS_TO_FASTQ_NOREF_LABELED_LIST as EXTRACT_FASTQ_LIST } from "../../../modules/local/extractViralHitsToFastqNoref"
 include { ADD_CONDITIONAL_TSV_COLUMN } from "../../../modules/local/addConditionalTsvColumn"
 
 /***********
@@ -54,28 +54,10 @@ workflow SPLIT_VIRAL_TSV_BY_SELECTED_TAXID {
         ]).tsv
         join_sorted_ch = SORT_JOINED_SPECIES(updated_col, "selected_taxid").sorted
         part_ch = PARTITION_TSV(join_sorted_ch, "selected_taxid").output
-        // 4. Restructure channel to separate species
-        partitioned_flattened_ch = part_ch.flatMap{
-            group, filepaths ->
-                // Make sure paths are a list even if there's just one
-                def pathlist = (filepaths instanceof List) ? filepaths : [filepaths]
-                pathlist.collect { path ->
-                    // Define regex pattern for extracting species taxid
-                    def filename = path.last()
-                    def pattern = "^partition_(.*?)_sorted_selected_taxid_added_selected_taxid_${group}_taxonomy_left_joined_aligner_taxid_lca\\.tsv\\.gz\$"
-                    def matcher = (filename =~ pattern)
-                    if (!matcher) {
-                        def msg = "Filename doesn't match required pattern: ${group}, ${path}, ${path.last()}"
-                        throw new IllegalArgumentException(msg)
-                    }
-                    // Convert to 2-tuples with key combining group and species
-                    ["${group}_${matcher[0][1]}", path]
-                }
-            }
-        // 5. Extract into interleaved FASTQ format
-        fastq_ch = EXTRACT_FASTQ(partitioned_flattened_ch, false).output
+        // 4. Extract into interleaved FASTQ format
+        fastq_ch = EXTRACT_FASTQ_LIST(part_ch, false).output
     emit:
-        tsv = partitioned_flattened_ch
+        tsv = part_ch
         fastq = fastq_ch
         test_in   = groups
         test_db   = db

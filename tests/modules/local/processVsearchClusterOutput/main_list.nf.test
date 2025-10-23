@@ -1,0 +1,103 @@
+nextflow_process {
+
+    name "Test process PROCESS_VSEARCH_CLUSTER_OUTPUT_LIST"
+    script "modules/local/processVsearchClusterOutput/main.nf"
+    process "PROCESS_VSEARCH_CLUSTER_OUTPUT_LIST"
+    config "tests/configs/run.config"
+    tag "module"
+    tag "process_vsearch_cluster_output_list"
+
+    setup {
+        run("LOAD_SAMPLESHEET") {
+            script "subworkflows/local/loadSampleSheet/main.nf"
+            process {
+                """
+                input[0] = "${projectDir}/test-data/single-end-samplesheet.csv"
+                input[1] = "illumina"
+                input[2] = true
+                """
+            }
+        }
+        run("VSEARCH_CLUSTER") {
+            script "modules/local/vsearch/main.nf"
+            process {
+                """
+                input[0] = LOAD_SAMPLESHEET.out.samplesheet
+                input[1] = 0.95
+                input[2] = 0
+                input[3] = 15
+                """
+            }
+        }
+    }
+
+    test("Should process multiple summary files in list format"){
+        tag "list_processing"
+        tag "expect_success"
+        when {
+            params {
+                n_clusters = 5
+            }
+            process {
+                '''
+                input[0] = VSEARCH_CLUSTER.out.summary
+                    .map { sample, summary ->
+                        def orig = file(summary)
+                        def s1 = file("${workDir}/${sample}_10239_vsearch_summary.tsv.gz")
+                        def s2 = file("${workDir}/${sample}_186538_vsearch_summary.tsv.gz")
+                        orig.copyTo(s1)
+                        orig.copyTo(s2)
+                        [sample, [s1, s2]]
+                    }
+                input[1] = params.n_clusters
+                input[2] = ""
+                '''
+            }
+        }
+        then {
+            // Should run without failures
+            assert process.success
+            def output_tabs = process.out.output[0][1]
+            def output_ids = process.out.ids[0][1]
+            def input_files = process.out.input[0][1]
+            assert output_tabs.size() == 2
+            assert output_ids.size() == 2
+            assert input_files.size() == 2
+            // Extract species IDs from input filenames and verify they're in output filenames
+            def species_ids = input_files.collect { input ->
+                def matcher = input.toString() =~ /input_.*?_(\d+)_vsearch_summary/
+                matcher ? matcher[0][1] : null
+            }
+            assert species_ids.every { it != null }
+            assert output_tabs.every { output ->
+                species_ids.any { species -> output.toString().contains(species) }
+            }
+            assert output_ids.every { output ->
+                species_ids.any { species -> output.toString().contains(species) }
+            }
+            // Sequence and cluster counts should match between input and output
+            // Output should have expected dimensions and column headers
+            def exp_col_names = ["seq_id", "cluster_id", "cluster_rep_id",
+                "seq_length", "is_cluster_rep", "percent_identity",
+                "orientation", "cigar", "cluster_size"]
+            for (int i = 0; i < 2; i++) {
+                def tab_in = path(input_files[i]).csv(sep: "\t", decompress: true, header: false)
+                def tab_out = path(output_tabs[i]).csv(sep: "\t", decompress: true)
+                def n_clusters_in = tab_in.columns["C0"].count("C")
+                def n_reps_in = tab_in.columns["C0"].count("S")
+                def n_hits_in = tab_in.columns["C0"].count("H")
+                def n_seqs_in = n_reps_in + n_hits_in
+                def n_clusters_out = tab_out.columns["cluster_id"].unique().size()
+                def n_reps_out = tab_out.columns["is_cluster_rep"].collect{it ? 1 : 0}.sum()
+                def n_hits_out = tab_out.columns["is_cluster_rep"].collect{it ? 0 : 1}.sum()
+                def n_seqs_out = n_reps_out + n_hits_out
+                assert n_clusters_in == n_clusters_out
+                assert n_reps_in == n_reps_out
+                assert n_hits_in == n_hits_out
+                assert n_seqs_in == n_seqs_out
+                assert tab_out.rowCount == n_seqs_in
+                assert tab_out.columnNames == exp_col_names
+            }
+        }
+    }
+}

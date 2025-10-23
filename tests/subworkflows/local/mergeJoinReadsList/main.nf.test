@@ -1,0 +1,116 @@
+nextflow_workflow {
+
+    name "Test subworkflow MERGE_JOIN_READS_LIST"
+    script "subworkflows/local/mergeJoinReadsList/main.nf"
+    workflow "MERGE_JOIN_READS_LIST"
+    tag "subworkflow"
+    tag "merge_join_reads"
+
+    test("Should run without failures on paired (interleaved) input") {
+        tag "expect_success"
+        tag "interleaved"
+        config "tests/configs/run.config"
+        setup {
+            run("LOAD_SAMPLESHEET") {
+                script "subworkflows/local/loadSampleSheet/main.nf"
+                process {
+                    """
+                    input[0] = "${projectDir}/test-data/samplesheet.csv"
+                    input[1] = "illumina"
+                    input[2] = false
+                    """
+                }
+            }
+            run("INTERLEAVE_FASTQ") {
+                script "modules/local/interleaveFastq/main.nf"
+                process {
+                    """
+                    input[0] = LOAD_SAMPLESHEET.out.samplesheet
+                    """
+                }
+            }
+            run("COPY_FILE_BARE") {
+                script "modules/local/copyFile/main.nf"
+                process {
+                    '''
+                    input[0] = INTERLEAVE_FASTQ.out.output.map{ sample, file -> file }
+                    input[1] = INTERLEAVE_FASTQ.out.output.map{ sample, file -> "${sample}_10239_interleaved.fastq.gz" }
+                    '''
+                }
+            }
+        }
+        when {
+            params {
+            }
+            workflow {
+                '''
+                def sample_id = INTERLEAVE_FASTQ.out.output.map{ sample, file -> sample }
+                input[0] = sample_id.combine(COPY_FILE_BARE.out).map{ sample, file -> tuple(sample, [file]) }
+                input[1] = LOAD_SAMPLESHEET.out.single_end
+                '''
+            }
+        }
+        then {
+            // Should run without failures
+            assert workflow.success
+            // Merged read count should equal input pairs
+            def fastq_in = path(workflow.out.input_reads[0][1][0]).fastq
+            def fastq_out = path(workflow.out.single_reads[0][1][0]).fastq
+            assert fastq_in.sequences.size() == fastq_out.sequences.size() * 2
+            // Merged IDs should equal input IDs
+            def ids_in = fastq_in.readNames.collect{it.tokenize(" ")[0]}.toSorted().unique()
+            def ids_out = fastq_out.readNames.collect{it.tokenize(" ")[0]}.toSorted().unique()
+            assert ids_in == ids_out
+            // BBMerge summary output should have expected fields
+            def bbmerge_tab = path(workflow.out.bbmerge_summary[0][1][0]).csv(sep: "\t", decompress: true)
+            def bbmerge_headers_exp = ["seq_id", "bbmerge_frag_length"]
+            assert bbmerge_tab.columnNames == bbmerge_headers_exp
+        }
+    }
+
+    test("Should run without failures on unpaired input") {
+        tag "expect_success"
+        tag "single_end"
+        config "tests/configs/run.config"
+        setup {
+            run("LOAD_SAMPLESHEET") {
+                script "subworkflows/local/loadSampleSheet/main.nf"
+                process {
+                    """
+                    input[0] = "${projectDir}/test-data/single-end-samplesheet.csv"
+                    input[1] = "illumina"
+                    input[2] = true
+                    """
+                }
+            }
+            run("COPY_FILE") {
+                script "modules/local/copyFile/main.nf"
+                process {
+                    """
+                    input[0] = LOAD_SAMPLESHEET.out.samplesheet
+                    input[1] = "reads.fastq.gz"
+                    """
+                }
+            }
+        }
+        when {
+            params {}
+            workflow {
+                '''
+                input[0] = COPY_FILE.out.map{ sample, file -> tuple(sample, [file]) }
+                input[1] = LOAD_SAMPLESHEET.out.single_end
+                '''
+            }
+        }
+        then {
+            // Should run without failures
+            assert workflow.success
+            // Output and input FASTQs should be identical
+            def md5_in = path(workflow.out.input_reads[0][1][0]).md5
+            def md5_out = path(workflow.out.single_reads[0][1][0]).md5
+            assert md5_in == md5_out
+            // BBMerge summary output should be empty
+            assert workflow.out.bbmerge_summary == []
+        }
+    }
+}
