@@ -1,4 +1,4 @@
-# v3.0.1.3-dev
+# v3.0.1.3
 - Updated `docs/batch.md` with a deprecation warning linking to private internal infrastructure for SecureBio users.
 - Refactored `VALIDATE_VIRAL_ASSIGNMENT` in `DOWNSTREAM` to iterate through clusters within groups, reducing channel elements from N_groups × N_clusters to N_groups (#477)
   - Updated modules to run loops internally rather than having Nextflow iterate through individual elements
