@@ -7,6 +7,10 @@ nextflow_process {
     tag "module"
     tag "downsample_fastn_by_id_list"
 
+    // Load shared helper functions
+    def shell = new GroovyShell()
+    def helpers = shell.parse(new File("tests/helpers/FileHelpers.groovy"))
+
     setup {
         run("GZIP_FILE") {
             script "modules/local/gzipFile/main.nf"
@@ -63,16 +67,6 @@ nextflow_process {
             }
         }
         then {
-            // Helper function to check if a file is gzipped
-            def isGzipped = { file ->
-                def firstByte, secondByte
-                new File(file.toString()).withInputStream { fis ->
-                    firstByte = fis.read()
-                    secondByte = fis.read()
-                }
-                return firstByte == 0x1f && secondByte == 0x8b
-            }
-
             // Process should run without errors
             assert process.success
             def output_files = process.out.output[0][1]
@@ -106,7 +100,7 @@ nextflow_process {
             // REGRESSION TEST for issue #495: Verify output files are actually gzipped
             // When input is .gz, output must also be truly gzipped (not just named .gz)
             for (output_file in output_files) {
-                assert isGzipped(output_file) : "File ${output_file} should be gzipped"
+                assert helpers.isGzipped(output_file) : "File ${output_file} should be gzipped"
             }
         }
     }
@@ -166,16 +160,6 @@ nextflow_process {
             }
         }
         then {
-            // Helper function to check if a file is gzipped
-            def isGzipped = { file ->
-                def firstByte, secondByte
-                new File(file.toString()).withInputStream { fis ->
-                    firstByte = fis.read()
-                    secondByte = fis.read()
-                }
-                return firstByte == 0x1f && secondByte == 0x8b
-            }
-
             // Process should run without errors
             assert process.success
             def output_files = process.out.output[0][1]
@@ -210,7 +194,7 @@ nextflow_process {
             // REGRESSION TEST for issue #495: Verify output files are actually gzipped
             // When input is .gz, output must also be truly gzipped (not just named .gz)
             for (output_file in output_files) {
-                assert isGzipped(output_file) : "File ${output_file} should be gzipped"
+                assert helpers.isGzipped(output_file) : "File ${output_file} should be gzipped"
             }
         }
     }
@@ -245,16 +229,6 @@ nextflow_process {
             }
         }
         then {
-            // Helper function to check if a file is gzipped
-            def isGzipped = { file ->
-                def firstByte, secondByte
-                new File(file.toString()).withInputStream { fis ->
-                    firstByte = fis.read()
-                    secondByte = fis.read()
-                }
-                return firstByte == 0x1f && secondByte == 0x8b
-            }
-
             // Process should run without errors
             assert process.success
             def output_files = process.out.output[0][1]
@@ -268,10 +242,10 @@ nextflow_process {
             assert plain_output != null : "Should have output file for plain input"
 
             // REGRESSION TEST: gzipped input should produce gzipped output
-            assert isGzipped(gz_output) : "File ${gz_output} from .gz input should be gzipped"
+            assert helpers.isGzipped(gz_output) : "File ${gz_output} from .gz input should be gzipped"
 
             // REGRESSION TEST: plain input should produce plain output
-            assert !isGzipped(plain_output) : "File ${plain_output} from plain input should NOT be gzipped"
+            assert !helpers.isGzipped(plain_output) : "File ${plain_output} from plain input should NOT be gzipped"
         }
     }
 }

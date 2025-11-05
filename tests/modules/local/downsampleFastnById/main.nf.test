@@ -7,6 +7,10 @@ nextflow_process {
     tag "module"
     tag "downsample_fastn_by_id"
 
+    // Load shared helper functions
+    def shell = new GroovyShell()
+    def helpers = shell.parse(new File("tests/helpers/FileHelpers.groovy"))
+
     test("Should correctly handle valid FASTQ input"){
         tag "expect_success"
         setup {
@@ -48,16 +52,6 @@ nextflow_process {
             }
         }
         then {
-            // Helper function to check if a file is gzipped
-            def isGzipped = { file ->
-                def firstByte, secondByte
-                new File(file.toString()).withInputStream { fis ->
-                    firstByte = fis.read()
-                    secondByte = fis.read()
-                }
-                return firstByte == 0x1f && secondByte == 0x8b
-            }
-
             // Process should run without errors
             assert process.success
             // FASTQ headers should match IDs
@@ -76,7 +70,7 @@ nextflow_process {
             // REGRESSION TEST for issue #495: Verify output file is actually gzipped
             // When input is .gz, output must also be truly gzipped (not just named .gz)
             def output_file = process.out.output[0][1]
-            assert isGzipped(output_file) : "File ${output_file} should be gzipped"
+            assert helpers.isGzipped(output_file) : "File ${output_file} should be gzipped"
         }
     }
 
@@ -121,16 +115,6 @@ nextflow_process {
             }
         }
         then {
-            // Helper function to check if a file is gzipped
-            def isGzipped = { file ->
-                def firstByte, secondByte
-                new File(file.toString()).withInputStream { fis ->
-                    firstByte = fis.read()
-                    secondByte = fis.read()
-                }
-                return firstByte == 0x1f && secondByte == 0x8b
-            }
-
             // Process should run without errors
             assert process.success
             // FASTA headers should match IDs
@@ -146,7 +130,7 @@ nextflow_process {
             // REGRESSION TEST for issue #495: Verify output file is actually gzipped
             // When input is .gz, output must also be truly gzipped (not just named .gz)
             def output_file = process.out.output[0][1]
-            assert isGzipped(output_file) : "File ${output_file} should be gzipped"
+            assert helpers.isGzipped(output_file) : "File ${output_file} should be gzipped"
         }
     }
 
