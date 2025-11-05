@@ -63,6 +63,16 @@ nextflow_process {
                 assert record_in.getReadString() == record_out.getReadString()
                 assert record_in.getBaseQualityString() == record_out.getBaseQualityString()
             }
+            // REGRESSION TEST for issue #495: Verify output file is actually gzipped
+            // When input is .gz, output must also be truly gzipped (not just named .gz)
+            def output_file = process.out.output[0][1]
+            // Check gzip magic bytes (0x1f 0x8b) at start of file
+            def fis = new FileInputStream(new File(output_file.toString()))
+            def firstByte = fis.read()
+            def secondByte = fis.read()
+            fis.close()
+            assert firstByte == 0x1f : "File ${output_file} should be gzipped but first byte is ${String.format('0x%02x', firstByte)} instead of 0x1f"
+            assert secondByte == 0x8b : "File ${output_file} should be gzipped but second byte is ${String.format('0x%02x', secondByte)} instead of 0x8b"
         }
     }
 
@@ -119,6 +129,16 @@ nextflow_process {
                 assert name in fasta_in.keySet()
                 assert fasta_in[name] == fasta_out[name]
             }
+            // REGRESSION TEST for issue #495: Verify output file is actually gzipped
+            // When input is .gz, output must also be truly gzipped (not just named .gz)
+            def output_file = process.out.output[0][1]
+            // Check gzip magic bytes (0x1f 0x8b) at start of file
+            def fis = new FileInputStream(new File(output_file.toString()))
+            def firstByte = fis.read()
+            def secondByte = fis.read()
+            fis.close()
+            assert firstByte == 0x1f : "File ${output_file} should be gzipped but first byte is ${String.format('0x%02x', firstByte)} instead of 0x1f"
+            assert secondByte == 0x8b : "File ${output_file} should be gzipped but second byte is ${String.format('0x%02x', secondByte)} instead of 0x8b"
         }
     }
 

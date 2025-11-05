@@ -93,6 +93,18 @@ nextflow_process {
                     assert name in fastq_in.readNames
                 }
             }
+            // REGRESSION TEST for issue #495: Verify output files are actually gzipped
+            // When input is .gz, output must also be truly gzipped (not just named .gz)
+            for (int i = 0; i < 2; i++) {
+                def output_file = output_files[i]
+                // Check gzip magic bytes (0x1f 0x8b) at start of file
+                def fis = new FileInputStream(new File(output_file.toString()))
+                def firstByte = fis.read()
+                def secondByte = fis.read()
+                fis.close()
+                assert firstByte == 0x1f : "File ${output_file} should be gzipped but first byte is ${String.format('0x%02x', firstByte)} instead of 0x1f"
+                assert secondByte == 0x8b : "File ${output_file} should be gzipped but second byte is ${String.format('0x%02x', secondByte)} instead of 0x8b"
+            }
         }
     }
 
@@ -182,6 +194,77 @@ nextflow_process {
                     assert fasta_in[name] == fasta_out[name]
                 }
             }
+            // REGRESSION TEST for issue #495: Verify output files are actually gzipped
+            // When input is .gz, output must also be truly gzipped (not just named .gz)
+            for (int i = 0; i < 2; i++) {
+                def output_file = output_files[i]
+                // Check gzip magic bytes (0x1f 0x8b) at start of file
+                def fis = new FileInputStream(new File(output_file.toString()))
+                def firstByte = fis.read()
+                def secondByte = fis.read()
+                fis.close()
+                assert firstByte == 0x1f : "File ${output_file} should be gzipped but first byte is ${String.format('0x%02x', firstByte)} instead of 0x1f"
+                assert secondByte == 0x8b : "File ${output_file} should be gzipped but second byte is ${String.format('0x%02x', secondByte)} instead of 0x8b"
+            }
+        }
+    }
+
+    test("REGRESSION #495: Should properly gzip each file based on its own extension (mixed gz and uncompressed)"){
+        tag "regression_495"
+        tag "expect_success"
+        when {
+            params {}
+            process {
+                '''
+                input[0] = GZIP_FILE.out
+                    .combine(EXTRACT_FASTN_IDS.out.output, by: 0)
+                    .map { sample, fastq, ids ->
+                        def orig_fastq = file(fastq)
+                        def orig_ids = file(ids)
+                        // First file: gzipped
+                        def f1 = file("${workDir}/${sample}_first.fastq.gz")
+                        // Second file: uncompressed (no .gz extension)
+                        def f2 = file("${workDir}/${sample}_second.fastq")
+                        def i1 = file("${workDir}/${sample}_first_ids.txt")
+                        def i2 = file("${workDir}/${sample}_second_ids.txt")
+                        orig_fastq.copyTo(f1)
+                        // Copy as uncompressed
+                        def gunzipProc = "gunzip -c ${orig_fastq}".execute()
+                        f2.text = gunzipProc.text
+                        orig_ids.copyTo(i1)
+                        orig_ids.copyTo(i2)
+                        [sample, [f1, f2], [i1, i2]]
+                    }
+                '''
+            }
+        }
+        then {
+            // Process should run without errors
+            assert process.success
+            def output_files = process.out.output[0][1]
+            assert output_files.size() == 2
+
+            // Find which output corresponds to which input
+            def gz_output = output_files.find { it.toString().contains('first') }
+            def plain_output = output_files.find { it.toString().contains('second') }
+
+            assert gz_output != null : "Should have output file for .gz input"
+            assert plain_output != null : "Should have output file for plain input"
+
+            // REGRESSION TEST: gzipped input should produce gzipped output
+            def fis1 = new FileInputStream(new File(gz_output.toString()))
+            def firstByte1 = fis1.read()
+            def secondByte1 = fis1.read()
+            fis1.close()
+            assert firstByte1 == 0x1f : "File ${gz_output} from .gz input should be gzipped but first byte is ${String.format('0x%02x', firstByte1)}"
+            assert secondByte1 == 0x8b : "File ${gz_output} from .gz input should be gzipped but second byte is ${String.format('0x%02x', secondByte1)}"
+
+            // REGRESSION TEST: plain input should produce plain output
+            def fis2 = new FileInputStream(new File(plain_output.toString()))
+            def firstByte2 = fis2.read()
+            fis2.close()
+            // Plain FASTQ should start with '@' (0x40), not gzip magic bytes
+            assert firstByte2 == 0x40 : "File ${plain_output} from plain input should NOT be gzipped but first byte is ${String.format('0x%02x', firstByte2)}"
         }
     }
 }
