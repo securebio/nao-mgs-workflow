@@ -42,12 +42,12 @@ workflow VALIDATE_VIRAL_ASSIGNMENTS {
                    // - blast_max_rank: Only keep alignments that are in the top-N for that query by bitscore
                    // - blast_min_frac: Only keep alignments that have at least this fraction of the best bitscore for that query
                    // - taxid_artificial: Parent taxid for artificial sequences in NCBI taxonomy
-    main:        
+    main:
         // 1. Split viral hits TSV by species
         split_ch = SPLIT_VIRAL_TSV_BY_SELECTED_TAXID(groups, db)
         // 2. Cluster sequences within species and obtain representatives of largest clusters
         cluster_ch = CLUSTER_VIRAL_ASSIGNMENTS(split_ch.fastq, params_map.validation_cluster_identity,
-            params_map.cluster_min_len, params_map.validation_n_clusters, Channel.of(false))
+            params_map.cluster_min_len, params_map.validation_n_clusters, Channel.of(params.platform == "ont"))
         // 3. Concatenate data across species (prepare for group-level BLAST)
         concat_fasta_ch = CONCATENATE_FILES_BY_EXTENSION(cluster_ch.fasta, "cluster_reps").output
         concat_cluster_ch = CONCATENATE_TSVS_LABELED(cluster_ch.tsv, "cluster_info")
@@ -67,7 +67,7 @@ workflow VALIDATE_VIRAL_ASSIGNMENTS {
         propagate_ch = PROPAGATE_VALIDATION_INFORMATION(groups, concat_cluster_ch.output,
             validate_ch.output, "aligner_taxid_lca")
         // 7. Cleanup and generate final outputs
-        regrouped_drop_ch = SELECT_TSV_COLUMNS(propagate_ch.output, "taxid_species,selected_taxid", "drop").output 
+        regrouped_drop_ch = SELECT_TSV_COLUMNS(propagate_ch.output, "taxid_species,selected_taxid", "drop").output
         output_hits_ch = COPY_HITS(regrouped_drop_ch, "validation_hits.tsv.gz")
         output_blast_ch = COPY_BLAST(blast_ch.blast, "validation_blast.tsv.gz")
     emit:

@@ -20,25 +20,35 @@ include { COPY_FILE_BARE as COPY_INPUT } from "../modules/local/copyFile"
 
 workflow DOWNSTREAM {
     main:
-        // 1. Prepare channel from input TSV file
+        // Prepare channel from input TSV file
         LOAD_DOWNSTREAM_DATA(params.input_file)
         input_ch = LOAD_DOWNSTREAM_DATA.out.input
         start_time_str = LOAD_DOWNSTREAM_DATA.out.start_time_str
-        // 2. Add group information, partition into per-group TSVs
+        // Add group information, partition into per-group TSVs
         PREPARE_GROUP_TSVS(input_ch)
         group_ch = PREPARE_GROUP_TSVS.out.groups
-        // 3. Mark duplicates
-        MARK_VIRAL_DUPLICATES(group_ch, params.aln_dup_deviation)
         // Prepare inputs for clade counting and validating taxonomic assignments
         viral_db_path = "${params.ref_dir}/results/total-virus-db-annotated.tsv.gz"
         viral_db = channel.value(viral_db_path)
-        dup_ch = MARK_VIRAL_DUPLICATES.out.dup.map{ label, tab, _stats -> [label, tab] }
-        // 4. Generate clade counts
-        COUNT_READS_PER_CLADE(dup_ch, viral_db)
-        // 5. Validate taxonomic assignments
+        // Conditionally mark duplicates and generate clade counts based on platform
+        if (params.platform == "ont") {
+            // ONT: Skip duplicate marking and clade counting
+            viral_hits_ch = group_ch
+            dup_output_ch = Channel.empty()
+            clade_counts_ch = Channel.empty()
+        }
+        else {
+            // Short-read: Mark duplicates based on alignment coordinates
+            MARK_VIRAL_DUPLICATES(group_ch, params.aln_dup_deviation)
+            viral_hits_ch = MARK_VIRAL_DUPLICATES.out.dup.map { label, tab, _stats -> [label, tab] }
+            dup_output_ch = MARK_VIRAL_DUPLICATES.out.dup
+            // Generate clade counts
+            clade_counts_ch = COUNT_READS_PER_CLADE(viral_hits_ch, viral_db)
+        }
+        // Validate taxonomic assignments
         def validation_params = params.collectEntries { k, v -> [k, v] }
         validation_params["cluster_min_len"] = 15
-        VALIDATE_VIRAL_ASSIGNMENTS(dup_ch, viral_db, params.ref_dir, validation_params)
+        VALIDATE_VIRAL_ASSIGNMENTS(viral_hits_ch, viral_db, params.ref_dir, validation_params)
         // Publish results
         params_str = groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(params))
         params_ch = Channel.of(params_str).collectFile(name: "params-downstream.json")
@@ -55,8 +65,8 @@ workflow DOWNSTREAM {
        intermediates_downstream = VALIDATE_VIRAL_ASSIGNMENTS.out.blast_results.mix(
                                         PREPARE_GROUP_TSVS.out.zero_vv_logs,
                                   )
-       results_downstream = MARK_VIRAL_DUPLICATES.out.dup.mix(
-                                COUNT_READS_PER_CLADE.out.output,
-                                VALIDATE_VIRAL_ASSIGNMENTS.out.annotated_hits,
-                            )
-}    
+        results_downstream = dup_output_ch.mix(
+                                clade_counts_ch,
+                                VALIDATE_VIRAL_ASSIGNMENTS.out.annotated_hits
+        )
+}
