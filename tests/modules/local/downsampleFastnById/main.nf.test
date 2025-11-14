@@ -7,6 +7,10 @@ nextflow_process {
     tag "module"
     tag "downsample_fastn_by_id"
 
+    // Load shared helper functions
+    def shell = new GroovyShell()
+    def helpers = shell.parse(new File("tests/helpers/FileHelpers.groovy"))
+
     test("Should correctly handle valid FASTQ input"){
         tag "expect_success"
         setup {
@@ -63,6 +67,10 @@ nextflow_process {
                 assert record_in.getReadString() == record_out.getReadString()
                 assert record_in.getBaseQualityString() == record_out.getBaseQualityString()
             }
+            // REGRESSION TEST for issue #495: Verify output file is actually gzipped
+            // When input is .gz, output must also be truly gzipped (not just named .gz)
+            def output_file = process.out.output[0][1]
+            assert helpers.isGzipped(output_file) : "File ${output_file} should be gzipped"
         }
     }
 
@@ -119,6 +127,10 @@ nextflow_process {
                 assert name in fasta_in.keySet()
                 assert fasta_in[name] == fasta_out[name]
             }
+            // REGRESSION TEST for issue #495: Verify output file is actually gzipped
+            // When input is .gz, output must also be truly gzipped (not just named .gz)
+            def output_file = process.out.output[0][1]
+            assert helpers.isGzipped(output_file) : "File ${output_file} should be gzipped"
         }
     }
 
