@@ -5,9 +5,18 @@ nextflow_pipeline {
     config "tests/configs/downstream.config"
     tag "workflow"
 
-    test("DOWNSTREAM workflow should run without errors") {
+    test("Short read DOWNSTREAM workflow should run without errors") {
         tag "downstream"
         tag "main_downstream"
+        then {
+            assert workflow.success
+        }
+    }
+
+    test("ONT DOWNSTREAM workflow should run without errors") {
+        config "tests/configs/downstream_ont.config"
+        tag "downstream_ont"
+        tag "main_downstream_ont"
         then {
             assert workflow.success
         }
@@ -28,4 +37,16 @@ nextflow_pipeline {
         }
     }
 
+    test("ONT DOWNSTREAM workflow output should match snapshot") {
+        config "tests/configs/downstream_ont.config"
+        tag "downstream_output_ont"
+        tag "main_downstream_output_ont"
+        tag "snapshot"
+        then {
+            assert workflow.success
+            assert snapshot(
+                path("${launchDir}/output/results_downstream/ont_1_validation_hits.tsv,gz"),
+            ).match("downstream_ont_output")
+        }
+    }
 }
