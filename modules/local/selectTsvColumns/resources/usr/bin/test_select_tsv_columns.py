@@ -168,6 +168,23 @@ class TestSelectColumns:
 
         result = output_file.read_text()
         assert result == ""
+    
+    def test_header_only_file(self, tmp_path):
+        """Test handling of a file with only a header line."""
+        input_file = tmp_path / "input.tsv"
+        output_file = tmp_path / "output.tsv"
+        input_file.write_text("col1\tcol2\tcol3\n")
+
+        select_tsv_columns.select_columns(
+            str(input_file),
+            str(output_file),
+            ["col1", "col3"],
+            "keep"
+        )
+
+        result = output_file.read_text()
+        expected = "col1\tcol3\n"
+        assert result == expected
 
     def test_keep_single_column(self, tmp_path):
         """Test keeping a single column."""
