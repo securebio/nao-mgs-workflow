@@ -41,11 +41,11 @@ nextflow_pipeline {
         config "tests/configs/downstream_ont.config"
         tag "downstream_output_ont"
         tag "main_downstream_output_ont"
-        tag "snapshot"
+        tag "snapshot_ont"
         then {
             assert workflow.success
             assert snapshot(
-                path("${launchDir}/output/results_downstream/ont_1_validation_hits.tsv,gz"),
+                path("${launchDir}/output/results_downstream/ont_1_validation_hits.tsv.gz"),
             ).match("downstream_ont_output")
         }
     }
