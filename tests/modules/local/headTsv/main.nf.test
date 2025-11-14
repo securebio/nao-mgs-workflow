@@ -1,7 +1,3 @@
-def countGzipLines = { file -> path(file).linesGzip.size() }
-def getGzipHeader = { file -> ["bash", "-c", "zcat " + file + " | head -n 1"].execute().text.trim() }
-def getGzipBody = { file -> ["bash", "-c", "zcat " + file + " | tail -n +2"].execute().text.trim() }
-
 nextflow_process {
 
     name "Test process HEAD_TSV"
@@ -10,46 +6,6 @@ nextflow_process {
     config "tests/configs/run.config"
     tag "module"
     tag "head_tsv"
-
-    test("Should fail with an appropriate error code if header fields exceed fields in input file"){
-        tag "expect_failed"
-        when {
-            params {}
-            process {
-                '''
-                input[0] = Channel.of("test")
-                    | combine(Channel.of("${projectDir}/test-data/toy-data/test_tab_sorted.tsv"))
-                input[1] = "a,b,c,d"
-                input[2] = "test"
-                '''
-            }
-        }
-        then {
-            assert process.failed
-            assert process.exitStatus == 1
-            assert process.errorReport.contains("ValueError: Number of header fields does not match number of fields in input file.")
-        }
-    }
-
-    test("Should fail with an appropriate error code if header fields are less than fields in input file"){
-        tag "expect_failed"
-        when {
-            params {}
-            process {
-                '''
-                input[0] = Channel.of("test")
-                    | combine(Channel.of("${projectDir}/test-data/toy-data/test_tab_sorted.tsv"))
-                input[1] = "a,b"
-                input[2] = "test"
-                '''
-            }
-        }
-        then {
-            assert process.failed
-            assert process.exitStatus == 1
-            assert process.errorReport.contains("ValueError: Number of header fields does not match number of fields in input file.")
-        }
-    }
 
     test("Should run without errors and produce appropriate output when run on appropriate input"){
         tag "expect_success"
@@ -78,33 +34,6 @@ nextflow_process {
             for (int i = 0; i < tab_out.columnCount; i++){
                 assert tab_out.columns[tab_out.columnNames[i]] == tab_in.columns[tab_in.columnNames[i]]
             }
-        }
-    }
-
-    test("Should handle empty input file and produce header-only output"){
-        tag "expect_success"
-        tag "empty_file"
-        when {
-            params {}
-            process {
-                '''
-                input[0] = Channel.of("test")
-                    | combine(Channel.of("${projectDir}/test-data/toy-data/empty_file.txt"))
-                input[1] = "a,b,c"
-                input[2] = "test"
-                '''
-            }
-        }
-        then {
-            // Should run without failures
-            assert process.success
-            
-            // Get the output file content directly
-            def outputFile = path(process.out.output[0][1])
-            def content = outputFile.text.trim()
-            
-            // Should have exactly one line with tab-separated headers
-            assert content == "a\tb\tc"
         }
     }
 

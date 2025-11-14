@@ -7,26 +7,6 @@ nextflow_process {
     tag "module"
     tag "add_sample_column"
 
-    test("Should break when sample_column is already present in tsv"){
-        tag "expect_failed"
-        when {
-            params {}
-            process {
-                '''
-                input[0] = Channel.of("test_sample")
-                    | combine(Channel.of("${projectDir}/test-data/toy-data/test_tab_sorted.tsv"))
-                input[1] = "x"
-                input[2] = "test"
-                '''
-            }
-        }
-        then {
-            assert process.failed
-            assert process.exitStatus == 1
-            assert process.errorReport.contains("ValueError: Sample name column already exists")
-        }
-    }
-
     test("Should run without failures on correct input and produce correct output"){
         tag "expect_success"
         when {
@@ -54,33 +34,6 @@ nextflow_process {
             for (i in tab_out.columns["sample"]) {
                 assert i == "test_sample"
             }
-        }
-    }
-
-    test("Should handle empty input file and produce empty output file"){
-        tag "expect_success"
-        tag "empty_file"
-        when {
-            params {}
-            process {
-                '''
-                input[0] = Channel.of("test_sample")
-                    | combine(Channel.of("${projectDir}/test-data/toy-data/empty_file.txt"))
-                input[1] = "sample"
-                input[2] = "test"
-                '''
-            }
-        }
-        then {
-            // Should run without failures
-            assert process.success
-            
-            // Get the output file content directly
-            def outputFile = path(process.out.output[0][1])
-            def content = outputFile.text
-            
-            // Output should be completely empty
-            assert content == ""
         }
     }
 

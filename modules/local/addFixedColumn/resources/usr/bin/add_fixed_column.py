@@ -6,7 +6,6 @@ import time
 import datetime
 import gzip
 import bz2
-import os
 
 def print_log(message):
     print("[", datetime.datetime.now(), "]  ", message, sep="")
@@ -20,7 +19,7 @@ def open_by_suffix(filename, mode="r", debug=False):
     if filename.endswith('.gz'):
         return gzip.open(filename, mode + 't')
     elif filename.endswith('.bz2'):
-        return bz2.BZ2file(filename, mode)
+        return bz2.BZ2File(filename, mode)
     else:
         return open(filename, mode)
 
