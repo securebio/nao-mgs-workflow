@@ -1,99 +1,71 @@
 #!/usr/bin/env python
 
 import pytest
-import gzip
 
-# Import the module to test
 import check_tsv_duplicates
 
 
 class TestCheckDuplicates:
     """Test the check_duplicates function."""
 
-    def test_no_duplicates(self, tmp_path):
+    @pytest.mark.parametrize(
+        "file_format",
+        ["plain", "gzip"],
+        ids=["plain_tsv", "gzipped_tsv"],
+    )
+    def test_no_duplicates(self, tsv_factory, file_format):
         """Test file with no duplicates passes successfully."""
-        input_file = tmp_path / "input.tsv"
-        output_file = tmp_path / "output.tsv"
-        input_file.write_text("id\tname\tvalue\n1\talice\t10\n2\tbob\t20\n3\tcharlie\t30\n")
-
-        check_tsv_duplicates.check_duplicates(
-            str(input_file),
-            str(output_file),
-            "id"
-        )
-
-        result = output_file.read_text()
+        input_content = "id\tname\tvalue\n1\talice\t10\n2\tbob\t20\n3\tcharlie\t30\n"
         expected = "id\tname\tvalue\n1\talice\t10\n2\tbob\t20\n3\tcharlie\t30\n"
+
+        if file_format == "plain":
+            input_file = tsv_factory.create_plain("input.tsv", input_content)
+            output_file = tsv_factory.get_path("output.tsv")
+        else:
+            input_file = tsv_factory.create_gzip("input.tsv.gz", input_content)
+            output_file = tsv_factory.get_path("output.tsv.gz")
+
+        check_tsv_duplicates.check_duplicates(input_file, output_file, "id")
+
+        if file_format == "plain":
+            result = tsv_factory.read_plain(output_file)
+        else:
+            result = tsv_factory.read_gzip(output_file)
+
         assert result == expected
 
-    def test_duplicate_values(self, tmp_path):
-        """Test that duplicate values raise ValueError."""
-        input_file = tmp_path / "input.tsv"
-        output_file = tmp_path / "output.tsv"
-        input_file.write_text("id\tname\tvalue\n1\talice\t10\n1\tbob\t20\n")
+    @pytest.mark.parametrize(
+        "input_content,field,expected_match",
+        [
+            (
+                "id\tname\tvalue\n1\talice\t10\n1\tbob\t20\n",
+                "id",
+                "Duplicate value found",
+            ),
+            (
+                "id\tname\tvalue\n3\tcharlie\t30\n1\talice\t10\n",
+                "id",
+                "File is not sorted",
+            ),
+            (
+                "id\tname\tvalue\n1\talice\t10\n",
+                "missing_field",
+                "Field not found in header",
+            ),
+            (
+                "",
+                "id",
+                "No header to select fields from",
+            ),
+        ],
+        ids=["duplicate_values", "unsorted_file", "missing_field", "empty_header"],
+    )
+    def test_check_duplicates_errors(
+        self, tsv_factory, input_content, field, expected_match
+    ):
+        """Test various error conditions for check_duplicates."""
+        input_file = tsv_factory.create_plain("input.tsv", input_content)
+        output_file = tsv_factory.get_path("output.tsv")
 
-        with pytest.raises(ValueError, match="Duplicate value found"):
-            check_tsv_duplicates.check_duplicates(
-                str(input_file),
-                str(output_file),
-                "id"
-            )
-
-    def test_unsorted_file(self, tmp_path):
-        """Test that unsorted file raises ValueError."""
-        input_file = tmp_path / "input.tsv"
-        output_file = tmp_path / "output.tsv"
-        input_file.write_text("id\tname\tvalue\n3\tcharlie\t30\n1\talice\t10\n")
-
-        with pytest.raises(ValueError, match="File is not sorted"):
-            check_tsv_duplicates.check_duplicates(
-                str(input_file),
-                str(output_file),
-                "id"
-            )
-
-    def test_missing_field(self, tmp_path):
-        """Test that missing field raises ValueError."""
-        input_file = tmp_path / "input.tsv"
-        output_file = tmp_path / "output.tsv"
-        input_file.write_text("id\tname\tvalue\n1\talice\t10\n")
-
-        with pytest.raises(ValueError, match="Field not found in header"):
-            check_tsv_duplicates.check_duplicates(
-                str(input_file),
-                str(output_file),
-                "missing_field"
-            )
-
-    def test_empty_header(self, tmp_path):
-        """Test that empty file raises ValueError."""
-        input_file = tmp_path / "empty.tsv"
-        output_file = tmp_path / "output.tsv"
-        input_file.write_text("")
-
-        with pytest.raises(ValueError, match="No header to select fields from"):
-            check_tsv_duplicates.check_duplicates(
-                str(input_file),
-                str(output_file),
-                "id"
-            )
-
-    def test_gzip_input_output(self, tmp_path):
-        """Test with gzipped input and output files."""
-        input_file = tmp_path / "input.tsv.gz"
-        output_file = tmp_path / "output.tsv.gz"
-
-        with gzip.open(input_file, "wt") as f:
-            f.write("id\tname\n1\talice\n2\tbob\n")
-
-        check_tsv_duplicates.check_duplicates(
-            str(input_file),
-            str(output_file),
-            "id"
-        )
-
-        with gzip.open(output_file, "rt") as f:
-            result = f.read()
-
-        expected = "id\tname\n1\talice\n2\tbob\n"
-        assert result == expected
+        with pytest.raises(ValueError, match=expected_match):
+            check_tsv_duplicates.check_duplicates(input_file, output_file, field)
