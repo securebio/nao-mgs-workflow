@@ -64,12 +64,16 @@ These guidelines represent best practices to implement in new code, though some 
     - After making any formatting changes, carefully review the diff to ensure no unintended modifications were introduced that could affect functionality. 
     
 ## Containers
-We preferentially use [Seqera containers](https://seqera.io/containers/), with [Docker Hub](https://hub.docker.com/) as a second choice.
 
-If your process needs a custom container, create a new Dockerfile in the `docker` directory. The name should have the prefix `nao-` followed by a descriptive name containing lowercase letters and hyphens, e.g. `docker/nao-blast-awscli.Dockerfile`
+Where possible, we use [Seqera Wave containers](https://docs.seqera.io/wave), managed programmatically via YAML files in the `containers` directory. To build a new Wave container:
 
-Build and push the custom containers using the script `bin/build-push-docker.sh`. (This should be done by a repo maintainer as it requires being logged in to DockerHub with the securebio username.) 
-    
+1. Write a placeholder statement in `configs/containers.config` specifying a label corresponding to your new container (e.g. `withlabel: foo { container = "bar" }`).
+2. Write a YAML file in the `containers` directory specifying the dependencies to include. Always specify exact versions.
+3. Run `bin/build_wave_container.py PATH_TO_YAML_FILE` to initiate the container build on Wave. The script will automatically update `configs.containers.config` with the appropriate container path.
+4. Wait a few minutes for the container to build before calling processes that depend on it.
+
+If you need a container with functionality beyond what's possible with Conda and Wave, you can build a custom Docker container and host it on [Docker Hub](https://hub.docker.com/). To do this, create a new Dockerfile in the `docker` directory. The name should have the prefix `nao-` followed by a descriptive name containing lowercase letters and hyphens, e.g. `docker/nao-blast-awscli.Dockerfile`. Once the Dockerfile is created, a repo maintainer can build and push it to Docker Hub using the script `bin/build-push-docker.sh`. (This should be done by a repo maintainer as it requires being logged in to DockerHub with the securebio username.) 
+
 ## Python Development Setup
 
 ### Recommended: Using uv

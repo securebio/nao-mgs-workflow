@@ -1,0 +1,7 @@
+name: coreutils_file
+label: coreutils_file
+channels:
+  - conda-forge
+dependencies:
+  - conda-forge::coreutils=9.5
+  - conda-forge::file=5.46

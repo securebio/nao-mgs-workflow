@@ -1,0 +1,6 @@
+name: curl
+label: curl
+channels:
+  - conda-forge
+dependencies:
+  - conda-forge::curl=8.14.1

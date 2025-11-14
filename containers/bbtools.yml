@@ -1,0 +1,9 @@
+name: BBTools
+label: BBTools
+channels:
+  - conda-forge
+  - bioconda
+dependencies:
+  - bioconda::bbmap=39.01
+  - conda-forge::gzip=1.14
+  - conda-forge::wget=1.21.4

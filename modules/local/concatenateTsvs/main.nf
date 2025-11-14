@@ -17,7 +17,7 @@ process CONCATENATE_TSVS {
 
 // Labeled version
 process CONCATENATE_TSVS_LABELED {
-    label "biopython"
+    label "python"
     label "single"
     input:
         tuple val(label), path(tsvs)

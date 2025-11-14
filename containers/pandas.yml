@@ -1,0 +1,7 @@
+name: pandas
+label: pandas
+channels:
+  - conda-forge
+  - bioconda
+dependencies:
+  - conda-forge::pandas=2.3.3

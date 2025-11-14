@@ -1,6 +1,6 @@
 // Consolidated viral SAM filtering: keep contaminant-free reads, applies pair-based score threshold filtering, adds missing mates for UP reads, and sorts output
 process FILTER_VIRAL_SAM {
-    label "pysam_biopython"
+    label "biopython"
     label "single"
     input:
         tuple val(sample), path(sam), path(contaminant_free_reads)

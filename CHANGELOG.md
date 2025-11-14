@@ -1,3 +1,12 @@
+# v3.0.1.4-dev
+- Removed `nextflow.preview.output` statement from `main.nf` for compatibility with Nextflow 25.10
+- Updated Github Actions to use new Nextflow version.
+- Updated container and dependency management
+    - Implemented container dependency scanning with Trivy (`bin/scan_containers.py`) and wrote corresponding Github Actions test (currently expected to fail).
+    - Implemented programmatic generation of Wave containers from YAML configuration files (`bin/build_wave_container.py` and `bin/build_wave_containers.py`) and replaced Docker Hub containers with generated Wave Containers.
+    - Deleted obsolete container specifications in `docker` directory.
+    - Updated non-results-affecting software versions to reduce vulnerabilities.
+
 # v3.0.1.3
 - Updated `docs/batch.md` with a deprecation warning linking to private internal infrastructure for SecureBio users.
 - Refactored `VALIDATE_VIRAL_ASSIGNMENT` in `DOWNSTREAM` to iterate through clusters within groups, reducing channel elements from N_groups × N_clusters to N_groups (#477)

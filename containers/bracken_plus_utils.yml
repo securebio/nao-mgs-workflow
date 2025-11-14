@@ -1,0 +1,9 @@
+name: bracken_plus_utils
+label: bracken_plus_utils
+channels:
+  - conda-forge
+  - bioconda
+dependencies:
+  - bioconda::bracken=3.0
+  - conda-forge::file=5.46
+  - conda-forge::gzip=1.14

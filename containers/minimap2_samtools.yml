@@ -1,0 +1,12 @@
+name: minimap2_samtools
+label: minimap2_samtools
+channels:
+  - conda-forge
+  - bioconda
+dependencies:
+  - conda-forge::coreutils=9.5
+  - conda-forge::curl=8.17.0
+  - conda-forge::unzip=6.0
+  - conda-forge::awscli=2.31.36
+  - bioconda::minimap2=2.28
+  - bioconda::samtools=1.22.1
