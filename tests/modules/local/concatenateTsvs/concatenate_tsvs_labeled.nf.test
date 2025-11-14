@@ -37,6 +37,28 @@ nextflow_process {
         }
     }
 
+    test("Should fail when input TSV column names are in different orders") {
+        tag "expect_failed"
+        when {
+            params {
+            }
+            process {
+                '''
+                input[0] = Channel.of("test")
+                    | combine(Channel.of("${projectDir}/test-data/toy-data/test_tab_sorted_3.tsv"))
+                    | concat(Channel.of("test").combine(COPY_FILE_1.out))
+                    | groupTuple()
+                input[1] = "mismatch"
+                '''
+            }
+        }
+        then {
+            assert process.failed
+            assert process.exitStatus == 1
+            assert process.errorReport.contains("Headers do not match")
+        }
+    }
+
     test("Should fail when input TSV column names don't match") {
         tag "expect_failed"
         when {
@@ -55,7 +77,7 @@ nextflow_process {
         then {
             assert process.failed
             assert process.exitStatus == 1
-            assert process.errorReport.contains("ValueError: Headers do not match")
+            assert process.errorReport.contains("Headers do not match")
         }
     }
 

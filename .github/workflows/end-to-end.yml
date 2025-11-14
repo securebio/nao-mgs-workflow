@@ -31,10 +31,10 @@ jobs:
           java-version: '21'
           distribution: 'temurin'
 
-      - name: Setup Nextflow (25.4.3)
+      - name: Setup Nextflow (25.10.0)
         uses: nf-core/setup-nextflow@v1
         with:
-          version: "25.4.3"
+          version: "25.10.0"
 
       - name: Install nf-test
         run: |
@@ -71,10 +71,10 @@ jobs:
           java-version: '21'
           distribution: 'temurin'
 
-      - name: Setup Nextflow (25.4.3)
+      - name: Setup Nextflow (25.10.0)
         uses: nf-core/setup-nextflow@v1
         with:
-          version: "25.4.3"
+          version: "25.10.0"
 
       - name: Install nf-test
         run: |
@@ -111,10 +111,10 @@ jobs:
           java-version: '21'
           distribution: 'temurin'
 
-      - name: Setup Nextflow (25.4.3)
+      - name: Setup Nextflow (25.10.0)
         uses: nf-core/setup-nextflow@v1
         with:
-          version: "25.4.3"
+          version: "25.10.0"
 
       - name: Install nf-test
         run: |
@@ -152,10 +152,10 @@ jobs:
           java-version: '21'
           distribution: 'temurin'
 
-      - name: Setup Nextflow (25.4.3)
+      - name: Setup Nextflow (25.10.0)
         uses: nf-core/setup-nextflow@v1
         with:
-          version: "25.4.3"
+          version: "25.10.0"
 
       - name: Install nf-test
         run: |
@@ -192,10 +192,10 @@ jobs:
           java-version: '21'
           distribution: 'temurin'
 
-      - name: Setup Nextflow (25.4.3)
+      - name: Setup Nextflow (25.10.0)
         uses: nf-core/setup-nextflow@v1
         with:
-          version: "25.4.3"
+          version: "25.10.0"
 
       - name: Install nf-test
         run: |

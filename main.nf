@@ -3,8 +3,6 @@ include { RUN_VALIDATION } from "./workflows/run_validation"
 include { INDEX } from "./workflows/index"
 include { DOWNSTREAM } from "./workflows/downstream"
 
-nextflow.preview.output = true
-
 workflow {
     main:
         if (params.mode == "index") {

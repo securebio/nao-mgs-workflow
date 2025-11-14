@@ -1,0 +1,16 @@
+[package]
+name = "concatenate_tsvs"
+version = "0.2.0"
+edition = "2021"
+
+[dependencies]
+flate2 = "1.0"
+bzip2 = "0.5"
+clap = { version = "4.5", features = ["derive", "std"], default-features = false }
+
+[profile.release]
+opt-level = "z"     # Optimize for size
+lto = true          # Enable link-time optimization
+codegen-units = 1   # Reduce number of codegen units to increase optimizations
+panic = "abort"     # Abort on panic instead of unwinding
+strip = true        # Strip symbols from binary
