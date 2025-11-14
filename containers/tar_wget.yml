@@ -1,0 +1,8 @@
+name: tar_wget
+label: tar_wget
+channels:
+  - conda-forge
+dependencies:
+  - conda-forge::coreutils=9.5
+  - conda-forge::tar=1.34
+  - conda-forge::wget=1.21.4

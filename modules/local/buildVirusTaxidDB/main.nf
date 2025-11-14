@@ -1,7 +1,7 @@
 // Make TSV of taxid, name, rank and parent taxid for all viruses in NCBI taxonomy
 process BUILD_VIRUS_TAXID_DB {
     label "single"
-    label "R"
+    label "rpkg"
     input:
         path(taxonomy_nodes)
         path(taxonomy_names)

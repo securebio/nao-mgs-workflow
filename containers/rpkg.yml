@@ -1,0 +1,10 @@
+name: rpkg
+label: rpkg
+channels:
+  - conda-forge
+  - bioconda
+dependencies:
+  - conda-forge::r-base=4.4.2
+  - conda-forge::r-tidyverse=2.0.0
+  - conda-forge::r-optparse=1.7.5
+  - conda-forge::r-jsonlite=2.0.0
