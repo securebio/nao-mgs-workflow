@@ -163,7 +163,7 @@ This is the default, small test dataset that we use for testing the `RUN` workfl
 
 Small "toy" data files (uncompressed, generally ~1KB or less) may be added freely to the repo in `test-data/toy-data`.
 
-To make a new test dataset on S3, copy the test dataset to `s3://nao-testing/<name-of-test-dataset>`. A pipeline maintainer (e.g. willbradshaw or harmonbhasin) can give you permission to add to the bucket.
+To make a new test dataset on S3, copy the test dataset to `s3://nao-testing/<name-of-test-dataset>`. A pipeline maintainer (e.g. willbradshaw or katherine-stansifer) can give you permission to add to the bucket.
 
 ```
 aws s3 cp /path/to/my_dataset s3://nao-testing/my_dataset/ --acl public-read
@@ -286,7 +286,7 @@ Feel free to use AI tools (Cursor, GitHub Copilot, Claude Code, etc.) to generat
 5. **Pass automated tests on GitHub Actions**. These run automatically when you open a pull request.
 6. **Write a meaningful description** of your changes in the PR description and give it a meaningful title. 
     - In comments, feel free to flag any open questions or places where you need careful review. 
-7. **Request review** from a maintainer on your changes. Current maintainers are jeffkaufman, willbradshaw, katherine-stansifer, and harmonbhasin. 
+7. **Request review** from a maintainer on your changes. Current maintainers are jeffkaufman, willbradshaw, and katherine-stansifer. 
     - Make sure to assign the PR to the desired reviewer so that they see your PR (put them in the "Assignees" section on GitHub as well as in the "Reviewers" section).
         - If the reviewer is not satisfied and requests changes, they should then change the "Assignee" to be the person who originally submitted the code. This may result in a few loops of "Assignee" being switched between the reviewer and the author.
 8. To merge, you must **have an approving review** on your final changes, and all conversations must be resolved. After merging, please delete your branch!
