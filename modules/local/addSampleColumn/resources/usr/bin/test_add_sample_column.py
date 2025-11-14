@@ -1,113 +1,82 @@
 #!/usr/bin/env python
 
 import pytest
-import gzip
 
-# Import the module to test
 import add_sample_column
 
 
 class TestAddSampleColumn:
     """Test the add_sample_column function."""
 
-    def test_basic_functionality(self, tmp_path):
-        """Test adding a sample column to a basic TSV file."""
-        input_file = tmp_path / "input.tsv"
-        output_file = tmp_path / "output.tsv"
-        input_file.write_text("col1\tcol2\tcol3\nval1\tval2\tval3\nval4\tval5\tval6\n")
+    @pytest.mark.parametrize(
+        "input_content,expected_output",
+        [
+            (
+                "col1\tcol2\tcol3\nval1\tval2\tval3\nval4\tval5\tval6\n",
+                "col1\tcol2\tcol3\tsample\nval1\tval2\tval3\tsample_001\nval4\tval5\tval6\tsample_001\n",
+            ),
+            ("", ""),
+            ("col1\tcol2\tcol3\n", "col1\tcol2\tcol3\tsample\n"),
+            (
+                "col1\tcol2\nval1\tval2\n\nval3\tval4\n",
+                "col1\tcol2\tsample\nval1\tval2\tsample_001\nval3\tval4\tsample_001\n",
+            ),
+        ],
+        ids=["basic_functionality", "empty_file", "header_only", "empty_lines_skipped"],
+    )
+    def test_add_sample_column_success_cases(
+        self, tsv_factory, input_content, expected_output
+    ):
+        """Test adding a sample column to various TSV file formats."""
+        input_file = tsv_factory.create_plain("input.tsv", input_content)
+        output_file = tsv_factory.get_path("output.tsv")
 
         add_sample_column.add_sample_column(
-            str(input_file),
-            "sample_001",
-            "sample",
-            str(output_file)
+            input_file, "sample_001", "sample", output_file
         )
 
-        result = output_file.read_text()
-        expected = "col1\tcol2\tcol3\tsample\nval1\tval2\tval3\tsample_001\nval4\tval5\tval6\tsample_001\n"
+        result = tsv_factory.read_plain(output_file)
+        assert result == expected_output
+
+    @pytest.mark.parametrize(
+        "file_format",
+        ["plain", "gzip"],
+        ids=["plain_tsv", "gzipped_tsv"],
+    )
+    def test_add_sample_column_file_formats(self, tsv_factory, file_format):
+        """Test adding sample column with both plain and gzipped files."""
+        input_content = "col1\tcol2\nval1\tval2\n"
+        expected = "col1\tcol2\tsample\nval1\tval2\tsample_001\n"
+
+        if file_format == "plain":
+            input_file = tsv_factory.create_plain("input.tsv", input_content)
+            output_file = tsv_factory.get_path("output.tsv")
+        else:
+            input_file = tsv_factory.create_gzip("input.tsv.gz", input_content)
+            output_file = tsv_factory.get_path("output.tsv.gz")
+
+        add_sample_column.add_sample_column(
+            input_file, "sample_001", "sample", output_file
+        )
+
+        if file_format == "plain":
+            result = tsv_factory.read_plain(output_file)
+        else:
+            result = tsv_factory.read_gzip(output_file)
+
         assert result == expected
 
-    def test_empty_file(self, tmp_path):
-        """Test handling of completely empty file."""
-        input_file = tmp_path / "empty.tsv"
-        output_file = tmp_path / "output.tsv"
-        input_file.write_text("")
-
-        add_sample_column.add_sample_column(
-            str(input_file),
-            "sample_001",
-            "sample",
-            str(output_file)
-        )
-
-        result = output_file.read_text()
-        assert result == ""
-
-    def test_header_only_file(self, tmp_path):
-        """Test file with only header line and no data rows."""
-        input_file = tmp_path / "header_only.tsv"
-        output_file = tmp_path / "output.tsv"
-        input_file.write_text("col1\tcol2\tcol3\n")
-
-        add_sample_column.add_sample_column(
-            str(input_file),
-            "sample_001",
-            "sample",
-            str(output_file)
-        )
-
-        result = output_file.read_text()
-        expected = "col1\tcol2\tcol3\tsample\n"
-        assert result == expected
-
-    def test_column_already_exists(self, tmp_path):
+    def test_column_already_exists(self, tsv_factory):
         """Test that adding an existing column raises ValueError."""
-        input_file = tmp_path / "input.tsv"
-        output_file = tmp_path / "output.tsv"
-        input_file.write_text("col1\tcol2\tcol3\nval1\tval2\tval3\n")
+        input_file = tsv_factory.create_plain(
+            "input.tsv", "col1\tcol2\tcol3\nval1\tval2\tval3\n"
+        )
+        output_file = tsv_factory.get_path("output.tsv")
 
         with pytest.raises(ValueError, match="Sample name column already exists: col2"):
             add_sample_column.add_sample_column(
-                str(input_file),
+                input_file,
                 "sample_001",
                 "col2",  # Column that already exists
-                str(output_file)
+                output_file,
             )
-
-    def test_empty_lines_skipped(self, tmp_path):
-        """Test that empty lines in the file are skipped."""
-        input_file = tmp_path / "with_empty_lines.tsv"
-        output_file = tmp_path / "output.tsv"
-        input_file.write_text("col1\tcol2\nval1\tval2\n\nval3\tval4\n")
-
-        add_sample_column.add_sample_column(
-            str(input_file),
-            "sample_001",
-            "sample",
-            str(output_file)
-        )
-
-        result = output_file.read_text()
-        expected = "col1\tcol2\tsample\nval1\tval2\tsample_001\nval3\tval4\tsample_001\n"
-        assert result == expected
-
-    def test_gzip_input_output(self, tmp_path):
-        """Test with gzipped input and output files."""
-        input_file = tmp_path / "input.tsv.gz"
-        output_file = tmp_path / "output.tsv.gz"
-
-        with gzip.open(input_file, "wt") as f:
-            f.write("col1\tcol2\nval1\tval2\n")
-
-        add_sample_column.add_sample_column(
-            str(input_file),
-            "sample_001",
-            "sample",
-            str(output_file)
-        )
-
-        with gzip.open(output_file, "rt") as f:
-            result = f.read()
-
-        expected = "col1\tcol2\tsample\nval1\tval2\tsample_001\n"
-        assert result == expected

@@ -1,137 +1,104 @@
 #!/usr/bin/env python
 
 import pytest
-import gzip
 
-# Import the module to test
 import concatenate_tsvs
 
 
 class TestConcatenateTsvs:
     """Test the concatenate_tsvs function."""
 
-    def test_basic_concatenation(self, tmp_path):
-        """Test concatenating multiple TSV files with matching headers."""
-        file1 = tmp_path / "file1.tsv"
-        file2 = tmp_path / "file2.tsv"
-        output_file = tmp_path / "output.tsv"
+    @pytest.mark.parametrize(
+        "files_content,expected_output",
+        [
+            (
+                [
+                    "col1\tcol2\tcol3\nval1\tval2\tval3\n",
+                    "col1\tcol2\tcol3\nval4\tval5\tval6\n",
+                ],
+                "col1\tcol2\tcol3\nval1\tval2\tval3\nval4\tval5\tval6\n",
+            ),
+            (
+                [
+                    "col1\tcol2\tcol3\nval1\tval2\tval3\n",
+                    "col3\tcol1\tcol2\nval6\tval4\tval5\n",
+                ],
+                "col1\tcol2\tcol3\nval1\tval2\tval3\nval4\tval5\tval6\n",
+            ),
+            (
+                ["", ""],
+                "",
+            ),
+            (
+                ["", "col1\tcol2\nval1\tval2\n", "col1\tcol2\nval3\tval4\n"],
+                "col1\tcol2\nval1\tval2\nval3\tval4\n",
+            ),
+            (
+                ["col1\tcol2\nval1\tval2\n"],
+                "col1\tcol2\nval1\tval2\n",
+            ),
+        ],
+        ids=[
+            "basic_concatenation",
+            "reordered_headers",
+            "all_empty_files",
+            "some_empty_files",
+            "single_file",
+        ],
+    )
+    def test_concatenate_success_cases(
+        self, tsv_factory, files_content, expected_output
+    ):
+        """Test various successful concatenation scenarios."""
+        input_files = [
+            tsv_factory.create_plain(f"file{i}.tsv", content)
+            for i, content in enumerate(files_content)
+        ]
+        output_file = tsv_factory.get_path("output.tsv")
 
-        file1.write_text("col1\tcol2\tcol3\nval1\tval2\tval3\n")
-        file2.write_text("col1\tcol2\tcol3\nval4\tval5\tval6\n")
+        concatenate_tsvs.concatenate_tsvs(input_files, output_file)
 
-        concatenate_tsvs.concatenate_tsvs(
-            [str(file1), str(file2)],
-            str(output_file)
-        )
+        result = tsv_factory.read_plain(output_file)
+        assert result == expected_output
 
-        result = output_file.read_text()
-        expected = "col1\tcol2\tcol3\nval1\tval2\tval3\nval4\tval5\tval6\n"
+    @pytest.mark.parametrize(
+        "file_format",
+        ["plain", "gzip"],
+        ids=["plain_tsv", "gzipped_tsv"],
+    )
+    def test_concatenate_file_formats(self, tsv_factory, file_format):
+        """Test concatenating files in different formats."""
+        file1_content = "col1\tcol2\nval1\tval2\n"
+        file2_content = "col1\tcol2\nval3\tval4\n"
+        expected = "col1\tcol2\nval1\tval2\nval3\tval4\n"
+
+        if file_format == "plain":
+            file1 = tsv_factory.create_plain("file1.tsv", file1_content)
+            file2 = tsv_factory.create_plain("file2.tsv", file2_content)
+            output_file = tsv_factory.get_path("output.tsv")
+        else:
+            file1 = tsv_factory.create_gzip("file1.tsv.gz", file1_content)
+            file2 = tsv_factory.create_gzip("file2.tsv.gz", file2_content)
+            output_file = tsv_factory.get_path("output.tsv.gz")
+
+        concatenate_tsvs.concatenate_tsvs([file1, file2], output_file)
+
+        if file_format == "plain":
+            result = tsv_factory.read_plain(output_file)
+        else:
+            result = tsv_factory.read_gzip(output_file)
+
         assert result == expected
 
-    def test_reordered_headers(self, tmp_path):
-        """Test concatenating files with different column orders."""
-        file1 = tmp_path / "file1.tsv"
-        file2 = tmp_path / "file2.tsv"
-        output_file = tmp_path / "output.tsv"
-
-        file1.write_text("col1\tcol2\tcol3\nval1\tval2\tval3\n")
-        file2.write_text("col3\tcol1\tcol2\nval6\tval4\tval5\n")
-
-        concatenate_tsvs.concatenate_tsvs(
-            [str(file1), str(file2)],
-            str(output_file)
-        )
-
-        result = output_file.read_text()
-        expected = "col1\tcol2\tcol3\nval1\tval2\tval3\nval4\tval5\tval6\n"
-        assert result == expected
-
-    def test_mismatched_headers(self, tmp_path):
+    def test_mismatched_headers(self, tsv_factory):
         """Test that mismatched headers raise ValueError."""
-        file1 = tmp_path / "file1.tsv"
-        file2 = tmp_path / "file2.tsv"
-        output_file = tmp_path / "output.tsv"
-
-        file1.write_text("col1\tcol2\tcol3\nval1\tval2\tval3\n")
-        file2.write_text("col1\tcol2\tcol4\nval4\tval5\tval6\n")
+        file1 = tsv_factory.create_plain(
+            "file1.tsv", "col1\tcol2\tcol3\nval1\tval2\tval3\n"
+        )
+        file2 = tsv_factory.create_plain(
+            "file2.tsv", "col1\tcol2\tcol4\nval4\tval5\tval6\n"
+        )
+        output_file = tsv_factory.get_path("output.tsv")
 
         with pytest.raises(ValueError, match="Headers do not match"):
-            concatenate_tsvs.concatenate_tsvs(
-                [str(file1), str(file2)],
-                str(output_file)
-            )
-
-    def test_all_empty_files(self, tmp_path):
-        """Test concatenating all empty files produces empty output."""
-        file1 = tmp_path / "empty1.tsv"
-        file2 = tmp_path / "empty2.tsv"
-        output_file = tmp_path / "output.tsv"
-
-        file1.write_text("")
-        file2.write_text("")
-
-        concatenate_tsvs.concatenate_tsvs(
-            [str(file1), str(file2)],
-            str(output_file)
-        )
-
-        result = output_file.read_text()
-        assert result == ""
-
-    def test_some_empty_files(self, tmp_path):
-        """Test skipping empty files during concatenation."""
-        file1 = tmp_path / "empty.tsv"
-        file2 = tmp_path / "file2.tsv"
-        file3 = tmp_path / "file3.tsv"
-        output_file = tmp_path / "output.tsv"
-
-        file1.write_text("")
-        file2.write_text("col1\tcol2\nval1\tval2\n")
-        file3.write_text("col1\tcol2\nval3\tval4\n")
-
-        concatenate_tsvs.concatenate_tsvs(
-            [str(file1), str(file2), str(file3)],
-            str(output_file)
-        )
-
-        result = output_file.read_text()
-        expected = "col1\tcol2\nval1\tval2\nval3\tval4\n"
-        assert result == expected
-
-    def test_single_file(self, tmp_path):
-        """Test concatenating a single file."""
-        file1 = tmp_path / "file1.tsv"
-        output_file = tmp_path / "output.tsv"
-
-        file1.write_text("col1\tcol2\nval1\tval2\n")
-
-        concatenate_tsvs.concatenate_tsvs(
-            [str(file1)],
-            str(output_file)
-        )
-
-        result = output_file.read_text()
-        expected = "col1\tcol2\nval1\tval2\n"
-        assert result == expected
-
-    def test_gzip_files(self, tmp_path):
-        """Test concatenating gzipped files."""
-        file1 = tmp_path / "file1.tsv.gz"
-        file2 = tmp_path / "file2.tsv.gz"
-        output_file = tmp_path / "output.tsv.gz"
-
-        with gzip.open(file1, "wt") as f:
-            f.write("col1\tcol2\nval1\tval2\n")
-        with gzip.open(file2, "wt") as f:
-            f.write("col1\tcol2\nval3\tval4\n")
-
-        concatenate_tsvs.concatenate_tsvs(
-            [str(file1), str(file2)],
-            str(output_file)
-        )
-
-        with gzip.open(output_file, "rt") as f:
-            result = f.read()
-
-        expected = "col1\tcol2\nval1\tval2\nval3\tval4\n"
-        assert result == expected
+            concatenate_tsvs.concatenate_tsvs([file1, file2], output_file)
