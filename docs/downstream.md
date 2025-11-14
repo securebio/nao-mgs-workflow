@@ -1,18 +1,20 @@
 # DOWNSTREAM WORKFLOW
 
-This page describes the structure and function of the `DOWNSTREAM` workflow. This workflow is responsible for downstream analysis of the outputs of the [`RUN` workflow](./run.md), particularly in cases that require comparisons across reads and/or samples[^comp]. Currently, this workflow performs three main analyses: (1) identification and marking of duplicate reads based on their Bowtie2 alignment results, (2) validation of viral taxonomic assignments using BLAST against the NCBI core_nt database, and (3) counting the number of reads assigned to viral clades by LCA.
+This page describes the structure and function of the `DOWNSTREAM` workflow. This workflow is responsible for downstream analysis of the outputs of the [`RUN` workflow](./run.md), particularly in cases that require comparisons across reads and/or samples[^comp].
+
+For short-read data, this workflow performs three main analyses: (1) identification and marking of duplicate reads based on their Bowtie2 alignment results, (2) validation of viral taxonomic assignments using BLAST against the NCBI core_nt database, and (3) counting the number of reads assigned to viral clades by LCA.
+
+For ONT data, the workflow only performs (1) validation of viral taxonomic assignments using BLAST against the NCBI core_nt database.
 
 [^comp]: These are kept to a minimum in the `RUN` workflow to minimize memory demands and maximize parallelization.
 
-> [!NOTE]
-> Currently, the `DOWNSTREAM` workflow is only used for short-read data. We intend to investigate similar workflows for ONT data in the future.
-
-
 ## Workflow structure
+
+### Short-read (Illumina/Aviti)
 
 ```mermaid
 ---
-title: DOWNSTREAM WORKFLOW
+title: DOWNSTREAM WORKFLOW (Short-read)
 config:
   layout: horizontal
 ---
@@ -25,7 +27,6 @@ E --> K(Summary TSVs)
 E --> F[VALIDATE_VIRAL_ASSIGNMENTS]
 G(Viral taxonomy DB) --> F
 F --> H(Validation hits TSV)
-F --> I(BLAST results TSV)
 G --> L[COUNT_READS_PER_CLADE]
 E --> L
 L --> M(Clade count TSVs)
@@ -50,6 +51,34 @@ style I fill:#000,color:#fff,stroke:#000
 style J fill:#000,color:#fff,stroke:#000
 style K fill:#000,color:#fff,stroke:#000
 style M fill:#000,color:#fff,stroke:#000
+```
+
+### Long-read (ONT)
+
+```mermaid
+---
+title: DOWNSTREAM WORKFLOW (ONT)
+config:
+  layout: horizontal
+---
+flowchart LR
+A(Viral hits tables) & B(Grouping information) --> C[LOAD_DOWNSTREAM_DATA]
+C --> D[PREPARE_GROUP_TSVS]
+D --> F[VALIDATE_VIRAL_ASSIGNMENTS]
+G(Viral taxonomy DB) --> F
+F --> H(Validation hits TSV)
+subgraph "Data preparation"
+C
+D
+end
+subgraph "Post-hoc validation"
+F
+end
+style A fill:#fff,stroke:#000
+style B fill:#fff,stroke:#000
+style G fill:#fff,stroke:#000
+style H fill:#000,color:#fff,stroke:#000
+style I fill:#000,color:#fff,stroke:#000
 ```
 
 ## Subworkflows
@@ -90,6 +119,9 @@ style H fill:#000,color:#fff,stroke:#000
 ```
 
 ### Annotate alignment duplicates (`MARK_VIRAL_DUPLICATES`)
+
+> [!NOTE]
+> This subworkflow is only executed for short-read platforms. ONT processing skips this step.
 
 This subworkflow takes in partitioned hits tables from `PREPARE_GROUP_TSVS`, then identifies duplicate reads on the basis of their assigned genome ID and alignment coordinates, as determined by Bowtie2 in the `RUN` workflow. In order to be considered duplicates, two read pairs must be mapped to the same genome ID by Bowtie2, with terminal alignment coordinates that are within a user-specified distance of each other (default 1 nt) at both ends. This fuzzy matching allows for the identification of duplicate reads in the presence of small read errors, alignment errors or overzealous adapter trimming.
 
@@ -172,6 +204,11 @@ style K fill:#000,color:#fff,stroke:#000
 
 ### Viral read counting
 
+
+> [!NOTE]
+> This subworkflow is only executed for short-read platforms. ONT processing skips this step.
+
+
 For each sample group, this module counts the number of reads assigned by LCA to each viral taxon in two ways:
 
 1. The number of reads directly assigned to a taxid by LCA.
@@ -211,27 +248,34 @@ To run the `DOWNSTREAM` workflow, you need:
     - The BLAST database for validation (e.g., `core_nt/`)
     - NCBI taxonomy files (`taxonomy-nodes.dmp`, `taxonomy-names.dmp`)
 5. A **config file** in a clean launch directory, pointing to:
+    - The sequencing platform (`params.platform`); one of: "illumina", "aviti", "pacbio", "ont"
     - The pipeline mode (`params.mode = "downstream"`);
     - The input file (`params.input_file`);
     - The base directory in which to put the working and output directories (`params.base_dir`);
     - The reference directory containing databases and indices (`params.ref_dir`);
-    - The permitted deviation when identifying alignment duplicates (`params.aln_dup_deviation`);
-    - Parameters for sequence clustering during validation:
-        - `params.validation_cluster_identity`: Minimum sequence identity for cluster formation (default 0.95)
-        - `params.validation_n_clusters`: Maximum clusters per selected taxid to validate (default 20)
+    - The permitted deviation when identifying alignment duplicates (`params.aln_dup_deviation`); **Note: Only used for short-read platforms**
+    - Parameters for sequence clustering during validation (different for short-read and long-read):
+        - `params.validation_cluster_identity`: Minimum sequence identity for cluster formation (default 0.95 for short-read, 1 for long-read)
+        - `params.validation_n_clusters`: Maximum clusters per selected taxid to validate (default 20 for short-read, 1000000 for long-read[^max_clusters])
     - Parameters for BLAST validation:
         - `params.blast_db_prefix`: Prefix for BLAST database (e.g., "core_nt")
-        - `params.blast_perc_id`: Percentage identity threshold for BLAST hits (default 60)
-        - `params.blast_qcov_hsp_perc`: Query coverage threshold for BLAST hits (default 30)
-        - `params.blast_max_rank`: Maximum rank for BLAST hits by bitscore (default 10)
+        - `params.blast_perc_id`: Percentage identity threshold for BLAST hits (60 for short-read, 0 for long-read)
+        - `params.blast_qcov_hsp_perc`: Query coverage threshold for BLAST hits (30 for short-read, 0 for long-read)
+        - `params.blast_max_rank`: Maximum rank for BLAST hits by bitscore (10 for short-read, 5 for long-read)
         - `params.blast_min_frac`: Minimum fraction of best bitscore to retain hits (default 0.9)
         - `params.taxid_artificial`: Parent taxid for artificial sequences (default 81077)
+
+[^max_clusters]: For ONT data, we don't need to limit the number of clusters to validate, as the total number of viral reads is typically much smaller than for short-read data.
 
 > [!NOTE]
 > Currently, the input file and grouping TSV must be generated manually. We intend to implement programmatic generation of these files in the future.
 
 > [!TIP]
 > We recommend starting each pipeline run in a clean launch directory, containing only your input file and config file.
+
+> [!TIP]
+> For ONT data, use `configs/downstream_ont.config` as your starting template, which includes parameters for clustering and BLAST validation more appropriate for ONT data.
+
 
 Given these input files, you must choose a run profile as described [here](./usage.md#2-choosing-a-profile). You can then run the pipeline as follows:
 

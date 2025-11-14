@@ -1,4 +1,14 @@
 {
+    "downstream_ont_output": {
+        "content": [
+            "ont_1_validation_hits.tsv.gz:md5,c8ae8cac9f2696cc60c28fb1e1be31e8"
+        ],
+        "meta": {
+            "nf-test": "0.9.3",
+            "nextflow": "25.10.0"
+        },
+        "timestamp": "2025-11-14T16:11:06.691438"
+    },
     "downstream_output": {
         "content": [
             "gs1_duplicate_reads.tsv.gz:md5,1fec7b7960c4127f820426219d13466b",
