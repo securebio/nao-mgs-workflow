@@ -1,35 +1,33 @@
 #!/usr/bin/env python
 
-import pytest
-import os
 import glob
+import os
 
-# Import the module to test
+import pytest
+
 import partition_tsv
 
 
 class TestReadLine:
     """Test the read_line function."""
 
-    def test_read_normal_line(self, tmp_path):
-        """Test reading a normal line."""
+    @pytest.mark.parametrize(
+        "content,expected",
+        [
+            ("col1\tcol2\tcol3\n", ["col1", "col2", "col3"]),
+            ("", None),
+        ],
+        ids=["normal_line", "empty_file"],
+    )
+    def test_read_line(self, tmp_path, content, expected):
+        """Test reading lines from files."""
         test_file = tmp_path / "test.tsv"
-        test_file.write_text("col1\tcol2\tcol3\n")
+        test_file.write_text(content)
 
         with open(test_file) as f:
             result = partition_tsv.read_line(f)
 
-        assert result == ["col1", "col2", "col3"]
-
-    def test_read_empty_file(self, tmp_path):
-        """Test reading from empty file returns None."""
-        test_file = tmp_path / "empty.tsv"
-        test_file.write_text("")
-
-        with open(test_file) as f:
-            result = partition_tsv.read_line(f)
-
-        assert result is None
+        assert result == expected
 
 
 class TestWriteLine:
@@ -51,50 +49,46 @@ class TestPartition:
 
     def test_basic_partition(self, tmp_path):
         """Test basic partitioning by column."""
-        os.chdir(tmp_path)  # Change to tmp directory for output files
+        os.chdir(tmp_path)
 
         input_file = tmp_path / "input.tsv"
-        input_file.write_text("id\tname\tvalue\n1\talice\t10\n1\tbob\t20\n2\tcharlie\t30\n")
+        input_file.write_text(
+            "id\tname\tvalue\n1\talice\t10\n1\tbob\t20\n2\tcharlie\t30\n"
+        )
 
-        # Use just the filename, not the full path
         partition_tsv.partition("input.tsv", "id")
 
-        # Check partition files were created
         partition_files = sorted(glob.glob("partition_*_input.tsv"))
         assert len(partition_files) == 2
 
-        # Check first partition
         with open(partition_files[0]) as f:
             content1 = f.read()
         assert "id\tname\tvalue\n" in content1
         assert "1\talice\t10\n" in content1
         assert "1\tbob\t20\n" in content1
 
-        # Check second partition
         with open(partition_files[1]) as f:
             content2 = f.read()
         assert "id\tname\tvalue\n" in content2
         assert "2\tcharlie\t30\n" in content2
 
-    def test_partition_empty_file(self, tmp_path):
-        """Test that empty file raises ValueError."""
-        os.chdir(tmp_path)
-
-        input_file = tmp_path / "empty.tsv"
-        input_file.write_text("")
-
-        with pytest.raises(ValueError, match="Input file is empty"):
-            partition_tsv.partition("empty.tsv", "id")
-
-    def test_partition_missing_column(self, tmp_path):
-        """Test that missing column raises ValueError."""
+    def test_partition_single_group(self, tmp_path):
+        """Test partitioning with all rows in one group."""
         os.chdir(tmp_path)
 
         input_file = tmp_path / "input.tsv"
-        input_file.write_text("id\tname\tvalue\n1\talice\t10\n")
+        input_file.write_text(
+            "id\tname\tvalue\n1\talice\t10\n1\tbob\t20\n1\tcharlie\t30\n"
+        )
 
-        with pytest.raises(ValueError, match="Required column is missing from header"):
-            partition_tsv.partition("input.tsv", "missing_col")
+        partition_tsv.partition("input.tsv", "id")
+
+        partition_files = glob.glob("partition_*_input.tsv")
+        assert len(partition_files) == 1
+
+        with open(partition_files[0]) as f:
+            lines = f.readlines()
+        assert len(lines) == 4  # header + 3 data rows
 
     def test_partition_header_only(self, tmp_path):
         """Test partitioning file with only header."""
@@ -105,34 +99,33 @@ class TestPartition:
 
         partition_tsv.partition("header_only.tsv", "id")
 
-        # Should create one empty partition file
         partition_files = glob.glob("partition_*_header_only.tsv")
         assert len(partition_files) == 1
         assert "empty" in partition_files[0]
 
-    def test_partition_unsorted_file(self, tmp_path):
-        """Test that unsorted file raises ValueError."""
-        os.chdir(tmp_path)
-
-        input_file = tmp_path / "unsorted.tsv"
-        input_file.write_text("id\tname\tvalue\n2\tcharlie\t30\n1\talice\t10\n")
-
-        with pytest.raises(ValueError, match="Input file is not sorted"):
-            partition_tsv.partition("unsorted.tsv", "id")
-
-    def test_partition_single_group(self, tmp_path):
-        """Test partitioning with all rows in one group."""
+    @pytest.mark.parametrize(
+        "content,column,expected_match",
+        [
+            ("", "id", "Input file is empty"),
+            (
+                "id\tname\tvalue\n1\talice\t10\n",
+                "missing_col",
+                "Required column is missing from header",
+            ),
+            (
+                "id\tname\tvalue\n2\tcharlie\t30\n1\talice\t10\n",
+                "id",
+                "Input file is not sorted",
+            ),
+        ],
+        ids=["empty_file", "missing_column", "unsorted_file"],
+    )
+    def test_partition_errors(self, tmp_path, content, column, expected_match):
+        """Test various error conditions."""
         os.chdir(tmp_path)
 
         input_file = tmp_path / "input.tsv"
-        input_file.write_text("id\tname\tvalue\n1\talice\t10\n1\tbob\t20\n1\tcharlie\t30\n")
+        input_file.write_text(content)
 
-        partition_tsv.partition("input.tsv", "id")
-
-        # Should create one partition file
-        partition_files = glob.glob("partition_*_input.tsv")
-        assert len(partition_files) == 1
-
-        with open(partition_files[0]) as f:
-            lines = f.readlines()
-        assert len(lines) == 4  # header + 3 data rows
+        with pytest.raises(ValueError, match=expected_match):
+            partition_tsv.partition("input.tsv", column)
