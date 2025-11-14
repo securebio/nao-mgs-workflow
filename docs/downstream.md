@@ -139,8 +139,8 @@ flowchart LR
 C("Viral taxonomy DB") --> B[SPLIT_VIRAL_TSV_BY_SELECTED_TAXID]
 A("Annotated hits TSVs <br> (MARK_VIRAL_DUPLICATES)") --> B
 B --> D[CLUSTER_VIRAL_ASSIGNMENTS]
-D --> E[CONCATENATE_FILES_ACROSS_SELECTED_TAXID]
-D --> F[CONCATENATE_TSVS_ACROSS_SELECTED_TAXID]
+D --> E[CONCATENATE_FILES_BY_EXTENSION]
+D --> F[CONCATENATE_TSVS_LABELED]
 E --> G[BLAST_FASTA]
 G --> H[VALIDATE_CLUSTER_REPRESENTATIVES]
 A --> H
@@ -153,7 +153,7 @@ subgraph "Partition and cluster by selected taxid"
 B
 D
 end
-subgraph "Concatenate across selected taxid"
+subgraph "Concatenate by sample group"
 E
 F
 end
@@ -313,43 +313,9 @@ style H fill:#000,color:#fff,stroke:#000
 style I fill:#000,color:#fff,stroke:#000
 ```
 
-#### Concatenate data across selected taxid (`CONCATENATE_FILES_ACROSS_SELECTED_TAXID` and `CONCATENATE_TSVS_ACROSS_SELECTED_TAXID`)
-
-These two subworkflows take partitioned data from `CLUSTER_VIRAL_ASSIGNMENTS` (FASTA files and clustering TSVs respectively) and reorganize them by sample group rather than by taxid group. Each subworkflow extracts the group identifier from the combined sample-group/taxid-group labels, then concatenates all files sharing the same group label. This restructuring allows for group-level BLAST analysis rather than separate BLAST jobs for each taxid group, significantly reducing computational overhead.
-
-```mermaid
----
-title: CONCATENATE_FILES_ACROSS_SELECTED_TAXID
-config:
-  layout: horizontal
----
-flowchart LR
-A("Representative FASTA files <br> labeled by sample group & taxid group <br> (CLUSTER_VIRAL_ASSIGNMENTS)") --> B[Extract group labels]
-B --> C[Collate and concatenate by sample group]
-C --> D(Concatenated FASTA files <br> labeled by group)
-style A fill:#fff,stroke:#000
-style D fill:#000,color:#fff,stroke:#000
-```
-
-```mermaid
----
-title: CONCATENATE_TSVS_ACROSS_SELECTED_TAXID
-config:
-  layout: horizontal
----
-flowchart LR
-A("Cluster information TSVs <br> labeled by group_selected_taxid <br> (CLUSTER_VIRAL_ASSIGNMENTS)") --> B[Add group_selected_taxid column]
-B --> C[Extract group labels]
-C --> D[Collate and concatenate by sample group]
-D --> E[Add group column]
-E --> F(Concatenated TSVs <br> labeled by group)
-style A fill:#fff,stroke:#000
-style F fill:#000,color:#fff,stroke:#000
-```
-
 #### Perform BLAST validation (`BLAST_FASTA`)
 
-This subworkflow takes concatenated representative sequences from `CONCATENATE_FILES_ACROSS_SELECTED_TAXID` and validates them against the NCBI core_nt database using BLAST. The subworkflow then filters BLAST results to retain only high-quality alignments: specifically, it filters to only the best alignment for each query/subject combination, then filters these to only include those whose bitscore is:
+This subworkflow takes concatenated representative sequences from `CLUSTER_VIRAL_ASSIGNMENTS` (concatenated by sample group using `CONCATENATE_FILES_BY_EXTENSION`) and validates them against the NCBI core_nt database using BLAST. The subworkflow then filters BLAST results to retain only high-quality alignments: specifically, it filters to only the best alignment for each query/subject combination, then filters these to only include those whose bitscore is:
 
 1. In the top-N alignments by bitscore for that query (for some N);
 2. At least P% of the bitscore of the best alignment for that query (for some P).
@@ -363,7 +329,7 @@ config:
   layout: horizontal
 ---
 flowchart LR
-A("Representative FASTA <br> (CONCATENATE_FILES_ACROSS_SELECTED_TAXID)") --> B[BLASTN]
+A("Representative FASTA <br> (CLUSTER_VIRAL_ASSIGNMENTS)") --> B[BLASTN]
 B --> C[Sort by query, subject, bitscore]
 C --> D[Filter to best hit per query/subject]
 D --> E[Sort by query, bitscore]
@@ -419,7 +385,7 @@ style H fill:#000,color:#fff,stroke:#000
 
 #### Propagate validation to individual hits (`PROPAGATE_VALIDATION_INFORMATION`)
 
-This subworkflow takes three inputs: the original hits TSV, the clustering information TSV from `CONCATENATE_TSVS_ACROSS_SELECTED_TAXID`, and the validation results from `VALIDATE_CLUSTER_REPRESENTATIVES`. Through a series of left-joins, it combines information from all of these into a single output TSV. The result is a TSV for which each hit is annotated with (a) its cluster representative status and ID, and (b) validation information for that representative, allowing indirect validation of each hit without BLASTing each of them individually.
+This subworkflow takes three inputs: the original hits TSV, the clustering information TSV from `CLUSTER_VIRAL_ASSIGNMENTS` (concatenated by sample group), and the validation results from `VALIDATE_CLUSTER_REPRESENTATIVES`. Through a series of left-joins, it combines information from all of these into a single output TSV. The result is a TSV for which each hit is annotated with (a) its cluster representative status and ID, and (b) validation information for that representative, allowing indirect validation of each hit without BLASTing each of them individually.
 
 ```mermaid
 ---
@@ -429,7 +395,7 @@ config:
 ---
 flowchart LR
 A("Original hits TSV <br> (MARK_VIRAL_DUPLICATES)") --> B[Sort by seq_id]
-C("Clustering TSV <br> (CONCATENATE_TSVS_ACROSS_SELECTED_TAXID)") --> D[Sort by cluster_rep_id]
+C("Clustering TSV <br> (CLUSTER_VIRAL_ASSIGNMENTS)") --> D[Sort by cluster_rep_id]
 E("Validation TSV <br> (VALIDATE_CLUSTER_REPRESENTATIVES)") --> F[Sort by cluster_rep_id]
 D --> G[Left join validation TSV into clustering TSV]
 F --> G

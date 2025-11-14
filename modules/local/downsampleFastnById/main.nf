@@ -34,7 +34,7 @@ process DOWNSAMPLE_FASTN_BY_ID_LIST {
             ids_file="${ids_array[$i]}"
             output=downsampled_${reads_file}
 
-            seqkit grep -f ${ids_file} ${reads_file} | seqkit rmdup | !{fastn.toString().endsWith(".gz") ? 'gzip -c' : 'cat'} > ${output}
+            seqkit grep -f ${ids_file} ${reads_file} | seqkit rmdup | { [[ "${reads_file}" == *.gz ]] && gzip -c || cat; } > ${output}
 
             ln -s ${reads_file} input_${reads_file}
             ln -s ${ids_file} input_${ids_file}

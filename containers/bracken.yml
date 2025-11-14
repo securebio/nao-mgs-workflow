@@ -1,0 +1,7 @@
+name: Bracken
+label: Bracken
+channels:
+  - conda-forge
+  - bioconda
+dependencies:
+  - bioconda::bracken=2.9

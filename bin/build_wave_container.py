@@ -4,57 +4,34 @@ Build a container using Seqera Wave API and update containers.config.
 """
 import argparse
 import base64
-import json
 import re
 import sys
 from pathlib import Path
 import requests
 import yaml
 
-
 def read_container_spec(spec_file: Path) -> dict:
     """Read container specification from YAML file."""
     with open(spec_file) as f:
         return yaml.safe_load(f)
 
-
-def build_conda_yaml(spec: dict) -> str:
-    """Generate conda environment YAML from spec."""
-    conda_yaml = {
-        "channels": spec.get("channels", ["conda-forge", "bioconda"]),
-        "dependencies": spec["dependencies"]
-    }
-    return yaml.dump(conda_yaml)
-
-
 def build_wave_container(spec: dict) -> str:
     """Call Wave API to build container and return the container URL."""
     wave_api = "https://wave.seqera.io/v1alpha2/container"
     deps = spec["dependencies"]
+    channels = spec.get("channels", ["conda-forge", "bioconda"])
+    packages = {
+        "type": "CONDA",
+        "channels": channels,
+    }
     has_pip = any(isinstance(dep, dict) and "pip" in dep for dep in deps)
     if has_pip:
-        conda_yaml = yaml.dump({
-            "channels": spec.get("channels", ["conda-forge", "bioconda"]),
-            "dependencies": deps
-        })
+        conda_yaml = yaml.dump({"channels": channels, "dependencies": deps})
         conda_yaml_b64 = base64.b64encode(conda_yaml.encode()).decode()
-        payload = {
-            "packages": {
-                "type": "CONDA",
-                "environment": conda_yaml_b64,
-                "channels": spec.get("channels", ["conda-forge", "bioconda"])
-            },
-            "freeze": True
-        }
+        packages["environment"] = conda_yaml_b64
     else:
-        payload = {
-            "packages": {
-                "type": "CONDA",
-                "entries": deps,
-                "channels": spec.get("channels", ["conda-forge", "bioconda"])
-            },
-            "freeze": True
-        }
+        packages["entries"] = deps
+    payload = {"packages": packages, "freeze": True}
     response = requests.post(wave_api, json=payload)
     if not response.ok:
         print(f"Error response: {response.status_code}", file=sys.stderr)
@@ -82,30 +59,50 @@ def update_containers_config(config_file: Path, label: str, container_url: str):
     return True
 
 
+def build_container_from_spec(spec_file: Path, config_file: Path, dry_run: bool = False) -> bool:
+    """
+    Build a Wave container from a spec file and optionally update the config.
+
+    Args:
+        spec_file: Path to container spec YAML file
+        config_file: Path to containers.config file
+        dry_run: If True, don't update config file
+
+    Returns:
+        True if successful, False otherwise
+    """
+    if not spec_file.exists():
+        print(f"Error: Spec file {spec_file} not found", file=sys.stderr)
+        return False
+
+    spec = read_container_spec(spec_file)
+    label = spec.get("label")
+    if not label:
+        print("Error: 'label' field required in spec file", file=sys.stderr)
+        return False
+
+    print(f"Building container for {label}...")
+    container_url = build_wave_container(spec)
+    print(f"Container built: {container_url}")
+
+    if not dry_run:
+        return update_containers_config(config_file, label, container_url)
+
+    return True
+
+
 def main():
     parser = argparse.ArgumentParser(description="Build Wave container and update config")
     parser.add_argument("spec_file", help="Path to container spec YAML file")
     parser.add_argument("--config", default="configs/containers.config", help="Path to containers.config")
     parser.add_argument("--dry-run", action="store_true", help="Don't update config file")
     args = parser.parse_args()
+
     spec_file = Path(args.spec_file)
     config_file = Path(args.config)
-    if not spec_file.exists():
-        print(f"Error: Spec file {spec_file} not found", file=sys.stderr)
-        sys.exit(1)
-    spec = read_container_spec(spec_file)
-    label = spec.get("label")
-    if not label:
-        print("Error: 'label' field required in spec file", file=sys.stderr)
-        sys.exit(1)
-    print(f"Building container for {label}...")
-    container_url = build_wave_container(spec)
-    print(f"Container built: {container_url}")
-    if not args.dry_run:
-        if update_containers_config(config_file, label, container_url):
-            sys.exit(0)
-        else:
-            sys.exit(1)
+
+    success = build_container_from_spec(spec_file, config_file, args.dry_run)
+    sys.exit(0 if success else 1)
 
 
 if __name__ == "__main__":
