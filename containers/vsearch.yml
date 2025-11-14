@@ -5,4 +5,4 @@ channels:
   - bioconda
 dependencies:
   - bioconda::vsearch=2.30.0
-  - conda-forge::gzip=1.13
+  - conda-forge::gzip=1.14

@@ -6,4 +6,4 @@ channels:
 dependencies:
   - bioconda::bracken=3.0
   - conda-forge::file=5.46
-  - conda-forge::gzip=1.13
+  - conda-forge::gzip=1.14

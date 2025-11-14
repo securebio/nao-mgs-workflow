@@ -1,6 +1,11 @@
 # v3.0.1.4-dev
 - Removed `nextflow.preview.output` statement from `main.nf` for compatibility with Nextflow 25.10
 - Updated Github Actions to use new Nextflow version.
+- Updated container and dependency management
+    - Implemented container dependency scanning with Trivy (`bin/scan_containers.py`) and wrote corresponding Github Actions test (currently expected to fail).
+    - Implemented programmatic generation of Wave containers from YAML configuration files (`bin/build_wave_container.py` and `bin/build_wave_containers.py`) and replaced Docker Hub containers with generated Wave Containers.
+    - Deleted obsolete container specifications in `docker` directory.
+    - Updated non-results-affecting software versions to reduce vulnerabilities.
 
 # v3.0.1.3
 - Updated `docs/batch.md` with a deprecation warning linking to private internal infrastructure for SecureBio users.
@@ -8,10 +13,6 @@
   - Updated modules to run loops internally rather than having Nextflow iterate through individual elements
   - Created new processes with `_LIST` suffix for backwards compatibility, with tests in `main_list.nf.test` files
   - Removed `CONCATENATE_FILES_ACROSS_SELECTED_TAXID` and `CONCATENATE_TSVS_ACROSS_SELECTED_TAXID` subworkflows which were reduced to single modules by this refactoring
-- Updated container and dependency management
-    - Implemented container dependency scanning with Trivy (`bin/scan_containers.py`) and wrote corresponding Github Actions test (currently expected to fail).
-    - Implemented programmatic generation of Wave containers from YAML configuration files (`bin/build_wave_container.py` and `bin/build_wave_containers.py`) and replaced Docker Hub containers with generated Wave Containers.
-    - Deleted obsolete container specifications in `docker` directory.
 
 # v3.0.1.2
 - `INDEX` workflow now uses daily releases of Virus-Host DB and NCBI taxonomy database, and the Kraken DB was updated to the latest version. (#445)
