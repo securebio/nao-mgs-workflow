@@ -1,12 +1,6 @@
 #!/usr/bin/env python
 
 import pytest
-import tempfile
-import os
-from pathlib import Path
-import gzip
-import bz2
-
 # Import the module to test
 import add_fixed_column
 
