@@ -66,18 +66,39 @@ fn read_header(reader: &mut dyn BufRead) -> io::Result<Option<Vec<String>>> {
     }
 }
 
-fn check_headers_match(header1: &[String], header2: &[String]) -> Result<(), String> {
-    if header1.len() != header2.len() {
-        return Err("Header length mismatch".to_string());
+fn check_headers(header: &[String], reference_header: &[String]) -> Result<(), String> {
+    use std::collections::HashSet;
+    
+    let hset: HashSet<&String> = header.iter().collect();
+    let rset: HashSet<&String> = reference_header.iter().collect();
+    
+    let header_difference: Vec<_> = hset.symmetric_difference(&rset).collect();
+    
+    if header_difference.is_empty() {
+        return Ok(());
     }
-
-    for (i, (h1, h2)) in header1.iter().zip(header2.iter()).enumerate() {
-        if h1 != h2 {
-            return Err("Headers do not match".to_string());
-        }
+    
+    let mut msg = "Headers do not match:".to_string();
+    let missing: Vec<_> = rset.difference(&hset).collect();
+    if !missing.is_empty() {
+        msg.push_str(&format!("\n\tMissing fields: {:?}", missing));
     }
+    let extra: Vec<_> = hset.difference(&rset).collect();
+    if !extra.is_empty() {
+        msg.push_str(&format!("\n\tExtra fields: {:?}", extra));
+    }
+    
+    Err(msg)
+}
 
-    Ok(())
+fn map_headers(header: &[String], reference_header: &[String]) -> Vec<usize> {
+    let header_mapping: std::collections::HashMap<&String, usize> = 
+        header.iter().enumerate().map(|(i, col)| (col, i)).collect();
+    
+    reference_header
+        .iter()
+        .map(|col| *header_mapping.get(col).expect("Header field not found in mapping"))
+        .collect()
 }
 
 fn concatenate_tsvs(input_files: &[String], output_file: &str) -> Result<(), Box<dyn Error>> {
@@ -123,13 +144,28 @@ fn concatenate_tsvs(input_files: &[String], output_file: &str) -> Result<(), Box
         let mut reader = open_reader(input_path)?;
 
         if let Some(header) = read_header(&mut *reader)? {
-            // Check headers match
-            check_headers_match(&header, ref_header)?;
+            // Check headers match (fields must match, order can differ)
+            check_headers(&header, ref_header)?;
 
-            // Write all data lines (skip header)
+            // Generate mapping of header fields to reference header
+            let header_mapping = map_headers(&header, ref_header);
+
+            // Write all data lines with mapped fields
             let mut line = String::new();
             while reader.read_line(&mut line)? > 0 {
-                writer.write_all(line.as_bytes())?;
+                let trimmed = line.trim();
+                if trimmed.is_empty() {
+                    line.clear();
+                    continue;
+                }
+                
+                let fields: Vec<&str> = trimmed.split('\t').collect();
+                let mapped_fields: Vec<&str> = header_mapping
+                    .iter()
+                    .map(|&idx| fields.get(idx).copied().unwrap_or(""))
+                    .collect();
+                
+                writeln!(writer, "{}", mapped_fields.join("\t"))?;
                 line.clear();
             }
         }
