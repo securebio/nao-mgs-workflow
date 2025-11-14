@@ -10,7 +10,7 @@ import sys
 from pathlib import Path
 
 
-def extract_containers(config_file: Path) -> list[str]:
+def extract_containers(config_file: Path) -> set[str]:
     """Extract unique container addresses from Nextflow config file."""
     pattern = re.compile(r'container\s*=\s*"([^"]+)"')
     containers = set()

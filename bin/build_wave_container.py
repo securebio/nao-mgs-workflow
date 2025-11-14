@@ -4,57 +4,34 @@ Build a container using Seqera Wave API and update containers.config.
 """
 import argparse
 import base64
-import json
 import re
 import sys
 from pathlib import Path
 import requests
 import yaml
 
-
 def read_container_spec(spec_file: Path) -> dict:
     """Read container specification from YAML file."""
     with open(spec_file) as f:
         return yaml.safe_load(f)
 
-
-def build_conda_yaml(spec: dict) -> str:
-    """Generate conda environment YAML from spec."""
-    conda_yaml = {
-        "channels": spec.get("channels", ["conda-forge", "bioconda"]),
-        "dependencies": spec["dependencies"]
-    }
-    return yaml.dump(conda_yaml)
-
-
 def build_wave_container(spec: dict) -> str:
     """Call Wave API to build container and return the container URL."""
     wave_api = "https://wave.seqera.io/v1alpha2/container"
     deps = spec["dependencies"]
+    channels = spec.get("channels", ["conda-forge", "bioconda"])
+    packages = {
+        "type": "CONDA",
+        "channels": channels,
+    }
     has_pip = any(isinstance(dep, dict) and "pip" in dep for dep in deps)
     if has_pip:
-        conda_yaml = yaml.dump({
-            "channels": spec.get("channels", ["conda-forge", "bioconda"]),
-            "dependencies": deps
-        })
+        conda_yaml = yaml.dump({"channels": channels, "dependencies": deps})
         conda_yaml_b64 = base64.b64encode(conda_yaml.encode()).decode()
-        payload = {
-            "packages": {
-                "type": "CONDA",
-                "environment": conda_yaml_b64,
-                "channels": spec.get("channels", ["conda-forge", "bioconda"])
-            },
-            "freeze": True
-        }
+        packages["environment"] = conda_yaml_b64
     else:
-        payload = {
-            "packages": {
-                "type": "CONDA",
-                "entries": deps,
-                "channels": spec.get("channels", ["conda-forge", "bioconda"])
-            },
-            "freeze": True
-        }
+        packages["entries"] = deps
+    payload = {"packages": packages, "freeze": True}
     response = requests.post(wave_api, json=payload)
     if not response.ok:
         print(f"Error response: {response.status_code}", file=sys.stderr)
