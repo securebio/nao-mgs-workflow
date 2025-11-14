@@ -3,9 +3,11 @@
 Rebuild all Wave containers from specs in containers/ directory.
 """
 import argparse
-import subprocess
 import sys
 from pathlib import Path
+
+# Import the build function from the single container builder
+from build_wave_container import build_container_from_spec
 
 
 def main():
@@ -26,13 +28,11 @@ def main():
     print(f"Found {len(spec_files)} container specs")
     print()
     failed = []
+    config_file = Path(args.config)
     for spec_file in spec_files:
         print(f"Processing {spec_file.name}...")
-        cmd = ["python3", "bin/build_wave_container.py", str(spec_file), "--config", args.config]
-        if args.dry_run:
-            cmd.append("--dry-run")
-        result = subprocess.run(cmd)
-        if result.returncode != 0:
+        success = build_container_from_spec(spec_file, config_file, args.dry_run)
+        if not success:
             failed.append(spec_file.name)
             if not args.continue_on_error:
                 print(f"\nError: Failed to build {spec_file.name}", file=sys.stderr)
