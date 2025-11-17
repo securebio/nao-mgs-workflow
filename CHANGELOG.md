@@ -6,6 +6,7 @@
     - Implemented programmatic generation of Wave containers from YAML configuration files (`bin/build_wave_container.py` and `bin/build_wave_containers.py`) and replaced Docker Hub containers with generated Wave Containers.
     - Deleted obsolete container specifications in `docker` directory.
     - Updated non-results-affecting software versions to reduce vulnerabilities.
+- Enabled ONT support for `DOWNSTREAM` post-hoc validation (`VALIDATE_VIRAL_ASSIGNMENTS`).
 
 # v3.0.1.3
 - Updated `docs/batch.md` with a deprecation warning linking to private internal infrastructure for SecureBio users.
@@ -44,7 +45,7 @@
     - Fixed frequent out-of-memory errors in PROCESS_VIRAL_MINIMAP2_SAM by adjusting resource requirements.
     - Fixed issue where the DOWNSTREAM workflow failed on samples with no viral hits.
     - Fixed bug in ANNOTATE_VIRUS_INFECTION that incorrectly assigned certain viruses to specific hosts (e.g. porcine respiratory coronavirus mislabeled as human-infecting; resolves issue #311).
-        
+
 ### Other changes (relevant mainly to developers)
 - Bug fixes:
     - RAISE_TAXONOMY_RANKS: Adjusted for updated classification of "Viruses" taxon in NCBI taxonomy database.
@@ -54,8 +55,8 @@
     - nf-test files for LOAD_SAMPLESHEET and LOAD_DOWNSTREAM_DATE: Fixed line iteration bug.
 - Container updates:
     - Introduced new custom containers to support reference file caching (new Dockerfiles in `docker` directory)
-    - Added `bin/build-push-docker.sh` to build and push Docker images to Dockerhub. 
-- Code quality: 
+    - Added `bin/build-push-docker.sh` to build and push Docker images to Dockerhub.
+- Code quality:
     - Converted modules and subworkflows with >5 positional arguments to use parameter maps (reduces risk of argument errors).
     - Added more unit tests in the pytest file for ANNOTATE_VIRUS_INFECTION.
     - Updated Github Actions to retry downloading `nf-test` (it often fails on the first attempt due transient 403 errors).
@@ -100,24 +101,24 @@
 - Made separate run_illumina.config and run_ont.config files to record correct BLAST defaults for each.
 
 # v2.10.0.0
-- Moved all outputs to main workflow for compatibility with Nextflow 25.04, and made pipeline compliant with new strict syntax. 
+- Moved all outputs to main workflow for compatibility with Nextflow 25.04, and made pipeline compliant with new strict syntax.
     - Pipeline is now *incompatible* with Nextflow 24.
 - Changed column names in `virus_hits_final.tsv` for consistency between Illumina and ONT output:
     - Added `docs/virus_hits_final.md` with full documentation of column names.
     - Column prefixes `bowtie2_` and `minimap2_` changed to `aligner_`.
     - Removed columns `bowtie2_fragment_length_fwd/rev`, `minimap2_query_sequence`, `minimap2_read_length`, `minimap2_ref_start/end`, `minimap2_alignment_start/end`.
-    - Added boolean columns `query_rc_by_aligner` and `query_rc_by_aligner_rev` to keep track of when the aligner reverse-complements a read; updated `query_seq` to undo the reverse complement operation.  
+    - Added boolean columns `query_rc_by_aligner` and `query_rc_by_aligner_rev` to keep track of when the aligner reverse-complements a read; updated `query_seq` to undo the reverse complement operation.
     - Changed column prefixes from `kraken_` to `kraken2_`.
 - Made more processes compatible with ONT/other unpaired data:
     - `run_validation` workflow now runs on ONT/other unpaired data.
-    - Updated EXTRACT_VIRAL_HITS_TO_FASTQ_NOREF_LABELED to infer endedness based on the input file and to work correctly on both unpaired and paired-end data. 
+    - Updated EXTRACT_VIRAL_HITS_TO_FASTQ_NOREF_LABELED to infer endedness based on the input file and to work correctly on both unpaired and paired-end data.
     - Updated BOWTIE2 and PROCESS_VIRAL_BOWTIE2_SAM to handle unpaired input data.
 - Overhauled MARK_ALIGNMENT_DUPLICATES:
     - Increased computational efficiency:
         - Added multithreaded processing of easily parallelizable steps.
         - Reworked assignment of reads to duplicate groups to avoid slow all-vs-all comparisons.
     - Made MARK_ALIGNMENT_DUPLICATES explicitly handle NAs:
-        - Now if the forward reads match and the reverse read alignments are NA, reads will be marked as duplicates. This is more conservative than the previous approach, which excluded reads from duplicate groups if either alignment was NA.     
+        - Now if the forward reads match and the reverse read alignments are NA, reads will be marked as duplicates. This is more conservative than the previous approach, which excluded reads from duplicate groups if either alignment was NA.
 - Completed work on post-hoc validation and integrated into DOWNSTREAM workflow:
     - Updated VALIDATE_VIRAL_ASSIGNMENTS to concatenate across species before rather than after BLAST_VIRAL, dramatically reducing per-process fixed costs of running BLAST. (Involved updates to PROPAGATE_VALIDATION_INFORMATION as well as new CONCATENATE_FASTA_ACROSS_SPECIES subworkflow and CONCATENATE_FASTN_LABELED process.)
     - Updated COMPUTE_TAXID_DISTANCE to compute distance from each taxid to their LCA rather than a single relative distance.

@@ -47,7 +47,6 @@ style A fill:#fff,stroke:#000
 style B fill:#fff,stroke:#000
 style G fill:#fff,stroke:#000
 style H fill:#000,color:#fff,stroke:#000
-style I fill:#000,color:#fff,stroke:#000
 style J fill:#000,color:#fff,stroke:#000
 style K fill:#000,color:#fff,stroke:#000
 style M fill:#000,color:#fff,stroke:#000
@@ -78,7 +77,6 @@ style A fill:#fff,stroke:#000
 style B fill:#fff,stroke:#000
 style G fill:#fff,stroke:#000
 style H fill:#000,color:#fff,stroke:#000
-style I fill:#000,color:#fff,stroke:#000
 ```
 
 ## Subworkflows
