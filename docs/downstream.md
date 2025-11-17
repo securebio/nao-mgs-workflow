@@ -257,7 +257,7 @@ To run the `DOWNSTREAM` workflow, you need:
         - `params.validation_n_clusters`: Maximum clusters per selected taxid to validate (default 20 for short-read, 1000000 for long-read[^max_clusters])
     - Parameters for BLAST validation:
         - `params.blast_db_prefix`: Prefix for BLAST database (e.g., "core_nt")
-        - `params.blast_perc_id`: Percentage identity threshold for BLAST hits (60 for short-read, 0 for long-read)
+        - `params.blast_perc_id`: Percentage identity threshold for BLAST hits (default 60 for short-read, 0 for long-read)
         - `params.blast_qcov_hsp_perc`: Query coverage threshold for BLAST hits (30 for short-read, 0 for long-read)
         - `params.blast_max_rank`: Maximum rank for BLAST hits by bitscore (10 for short-read, 5 for long-read)
         - `params.blast_min_frac`: Minimum fraction of best bitscore to retain hits (default 0.9)
