@@ -7,7 +7,6 @@
     - Deleted obsolete container specifications in `docker` directory.
     - Updated non-results-affecting software versions to reduce vulnerabilities.
 - Enabled ONT support for `DOWNSTREAM` post-hoc validation (`VALIDATE_VIRAL_ASSIGNMENTS`).
-
 # v3.0.1.3
 - Updated `docs/batch.md` with a deprecation warning linking to private internal infrastructure for SecureBio users.
 - Refactored `VALIDATE_VIRAL_ASSIGNMENT` in `DOWNSTREAM` to iterate through clusters within groups, reducing channel elements from N_groups × N_clusters to N_groups (#477)
