@@ -66,7 +66,7 @@ To perform these functions, the workflow runs a series of subworkflows responsib
 This subworkflow loads the samplesheet and creates a channel containing the samplesheet data, in the structure expected by the pipeline. It also derives the endedness for the pipeline run (single- vs paired-end) from the structure of the samplesheet, and checks that the specified sequencing platform is (a) valid and (b) compatible with the specified endedness. (No diagram is provided for this subworkflow.)
 
 ### Subset and trim reads (SUBSET_TRIM)
-This subworkflow uses [Seqtk](https://github.com/lh3/seqtk) to randomly subsample the input reads to a target number[^target] (default 1 million read pairs per sample) to save time and and compute on downstream steps while still providing a reliable statistical picture of the overall sample. Following downsampling, read pairs are combined into a single interleaved file, which then undergoes adapter trimming and quality screening with [FASTP](https://github.com/OpenGene/fastp).
+This subworkflow uses [Seqtk](https://github.com/lh3/seqtk) to randomly subsample the input reads to a target number[^target] (default 1 million read pairs per sample) to save time and compute on downstream steps while still providing a reliable statistical picture of the overall sample. Following downsampling, read pairs are combined into a single interleaved file, which then undergoes adapter trimming and quality screening with [FASTP](https://github.com/OpenGene/fastp).
 
 [^target]: More precisely, the subworkflow uses the total read count and target read number to calculate a fraction *p* of the input reads that should be retained, then keeps each read from the input data with probability *p*. Since each read is kept or discarded independently of the others, the final read count will not exactly match the target number; however, it will be very close for sufficiently large input files.
 
@@ -240,7 +240,7 @@ style L fill:#000,color:#fff,stroke:#000
 3. Next, reads are aligned to the previously-mentioned database of vertebrate-infecting viral genomes with [Bowtie2](https://bowtie-bio.sourceforge.net/bowtie2/index.shtml) using quite permissive parameters that allow multiple alignments to be returned and are designed to capture as many putative vertebrate viral reads as possible. The output files are processed to generate new read files containing any read pair for which at least one read matches the vertebrate viral database.
 4. The output of the previous step is passed to a further filtering step, in which reads matching a series of common contaminant sequences are removed. This is done by aligning surviving reads to these contaminants using Bowtie2 in series. Contaminants to be screened against include reference genomes from human, cow, pig, carp, mouse and *E. coli*, as well as various genetic engineering vectors.
 5. The reads that survive contaminant filtering then go through an alignment score filtering step to get rid of low quality alignments. 
-6. The reads that make it through the score filter are then run through our [custom LCA algorithm](docs/lca.md). The LCA taxid assignment is what we use to classify reads in the final viral hits table.
+6. The reads that make it through the score filter are then run through our [custom LCA algorithm](./lca.md). The LCA taxid assignment is what we use to classify reads in the final viral hits table.
 7. The LCA and processed bowtie2 output are run through [PROCESS_LCA_ALIGNER_OUTPUT](#process-lca-aligner-output-processlcaaligneroutput) to organize and clean the output viral hits table.
 
 ### Viral identification (ONT version)
@@ -286,7 +286,7 @@ style J fill:#000,color:#fff,stroke:#000
 2. Next, common contaminant sequences are removed, by aligning reads to contaminants with [Minimap2](https://github.com/lh3/minimap2) in a series. Contaminants to be screened against include reference genomes from human, cow, pig, carp, mouse and *E. coli*, as well as various genetic engineering vectors.
     - Note that, unlike for EXTRACT_VIRAL_READS_SHORT, contaminant removal is done before viral read identification. EXTRACT_VIRAL_READS_ONT is frequently used on swab samples (not just on wastewater samples); we avoid analyzing human reads from swab samples for privacy/compliance reasons, so we wish to discard human reads as early in the workflow as possible.
 3. Then, reads are aligned to our database of vertebrate-infecting viral genomes using Minimap2 while allowing multiple alignments to be returned. (As noted above, the viral database is generated from Genbank by the index workflow.)
-4. After that, these reads are run through our [custom LCA algorithm](docs/lca). The LCA taxid assignment is what we use to classify reads in the final viral hits table.
+4. After that, these reads are run through our [custom LCA algorithm](./lca.md). The LCA taxid assignment is what we use to classify reads in the final viral hits table.
   - Note that, unlike EXTRACT_VIRAL_READS_SHORT, we don't do any alignment score filtering as our experiments revealed that misclassified reads couldn't be distinguished by setting a simple score threshold.
 5. Finally, the LCA and processed minimap2 output are run through [PROCESS_LCA_ALIGNER_OUTPUT](#process-lca-aligner-output-processlcaaligneroutput) to organize and clean the output viral hits table.
 

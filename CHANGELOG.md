@@ -7,6 +7,9 @@
     - Deleted obsolete container specifications in `docker` directory.
     - Updated non-results-affecting software versions to reduce vulnerabilities.
 - Enabled ONT support for `DOWNSTREAM` post-hoc validation (`VALIDATE_VIRAL_ASSIGNMENTS`).
+- Fixed broken documentation links in `docs/run.md`, `docs/virus_hits_final.md`, and `docs/README.md` that were using incorrect relative paths (e.g., `docs/lca.md` instead of `./lca.md`), causing 404 errors on GitHub (#506)
+- Fixed typo in `docs/run.md` ("time and and compute" → "time and compute") (#506)
+- Updated maintainer references in `docs/developer.md` to reflect current team members (#506)
 
 # v3.0.1.3
 - Updated `docs/batch.md` with a deprecation warning linking to private internal infrastructure for SecureBio users.
