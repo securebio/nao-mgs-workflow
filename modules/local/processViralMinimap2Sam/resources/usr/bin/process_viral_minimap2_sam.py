@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 # Import modules
-import sys
+import sys, os
 import argparse
 import pandas as pd
 import time
@@ -11,7 +11,7 @@ import gzip
 import bz2
 import math
 from Bio import SeqIO
-
+import shutil
 # Utility functions
 
 
@@ -241,16 +241,16 @@ def main():
         print_log(f"Virus DB imported. {len(virus_db)} total viral taxids.")
 
         print_log(f"Imported {len(viral_taxids)} virus taxa.")
-
-        # Import clean reads
-        clean_read_dict = {}
-        for record in SeqIO.parse(clean_reads, "fastq"):
-            read_id = record.id
-            clean_read_dict[read_id] = record
+        clean_reads_path = clean_reads.name
+        tmp_fastq = clean_reads_path + ".tmp.fastq"
+        index_file  = tmp_fastq + ".idx"
+        with gzip.open(clean_reads_path, "rb") as f_in, open(tmp_fastq, "wb") as f_out:
+            shutil.copyfileobj(f_in, f_out)
+        idx = SeqIO.index_db(index_file, tmp_fastq, "fastq")
 
         # Process SAM
         print_log("Processing SAM file...")
-        process_sam(sam_file, out_file, genbank_metadata, viral_taxids, clean_read_dict)
+        process_sam(sam_file, out_file, genbank_metadata, viral_taxids, idx) #use seqio index
         print_log("File processed.")
 
         # Finish time tracking
