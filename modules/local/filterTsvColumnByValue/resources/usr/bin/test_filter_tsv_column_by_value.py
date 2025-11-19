@@ -19,14 +19,16 @@ class TestFilterTsvColumnByValue:
         import logging
         logger = logging.getLogger()
 
-        filter_tsv_column_by_value.stream_and_filter_tsv(
-            open(input_file, "r"),
-            open(output_file, "w"),
-            "test_column",
-            "test_value",
-            keep_matching=True,
-            logger=logger
-        )
+        with open(input_file, "r") as inf, open(output_file, "w") as outf:
+            filter_tsv_column_by_value.stream_and_filter_tsv(
+                inf,
+                outf,
+                "test_column",
+                "test_value",
+                keep_matching=True,
+                logger=logger
+            )
+
 
         result = tsv_factory.read_plain(output_file)
         assert result == ""
