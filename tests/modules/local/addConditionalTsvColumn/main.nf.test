@@ -129,12 +129,10 @@ nextflow_process {
         }
         then {
             assert process.failed
-            // When a Nextflow process fails, the errorReport contains both the script definition
-            // and the actual runtime error output. Since our error message is embedded in the AWK
-            // script (line 38 of main.nf), it appears twice: once in the script definition and 
-            // once as the actual stderr output. The "\n  " prefix helps identify the actual runtime
-            // error occurrence versus the script definition.
-            assert process.errorReport.contains("\n  ERROR: could not find all requested columns in header")
+            // The Python script raises a ValueError which appears in the error report.
+            // We check for "ValueError: could not find all requested columns in header"
+            // to verify the correct error is raised.
+            assert process.errorReport.contains("ValueError: could not find all requested columns in header")
         }
     }
 
@@ -159,7 +157,7 @@ nextflow_process {
         }
         then {
             assert process.failed
-            assert process.errorReport.contains("\n  ERROR: could not find all requested columns in header")
+            assert process.errorReport.contains("ValueError: could not find all requested columns in header")
         }
     }
 
@@ -184,7 +182,7 @@ nextflow_process {
         }
         then {
             assert process.failed
-            assert process.errorReport.contains("\n  ERROR: could not find all requested columns in header")
+            assert process.errorReport.contains("ValueError: could not find all requested columns in header")
         }
     }
 }
