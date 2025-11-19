@@ -1,0 +1,2 @@
+label,hits_tsv,groups_tsv
+ont1,s3://nao-testing/ont-ww-test/processed/virus_hits_final.tsv,s3://nao-testing/ont-ww-test/metadata/sample_groups_ont.tsv
