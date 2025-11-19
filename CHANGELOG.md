@@ -1,6 +1,6 @@
-# v3.0.1.4-dev
+# v3.0.1.4
 - Removed `nextflow.preview.output` statement from `main.nf` for compatibility with Nextflow 25.10
-- Updated Github Actions to use new Nextflow version.
+- Updated Github Actions to use Nextflow 25.10.0.
 - Updated container and dependency management
     - Implemented container dependency scanning with Trivy (`bin/scan_containers.py`) and wrote corresponding Github Actions test (currently expected to fail).
     - Implemented programmatic generation of Wave containers from YAML configuration files (`bin/build_wave_container.py` and `bin/build_wave_containers.py`) and replaced Docker Hub containers with generated Wave Containers.
