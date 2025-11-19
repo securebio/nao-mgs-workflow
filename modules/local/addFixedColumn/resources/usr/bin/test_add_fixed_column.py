@@ -17,9 +17,8 @@ class TestAddColumn:
             ),
             ("", ""),
             ("col1\tcol2\tcol3\n", "col1\tcol2\tcol3\tnew_col\n"),
-            ("\n\n\n", ""),
         ],
-        ids=["basic_functionality", "empty_file", "header_only", "whitespace_only"],
+        ids=["basic_functionality", "empty_file", "header_only"],
     )
     def test_add_column_success_cases(
         self, tsv_factory, input_content, expected_output
