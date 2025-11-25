@@ -1,5 +1,6 @@
 # v3.0.1.5-dev
 - Fixed `SPLIT_VIRAL_TSV_BY_SELECTED_TAXID` failing when input TSV has no data rows. Empty partition files (`partition_empty_*`) are now filtered out before downstream processing. (#524)
+- Converted many nf-test tests to Pytest to ease pre-release review.
 
 # v3.0.1.4
 - Removed `nextflow.preview.output` statement from `main.nf` for compatibility with Nextflow 25.10
