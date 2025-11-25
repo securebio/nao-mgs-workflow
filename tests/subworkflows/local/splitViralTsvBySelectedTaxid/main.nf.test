@@ -56,6 +56,68 @@ nextflow_workflow {
         }
     }
 
+    test("Should handle empty partition files (no data rows)") {
+        tag "expect_success"
+        tag "empty_partition"
+        setup {
+            run("LOAD_DOWNSTREAM_DATA") {
+                script "subworkflows/local/loadDownstreamData/main.nf"
+                process {
+                    """
+                    input[0] = "${projectDir}/test-data/downstream/input_file_single.csv"
+                    """
+                }
+            }
+            run("PREPARE_GROUP_TSVS") {
+                script "subworkflows/local/prepareGroupTsvs/main.nf"
+                process {
+                    '''
+                    input[0] = LOAD_DOWNSTREAM_DATA.out.input
+                    '''
+                }
+            }
+            run("FILTER_TSV_COLUMN_BY_VALUE", alias: "FILTER_TO_EMPTY") {
+                script "modules/local/filterTsvColumnByValue/main.nf"
+                process {
+                    // Filter to a non-existent taxid to create an empty TSV (headers only)
+                    '''
+                    input[0] = PREPARE_GROUP_TSVS.out.groups
+                    input[1] = "aligner_taxid_lca"
+                    input[2] = "99999999"
+                    input[3] = true
+                    '''
+                }
+            }
+            run("COPY_FILE_BARE") {
+                script "modules/local/copyFile/main.nf"
+                process {
+                    '''
+                    input[0] = "${params.ref_dir}/results/total-virus-db-annotated.tsv.gz"
+                    input[1] = "virus-db.tsv.gz"
+                    '''
+                }
+            }
+        }
+        when {
+            params {
+            }
+            workflow {
+                '''
+                input[0] = FILTER_TO_EMPTY.out.output
+                input[1] = COPY_FILE_BARE.out
+                '''
+            }
+        }
+        then {
+            // Should run without failures even when input TSV has no data rows
+            assert workflow.success
+            // TSV output should be empty (partition_empty_* filtered out)
+            assert workflow.out.tsv.collect{it[1]}.flatten().size() == 0
+            // FASTQ output should be empty
+            assert workflow.out.fastq.collect{it[1]}.flatten().size() == 0
+        }
+    }
+
     test("Should run without failures on valid input data") {
         tag "expect_success"
         setup {
