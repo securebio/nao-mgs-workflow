@@ -54,14 +54,22 @@ workflow SPLIT_VIRAL_TSV_BY_SELECTED_TAXID {
         ]).tsv
         join_sorted_ch = SORT_JOINED_SPECIES(updated_col, "selected_taxid").sorted
         part_ch = PARTITION_TSV(join_sorted_ch, "selected_taxid").output
-        // 4. Extract into interleaved FASTQ format
-        fastq_ch = EXTRACT_FASTQ_LIST(part_ch, false).output
+        // 4. Filter out empty partition files (partition_empty_*) which contain only headers
+        // These are created when the input TSV has no data rows for a particular group
+        part_filtered_ch = part_ch.map { sample, files ->
+            def file_list = files instanceof List ? files : [files]
+            def filtered = file_list.findAll { f -> !f.name.startsWith("partition_empty_") }
+            [sample, filtered]
+        }.filter { sample, files -> files.size() > 0 }
+        // 5. Extract into interleaved FASTQ format
+        fastq_ch = EXTRACT_FASTQ_LIST(part_filtered_ch, false).output
     emit:
-        tsv = part_ch
+        tsv = part_filtered_ch
         fastq = fastq_ch
         test_in   = groups
         test_db   = db
         test_sort = sorted_ch
         test_join = join_ch
         test_part = part_ch
+        test_part_filtered = part_filtered_ch
 }
