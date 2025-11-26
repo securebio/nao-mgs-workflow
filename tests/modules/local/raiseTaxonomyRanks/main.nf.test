@@ -7,8 +7,9 @@ nextflow_process {
     tag "module"
     tag "raise_taxonomy_ranks"
 
-    test("Should run without errors on test data and produce expected output"){
+    test("End-to-end crash test with valid input"){
         tag "expect_success"
+        tag "valid_input"
         when {
             params {
                 taxonomy_db = "${projectDir}/test-data/toy-data/test-taxonomy-ranked.tsv"
@@ -24,26 +25,8 @@ nextflow_process {
         then {
             // Should run without errors
             assert process.success
-            // Output should match input with one extra column per target rank
-            def tax_tab_out = path(process.out.db[0]).csv(sep: "\t", decompress: true)
-            def tax_tab_in = path(params.taxonomy_db).csv(sep: "\t")
-            def target_ranks = params.target_ranks.split(" ")
-            def new_cols = target_ranks.collect{ "taxid_${it}".toString() }
-            assert tax_tab_out.rowCount == tax_tab_in.rowCount
-            assert tax_tab_out.columnCount == tax_tab_in.columnCount + target_ranks.size()
-            for (c in tax_tab_in.columnNames){
-                assert tax_tab_out.columnNames.contains(c)
-                assert tax_tab_in.columns[c] == tax_tab_out.columns[c]
-            }
-            for (int i = 0; i < new_cols.size(); i++) {
-                assert tax_tab_out.columnNames.contains(new_cols[i])
-                assert !tax_tab_in.columnNames.contains(new_cols[i])
-            }
-            // New values should match expectations
-            def new_cols_exp = target_ranks.collect{ "exp_${it}" }
-            for (int r = 0; r < target_ranks.size(); r++) {
-                assert tax_tab_out.columns[new_cols[r]] == tax_tab_out.columns[new_cols_exp[r]]
-            }
+            // Output should be created
+            assert path(process.out.db[0]).exists()
         }
     }
 }

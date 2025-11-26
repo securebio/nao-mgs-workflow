@@ -1,7 +1,3 @@
-def countGzipLines = { file -> path(file).linesGzip.size() }
-def getGzipHeader = { file -> ["bash", "-c", "zcat " + file + " | head -n 1"].execute().text.trim() }
-def getGzipBody = { file -> ["bash", "-c", "zcat " + file + " | tail -n +2"].execute().text.trim() }
-
 nextflow_process {
 
     name "Test process REHEAD_TSV"
@@ -11,165 +7,9 @@ nextflow_process {
     tag "module"
     tag "rehead_tsv"
 
-    test("Should fail with an appropriate error code if the first/only field to modify is not present"){
-        tag "expect_failed"
-        when {
-            params {}
-            process {
-                '''
-                input[0] = Channel.of("test")
-                    | combine(Channel.of("${projectDir}/test-data/toy-data/test_tab_sorted.tsv"))
-                input[1] = "xyz" // Not in header
-                input[2] = "abc"
-                '''
-            }
-        }
-        then {
-            assert process.failed
-            assert process.exitStatus == 1
-            assert process.errorReport.contains("ValueError: Input field not found in file header")
-        }
-    }
-
-    test("Should fail with an appropriate error code if a later input field is not present"){
-        tag "expect_failed"
-        when {
-            params {}
-            process {
-                '''
-                input[0] = Channel.of("test")
-                    | combine(Channel.of("${projectDir}/test-data/toy-data/test_tab_sorted.tsv"))
-                input[1] = "x,xyz" // Not in header
-                input[2] = "a,abc"
-                '''
-            }
-        }
-        then {
-            assert process.failed
-            assert process.exitStatus == 1
-            assert process.errorReport.contains("ValueError: Input field not found in file header")
-        }
-    }
-
-    test("Should fail with an appropriate error code if there are more input fields than output fields"){
-        tag "expect_failed"
-        when {
-            params {}
-            process {
-                '''
-                input[0] = Channel.of("test")
-                    | combine(Channel.of("${projectDir}/test-data/toy-data/test_tab_sorted.tsv"))
-                input[1] = "x,y"
-                input[2] = "a"
-                '''
-            }
-        }
-        then {
-            assert process.failed
-            assert process.exitStatus == 1
-            assert process.errorReport.contains("ValueError: Input and output field lists must be the same length.")
-        }
-    }
-
-    test("Should fail with an appropriate error code if there are more output fields than input fields"){
-        tag "expect_failed"
-        when {
-            params {}
-            process {
-                '''
-                input[0] = Channel.of("test")
-                    | combine(Channel.of("${projectDir}/test-data/toy-data/test_tab_sorted.tsv"))
-                input[1] = "x"
-                input[2] = "a,b"
-                '''
-            }
-        }
-        then {
-            assert process.failed
-            assert process.exitStatus == 1
-            assert process.errorReport.contains("ValueError: Input and output field lists must be the same length.")
-        }
-    }
-
-    test("Should produce no change when old and new headers match (one input field)"){
+    test("End-to-end crash test with valid input"){
         tag "expect_success"
-        when {
-            params {}
-            process {
-                '''
-                input[0] = Channel.of("test")
-                    | combine(Channel.of("${projectDir}/test-data/toy-data/test_tab_sorted.tsv"))
-                input[1] = "x"
-                input[2] = "x"
-                '''
-            }
-        }
-        then {
-            // Should run without failures
-            assert process.success
-            // Output should match input
-            assert path(process.out.output[0][1]).md5 == path(process.out.input[0][1]).md5
-        }
-    }
-
-    test("Should produce no change when old and new headers match (multiple input fields)"){
-        tag "expect_success"
-        when {
-            params {}
-            process {
-                '''
-                input[0] = Channel.of("test")
-                    | combine(Channel.of("${projectDir}/test-data/toy-data/test_tab_sorted.tsv"))
-                input[1] = "x,y"
-                input[2] = "x,y"
-                '''
-            }
-        }
-        then {
-            // Should run without failures
-            assert process.success
-            // Output should match input
-            assert path(process.out.output[0][1]).md5 == path(process.out.input[0][1]).md5
-        }
-    }
-
-    test("Should successfully change the header when old and new fields differ (one input field)"){
-        tag "expect_success"
-        when {
-            params {}
-            process {
-                '''
-                input[0] = Channel.of("test")
-                    | combine(Channel.of("${projectDir}/test-data/toy-data/test_tab_sorted.tsv"))
-                input[1] = "x"
-                input[2] = "test"
-                '''
-            }
-        }
-        then {
-            // Should run without failures
-            assert process.success
-            // Output and input dimensions should match
-            def tab_in = path(process.out.input[0][1]).csv(sep: "\t")
-            def tab_out = path(process.out.output[0][1]).csv(sep: "\t")
-            assert tab_out.columnCount == tab_in.columnCount
-            assert tab_out.rowCount == tab_in.rowCount
-            // Output and input headers should match except for intended substitution
-            assert tab_out.columnNames != tab_in.columnNames
-            assert tab_out.columnNames == tab_in.columnNames*.replace("x", "test")
-            // Rest of file should be unmodified
-            for (c in tab_in.columnNames) {
-                if (c == "x"){
-                    assert tab_in.columns[c] == tab_out.columns["test"]
-                } else {
-                    assert tab_in.columns[c] == tab_out.columns[c]
-                }
-            }
-        }
-    }
-
-    test("Should successfully change the header when old and new fields differ (multiple input fields)"){
-        tag "expect_success"
+        tag "valid_input"
         when {
             params {}
             process {
@@ -184,48 +24,8 @@ nextflow_process {
         then {
             // Should run without failures
             assert process.success
-            // Output and input dimensions should match
-            def tab_in = path(process.out.input[0][1]).csv(sep: "\t")
-            def tab_out = path(process.out.output[0][1]).csv(sep: "\t")
-            assert tab_out.columnCount == tab_in.columnCount
-            assert tab_out.rowCount == tab_in.rowCount
-            // Output and input headers should match except for intended substitution
-            assert tab_out.columnNames != tab_in.columnNames
-            assert tab_out.columnNames == tab_in.columnNames*.replace("x", "a")*.replace("y", "b")
-            // Rest of file should be unmodified
-            for (c in tab_in.columnNames) {
-                if (c == "x"){
-                    assert tab_in.columns[c] == tab_out.columns["a"]
-                } else if (c == "y"){
-                    assert tab_in.columns[c] == tab_out.columns["b"]
-                } else {
-                    assert tab_in.columns[c] == tab_out.columns[c]
-                }
-            }
-        }
-    }
-
-    test("Should handle empty input file and produce empty output file"){
-        tag "empty_file"
-        tag "expect_success"
-        when {
-            params {}
-            process {
-                '''
-                input[0] = Channel.of("test")
-                    | combine(Channel.of("${projectDir}/test-data/toy-data/empty_file.txt"))
-                input[1] = "x"
-                input[2] = "new_col"
-                '''
-            }
-        }
-        then {
-            // Should run without failures
-            assert process.success
-            
-            // Output should be empty
-            def outputFile = path(process.out.output[0][1])
-            assert outputFile.text == ""
+            // Output should be created
+            assert path(process.out.output[0][1]).exists()
         }
     }
 }

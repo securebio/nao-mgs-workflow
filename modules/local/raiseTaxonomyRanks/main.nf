@@ -9,6 +9,6 @@ process RAISE_TAXONOMY_RANKS {
         path("taxonomy-db-raised.tsv.gz"), emit: db
     shell:
         '''
-        raise-taxonomy-ranks.py !{taxonomy_db} "!{target_ranks}" taxonomy-db-raised.tsv.gz
+        raise_taxonomy_ranks.py !{taxonomy_db} "!{target_ranks}" taxonomy-db-raised.tsv.gz
         '''
 }
