@@ -34,7 +34,7 @@ alignment group, all reads in both groups are marked with the same
 
 Testing on 69,652 read pairs, 33,920 of which were unique per alignment-based
 duplication identification, 22,683 were unique after additionally considering
-similarity.  This ran in 3m36s, which is fast enough to be usable, but slow
+similarity.  This ran in 1m18s, which is fast enough to be usable, but slow
 enough that we'd really like to integrate this into DOWNSTREAM.
 
 #### Usage

@@ -10,6 +10,7 @@ import gzip
 from pathlib import Path
 from typing import Dict, Set, Tuple
 from collections import defaultdict
+from itertools import combinations
 
 import networkx as nx
 
@@ -138,23 +139,19 @@ def merge_groups_by_similarity(
     for exemplar in prim_align_groups.keys():
         graph.add_node(exemplar)
 
-    # Add edges based on similarity
-    exemplar_list = list(prim_align_groups.keys())
-    for i, exemplar_a in enumerate(exemplar_list):
-        for exemplar_b in exemplar_list[i+1:]:
-            # Get similarity exemplars for both groups
-            sim_exemplars_a = {
-                similarity_exemplars[seq_id]
-                for seq_id in prim_align_groups[exemplar_a]
-            }
-            sim_exemplars_b = {
-                similarity_exemplars[seq_id]
-                for seq_id in prim_align_groups[exemplar_b]
-            }
+    # Add edges based on similarity using an inverted index for
+    # performance. Build a map from similarity exemplars to the alignment
+    # groups they belong to.  This avoids an O(N^2) all-vs-all comparison.
+    sim_to_align_map = defaultdict(set)
+    for align_exemplar, seq_ids in prim_align_groups.items():
+        for seq_id in seq_ids:
+            sim_exemplar = similarity_exemplars[seq_id]
+            sim_to_align_map[sim_exemplar].add(align_exemplar)
 
-            # If they share any similarity exemplar, merge the groups
-            if sim_exemplars_a & sim_exemplars_b:
-                graph.add_edge(exemplar_a, exemplar_b)
+    # Connect all alignment groups that share a similarity exemplar
+    for align_exemplars_to_merge in sim_to_align_map.values():
+        for u, v in combinations(align_exemplars_to_merge, 2):
+            graph.add_edge(u, v)
 
     # Find connected components
     components = list(nx.connected_components(graph))
