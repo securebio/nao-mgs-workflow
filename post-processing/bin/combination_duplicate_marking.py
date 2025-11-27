@@ -75,7 +75,9 @@ def validate_exemplars(
             )
 
 
-def run_similarity_dedup(read_pairs: Dict[str, ReadPair]) -> Dict[str, str]:
+def run_similarity_dedup(
+        read_pairs: Dict[str, ReadPair],
+        params: DedupParams) -> Dict[str, str]:
     """
     Run similarity-based deduplication using nao_dedup on ALL reads.
 
@@ -86,7 +88,7 @@ def run_similarity_dedup(read_pairs: Dict[str, ReadPair]) -> Dict[str, str]:
     read_pair_list = [rp for rp in sorted(
         read_pairs.values(), key=lambda x: x.read_id)]
 
-    deduplicate_read_pairs(read_pair_list, verbose=True)
+    deduplicate_read_pairs(read_pair_list, dedup_params=params, verbose=True)
 
     similarity_exemplars = {}
     for rp in read_pair_list:
@@ -174,7 +176,8 @@ def merge_groups_by_similarity(
 def select_final_exemplars(
     merged_groups: Dict[str, Set[str]],
     read_pairs: Dict[str, ReadPair],
-    similarity_exemplars: Dict[str, str]
+    similarity_exemplars: Dict[str, str],
+    params: DedupParams
 ) -> Dict[str, str]:
     """
     Select final exemplar for each merged group using dedup.py's
@@ -216,8 +219,6 @@ def select_final_exemplars(
             # Build graph of similarities among exemplars
             graph = nx.Graph()
             graph.add_nodes_from(range(len(exemplar_pairs)))
-
-            params = DedupParams()
             for i in range(len(exemplar_pairs)):
                 for j in range(i + 1, len(exemplar_pairs)):
                     if _read_pairs_equivalent(
@@ -290,6 +291,9 @@ def main():
     input_path = sys.argv[1]
     output_path = sys.argv[2]
 
+    # Create deduplication parameters once to ensure consistency
+    params = DedupParams()
+
     print("Pass 1: Reading deduplication columns...")
     read_pairs, prim_align_exemplars = read_dedup_columns(input_path)
     print(f"  Read {len(read_pairs)} reads")
@@ -302,7 +306,7 @@ def main():
     print(f"  Found {len(prim_align_groups)} prim_align groups")
 
     print("Running similarity-based deduplication...")
-    similarity_exemplars = run_similarity_dedup(read_pairs)
+    similarity_exemplars = run_similarity_dedup(read_pairs, params)
 
     print("Merging groups based on similarity...")
     merged_groups = merge_groups_by_similarity(
@@ -311,7 +315,7 @@ def main():
 
     print("Selecting final exemplars using centrality logic...")
     combined_exemplars = select_final_exemplars(
-        merged_groups, read_pairs, similarity_exemplars)
+        merged_groups, read_pairs, similarity_exemplars, params)
 
     print("Pass 2: Writing output with combined_dup_exemplar column...")
     write_output_with_combined_column(

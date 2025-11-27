@@ -11,7 +11,17 @@ import gzip
 # Add bin directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent / "bin"))
 
+# Add deps to path so we can import nao_dedup
+sys.path.insert(0, str(Path(__file__).parent.parent / "deps"))
+
 import combination_duplicate_marking as cdm
+from nao_dedup.dedup import DedupParams
+
+
+@pytest.fixture
+def params():
+    """Fixture providing DedupParams for tests."""
+    return DedupParams()
 
 
 @pytest.fixture
@@ -140,7 +150,7 @@ class TestBuildPrimAlignGroups:
 class TestEndToEnd:
     """End-to-end integration tests."""
 
-    def test_no_duplicates(self, tsv_factory):
+    def test_no_duplicates(self, tsv_factory, params):
         """Test case where no reads are duplicates."""
         content = (
             "seq_id\tquery_seq\tquery_seq_rev\tquery_qual\tquery_qual_rev\t"
@@ -163,9 +173,9 @@ class TestEndToEnd:
         read_pairs, prim_align_exemplars = cdm.read_dedup_columns(input_file)
         cdm.validate_exemplars(read_pairs, prim_align_exemplars)
         prim_align_groups = cdm.build_prim_align_groups(prim_align_exemplars)
-        similarity_exemplars = cdm.run_similarity_dedup(read_pairs)
+        similarity_exemplars = cdm.run_similarity_dedup(read_pairs, params)
         merged_groups = cdm.merge_groups_by_similarity(prim_align_groups, similarity_exemplars)
-        combined_exemplars = cdm.select_final_exemplars(merged_groups, read_pairs, similarity_exemplars)
+        combined_exemplars = cdm.select_final_exemplars(merged_groups, read_pairs, similarity_exemplars, params)
         cdm.write_output_with_combined_column(input_file, output_file, combined_exemplars)
 
         # Verify output
@@ -184,7 +194,7 @@ class TestEndToEnd:
         assert rows[0]["combined_dup_exemplar"] == "read1"
         assert rows[1]["combined_dup_exemplar"] == "read2"
 
-    def test_alignment_duplicates_only(self, tsv_factory):
+    def test_alignment_duplicates_only(self, tsv_factory, params):
         """Test case with only alignment-based duplicates."""
         # Use more realistic sequences that are clearly different
         seq1 = "ACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGT"
@@ -208,9 +218,9 @@ class TestEndToEnd:
         read_pairs, prim_align_exemplars = cdm.read_dedup_columns(input_file)
         cdm.validate_exemplars(read_pairs, prim_align_exemplars)
         prim_align_groups = cdm.build_prim_align_groups(prim_align_exemplars)
-        similarity_exemplars = cdm.run_similarity_dedup(read_pairs)
+        similarity_exemplars = cdm.run_similarity_dedup(read_pairs, params)
         merged_groups = cdm.merge_groups_by_similarity(prim_align_groups, similarity_exemplars)
-        combined_exemplars = cdm.select_final_exemplars(merged_groups, read_pairs, similarity_exemplars)
+        combined_exemplars = cdm.select_final_exemplars(merged_groups, read_pairs, similarity_exemplars, params)
         cdm.write_output_with_combined_column(input_file, output_file, combined_exemplars)
 
         # Verify output
@@ -223,7 +233,7 @@ class TestEndToEnd:
         # read3 should be its own exemplar
         assert rows[2]["combined_dup_exemplar"] == "read3"
 
-    def test_similarity_merges_alignment_groups(self, tsv_factory):
+    def test_similarity_merges_alignment_groups(self, tsv_factory, params):
         """Test that similarity-based dedup merges alignment groups."""
         # Create two alignment groups where one member from each is very similar
         content = (
@@ -260,9 +270,9 @@ class TestEndToEnd:
         read_pairs, prim_align_exemplars = cdm.read_dedup_columns(input_file)
         cdm.validate_exemplars(read_pairs, prim_align_exemplars)
         prim_align_groups = cdm.build_prim_align_groups(prim_align_exemplars)
-        similarity_exemplars = cdm.run_similarity_dedup(read_pairs)
+        similarity_exemplars = cdm.run_similarity_dedup(read_pairs, params)
         merged_groups = cdm.merge_groups_by_similarity(prim_align_groups, similarity_exemplars)
-        combined_exemplars = cdm.select_final_exemplars(merged_groups, read_pairs, similarity_exemplars)
+        combined_exemplars = cdm.select_final_exemplars(merged_groups, read_pairs, similarity_exemplars, params)
         cdm.write_output_with_combined_column(input_file, output_file, combined_exemplars)
 
         # Verify output
@@ -277,7 +287,7 @@ class TestEndToEnd:
         assert rows[2]["combined_dup_exemplar"] == exemplar
         assert rows[3]["combined_dup_exemplar"] == exemplar
 
-    def test_empty_file(self, tsv_factory):
+    def test_empty_file(self, tsv_factory, params):
         """Test handling of file with only header."""
         content = (
             "seq_id\tquery_seq\tquery_seq_rev\tquery_qual\tquery_qual_rev\t"
@@ -290,11 +300,11 @@ class TestEndToEnd:
         read_pairs, prim_align_exemplars = cdm.read_dedup_columns(input_file)
         cdm.validate_exemplars(read_pairs, prim_align_exemplars)
         prim_align_groups = cdm.build_prim_align_groups(prim_align_exemplars)
-        similarity_exemplars = cdm.run_similarity_dedup(read_pairs)
+        similarity_exemplars = cdm.run_similarity_dedup(read_pairs, params)
         merged_groups = cdm.merge_groups_by_similarity(
             prim_align_groups, similarity_exemplars)
         combined_exemplars = cdm.select_final_exemplars(
-            merged_groups, read_pairs, similarity_exemplars)
+            merged_groups, read_pairs, similarity_exemplars, params)
         cdm.write_output_with_combined_column(
             input_file, output_file, combined_exemplars)
 
@@ -306,7 +316,7 @@ class TestEndToEnd:
         assert len(rows) == 0
         assert "combined_dup_exemplar" in reader.fieldnames
 
-    def test_single_read(self, tsv_factory):
+    def test_single_read(self, tsv_factory, params):
         """Test handling of single read."""
         seq = "ACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGT"
         qual = "IIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIII"
@@ -322,11 +332,11 @@ class TestEndToEnd:
         read_pairs, prim_align_exemplars = cdm.read_dedup_columns(input_file)
         cdm.validate_exemplars(read_pairs, prim_align_exemplars)
         prim_align_groups = cdm.build_prim_align_groups(prim_align_exemplars)
-        similarity_exemplars = cdm.run_similarity_dedup(read_pairs)
+        similarity_exemplars = cdm.run_similarity_dedup(read_pairs, params)
         merged_groups = cdm.merge_groups_by_similarity(
             prim_align_groups, similarity_exemplars)
         combined_exemplars = cdm.select_final_exemplars(
-            merged_groups, read_pairs, similarity_exemplars)
+            merged_groups, read_pairs, similarity_exemplars, params)
         cdm.write_output_with_combined_column(
             input_file, output_file, combined_exemplars)
 
@@ -338,7 +348,7 @@ class TestEndToEnd:
         assert len(rows) == 1
         assert rows[0]["combined_dup_exemplar"] == "read1"
 
-    def test_column_order_preserved(self, tsv_factory):
+    def test_column_order_preserved(self, tsv_factory, params):
         """Test that output columns match input order."""
         seq = "ACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGT"
         qual = "IIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIII"
@@ -354,11 +364,11 @@ class TestEndToEnd:
         read_pairs, prim_align_exemplars = cdm.read_dedup_columns(input_file)
         cdm.validate_exemplars(read_pairs, prim_align_exemplars)
         prim_align_groups = cdm.build_prim_align_groups(prim_align_exemplars)
-        similarity_exemplars = cdm.run_similarity_dedup(read_pairs)
+        similarity_exemplars = cdm.run_similarity_dedup(read_pairs, params)
         merged_groups = cdm.merge_groups_by_similarity(
             prim_align_groups, similarity_exemplars)
         combined_exemplars = cdm.select_final_exemplars(
-            merged_groups, read_pairs, similarity_exemplars)
+            merged_groups, read_pairs, similarity_exemplars, params)
         cdm.write_output_with_combined_column(
             input_file, output_file, combined_exemplars)
 
@@ -381,7 +391,7 @@ class TestEndToEnd:
         assert rows[0]["extra2"] == "val2"
         assert rows[0]["extra3"] == "val3"
 
-    def test_transitive_merging(self, tsv_factory):
+    def test_transitive_merging(self, tsv_factory, params):
         """Test that groups merge transitively through prim_align."""
         # Create reads where alignment groups merge but not all similar
         # Group 1: read1, read2 (read1≠read2 by similarity)
@@ -409,11 +419,11 @@ class TestEndToEnd:
         read_pairs, prim_align_exemplars = cdm.read_dedup_columns(input_file)
         cdm.validate_exemplars(read_pairs, prim_align_exemplars)
         prim_align_groups = cdm.build_prim_align_groups(prim_align_exemplars)
-        similarity_exemplars = cdm.run_similarity_dedup(read_pairs)
+        similarity_exemplars = cdm.run_similarity_dedup(read_pairs, params)
         merged_groups = cdm.merge_groups_by_similarity(
             prim_align_groups, similarity_exemplars)
         combined_exemplars = cdm.select_final_exemplars(
-            merged_groups, read_pairs, similarity_exemplars)
+            merged_groups, read_pairs, similarity_exemplars, params)
         cdm.write_output_with_combined_column(
             input_file, output_file, combined_exemplars)
 
