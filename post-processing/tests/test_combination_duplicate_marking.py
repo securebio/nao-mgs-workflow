@@ -159,9 +159,6 @@ class TestEndToEnd:
         input_file = tsv_factory.create_gzip("input.tsv.gz", content)
         output_file = tsv_factory.get_path("output.tsv.gz")
 
-        cdm.main.__wrapped__ = lambda: None  # Avoid sys.exit
-        sys.argv = ["combination_duplicate_marking.py", input_file, output_file]
-
         # Run the full pipeline
         read_pairs, prim_align_exemplars = cdm.read_dedup_columns(input_file)
         cdm.validate_exemplars(read_pairs, prim_align_exemplars)
