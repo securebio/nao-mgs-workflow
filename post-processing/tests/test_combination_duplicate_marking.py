@@ -279,3 +279,169 @@ class TestEndToEnd:
         assert rows[1]["combined_dup_exemplar"] == exemplar
         assert rows[2]["combined_dup_exemplar"] == exemplar
         assert rows[3]["combined_dup_exemplar"] == exemplar
+
+    def test_empty_file(self, tsv_factory):
+        """Test handling of file with only header."""
+        content = (
+            "seq_id\tquery_seq\tquery_seq_rev\tquery_qual\tquery_qual_rev\t"
+            "prim_align_dup_exemplar\n"
+        )
+        input_file = tsv_factory.create_gzip("input.tsv.gz", content)
+        output_file = tsv_factory.get_path("output.tsv.gz")
+
+        # Run the full pipeline
+        read_pairs, prim_align_exemplars = cdm.read_dedup_columns(input_file)
+        cdm.validate_exemplars(read_pairs, prim_align_exemplars)
+        prim_align_groups = cdm.build_prim_align_groups(prim_align_exemplars)
+        similarity_exemplars = cdm.run_similarity_dedup(read_pairs)
+        merged_groups = cdm.merge_groups_by_similarity(
+            prim_align_groups, similarity_exemplars)
+        combined_exemplars = cdm.select_final_exemplars(
+            merged_groups, read_pairs, similarity_exemplars)
+        cdm.write_output_with_combined_column(
+            input_file, output_file, combined_exemplars)
+
+        # Verify output has header but no data rows
+        with gzip.open(output_file, 'rt') as f:
+            reader = csv.DictReader(f, delimiter='\t')
+            rows = list(reader)
+
+        assert len(rows) == 0
+        assert "combined_dup_exemplar" in reader.fieldnames
+
+    def test_single_read(self, tsv_factory):
+        """Test handling of single read."""
+        seq = "ACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGT"
+        qual = "IIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIII"
+        content = (
+            "seq_id\tquery_seq\tquery_seq_rev\tquery_qual\tquery_qual_rev\t"
+            "prim_align_dup_exemplar\n"
+            f"read1\t{seq}\t{seq}\t{qual}\t{qual}\tread1\n"
+        )
+        input_file = tsv_factory.create_gzip("input.tsv.gz", content)
+        output_file = tsv_factory.get_path("output.tsv.gz")
+
+        # Run the full pipeline
+        read_pairs, prim_align_exemplars = cdm.read_dedup_columns(input_file)
+        cdm.validate_exemplars(read_pairs, prim_align_exemplars)
+        prim_align_groups = cdm.build_prim_align_groups(prim_align_exemplars)
+        similarity_exemplars = cdm.run_similarity_dedup(read_pairs)
+        merged_groups = cdm.merge_groups_by_similarity(
+            prim_align_groups, similarity_exemplars)
+        combined_exemplars = cdm.select_final_exemplars(
+            merged_groups, read_pairs, similarity_exemplars)
+        cdm.write_output_with_combined_column(
+            input_file, output_file, combined_exemplars)
+
+        # Verify output
+        with gzip.open(output_file, 'rt') as f:
+            reader = csv.DictReader(f, delimiter='\t')
+            rows = list(reader)
+
+        assert len(rows) == 1
+        assert rows[0]["combined_dup_exemplar"] == "read1"
+
+    def test_column_order_preserved(self, tsv_factory):
+        """Test that output columns match input order."""
+        seq = "ACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGT"
+        qual = "IIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIII"
+        content = (
+            "extra1\tseq_id\textra2\tquery_seq\tquery_seq_rev\t"
+            "query_qual\tquery_qual_rev\tprim_align_dup_exemplar\textra3\n"
+            f"val1\tread1\tval2\t{seq}\t{seq}\t{qual}\t{qual}\tread1\tval3\n"
+        )
+        input_file = tsv_factory.create_gzip("input.tsv.gz", content)
+        output_file = tsv_factory.get_path("output.tsv.gz")
+
+        # Run the full pipeline
+        read_pairs, prim_align_exemplars = cdm.read_dedup_columns(input_file)
+        cdm.validate_exemplars(read_pairs, prim_align_exemplars)
+        prim_align_groups = cdm.build_prim_align_groups(prim_align_exemplars)
+        similarity_exemplars = cdm.run_similarity_dedup(read_pairs)
+        merged_groups = cdm.merge_groups_by_similarity(
+            prim_align_groups, similarity_exemplars)
+        combined_exemplars = cdm.select_final_exemplars(
+            merged_groups, read_pairs, similarity_exemplars)
+        cdm.write_output_with_combined_column(
+            input_file, output_file, combined_exemplars)
+
+        # Verify column order and values preserved
+        with gzip.open(output_file, 'rt') as f:
+            reader = csv.DictReader(f, delimiter='\t')
+            fieldnames = reader.fieldnames
+            rows = list(reader)
+
+        # Check column order: original columns + combined_dup_exemplar at end
+        expected_fields = [
+            "extra1", "seq_id", "extra2", "query_seq", "query_seq_rev",
+            "query_qual", "query_qual_rev", "prim_align_dup_exemplar",
+            "extra3", "combined_dup_exemplar"
+        ]
+        assert fieldnames == expected_fields
+
+        # Check extra columns preserved
+        assert rows[0]["extra1"] == "val1"
+        assert rows[0]["extra2"] == "val2"
+        assert rows[0]["extra3"] == "val3"
+
+    def test_transitive_merging(self, tsv_factory):
+        """Test that groups merge transitively through prim_align."""
+        # Create reads where alignment groups merge but not all similar
+        # Group 1: read1, read2 (read1≠read2 by similarity)
+        # Group 2: read3, read4 (read3≠read4 by similarity)
+        # But read1≈read3 (similar)
+        # Result: all four get same combined_dup_exemplar
+        seq1 = "ACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGT"
+        seq2 = "GGCCGGCCGGCCGGCCGGCCGGCCGGCCGGCCGGCCGGCCGGCCGGCCGGCCGGCCGGCCGGCC"
+        seq3 = "ACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGT"  # Same as seq1
+        seq4 = "TTAATTAATTAATTAATTAATTAATTAATTAATTAATTAATTAATTAATTAATTAATTAATTAA"
+        qual = "I" * 64
+
+        content = (
+            "seq_id\tquery_seq\tquery_seq_rev\tquery_qual\tquery_qual_rev\t"
+            "prim_align_dup_exemplar\n"
+            f"read1\t{seq1}\t{seq1}\t{qual}\t{qual}\tread1\n"
+            f"read2\t{seq2}\t{seq2}\t{qual}\t{qual}\tread1\n"  # Alignment dup of read1
+            f"read3\t{seq3}\t{seq3}\t{qual}\t{qual}\tread3\n"  # Similar to read1
+            f"read4\t{seq4}\t{seq4}\t{qual}\t{qual}\tread3\n"  # Alignment dup of read3
+        )
+        input_file = tsv_factory.create_gzip("input.tsv.gz", content)
+        output_file = tsv_factory.get_path("output.tsv.gz")
+
+        # Run the full pipeline
+        read_pairs, prim_align_exemplars = cdm.read_dedup_columns(input_file)
+        cdm.validate_exemplars(read_pairs, prim_align_exemplars)
+        prim_align_groups = cdm.build_prim_align_groups(prim_align_exemplars)
+        similarity_exemplars = cdm.run_similarity_dedup(read_pairs)
+        merged_groups = cdm.merge_groups_by_similarity(
+            prim_align_groups, similarity_exemplars)
+        combined_exemplars = cdm.select_final_exemplars(
+            merged_groups, read_pairs, similarity_exemplars)
+        cdm.write_output_with_combined_column(
+            input_file, output_file, combined_exemplars)
+
+        # Verify all four reads have same combined exemplar
+        with gzip.open(output_file, 'rt') as f:
+            reader = csv.DictReader(f, delimiter='\t')
+            rows = list(reader)
+
+        # All should have same exemplar due to transitive merging
+        exemplar = rows[0]["combined_dup_exemplar"]
+        assert rows[1]["combined_dup_exemplar"] == exemplar
+        assert rows[2]["combined_dup_exemplar"] == exemplar
+        assert rows[3]["combined_dup_exemplar"] == exemplar
+
+    def test_duplicate_seq_id_raises_error(self, tsv_factory):
+        """Test that duplicate seq_ids in input raise an error."""
+        seq = "ACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGT"
+        qual = "IIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIII"
+        content = (
+            "seq_id\tquery_seq\tquery_seq_rev\tquery_qual\tquery_qual_rev\t"
+            "prim_align_dup_exemplar\n"
+            f"read1\t{seq}\t{seq}\t{qual}\t{qual}\tread1\n"
+            f"read1\t{seq}\t{seq}\t{qual}\t{qual}\tread1\n"  # Duplicate!
+        )
+        input_file = tsv_factory.create_gzip("input.tsv.gz", content)
+
+        with pytest.raises(ValueError, match="Duplicate seq_id found"):
+            cdm.read_dedup_columns(input_file)

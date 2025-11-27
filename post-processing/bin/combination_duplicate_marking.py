@@ -44,6 +44,8 @@ def read_dedup_columns(
 
         for row in reader:
             seq_id = row['seq_id']
+            if seq_id in read_pairs:
+                raise ValueError(f"Duplicate seq_id found: {seq_id}")
             read_pairs[seq_id] = ReadPair(
                 read_id=seq_id,
                 fwd_seq=row['query_seq'],
@@ -118,6 +120,11 @@ def merge_groups_by_similarity(
 
     If any member of group A shares a similarity exemplar with any member of
     group B, merge A and B into one group.
+
+    This implements transitive merging through alignment groups: if reads A
+    and B are alignment duplicates, and C and D are alignment duplicates,
+    and A is similar to C, then ALL of A, B, C, D get merged together even
+    if B and D are not similar to anything.
 
     Returns:
         Dict mapping a representative prim_align_exemplar to all seq_ids in the
@@ -221,7 +228,10 @@ def select_final_exemplars(
                         graph.add_edge(i, j)
 
             # Handle potentially disconnected graph by finding
-            # connected components and picking best from largest
+            # connected components and picking best from largest.
+            # Graph can be disconnected when prim_align groups merge
+            # through shared similarity but contain multiple distinct
+            # similarity clusters. We pick from the largest cluster.
             components = list(nx.connected_components(graph))
             largest_component = max(components, key=len)
 

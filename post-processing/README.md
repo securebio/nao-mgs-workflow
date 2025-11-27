@@ -80,6 +80,14 @@ to the read's own `seq_id`.
 
 This two-pass approach avoids loading the entire TSV into memory.
 
+#### Memory Considerations
+
+During the first pass, all read pairs (sequences and quality scores) are loaded
+into memory for similarity-based deduplication. Memory usage scales linearly
+with the number of reads in the input file. For very large files (millions of
+reads), this can be quite a bit of memory. The second pass streams through the
+file without loading it all into memory.
+
 #### Example
 
 If you have:
