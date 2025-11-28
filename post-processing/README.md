@@ -84,9 +84,9 @@ This two-pass approach avoids loading the entire TSV into memory.
 
 During the first pass, all read pairs (sequences and quality scores) are loaded
 into memory for similarity-based deduplication. Memory usage scales linearly
-with the number of reads in the input file. For very large files (millions of
-reads), this can be quite a bit of memory. The second pass streams through the
-file without loading it all into memory.
+with the number of reads in the input file. For files with lots of reads, this
+still requires large amounts of memory (e.g., ~3GB for 250k reads). The second
+pass streams through the file without loading it all into memory.
 
 #### Example
 

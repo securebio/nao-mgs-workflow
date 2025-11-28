@@ -77,7 +77,8 @@ def validate_exemplars(
 
 def run_similarity_dedup(
         read_pairs: Dict[str, ReadPair],
-        params: DedupParams) -> Dict[str, str]:
+        params: DedupParams,
+        minimizer_params: MinimizerParams) -> Dict[str, str]:
     """
     Run similarity-based deduplication using nao_dedup on ALL reads.
 
@@ -88,7 +89,8 @@ def run_similarity_dedup(
     read_pair_list = [rp for rp in sorted(
         read_pairs.values(), key=lambda x: x.read_id)]
 
-    deduplicate_read_pairs(read_pair_list, dedup_params=params, verbose=True)
+    deduplicate_read_pairs(
+        read_pair_list, dedup_params=params, minimizer_params=minimizer_params, verbose=True)
 
     similarity_exemplars = {}
     for rp in read_pair_list:
@@ -292,7 +294,11 @@ def main():
     output_path = sys.argv[2]
 
     # Create deduplication parameters once to ensure consistency
+    # Note: the default kmer length of 7 is much too loose for our situation,
+    # as there are only 4^7 (~16k) possible sequences and we have 10-100 times
+    # that many reads.
     params = DedupParams()
+    minimizer_params = MinimizerParams(kmer_len=15, window_len=25, num_windows=4)
 
     print("Pass 1: Reading deduplication columns...")
     read_pairs, prim_align_exemplars = read_dedup_columns(input_path)
@@ -306,7 +312,7 @@ def main():
     print(f"  Found {len(prim_align_groups)} prim_align groups")
 
     print("Running similarity-based deduplication...")
-    similarity_exemplars = run_similarity_dedup(read_pairs, params)
+    similarity_exemplars = run_similarity_dedup(read_pairs, params, minimizer_params)
 
     print("Merging groups based on similarity...")
     merged_groups = merge_groups_by_similarity(
