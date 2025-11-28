@@ -29,4 +29,4 @@ jobs:
 
       - name: Run pytest
         run: |
-          python -m pytest modules/local/*/resources/usr/bin/test_*.py -v --tb=short
+          python -m pytest modules/local/*/resources/usr/bin/test_*.py post-processing/tests/ -v --tb=short
