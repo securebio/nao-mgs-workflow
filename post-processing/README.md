@@ -124,7 +124,7 @@ pytest
 ### deps/nao_dedup
 
 This is a git subtree from https://github.com/securebio/nao-dedup, tracking the
-`jefftk/streaming` branch for now.  Once that branch is merged
+`jefftk/c-implementation` branch for now.  Once that branch is merged
 we'll track `main` instead.
 
 #### Pulling in updates
@@ -135,7 +135,7 @@ To pull in changes from the upstream repository:
 git subtree pull \
     --prefix=post-processing/deps/nao_dedup \
     https://github.com/securebio/nao-dedup \
-    jefftk/streaming \
+    jefftk/c-implementation \
     --squash
 ```
 
@@ -147,5 +147,5 @@ If you make changes to the subtree that should be pushed back to the upstream re
 git subtree push \
     --prefix=post-processing/deps/nao_dedup \
     https://github.com/securebio/nao-dedup \
-    jefftk/streaming
+    jefftk/c-implementation
 ```
