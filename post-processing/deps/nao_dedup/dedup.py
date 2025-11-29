@@ -363,3 +363,201 @@ def deduplicate_read_pairs(
         )
 
     return read_pairs
+
+
+##
+# Streaming deduplication for large datasets
+##
+
+
+class Exemplar:
+    """
+    Lightweight storage for unique sequences.
+    Using __slots__ reduces memory overhead by ~60% compared to dicts.
+    """
+    __slots__ = ('read_id', 'fwd_seq', 'rev_seq')
+
+    def __init__(self, rp: ReadPair):
+        self.read_id = rp.read_id
+        self.fwd_seq = rp.fwd_seq
+        self.rev_seq = rp.rev_seq
+
+
+@dataclass
+class ClusterStats:
+    """Tracks the best representative seen so far for a cluster."""
+    best_read_id: str
+    best_score: float
+    count: int = 1
+
+
+def _get_stable_keys(rp: ReadPair, params: MinimizerParams) -> set[int]:
+    """
+    Extract minimizer keys from multiple windows to ensure we find matches
+    even if the read has errors at the edges.
+
+    Args:
+        rp: ReadPair to extract keys from
+        params: Minimizer parameters
+
+    Returns:
+        Set of minimizer hashes
+    """
+    keys = set()
+    for i in range(params.num_windows):
+        # Check both Fwd and Rev hashes for maximum tolerance
+        k_fwd = _extract_minimizer(rp.fwd_seq, i, params)
+        k_rev = _extract_minimizer(rp.rev_seq, i, params)
+
+        # -1 is the sentinel for "window too short" or invalid
+        if k_fwd != EMPTY_KMER_SENTINEL_HASH:
+            keys.add(k_fwd)
+        if k_rev != EMPTY_KMER_SENTINEL_HASH:
+            keys.add(k_rev)
+
+    return keys
+
+
+def _calculate_score(rp: ReadPair) -> float:
+    """
+    Calculate quality score for a read pair.
+
+    Higher scores indicate better reads. Uses total length as primary criterion
+    and mean quality as tiebreaker.
+
+    Args:
+        rp: ReadPair to score
+
+    Returns:
+        Quality score (higher is better)
+    """
+    length = len(rp.fwd_seq) + len(rp.rev_seq)
+    # Length is primary, Quality is tie-breaker
+    return length + rp.mean_qual()
+
+
+def _find_matching_exemplar(
+    rp: ReadPair,
+    keys: set[int],
+    exemplar_db: dict[int, list[Exemplar]],
+    dedup_params: DedupParams
+) -> Optional[str]:
+    """
+    Find if this read pair matches any existing exemplar.
+
+    Args:
+        rp: ReadPair to match
+        keys: Set of minimizer keys for this read
+        exemplar_db: Database of exemplars indexed by minimizer hash
+        dedup_params: Deduplication parameters
+
+    Returns:
+        Read ID of matching exemplar, or None if no match found
+    """
+    checked_ids = set()
+
+    for key in keys:
+        if key in exemplar_db:
+            for exemplar in exemplar_db[key]:
+                if exemplar.read_id in checked_ids:
+                    continue
+                checked_ids.add(exemplar.read_id)
+
+                # Check standard orientation (Fwd-Fwd, Rev-Rev)
+                if (_sequences_match(rp.fwd_seq, exemplar.fwd_seq, dedup_params) and
+                    _sequences_match(rp.rev_seq, exemplar.rev_seq, dedup_params)):
+                    return exemplar.read_id
+
+                # Check swapped orientation if in tolerant mode
+                if dedup_params.orientation == ORIENT_TOLERANT:
+                    if (_sequences_match(rp.fwd_seq, exemplar.rev_seq, dedup_params) and
+                        _sequences_match(rp.rev_seq, exemplar.fwd_seq, dedup_params)):
+                        return exemplar.read_id
+
+    return None
+
+
+def deduplicate_read_pairs_streaming(
+    read_pairs,  # Iterable of ReadPair objects
+    dedup_params: DedupParams = DedupParams(),
+    minimizer_params: MinimizerParams = MinimizerParams(),
+) -> dict[str, str]:
+    """
+    Deduplicate read pairs using a streaming single-pass algorithm.
+
+    This is much more memory-efficient than the graph-based approach for large
+    datasets. It only stores unique sequences in memory, not all duplicates.
+
+    The function streams through reads once, grouping them and tracking the best
+    representative for each cluster. It returns a mapping from read_id to exemplar_id.
+
+    Args:
+        read_pairs: Iterable of ReadPair objects to deduplicate
+        dedup_params: Parameters controlling deduplication behavior
+        minimizer_params: Parameters for minimizer extraction
+
+    Returns:
+        Dict mapping read_id to exemplar_id
+    """
+    # DATA STORES
+    # 1. Unique Sequences: Map from MinimizerHash -> List[Exemplar]
+    #    We ONLY store unique reads here. Duplicates are never stored.
+    exemplar_db = defaultdict(list)
+
+    # 2. Cluster Leaders: Map from OriginalExemplarID -> ClusterStats
+    cluster_leaders = {}
+
+    # 3. Read-to-Exemplar mapping: Map from read_id -> exemplar_id
+    #    This is what we return
+    read_to_exemplar = {}
+
+    # Single pass: Find clusters and track best representative
+    for rp in read_pairs:
+
+        # Score this read
+        current_score = _calculate_score(rp)
+
+        # Search for match
+        keys = _get_stable_keys(rp, minimizer_params)
+        match_exemplar_id = _find_matching_exemplar(rp, keys, exemplar_db, dedup_params)
+
+        if match_exemplar_id:
+            # It's a duplicate of an existing cluster
+            # Check if this new read is BETTER than the current leader
+            stats = cluster_leaders[match_exemplar_id]
+            stats.count += 1
+
+            if current_score > stats.best_score:
+                # We found a better leader! Update the stats.
+                stats.best_read_id = rp.read_id
+                stats.best_score = current_score
+
+            # Record this read's exemplar (will be updated if leader changes)
+            read_to_exemplar[rp.read_id] = match_exemplar_id
+        else:
+            # It's a new unique cluster
+            new_exemplar = Exemplar(rp)
+
+            # Add to DB under all keys so we find it later
+            for key in keys:
+                exemplar_db[key].append(new_exemplar)
+
+            # Initialize stats
+            cluster_leaders[rp.read_id] = ClusterStats(
+                best_read_id=rp.read_id,
+                best_score=current_score
+            )
+
+            # This read is its own exemplar
+            read_to_exemplar[rp.read_id] = rp.read_id
+
+
+    # Resolve final exemplars: some reads may point to an intermediate exemplar
+    # that was later replaced by a better one
+    final_mapping = {}
+    for read_id, initial_exemplar_id in read_to_exemplar.items():
+        # Look up the final best leader for this cluster
+        final_exemplar_id = cluster_leaders[initial_exemplar_id].best_read_id
+        final_mapping[read_id] = final_exemplar_id
+
+    return final_mapping

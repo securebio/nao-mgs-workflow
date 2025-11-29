@@ -26,6 +26,7 @@ from dedup import (
     _select_exemplar_by_centrality,
     _sequences_match,
     deduplicate_read_pairs,
+    deduplicate_read_pairs_streaming,
 )
 
 
@@ -489,18 +490,34 @@ class TestParameterValidation:
         assert params2.orientation == ORIENT_TOLERANT
 
 
+def _get_exemplar_mapping(result):
+    """Helper to get exemplar mapping from either result type."""
+    if isinstance(result, dict):
+        # Streaming version returns dict
+        return result
+    else:
+        # Graph version returns list
+        return {rp.read_id: rp.exemplar_id for rp in result}
+
+
+@pytest.mark.parametrize(
+    "dedup_func",
+    [deduplicate_read_pairs, deduplicate_read_pairs_streaming],
+    ids=["graph", "streaming"]
+)
 class TestDeduplicateFunction:
-    """End-to-end tests for the deduplicate_read_pairs function."""
+    """End-to-end tests for both deduplication algorithms."""
 
     @pytest.mark.fast
     @pytest.mark.integration
-    def test_empty_input_empty_output(self):
-        result = deduplicate_read_pairs([])
-        assert result == []
+    def test_empty_input_empty_output(self, dedup_func):
+        result = dedup_func([], verbose=False)
+        mapping = _get_exemplar_mapping(result)
+        assert mapping == {}
 
     @pytest.mark.fast
     @pytest.mark.integration
-    def test_all_identical_sequences_single_cluster(self):
+    def test_all_identical_sequences_single_cluster(self, dedup_func):
         rng = random.Random(42)
         seq_f = _random_seq(100, rng)
         seq_r = _random_seq(100, rng)
@@ -512,15 +529,16 @@ class TestDeduplicateFunction:
             ReadPair("read3", seq_f, seq_r, qual, qual),
         ]
 
-        result = deduplicate_read_pairs(read_pairs)
+        result = dedup_func(read_pairs, verbose=False)
+        mapping = _get_exemplar_mapping(result)
 
-        exemplars = {rp.exemplar_id for rp in result}
+        exemplars = set(mapping.values())
         assert len(exemplars) == 1
-        assert [rp.read_id for rp in result] == ["read1", "read2", "read3"]
+        assert set(mapping.keys()) == {"read1", "read2", "read3"}
 
     @pytest.mark.fast
     @pytest.mark.integration
-    def test_no_duplicates_all_singletons(self):
+    def test_no_duplicates_all_singletons(self, dedup_func):
         rng = random.Random(42)
         qual = "I" * 100
 
@@ -530,15 +548,16 @@ class TestDeduplicateFunction:
             ReadPair("read3", _random_seq(100, rng), _random_seq(100, rng), qual, qual),
         ]
 
-        result = deduplicate_read_pairs(read_pairs)
+        result = dedup_func(read_pairs, verbose=False)
+        mapping = _get_exemplar_mapping(result)
 
-        for rp in result:
-            assert rp.exemplar_id == rp.read_id
-        assert [rp.read_id for rp in result] == ["read1", "read2", "read3"]
+        for read_id, exemplar_id in mapping.items():
+            assert exemplar_id == read_id
+        assert set(mapping.keys()) == {"read1", "read2", "read3"}
 
     @pytest.mark.fast
     @pytest.mark.integration
-    def test_multiple_small_clusters(self):
+    def test_multiple_small_clusters(self, dedup_func):
         rng = random.Random(42)
 
         seq1_f = _random_seq(100, rng)
@@ -556,28 +575,23 @@ class TestDeduplicateFunction:
             ReadPair("read5", seq3_f, seq3_r, "I" * 100, "I" * 100),  # Cluster 2
         ]
 
-        result = deduplicate_read_pairs(read_pairs)
+        result = dedup_func(read_pairs, verbose=False)
+        mapping = _get_exemplar_mapping(result)
 
-        exemplars = {rp.exemplar_id for rp in result}
+        exemplars = set(mapping.values())
         assert len(exemplars) == 3
 
-        assert [rp.read_id for rp in result] == [
-            "read1",
-            "read2",
-            "read3",
-            "read4",
-            "read5",
-        ]
+        assert set(mapping.keys()) == {"read1", "read2", "read3", "read4", "read5"}
 
-        assert result[0].exemplar_id == "read2"  # Higher quality wins
-        assert result[1].exemplar_id == "read2"
-        assert result[2].exemplar_id == "read3"  # Singleton
-        assert result[3].exemplar_id in ["read4", "read5"]
-        assert result[4].exemplar_id == result[3].exemplar_id
+        assert mapping["read1"] == "read2"  # Higher quality wins
+        assert mapping["read2"] == "read2"
+        assert mapping["read3"] == "read3"  # Singleton
+        assert mapping["read4"] in ["read4", "read5"]
+        assert mapping["read5"] == mapping["read4"]
 
     @pytest.mark.fast
     @pytest.mark.integration
-    def test_realistic_reads_with_errors(self):
+    def test_realistic_reads_with_errors(self, dedup_func):
         rng = random.Random(42)
 
         base_seq_f = _random_seq(150, rng)
@@ -600,13 +614,14 @@ class TestDeduplicateFunction:
         ]
 
         dedup_params = DedupParams(max_offset=1, max_error_frac=0.01)
-        result = deduplicate_read_pairs(read_pairs, dedup_params)
+        result = dedup_func(read_pairs, dedup_params, verbose=False)
+        mapping = _get_exemplar_mapping(result)
 
-        exemplar1 = result[0].exemplar_id
-        assert result[1].exemplar_id == exemplar1
-        assert result[2].exemplar_id == exemplar1
+        exemplar1 = mapping["read1"]
+        assert mapping["read2"] == exemplar1
+        assert mapping["read3"] == exemplar1
 
-        assert result[3].exemplar_id == "read4"
+        assert mapping["read4"] == "read4"
 
-        exemplars = {rp.exemplar_id for rp in result}
+        exemplars = set(mapping.values())
         assert len(exemplars) == 2
