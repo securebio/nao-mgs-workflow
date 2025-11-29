@@ -1,13 +1,23 @@
-# nao-dedup
+# nao_dedup
 
 Sequencing read deduplication with error-tolerant matching
 
 ## Overview
 
-`nao-dedup` identifies and removes duplicate read pairs from sequencing data
+`nao_dedup` identifies and removes duplicate read pairs from sequencing data
 while being tolerant of small alignment shifts and sequencing errors. It uses
-minimizer-based bucketing for efficiency and graph-based clustering to handle
-reads that differ slightly due to sequencing errors or alignment variations.
+minimizer-based bucketing for efficiency to avoid comparing every read pair
+against every other pair.
+
+This library is available in two implementations:
+- **Python**: Graph-based and streaming implementations for flexibility
+- **C**: Streaming-only, very high-performance (~50x faster)
+
+In maintaining this library we keep the C and Python streaming versions
+completely in sync in terms of functionality.  This allows the Python version
+to serve as a reference (for both humans and LLMs) for what we intend to be
+doing, in part because our team is overall much stronger working in Python.
+
 
 ## Features
 
@@ -21,42 +31,30 @@ reads that differ slightly due to sequencing errors or alignment variations.
   for each duplicate cluster
 - **Flexible orientation handling**: Can operate in strict mode (same
   orientation required) or tolerant mode (handles mate-pair swaps)
+- **High performance**: C implementation is 47x faster than Python
 
-## Installation
+---
 
-### Requirements
+## Python Implementation
+
+### Installation
+
+#### Requirements
 
 - Python 3.8 or higher
 
-### Install dependencies
+#### Install dependencies
 
 ```bash
 pip install -r requirements.txt
 ```
 
-## Usage
+### Usage
 
-### Choosing an Algorithm
-
-`nao-dedup` provides two deduplication algorithms:
-
-1. **`deduplicate_read_pairs()`** - Graph-based algorithm
-   - **Best for**: Small to medium datasets (< 100k reads)
-   - **Advantages**: Uses graph centrality to select optimal exemplars
-   - **Memory usage**: Stores all reads in memory (~3GB for 250k reads)
-
-2. **`deduplicate_read_pairs_streaming()`** - Streaming two-pass algorithm
-   - **Best for**: Large datasets (> 100k reads)
-   - **Advantages**: Only stores unique sequences in memory (~2-3x less memory
-     in the typical case, far more on pathological datasets)
-   - **Memory usage**: Much lower (~1GB for 250k reads with 75k unique)
-   - **Quality**: Still selects high-quality representatives based on length
-     and quality
-
-### Basic Example
+#### Basic Example
 
 ```python
-from dedup import ReadPair, deduplicate_read_pairs_streaming, DedupParams
+from dedup import ReadPair, deduplicate_read_pairs, DedupParams
 
 # Create read pairs
 read_pairs = [
@@ -65,16 +63,18 @@ read_pairs = [
     ReadPair("read3", "GGGGAAAA", "CCCCTTTT", "IIIIIIII", "IIIIIIII"),  # Different
 ]
 
-# Run deduplication
+# Run deduplication (graph-based)
 result = deduplicate_read_pairs(read_pairs)
-# Or deduplicate_read_pairs_streaming(read_pairs) for large datasets.
+
+# Or use streaming implementation for memory efficiency
+result = deduplicate_read_pairs_streaming(read_pairs)
 
 # Check results
 for rp in result:
     print(f"{rp.read_id} -> exemplar: {rp.exemplar_id}")
 ```
 
-### Advanced Configuration
+#### Advanced Configuration
 
 ```python
 from dedup import DedupParams, MinimizerParams, ORIENT_STRICT, ORIENT_TOLERANT
@@ -86,18 +86,15 @@ dedup_params = DedupParams(
     orientation=ORIENT_TOLERANT  # Allow swapped mate pairs
 )
 
-# Configure minimizer parameters
-# Note: For large datasets with many reads, use a larger kmer_len to avoid
-# bucket explosions. With default kmer_len=7, there are only 4^7 (~16k)
-# possible sequences.
+# Configure minimizer parameters (rarely needs changing)
 minimizer_params = MinimizerParams(
-    num_windows=4,    # Number of windows per read
+    num_windows=3,    # Number of windows per read
     window_len=25,    # Base pairs per window
-    kmer_len=15       # K-mer size (use 15 for large datasets)
+    kmer_len=7        # K-mer size for minimizers
 )
 
 # Run with custom parameters
-result = deduplicate_read_pairs_streaming(
+result = deduplicate_read_pairs(
     read_pairs,
     dedup_params=dedup_params,
     minimizer_params=minimizer_params,
@@ -105,64 +102,9 @@ result = deduplicate_read_pairs_streaming(
 )
 ```
 
-## How It Works
+### Python Parameters
 
-### Graph-based Algorithm (`deduplicate_read_pairs`)
-
-1. **Minimizer Extraction**: Each read is divided into windows, and the
-   lexicographically smallest k-mer (minimizer) is extracted from each window.
-
-2. **Bucketing**: Read pairs with matching minimizers are assigned to the same
-   buckets, reducing the number of pairwise comparisons needed.
-
-3. **Pairwise Comparison**: Within each bucket, read pairs are compared to
-   determine if they're duplicates, allowing for:
-   - Small alignment offsets (configurable via `max_offset`)
-   - Sequencing errors (configurable via `max_error_frac`)
-   - Optional mate-pair orientation swaps (configurable via `orientation`)
-
-4. **Graph Construction**: An equivalence graph is built where nodes are read
-   pairs and edges connect duplicates.
-
-5. **Clustering**: Connected components in the graph represent duplicate clusters.
-
-6. **Exemplar Selection**: For each cluster, an exemplar is selected based on:
-   - Graph centrality (lower eccentricity is better)
-   - Mean quality score (higher is better)
-   - Total read length (longer is better)
-   - Read ID (lexicographic tie-breaker)
-
-### Streaming Algorithm (`deduplicate_read_pairs_streaming`)
-
-The streaming algorithm uses a two-pass approach that provides near-optimal
-exemplar selection while using significantly less memory:
-
-**Pass 1: Cluster and Track Best Representatives**
-
-1. **Stream through reads**: Process reads one at a time, not loading all into
-   memory
-2. **Find matches**: For each read, use minimizer-based bucketing to find matching
-   unique sequences (exemplars)
-3. **Update or create cluster**:
-   - If match found: Check if this read is better than the current cluster
-     representative
-   - If no match: Create new cluster with this read as the exemplar
-4. **Track best**: Maintain only the best read seen so far for each cluster
-
-**Pass 2: Assign Final Exemplars**
-
-1. **Stream through reads again**: Process all reads a second time
-2. **Look up cluster**: Find which cluster each read belongs to (same logic as
-   Pass 1)
-3. **Assign best exemplar**: Use the best representative identified in Pass 1
-
-**Key Advantages**:
-- **Memory efficient**: Only stores unique sequences
-- **Fast**: Two linear passes through data vs. O(N²) graph construction
-
-## Parameters
-
-### DedupParams
+#### DedupParams
 
 - `max_offset` (default: 1): Maximum number of bases a read can be shifted and
   still be considered a duplicate
@@ -171,16 +113,201 @@ exemplar selection while using significantly less memory:
 - `orientation` (default: "tolerant"): Either `ORIENT_STRICT` (F-R must match
   F-R) or `ORIENT_TOLERANT` (also allows F-R to match R-F)
 
-### MinimizerParams
+#### MinimizerParams
 
 - `num_windows` (default: 3): Number of windows to extract from each read
 - `window_len` (default: 25): Size of each window in base pairs
 - `kmer_len` (default: 7): Size of k-mers for minimizer calculation
 
-## Testing
+---
 
-Run all tests:
+## C Implementation
+
+### Features
+
+- **High Performance**: 47x faster than Python implementation
+- **Memory Efficient**: Arena allocators minimize fragmentation, separate scratch/result memory
+- **Scalable**: Handles 20M+ reads with configurable hash table sizing
+- **Quality-Aware**: Uses sequence quality scores for tie-breaking between duplicates
+- **Generic**: TSV-agnostic - works with any data source
+
+### API Overview
+
+#### Lifecycle
+
+```c
+// Create context with parameters
+NaoDedupParams params = {
+    .kmer_len = 15,
+    .window_len = 25,
+    .num_windows = 4,
+    .quality_threshold = 0.97,
+    .expected_reads = 20000000
+};
+NaoDedupContext* ctx = nao_dedup_create(params);
+
+// ... process reads ...
+
+// Clean up
+nao_dedup_destroy(ctx);
+```
+
+#### Pass 1: Build Index
+
+```c
+// Feed reads to the library (strings don't need to be null-terminated)
+const char* exemplar = nao_dedup_process_read(
+    ctx,
+    read_id, id_len,
+    fwd_seq, fwd_len,
+    rev_seq, rev_len,
+    fwd_qual, fwd_qual_len,  // Can be NULL/0
+    rev_qual, rev_qual_len   // Can be NULL/0
+);
+// exemplar is the similarity exemplar for this read
+
+// Finalize when done (frees scratch memory)
+nao_dedup_finalize(ctx);
+```
+
+#### Pass 2: Query Results
+
+```c
+// After finalization, query final exemplars
+const char* final_exemplar = nao_dedup_get_final_exemplar(ctx, read_id);
+```
+
+#### Statistics
+
+```c
+NaoDedupStats stats;
+nao_dedup_get_stats(ctx, &stats);
+printf("Processed %d reads in %d clusters\n",
+       stats.total_reads_processed,
+       stats.unique_clusters);
+```
+
+### Integration Example
+
+See `../src/similarity_duplicate_marking.c` for a complete example of how to integrate this library with TSV file I/O.
+
+The driver handles:
+- File I/O (gzipped TSV files)
+- TSV parsing
+- Business logic (only processing alignment-unique reads)
+- Output formatting
+
+The library handles:
+- Minimizer extraction
+- Similarity matching
+- Cluster management
+- Memory management
+
+### Performance
+
+**Small file (70K reads)**:
+- Python: 28.4s
+- C library: 2.6s
+- **Speedup: 11x**
+
+**Large file (2M reads)**:
+- Python: ~60 minutes (estimated)
+- C library: 76 seconds
+- **Speedup: 47x**
+
+### Memory Usage
+
+- **Scratch arena**: 2GB (freed after Pass 1)
+- **Result arena**: 512MB (kept for Pass 2 lookups)
+- **Hash tables**: ~16M buckets for 20M reads
+
+### Thread Safety
+
+This library is **not thread-safe**. Each thread should use its own `NaoDedupContext`.
+
+### Error Handling
+
+Functions return NULL on error. Use `nao_dedup_get_error_message()` to retrieve error details:
+
+```c
+NaoDedupContext* ctx = nao_dedup_create(params);
+if (!ctx) {
+    fprintf(stderr, "Error: %s\n", nao_dedup_get_error_message());
+    exit(1);
+}
+```
+
+### Compilation
 
 ```bash
-pytest
+gcc -O3 -march=native -I. your_driver.c nao_dedup.c -lz -o your_program
 ```
+
+---
+
+## How It Works
+
+### 1. Minimizer Extraction
+
+Each read is divided into windows, and the lexicographically smallest k-mer
+(minimizer) is extracted from each window. This creates a signature for each
+read pair.
+
+### 2. Bucketing
+
+Read pairs with matching minimizers are assigned to the same buckets. This
+dramatically reduces the number of pairwise comparisons needed.
+
+### 3. Pairwise Comparison
+
+Within each bucket, read pairs are compared to determine if they're
+duplicates. Comparison allows for:
+- Small alignment offsets (configurable via `max_offset`)
+- Sequencing errors (configurable via `max_error_frac`)
+- Optional mate-pair orientation swaps (configurable via `orientation`)
+
+### 4. Clustering (Python graph-based) or Streaming (C and Python streaming)
+
+**Python graph-based**:
+- An equivalence graph is built where nodes are read pairs and edges connect duplicates
+- Connected components in the graph represent duplicate clusters
+- For each cluster, an exemplar is selected based on graph centrality, quality score, read length, and read ID
+
+**C and Python streaming**:
+- No graph construction - purely streaming approach
+- First matching read in a bucket becomes the cluster exemplar
+- Subsequent matches are assigned to that exemplar
+- Two-pass algorithm: Pass 1 builds index, Pass 2 queries final exemplars
+
+### 5. Exemplar Selection
+
+**Python graph-based** selects based on:
+1. Graph centrality (lower eccentricity is better)
+2. Mean quality score (higher is better)
+3. Total read length (longer is better)
+4. Read ID (lexicographic tie-breaker)
+
+**C/Python streaming** selects based on:
+1. First match in bucket (becomes exemplar)
+2. Quality score for tie-breaking when applicable
+
+## Testing
+
+### Python tests
+
+Run all Python tests:
+
+```bash
+pytest tests/test_dedup.py
+```
+
+### C tests
+
+Build the test library and run tests:
+
+```bash
+make test
+```
+
+This builds `tests/libnaodedup_test.so` and runs parametrized tests that verify
+parity between Python and C implementations.

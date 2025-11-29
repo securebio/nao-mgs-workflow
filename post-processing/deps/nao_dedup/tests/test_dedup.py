@@ -625,3 +625,123 @@ class TestDeduplicateFunction:
 
         exemplars = set(mapping.values())
         assert len(exemplars) == 2
+
+
+# ============================================================================
+# C Implementation Tests
+# ============================================================================
+
+# Import C wrapper
+try:
+    from c_wrapper import deduplicate_read_pairs_c
+except (ImportError, FileNotFoundError) as e:
+    raise RuntimeError(
+        "C library not found. Run 'make test-lib' to build it."
+    ) from e
+
+# Parametrize to run tests on both implementations
+c_and_python_impls = [deduplicate_read_pairs_streaming, deduplicate_read_pairs_c]
+impl_ids = ["python-streaming", "c"]
+
+
+@pytest.mark.parametrize(
+    "dedup_func",
+    c_and_python_impls,
+    ids=impl_ids
+)
+class TestCAndPythonDeduplication:
+    """Tests that run on both C and Python implementations."""
+
+    @pytest.mark.fast
+    @pytest.mark.integration
+    def test_empty_input(self, dedup_func):
+        result = dedup_func([], verbose=False)
+        mapping = _get_exemplar_mapping(result)
+        assert mapping == {}
+
+    @pytest.mark.fast
+    @pytest.mark.integration
+    def test_single_read(self, dedup_func):
+        rp = ReadPair("read1", "AAAA", "TTTT", "IIII", "IIII")
+        result = dedup_func([rp], verbose=False)
+        mapping = _get_exemplar_mapping(result)
+        assert mapping == {"read1": "read1"}
+
+    @pytest.mark.fast
+    @pytest.mark.integration
+    def test_identical_reads(self, dedup_func):
+        rng = random.Random(42)
+        seq_f = _random_seq(100, rng)
+        seq_r = _random_seq(100, rng)
+        qual = "I" * 100
+
+        read_pairs = [
+            ReadPair("read1", seq_f, seq_r, qual, qual),
+            ReadPair("read2", seq_f, seq_r, qual, qual),
+            ReadPair("read3", seq_f, seq_r, qual, qual),
+        ]
+
+        result = dedup_func(read_pairs, verbose=False)
+        mapping = _get_exemplar_mapping(result)
+
+        # All should map to same exemplar
+        exemplars = set(mapping.values())
+        assert len(exemplars) == 1
+
+    @pytest.mark.fast
+    @pytest.mark.integration
+    def test_no_duplicates(self, dedup_func):
+        rng = random.Random(42)
+        qual = "I" * 100
+
+        read_pairs = [
+            ReadPair("read1", _random_seq(100, rng), _random_seq(100, rng), qual, qual),
+            ReadPair("read2", _random_seq(100, rng), _random_seq(100, rng), qual, qual),
+            ReadPair("read3", _random_seq(100, rng), _random_seq(100, rng), qual, qual),
+        ]
+
+        result = dedup_func(read_pairs, verbose=False)
+        mapping = _get_exemplar_mapping(result)
+
+        # Each should be its own exemplar
+        for read_id in mapping:
+            assert mapping[read_id] == read_id
+
+    @pytest.mark.fast
+    @pytest.mark.integration
+    def test_approximate_match_parity(self, dedup_func):
+        """Ensure C and Python handle mismatches identically."""
+        seq = "A" * 100
+        seq_error = "A" * 50 + "T" + "A" * 49  # 1 mismatch (1% error)
+
+        # Should match with 2% error threshold
+        rp1 = ReadPair("r1", seq, seq, "I"*100, "I"*100)
+        rp2 = ReadPair("r2", seq_error, seq, "I"*100, "I"*100)
+
+        # Explicit params to allow the error
+        params = DedupParams(max_error_frac=0.02)
+        result = dedup_func([rp1, rp2], dedup_params=params)
+        mapping = _get_exemplar_mapping(result)
+
+        # Should be clustered together
+        assert mapping["r1"] == mapping["r2"]
+
+    @pytest.mark.fast
+    @pytest.mark.integration
+    def test_approximate_match_threshold(self, dedup_func):
+        """Ensure C and Python reject matches above error threshold."""
+        seq = "A" * 100
+        seq_error = "A" * 97 + "TTT"  # 3 mismatches (3% error)
+
+        rp1 = ReadPair("r1", seq, seq, "I"*100, "I"*100)
+        rp2 = ReadPair("r2", seq_error, seq, "I"*100, "I"*100)
+
+        # With 2% threshold, should NOT match
+        params = DedupParams(max_error_frac=0.02)
+        result = dedup_func([rp1, rp2], dedup_params=params)
+        mapping = _get_exemplar_mapping(result)
+
+        # Should be separate clusters
+        assert mapping["r1"] != mapping["r2"]
+        assert mapping["r1"] == "r1"
+        assert mapping["r2"] == "r2"
