@@ -481,6 +481,7 @@ def deduplicate_read_pairs_streaming(
     read_pairs,  # Iterable of ReadPair objects
     dedup_params: DedupParams = DedupParams(),
     minimizer_params: MinimizerParams = MinimizerParams(),
+    verbose: bool = False,
 ) -> dict[str, str]:
     """
     Deduplicate read pairs using a streaming single-pass algorithm.
@@ -495,6 +496,7 @@ def deduplicate_read_pairs_streaming(
         read_pairs: Iterable of ReadPair objects to deduplicate
         dedup_params: Parameters controlling deduplication behavior
         minimizer_params: Parameters for minimizer extraction
+        verbose: If True, print statistics about deduplication
 
     Returns:
         Dict mapping read_id to exemplar_id
@@ -559,5 +561,10 @@ def deduplicate_read_pairs_streaming(
         # Look up the final best leader for this cluster
         final_exemplar_id = cluster_leaders[initial_exemplar_id].best_read_id
         final_mapping[read_id] = final_exemplar_id
+
+    if verbose:
+        num_clusters = len(cluster_leaders)
+        num_reads = len(final_mapping)
+        print(f"Streaming dedup: {num_reads} reads -> {num_clusters} clusters")
 
     return final_mapping
