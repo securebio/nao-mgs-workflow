@@ -745,3 +745,105 @@ class TestCAndPythonDeduplication:
         assert mapping["r1"] != mapping["r2"]
         assert mapping["r1"] == "r1"
         assert mapping["r2"] == "r2"
+
+    @pytest.mark.fast
+    @pytest.mark.integration
+    def test_offset_alignment_left_shift(self, dedup_func):
+        """Test that sequences match when one is shifted left by 1 base."""
+        # Use longer sequences so they'll share minimizer buckets
+        # Sequence 1: G + 99 A's (100 bases total)
+        # Sequence 2: 99 A's (99 bases)
+        # With offset=1, seq1[1:] aligns with seq2[0:], giving perfect match
+        seq1 = "G" + "A" * 99
+        seq2 = "A" * 99
+        common = "T" * 99  # Same reverse read so they share buckets
+
+        rp1 = ReadPair("r1", seq1, common, "I"*100, "I"*99)
+        rp2 = ReadPair("r2", seq2, common, "I"*99, "I"*99)
+
+        # With max_offset=1, these should match
+        # Overlap is 99 bases, offset counts as 1 error, so 1/99 ≈ 0.0101 (1.01% error)
+        params = DedupParams(max_offset=1, max_error_frac=0.02)
+        result = dedup_func([rp1, rp2], dedup_params=params)
+        mapping = _get_exemplar_mapping(result)
+
+        # Should be clustered together
+        assert mapping["r1"] == mapping["r2"]
+
+    @pytest.mark.fast
+    @pytest.mark.integration
+    def test_offset_alignment_right_shift(self, dedup_func):
+        """Test that sequences match when one is shifted right by 1 base."""
+        # Use longer sequences so they'll share minimizer buckets
+        # Sequence 1: 99 A's
+        # Sequence 2: G + 99 A's (100 bases total)
+        # With offset=-1, seq1[0:] aligns with seq2[1:], giving perfect match
+        seq1 = "A" * 99
+        seq2 = "G" + "A" * 99
+        common = "T" * 99  # Same reverse read so they share buckets
+
+        rp1 = ReadPair("r1", seq1, common, "I"*99, "I"*99)
+        rp2 = ReadPair("r2", seq2, common, "I"*100, "I"*99)
+
+        # With max_offset=1, these should match
+        params = DedupParams(max_offset=1, max_error_frac=0.02)
+        result = dedup_func([rp1, rp2], dedup_params=params)
+        mapping = _get_exemplar_mapping(result)
+
+        # Should be clustered together
+        assert mapping["r1"] == mapping["r2"]
+
+    @pytest.mark.fast
+    @pytest.mark.integration
+    def test_different_length_no_match_beyond_offset(self, dedup_func):
+        """Test that sequences with length difference > max_offset don't match."""
+        # Use longer sequences that share minimizer buckets, but differ in BOTH reads
+        # Forward: Sequence 1: GG + 98 A's (100 bases) vs 98 A's
+        # Reverse: Sequence 1: TT + 98 C's (100 bases) vs 98 C's
+        # Both have difference of 2 bases, but max_offset=1, so should not match
+        seq1_fwd = "GG" + "A" * 98
+        seq2_fwd = "A" * 98
+        seq1_rev = "TT" + "C" * 98
+        seq2_rev = "C" * 98
+
+        rp1 = ReadPair("r1", seq1_fwd, seq1_rev, "I"*100, "I"*100)
+        rp2 = ReadPair("r2", seq2_fwd, seq2_rev, "I"*98, "I"*98)
+
+        params = DedupParams(max_offset=1, max_error_frac=0.01)
+        result = dedup_func([rp1, rp2], dedup_params=params)
+        mapping = _get_exemplar_mapping(result)
+
+        # Should be separate clusters
+        assert mapping["r1"] == "r1"
+        assert mapping["r2"] == "r2"
+
+    @pytest.mark.fast
+    @pytest.mark.integration
+    def test_error_fraction_with_offset(self, dedup_func):
+        """Test that offset counts toward error budget."""
+        # Seq1: 200 A's
+        # Seq2: G + 199 A's (shifted by 1)
+        seq1 = "A" * 200
+        seq2 = "G" + "A" * 199
+
+        rp1 = ReadPair("r1", seq1, seq1, "I"*200, "I"*200)
+        rp2 = ReadPair("r2", seq2, seq1, "I"*200, "I"*200)
+
+        # With max_offset=1 and max_error_frac=0.004:
+        # Offset=-1: overlap=199, offset counts as 1, total = 1/199 ≈ 0.00503
+        # Should NOT match (0.00503 > 0.004)
+        params = DedupParams(max_offset=1, max_error_frac=0.004)
+        result = dedup_func([rp1, rp2], dedup_params=params)
+        mapping = _get_exemplar_mapping(result)
+
+        # Should be separate clusters
+        assert mapping["r1"] == "r1"
+        assert mapping["r2"] == "r2"
+
+        # But with 0.006 threshold, should match  (0.00503 <= 0.006)
+        params2 = DedupParams(max_offset=1, max_error_frac=0.006)
+        result2 = dedup_func([rp1, rp2], dedup_params=params2)
+        mapping2 = _get_exemplar_mapping(result2)
+
+        # Should be clustered together
+        assert mapping2["r1"] == mapping2["r2"]

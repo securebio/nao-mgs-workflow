@@ -28,7 +28,8 @@ class NaoDedupParams(ctypes.Structure):
         ("kmer_len", ctypes.c_int),
         ("window_len", ctypes.c_int),
         ("num_windows", ctypes.c_int),
-        ("quality_threshold", ctypes.c_double),
+        ("max_offset", ctypes.c_int),
+        ("max_error_frac", ctypes.c_double),
         ("expected_reads", ctypes.c_size_t),
     ]
 
@@ -90,7 +91,8 @@ class NaoDedupContext:
             kmer_len=params_dict.get('kmer_len', 15),
             window_len=params_dict.get('window_len', 25),
             num_windows=params_dict.get('num_windows', 4),
-            quality_threshold=params_dict.get('quality_threshold', 0.97),
+            max_offset=params_dict.get('max_offset', 1),
+            max_error_frac=params_dict.get('max_error_frac', 0.01),
             expected_reads=params_dict.get('expected_reads', 1000000),
         )
 
@@ -161,7 +163,8 @@ def deduplicate_read_pairs_c(read_pairs, dedup_params=None, minimizer_params=Non
         'kmer_len': minimizer_params.kmer_len,
         'window_len': minimizer_params.window_len,
         'num_windows': minimizer_params.num_windows,
-        'quality_threshold': 1.0 - dedup_params.max_error_frac,  # Convert error to similarity
+        'max_offset': dedup_params.max_offset,
+        'max_error_frac': dedup_params.max_error_frac,
         'expected_reads': len(read_pairs) if read_pairs else 1000,
     }
 
