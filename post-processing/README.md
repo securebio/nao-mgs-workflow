@@ -28,19 +28,22 @@ We have two kinds of duplicate detection:
    sequence similarity, tolerating small alignment shifts and sequencing
    errors.
 
-If any member of one alignment group is similar to any member of another
-alignment group, all reads in both groups are marked with the same
-`combined_dup_exemplar`.
+The similarity-based tool only processes reads where `prim_align_dup_exemplar
+== seq_id` (alignment-unique reads), and produces a `sim_dup_exemplar` column.
+If you only want the exemplars you can filter to reads where sim_dup_exemplar
+== seq_id.  If you need the groups, first look up the record identified in
+prim_align_dup_exemplar, and then group by that record's sim_dup_exemplar.
 
 Testing on 69,652 read pairs, 33,920 of which were unique per alignment-based
 duplication identification, 22,683 were unique after additionally considering
-similarity.  This ran in 1m18s, which is fast enough to be usable, but slow
-enough that we'd really like to integrate this into DOWNSTREAM.
+similarity. With the new approach, we only need to run similarity deduplication
+on the 33,920 alignment-unique reads instead of all 69,652, making it much
+faster and more memory-efficient.
 
 #### Usage
 
 ```bash
-./bin/combination_duplicate_marking.py <input.tsv.gz> <output.tsv.gz>
+./bin/similarity_duplicate_marking.py <input.tsv.gz> <output.tsv.gz>
 ```
 
 #### Input Format
@@ -61,44 +64,52 @@ agnostic to whether it is run on a `_validation_hits.tsv.gz`,
 #### Output Format
 
 The output is a gzipped TSV file containing all input columns in the same order
-as the input, plus a final new column `combined_dup_exemplar`.  This is the
-final exemplar ID after combining both deduplication methods .
+as the input, plus a final new column `sim_dup_exemplar`:
 
-For reads that are not duplicates of anything, `combined_dup_exemplar` is set
-to the read's own `seq_id`.
+- For reads where `prim_align_dup_exemplar == seq_id`: Contains the similarity
+  exemplar ID (the read's own `seq_id` if not a similarity duplicate)
+- For all other reads: Contains `'NA'` (these reads were already identified as
+  duplicates by alignment, so no similarity check is needed)
 
 #### Algorithm
 
-1. **First pass**: Reads deduplication columns from input:
+1. **First pass**: Reads only alignment-unique reads from input:
+   - Filters to reads where `prim_align_dup_exemplar == seq_id`
+   - Runs similarity-based deduplication on these reads using nao-dedup's
+     streaming algorithm
 
-   - Groups reads by their `prim_align_dup_exemplar`
-   - Runs similarity-based deduplication on all reads
-   - Merges alignment groups when their members are found to be similar
-   - Selects final exemplars using centrality-based logic from nao_dedup
-
-2. **Second pass**: Writes output with the new `combined_dup_exemplar` column.
+2. **Second pass**: Writes output with the new `sim_dup_exemplar` column:
+   - For alignment-unique reads: Uses the similarity exemplar
+   - For alignment duplicates: Writes `'NA'`
 
 This two-pass approach avoids loading the entire TSV into memory.
 
 #### Memory Considerations
 
-During the first pass, all read pairs (sequences and quality scores) are loaded
-into memory for similarity-based deduplication. Memory usage scales linearly
-with the number of reads in the input file. For files with lots of reads, this
-still requires large amounts of memory (e.g., ~3GB for 250k reads). The second
-pass streams through the file without loading it all into memory.
+During the first pass, only alignment-unique read pairs are loaded into memory.
+Memory usage scales with the number of alignment-unique reads, which is
+typically much smaller than the total number of reads. The streaming algorithm
+further reduces memory usage by only storing unique sequences (e.g., ~300MB for
+30k alignment-unique reads with 5k unique sequences). The second pass streams
+through the file without loading it all into memory.
 
 #### Example
 
 If you have:
-- Reads A and B marked as alignment duplicates (both have
-  `prim_align_dup_exemplar = "A"`)
-- Reads C and D marked as alignment duplicates (both have
-  `prim_align_dup_exemplar = "C"`)
-- Similarity deduplication finds that A and C have similar sequences
+- Read A with `prim_align_dup_exemplar = "A"` (alignment-unique)
+- Read B with `prim_align_dup_exemplar = "A"` (alignment duplicate of A)
+- Read C with `prim_align_dup_exemplar = "C"` (alignment-unique)
+- Similarity deduplication finds that A and C have similar sequences but C is
+  higher quality.
 
-Then all four reads (A, B, C, D) will receive the same `combined_dup_exemplar`
-value, chosen using quality and centrality metrics.
+Then:
+- Read A gets `sim_dup_exemplar = "C"` (chosen as exemplar based on quality)
+- Read B gets `sim_dup_exemplar = "NA"` (already marked as duplicate via
+  alignment)
+- Read C gets `sim_dup_exemplar = "C"` (similarity duplicate of A)
+
+To learn that the "all things considered" exemplar for B is C, you'd see that B
+has a `prim_align_dup_exemplar` of A, and that A has a `sim_dup_exemplar` of C.
 
 ## Testing
 
@@ -113,8 +124,8 @@ pytest
 ### deps/nao_dedup
 
 This is a git subtree from https://github.com/securebio/nao-dedup, tracking the
-`jefftk/import-code` branch for now.  Once that branch is merged we'll track
-`main` instead.
+`jefftk/streaming` branch for now.  Once that branch is merged
+we'll track `main` instead.
 
 #### Pulling in updates
 
@@ -124,7 +135,7 @@ To pull in changes from the upstream repository:
 git subtree pull \
     --prefix=post-processing/deps/nao_dedup \
     https://github.com/securebio/nao-dedup \
-    jefftk/import-code \
+    jefftk/streaming \
     --squash
 ```
 
@@ -136,5 +147,5 @@ If you make changes to the subtree that should be pushed back to the upstream re
 git subtree push \
     --prefix=post-processing/deps/nao_dedup \
     https://github.com/securebio/nao-dedup \
-    jefftk/import-code
+    jefftk/streaming
 ```
