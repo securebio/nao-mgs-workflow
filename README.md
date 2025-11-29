@@ -36,10 +36,27 @@ pip install -r requirements.txt
 
 ## Usage
 
+### Choosing an Algorithm
+
+`nao-dedup` provides two deduplication algorithms:
+
+1. **`deduplicate_read_pairs()`** - Graph-based algorithm
+   - **Best for**: Small to medium datasets (< 100k reads)
+   - **Advantages**: Uses graph centrality to select optimal exemplars
+   - **Memory usage**: Stores all reads in memory (~3GB for 250k reads)
+
+2. **`deduplicate_read_pairs_streaming()`** - Streaming two-pass algorithm
+   - **Best for**: Large datasets (> 100k reads)
+   - **Advantages**: Only stores unique sequences in memory (~2-3x less memory
+     in the typical case, far more on pathological datasets)
+   - **Memory usage**: Much lower (~1GB for 250k reads with 75k unique)
+   - **Quality**: Still selects high-quality representatives based on length
+     and quality
+
 ### Basic Example
 
 ```python
-from dedup import ReadPair, deduplicate_read_pairs, DedupParams
+from dedup import ReadPair, deduplicate_read_pairs_streaming, DedupParams
 
 # Create read pairs
 read_pairs = [
@@ -50,6 +67,7 @@ read_pairs = [
 
 # Run deduplication
 result = deduplicate_read_pairs(read_pairs)
+# Or deduplicate_read_pairs_streaming(read_pairs) for large datasets.
 
 # Check results
 for rp in result:
@@ -68,15 +86,18 @@ dedup_params = DedupParams(
     orientation=ORIENT_TOLERANT  # Allow swapped mate pairs
 )
 
-# Configure minimizer parameters (rarely needs changing)
+# Configure minimizer parameters
+# Note: For large datasets with many reads, use a larger kmer_len to avoid
+# bucket explosions. With default kmer_len=7, there are only 4^7 (~16k)
+# possible sequences.
 minimizer_params = MinimizerParams(
-    num_windows=3,    # Number of windows per read
+    num_windows=4,    # Number of windows per read
     window_len=25,    # Base pairs per window
-    kmer_len=7        # K-mer size for minimizers
+    kmer_len=15       # K-mer size (use 15 for large datasets)
 )
 
 # Run with custom parameters
-result = deduplicate_read_pairs(
+result = deduplicate_read_pairs_streaming(
     read_pairs,
     dedup_params=dedup_params,
     minimizer_params=minimizer_params,
@@ -86,42 +107,58 @@ result = deduplicate_read_pairs(
 
 ## How It Works
 
-### 1. Minimizer Extraction
+### Graph-based Algorithm (`deduplicate_read_pairs`)
 
-Each read is divided into windows, and the lexicographically smallest k-mer
-(minimizer) is extracted from each window. This creates a signature for each
-read pair.
+1. **Minimizer Extraction**: Each read is divided into windows, and the
+   lexicographically smallest k-mer (minimizer) is extracted from each window.
 
-### 2. Bucketing
+2. **Bucketing**: Read pairs with matching minimizers are assigned to the same
+   buckets, reducing the number of pairwise comparisons needed.
 
-Read pairs with matching minimizers are assigned to the same buckets. This
-dramatically reduces the number of pairwise comparisons needed.
+3. **Pairwise Comparison**: Within each bucket, read pairs are compared to
+   determine if they're duplicates, allowing for:
+   - Small alignment offsets (configurable via `max_offset`)
+   - Sequencing errors (configurable via `max_error_frac`)
+   - Optional mate-pair orientation swaps (configurable via `orientation`)
 
-### 3. Pairwise Comparison
+4. **Graph Construction**: An equivalence graph is built where nodes are read
+   pairs and edges connect duplicates.
 
-Within each bucket, read pairs are compared to determine if they're
-duplicates. Comparison allows for:
-- Small alignment offsets (configurable via `max_offset`)
-- Sequencing errors (configurable via `max_error_frac`)
-- Optional mate-pair orientation swaps (configurable via `orientation`)
+5. **Clustering**: Connected components in the graph represent duplicate clusters.
 
-### 4. Graph Construction
+6. **Exemplar Selection**: For each cluster, an exemplar is selected based on:
+   - Graph centrality (lower eccentricity is better)
+   - Mean quality score (higher is better)
+   - Total read length (longer is better)
+   - Read ID (lexicographic tie-breaker)
 
-An equivalence graph is built where nodes are read pairs and edges connect
-duplicates.
+### Streaming Algorithm (`deduplicate_read_pairs_streaming`)
 
-### 5. Clustering
+The streaming algorithm uses a two-pass approach that provides near-optimal
+exemplar selection while using significantly less memory:
 
-Connected components in the graph represent duplicate clusters.
+**Pass 1: Cluster and Track Best Representatives**
 
-### 6. Exemplar Selection
+1. **Stream through reads**: Process reads one at a time, not loading all into
+   memory
+2. **Find matches**: For each read, use minimizer-based bucketing to find matching
+   unique sequences (exemplars)
+3. **Update or create cluster**:
+   - If match found: Check if this read is better than the current cluster
+     representative
+   - If no match: Create new cluster with this read as the exemplar
+4. **Track best**: Maintain only the best read seen so far for each cluster
 
-For each cluster, an exemplar is selected based on:
+**Pass 2: Assign Final Exemplars**
 
-1. Graph centrality (lower eccentricity is better)
-2. Mean quality score (higher is better)
-3. Total read length (longer is better)
-4. Read ID (lexicographic tie-breaker)
+1. **Stream through reads again**: Process all reads a second time
+2. **Look up cluster**: Find which cluster each read belongs to (same logic as
+   Pass 1)
+3. **Assign best exemplar**: Use the best representative identified in Pass 1
+
+**Key Advantages**:
+- **Memory efficient**: Only stores unique sequences
+- **Fast**: Two linear passes through data vs. O(N²) graph construction
 
 ## Parameters
 
