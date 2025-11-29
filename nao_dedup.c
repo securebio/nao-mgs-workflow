@@ -274,31 +274,68 @@ static int get_stable_keys(const char* fwd_seq, int fwd_len,
 }
 
 // ============================================================================
-// Sequence Matching
+// Sequence Matching (Python-compatible offset-based algorithm)
 // ============================================================================
+
+static int mismatch_count(const char* s1, const char* s2, int len) {
+    int mismatches = 0;
+    for (int i = 0; i < len; i++) {
+        if (s1[i] != s2[i]) mismatches++;
+    }
+    return mismatches;
+}
 
 static int sequences_match(const char* seq1, int len1,
                            const char* seq2, int len2,
-                           double quality_threshold) {
-    if (len1 != len2) return 0;
-    if (len1 == 0) return 1;
+                           int max_offset, double max_error_frac) {
+    // Handle empty sequences
+    if (len1 == 0 && len2 == 0) return 1;
 
-    int matches = 0;
-    for (int i = 0; i < len1; i++) {
-        if (seq1[i] == seq2[i]) matches++;
+    // Try all offsets from -max_offset to +max_offset
+    for (int offset = -max_offset; offset <= max_offset; offset++) {
+        int mismatches;
+        int overlap_len;
+
+        if (offset >= 0) {
+            // seq1 shifted left: seq1[offset:] aligns with seq2[0:]
+            overlap_len = (len1 - offset < len2) ? len1 - offset : len2;
+            if (overlap_len <= 0) continue;
+            mismatches = mismatch_count(seq1 + offset, seq2, overlap_len);
+        } else {
+            // seq1 shifted right: seq1[0:] aligns with seq2[-offset:]
+            overlap_len = (len1 < len2 + offset) ? len1 : len2 + offset;
+            if (overlap_len <= 0) continue;
+            mismatches = mismatch_count(seq1, seq2 - offset, overlap_len);
+        }
+
+        // Check if this alignment is within error threshold
+        // offset counts as errors, plus actual mismatches
+        int abs_offset = (offset < 0) ? -offset : offset;
+        if (abs_offset + mismatches <= max_error_frac * overlap_len) {
+            return 1;
+        }
     }
 
-    double similarity = (double)matches / len1;
-    return similarity >= quality_threshold;
+    return 0;
 }
 
 static int read_matches_exemplar(const char* fwd_seq, int fwd_len,
                                  const char* rev_seq, int rev_len,
-                                 const Exemplar* ex, double quality_threshold) {
-    return (sequences_match(fwd_seq, fwd_len, ex->fwd_seq, ex->fwd_len, quality_threshold) &&
-            sequences_match(rev_seq, rev_len, ex->rev_seq, ex->rev_len, quality_threshold)) ||
-           (sequences_match(fwd_seq, fwd_len, ex->rev_seq, ex->rev_len, quality_threshold) &&
-            sequences_match(rev_seq, rev_len, ex->fwd_seq, ex->fwd_len, quality_threshold));
+                                 const Exemplar* ex,
+                                 int max_offset, double max_error_frac) {
+    // Check standard orientation (fwd-fwd, rev-rev)
+    if (sequences_match(fwd_seq, fwd_len, ex->fwd_seq, ex->fwd_len, max_offset, max_error_frac) &&
+        sequences_match(rev_seq, rev_len, ex->rev_seq, ex->rev_len, max_offset, max_error_frac)) {
+        return 1;
+    }
+
+    // Check swapped orientation (fwd-rev, rev-fwd) - tolerant mode
+    if (sequences_match(fwd_seq, fwd_len, ex->rev_seq, ex->rev_len, max_offset, max_error_frac) &&
+        sequences_match(rev_seq, rev_len, ex->fwd_seq, ex->fwd_len, max_offset, max_error_frac)) {
+        return 1;
+    }
+
+    return 0;
 }
 
 // ============================================================================
@@ -348,14 +385,14 @@ static const char* find_matching_exemplar(ExemplarDB* db,
                                          const char* fwd_seq, int fwd_len,
                                          const char* rev_seq, int rev_len,
                                          const uint64_t* keys, int num_keys,
-                                         double quality_threshold) {
+                                         int max_offset, double max_error_frac) {
     for (int i = 0; i < num_keys; i++) {
         int bucket_idx = keys[i] % db->size;
         ExemplarBucket* bucket = &db->buckets[bucket_idx];
 
         // Iterate through linked list
         for (Exemplar* ex = bucket->head; ex != NULL; ex = ex->next) {
-            if (read_matches_exemplar(fwd_seq, fwd_len, rev_seq, rev_len, ex, quality_threshold)) {
+            if (read_matches_exemplar(fwd_seq, fwd_len, rev_seq, rev_len, ex, max_offset, max_error_frac)) {
                 return ex->read_id;
             }
         }
@@ -484,8 +521,13 @@ NaoDedupContext* nao_dedup_create(NaoDedupParams params) {
         return NULL;
     }
 
-    if (params.quality_threshold < 0.0 || params.quality_threshold > 1.0) {
-        last_error_msg = "Quality threshold must be between 0.0 and 1.0";
+    if (params.max_offset < 0) {
+        last_error_msg = "max_offset must be >= 0";
+        return NULL;
+    }
+
+    if (params.max_error_frac < 0.0 || params.max_error_frac > 1.0) {
+        last_error_msg = "max_error_frac must be between 0.0 and 1.0";
         return NULL;
     }
 
@@ -592,7 +634,7 @@ const char* nao_dedup_process_read(
     // Check if matches existing exemplar
     const char* matching_exemplar = find_matching_exemplar(
         ctx->exemplar_db, fwd_seq, fwd_len, rev_seq, rev_len, keys, num_keys,
-        ctx->params.quality_threshold);
+        ctx->params.max_offset, ctx->params.max_error_frac);
 
     if (matching_exemplar) {
         // Found a match

@@ -18,7 +18,8 @@ typedef struct {
     int kmer_len;           // K-mer length for minimizer hashing
     int window_len;         // Window length for minimizer extraction
     int num_windows;        // Number of windows to process per read
-    double quality_threshold;  // Similarity threshold (0.0 - 1.0)
+    int max_offset;         // Maximum alignment shift in bases (default: 1)
+    double max_error_frac;  // Maximum mismatch fraction (default: 0.01)
     size_t expected_reads;  // Expected number of reads (for hash table sizing)
 } NaoDedupParams;
 
