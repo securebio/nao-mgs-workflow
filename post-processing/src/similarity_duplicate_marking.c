@@ -124,6 +124,32 @@ static int parse_tsv_line(char* line, char** fields, size_t* field_lens, int max
     return field_count;
 }
 
+/*
+ * Get pointer to Nth field in a TSV line (0-indexed) and its length.
+ * Returns 1 on success, 0 if field doesn't exist.
+ * Does not modify the input line.
+ */
+static int get_field(const char* line, int field_idx, const char** field_start, int* field_len) {
+    const char* ptr = line;
+
+    // Skip to the desired field
+    for (int i = 0; i < field_idx; i++) {
+        while (*ptr && *ptr != '\t') ptr++;
+        if (!*ptr) return 0;  // Field doesn't exist
+        ptr++;  // Skip the tab
+    }
+
+    // Found the field
+    *field_start = ptr;
+
+    // Find the end of the field
+    const char* end = ptr;
+    while (*end && *end != '\t' && *end != '\n' && *end != '\r') end++;
+
+    *field_len = end - ptr;
+    return 1;
+}
+
 // ============================================================================
 // Pass 1: Process alignment-unique reads
 // ============================================================================
@@ -280,20 +306,6 @@ static void write_output_with_sim_column(
         exit(1);
     }
 
-    // The seq_id column must come before the prim_align_dup_exemplar column
-    // for the fast-path optimization below which skips from seq_id to
-    // prim_align_dup_exemplar without parsing all fields.  We could make this
-    // more general, but seq_id is always the first column so instead raise an
-    // error so we know if this stops being the case.
-    if (seq_id_idx >= prim_align_idx) {
-        fprintf(stderr, "Error: seq_id column (index %d) must come before "
-                "prim_align_dup_exemplar column (index %d)\n",
-                seq_id_idx, prim_align_idx);
-        gzclose(fp_in);
-        gzclose(fp_out);
-        exit(1);
-    }
-
     // Process data rows (optimized fast path for alignment duplicates)
     while (gzgets_growing(fp_in, lb)) {
         // Remove trailing newline
@@ -305,35 +317,17 @@ static void write_output_with_sim_column(
 
         // Fast path: check if this is an alignment duplicate
         // We do this by finding the seq_id and prim_align_dup_exemplar without full parsing
-        char* line = lb->data;
-        char* seq_id_start = line;
-        char* prim_align_start = NULL;
+        const char* seq_id_start;
+        const char* prim_align_start;
+        int seq_id_len, prim_align_len;
 
-        // Skip to seq_id column
-        for (int i = 0; i < seq_id_idx; i++) {
-            while (*seq_id_start && *seq_id_start != '\t') seq_id_start++;
-            if (*seq_id_start) seq_id_start++;
+        if (!get_field(lb->data, seq_id_idx, &seq_id_start, &seq_id_len) ||
+            !get_field(lb->data, prim_align_idx, &prim_align_start, &prim_align_len)) {
+            fprintf(stderr, "Error: Malformed line (missing fields)\n");
+            continue;
         }
-
-        // Find end of seq_id
-        char* seq_id_end = seq_id_start;
-        while (*seq_id_end && *seq_id_end != '\t') seq_id_end++;
-
-        // Skip to prim_align column
-        prim_align_start = seq_id_end;
-        for (int i = seq_id_idx + 1; i < prim_align_idx; i++) {
-            if (*prim_align_start) prim_align_start++;
-            while (*prim_align_start && *prim_align_start != '\t') prim_align_start++;
-        }
-        if (*prim_align_start) prim_align_start++;
 
         // Compare seq_id and prim_align_dup_exemplar
-        char* prim_align_end = prim_align_start;
-        while (*prim_align_end && *prim_align_end != '\t') prim_align_end++;
-
-        int seq_id_len = seq_id_end - seq_id_start;
-        int prim_align_len = prim_align_end - prim_align_start;
-
         if (seq_id_len != prim_align_len ||
             memcmp(seq_id_start, prim_align_start, seq_id_len) != 0) {
             // Alignment duplicate - fast path

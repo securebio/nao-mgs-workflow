@@ -82,10 +82,6 @@ The input must be a gzipped TSV file with at least these columns:
 - `prim_align_dup_exemplar`: Alignment-based duplicate exemplar (set to the
   read's own `seq_id` if not a duplicate).
 
-The `seq_id` column must come before the `prim_align_dup_exemplar` column. The
-tool will validate this and exit with an error if the columns are in the wrong
-order.
-
 Additional columns are preserved in the output.  This means the tool is
 agnostic to whether it is run on a `_validation_hits.tsv.gz`,
 `_duplicate_reads.tsv.gz`, or anything else with the same structure.

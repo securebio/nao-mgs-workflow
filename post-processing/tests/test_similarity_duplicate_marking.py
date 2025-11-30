@@ -289,29 +289,3 @@ class TestEndToEnd:
         # read2 and read3 are alignment duplicates
         assert rows[1]["sim_dup_exemplar"] == "NA"
         assert rows[2]["sim_dup_exemplar"] == "NA"
-
-    def test_column_order_validation(self, binary_path, tsv_factory):
-        """Test that binary errors when seq_id comes after prim_align_dup_exemplar."""
-        seq = "ACGT" * 12
-        qual = "I" * 48
-
-        # Create content with columns in wrong order (prim_align before seq_id)
-        content = (
-            "prim_align_dup_exemplar\tseq_id\tquery_seq\tquery_seq_rev\t"
-            "query_qual\tquery_qual_rev\n"
-            f"read1\tread1\t{seq}\t{seq}\t{qual}\t{qual}\n"
-        )
-        input_file = tsv_factory.create_gzip("input.tsv.gz", content)
-        output_file = tsv_factory.get_path("output.tsv.gz")
-
-        # Binary should fail with error message about column order
-        result = subprocess.run(
-            [binary_path, input_file, output_file],
-            capture_output=True,
-            text=True,
-        )
-
-        assert result.returncode != 0
-        assert "seq_id column" in result.stderr
-        assert "must come before" in result.stderr
-        assert "prim_align_dup_exemplar" in result.stderr
