@@ -43,7 +43,8 @@ typedef struct Exemplar {
 
 // Cluster statistics for finding best exemplar
 typedef struct ClusterStats {
-    char* best_read_id;
+    char* key;              // Immutable: initial exemplar ID (hash table key)
+    char* best_read_id;     // Mutable: current best read ID
     double best_score;
     int count;
     struct ClusterStats* next;
@@ -435,8 +436,9 @@ static ClusterStats* get_or_create_cluster(ClusterLeaders* cl, Arena* arena,
 
     ClusterStats* curr = cl->buckets[bucket_idx];
     while (curr) {
-        if (strncmp(curr->best_read_id, exemplar_id, ex_len) == 0 &&
-            curr->best_read_id[ex_len] == '\0') {
+        // Compare against the immutable key, not best_read_id which can change
+        if (strncmp(curr->key, exemplar_id, ex_len) == 0 &&
+            curr->key[ex_len] == '\0') {
             return curr;
         }
         curr = curr->next;
@@ -445,9 +447,12 @@ static ClusterStats* get_or_create_cluster(ClusterLeaders* cl, Arena* arena,
     ClusterStats* stats = arena_alloc(arena, sizeof(ClusterStats));
     if (!stats) return NULL;
 
-    stats->best_read_id = arena_strndup(arena, exemplar_id, ex_len);
-    if (!stats->best_read_id) return NULL;
+    // Store the immutable key
+    stats->key = arena_strndup(arena, exemplar_id, ex_len);
+    if (!stats->key) return NULL;
 
+    // Initialize best_read_id to the same value initially
+    stats->best_read_id = stats->key;
     stats->best_score = -1.0;
     stats->count = 0;
     stats->next = cl->buckets[bucket_idx];
@@ -693,14 +698,15 @@ const char* nao_dedup_get_final_exemplar(
     const char* initial = find_exemplar(ctx->read_to_exemplar, read_id);
     if (!initial) return read_id;
 
-    // Find cluster leader (initial is internal, null-terminated)
+    // Find cluster leader by the immutable key (initial is internal, null-terminated)
     size_t init_len = strlen(initial);
     uint64_t hash = hash_string_n(initial, init_len);
     int bucket_idx = hash % ctx->cluster_leaders->size;
 
     ClusterStats* curr = ctx->cluster_leaders->buckets[bucket_idx];
     while (curr) {
-        if (strcmp(curr->best_read_id, initial) == 0) {
+        // Compare against the immutable key, not best_read_id
+        if (strcmp(curr->key, initial) == 0) {
             return curr->best_read_id;
         }
         curr = curr->next;
