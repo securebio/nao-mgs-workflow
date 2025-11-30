@@ -102,6 +102,10 @@ ruff check .
 mypy .
 ```
 
+## Post Processing
+
+The `post-processing/` directory contains standalone Python scripts for additional analyses that can be run on workflow outputs. These scripts are not yet integrated into the main pipeline but provide useful functionality for tasks like similarity-based duplicate marking. See [post-processing/README.md](../post-processing/README.md) for details on available scripts and usage.
+
 ## Testing
 
 We use [nf-test](https://www.nf-test.com/) for unit, integration, and end-to-end tests. We intend to transition to using [pytest](https://docs.pytest.org/en/stable/index.html#) for unit tests of Python processes, and developers should therefore write unit tests in pytest for any processes that use Python.
