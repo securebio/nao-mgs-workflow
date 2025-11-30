@@ -21,6 +21,8 @@ typedef struct {
     int max_offset;         // Maximum alignment shift in bases (default: 1)
     double max_error_frac;  // Maximum mismatch fraction (default: 0.01)
     size_t expected_reads;  // Expected number of reads (for hash table sizing)
+    size_t scratch_arena_size;  // Scratch arena size in bytes (default: 2GB)
+    size_t result_arena_size;   // Result arena size in bytes (default: 512MB)
 } NaoDedupParams;
 
 // Statistics from deduplication

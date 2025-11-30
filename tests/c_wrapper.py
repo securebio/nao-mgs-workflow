@@ -31,6 +31,8 @@ class NaoDedupParams(ctypes.Structure):
         ("max_offset", ctypes.c_int),
         ("max_error_frac", ctypes.c_double),
         ("expected_reads", ctypes.c_size_t),
+        ("scratch_arena_size", ctypes.c_size_t),
+        ("result_arena_size", ctypes.c_size_t),
     ]
 
 class NaoDedupStats(ctypes.Structure):
@@ -94,6 +96,8 @@ class NaoDedupContext:
             max_offset=params_dict.get('max_offset', 1),
             max_error_frac=params_dict.get('max_error_frac', 0.01),
             expected_reads=params_dict.get('expected_reads', 1000000),
+            scratch_arena_size=params_dict.get('scratch_arena_size', 0),  # 0 = use default (2GB)
+            result_arena_size=params_dict.get('result_arena_size', 0),    # 0 = use default (512MB)
         )
 
         self._ctx = lib.nao_dedup_create(params)

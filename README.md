@@ -141,8 +141,11 @@ NaoDedupParams params = {
     .kmer_len = 15,
     .window_len = 25,
     .num_windows = 4,
-    .quality_threshold = 0.97,
-    .expected_reads = 20000000
+    .max_offset = 1,
+    .max_error_frac = 0.01,
+    .expected_reads = 20000000,
+    .scratch_arena_size = 0,  // 0 = use default (2GB)
+    .result_arena_size = 0    // 0 = use default (512MB)
 };
 NaoDedupContext* ctx = nao_dedup_create(params);
 
@@ -227,7 +230,13 @@ This library is **not thread-safe**. Each thread should use its own `NaoDedupCon
 
 ### Error Handling
 
-Functions return NULL on error. Use `nao_dedup_get_error_message()` to retrieve error details:
+The C library uses different error handling strategies depending on the
+operation phase:
+
+#### During Initialization (`nao_dedup_create`)
+
+Functions return `NULL` on error. Use `nao_dedup_get_error_message()` to
+retrieve error details:
 
 ```c
 NaoDedupContext* ctx = nao_dedup_create(params);
@@ -236,6 +245,56 @@ if (!ctx) {
     exit(1);
 }
 ```
+
+Common initialization errors:
+- Invalid parameters (e.g., negative offsets)
+- Memory allocation failure for context or arenas
+- Hash table initialization failure
+
+#### During Processing (`nao_dedup_process_read`, etc.)
+
+**Memory allocation failures during processing are fatal and cause immediate
+program termination.**
+
+If arena capacity is exceeded during processing, the library prints an error
+message to stderr and exits with code 1:
+
+```
+FATAL: Out of memory in arena_alloc: arena capacity exceeded
+The dataset has exceeded the pre-allocated arena capacity.
+
+You can increase arena sizes via NaoDedupParams:
+
+     params.scratch_arena_size = 4ULL * 1024 * 1024 * 1024;   // 4GB
+     params.result_arena_size = 1024ULL * 1024 * 1024;        // 1GB
+     (defaults: scratch=2GB, result=512MB)
+```
+
+**Important: Two types of memory errors**
+
+1. **System out of memory at creation** - If `malloc()` fails when allocating
+   the arenas, `nao_dedup_create()` returns NULL gracefully. This means
+   your system truly doesn't have enough RAM.
+
+2. **Arena capacity exceeded during processing** - If your dataset uses more
+   than the configured arena sizes processing will exit with the error
+   above. This doesn't mean your system is out of RAM - it means the **arena
+   sizes are too small** for your dataset and you need to configure
+   NaoDedupParams with larger ones.
+
+**Why this design?**
+
+1. **Arena sizes are configurable** - Set via `NaoDedupParams` with sensible
+   defaults (2GB scratch + 512MB result). For most datasets these defaults are
+   sufficient.
+
+2. **Graceful error handling is not possible** - If we can't allocate memory to
+   store read data, we cannot produce correct deduplication results. Continuing
+   would silently produce incorrect output (missing duplicates).
+
+3. **Fast failure is better than wrong results** - For batch processing
+   pipelines, it's better to fail immediately with a clear error than to return
+   subtly incorrect data.
 
 ### Compilation
 

@@ -9,6 +9,8 @@
 #include <string.h>
 #include <stdint.h>
 
+// Note: stdio.h provides fprintf/stderr, stdlib.h provides exit
+
 // ============================================================================
 // Internal Data Structures
 // ============================================================================
@@ -108,6 +110,20 @@ struct NaoDedupContext {
 // Thread-local error message for creation failures
 static __thread const char* last_error_msg = NULL;
 
+// Helper to handle fatal allocation errors
+static void fatal_alloc_error(const char* context) {
+    fprintf(stderr, "FATAL: Out of memory in %s\n", context);
+    fprintf(stderr, "The dataset has exceeded the pre-allocated arena capacity.\n");
+    fprintf(stderr, "\n");
+    fprintf(stderr, "Solutions:\n");
+    fprintf(stderr, "  1. Process your data in smaller batches\n");
+    fprintf(stderr, "  2. Increase arena sizes via NaoDedupParams:\n");
+    fprintf(stderr, "     params.scratch_arena_size = 4ULL * 1024 * 1024 * 1024;  // 4GB\n");
+    fprintf(stderr, "     params.result_arena_size = 1024ULL * 1024 * 1024;        // 1GB\n");
+    fprintf(stderr, "     (defaults: scratch=2GB, result=512MB)\n");
+    exit(1);
+}
+
 // ============================================================================
 // Helper Functions
 // ============================================================================
@@ -160,7 +176,7 @@ static void* arena_alloc(Arena* arena, size_t size) {
     size = (size + 7) & ~7;
 
     if (arena->used + size > arena->size) {
-        return NULL;  // Out of memory
+        fatal_alloc_error("arena_alloc: arena capacity exceeded");
     }
 
     void* ptr = arena->current;
@@ -172,14 +188,12 @@ static void* arena_alloc(Arena* arena, size_t size) {
 static char* arena_strdup(Arena* arena, const char* str) {
     size_t len = strlen(str) + 1;
     char* copy = arena_alloc(arena, len);
-    if (!copy) return NULL;
     memcpy(copy, str, len);
     return copy;
 }
 
 static char* arena_strndup(Arena* arena, const char* str, size_t n) {
     char* copy = arena_alloc(arena, n + 1);
-    if (!copy) return NULL;
     memcpy(copy, str, n);
     copy[n] = '\0';
     return copy;
@@ -364,14 +378,11 @@ static void add_exemplar(ExemplarDB* db, Arena* arena, uint64_t key,
     int bucket_idx = key % db->size;
     ExemplarBucket* bucket = &db->buckets[bucket_idx];
 
-    // Allocate new exemplar from arena
+    // Allocate new exemplar from arena (never returns NULL, exits on error)
     Exemplar* ex = arena_alloc(arena, sizeof(Exemplar));
-    if (!ex) return;
-
     ex->read_id = arena_strndup(arena, read_id, id_len);
     ex->fwd_seq = arena_strndup(arena, fwd_seq, fwd_len);
     ex->rev_seq = arena_strndup(arena, rev_seq, rev_len);
-    if (!ex->read_id || !ex->fwd_seq || !ex->rev_seq) return;
 
     ex->fwd_len = fwd_len;
     ex->rev_len = rev_len;
@@ -444,12 +455,9 @@ static ClusterStats* get_or_create_cluster(ClusterLeaders* cl, Arena* arena,
         curr = curr->next;
     }
 
+    // Allocate new cluster (never returns NULL, exits on error)
     ClusterStats* stats = arena_alloc(arena, sizeof(ClusterStats));
-    if (!stats) return NULL;
-
-    // Store the immutable key
     stats->key = arena_strndup(arena, exemplar_id, ex_len);
-    if (!stats->key) return NULL;
 
     // Initialize best_read_id to the same value initially
     stats->best_read_id = stats->key;
@@ -486,12 +494,10 @@ static void add_read_mapping(ReadToExemplar* rte, Arena* arena,
     uint64_t hash = hash_string_n(read_id, id_len);
     int bucket_idx = hash % rte->size;
 
+    // Allocate mapping entry (never returns NULL, exits on error)
     MappingEntry* entry = arena_alloc(arena, sizeof(MappingEntry));
-    if (!entry) return;
-
     entry->read_id = arena_strndup(arena, read_id, id_len);
     entry->exemplar_id = arena_strdup(arena, exemplar_id);  // exemplar_id is internal, already null-terminated
-    if (!entry->read_id || !entry->exemplar_id) return;
 
     entry->next = rte->buckets[bucket_idx];
     rte->buckets[bucket_idx] = entry;
@@ -545,9 +551,19 @@ NaoDedupContext* nao_dedup_create(NaoDedupParams params) {
     ctx->params = params;
     ctx->hash_table_size = compute_hash_table_size(params.expected_reads);
 
+    // Apply default arena sizes if not specified
+    size_t scratch_size = params.scratch_arena_size;
+    if (scratch_size == 0) {
+        scratch_size = 2ULL * 1024 * 1024 * 1024;  // Default: 2GB
+    }
+    size_t result_size = params.result_arena_size;
+    if (result_size == 0) {
+        result_size = 512ULL * 1024 * 1024;  // Default: 512MB
+    }
+
     // Create arenas
-    ctx->scratch_arena = arena_create(2ULL * 1024 * 1024 * 1024);  // 2GB
-    ctx->result_arena = arena_create(512ULL * 1024 * 1024);        // 512MB
+    ctx->scratch_arena = arena_create(scratch_size);
+    ctx->result_arena = arena_create(result_size);
 
     if (!ctx->scratch_arena || !ctx->result_arena) {
         last_error_msg = "Failed to allocate arenas";
@@ -628,11 +644,9 @@ const char* nao_dedup_process_read(
         add_read_mapping(ctx->read_to_exemplar, ctx->result_arena, read_id, id_len, read_id);
         ClusterStats* stats = get_or_create_cluster(ctx->cluster_leaders,
                                                     ctx->result_arena, read_id, id_len);
-        if (stats) {
-            stats->best_read_id = arena_strndup(ctx->result_arena, read_id, id_len);
-            stats->best_score = score;
-            stats->count = 1;
-        }
+        stats->best_read_id = arena_strndup(ctx->result_arena, read_id, id_len);
+        stats->best_score = score;
+        stats->count = 1;
         return read_id;
     }
 
@@ -646,12 +660,10 @@ const char* nao_dedup_process_read(
         add_read_mapping(ctx->read_to_exemplar, ctx->result_arena, read_id, id_len, matching_exemplar);
         ClusterStats* stats = get_or_create_cluster(ctx->cluster_leaders,
                                                     ctx->result_arena, matching_exemplar, strlen(matching_exemplar));
-        if (stats) {
-            stats->count++;
-            if (score > stats->best_score) {
-                stats->best_score = score;
-                stats->best_read_id = arena_strndup(ctx->result_arena, read_id, id_len);
-            }
+        stats->count++;
+        if (score > stats->best_score) {
+            stats->best_score = score;
+            stats->best_read_id = arena_strndup(ctx->result_arena, read_id, id_len);
         }
         return matching_exemplar;
     } else {
@@ -659,11 +671,9 @@ const char* nao_dedup_process_read(
         add_read_mapping(ctx->read_to_exemplar, ctx->result_arena, read_id, id_len, read_id);
         ClusterStats* stats = get_or_create_cluster(ctx->cluster_leaders,
                                                     ctx->result_arena, read_id, id_len);
-        if (stats) {
-            stats->best_read_id = arena_strndup(ctx->result_arena, read_id, id_len);
-            stats->best_score = score;
-            stats->count = 1;
-        }
+        stats->best_read_id = arena_strndup(ctx->result_arena, read_id, id_len);
+        stats->best_score = score;
+        stats->count = 1;
 
         // Add to exemplar database
         for (int i = 0; i < num_keys; i++) {
