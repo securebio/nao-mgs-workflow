@@ -20,7 +20,7 @@ def binary_path():
     cmd = ["make", "--directory", str(src_dir)]
 
     print(f"\n[Compiling binary at {src_dir} ...]")
-    subprocess.run(cmd, capture_output=True, text=True, check=True)
+    subprocess.run(cmd, check=True)
 
     if not bin_path.exists():
         pytest.fail(f"Make finished but binary not found at {bin_path}")
