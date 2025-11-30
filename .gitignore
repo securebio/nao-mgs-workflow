@@ -24,3 +24,7 @@ package-lock.json
 package.json
 
 uv.lock
+
+# Post-processing build artifacts
+post-processing/bin/
+post-processing/obj/

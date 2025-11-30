@@ -1,35 +1,31 @@
 #!/usr/bin/env python3
-"""Tests for similarity_duplicate_marking.py"""
+"""Tests for similarity_duplicate_marking binary"""
 
+import csv
 import sys
+import gzip
+import pytest
+import subprocess
 from pathlib import Path
 
-import pytest
-import csv
-import gzip
 
-# Add bin directory to path
-sys.path.insert(0, str(Path(__file__).parent.parent / "bin"))
+@pytest.fixture(scope="session")
+def binary_path():
+    """Returns the path to the C binary, building it if necessary"""
+    base_dir = Path(__file__).parent.parent
+    src_dir = base_dir / "src"
+    bin_path = base_dir / "bin" / "similarity_duplicate_marking"
 
-# Add deps to path so we can import nao_dedup
-sys.path.insert(0, str(Path(__file__).parent.parent / "deps"))
+    # Run make in the src directory
+    cmd = ["make", "--directory", str(src_dir)]
 
-import similarity_duplicate_marking as sdm
-from nao_dedup.dedup import DedupParams, MinimizerParams, \
-    deduplicate_read_pairs_streaming
+    print(f"\n[Compiling binary at {src_dir} ...]")
+    subprocess.run(cmd, capture_output=True, text=True, check=True)
 
+    if not bin_path.exists():
+        pytest.fail(f"Make finished but binary not found at {bin_path}")
 
-@pytest.fixture
-def params():
-    """Fixture providing DedupParams for tests."""
-    return DedupParams()
-
-
-@pytest.fixture
-def minimizer_params():
-    """Fixture providing MinimizerParams for tests."""
-    return MinimizerParams(kmer_len=15, window_len=25, num_windows=4)
-
+    return str(bin_path)
 
 @pytest.fixture
 def tsv_factory(tmp_path):
@@ -122,16 +118,20 @@ def create_test_tsv_content(rows, extra_cols=None):
     return "\n".join(lines) + "\n"
 
 
-def run_pipeline_and_get_output(input_file, output_file, params, minimizer_params):
-    """Run the full similarity dedup pipeline and return output rows.
+def run_binary_and_get_output(binary_path, input_file, output_file):
+    """Run the C binary and return output rows.
 
     Returns:
         Tuple of (rows, fieldnames) where rows is a list of dicts
     """
-    read_pairs = sdm.read_alignment_unique_reads(input_file)
-    similarity_exemplars = deduplicate_read_pairs_streaming(
-        read_pairs, params, minimizer_params)
-    sdm.write_output_with_sim_column(input_file, output_file, similarity_exemplars)
+    result = subprocess.run(
+        [binary_path, input_file, output_file],
+        capture_output=True,
+        text=True,
+    )
+
+    if result.returncode != 0:
+        raise RuntimeError(f"Binary failed: {result.stderr}")
 
     with gzip.open(output_file, 'rt') as f:
         reader = csv.DictReader(f, delimiter='\t')
@@ -141,150 +141,10 @@ def run_pipeline_and_get_output(input_file, output_file, params, minimizer_param
     return rows, fieldnames
 
 
-class TestReadAlignmentUniqueReads:
-    """Test reading only alignment-unique reads."""
-
-    def test_basic_reading(self, tsv_factory):
-        """Test reading only alignment-unique reads from TSV."""
-        content = (
-            "seq_id\tquery_seq\tquery_seq_rev\tquery_qual\tquery_qual_rev\t"
-            "prim_align_dup_exemplar\textra_col\n"
-            "read1\tACGT\tTGCA\tIIII\tIIII\tread1\textra1\n"
-            "read2\tGGGG\tCCCC\tHHHH\tHHHH\tread1\textra2\n"  # Alignment dup
-            "read3\tTTTT\tAAAA\tJJJJ\tJJJJ\tread3\textra3\n"
-        )
-        input_file = tsv_factory.create_gzip("input.tsv.gz", content)
-
-        read_pairs = list(sdm.read_alignment_unique_reads(input_file))
-
-        # Only read1 and read3 should be yielded (alignment-unique)
-        assert len(read_pairs) == 2
-        assert read_pairs[0].read_id == "read1"
-        assert read_pairs[1].read_id == "read3"
-        assert read_pairs[0].fwd_seq == "ACGT"
-        assert read_pairs[1].fwd_seq == "TTTT"
-
-    def test_all_duplicates(self, tsv_factory):
-        """Test file where all reads are alignment duplicates."""
-        content = (
-            "seq_id\tquery_seq\tquery_seq_rev\tquery_qual\tquery_qual_rev\t"
-            "prim_align_dup_exemplar\n"
-            "read1\tACGT\tTGCA\tIIII\tIIII\tread1\n"
-            "read2\tGGGG\tCCCC\tHHHH\tHHHH\tread1\n"
-            "read3\tTTTT\tAAAA\tJJJJ\tJJJJ\tread1\n"
-        )
-        input_file = tsv_factory.create_gzip("input.tsv.gz", content)
-
-        read_pairs = list(sdm.read_alignment_unique_reads(input_file))
-
-        # Only read1 should be yielded
-        assert len(read_pairs) == 1
-        assert read_pairs[0].read_id == "read1"
-
-
-class TestCountReturns:
-    """Test the counts returned by write_output_with_sim_column."""
-
-    def test_counts_no_duplicates(self, tsv_factory, params, minimizer_params):
-        """Test counts when there are no duplicates."""
-        seq1 = "A" * 76
-        seq2 = "G" * 76
-        qual = "I" * 76
-
-        content = create_test_tsv_content([
-            ("read1", seq1, qual, "read1"),
-            ("read2", seq2, qual, "read2"),
-        ])
-        input_file = tsv_factory.create_gzip("input.tsv.gz", content)
-        output_file = tsv_factory.get_path("output.tsv.gz")
-
-        read_pairs = sdm.read_alignment_unique_reads(input_file)
-        similarity_exemplars = deduplicate_read_pairs_streaming(
-            read_pairs, params, minimizer_params)
-        n_reads, n_prim_align_dups, n_sim_dups = sdm.write_output_with_sim_column(
-            input_file, output_file, similarity_exemplars)
-
-        assert n_reads == 2
-        assert n_prim_align_dups == 0
-        assert n_sim_dups == 0
-
-    def test_counts_with_alignment_duplicates(self, tsv_factory, params, minimizer_params):
-        """Test counts when there are alignment duplicates."""
-        seq = "A" * 76
-        qual = "I" * 76
-
-        content = create_test_tsv_content([
-            ("read1", seq, qual, "read1"),
-            ("read2", seq, qual, "read1"),  # alignment dup
-            ("read3", seq, qual, "read1"),  # alignment dup
-        ])
-        input_file = tsv_factory.create_gzip("input.tsv.gz", content)
-        output_file = tsv_factory.get_path("output.tsv.gz")
-
-        read_pairs = sdm.read_alignment_unique_reads(input_file)
-        similarity_exemplars = deduplicate_read_pairs_streaming(
-            read_pairs, params, minimizer_params)
-        n_reads, n_prim_align_dups, n_sim_dups = sdm.write_output_with_sim_column(
-            input_file, output_file, similarity_exemplars)
-
-        assert n_reads == 3
-        assert n_prim_align_dups == 2  # read2 and read3
-        assert n_sim_dups == 0
-
-    def test_counts_with_similarity_duplicates(self, tsv_factory, params, minimizer_params):
-        """Test counts when there are similarity duplicates among alignment-unique reads."""
-        seq1 = "A" * 76
-        seq2 = "G" * 76
-        qual = "I" * 76
-
-        content = create_test_tsv_content([
-            ("read1", seq1, qual, "read1"),
-            ("read2", seq1, qual, "read2"),  # alignment-unique, but similar to read1
-            ("read3", seq2, qual, "read3"),
-        ])
-        input_file = tsv_factory.create_gzip("input.tsv.gz", content)
-        output_file = tsv_factory.get_path("output.tsv.gz")
-
-        read_pairs = sdm.read_alignment_unique_reads(input_file)
-        similarity_exemplars = deduplicate_read_pairs_streaming(
-            read_pairs, params, minimizer_params)
-        n_reads, n_prim_align_dups, n_sim_dups = sdm.write_output_with_sim_column(
-            input_file, output_file, similarity_exemplars)
-
-        assert n_reads == 3
-        assert n_prim_align_dups == 0
-        assert n_sim_dups == 1  # read2 is sim dup of read1
-
-    def test_counts_mixed_duplicates(self, tsv_factory, params, minimizer_params):
-        """Test counts with both alignment and similarity duplicates."""
-        seq1 = "A" * 76
-        seq2 = "G" * 76
-        qual = "I" * 76
-
-        content = create_test_tsv_content([
-            ("read1", seq1, qual, "read1"),
-            ("read2", seq2, qual, "read1"),  # alignment dup
-            ("read3", seq1, qual, "read3"),  # alignment-unique, sim dup of read1
-            ("read4", seq2, qual, "read4"),  # alignment-unique, different
-        ])
-        input_file = tsv_factory.create_gzip("input.tsv.gz", content)
-        output_file = tsv_factory.get_path("output.tsv.gz")
-
-        read_pairs = sdm.read_alignment_unique_reads(input_file)
-        similarity_exemplars = deduplicate_read_pairs_streaming(
-            read_pairs, params, minimizer_params)
-        n_reads, n_prim_align_dups, n_sim_dups = sdm.write_output_with_sim_column(
-            input_file, output_file, similarity_exemplars)
-
-        assert n_reads == 4
-        assert n_prim_align_dups == 1  # read2
-        assert n_sim_dups == 1  # read3
-
-
 class TestEndToEnd:
     """End-to-end integration tests."""
 
-    def test_no_duplicates(self, tsv_factory, params, minimizer_params):
+    def test_no_duplicates(self, binary_path, tsv_factory):
         """Test case where no reads are duplicates."""
         seq1 = "A" * 76
         seq2 = "G" * 76
@@ -298,14 +158,13 @@ class TestEndToEnd:
         input_file = tsv_factory.create_gzip("input.tsv.gz", content)
         output_file = tsv_factory.get_path("output.tsv.gz")
 
-        rows, _ = run_pipeline_and_get_output(
-            input_file, output_file, params, minimizer_params)
+        rows, _ = run_binary_and_get_output(binary_path, input_file, output_file)
 
         # Each read should be its own similarity exemplar
         assert rows[0]["sim_dup_exemplar"] == "read1"
         assert rows[1]["sim_dup_exemplar"] == "read2"
 
-    def test_alignment_duplicates_get_na(self, tsv_factory, params, minimizer_params):
+    def test_alignment_duplicates_get_na(self, binary_path, tsv_factory):
         """Test that alignment duplicates get 'NA' for sim_dup_exemplar."""
         seq1 = "ACGT" * 19
         seq2 = "TGCA" * 19
@@ -320,8 +179,7 @@ class TestEndToEnd:
         input_file = tsv_factory.create_gzip("input.tsv.gz", content)
         output_file = tsv_factory.get_path("output.tsv.gz")
 
-        rows, _ = run_pipeline_and_get_output(
-            input_file, output_file, params, minimizer_params)
+        rows, _ = run_binary_and_get_output(binary_path, input_file, output_file)
 
         # read1 and read3 are alignment-unique, should have sim_dup_exemplar
         assert rows[0]["sim_dup_exemplar"] == "read1"
@@ -329,7 +187,7 @@ class TestEndToEnd:
         # read2 is alignment duplicate, should have 'NA'
         assert rows[1]["sim_dup_exemplar"] == "NA"
 
-    def test_similarity_duplicates_among_alignment_unique(self, tsv_factory, params, minimizer_params):
+    def test_similarity_duplicates_among_alignment_unique(self, binary_path, tsv_factory):
         """Test similarity deduplication among alignment-unique reads."""
         # read1 and read3 are identical (similarity duplicates)
         seq1 = "A" * 76
@@ -345,8 +203,7 @@ class TestEndToEnd:
         input_file = tsv_factory.create_gzip("input.tsv.gz", content)
         output_file = tsv_factory.get_path("output.tsv.gz")
 
-        rows, _ = run_pipeline_and_get_output(
-            input_file, output_file, params, minimizer_params)
+        rows, _ = run_binary_and_get_output(binary_path, input_file, output_file)
 
         # read1 and read3 are alignment-unique and similar
         # They should have the same sim_dup_exemplar
@@ -355,20 +212,19 @@ class TestEndToEnd:
         # read2 is alignment duplicate, should have 'NA'
         assert rows[1]["sim_dup_exemplar"] == "NA"
 
-    def test_empty_file(self, tsv_factory, params, minimizer_params):
+    def test_empty_file(self, binary_path, tsv_factory):
         """Test handling of file with only header."""
         content = create_test_tsv_content([])
         input_file = tsv_factory.create_gzip("input.tsv.gz", content)
         output_file = tsv_factory.get_path("output.tsv.gz")
 
-        rows, fieldnames = run_pipeline_and_get_output(
-            input_file, output_file, params, minimizer_params)
+        rows, fieldnames = run_binary_and_get_output(binary_path, input_file, output_file)
 
         # Verify output has header but no data rows
         assert len(rows) == 0
         assert "sim_dup_exemplar" in fieldnames
 
-    def test_single_read(self, tsv_factory, params, minimizer_params):
+    def test_single_read(self, binary_path, tsv_factory):
         """Test handling of single read."""
         seq = "ACGT" * 12
         qual = "I" * 48
@@ -379,13 +235,12 @@ class TestEndToEnd:
         input_file = tsv_factory.create_gzip("input.tsv.gz", content)
         output_file = tsv_factory.get_path("output.tsv.gz")
 
-        rows, _ = run_pipeline_and_get_output(
-            input_file, output_file, params, minimizer_params)
+        rows, _ = run_binary_and_get_output(binary_path, input_file, output_file)
 
         assert len(rows) == 1
         assert rows[0]["sim_dup_exemplar"] == "read1"
 
-    def test_column_order_preserved(self, tsv_factory, params, minimizer_params):
+    def test_column_order_preserved(self, binary_path, tsv_factory):
         """Test that output columns match input order and extra columns preserved."""
         seq = "ACGT" * 12
         qual = "I" * 48
@@ -399,8 +254,7 @@ class TestEndToEnd:
         input_file = tsv_factory.create_gzip("input.tsv.gz", content)
         output_file = tsv_factory.get_path("output.tsv.gz")
 
-        rows, fieldnames = run_pipeline_and_get_output(
-            input_file, output_file, params, minimizer_params)
+        rows, fieldnames = run_binary_and_get_output(binary_path, input_file, output_file)
 
         # Check column order: original columns + sim_dup_exemplar at end
         expected_fields = [
@@ -415,7 +269,7 @@ class TestEndToEnd:
         assert rows[0]["extra2"] == "val2"
         assert rows[0]["extra3"] == "val3"
 
-    def test_all_alignment_duplicates(self, tsv_factory, params, minimizer_params):
+    def test_all_alignment_duplicates(self, binary_path, tsv_factory):
         """Test file where all reads are alignment duplicates of one read."""
         seq = "ACGT" * 12
         qual = "I" * 48
@@ -428,11 +282,36 @@ class TestEndToEnd:
         input_file = tsv_factory.create_gzip("input.tsv.gz", content)
         output_file = tsv_factory.get_path("output.tsv.gz")
 
-        rows, _ = run_pipeline_and_get_output(
-            input_file, output_file, params, minimizer_params)
+        rows, _ = run_binary_and_get_output(binary_path, input_file, output_file)
 
         # Only read1 is alignment-unique
         assert rows[0]["sim_dup_exemplar"] == "read1"
         # read2 and read3 are alignment duplicates
         assert rows[1]["sim_dup_exemplar"] == "NA"
         assert rows[2]["sim_dup_exemplar"] == "NA"
+
+    def test_column_order_validation(self, binary_path, tsv_factory):
+        """Test that binary errors when seq_id comes after prim_align_dup_exemplar."""
+        seq = "ACGT" * 12
+        qual = "I" * 48
+
+        # Create content with columns in wrong order (prim_align before seq_id)
+        content = (
+            "prim_align_dup_exemplar\tseq_id\tquery_seq\tquery_seq_rev\t"
+            "query_qual\tquery_qual_rev\n"
+            f"read1\tread1\t{seq}\t{seq}\t{qual}\t{qual}\n"
+        )
+        input_file = tsv_factory.create_gzip("input.tsv.gz", content)
+        output_file = tsv_factory.get_path("output.tsv.gz")
+
+        # Binary should fail with error message about column order
+        result = subprocess.run(
+            [binary_path, input_file, output_file],
+            capture_output=True,
+            text=True,
+        )
+
+        assert result.returncode != 0
+        assert "seq_id column" in result.stderr
+        assert "must come before" in result.stderr
+        assert "prim_align_dup_exemplar" in result.stderr

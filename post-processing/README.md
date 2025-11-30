@@ -10,10 +10,10 @@ out how to fully include them.
 
 ## Scripts
 
-### bin/combination_duplicate_marking.py
+### bin/similarity_duplicate_marking
 
-Runs similarity-based duplicate marking as a supplement to existing
-alignment-based duplicate marking.
+A high-performance C tool that runs similarity-based duplicate marking as a
+supplement to existing alignment-based duplicate marking.
 
 #### Overview
 
@@ -40,10 +40,34 @@ similarity. With the new approach, we only need to run similarity deduplication
 on the 33,920 alignment-unique reads instead of all 69,652, making it much
 faster and more memory-efficient.
 
+#### Building
+
+The similarity duplicate marking tool is implemented in C for
+performance. Build it with:
+
+```bash
+cd src
+make
+```
+
+This will compile the binary to `bin/similarity_duplicate_marking`. Build
+artifacts (object files) are placed in `obj/`.
+
+**Requirements:**
+- C compiler (gcc or clang)
+- zlib development headers (`zlib.h`)
+
+To clean build artifacts:
+
+```bash
+cd src
+make clean
+```
+
 #### Usage
 
 ```bash
-./bin/similarity_duplicate_marking.py <input.tsv.gz> <output.tsv.gz>
+./bin/similarity_duplicate_marking <input.tsv.gz> <output.tsv.gz>
 ```
 
 #### Input Format
@@ -55,7 +79,12 @@ The input must be a gzipped TSV file with at least these columns:
 - `query_seq_rev`: Reverse read sequence
 - `query_qual`: Quality scores for forward read
 - `query_qual_rev`: Quality scores for reverse read
-- `prim_align_dup_exemplar`: Alignment-based duplicate exemplar (set to the read's own `seq_id` if not a duplicate)
+- `prim_align_dup_exemplar`: Alignment-based duplicate exemplar (set to the
+  read's own `seq_id` if not a duplicate).
+
+The `seq_id` column must come before the `prim_align_dup_exemplar` column. The
+tool will validate this and exit with an error if the columns are in the wrong
+order.
 
 Additional columns are preserved in the output.  This means the tool is
 agnostic to whether it is run on a `_validation_hits.tsv.gz`,
@@ -89,9 +118,8 @@ This two-pass approach avoids loading the entire TSV into memory.
 During the first pass, only alignment-unique read pairs are loaded into memory.
 Memory usage scales with the number of alignment-unique reads, which is
 typically much smaller than the total number of reads. The streaming algorithm
-further reduces memory usage by only storing unique sequences (e.g., ~300MB for
-30k alignment-unique reads with 5k unique sequences). The second pass streams
-through the file without loading it all into memory.
+further reduces memory usage by only storing unique sequences. The second pass
+streams through the file without loading it all into memory.
 
 #### Example
 
@@ -119,6 +147,22 @@ Run tests with:
 pytest
 ```
 
+**Note:** The binary must be built before running tests. Run `cd src && make`
+if needed.
+
+## Implementation
+
+The tool is implemented in C for performance:
+
+- **`src/similarity_duplicate_marking.c`**: Main driver that handles TSV I/O
+  and calls the deduplication library
+- **`src/Makefile`**: Build configuration
+- **`deps/nao_dedup/`**: Git subtree containing the nao-dedup library (see below)
+
+Build artifacts:
+- **`bin/similarity_duplicate_marking`**: Compiled binary
+- **`obj/`**: Object files
+
 ## Dependencies
 
 ### deps/nao_dedup
@@ -126,6 +170,8 @@ pytest
 This is a git subtree from https://github.com/securebio/nao-dedup, tracking the
 `jefftk/c-implementation` branch for now.  Once that branch is merged
 we'll track `main` instead.
+
+The library provides the core deduplication algorithm with offset-based sequence matching.
 
 #### Pulling in updates
 
