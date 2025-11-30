@@ -22,6 +22,7 @@ $(OBJ_DIR)/nao_dedup.o: $(DEDUP_DIR)/nao_dedup.c | $(OBJ_DIR)
 	$(CC) $(CFLAGS) $(INCLUDES) -c -o $@ $<
 
 $(TARGET): $(OBJ)
+	mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
 
 clean:
