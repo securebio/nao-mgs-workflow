@@ -158,7 +158,7 @@ class TestFilterTsvColumnByValue:
             assert int(fields[0]) != 6
     
     def test_filter_lines_with_quotes(self, tsv_factory):
-        """Should correctly handle fields with quotes."""
+        """Should correctly handle fields with quotes (regression test)."""
         input_content = 'x\ty\tz\n"0"\t"1"\t"2"\n"0"\t"3"\t"4"\n'
         input_file = tsv_factory.create_plain("input.tsv", input_content)
         output_file = tsv_factory.get_path("output.tsv")
