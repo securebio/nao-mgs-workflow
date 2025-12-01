@@ -1,0 +1,16 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+*.so
+*.dylib
+dist/
+build/
+
+# Rust
+target/
+Cargo.lock
+
+# OS
+.DS_Store
