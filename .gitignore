@@ -28,3 +28,5 @@ uv.lock
 # Post-processing build artifacts
 post-processing/bin/
 post-processing/obj/
+
+.DS_Store
