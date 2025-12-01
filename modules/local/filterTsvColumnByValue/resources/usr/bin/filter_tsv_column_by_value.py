@@ -2,6 +2,7 @@
 
 """
 Filters TSV files to keep only rows where a specified column matches a given value.
+Treats quote characters as regular characters, not as delimiters.
 """
 
 # =======================================================================
@@ -216,8 +217,8 @@ def stream_and_filter_tsv(
         logger (logging.Logger): Logger instance for logging messages.
     """
     logger.info("Initializing streaming TSV reader and writer")
-    reader = csv.reader(input_file, delimiter="\t")
-    writer = csv.writer(output_file, delimiter="\t", lineterminator="\n")
+    reader = csv.reader(input_file, delimiter="\t", quotechar=None)
+    writer = csv.writer(output_file, delimiter="\t", lineterminator="\n", quotechar=None)
     # Read and validate header
     try:
         header = next(reader)
