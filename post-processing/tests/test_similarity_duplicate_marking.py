@@ -11,19 +11,24 @@ from pathlib import Path
 
 @pytest.fixture(scope="session")
 def binary_path():
-    """Returns the path to the C binary, building it if necessary"""
+    """Returns the path to the Rust binary, building it if necessary"""
     base_dir = Path(__file__).parent.parent
-    src_dir = base_dir / "src"
-    bin_path = base_dir / "bin" / "similarity_duplicate_marking"
+    rust_dir = base_dir / "rust_dedup"
+    bin_path = rust_dir / "target" / "release" / "similarity_duplicate_marking"
 
-    # Run make in the src directory
-    cmd = ["make", "--directory", str(src_dir)]
+    # Find cargo binary (use full path since it may not be in PATH)
+    cargo_bin = Path.home() / ".cargo" / "bin" / "cargo"
+    if not cargo_bin.exists():
+        pytest.fail(f"Cargo not found at {cargo_bin}. Please install Rust.")
 
-    print(f"\n[Compiling binary at {src_dir} ...]")
-    subprocess.run(cmd, check=True)
+    # Run cargo build --release in the rust_dedup directory
+    cmd = [str(cargo_bin), "build", "--release"]
+
+    print(f"\n[Compiling Rust binary at {rust_dir} ...]")
+    subprocess.run(cmd, cwd=str(rust_dir), check=True)
 
     if not bin_path.exists():
-        pytest.fail(f"Make finished but binary not found at {bin_path}")
+        pytest.fail(f"Cargo build finished but binary not found at {bin_path}")
 
     return str(bin_path)
 
@@ -119,7 +124,7 @@ def create_test_tsv_content(rows, extra_cols=None):
 
 
 def run_binary_and_get_output(binary_path, input_file, output_file):
-    """Run the C binary and return output rows.
+    """Run the binary and return output rows.
 
     Returns:
         Tuple of (rows, fieldnames) where rows is a list of dicts

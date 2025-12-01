@@ -1,4 +1,5 @@
 import random
+import subprocess
 import sys
 from pathlib import Path
 
@@ -547,29 +548,42 @@ class TestDeduplicateFunction:
 
 
 # ============================================================================
-# C Implementation Tests
+# Python and Rust Implementation Tests
 # ============================================================================
 
-# Import C wrapper
+# Import Rust wrapper - always rebuild to pick up any changes
+rust_bindings_dir = Path(__file__).parent / "rust_bindings"
+
 try:
-    from c_wrapper import deduplicate_read_pairs_c
-except (ImportError, FileNotFoundError) as e:
+    # Always run maturin develop to ensure we're testing the latest code
+    # (maturin will skip rebuild if nothing changed)
+    subprocess.run(
+        ["maturin", "develop", "--quiet"],
+        cwd=str(rust_bindings_dir),
+        check=True
+    )
+    from nao_dedup_rust import deduplicate_read_pairs_rust
+except (subprocess.CalledProcessError, FileNotFoundError) as e:
     raise RuntimeError(
-        "C library not found. Run 'make test-lib' to build it."
+        "Failed to build Rust library. "
+        "Install Rust first (brew install rust), then:\n"
+        "  pip install -r requirements-dev.txt\n"
+        "  cd tests/rust_bindings && maturin develop"
     ) from e
 
 # Parametrize to run tests on both implementations
-c_and_python_impls = [deduplicate_read_pairs_streaming, deduplicate_read_pairs_c]
-impl_ids = ["python-streaming", "c"]
+implementations = [deduplicate_read_pairs_streaming,
+                   deduplicate_read_pairs_rust]
+implementation_ids = ["python-streaming", "rust"]
 
 
 @pytest.mark.parametrize(
     "dedup_func",
-    c_and_python_impls,
-    ids=impl_ids
+    implementations,
+    ids=implementations
 )
-class TestCAndPythonDeduplication:
-    """Tests that run on both C and Python implementations."""
+class TestPythonAndRustDeduplication:
+    """Tests that run on Python and Rust implementations."""
 
     def test_empty_input(self, dedup_func):
         result = dedup_func([], verbose=False)

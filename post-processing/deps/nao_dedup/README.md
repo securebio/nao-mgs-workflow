@@ -11,9 +11,9 @@ against every other pair.
 
 This library is available in two implementations:
 - **Python**: Graph-based and streaming implementations for flexibility
-- **C**: Streaming-only, very high-performance (~50x faster)
+- **Rust**: Streaming-only, very high-performance
 
-In maintaining this library we keep the C and Python streaming versions
+In maintaining this library we keep the Rust and Python streaming versions
 completely in sync in terms of functionality.  This allows the Python version
 to serve as a reference (for both humans and LLMs) for what we intend to be
 doing, in part because our team is overall much stronger working in Python.
@@ -31,7 +31,8 @@ doing, in part because our team is overall much stronger working in Python.
   for each duplicate cluster
 - **Flexible orientation handling**: Can operate in strict mode (same
   orientation required) or tolerant mode (handles mate-pair swaps)
-- **High performance**: C implementation is 47x faster than Python
+- **High performance**: Rust implementation is ~40x faster than Python, and
+  uses much less memory.
 
 ---
 
@@ -121,188 +122,77 @@ result = deduplicate_read_pairs(
 
 ---
 
-## C Implementation
+## Rust Implementation
 
 ### Features
 
-- **High Performance**: 47x faster than Python implementation
-- **Memory Efficient**: Arena allocators minimize fragmentation, separate scratch/result memory
-- **Scalable**: Handles 20M+ reads with configurable hash table sizing
-- **Quality-Aware**: Uses sequence quality scores for tie-breaking between duplicates
-- **Generic**: TSV-agnostic - works with any data source
+- **High Performance**: Significantly faster than Python implementation
+- **Memory Efficient**: Only stores exemplar reads, not entire dataset
+- **Scalable**: Handles millions of reads efficiently
+- **Quality-Aware**: Uses sequence quality scores for exemplar selection
 
 ### API Overview
 
-#### Lifecycle
-
-```c
-// Create context with parameters
-NaoDedupParams params = {
-    .kmer_len = 15,
-    .window_len = 25,
-    .num_windows = 4,
-    .max_offset = 1,
-    .max_error_frac = 0.01,
-    .expected_reads = 20000000,
-    .scratch_arena_size = 0,  // 0 = use default (2GB)
-    .result_arena_size = 0    // 0 = use default (512MB)
-};
-NaoDedupContext* ctx = nao_dedup_create(params);
-
-// ... process reads ...
-
-// Clean up
-nao_dedup_destroy(ctx);
-```
+The Rust library is designed as a stateful context that processes reads in two
+passes:
 
 #### Pass 1: Build Index
 
-```c
-// Feed reads to the library (strings don't need to be null-terminated)
-const char* exemplar = nao_dedup_process_read(
-    ctx,
-    read_id, id_len,
-    fwd_seq, fwd_len,
-    rev_seq, rev_len,
-    fwd_qual, fwd_qual_len,  // Can be NULL/0
-    rev_qual, rev_qual_len   // Can be NULL/0
-);
-// exemplar is the similarity exemplar for this read
+```rust
+use nao_dedup::{DedupContext, DedupParams, MinimizerParams, ReadPair};
 
-// Finalize when done (frees scratch memory)
-nao_dedup_finalize(ctx);
+// Create context with default or custom parameters
+let dedup_params = DedupParams::default();
+let minimizer_params = MinimizerParams::default();
+let mut ctx = DedupContext::new(dedup_params, minimizer_params);
+
+// Process each read
+let read_pair = ReadPair {
+    read_id: "read1".to_string(),
+    fwd_seq: "ACGTACGT".to_string(),
+    rev_seq: "TGCATGCA".to_string(),
+    fwd_qual: "IIIIIIII".to_string(),
+    rev_qual: "IIIIIIII".to_string(),
+};
+ctx.process_read(read_pair);
+
+// Finalize to build final exemplar mappings
+ctx.finalize();
 ```
 
 #### Pass 2: Query Results
 
-```c
+```rust
 // After finalization, query final exemplars
-const char* final_exemplar = nao_dedup_get_final_exemplar(ctx, read_id);
-```
+let exemplar = ctx.get_final_exemplar("read1");
+println!("read1 -> {}", exemplar);
 
-#### Statistics
-
-```c
-NaoDedupStats stats;
-nao_dedup_get_stats(ctx, &stats);
-printf("Processed %d reads in %d clusters\n",
-       stats.total_reads_processed,
-       stats.unique_clusters);
+// Get statistics
+let (total_processed, unique_clusters) = ctx.stats();
 ```
 
 ### Integration Example
 
-See `../src/similarity_duplicate_marking.c` for a complete example of how to integrate this library with TSV file I/O.
-
-The driver handles:
-- File I/O (gzipped TSV files)
-- TSV parsing
-- Business logic (only processing alignment-unique reads)
-- Output formatting
-
-The library handles:
-- Minimizer extraction
-- Similarity matching
-- Cluster management
-- Memory management
+See `post-processing/rust_dedup/src/similarity_duplicate_marking.rs` in
+https://github.com/securebio/nao-mgs-workflow for a complete example of how to
+integrate this library with TSV file I/O.
 
 ### Performance
 
-**Small file (70K reads)**:
-- Python: 28.4s
-- C library: 2.6s
-- **Speedup: 11x**
+**Large file (685K reads, 456K alignment-unique)**:
+- Rust: 127 seconds
+- Memory: 1.37 GB peak
 
-**Large file (2M reads)**:
-- Python: ~60 minutes (estimated)
-- C library: 76 seconds
-- **Speedup: 47x**
+We balance memory and speed, storing only exemplar reads rather than the entire
+dataset.
 
-### Memory Usage
+### Building
 
-- **Scratch arena**: 2GB (freed after Pass 1)
-- **Result arena**: 512MB (kept for Pass 2 lookups)
-- **Hash tables**: ~16M buckets for 20M reads
-
-### Thread Safety
-
-This library is **not thread-safe**. Each thread should use its own `NaoDedupContext`.
-
-### Error Handling
-
-The C library uses different error handling strategies depending on the
-operation phase:
-
-#### During Initialization (`nao_dedup_create`)
-
-Functions return `NULL` on error. Use `nao_dedup_get_error_message()` to
-retrieve error details:
-
-```c
-NaoDedupContext* ctx = nao_dedup_create(params);
-if (!ctx) {
-    fprintf(stderr, "Error: %s\n", nao_dedup_get_error_message());
-    exit(1);
-}
-```
-
-Common initialization errors:
-- Invalid parameters (e.g., negative offsets)
-- Memory allocation failure for context or arenas
-- Hash table initialization failure
-
-#### During Processing (`nao_dedup_process_read`, etc.)
-
-**Memory allocation failures during processing are fatal and cause immediate
-program termination.**
-
-If arena capacity is exceeded during processing, the library prints an error
-message to stderr and exits with code 1:
-
-```
-FATAL: Out of memory in arena_alloc: arena capacity exceeded
-The dataset has exceeded the pre-allocated arena capacity.
-
-You can increase arena sizes via NaoDedupParams:
-
-     params.scratch_arena_size = 4ULL * 1024 * 1024 * 1024;   // 4GB
-     params.result_arena_size = 1024ULL * 1024 * 1024;        // 1GB
-     (defaults: scratch=2GB, result=512MB)
-```
-
-**Important: Two types of memory errors**
-
-1. **System out of memory at creation** - If `malloc()` fails when allocating
-   the arenas, `nao_dedup_create()` returns NULL gracefully. This means
-   your system truly doesn't have enough RAM.
-
-2. **Arena capacity exceeded during processing** - If your dataset uses more
-   than the configured arena sizes processing will exit with the error
-   above. This doesn't mean your system is out of RAM - it means the **arena
-   sizes are too small** for your dataset and you need to configure
-   NaoDedupParams with larger ones.
-
-**Why this design?**
-
-1. **Arena sizes are configurable** - Set via `NaoDedupParams` with sensible
-   defaults (2GB scratch + 512MB result). For most datasets these defaults are
-   sufficient.
-
-2. **Graceful error handling is not possible** - If we can't allocate memory to
-   store read data, we cannot produce correct deduplication results. Continuing
-   would silently produce incorrect output (missing duplicates).
-
-3. **Fast failure is better than wrong results** - For batch processing
-   pipelines, it's better to fail immediately with a clear error than to return
-   subtly incorrect data.
-
-### Compilation
+The library is a standard Rust crate. Build with:
 
 ```bash
-gcc -O3 -march=native -I. your_driver.c nao_dedup.c -lz -o your_program
+cargo build --release
 ```
-
----
 
 ## How It Works
 
@@ -325,14 +215,16 @@ duplicates. Comparison allows for:
 - Sequencing errors (configurable via `max_error_frac`)
 - Optional mate-pair orientation swaps (configurable via `orientation`)
 
-### 4. Clustering (Python graph-based) or Streaming (C and Python streaming)
+### 4. Clustering (Python graph-based) or Streaming (Rust and Python streaming)
 
 **Python graph-based**:
-- An equivalence graph is built where nodes are read pairs and edges connect duplicates
+- An equivalence graph is built where nodes are read pairs and edges connect
+  duplicates
 - Connected components in the graph represent duplicate clusters
-- For each cluster, an exemplar is selected based on graph centrality, quality score, read length, and read ID
+- For each cluster, an exemplar is selected based on graph centrality, quality
+  score, read length, and read ID
 
-**C and Python streaming**:
+**Rust and Python streaming**:
 - No graph construction - purely streaming approach
 - First matching read in a bucket becomes the cluster exemplar
 - Subsequent matches are assigned to that exemplar
@@ -346,27 +238,55 @@ duplicates. Comparison allows for:
 3. Total read length (longer is better)
 4. Read ID (lexicographic tie-breaker)
 
-**C/Python streaming** selects based on:
+**Rust/Python streaming** selects based on:
 1. First match in bucket (becomes exemplar)
 2. Quality score for tie-breaking when applicable
 
+## Development Setup
+
+### Rust Toolchain
+
+On macOS with Homebrew:
+```bash
+brew install rust
+```
+
+On Linux:
+```bash
+# Ubuntu/Debian
+sudo apt install rustc cargo
+
+# Fedora
+sudo dnf install rust cargo
+```
+
+Verify installation:
+```bash
+cargo --version
+```
+
+### Python Dependencies
+
+For runtime dependencies:
+```bash
+pip install -r requirements.txt
+```
+
+For development and testing:
+```bash
+pip install -r requirements-dev.txt
+```
+
 ## Testing
 
-### Python tests
+### Python and Rust tests
 
-Run all Python tests:
-
-```bash
-pytest tests/test_dedup.py
-```
-
-### C tests
-
-Build the test library and run tests:
+Run all tests (Python and Rust implementations):
 
 ```bash
-make test
+pytest
 ```
 
-This builds `tests/libnaodedup_test.so` and runs parametrized tests that verify
-parity between Python and C implementations.
+To ensure the Python and Rust implementations of streaming dedup stay in sync,
+tests are parametrized by implementation.  The Rust library is built
+automatically when tests are run if not already present.

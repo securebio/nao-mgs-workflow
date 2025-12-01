@@ -12,7 +12,7 @@ out how to fully include them.
 
 ### bin/similarity_duplicate_marking
 
-A high-performance C tool that runs similarity-based duplicate marking as a
+A high-performance Rust tool that runs similarity-based duplicate marking as a
 supplement to existing alignment-based duplicate marking.
 
 #### Overview
@@ -42,32 +42,30 @@ faster and more memory-efficient.
 
 #### Building
 
-The similarity duplicate marking tool is implemented in C for
+The similarity duplicate marking tool is implemented in Rust for
 performance. Build it with:
 
 ```bash
-cd src
-make
+cd rust_dedup
+cargo build --release
 ```
 
-This will compile the binary to `bin/similarity_duplicate_marking`. Build
-artifacts (object files) are placed in `obj/`.
+This will compile the binary to `rust_dedup/target/release/similarity_duplicate_marking`.
 
 **Requirements:**
-- C compiler (gcc or clang)
-- zlib development headers (`zlib.h`)
+- Rust toolchain (cargo, rustc) - Install from https://rustup.rs/
 
 To clean build artifacts:
 
 ```bash
-cd src
-make clean
+cd rust_dedup
+cargo clean
 ```
 
 #### Usage
 
 ```bash
-./bin/similarity_duplicate_marking <input.tsv.gz> <output.tsv.gz>
+./rust_dedup/target/release/similarity_duplicate_marking <input.tsv.gz> <output.tsv.gz>
 ```
 
 #### Input Format
@@ -143,31 +141,29 @@ Run tests with:
 pytest
 ```
 
-**Note:** The binary must be built before running tests. Run `cd src && make`
-if needed.
+**Note:** The Rust binary will be built automatically when running tests.
 
 ## Implementation
 
-The tool is implemented in C for performance:
+The tool is implemented in Rust for performance:
 
-- **`src/similarity_duplicate_marking.c`**: Main driver that handles TSV I/O
+- **`rust_dedup/src/similarity_duplicate_marking.rs`**: Main binary that handles TSV I/O
   and calls the deduplication library
-- **`src/Makefile`**: Build configuration
+- **`rust_dedup/Cargo.toml`**: Build configuration
 - **`deps/nao_dedup/`**: Git subtree containing the nao-dedup library (see below)
 
 Build artifacts:
-- **`bin/similarity_duplicate_marking`**: Compiled binary
-- **`obj/`**: Object files
+- **`rust_dedup/target/release/similarity_duplicate_marking`**: Compiled binary
+- **`rust_dedup/target/`**: Build artifacts and intermediate files
 
 ## Dependencies
 
 ### deps/nao_dedup
 
-This is a git subtree from https://github.com/securebio/nao-dedup, tracking the
-`jefftk/c-implementation` branch for now.  Once that branch is merged
-we'll track `main` instead.
+This is a git subtree from https://github.com/securebio/nao-dedup.
 
-The library provides the core deduplication algorithm with offset-based sequence matching.
+The library provides the core deduplication algorithm with offset-based sequence
+matching, implemented in Rust with Python bindings for testing.
 
 #### Pulling in updates
 
@@ -177,7 +173,7 @@ To pull in changes from the upstream repository:
 git subtree pull \
     --prefix=post-processing/deps/nao_dedup \
     https://github.com/securebio/nao-dedup \
-    jefftk/c-implementation \
+    main \
     --squash
 ```
 
@@ -189,5 +185,5 @@ If you make changes to the subtree that should be pushed back to the upstream re
 git subtree push \
     --prefix=post-processing/deps/nao_dedup \
     https://github.com/securebio/nao-dedup \
-    jefftk/c-implementation
+    main
 ```
