@@ -1,9 +1,0 @@
-__pycache__/
-*.py[cod]
-.pytest_cache/
-.DS_Store
-
-# C build artifacts
-*.o
-*.so
-*.dylib
