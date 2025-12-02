@@ -1,6 +1,7 @@
 # v3.0.1.6
 
 - Modified filterTsvColumnByValue to correctly handle quotation characters in FASTQ quality strings.
+- Modified Github Actions configuration to use the official Github Action to install nf-test.
 
 # v3.0.1.5
 - Fixed `SPLIT_VIRAL_TSV_BY_SELECTED_TAXID` failing when input TSV has no data rows. Empty partition files (`partition_empty_*`) are now filtered out before downstream processing. (#524)
