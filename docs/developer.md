@@ -153,7 +153,7 @@ In cases where a module is a thin wrapper around a script in another language, c
     - Small "toy" data files (uncompressed, generally ~1KB or less) may be added freely to the repo in `test-data/toy-data`.
 - Larger public test datasets are stored in `s3://nao-testing` (publicly available). 
     - The "gold standard test dataset" (`s3://nao-testing/gold-standard-test/`) is the default test dataset that we use for testing the `RUN` and `DOWNSTREAM` workflows on short-read data. It is a small dataset that contains 165 reads from the [Yang 2020](https://www.sciencedirect.com/science/article/abs/pii/S0048969720358514?via%3Dihub) study.
-    - The "ONT wastewater test dataset"(`s3://nao-testing/ont-ww-test/`) is the default, small test dataset that we use for testing the `RUN` workflow on ONT (long-read) data.
+    - The "ONT wastewater test dataset" (`s3://nao-testing/ont-ww-test/`) is the default, small test dataset that we use for testing the `RUN` workflow on ONT (long-read) data.
 - Results of workflow runs on the test datasets from S3 are in the repo in `test-data/<dataset>-results-<workflow>`. 
 
 To make a new test dataset on S3, copy the test dataset to `s3://nao-testing/<name-of-test-dataset>`. A pipeline maintainer (e.g. willbradshaw or katherine-stansifer) can give you permission to add to the bucket.
