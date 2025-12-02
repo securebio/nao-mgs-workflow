@@ -223,7 +223,7 @@ Test [7677da69] 'RUN workflow output should match snapshot'
 
 ### `pytest`
 
-`pytest` tests should be located in the same directory as their corresponding Python script, and should be named `test_X` where `X` is the filename of the script being tested.
+`pytest` tests should be located in the same directory as their corresponding Python script, and should be named by prepending `test_` to the script's filename (e.g., `test_my_script.py` for a script named `my_script.py`).
 
 Unlike nf-test, `pytest` tests are very fast and cheap to run. Consequently, we recommend being as comprehensive as reasonably possible when writing `pytest` suites.
 
