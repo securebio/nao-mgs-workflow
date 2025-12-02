@@ -1,6 +1,7 @@
 # v3.0.1.6-dev
 
 - Modified filterTsvColumnByValue to correctly handle quotation characters in FASTQ quality strings.
+- Clarified testing documentation in `docs/developer.md`.
 
 # v3.0.1.5
 - Fixed `SPLIT_VIRAL_TSV_BY_SELECTED_TAXID` failing when input TSV has no data rows. Empty partition files (`partition_empty_*`) are now filtered out before downstream processing. (#524)
