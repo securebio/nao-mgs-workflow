@@ -1,4 +1,4 @@
-# v3.0.1.6-dev
+# v3.0.1.6
 
 - Modified filterTsvColumnByValue to correctly handle quotation characters in FASTQ quality strings.
 
