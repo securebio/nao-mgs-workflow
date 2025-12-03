@@ -186,7 +186,7 @@ To run all tests in the `tests` directory, use the command `nf-test test tests`.
 - Running this full suite of local tests takes hours; we recommend using the script `bin/run_parallel_test` to parallelize. 
 - Running the full test suite frequently hits API limits for Seqera container pulls; to resolve this, request a user token from Seqera as described in [troubleshooting.md](troubleshooting.md).
 
-After tests finish, you should clean up by running `sudo rm -rf .nf-test/`.
+After tests finish, you should clean up by running `bin/clean-nf-test.sh`.
 
 > [!NOTE]
 > Periodically delete docker images to free up space on your instance. Running the following command will delete all docker images on your system:
