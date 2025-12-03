@@ -135,7 +135,7 @@ The `test-data/` directory (and organization of test data in general) is describ
 
 [Documentation for `nf-test`](https://www.nf-test.com/docs/getting-started/) and Nextflow's [`nf-test` training](https://training.nextflow.io/2.1.3/side_quests/nf-test/) are helpful resources.
 
-In cases where a module is a thin wrapper around a script in another language, comprehensive unit testing should be done using an appropriate testing library for that language (e.g. Pytest for Python scripts). In this case, `nf-test` tests for the module should be kept to a minimum, typically a single end-to-end test that confirms the module runs without crashing. We are currently in the process of moving as many modules as possible to this paradigm; however, some modules are harder to transition than others. For modules that retain major functionality in the Nextflow process itself, a comprehensive `nf-test` suite is still needed. In this case, we recommend the following guidelines:
+In cases where a module is a thin wrapper around a script in another language, comprehensive unit testing should be done using an appropriate testing library for that language (e.g. pytest for Python scripts). In this case, `nf-test` tests for the module should be kept to a minimum, typically a single end-to-end test that confirms the module runs without crashing. We are currently in the process of moving as many modules as possible to this paradigm; however, some modules are harder to transition than others. For modules that retain major functionality in the Nextflow process itself, a comprehensive `nf-test` suite is still needed. In this case, we recommend the following guidelines:
 
 - At a minimum, write a test that the process completes successfully on valid input data (`assert process.success`).
 - When relevant, processes should be tested on both single- and paired-end data.
@@ -153,7 +153,7 @@ In cases where a module is a thin wrapper around a script in another language, c
     - Small "toy" data files (uncompressed, generally ~1KB or less) may be added freely to the repo in `test-data/toy-data`.
 - Larger public test datasets are stored in `s3://nao-testing` (publicly available). 
     - The "gold standard test dataset" (`s3://nao-testing/gold-standard-test/`) is the default test dataset that we use for testing the `RUN` and `DOWNSTREAM` workflows on short-read data. It is a small dataset that contains 165 reads from the [Yang 2020](https://www.sciencedirect.com/science/article/abs/pii/S0048969720358514?via%3Dihub) study.
-    - The "ONT wastewater test dataset"(`s3://nao-testing/ont-ww-test/`) is the default, small test dataset that we use for testing the `RUN` workflow on ONT (long-read) data.
+    - The "ONT wastewater test dataset" (`s3://nao-testing/ont-ww-test/`) is the default, small test dataset that we use for testing the `RUN` workflow on ONT (long-read) data.
 - Results of workflow runs on the test datasets from S3 are in the repo in `test-data/<dataset>-results-<workflow>`. 
 
 To make a new test dataset on S3, copy the test dataset to `s3://nao-testing/<name-of-test-dataset>`. A pipeline maintainer (e.g. willbradshaw or katherine-stansifer) can give you permission to add to the bucket.
@@ -223,7 +223,7 @@ Test [7677da69] 'RUN workflow output should match snapshot'
 
 ### `pytest`
 
-`pytest` tests should be located in the same directory as their corresponding Python script, and should be named `test_X` where `X` is the filename of the script being tested.
+`pytest` tests should be located in the same directory as their corresponding Python script, and should be named by prepending `test_` to the script's filename (e.g., `test_my_script.py` for a script named `my_script.py`).
 
 Unlike nf-test, `pytest` tests are very fast and cheap to run. Consequently, we recommend being as comprehensive as reasonably possible when writing `pytest` suites.
 
