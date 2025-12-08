@@ -33,8 +33,7 @@ workflow DOWNSTREAM {
         // Conditionally mark duplicates and generate clade counts based on platform
         if (params.platform == "ont") {
             // ONT: Skip duplicate marking and clade counting, but still sort by seq_id
-            sorted_ont_ch = SORT_ONT_HITS(group_ch, "seq_id").sorted
-            viral_hits_ch = sorted_ont_ch
+            viral_hits_ch = SORT_ONT_HITS(group_ch, "seq_id").sorted
             dup_output_ch = Channel.empty()
             clade_counts_ch = Channel.empty()
         }
