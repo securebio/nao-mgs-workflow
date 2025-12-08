@@ -71,4 +71,3 @@ workflow DOWNSTREAM {
                                 VALIDATE_VIRAL_ASSIGNMENTS.out.annotated_hits
         )
 }
-
