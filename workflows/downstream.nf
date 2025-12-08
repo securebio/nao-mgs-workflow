@@ -13,7 +13,7 @@ include { VALIDATE_VIRAL_ASSIGNMENTS } from "../subworkflows/local/validateViral
 include { COUNT_READS_PER_CLADE } from "../modules/local/countReadsPerClade"
 include { COPY_FILE_BARE as COPY_VERSION } from "../modules/local/copyFile"
 include { COPY_FILE_BARE as COPY_INPUT } from "../modules/local/copyFile"
-
+include { SORT_TSV as SORT_ONT_HITS } from "../modules/local/sortTsv"
 /*****************
 | MAIN WORKFLOWS |
 *****************/
@@ -32,8 +32,9 @@ workflow DOWNSTREAM {
         viral_db = channel.value(viral_db_path)
         // Conditionally mark duplicates and generate clade counts based on platform
         if (params.platform == "ont") {
-            // ONT: Skip duplicate marking and clade counting
-            viral_hits_ch = group_ch
+            // ONT: Skip duplicate marking and clade counting, but still sort by seq_id
+            sorted_ont_ch = SORT_ONT_HITS(group_ch, "seq_id").sorted
+            viral_hits_ch = sorted_ont_ch
             dup_output_ch = Channel.empty()
             clade_counts_ch = Channel.empty()
         }
@@ -70,3 +71,4 @@ workflow DOWNSTREAM {
                                 VALIDATE_VIRAL_ASSIGNMENTS.out.annotated_hits
         )
 }
+
