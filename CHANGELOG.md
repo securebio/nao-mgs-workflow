@@ -1,6 +1,7 @@
 # v3.0.1.7-dev
 - Clarified testing documentation in `docs/developer.md`.
 - Added bin/clean-nf-test.sh for test cleanup.
+- Added sorting of ONT hits by seq_id in `DOWNSTREAM` workflow ([#544](https://github.com/securebio/nao-mgs-workflow/issues/544))
 
 # v3.0.1.6
 - Modified filterTsvColumnByValue to correctly handle quotation characters in FASTQ quality strings.
