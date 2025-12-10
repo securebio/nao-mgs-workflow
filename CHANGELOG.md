@@ -1,5 +1,9 @@
-# v3.0.1.6
+# v3.0.1.7
+- Clarified testing documentation in `docs/developer.md`.
+- Added bin/clean-nf-test.sh for test cleanup.
+- Added sorting of ONT hits by seq_id in `DOWNSTREAM` workflow.
 
+# v3.0.1.6
 - Modified filterTsvColumnByValue to correctly handle quotation characters in FASTQ quality strings.
 - Modified Github Actions configuration to use the official Github Action to install nf-test.
 
