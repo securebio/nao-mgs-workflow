@@ -1,5 +1,6 @@
 # v3.0.1.8-dev
 - Pruning and streamlining testing for easier releases:
+    - Separated downloading part of JOIN_RIBO_REF into a separate WGET process, and tested both parts separately
     - Moved ADD_CONDITIONAL_TSV_COLUMN to Python and implemented pytest tests.
     - Moved COUNT_READS_PER_CLADE tests to Pytest.
     - Deleted extraneous tests for BOWTIE2 and CONCATENATE_FILES.
