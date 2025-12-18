@@ -1,3 +1,6 @@
+# v3.0.1.8-dev
+- Moved ADD_CONDITIONAL_TSV_COLUMN to Python and implemented pytest tests.
+
 # v3.0.1.7
 - Clarified testing documentation in `docs/developer.md`.
 - Added bin/clean-nf-test.sh for test cleanup.
