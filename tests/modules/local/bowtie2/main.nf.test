@@ -166,3 +166,4 @@ nextflow_process {
             assert output_lines_sam == ids_mapped.size()
         }
     }
+}
