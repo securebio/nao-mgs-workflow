@@ -75,8 +75,9 @@ class TestSelectColumns:
             ("keep", ["col1", "col3"], "col1\tcol3\nval1\tval3\n"),
             ("drop", ["col2", "col4"], "col1\tcol3\nval1\tval3\n"),
             ("keep", ["col2"], "col2\nval2\n"),
+            ("keep", ["col1", "col2", "col3", "col4"], "col1\tcol2\tcol3\tcol4\nval1\tval2\tval3\tval4\n"),
         ],
-        ids=["keep_mode_basic", "drop_mode_basic", "keep_single_column"],
+        ids=["keep_mode_basic", "drop_mode_basic", "keep_single_column", "keep_all_columns"],
     )
     def test_select_columns_success_cases(
         self, tsv_factory, mode, columns, expected_output
@@ -97,8 +98,9 @@ class TestSelectColumns:
         [
             ("", ["col1"], "keep", ""),
             ("col1\tcol2\tcol3\n", ["col1", "col3"], "keep", "col1\tcol3\n"),
+            ("col1\tcol2\tcol3\n", ["col1", "col3"], "drop", "col2\n"),
         ],
-        ids=["empty_file", "header_only_file"],
+        ids=["empty_file", "header_only_file_keep", "header_only_file_drop"],
     )
     def test_select_columns_edge_cases(
         self, tsv_factory, input_content, columns, mode, expected_output
