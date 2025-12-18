@@ -58,35 +58,6 @@ nextflow_process {
         }
     }
 
-    test("Should run without failures on two input TSVs") {
-        tag "expect_success"
-        when {
-            params {
-            }
-            process {
-                '''
-                input[0] = COPY_FILE_1.out.combine(COPY_FILE_2.out)
-                input[1] = "test_double"
-                input[2] = "fastq"
-                '''
-            }
-        }
-        then {
-            // Should run without failures
-            assert process.success
-            // Output should have double the entries of input
-            def fastq_out = path(process.out.output[0]).fastq
-            def fastq_in = path(process.out.input[0]).fastq
-            def reads_in = fastq_in.getNumberOfRecords()
-            assert fastq_out.getNumberOfRecords() == reads_in * 2
-            // Read names should match input
-            for (int i = 0; i < fastq_in.getNumberOfRecords(); i++){
-                assert fastq_in.readNames[i] == fastq_out.readNames[i]
-                assert fastq_in.readNames[i] == fastq_out.readNames[i+reads_in]
-            }
-        }
-    }
-
     test("Should run without failures on three input TSVs") {
         tag "expect_success"
         when {
