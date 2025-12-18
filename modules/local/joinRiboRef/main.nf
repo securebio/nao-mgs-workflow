@@ -1,35 +1,39 @@
-// Download & concatenate ribosomal references
+// Process & concatenate ribosomal references
 process JOIN_RIBO_REF {
     label "BBTools"
     label "single"
     input:
-        val(ssu_url)
-        val(lsu_url)
+        path(ssu_ref)
+        path(lsu_ref)
     output:
         path("ribo-ref-concat.fasta.gz"), emit: ribo_ref
-        tuple path("ssu_ref_input.fasta.gz"), path("lsu_ref_input.fasta.gz"), emit: input
-    shell:
-        '''
-        # Download references
-        wget !{ssu_url} -O ssu_ref.fasta.gz
-        wget !{lsu_url} -O lsu_ref.fasta.gz
+        tuple path("ssu_ref_input.*"), path("lsu_ref_input.*"), emit: input
+    script:
+        def ssuExtractCmd = ssu_ref.toString().endsWith(".gz") ? "zcat" : "cat"
+        def lsuExtractCmd = lsu_ref.toString().endsWith(".gz") ? "zcat" : "cat"
+        """
         # Add suffixes to reference headers
-        for ref in ssu lsu; do
-            zcat ${ref}_ref.fasta.gz | awk -v suffix=$ref '
+        ${ssuExtractCmd} ${ssu_ref} | awk -v suffix=ssu '
             /^>/ {
-                pos = index($0, " ")
-                print (pos > 0) ? substr($0,1,pos-1) "::" toupper(suffix) substr($0,pos) : $0 "::" toupper(suffix)
+                pos = index(\$0, " ")
+                print (pos > 0) ? substr(\$0,1,pos-1) "::" toupper(suffix) substr(\$0,pos) : \$0 "::" toupper(suffix)
                 next
             }
-            { print }' | gzip > ${ref}_ref_suffix.fasta.gz
-        done
+            { print }' | gzip > ssu_ref_suffix.fasta.gz
 
-        # Update input files for concatenation
-        in="ssu_ref_suffix.fasta.gz lsu_ref_suffix.fasta.gz"
-        cat ${in} > ribo-ref-concat.fasta.gz
+        ${lsuExtractCmd} ${lsu_ref} | awk -v suffix=lsu '
+            /^>/ {
+                pos = index(\$0, " ")
+                print (pos > 0) ? substr(\$0,1,pos-1) "::" toupper(suffix) substr(\$0,pos) : \$0 "::" toupper(suffix)
+                next
+            }
+            { print }' | gzip > lsu_ref_suffix.fasta.gz
+
+        # Concatenate files
+        cat ssu_ref_suffix.fasta.gz lsu_ref_suffix.fasta.gz > ribo-ref-concat.fasta.gz
 
         # Return input files for testing
-        ln -s ssu_ref.fasta.gz ssu_ref_input.fasta.gz
-        ln -s lsu_ref.fasta.gz lsu_ref_input.fasta.gz
-        '''
+        ln -s ${ssu_ref} ssu_ref_input.${ssu_ref}
+        ln -s ${lsu_ref} lsu_ref_input.${lsu_ref}
+        """
 }

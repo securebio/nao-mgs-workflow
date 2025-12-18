@@ -8,6 +8,8 @@
 
 include { MAKE_VIRUS_TAXONOMY_DB } from "../subworkflows/local/makeVirusTaxonomyDB"
 include { MAKE_VIRUS_GENOME_DB } from "../subworkflows/local/makeVirusGenomeDB"
+include { WGET as WGET_SSU } from "../modules/local/wget"
+include { WGET as WGET_LSU } from "../modules/local/wget"
 include { JOIN_RIBO_REF } from "../modules/local/joinRiboRef"
 include { DOWNLOAD_BLAST_DB } from "../modules/local/downloadBlastDB"
 include { MAKE_HUMAN_INDEX } from "../subworkflows/local/makeHumanIndex"
@@ -35,8 +37,11 @@ workflow INDEX {
         virus_genome_params = params.collectEntries { k, v -> [k, v] }
         virus_genome_params.putAll([k: "20", hdist: "3", entropy: "0.5", polyx_len: "10"])
         MAKE_VIRUS_GENOME_DB(params.ncbi_viral_params, MAKE_VIRUS_TAXONOMY_DB.out.db, virus_genome_params)
+        // Download ribosomal references
+        WGET_SSU(params.ssu_url, "ssu_ref.fasta.gz")
+        WGET_LSU(params.lsu_url, "lsu_ref.fasta.gz")
         // Build alignment indices
-        JOIN_RIBO_REF(params.ssu_url, params.lsu_url)
+        JOIN_RIBO_REF(WGET_SSU.out.file, WGET_LSU.out.file)
         MAKE_VIRUS_INDEX(MAKE_VIRUS_GENOME_DB.out.fasta)
         MAKE_HUMAN_INDEX(params.human_url)
         MAKE_CONTAMINANT_INDEX(params.genome_urls, params.contaminants)
