@@ -8,33 +8,23 @@ nextflow_process {
     tag "extract_viral_hits_to_fastq_noref_labeled_list"
 
     setup {
-        run("LOAD_SAMPLESHEET") {
-            script "subworkflows/local/loadSampleSheet/main.nf"
+        run("COPY_FILE") {
+            script "modules/local/copyFile/main.nf"
             process {
                 '''
-                input[0] = "${projectDir}/test-data/samplesheet.csv"
-                input[1] = "illumina"
-                input[2] = false
+                input[0] = Channel.of("test")
+                    | combine(Channel.of("${projectDir}/test-data/toy-data/extract-viral-hits/interleaved.tsv"))
+                input[1] = "partition_1_hits.tsv"
                 '''
             }
         }
-        run("EXTRACT_VIRAL_READS_SHORT", alias: "EXTRACT_VIRAL_READS_SHORT") {
-            script "subworkflows/local/extractViralReadsShort/main.nf"
+        run("COPY_FILE", alias: "COPY_FILE_2") {
+            script "modules/local/copyFile/main.nf"
             process {
                 '''
-                def short_params = [
-                    aln_score_threshold: params.bt2_score_threshold,
-                    adapters: params.adapters,
-                    cutadapt_error_rate: params.cutadapt_error_rate,
-                    min_kmer_hits: "1",
-                    k: "24",
-                    bbduk_suffix: "viral",
-                    taxid_artificial: "81077",
-                    db_download_timeout: params.db_download_timeout
-                ]
-                input[0] = LOAD_SAMPLESHEET.out.samplesheet
-                input[1] = params.ref_dir
-                input[2] = short_params
+                input[0] = Channel.of("test")
+                    | combine(Channel.of("${projectDir}/test-data/toy-data/extract-viral-hits/interleaved.tsv"))
+                input[1] = "partition_2_hits.tsv"
                 '''
             }
         }
@@ -47,15 +37,7 @@ nextflow_process {
             params {}
             process {
                 '''
-                input[0] = Channel.of("test")
-                    .combine(EXTRACT_VIRAL_READS_SHORT.out.hits_final)
-                    .map { sample, tsv ->
-                        def tsv1 = file("${workDir}/partition_10239_${sample}_test.tsv.gz")
-                        def tsv2 = file("${workDir}/partition_186538_${sample}_test.tsv.gz")
-                        tsv.copyTo(tsv1)
-                        tsv.copyTo(tsv2)
-                        [sample, [tsv1, tsv2]]
-                    }
+                input[0] = COPY_FILE.output.mix(COPY_FILE_2.output).groupTuple()
                 input[1] = false
                 '''
             }
@@ -79,7 +61,7 @@ nextflow_process {
             def total_reads_in = 0
             def total_reads_out = 0
             for (int i = 0; i < 2; i++) {
-                def tab_in = path(input_tsvs[i]).csv(sep: "\t", decompress: true)
+                def tab_in = path(input_tsvs[i]).csv(sep: "\t")
                 def fastq_out = path(output_fastqs[i]).fastq
                 // Output should preserve read count
                 def reads_in = tab_in.rowCount

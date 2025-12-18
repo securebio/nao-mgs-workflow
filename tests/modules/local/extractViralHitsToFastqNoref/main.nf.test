@@ -10,42 +10,11 @@ nextflow_process {
         tag "interleaved"
         tag "expect_success"
         config "tests/configs/run.config"
-        setup {
-            run("LOAD_SAMPLESHEET") {
-                script "subworkflows/local/loadSampleSheet/main.nf"
-                process {
-                    '''
-                    input[0] = "${projectDir}/test-data/samplesheet.csv"
-                    input[1] = "illumina"
-                    input[2] = false
-                    '''
-                }
-            }
-            run("EXTRACT_VIRAL_READS_SHORT", alias: "EXTRACT_VIRAL_READS_SHORT") {
-                script "subworkflows/local/extractViralReadsShort/main.nf"
-                process {
-                    '''
-                    def short_params = [
-                        aln_score_threshold: params.bt2_score_threshold,
-                        adapters: params.adapters,
-                        cutadapt_error_rate: params.cutadapt_error_rate,
-                        min_kmer_hits: "1",
-                        k: "24",
-                        bbduk_suffix: "viral",
-                        taxid_artificial: "81077",
-                        db_download_timeout: params.db_download_timeout
-                    ]
-                    input[0] = LOAD_SAMPLESHEET.out.samplesheet
-                    input[1] = params.ref_dir
-                    input[2] = short_params
-                    '''
-                }
-            }
-        }
         when {
             process {
                 '''
-                input[0] = Channel.of("test").combine(EXTRACT_VIRAL_READS_SHORT.out.hits_final)
+                input[0] = Channel.of("test")
+                    | combine(Channel.of("${projectDir}/test-data/toy-data/extract-viral-hits/interleaved.tsv"))
                 input[1] = false
                 '''
             }
@@ -54,7 +23,7 @@ nextflow_process {
             // Should run without failures
             assert process.success
             // Output should preserve read count
-            def tab_in = path(process.out.input[0][1]).csv(sep: "\t", decompress: true)
+            def tab_in = path(process.out.input[0][1]).csv(sep: "\t")
             def fastq_out = path(process.out.output[0][1]).fastq
             def reads_in = tab_in.rowCount
             def reads_out = fastq_out.readNames.size()
@@ -91,33 +60,11 @@ nextflow_process {
         tag "single_end"
         tag "expect_success"
         config "tests/configs/run.config"
-        setup {
-            run("LOAD_SAMPLESHEET") {
-                script "subworkflows/local/loadSampleSheet/main.nf"
-                process {
-                    '''
-                    input[0] = "${projectDir}/test-data/ont-samplesheet.csv"
-                    input[1] = "ont"
-                    input[2] = false
-                    '''
-                }
-            }
-            run("EXTRACT_VIRAL_READS_ONT", alias: "EXTRACT_VIRAL_READS_ONT") {
-                script "subworkflows/local/extractViralReadsONT/main.nf"
-                process {
-                    '''
-                    input[0] = LOAD_SAMPLESHEET.out.samplesheet
-                    input[1] = params.ref_dir
-                    input[2] = "81077"
-                    input[3] = params.db_download_timeout
-                    '''
-                }
-            }
-        }
         when {
             process {
                 '''
-                input[0] = Channel.of("test").combine(EXTRACT_VIRAL_READS_ONT.out.hits_final)
+                input[0] = Channel.of("test")
+                    | combine(Channel.of("${projectDir}/test-data/toy-data/extract-viral-hits/ont.tsv"))
                 input[1] = false
                 '''
             }
@@ -126,7 +73,7 @@ nextflow_process {
             // Should run without failures
             assert process.success
             // Output should preserve read count
-            def tab_in = path(process.out.input[0][1]).csv(sep: "\t", decompress: true)
+            def tab_in = path(process.out.input[0][1]).csv(sep: "\t")
             def fastq_out = path(process.out.output[0][1]).fastq
             def reads_in = tab_in.rowCount
             def reads_out = fastq_out.readNames.size()
