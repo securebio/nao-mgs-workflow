@@ -67,63 +67,31 @@ class TestAddConditionalColumn:
 
         result = tsv_factory.read_plain(output_file)
         assert result == expected_output
-
-    def test_check_column_doesnt_exist(self, tsv_factory):
-        """Test that missing check column raises ValueError."""
+    
+    @pytest.mark.parametrize(
+        ("col_to_make_missing", "missing_col_name"),
+        [
+            ("chk_col", "nonexistent_col"),
+            ("if_col", "missing_col"),
+            ("else_col", "not_there"),
+        ],
+    )
+    def test_missing_columns(self, tsv_factory, col_to_make_missing, missing_col_name):
         input_file = tsv_factory.create_plain(
             "input.tsv", "x\ty\tz\n0\t100\t200\n"
         )
         output_file = tsv_factory.get_path("output.tsv")
 
-        with pytest.raises(
-            ValueError, match="could not find all requested columns in header"
-        ):
-            add_conditional_tsv_column.add_conditional_column(
-                input_file,
-                chk_col="nonexistent_col",
-                match_val="0",
-                if_col="y",
-                else_col="z",
-                new_hdr="selected",
-                out_path=output_file,
-            )
+        kwargs = {
+            "input_path": input_file,
+            "match_val": "0",
+            "new_hdr": "selected",
+            "out_path": output_file,
+            "chk_col": "x",
+            "if_col": "y",
+            "else_col": "z",
+        }
+        kwargs[col_to_make_missing] = missing_col_name
 
-    def test_if_column_doesnt_exist(self, tsv_factory):
-        """Test that missing if column raises ValueError."""
-        input_file = tsv_factory.create_plain(
-            "input.tsv", "x\ty\tz\n0\t100\t200\n"
-        )
-        output_file = tsv_factory.get_path("output.tsv")
-
-        with pytest.raises(
-            ValueError, match="could not find all requested columns in header"
-        ):
-            add_conditional_tsv_column.add_conditional_column(
-                input_file,
-                chk_col="x",
-                match_val="0",
-                if_col="missing_col",
-                else_col="z",
-                new_hdr="selected",
-                out_path=output_file,
-            )
-
-    def test_else_column_doesnt_exist(self, tsv_factory):
-        """Test that missing else column raises ValueError."""
-        input_file = tsv_factory.create_plain(
-            "input.tsv", "x\ty\tz\n0\t100\t200\n"
-        )
-        output_file = tsv_factory.get_path("output.tsv")
-
-        with pytest.raises(
-            ValueError, match="could not find all requested columns in header"
-        ):
-            add_conditional_tsv_column.add_conditional_column(
-                input_file,
-                chk_col="x",
-                match_val="0",
-                if_col="y",
-                else_col="not_there",
-                new_hdr="selected",
-                out_path=output_file,
-            )
+        with pytest.raises(ValueError, match="could not find all requested columns in header"):
+            add_conditional_tsv_column.add_conditional_column(**kwargs)
