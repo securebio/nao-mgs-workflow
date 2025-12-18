@@ -23,32 +23,32 @@ nextflow_process {
         then {
             // Should run without failures
             assert process.success
-            
+
             // Output and input files should exist
             assert path(process.out.output[0][1]).exists()
             assert path(process.out.input[0][1]).exists()
-            
+
             // Parse the gzipped output TSV and expected output TSV
             def output_tsv = path(process.out.output[0][1]).csv(sep: "\t", decompress: true)
             def expected_tsv = path("${projectDir}/test-data/toy-data/count-reads-per-clade/expected-output.tsv").csv(sep: "\t")
-            
+
             // Should have same number of rows as expected
             assert output_tsv.rowCount == expected_tsv.rowCount
-            
+
             // Check header columns match
             assert output_tsv.columnNames == expected_tsv.columnNames
-            
+
             // Convert both to maps for easier comparison
             def output_rows_by_taxid = [:]
             output_tsv.rows.each { row ->
                 output_rows_by_taxid[row.taxid] = row
             }
-            
+
             def expected_rows_by_taxid = [:]
             expected_tsv.rows.each { row ->
                 expected_rows_by_taxid[row.taxid] = row
             }
-            
+
             // Compare each row
             expected_rows_by_taxid.each { taxid, expected_row ->
                 def output_row = output_rows_by_taxid[taxid]
@@ -60,184 +60,6 @@ nextflow_process {
                 assert output_row.reads_clade_total == expected_row.reads_clade_total
                 assert output_row.reads_clade_dedup == expected_row.reads_clade_dedup
             }
-        }
-    }
-
-    test("Should handle header-only reads file") {
-        tag "expect_success"
-        tag "edge_case" 
-        tag "empty_input"
-        when {
-            params {}
-            process {
-                '''
-                input[0] = Channel.of("test")
-                    | combine(Channel.of("${projectDir}/test-data/toy-data/count-reads-per-clade/test-reads-header-only.tsv"))
-                input[1] = "${projectDir}/test-data/toy-data/count-reads-per-clade/test-taxonomy.tsv"
-                '''
-            }
-        }
-        then {
-            // Should run without failures
-            assert process.success
-            
-            // Output and input files should exist
-            assert path(process.out.output[0][1]).exists()
-            assert path(process.out.input[0][1]).exists()
-            
-            // Check gzipped file content directly since CSV parser struggles with header-only files
-            def gzFile = new java.util.zip.GZIPInputStream(path(process.out.output[0][1]).newInputStream())
-            def output_content = gzFile.text.trim()
-            gzFile.close()
-            def lines = output_content.split('\n')
-            
-            // Should have exactly 1 line (header only)
-            assert lines.size() == 1
-            
-            // Check header is correct
-            def header = lines[0]
-            def expected_header = "group\ttaxid\tparent_taxid\treads_direct_total\treads_direct_dedup\treads_clade_total\treads_clade_dedup"
-            assert header == expected_header
-        }
-    }
-
-    test("Should fail when reads file missing seq_id column") {
-        tag "expect_failed"
-        tag "missing_columns"
-        when {
-            params {}
-            process {
-                '''
-                input[0] = Channel.of("test")
-                    | combine(Channel.of("${projectDir}/test-data/toy-data/count-reads-per-clade/test-reads-missing-seq-id.tsv"))
-                input[1] = "${projectDir}/test-data/toy-data/count-reads-per-clade/test-taxonomy.tsv"
-                '''
-            }
-        }
-        then {
-            assert process.failed
-            assert process.exitStatus == 1
-            assert process.errorReport.contains("Error: Missing required column 'seq_id' in reads file: test-reads-missing-seq-id.tsv")
-        }
-    }
-
-    test("Should fail when reads file missing prim_align_dup_exemplar column") {
-        tag "expect_failed"
-        tag "missing_columns"
-        when {
-            params {}
-            process {
-                '''
-                input[0] = Channel.of("test")
-                    | combine(Channel.of("${projectDir}/test-data/toy-data/count-reads-per-clade/test-reads-missing-exemplar.tsv"))
-                input[1] = "${projectDir}/test-data/toy-data/count-reads-per-clade/test-taxonomy.tsv"
-                '''
-            }
-        }
-        then {
-            assert process.failed
-            assert process.exitStatus == 1
-            assert process.errorReport.contains("Error: Missing required column 'prim_align_dup_exemplar' in reads file: test-reads-missing-exemplar.tsv")
-        }
-    }
-
-    test("Should fail when reads file missing aligner_taxid_lca column") {
-        tag "expect_failed"
-        tag "missing_columns"
-        when {
-            params {}
-            process {
-                '''
-                input[0] = Channel.of("test")
-                    | combine(Channel.of("${projectDir}/test-data/toy-data/count-reads-per-clade/test-reads-missing-taxid.tsv"))
-                input[1] = "${projectDir}/test-data/toy-data/count-reads-per-clade/test-taxonomy.tsv"
-                '''
-            }
-        }
-        then {
-            assert process.failed
-            assert process.exitStatus == 1
-            assert process.errorReport.contains("Error: Missing required column 'aligner_taxid_lca' in reads file: test-reads-missing-taxid.tsv")
-        }
-    }
-
-    test("Should fail when taxonomy file missing taxid column") {
-        tag "expect_failed"
-        tag "missing_columns"
-        when {
-            params {}
-            process {
-                '''
-                input[0] = Channel.of("test")
-                    | combine(Channel.of("${projectDir}/test-data/toy-data/count-reads-per-clade/test-reads.tsv"))
-                input[1] = "${projectDir}/test-data/toy-data/count-reads-per-clade/test-taxonomy-missing-taxid.tsv"
-                '''
-            }
-        }
-        then {
-            assert process.failed
-            assert process.exitStatus == 1
-            assert process.errorReport.contains("Error: Missing required column 'taxid' in taxonomy file: test-taxonomy-missing-taxid.tsv")
-        }
-    }
-
-    test("Should fail when taxonomy file missing parent_taxid column") {
-        tag "expect_failed"
-        tag "missing_columns"
-        when {
-            params {}
-            process {
-                '''
-                input[0] = Channel.of("test")
-                    | combine(Channel.of("${projectDir}/test-data/toy-data/count-reads-per-clade/test-reads.tsv"))
-                input[1] = "${projectDir}/test-data/toy-data/count-reads-per-clade/test-taxonomy-missing-parent.tsv"
-                '''
-            }
-        }
-        then {
-            assert process.failed
-            assert process.exitStatus == 1
-            assert process.errorReport.contains("Error: Missing required column 'parent_taxid' in taxonomy file: test-taxonomy-missing-parent.tsv")
-        }
-    }
-
-    test("Should fail when reads file missing group column") {
-        tag "expect_failed"
-        tag "missing_columns"
-        when {
-            params {}
-            process {
-                '''
-                input[0] = Channel.of("test")
-                    | combine(Channel.of("${projectDir}/test-data/toy-data/count-reads-per-clade/test-reads-missing-group.tsv"))
-                input[1] = "${projectDir}/test-data/toy-data/count-reads-per-clade/test-taxonomy.tsv"
-                '''
-            }
-        }
-        then {
-            assert process.failed
-            assert process.exitStatus == 1
-            assert process.errorReport.contains("Error: Missing required column 'group' in reads file: test-reads-missing-group.tsv")
-        }
-    }
-
-    test("Should fail when group doesn't match reads file") {
-        tag "expect_failed"
-        tag "group_mismatch"
-        when {
-            params {}
-            process {
-                '''
-                input[0] = Channel.of("wrong_group")
-                    | combine(Channel.of("${projectDir}/test-data/toy-data/count-reads-per-clade/test-reads.tsv"))
-                input[1] = "${projectDir}/test-data/toy-data/count-reads-per-clade/test-taxonomy.tsv"
-                '''
-            }
-        }
-        then {
-            assert process.failed
-            assert process.exitStatus == 1
-            assert process.errorReport.contains("Expected group 'wrong_group', found 'test'")
         }
     }
 

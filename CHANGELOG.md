@@ -1,6 +1,7 @@
 # v3.0.1.8-dev
 - Pruning and streamlining testing for easier releases:
     - Moved ADD_CONDITIONAL_TSV_COLUMN to Python and implemented pytest tests.
+    - Moved COUNT_READS_PER_CLADE tests to Pytest.
     - Deleted extraneous tests for BOWTIE2 and CONCATENATE_FILES.
     - Created toy data file for BRACKEN and BLAST tests to reduce setup burden.
     - Added plaintext handling to BLAST process to help with testing

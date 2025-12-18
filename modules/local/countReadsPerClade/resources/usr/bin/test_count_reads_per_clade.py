@@ -8,7 +8,9 @@ from count_reads_per_clade import (
     get_clade_counts,
     is_duplicate,
     parents,
+    read_tsv,
     roots,
+    write_output_tsv,
 )
 
 
@@ -433,3 +435,100 @@ def test_get_clade_counts():
     node_counts = Counter({1: 1})
     result = get_clade_counts(node_counts, tree)
     assert isinstance(result, Counter)
+
+
+# Integration tests covering nf-test scenarios
+
+
+@pytest.mark.parametrize(
+    "missing_column",
+    ["seq_id", "prim_align_dup_exemplar", "aligner_taxid_lca", "group"],
+)
+def test_missing_reads_columns(tsv_factory, missing_column):
+    """Test that missing required columns in reads file raise KeyError."""
+    # Start with all required columns and appropriate test values
+    all_columns = ["seq_id", "prim_align_dup_exemplar", "aligner_taxid_lca", "group"]
+    test_values = ["read1", "read1", "100", "test"]
+
+    # Remove the missing column and its corresponding value
+    columns = []
+    values = []
+    for col, val in zip(all_columns, test_values):
+        if col != missing_column:
+            columns.append(col)
+            values.append(val)
+
+    # Create reads file with missing column
+    reads_content = "\t".join(columns) + "\n" + "\t".join(values) + "\n"
+    reads_file = tsv_factory.create_plain("reads.tsv", reads_content)
+
+    # Should raise KeyError for missing column
+    with pytest.raises(KeyError, match=missing_column):
+        count_direct_reads_per_taxid(read_tsv(reads_file), "test")
+
+
+@pytest.mark.parametrize(
+    "missing_column",
+    ["taxid", "parent_taxid"],
+)
+def test_missing_taxonomy_columns(tsv_factory, missing_column):
+    """Test that missing required columns in taxonomy file raise KeyError."""
+    # Start with all required columns
+    all_columns = ["taxid", "parent_taxid"]
+    # Remove the missing column
+    columns = [col for col in all_columns if col != missing_column]
+
+    # Create taxonomy file with missing column
+    tax_content = "\t".join(columns) + "\n100\n"
+    tax_file = tsv_factory.create_plain("taxonomy.tsv", tax_content)
+
+    # Should raise KeyError for missing column
+    with pytest.raises(KeyError, match=missing_column):
+        build_tree(read_tsv(tax_file))
+
+
+def test_group_mismatch_error(tsv_factory):
+    """Test that group mismatch raises AssertionError."""
+    # Create reads file with group "test"
+    reads_content = "seq_id\tprim_align_dup_exemplar\taligner_taxid_lca\tgroup\nread1\tread1\t100\ttest\n"
+    reads_file = tsv_factory.create_plain("reads.tsv", reads_content)
+
+    # Try to process with wrong group
+    with pytest.raises(AssertionError, match="Expected group 'wrong_group', found 'test'"):
+        count_direct_reads_per_taxid(read_tsv(reads_file), "wrong_group")
+
+
+def test_header_only_reads_file(tsv_factory):
+    """Test that header-only reads file produces header-only output."""
+    # Create header-only reads file
+    reads_content = "seq_id\tprim_align_dup_exemplar\taligner_taxid_lca\tgroup\n"
+    reads_file = tsv_factory.create_plain("reads.tsv", reads_content)
+
+    # Create valid taxonomy file
+    tax_content = "taxid\tparent_taxid\n100\t1\n"
+    tax_file = tsv_factory.create_plain("taxonomy.tsv", tax_content)
+
+    # Process the files
+    direct_total, direct_dedup = count_direct_reads_per_taxid(
+        read_tsv(reads_file), "test"
+    )
+    tree = build_tree(read_tsv(tax_file))
+    clade_total = get_clade_counts(direct_total, tree)
+    clade_dedup = get_clade_counts(direct_dedup, tree)
+
+    # Write output
+    output_file = tsv_factory.get_path("output.tsv.gz")
+    write_output_tsv(
+        output_file, "test", tree, direct_total, direct_dedup, clade_total, clade_dedup
+    )
+
+    # Read and verify output is header-only
+    output_content = tsv_factory.read_gzip(output_file).strip()
+    lines = output_content.split('\n')
+
+    # Should have exactly 1 line (header only)
+    assert len(lines) == 1
+
+    # Verify header
+    expected_header = "group\ttaxid\tparent_taxid\treads_direct_total\treads_direct_dedup\treads_clade_total\treads_clade_dedup"
+    assert lines[0] == expected_header
