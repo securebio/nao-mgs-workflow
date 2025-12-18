@@ -7,38 +7,6 @@ nextflow_process {
     tag "module"
     tag "bracken"
 
-    setup {
-        run("LOAD_SAMPLESHEET") {
-            script "subworkflows/local/loadSampleSheet/main.nf"
-            process {
-                """
-                input[0] = "${projectDir}/test-data/single-end-samplesheet.csv"
-                input[1] = "illumina"
-                input[2] = true
-                """
-            }
-        }
-        run("COPY_FILE") {
-            script "modules/local/copyFile/main.nf"
-            process {
-                """
-                input[0] = LOAD_SAMPLESHEET.out.samplesheet
-                input[1] = "input.fastq.gz"
-                """
-            }
-        }
-        run("KRAKEN") {
-            script "modules/local/kraken/main.nf"
-            process {
-                '''
-                input[0] = COPY_FILE.out
-                input[1] = "${params.ref_dir}/results/kraken_db"
-                input[2] = params.db_download_timeout
-                '''
-            }
-        }
-    }
-
     test("Should run without failures on correct input (success test only)") {
         tag "single_end"
         tag "expect_success"
@@ -46,7 +14,8 @@ nextflow_process {
             params {}
             process {
                 '''
-                input[0] = KRAKEN.out.report
+                input[0] = Channel.of("test")
+                    | combine(Channel.of("${projectDir}/test-data/toy-data/bracken/kraken.report"))
                 input[1] = "${params.ref_dir}/results/kraken_db"
                 input[2] = "F"
                 input[3] = "5"

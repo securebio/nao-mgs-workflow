@@ -1,5 +1,8 @@
 # v3.0.1.8-dev
-- Moved ADD_CONDITIONAL_TSV_COLUMN to Python and implemented pytest tests.
+- Pruning and streamlining testing for easier releases:
+    - Moved ADD_CONDITIONAL_TSV_COLUMN to Python and implemented pytest tests.
+    - Deleted extraneous BOWTIE2 tests.
+    - Created toy data file for BRACKEN test to reduce setup burden.
 
 # v3.0.1.7
 - Clarified testing documentation in `docs/developer.md`.
