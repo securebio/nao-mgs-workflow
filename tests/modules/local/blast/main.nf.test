@@ -32,7 +32,7 @@ nextflow_process {
             // Should run without failures
             assert process.success
             // Output TSV should have expected format
-            def tsv_out = path(process.out.output[0][1]).csv(sep: "\t", header: false)
+            def tsv_out = path(process.out.output[0][1]).csv(sep: "\t", header: false, decompress: true)
             def cols_exp = "qseqid sseqid sgi staxid qlen evalue bitscore qcovs length pident mismatch gapopen sstrand qstart qend sstart send"
             assert tsv_out.columnCount == cols_exp.split(" ").size()
             // Compare to input FASTA

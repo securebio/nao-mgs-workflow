@@ -11,7 +11,7 @@ process BLASTN {
         tuple val(sample), path("${sample}_in.fasta.gz"), emit: input
     script:
         def extractCmd = fasta.toString().endsWith(".gz") ? "zcat" : "cat"
-        def outputCmd = fasta.toString().endsWith(".gz") ? "gzip" : "cat"
+        def inputCmd = fasta.toString().endsWith(".gz") ? "ln -s ${fasta} ${sample}_in.fasta.gz" : "gzip -c ${fasta} > ${sample}_in.fasta.gz"
         """
         # Download BLAST database if not already present
         download-db.sh "${blast_db_dir}" "${params_map.db_download_timeout}"
@@ -22,8 +22,8 @@ process BLASTN {
         fmt="6 qseqid sseqid sgi staxid qlen evalue bitscore qcovs length pident mismatch gapopen sstrand qstart qend sstart send"
         # Run BLAST
         ${extractCmd} ${fasta} | blastn \${io} \${par} -outfmt "\${fmt}" \\
-            | ${outputCmd} > ${sample}_hits.blast.gz
+            | gzip > ${sample}_hits.blast.gz
         # Link input to output for testing
-        ln -s ${fasta} ${sample}_in.fasta.gz
+        ${inputCmd}
         """
 }
