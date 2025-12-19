@@ -189,12 +189,12 @@ def generate_dockerfile(spec_filename: str) -> str:
     dockerfile = f"""
 FROM mambaorg/micromamba:1.5.10
 USER root
+RUN apt-get update && apt-get install -y procps && rm -rf /var/lib/apt/lists/*
 RUN mkdir -p /opt/conda
 COPY {spec_filename} /tmp/environment.yml
 RUN micromamba install -y -n base -f /tmp/environment.yml && \\
     micromamba clean --all --yes
 ENV PATH=/opt/conda/bin:$PATH
-USER mambauser
 """
     return dockerfile
 
