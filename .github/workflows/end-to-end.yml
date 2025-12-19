@@ -9,13 +9,26 @@ on:
 
 jobs:
   test-index:
-    runs-on: ubuntu-latest-4-cores
+    runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
       AWS_ACCESS_KEY_ID: ${{secrets.NAO_TESTING_ACCESS_KEY }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.NAO_TESTING_SECRET_ACCESS_KEY }}
 
     steps:
+      - name: Maximize build space
+        run: |
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /opt/hostedtoolcache/CodeQL
+          sudo docker image prune --all --force
+          sudo docker builder prune --all --force
+          sudo apt-get remove -y '^aspnetcore-.*' '^dotnet-.*' '^llvm-.*' 'php.*' '^mongodb-.*' '^mysql-.*' azure-cli google-chrome-stable firefox powershell mono-devel libgl1-mesa-dri
+          sudo apt-get autoremove -y
+          sudo apt-get clean
+          df -h
+
       - name: Configure AWS CLI
         run: |
           aws configure set aws_access_key_id ${{ secrets.NAO_TESTING_ACCESS_KEY }}
