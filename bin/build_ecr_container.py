@@ -98,25 +98,51 @@ def compute_spec_hash(spec: dict[str, Any]) -> str:
 # ECR SETUP FUNCTIONS #
 #######################
 
+def check_image_exists(
+    ecr_client: Any,
+    repo_name: str,
+    image_tag: str,
+) -> bool:
+    """
+    Check if an image with the given tag already exists in ECR.
+    Args:
+        ecr_client: ECR client
+        repo_name (str): Repository name
+        image_tag (str): Image tag to check (just the tag part, not the full URI)
+    Returns:
+        bool: True if image exists, False otherwise
+    """
+    try:
+        ecr_client.describe_images(
+            repositoryName=repo_name,
+            imageIds=[{"imageTag": image_tag}]
+        )
+        return True
+    except ClientError as e:
+        if e.response["Error"]["Code"] == "ImageNotFoundException":
+            return False
+        # For other errors (like RepositoryNotFoundException), let it propagate
+        raise
+
 def setup_ecr_repository(
     label: str,
     prefix: str,
-    region: str,
     spec_hash: str,
-) -> tuple[str, str, str]:
+) -> tuple[str, str, str, bool]:
     """
-    Ensure ECR repository exists and return image tags.
+    Ensure ECR Public repository exists and return image tags.
     Args:
         label (str): Container label
         prefix (str): Repository name prefix
-        region (str): AWS region
         spec_hash (str): Hash of the spec for tagging
     Returns:
-        tuple[str, str, str]: Tuple of (image_tag, image_tag_latest, registry_url)
+        tuple[str, str, str, bool]: Tuple of (image_tag, image_tag_latest, registry_url, image_exists)
     """
-    logger.info("Setting up ECR repository")
+    logger.info("Setting up ECR Public repository")
     repo_name = f"{prefix}/{label.lower()}"
-    ecr_client = boto3.client("ecr", region_name=region)
+    ecr_client = boto3.client("ecr-public", region_name="us-east-1")
+
+    # Check if repository exists, create if it doesn't
     try:
         response = ecr_client.describe_repositories(repositoryNames=[repo_name])
         repo = response["repositories"][0]
@@ -126,9 +152,7 @@ def setup_ecr_repository(
             logger.info("ECR repository does not exist; creating")
             try:
                 response = ecr_client.create_repository(
-                    repositoryName=repo_name,
-                    imageScanningConfiguration={"scanOnPush": True},
-                    encryptionConfiguration={"encryptionType": "AES256"},
+                    repositoryName=repo_name
                 )
                 repo = response["repository"]
                 logger.info(f"Created repository: {repo['repositoryUri']}")
@@ -138,11 +162,18 @@ def setup_ecr_repository(
         else:
             logger.error(f"Error checking repository: {e}")
             raise
+
     repo_uri = repo["repositoryUri"]
     registry_url = repo_uri.split("/")[0]
     image_tag = f"{repo_uri}:{spec_hash}"
     image_tag_latest = f"{repo_uri}:latest"
-    return image_tag, image_tag_latest, registry_url
+
+    # Check if image with this hash already exists
+    image_exists = check_image_exists(ecr_client, repo_name, spec_hash)
+    if image_exists:
+        logger.info(f"Image with tag {spec_hash} already exists in ECR")
+
+    return image_tag, image_tag_latest, registry_url, image_exists
 
 ################################
 # LOCAL DOCKER BUILD FUNCTIONS #
@@ -237,16 +268,15 @@ def build_container(spec_file: Path,
 # ECR PUSH FUNCTIONS #
 ######################
 
-def docker_login_ecr(registry_url: str, region: str) -> None:
-    """Authenticate Docker with ECR.
+def docker_login_ecr(registry_url: str) -> None:
+    """Authenticate Docker with ECR Public.
     Args:
         registry_url (str): ECR registry URL
-        region (str): AWS region
     """
     try:
-        # Get login password
+        # Get login password for ECR Public
         result = subprocess.run(
-            ["aws", "ecr", "get-login-password", "--region", region],
+            ["aws", "ecr-public", "get-login-password", "--region", "us-east-1"],
             capture_output=True,
             text=True,
             check=True,
@@ -260,9 +290,10 @@ def docker_login_ecr(registry_url: str, region: str) -> None:
             check=True,
             capture_output=True,
         )
-        logger.info("Authenticated with ECR")
+        logger.info("Authenticated with ECR Public")
     except subprocess.CalledProcessError as e:
-        msg = f"Error authenticating with ECR: {e}"
+        error_output = e.stderr.strip() if e.stderr else e.stdout.strip() if e.stdout else "No error output"
+        msg = f"Error authenticating with ECR Public: {error_output}"
         logger.error(msg)
         raise RuntimeError(msg)
 
@@ -287,22 +318,20 @@ def push_to_ecr(
     image_tag: str,
     image_tag_latest: str,
     registry_url: str,
-    region: str,
 ) -> None:
     """
-    Authenticate with ECR and push container images.
+    Authenticate with ECR Public and push container images.
     Args:
         image_tag (str): Primary image tag (with hash)
         image_tag_latest (str): Latest tag for the image
         registry_url (str): ECR registry URL
-        region (str): AWS region
     """
     try:
-        docker_login_ecr(registry_url, region)
+        docker_login_ecr(registry_url)
         push_docker_image(image_tag)
         push_docker_image(image_tag_latest)
     except Exception as e:
-        msg = f"Error pushing to ECR: {e}"
+        msg = f"Error pushing to ECR Public: {e}"
         logger.error(msg)
         raise RuntimeError(msg)
 
@@ -314,12 +343,14 @@ def update_containers_config(
     config_file: Path,
     label: str,
     container_url: str,
-) -> None:
+) -> bool:
     """Update the container URL for a specific label in containers.config.
     Args:
         config_file (Path): Path to containers.config file
         label (str): Container label
         container_url (str): Container URL
+    Returns:
+        bool: True if config was updated, False if already up to date
     """
     logger.info("Updating config")
     content = config_file.read_text()
@@ -332,11 +363,13 @@ def update_containers_config(
     old_url = match.group(0).split('"')[1]
     if old_url == container_url:
         logger.info("Config already up to date")
+        return False
     new_content = re.sub(
         pattern, rf"\g<1>{container_url}\g<2>", content, flags=re.DOTALL
     )
     config_file.write_text(new_content)
     logger.info(f"Updated {config_file}")
+    return True
 
 ######################
 # MAIN ORCHESTRATION #
@@ -344,15 +377,13 @@ def update_containers_config(
 
 def build_and_push_container(
     spec_file: Path,
-    region: str,
     prefix: str,
     config_file: Path,
 ) -> None:
     """
-    Build a container from a spec file and push to ECR.
+    Build a container from a spec file and push to ECR Public.
     Args:
         spec_file (Path): Path to container spec YAML file
-        region (str): AWS region for ECR
         prefix (str): Repository name prefix
         config_file (Path): Path to containers.config file
     """
@@ -366,15 +397,22 @@ def build_and_push_container(
         label = spec["label"]
         spec_hash = compute_spec_hash(spec)
         logger.info(f"Container: {label}, Hash: {spec_hash}")
-        image_tag, image_tag_latest, registry_url = setup_ecr_repository(
-            label, prefix, region, spec_hash
+        image_tag, image_tag_latest, registry_url, image_exists = setup_ecr_repository(
+            label, prefix, spec_hash
         )
-        build_container(spec_file, image_tag, image_tag_latest)
-        push_to_ecr(image_tag, image_tag_latest, registry_url, region)
-        update_containers_config(config_file, label, image_tag)
-        logger.info(f"Successfully built and pushed: {label}")
-        logger.info(f"  Image: {image_tag}")
-        logger.info(f"  Config updated: {config_file}")
+
+        if image_exists:
+            logger.info(f"Image already exists in ECR, skipping build")
+            # Still update config in case it's outdated
+            config_updated = update_containers_config(config_file, label, image_tag)
+            if not config_updated:
+                logger.info("Nothing to do - image exists and config is up to date")
+        else:
+            build_container(spec_file, image_tag, image_tag_latest)
+            push_to_ecr(image_tag, image_tag_latest, registry_url)
+            update_containers_config(config_file, label, image_tag)
+            logger.info(f"Successfully built and pushed: {label}")
+            logger.info(f"  Image: {image_tag}")
     except Exception as e:
         logger.error(f"Error: {e}")
         raise
@@ -387,11 +425,6 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=DESC)
     parser.add_argument(
         "spec_file", type=Path, help="Path to container spec YAML file"
-    )
-    parser.add_argument(
-        "--region",
-        default="us-east-1",
-        help="AWS region for ECR (default: us-east-1)",
     )
     parser.add_argument(
         "--prefix",
@@ -409,7 +442,7 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
-    build_and_push_container(args.spec_file, args.region, args.prefix, args.config)
+    build_and_push_container(args.spec_file, args.prefix, args.config)
 
 if __name__ == "__main__":
     main()
