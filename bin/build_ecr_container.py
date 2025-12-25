@@ -238,9 +238,10 @@ def tag_docker_image(source_tag: str, target_tag: str) -> None:
             capture_output=True,
         )
     except subprocess.CalledProcessError as e:
-        msg = f"Failed to tag {target_tag}: {e}"
+        error_details = e.stderr.decode().strip() if e.stderr else str(e)
+        msg = f"Failed to tag {target_tag}: {error_details}"
         logger.error(msg)
-        raise RuntimeError(msg)
+        raise RuntimeError(msg) from e
 
 def build_container(spec_file: Path,
     image_tag: str,
