@@ -223,7 +223,7 @@ def build_docker_image_from_spec(
     except subprocess.CalledProcessError as e:
         msg = f"Error building Docker image: {e}"
         logger.error(msg)
-        raise RuntimeError(msg)
+        raise RuntimeError(msg) from e
 
 def tag_docker_image(source_tag: str, target_tag: str) -> None:
     """Tag a Docker image with an additional tag.
