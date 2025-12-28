@@ -1,0 +1,26 @@
+{
+    "mode": "index",
+    "base_dir": "s3://nao-testing/index-test-tiny",
+    "taxonomy_url": "https://nao-testing.s3.amazonaws.com/test-databases/tiny-taxonomy.zip",
+    "virus_host_db_url": "https://www.genome.jp/ftp/db/virushostdb/virushostdb.daily.tsv",
+    "human_url": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nucleotide&id=NC_000021.9&rettype=fasta&seq_start=10000000&seq_stop=10001000",
+    "genome_urls": {
+        "phage": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nucleotide&id=NC_000866.4&rettype=fasta&seq_start=1&seq_stop=1000"
+    },
+    "ssu_url": "https://www.ebi.ac.uk/ena/browser/api/fasta/AB065370.1",
+    "lsu_url": "https://www.ebi.ac.uk/ena/browser/api/fasta/AB065370.1",
+    "host_taxon_db": "/home/ec2-user/mgs-workflow/ref/host-taxa.tsv",
+    "contaminants": "/home/ec2-user/mgs-workflow/test-data/toy-data/empty_file.txt",
+    "adapters": "/home/ec2-user/mgs-workflow/ref/adapters.fasta",
+    "genome_patterns_exclude": "/home/ec2-user/mgs-workflow/ref/hv_patterns_exclude.txt",
+    "kraken_db": "https://nao-testing.s3.amazonaws.com/test-databases/tiny-kraken2-db.tar.gz",
+    "blast_db_name": "https://nao-testing.s3.amazonaws.com/test-databases/blast_db.tar.gz",
+    "ncbi_viral_params": "--section refseq --assembly-level complete --taxids 2847173",
+    "virus_taxid": "10239",
+    "viral_taxids_exclude_hard": "2731619 2732413 2732411",
+    "host_taxa_screen": "vertebrate human",
+    "kraken_memory": "",
+    "classify_dedup_subset": "",
+    "trace_timestamp": "2025-12-28_19-24-21",
+    "db_download_timeout": 1200
+}
