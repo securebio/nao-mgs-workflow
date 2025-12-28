@@ -290,13 +290,15 @@ def create_archives(kraken_dir: Path,
     Returns:
         tuple[Path, Path, Path]: Tuple of (kraken_tarball_path, blast_tarball_path, taxonomy_zip_path)
     """
+    # Create Kraken tarball with files at root level (no wrapper directory)
     kraken_tarball = kraken_dir.with_suffix('.tar.gz')
     subprocess.run([
         "tar", "-czf", str(kraken_tarball),
-        "-C", str(kraken_dir.parent),
-        kraken_dir.name
+        "-C", str(kraken_dir),
+        "."
     ], check=True)
 
+    # Create BLAST tarball with directory wrapper (BLAST expects -db path/to/db_prefix)
     blast_tarball = blast_dir.with_suffix('.tar.gz')
     subprocess.run([
         "tar", "-czf", str(blast_tarball),
@@ -414,7 +416,7 @@ def run_build(args: argparse.Namespace) -> None:
     with tempfile.TemporaryDirectory() as tmpdir:
         tmpdir = Path(tmpdir)
         kraken_dir = tmpdir / "tiny-kraken2-db"
-        blast_dir = tmpdir / "tiny-blast-db"
+        blast_dir = tmpdir / "blast_db"
         kraken_dir.mkdir(parents=True, exist_ok=True)
         blast_dir.mkdir(parents=True, exist_ok=True)
 
