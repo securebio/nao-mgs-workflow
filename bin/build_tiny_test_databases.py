@@ -199,35 +199,118 @@ def build_kraken_database(
         capture_output=True
     )
 
+##################
+# BLAST DATABASE #
+##################
+
+def build_blast_database(output_dir: Path, sequences: list[tuple[str, str | Path, int]]) -> None:
+    """
+    Build tiny BLAST database using provided sequences.
+    Args:
+        output_dir (Path): BLAST database output directory
+        sequences (list[tuple[str, str | Path, int]]): List of (filename, source, taxid) tuples
+    """
+    # Collect all sequences into a single FASTA file and track seq_id -> taxid mapping
+    combined_fasta = output_dir / "sequences.fasta"
+    taxid_map_file = output_dir / "taxid_map.txt"
+
+    seq_id_to_taxid = {}
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmpdir = Path(tmpdir)
+
+        with open(combined_fasta, 'w') as outfile:
+            for filename, source, taxid in sequences:
+                # Download or load the sequence
+                if isinstance(source, Path):
+                    with open_by_suffix(source) as f:
+                        content = f.read()
+                else:
+                    content = download_sequence(source)
+
+                # Process FASTA content to simplify headers for BLAST
+                lines = content.split('\n')
+                for i, line in enumerate(lines):
+                    if line.startswith('>'):
+                        # Extract simple sequence ID (e.g., "NC_000021.9" from ">NC_000021.9 ...")
+                        # or "AB065370.1" from ">ENA|AB065370|AB065370.1 ..."
+                        parts = line[1:].split()
+                        if parts:
+                            # Handle different formats
+                            seq_id = parts[0]
+                            if '|' in seq_id:
+                                # For formats like "ENA|AB065370|AB065370.1", take the last part
+                                seq_id = seq_id.split('|')[-1]
+                            seq_id_to_taxid[seq_id] = taxid
+                            # Write simplified header
+                            lines[i] = f'>{seq_id}'
+
+                # Write modified content to combined file
+                outfile.write('\n'.join(lines))
+                if not content.endswith('\n'):
+                    outfile.write('\n')
+
+    # Write taxid mapping file for BLAST
+    with open(taxid_map_file, 'w') as mapfile:
+        for seq_id, taxid in seq_id_to_taxid.items():
+            mapfile.write(f"{seq_id}\t{taxid}\n")
+
+    # Build BLAST database with taxonomy information
+    logger.info("Building BLAST database...")
+    result = subprocess.run([
+        "makeblastdb",
+        "-in", str(combined_fasta),
+        "-dbtype", "nucl",
+        "-out", str(output_dir / "tiny_blast_db"),
+        "-title", "Tiny BLAST Database",
+        "-parse_seqids",
+        "-taxid_map", str(taxid_map_file)
+    ], capture_output=True, text=True)
+
+    if result.returncode != 0:
+        logger.error("Failed to build BLAST database")
+        logger.error(result.stderr)
+        raise subprocess.CalledProcessError(result.returncode, result.args)
+
 ####################
 # ARCHIVE CREATION #
 ####################
 
-def create_archives(output_dir: Path,
+def create_archives(kraken_dir: Path,
+                    blast_dir: Path,
                     taxonomy_nodes: Path,
-                    taxonomy_names: Path) -> tuple[Path, Path]:
+                    taxonomy_names: Path) -> tuple[Path, Path, Path]:
     """
     Create tarball and zip archives for distribution.
     Args:
-        output_dir (Path): Kraken2 database directory
+        kraken_dir (Path): Kraken2 database directory
+        blast_dir (Path): BLAST database directory
         taxonomy_nodes (Path): Path to tiny-taxonomy-nodes.dmp
         taxonomy_names (Path): Path to tiny-taxonomy-names.dmp
     Returns:
-        tuple[Path, Path]: Tuple of (kraken_tarball_path, taxonomy_zip_path)
+        tuple[Path, Path, Path]: Tuple of (kraken_tarball_path, blast_tarball_path, taxonomy_zip_path)
     """
-    kraken_tarball = output_dir.with_suffix('.tar.gz')
+    kraken_tarball = kraken_dir.with_suffix('.tar.gz')
     subprocess.run([
         "tar", "-czf", str(kraken_tarball),
-        "-C", str(output_dir.parent),
-        output_dir.name
+        "-C", str(kraken_dir.parent),
+        kraken_dir.name
     ], check=True)
-    taxonomy_zip = output_dir.parent / "tiny-taxonomy.zip"
+
+    blast_tarball = blast_dir.with_suffix('.tar.gz')
+    subprocess.run([
+        "tar", "-czf", str(blast_tarball),
+        "-C", str(blast_dir.parent),
+        blast_dir.name
+    ], check=True)
+
+    taxonomy_zip = kraken_dir.parent / "tiny-taxonomy.zip"
     subprocess.run([
         "zip", "-q", "-j", str(taxonomy_zip),
         str(taxonomy_nodes),
         str(taxonomy_names)
     ], check=True)
-    return kraken_tarball, taxonomy_zip
+    return kraken_tarball, blast_tarball, taxonomy_zip
 
 ################
 # S3 UPLOAD    #
@@ -329,27 +412,39 @@ def run_build(args: argparse.Namespace) -> None:
 
     # Build in temporary directory
     with tempfile.TemporaryDirectory() as tmpdir:
-        output_dir = Path(tmpdir) / "tiny-kraken2-db"
-        output_dir.mkdir(parents=True, exist_ok=True)
-        logger.info("Step 1: Setting up minimal taxonomy...")
-        setup_kraken_taxonomy(output_dir, args.taxonomy_nodes, args.taxonomy_names)
-        logger.info("Step 2: Building Kraken2 database...")
+        tmpdir = Path(tmpdir)
+        kraken_dir = tmpdir / "tiny-kraken2-db"
+        blast_dir = tmpdir / "tiny-blast-db"
+        kraken_dir.mkdir(parents=True, exist_ok=True)
+        blast_dir.mkdir(parents=True, exist_ok=True)
+
         sequences = [
             ("human_chr21.fna", urls['human'], 9606),
             ("t4_phage.fna", urls['phage'], 10665),
             ("bsubtilis_rrna.fna", urls['ssu'], 1423),
             ("hdv.fna", args.viral_genome, 12475),
         ]
-        build_kraken_database(output_dir, sequences)
-        logger.info("Step 3: Creating distribution archives...")
-        kraken_tarball, taxonomy_zip = create_archives(
-            output_dir, args.taxonomy_nodes, args.taxonomy_names
+
+        logger.info("Step 1: Setting up minimal taxonomy...")
+        setup_kraken_taxonomy(kraken_dir, args.taxonomy_nodes, args.taxonomy_names)
+        logger.info("Step 2: Building Kraken2 database...")
+        build_kraken_database(kraken_dir, sequences)
+        logger.info("Step 3: Building BLAST database...")
+        build_blast_database(blast_dir, sequences)
+        logger.info("Step 4: Creating distribution archives...")
+        kraken_tarball, blast_tarball, taxonomy_zip = create_archives(
+            kraken_dir, blast_dir, args.taxonomy_nodes, args.taxonomy_names
         )
-        logger.info("Step 4: Uploading to S3...")
+        logger.info("Step 5: Uploading to S3...")
         kraken_url = upload_to_s3(
             kraken_tarball,
             args.s3_bucket,
             f"{args.s3_prefix}/{kraken_tarball.name}"
+        )
+        blast_url = upload_to_s3(
+            blast_tarball,
+            args.s3_bucket,
+            f"{args.s3_prefix}/{blast_tarball.name}"
         )
         taxonomy_url = upload_to_s3(
             taxonomy_zip,
