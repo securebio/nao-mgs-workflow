@@ -19,6 +19,7 @@ import shutil
 from datetime import datetime, timezone
 from pathlib import Path
 from urllib.request import urlopen
+import boto3
 
 ###########
 # LOGGING #
@@ -227,6 +228,27 @@ def create_archives(output_dir: Path,
     ], check=True)
     return kraken_tarball, taxonomy_zip
 
+################
+# S3 UPLOAD    #
+################
+
+def upload_to_s3(local_file: Path, bucket: str, key: str) -> str:
+    """
+    Upload a file to S3.
+    Args:
+        local_file (Path): Path to local file to upload
+        bucket (str): S3 bucket name
+        key (str): S3 object key
+    Returns:
+        str: HTTPS URL for the uploaded file
+    """
+    s3_client = boto3.client("s3")
+    logger.info(f"Uploading {local_file.name} to s3://{bucket}/{key}...")
+    s3_client.upload_file(str(local_file), bucket, key)
+    https_url = f"https://{bucket}.s3.amazonaws.com/{key}"
+    logger.info(f"  Uploaded to {https_url}")
+    return https_url
+
 ########
 # MAIN #
 ########
@@ -242,11 +264,6 @@ def parse_arguments() -> argparse.Namespace:
     repo_root = script_dir.parent
     default_taxonomy_dir = repo_root / "test-data" / "tiny-index"
     parser.add_argument(
-        "output_dir",
-        type=Path,
-        help="Output directory for Kraken2 database"
-    )
-    parser.add_argument(
         "viral_genome",
         type=Path,
         help="Path to viral genome FASTA (gzipped)"
@@ -254,8 +271,8 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument(
         "--config-file",
         type=Path,
+        default=repo_root / "configs" / "index-for-run-test.config",
         help="Path to config file containing reference URLs (default: configs/index-for-run-test.config)"
-        default = repo_root / "configs" / "index-for-run-test.config"
     )
     parser.add_argument(
         "--taxonomy-nodes",
@@ -268,6 +285,18 @@ def parse_arguments() -> argparse.Namespace:
         type=Path,
         default=default_taxonomy_dir / "names.dmp",
         help=f"Path to taxonomy names.dmp file (default: {default_taxonomy_dir / 'names.dmp'})"
+    )
+    parser.add_argument(
+        "--s3-bucket",
+        type=str,
+        default="nao-testing",
+        help="S3 bucket for upload (default: nao-testing)"
+    )
+    parser.add_argument(
+        "--s3-prefix",
+        type=str,
+        default="test-databases",
+        help="S3 key prefix for uploaded files (default: test-databases)"
     )
     return parser.parse_args()
 
@@ -288,31 +317,43 @@ def validate_inputs(args: argparse.Namespace) -> None:
         if not file_path.exists():
             raise FileNotFoundError(f"{file_desc} not found: {file_path}")
 
-def run_build(args: argparse.Namespace) -> tuple[Path, Path]:
+def run_build(args: argparse.Namespace) -> None:
     """
     Execute the database build process.
     Args:
         args (argparse.Namespace): Parsed command-line arguments
-    Returns:
-        tuple[Path, Path]: Paths to generated kraken tarball and taxonomy zip
     """
     urls = parse_config(args.config_file)
-    args.output_dir.mkdir(parents=True, exist_ok=True)
-    logger.info("Step 1: Setting up minimal taxonomy...")
-    setup_kraken_taxonomy(args.output_dir, args.taxonomy_nodes, args.taxonomy_names)
-    logger.info("Step 2: Building Kraken2 database...")
-    sequences = [
-        ("human_chr21.fna", urls['human'], 9606),
-        ("t4_phage.fna", urls['phage'], 10665),
-        ("bsubtilis_rrna.fna", urls['ssu'], 1423),
-        ("hdv.fna", args.viral_genome, 12475),
-    ]
-    build_kraken_database(args.output_dir, sequences)
-    logger.info("Step 3: Creating distribution archives...")
-    kraken_tarball, taxonomy_zip = create_archives(
-        args.output_dir, args.taxonomy_nodes, args.taxonomy_names
-    )
-    return kraken_tarball, taxonomy_zip
+
+    # Build in temporary directory
+    with tempfile.TemporaryDirectory() as tmpdir:
+        output_dir = Path(tmpdir) / "tiny-kraken2-db"
+        output_dir.mkdir(parents=True, exist_ok=True)
+        logger.info("Step 1: Setting up minimal taxonomy...")
+        setup_kraken_taxonomy(output_dir, args.taxonomy_nodes, args.taxonomy_names)
+        logger.info("Step 2: Building Kraken2 database...")
+        sequences = [
+            ("human_chr21.fna", urls['human'], 9606),
+            ("t4_phage.fna", urls['phage'], 10665),
+            ("bsubtilis_rrna.fna", urls['ssu'], 1423),
+            ("hdv.fna", args.viral_genome, 12475),
+        ]
+        build_kraken_database(output_dir, sequences)
+        logger.info("Step 3: Creating distribution archives...")
+        kraken_tarball, taxonomy_zip = create_archives(
+            output_dir, args.taxonomy_nodes, args.taxonomy_names
+        )
+        logger.info("Step 4: Uploading to S3...")
+        kraken_url = upload_to_s3(
+            kraken_tarball,
+            args.s3_bucket,
+            f"{args.s3_prefix}/{kraken_tarball.name}"
+        )
+        taxonomy_url = upload_to_s3(
+            taxonomy_zip,
+            args.s3_bucket,
+            f"{args.s3_prefix}/{taxonomy_zip.name}"
+        )
 
 def main():
     """Main entry point for the script."""
