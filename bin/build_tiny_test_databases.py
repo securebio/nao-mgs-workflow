@@ -111,22 +111,23 @@ def download_sequence(url: str) -> str:
     with urlopen(url) as response:
         return response.read().decode('utf-8')
 
-def open_by_suffix(filename: str, mode: str = "r"):
+def open_by_suffix(filename: str | Path, mode: str = "r"):
     """
     Parse the suffix of a filename to determine the right open method
     to use, then open the file. Can handle .gz, .bz2, and uncompressed files.
     Args:
-        filename (str): Path to file to open
+        filename (str | Path): Path to file to open
         mode (str): File open mode (default "r")
     Returns:
         File handle appropriate for the file compression type
     """
-    if filename.endswith(".gz"):
-        return gzip.open(filename, mode + "t")
-    elif filename.endswith(".bz2"):
-        return bz2.BZ2File(filename, mode)
+    filename_str = str(filename)
+    if filename_str.endswith(".gz"):
+        return gzip.open(filename_str, mode + "t")
+    elif filename_str.endswith(".bz2"):
+        return bz2.BZ2File(filename_str, mode)
     else:
-        return open(filename, mode)
+        return open(filename_str, mode)
 
 def add_sequence_to_kraken_library(fasta_path: Path, db_path: Path) -> None:
     """
@@ -264,9 +265,10 @@ def parse_arguments() -> argparse.Namespace:
     repo_root = script_dir.parent
     default_taxonomy_dir = repo_root / "test-data" / "tiny-index"
     parser.add_argument(
-        "viral_genome",
+        "--viral-genome",
         type=Path,
-        help="Path to viral genome FASTA (gzipped)"
+        help="Path to HDV genome FASTA file (default: test-data/tiny-index/hdv.fasta)",
+        default=default_taxonomy_dir / "hdv.fasta"
     )
     parser.add_argument(
         "--config-file",
