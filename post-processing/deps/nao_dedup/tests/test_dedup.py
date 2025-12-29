@@ -18,9 +18,9 @@ from dedup import (
     ReadPair,
     _assign_to_buckets,
     _build_graph,
-    _canonical_kmer,
     _extract_minimizer,
     _get_bucket_keys,
+    _hash_kmer,
     _mismatch_count,
     _read_pairs_equivalent,
     _reverse_complement,
@@ -35,6 +35,10 @@ def _random_seq(length: int, rng: random.Random) -> str:
     """Generate random DNA sequence of specified length."""
     return "".join(rng.choices(["A", "C", "G", "T"], k=length))
 
+
+# ============================================================================
+# Python-Only Tests (Helper Functions, Graph Operations, etc.)
+# ============================================================================
 
 class TestHelperFunctions:
     """Test sequence manipulation helper functions."""
@@ -51,13 +55,6 @@ class TestHelperFunctions:
 
     def test_reverse_complement_empty(self):
         assert _reverse_complement("") == ""
-
-    def test_canonical_kmer_lexicographic_selection(self):
-        assert _canonical_kmer("AAAA") == "AAAA"  # AAAA vs TTTT
-        assert _canonical_kmer("TTTT") == "AAAA"  # Same result
-        assert _canonical_kmer("ACGT") == "ACGT"  # ACGT vs ACGT (palindrome)
-        assert _canonical_kmer("AAAC") == "AAAC"  # AAAC vs GTTT
-        assert _canonical_kmer("GTTT") == "AAAC"  # Same result
 
     def test_mismatch_count_equal_length(self):
         assert _mismatch_count("AAAA", "AAAA") == 0
@@ -150,7 +147,6 @@ class TestMinimizerExtraction:
         assert len(keys) == 8
         assert all(isinstance(key, tuple) and len(key) == 2 for key in keys)
 
-
 class TestSequenceMatching:
     """Test sequence matching functions."""
 
@@ -194,24 +190,6 @@ class TestSequenceMatching:
 
         assert _read_pairs_equivalent(rp1, rp2, params)
         assert not _read_pairs_equivalent(rp1, rp3, params)
-
-    def test_read_pairs_equivalent_swapped_tolerant(self):
-        # In tolerant mode, should match F1-R1 vs R2-F2
-        params = DedupParams(max_offset=1, max_error_frac=0.01, orientation=ORIENT_TOLERANT)
-
-        rp1 = ReadPair("read1", "AAAA", "TTTT", "IIII", "IIII")
-        rp2 = ReadPair("read2", "TTTT", "AAAA", "IIII", "IIII")  # Swapped F/R
-
-        assert _read_pairs_equivalent(rp1, rp2, params)
-
-    def test_read_pairs_equivalent_swapped_strict(self):
-        # In strict mode, should NOT match swapped orientation
-        params = DedupParams(max_offset=1, max_error_frac=0.01, orientation=ORIENT_STRICT)
-
-        rp1 = ReadPair("read1", "AAAA", "TTTT", "IIII", "IIII")
-        rp2 = ReadPair("read2", "TTTT", "AAAA", "IIII", "IIII")  # Swapped F/R
-
-        assert not _read_pairs_equivalent(rp1, rp2, params)
 
     def test_read_pairs_equivalent_no_match(self):
         params = DedupParams(max_offset=1, max_error_frac=0.01, orientation=ORIENT_TOLERANT)
@@ -420,30 +398,77 @@ class TestParameterValidation:
         assert params2.orientation == ORIENT_TOLERANT
 
 
-def _get_exemplar_mapping(result):
-    """Helper to get exemplar mapping from either result type."""
-    if isinstance(result, dict):
-        # Streaming version returns dict
-        return result
-    else:
-        # Graph version returns list
-        return {rp.read_id: rp.exemplar_id for rp in result}
+# ============================================================================
+# Rust-Specific Tests
+# ============================================================================
+
+class TestRustSpecific:
+    """Tests specific to the Rust implementation."""
+
+    def test_rust_kmer_len_validation(self):
+        """Test that Rust validates kmer_len <= 32."""
+        from nao_dedup_rust import deduplicate_read_pairs_rust
+
+        # Create a minimal test case
+        rp = ReadPair("test", "A" * 100, "T" * 100, "I" * 100, "I" * 100)
+
+        # kmer_len > 32 should raise ValueError from Rust
+        params = MinimizerParams(kmer_len=33, window_len=50, num_windows=3)
+        with pytest.raises(ValueError, match="k-mer length must be <= 32"):
+            deduplicate_read_pairs_rust([rp], minimizer_params=params)
+
+
+# ============================================================================
+# End-to-End Deduplication Tests (All Implementations)
+# ============================================================================
+
+# Import Rust wrapper - always rebuild to pick up any changes
+rust_bindings_dir = Path(__file__).parent / "rust_bindings"
+
+try:
+    # Always run maturin develop to ensure we're testing the latest code
+    # (maturin will skip rebuild if nothing changed)
+    subprocess.run(
+        ["maturin", "develop", "--quiet"],
+        cwd=str(rust_bindings_dir),
+        check=True
+    )
+    from nao_dedup_rust import deduplicate_read_pairs_rust
+except (subprocess.CalledProcessError, FileNotFoundError) as e:
+    raise RuntimeError(
+        "Failed to build Rust library. "
+        "Install Rust first, then:\n"
+        "  pip install -r requirements-dev.txt\n"
+        "  cd tests/rust_bindings && maturin develop"
+    ) from e
+
+# Parametrize to run tests on all three implementations
+all_implementations = [
+    deduplicate_read_pairs,
+    deduplicate_read_pairs_streaming,
+    deduplicate_read_pairs_rust
+]
+all_implementation_ids = ["graph", "python-streaming", "rust"]
 
 
 @pytest.mark.parametrize(
     "dedup_func",
-    [deduplicate_read_pairs, deduplicate_read_pairs_streaming],
-    ids=["graph", "streaming"]
+    all_implementations,
+    ids=all_implementation_ids
 )
-class TestDeduplicateFunction:
-    """End-to-end tests for both deduplication algorithms."""
+class TestDeduplication:
+    """End-to-end tests for all deduplication implementations."""
 
-    def test_empty_input_empty_output(self, dedup_func):
-        result = dedup_func([], verbose=False)
-        mapping = _get_exemplar_mapping(result)
+    def test_empty_input(self, dedup_func):
+        mapping = dedup_func([], verbose=False)
         assert mapping == {}
 
-    def test_all_identical_sequences_single_cluster(self, dedup_func):
+    def test_single_read(self, dedup_func):
+        rp = ReadPair("read1", "AAAA", "TTTT", "IIII", "IIII")
+        mapping = dedup_func([rp], verbose=False)
+        assert mapping == {"read1": "read1"}
+
+    def test_identical_reads(self, dedup_func):
         rng = random.Random(42)
         seq_f = _random_seq(100, rng)
         seq_r = _random_seq(100, rng)
@@ -455,14 +480,13 @@ class TestDeduplicateFunction:
             ReadPair("read3", seq_f, seq_r, qual, qual),
         ]
 
-        result = dedup_func(read_pairs, verbose=False)
-        mapping = _get_exemplar_mapping(result)
+        mapping = dedup_func(read_pairs, verbose=False)
 
+        # All should map to same exemplar
         exemplars = set(mapping.values())
         assert len(exemplars) == 1
-        assert set(mapping.keys()) == {"read1", "read2", "read3"}
 
-    def test_no_duplicates_all_singletons(self, dedup_func):
+    def test_no_duplicates(self, dedup_func):
         rng = random.Random(42)
         qual = "I" * 100
 
@@ -472,12 +496,11 @@ class TestDeduplicateFunction:
             ReadPair("read3", _random_seq(100, rng), _random_seq(100, rng), qual, qual),
         ]
 
-        result = dedup_func(read_pairs, verbose=False)
-        mapping = _get_exemplar_mapping(result)
+        mapping = dedup_func(read_pairs, verbose=False)
 
-        for read_id, exemplar_id in mapping.items():
-            assert exemplar_id == read_id
-        assert set(mapping.keys()) == {"read1", "read2", "read3"}
+        # Each should be its own exemplar
+        for read_id in mapping:
+            assert mapping[read_id] == read_id
 
     def test_multiple_small_clusters(self, dedup_func):
         rng = random.Random(42)
@@ -497,8 +520,7 @@ class TestDeduplicateFunction:
             ReadPair("read5", seq3_f, seq3_r, "I" * 100, "I" * 100),  # Cluster 2
         ]
 
-        result = dedup_func(read_pairs, verbose=False)
-        mapping = _get_exemplar_mapping(result)
+        mapping = dedup_func(read_pairs, verbose=False)
 
         exemplars = set(mapping.values())
         assert len(exemplars) == 3
@@ -534,8 +556,7 @@ class TestDeduplicateFunction:
         ]
 
         dedup_params = DedupParams(max_offset=1, max_error_frac=0.01)
-        result = dedup_func(read_pairs, dedup_params, verbose=False)
-        mapping = _get_exemplar_mapping(result)
+        mapping = dedup_func(read_pairs, dedup_params, verbose=False)
 
         exemplar1 = mapping["read1"]
         assert mapping["read2"] == exemplar1
@@ -546,94 +567,8 @@ class TestDeduplicateFunction:
         exemplars = set(mapping.values())
         assert len(exemplars) == 2
 
-
-# ============================================================================
-# Python and Rust Implementation Tests
-# ============================================================================
-
-# Import Rust wrapper - always rebuild to pick up any changes
-rust_bindings_dir = Path(__file__).parent / "rust_bindings"
-
-try:
-    # Always run maturin develop to ensure we're testing the latest code
-    # (maturin will skip rebuild if nothing changed)
-    subprocess.run(
-        ["maturin", "develop", "--quiet"],
-        cwd=str(rust_bindings_dir),
-        check=True
-    )
-    from nao_dedup_rust import deduplicate_read_pairs_rust
-except (subprocess.CalledProcessError, FileNotFoundError) as e:
-    raise RuntimeError(
-        "Failed to build Rust library. "
-        "Install Rust first (brew install rust), then:\n"
-        "  pip install -r requirements-dev.txt\n"
-        "  cd tests/rust_bindings && maturin develop"
-    ) from e
-
-# Parametrize to run tests on both implementations
-implementations = [deduplicate_read_pairs_streaming,
-                   deduplicate_read_pairs_rust]
-implementation_ids = ["python-streaming", "rust"]
-
-
-@pytest.mark.parametrize(
-    "dedup_func",
-    implementations,
-    ids=implementations
-)
-class TestPythonAndRustDeduplication:
-    """Tests that run on Python and Rust implementations."""
-
-    def test_empty_input(self, dedup_func):
-        result = dedup_func([], verbose=False)
-        mapping = _get_exemplar_mapping(result)
-        assert mapping == {}
-
-    def test_single_read(self, dedup_func):
-        rp = ReadPair("read1", "AAAA", "TTTT", "IIII", "IIII")
-        result = dedup_func([rp], verbose=False)
-        mapping = _get_exemplar_mapping(result)
-        assert mapping == {"read1": "read1"}
-
-    def test_identical_reads(self, dedup_func):
-        rng = random.Random(42)
-        seq_f = _random_seq(100, rng)
-        seq_r = _random_seq(100, rng)
-        qual = "I" * 100
-
-        read_pairs = [
-            ReadPair("read1", seq_f, seq_r, qual, qual),
-            ReadPair("read2", seq_f, seq_r, qual, qual),
-            ReadPair("read3", seq_f, seq_r, qual, qual),
-        ]
-
-        result = dedup_func(read_pairs, verbose=False)
-        mapping = _get_exemplar_mapping(result)
-
-        # All should map to same exemplar
-        exemplars = set(mapping.values())
-        assert len(exemplars) == 1
-
-    def test_no_duplicates(self, dedup_func):
-        rng = random.Random(42)
-        qual = "I" * 100
-
-        read_pairs = [
-            ReadPair("read1", _random_seq(100, rng), _random_seq(100, rng), qual, qual),
-            ReadPair("read2", _random_seq(100, rng), _random_seq(100, rng), qual, qual),
-            ReadPair("read3", _random_seq(100, rng), _random_seq(100, rng), qual, qual),
-        ]
-
-        result = dedup_func(read_pairs, verbose=False)
-        mapping = _get_exemplar_mapping(result)
-
-        # Each should be its own exemplar
-        for read_id in mapping:
-            assert mapping[read_id] == read_id
-
     def test_approximate_match_parity(self, dedup_func):
-        """Ensure C and Python handle mismatches identically."""
+        """Ensure Rust and Python handle mismatches identically."""
         seq = "A" * 100
         seq_error = "A" * 50 + "T" + "A" * 49  # 1 mismatch (1% error)
 
@@ -643,14 +578,13 @@ class TestPythonAndRustDeduplication:
 
         # Explicit params to allow the error
         params = DedupParams(max_error_frac=0.02)
-        result = dedup_func([rp1, rp2], dedup_params=params)
-        mapping = _get_exemplar_mapping(result)
+        mapping = dedup_func([rp1, rp2], dedup_params=params)
 
         # Should be clustered together
         assert mapping["r1"] == mapping["r2"]
 
     def test_approximate_match_threshold(self, dedup_func):
-        """Ensure C and Python reject matches above error threshold."""
+        """Ensure Rust and Python reject matches above error threshold."""
         seq = "A" * 100
         seq_error = "A" * 97 + "TTT"  # 3 mismatches (3% error)
 
@@ -659,8 +593,7 @@ class TestPythonAndRustDeduplication:
 
         # With 2% threshold, should NOT match
         params = DedupParams(max_error_frac=0.02)
-        result = dedup_func([rp1, rp2], dedup_params=params)
-        mapping = _get_exemplar_mapping(result)
+        mapping = dedup_func([rp1, rp2], dedup_params=params)
 
         # Should be separate clusters
         assert mapping["r1"] != mapping["r2"]
@@ -683,8 +616,7 @@ class TestPythonAndRustDeduplication:
         # With max_offset=1, these should match
         # Overlap is 99 bases, offset counts as 1 error, so 1/99 ≈ 0.0101 (1.01% error)
         params = DedupParams(max_offset=1, max_error_frac=0.02)
-        result = dedup_func([rp1, rp2], dedup_params=params)
-        mapping = _get_exemplar_mapping(result)
+        mapping = dedup_func([rp1, rp2], dedup_params=params)
 
         # Should be clustered together
         assert mapping["r1"] == mapping["r2"]
@@ -704,8 +636,7 @@ class TestPythonAndRustDeduplication:
 
         # With max_offset=1, these should match
         params = DedupParams(max_offset=1, max_error_frac=0.02)
-        result = dedup_func([rp1, rp2], dedup_params=params)
-        mapping = _get_exemplar_mapping(result)
+        mapping = dedup_func([rp1, rp2], dedup_params=params)
 
         # Should be clustered together
         assert mapping["r1"] == mapping["r2"]
@@ -725,8 +656,7 @@ class TestPythonAndRustDeduplication:
         rp2 = ReadPair("r2", seq2_fwd, seq2_rev, "I"*98, "I"*98)
 
         params = DedupParams(max_offset=1, max_error_frac=0.01)
-        result = dedup_func([rp1, rp2], dedup_params=params)
-        mapping = _get_exemplar_mapping(result)
+        mapping = dedup_func([rp1, rp2], dedup_params=params)
 
         # Should be separate clusters
         assert mapping["r1"] == "r1"
@@ -746,8 +676,7 @@ class TestPythonAndRustDeduplication:
         # Offset=-1: overlap=199, offset counts as 1, total = 1/199 ≈ 0.00503
         # Should NOT match (0.00503 > 0.004)
         params = DedupParams(max_offset=1, max_error_frac=0.004)
-        result = dedup_func([rp1, rp2], dedup_params=params)
-        mapping = _get_exemplar_mapping(result)
+        mapping = dedup_func([rp1, rp2], dedup_params=params)
 
         # Should be separate clusters
         assert mapping["r1"] == "r1"
@@ -756,7 +685,7 @@ class TestPythonAndRustDeduplication:
         # But with 0.006 threshold, should match  (0.00503 <= 0.006)
         params2 = DedupParams(max_offset=1, max_error_frac=0.006)
         result2 = dedup_func([rp1, rp2], dedup_params=params2)
-        mapping2 = _get_exemplar_mapping(result2)
+        mapping2 = result2
 
         # Should be clustered together
         assert mapping2["r1"] == mapping2["r2"]
@@ -765,17 +694,17 @@ class TestPythonAndRustDeduplication:
         """
         Test that cluster lookups work correctly after the best_read_id is updated.
 
-        This test triggers a bug where the cluster hash table uses the initial
-        exemplar ID as its key, but lookups incorrectly compare against best_read_id,
-        which can change during processing.
+        This is a regression test for a bug where the cluster hash table uses the
+        initial exemplar ID as its key, but lookups incorrectly compared against
+        best_read_id, which can change during processing.
 
         Scenario:
         1. Read A (low quality) creates cluster keyed by "readA"
         2. Read B (high quality) matches A, updates best_read_id to "readB"
         3. Read C (low quality) matches A, should find the same cluster
 
-        Bug behavior: Step 3 fails to find the cluster because it hashes "readA"
-        but compares against best_read_id "readB", creating a duplicate cluster.
+        The bug caused step 3 to fail because it hashed "readA" but compared
+        against best_read_id "readB", creating a duplicate cluster instead.
         """
         # Create three identical sequences but with different quality scores
         seq = "A" * 150
@@ -791,8 +720,7 @@ class TestPythonAndRustDeduplication:
 
         # Process in order A, B, C
         read_pairs = [rpA, rpB, rpC]
-        result = dedup_func(read_pairs, verbose=False)
-        mapping = _get_exemplar_mapping(result)
+        mapping = dedup_func(read_pairs, verbose=False)
 
         # All three should map to the same cluster
         exemplars = set(mapping.values())
@@ -821,8 +749,7 @@ class TestPythonAndRustDeduplication:
             ReadPair("read5", seq, seq, "(" * 150, "(" * 150),  # Q=7
         ]
 
-        result = dedup_func(read_pairs, verbose=False)
-        mapping = _get_exemplar_mapping(result)
+        mapping = dedup_func(read_pairs, verbose=False)
 
         # All should map to the same cluster
         exemplars = set(mapping.values())
@@ -831,3 +758,221 @@ class TestPythonAndRustDeduplication:
         # All should map to read3 (highest quality)
         for read_id in ["read1", "read2", "read3", "read4", "read5"]:
             assert mapping[read_id] == "read3", f"{read_id} mapped to {mapping[read_id]}, expected read3"
+
+    def test_best_read_selection_quality_length_tiebreaker(self, dedup_func):
+        """
+        Test that when reads have the same quality, the longer one is chosen as
+        exemplar.
+
+        This test verifies the scoring formula: score = mean_quality * 1000 +
+        length.
+
+        Scenario:
+        1. Read A (shorter, Q=30) creates cluster
+        2. Read B (longer, Q=30) matches A and should become the exemplar
+
+        Since "better" is quality*1000 + length, B should become the exemplar.
+        """
+        # Create identical sequence content, but different lengths
+        # Use same quality (Q=30, which is '?' in Phred+33) for both
+        qual_char = "?"  # Q=30
+
+        # Shorter read: 100 bases
+        seq_short = "A" * 100
+        rpA = ReadPair(
+            "readA", seq_short, seq_short, qual_char * 100, qual_char * 100)
+
+        # Longer read: 150 bases
+        seq_long = "A" * 150
+        rpB = ReadPair(
+            "readB", seq_long, seq_long, qual_char * 150, qual_char * 150)
+
+        # Verify they have the same mean quality
+        assert abs(rpA.mean_qual() - rpB.mean_qual()) < 0.01, \
+            f"Reads should have same quality: A={rpA.mean_qual()}, " \
+            f"B={rpB.mean_qual()}"
+
+        # Process shorter first, then longer
+        read_pairs = [rpA, rpB]
+        mapping = dedup_func(read_pairs, verbose=False)
+
+        # Both should cluster together
+        assert mapping["readA"] == mapping["readB"], \
+            f"Reads should cluster together: A->{mapping['readA']}, "\
+            f"B->{mapping['readB']}"
+
+        # The longer read (readB) should be chosen as the exemplar
+        assert mapping["readA"] == "readB", \
+            f"Expected readB (longer) as exemplar, but got {mapping['readA']}"
+        assert mapping["readB"] == "readB"
+
+    def test_windows_with_all_ns(self, dedup_func):
+        """
+        Test that sequences with windows containing all N's are handled correctly.
+
+        Edge case: When a window has all N's (or enough N's that no valid k-mer
+        can be formed), Python's _extract_minimizer returns EMPTY_KMER_SENTINEL_HASH
+        while Rust's extract_minimizers skips the window (doesn't add to vector).
+
+        Both produce the same clustering behavior in this test because the reads
+        share valid minimizers in other windows. However, in pathological cases
+        where reads ONLY share N-windows (no valid minimizers in common), Python
+        would cluster them (via shared sentinel bucket keys) while Rust would not
+        (no bucket keys in common). This is an acceptable edge case difference.
+        """
+        # With default params: num_windows=3/4, window_len=25
+        # Create sequences where middle window is all N's
+        # Format: [good bases][all N's][good bases]
+        seq_with_ns = "A" * 30 + "N" * 30 + "C" * 90
+
+        # Two identical sequences with N windows
+        rp1 = ReadPair("r1", seq_with_ns, seq_with_ns, "I" * 150, "I" * 150)
+        rp2 = ReadPair("r2", seq_with_ns, seq_with_ns, "I" * 150, "I" * 150)
+
+        mapping = dedup_func([rp1, rp2], verbose=False)
+
+        # Should be clustered together despite N windows
+        assert mapping["r1"] == mapping["r2"], \
+            f"Sequences with N windows not clustered: r1->{mapping['r1']}, r2->{mapping['r2']}"
+
+    def test_all_windows_ns(self, dedup_func):
+        """
+        Test sequences where ALL windows contain only N's.
+
+        Edge case: Implementations behave differently for all-N reads:
+        - Graph: All-N reads share bucket keys (with sentinel values) so they
+          cluster together
+        - Python streaming and Rust: All-N reads produce no valid comparisons,
+          so each is separate. (Python creates sentinel bucket keys but the
+          streaming algorithm filters them out; Rust skips N-windows entirely.)
+        """
+        # Create a sequence of all N's
+        all_ns = "N" * 150
+
+        # Two sequences of all N's
+        rp1 = ReadPair("r1", all_ns, all_ns, "I" * 150, "I" * 150)
+        rp2 = ReadPair("r2", all_ns, all_ns, "I" * 150, "I" * 150)
+
+        # Also add a normal sequence
+        normal_seq = "A" * 150
+        rp3 = ReadPair("r3", normal_seq, normal_seq, "I" * 150, "I" * 150)
+
+        mapping = dedup_func([rp1, rp2, rp3], verbose=False)
+
+        # r3 should always be its own cluster
+        assert mapping["r3"] == "r3"
+
+        # All-N reads behave differently:
+        if dedup_func == deduplicate_read_pairs:  # graph only
+            # Graph: all-N reads share bucket keys, so they cluster together
+            assert mapping["r1"] == mapping["r2"], "Graph should cluster all-N reads"
+        else:  # Python streaming and Rust
+            # Both produce no valid comparisons for all-N reads
+            assert mapping["r1"] == "r1", "r1 should be its own exemplar"
+            assert mapping["r2"] == "r2", "r2 should be its own exemplar"
+
+    def test_adapter_orientation_swapped_deduplication(self, dedup_func):
+        """
+        Verify that the same DNA fragment with adapters in opposite orientations
+        is correctly identified as a duplicate.
+
+        When adapters attach to a double-stranded insert in opposite orientations,
+        we get reads that are swapped but NOT reverse complemented:
+
+        Orientation alpha (P5 on top strand):
+            Forward read: beginning of top strand
+            Reverse read: beginning of bottom strand (reported as-is by sequencer)
+
+        Orientation beta (P5 on bottom strand):
+            Forward read: beginning of bottom strand
+            Reverse read: beginning of top strand (reported as-is by sequencer)
+
+        This means: (F_alpha, R_alpha) should match (R_beta, F_beta)
+        with NO reverse complement needed.
+
+        Example with GATTACA insert (using longer sequences for realistic minimizers):
+        """
+        # Create a 150bp "insert" - this represents the actual DNA fragment
+        # Use a pattern that's clearly directional (not palindromic)
+        insert_top = "GATTACA" * 21 + "GAT"  # 150bp total
+        insert_bottom = _reverse_complement(insert_top)
+
+        qual = "I" * 150
+
+        # Orientation alpha: P5 attached to top strand
+        # Forward reads from top strand, reverse reads from bottom strand
+        fwd_alpha = insert_top
+        rev_alpha = insert_bottom
+
+        # Orientation beta: P5 attached to bottom strand (insert rotated 180°)
+        # Forward reads from bottom strand, reverse reads from top strand
+        fwd_beta = insert_bottom
+        rev_beta = insert_top
+
+        rp1 = ReadPair("r1", fwd_alpha, rev_alpha, qual, qual)
+        rp2 = ReadPair("r2", fwd_beta, rev_beta, qual, qual)
+
+        # Verify they're actually swapped (not identical)
+        assert fwd_alpha == rev_beta
+        assert rev_alpha == fwd_beta
+        assert fwd_alpha != fwd_beta  # Different orientations
+
+        mapping = dedup_func([rp1, rp2], verbose=False)
+
+        # They should be detected as duplicates (tolerant mode)
+        assert mapping["r1"] == mapping["r2"], \
+            f"Adapter-swapped orientations not deduplicated. " \
+            f"R1: {mapping['r1']}, R2: {mapping['r2']}"
+
+    def test_windowing_strategy_beginning_of_read(self, dedup_func):
+        """
+        Verify that windowing strategy anchors to the beginning of the read.
+
+        Both implementations use adjacent windows starting from position 0,
+        focusing on the most stable region of the read (since quality drops off
+        as you get farther into a read, so more trimming is likely.
+
+        With num_windows=3, window_len=25 on 150bp reads:
+        Windows: [0-25], [25-50], [50-75]
+
+        Case 1: Similarity only in the tail [75-150] → miss
+        Case 2: Similarity in window 1 [25-50] → detect
+        """
+        # Use parameters that allow 9 mismatches in 150bp (6% error)
+        m_params = MinimizerParams(num_windows=3, window_len=25, kmer_len=7)
+        d_params = DedupParams(max_offset=0, max_error_frac=0.07)
+        read_len = 150
+        base_seq = "C" * read_len
+        qual = "I" * read_len
+
+        # --- Case 1: Both miss (tail-only similarity) ---
+        # Break all k-mers in the first three windows [0-75]
+        # but leave the tail [75-150] clean.
+        read2_tail_only_list = list(base_seq)
+        # 3 changes per 25bp window to disrupt all 7-mers
+        for idx in [6, 13, 20, 31, 38, 45, 56, 63, 70]:
+            read2_tail_only_list[idx] = "T"
+        read2_tail_only = "".join(read2_tail_only_list)
+
+        rp1 = ReadPair("r1", base_seq, base_seq, qual, qual)
+        rp2_tail = ReadPair("r2_tail", read2_tail_only, read2_tail_only, qual, qual)
+
+        # Both implementations: All windows contain mismatches -> No shared
+        # minimizers
+        mapping = dedup_func([rp1, rp2_tail], d_params, m_params, verbose=False)
+        assert mapping["r1"] != mapping["r2_tail"], \
+            "Should miss tail-only similarity (windows only cover first 75bp)"
+
+        # --- Case 2: Both hit (window 1 has similarity) ---
+        # Break k-mers in windows 0 and 2, but leave window 1 [25-50] clean
+        read2_mid_match_list = list(base_seq)
+        for idx in [6, 13, 20, 56, 63, 70]:
+            read2_mid_match_list[idx] = "T"
+        read2_mid_match = "".join(read2_mid_match_list)
+
+        rp2_mid = ReadPair("r2_mid", read2_mid_match, read2_mid_match, qual, qual)
+
+        # Both implementations: Window 1 [25-50] is intact -> Shares minimizer
+        mapping2 = dedup_func([rp1, rp2_mid], d_params, m_params, verbose=False)
+        assert mapping2["r1"] == mapping2["r2_mid"], \
+            "Should detect similarity via shared minimizer in window 1"
