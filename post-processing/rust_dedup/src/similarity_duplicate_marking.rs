@@ -140,7 +140,7 @@ fn main() {
             n_prim_align_dups += 1;
         } else {
             // Alignment-unique - query for similarity exemplar
-            let sim_exemplar = ctx.get_final_exemplar(seq_id);
+            let sim_exemplar = ctx.get_cluster_id(seq_id);
             writeln!(writer, "{}\t{}", line.trim_end(), sim_exemplar).expect("Failed to write line");
 
             if sim_exemplar != seq_id {
