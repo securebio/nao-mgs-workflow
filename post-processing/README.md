@@ -36,9 +36,7 @@ prim_align_dup_exemplar, and then group by that record's sim_dup_exemplar.
 
 Testing on 69,652 read pairs, 33,920 of which were unique per alignment-based
 duplication identification, 22,683 were unique after additionally considering
-similarity. With the new approach, we only need to run similarity deduplication
-on the 33,920 alignment-unique reads instead of all 69,652, making it much
-faster and more memory-efficient.
+similarity.
 
 #### Building
 
