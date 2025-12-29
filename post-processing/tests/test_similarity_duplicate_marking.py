@@ -6,6 +6,7 @@ import sys
 import gzip
 import pytest
 import subprocess
+import shutil
 from pathlib import Path
 
 
@@ -16,13 +17,12 @@ def binary_path():
     rust_dir = base_dir / "rust_dedup"
     bin_path = rust_dir / "target" / "release" / "similarity_duplicate_marking"
 
-    # Find cargo binary (use full path since it may not be in PATH)
-    cargo_bin = Path.home() / ".cargo" / "bin" / "cargo"
-    if not cargo_bin.exists():
-        pytest.fail(f"Cargo not found at {cargo_bin}. Please install Rust.")
+    # Check if cargo is available in PATH
+    if shutil.which("cargo") is None:
+        pytest.fail("Cargo not found in PATH. Please install Rust.")
 
     # Run cargo build --release in the rust_dedup directory
-    cmd = [str(cargo_bin), "build", "--release"]
+    cmd = ["cargo", "build", "--release"]
 
     print(f"\n[Compiling Rust binary at {rust_dir} ...]")
     subprocess.run(cmd, cwd=str(rust_dir), check=True)
