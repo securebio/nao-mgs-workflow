@@ -36,14 +36,8 @@ jobs:
         with:
           version: "25.10.0"
 
-      - name: Install nf-test
-        run: |
-          for i in 1 2 3 4 5; do
-            echo "Attempt $i to download nf-test..."
-            wget -qO- https://get.nf-test.com | bash && break
-            sleep 10
-          done
-          sudo mv nf-test /usr/local/bin/
+      - name: Setup nf-test
+        uses: nf-core/setup-nf-test@v1
 
       - name: Run index workflow
         run: nf-test test --tag index --verbose
@@ -76,14 +70,8 @@ jobs:
         with:
           version: "25.10.0"
 
-      - name: Install nf-test
-        run: |
-          for i in 1 2 3 4 5; do
-            echo "Attempt $i to download nf-test..."
-            wget -qO- https://get.nf-test.com | bash && break
-            sleep 10
-          done
-          sudo mv nf-test /usr/local/bin/
+      - name: Setup nf-test
+        uses: nf-core/setup-nf-test@v1
 
       - name: Run run workflow (short read)
         run: nf-test test --tag run_output --verbose --ci
@@ -116,14 +104,8 @@ jobs:
         with:
           version: "25.10.0"
 
-      - name: Install nf-test
-        run: |
-          for i in 1 2 3 4 5; do
-            echo "Attempt $i to download nf-test..."
-            wget -qO- https://get.nf-test.com | bash && break
-            sleep 10
-          done
-          sudo mv nf-test /usr/local/bin/
+      - name: Setup nf-test
+        uses: nf-core/setup-nf-test@v1
 
       - name: Run run workflow (ONT)
         run: nf-test test --tag run_output_ont --verbose --ci
@@ -157,14 +139,8 @@ jobs:
         with:
           version: "25.10.0"
 
-      - name: Install nf-test
-        run: |
-          for i in 1 2 3 4 5; do
-            echo "Attempt $i to download nf-test..."
-            wget -qO- https://get.nf-test.com | bash && break
-            sleep 10
-          done
-          sudo mv nf-test /usr/local/bin/
+      - name: Setup nf-test
+        uses: nf-core/setup-nf-test@v1
 
       - name: Run run_validation workflow
         run: nf-test test --tag run_validation_viral_hits --verbose
@@ -197,14 +173,8 @@ jobs:
         with:
           version: "25.10.0"
 
-      - name: Install nf-test
-        run: |
-          for i in 1 2 3 4 5; do
-            echo "Attempt $i to download nf-test..."
-            wget -qO- https://get.nf-test.com | bash && break
-            sleep 10
-          done
-          sudo mv nf-test /usr/local/bin/
+      - name: Setup nf-test
+        uses: nf-core/setup-nf-test@v1
 
       - name: Run DOWNSTREAM workflow and check output
         run: nf-test test --tag downstream_output --verbose --ci
@@ -237,14 +207,8 @@ jobs:
         with:
           version: "25.10.0"
 
-      - name: Install nf-test
-        run: |
-          for i in 1 2 3 4 5; do
-            echo "Attempt $i to download nf-test..."
-            wget -qO- https://get.nf-test.com | bash && break
-            sleep 10
-          done
-          sudo mv nf-test /usr/local/bin/
+      - name: Setup nf-test
+        uses: nf-core/setup-nf-test@v1
 
       - name: Run DOWNSTREAM workflow (ONT) and check output
         run: nf-test test --tag downstream_output_ont --verbose --ci
