@@ -108,11 +108,14 @@ The `post-processing/` directory contains standalone Python scripts for addition
 
 ## Testing
 
-We use [nf-test](https://www.nf-test.com/) for unit, integration, and end-to-end tests. We intend to transition to using [pytest](https://docs.pytest.org/en/stable/index.html#) for unit tests of Python processes, and developers should therefore write unit tests in pytest for any processes that use Python.
+We currently use [`nf-test`](https://www.nf-test.com/) for unit, integration, and end-to-end tests for many modules and all workflows. However, `nf-test` is very slow, so we're transitioning away from using it in cases where other, faster testing libraries are available. Wherever possible, a module should have a single `nf-test` test that confirms it runs end-to-end without crashing, while detailed functionality should be tested elsewhere. For Python processes, we recommend writing unit tests in [`pytest`](https://docs.pytest.org/en/stable/index.html).
 
-### Organization of tests 
+### nf-test
 
-Tests themselves are organized in the `tests/` directory following the same structure as the main code. 
+#### Organization
+
+`nf-test` tests are organized in the `tests/` directory following the same structure as the main code:
+
 ```
 tests/
 ├── modules/local/
@@ -125,8 +128,6 @@ tests/
     └── workflow_name.nf.test
 ```
 
-We also have `.github/workflows/end-to-end.yml` which specifies which tests run automatically on PRs through Github Actions. 
-
 Config files for tests are organized as follows:
 - `tests/nextflow.config` is the default config file for `nf-test` and specifies resources for each process based on labels.
 - `tests/config/` has config files used by each workflow test.
@@ -134,11 +135,12 @@ Config files for tests are organized as follows:
 
 The `test-data/` directory (and organization of test data in general) is described in the "Test datasets" section below.
 
-### Writing tests
+#### Writing tests
 
-[Documentation for nf-test](https://www.nf-test.com/docs/getting-started/) and Nextflow's [nf-test training](https://training.nextflow.io/2.1.3/side_quests/nf-test/) are helpful resources.
+[Documentation for `nf-test`](https://www.nf-test.com/docs/getting-started/) and Nextflow's [`nf-test` training](https://training.nextflow.io/2.1.3/side_quests/nf-test/) are helpful resources.
 
-Here are some guidelines:
+In cases where a module is a thin wrapper around a script in another language, comprehensive unit testing should be done using an appropriate testing library for that language (e.g. pytest for Python scripts). In this case, `nf-test` tests for the module should be kept to a minimum, typically a single end-to-end test that confirms the module runs without crashing. We are currently in the process of moving as many modules as possible to this paradigm; however, some modules are harder to transition than others. For modules that retain major functionality in the Nextflow process itself, a comprehensive `nf-test` suite is still needed. In this case, we recommend the following guidelines:
+
 - At a minimum, write a test that the process completes successfully on valid input data (`assert process.success`).
 - When relevant, processes should be tested on both single- and paired-end data.
 - Use descriptive test names and appropriate tags.
@@ -148,24 +150,15 @@ Here are some guidelines:
 
 `tests/modules/local/fastqc/main.nf.test` is an example of bare-minimum tests for a process, and `tests/modules/local/vsearch/main.nf.test` is an example of really good, comprehensive testing!
 
-### Test datasets 
+#### Test datasets 
 
-Organization of test data 
 - Small (uncompressed) test data files are in `test-data/`; larger test datasets are in S3:
     - Currently there is no set organization of the `test-data/` directory. It will be organized in the future; see issue [#349](https://github.com/naobservatory/mgs-workflow/issues/349).
+    - Small "toy" data files (uncompressed, generally ~1KB or less) may be added freely to the repo in `test-data/toy-data`.
 - Larger public test datasets are stored in `s3://nao-testing` (publicly available). 
-    - These are the "gold standard test dataset" and the "ONT wastewater test dataset", described below.
+    - The "gold standard test dataset" (`s3://nao-testing/gold-standard-test/`) is the default test dataset that we use for testing the `RUN` and `DOWNSTREAM` workflows on short-read data. It is a small dataset that contains 165 reads from the [Yang 2020](https://www.sciencedirect.com/science/article/abs/pii/S0048969720358514?via%3Dihub) study.
+    - The "ONT wastewater test dataset" (`s3://nao-testing/ont-ww-test/`) is the default, small test dataset that we use for testing the `RUN` workflow on ONT (long-read) data.
 - Results of workflow runs on the test datasets from S3 are in the repo in `test-data/<dataset>-results-<workflow>`. 
-
-#### Gold standard test dataset (`s3://nao-testing/gold-standard-test/`)
-This is the default test dataset that we use for testing the `RUN` and `DOWNSTREAM` workflows on short-read data. It is a small dataset that contains 165 reads from the [Yang 2020](https://www.sciencedirect.com/science/article/abs/pii/S0048969720358514?via%3Dihub) study. 
-
-#### ONT wastewater test dataset (`s3://nao-testing/ont-ww-test/`)
-This is the default, small test dataset that we use for testing the `RUN` workflow on ONT (long-read) data.
-
-### Adding new test data
-
-Small "toy" data files (uncompressed, generally ~1KB or less) may be added freely to the repo in `test-data/toy-data`.
 
 To make a new test dataset on S3, copy the test dataset to `s3://nao-testing/<name-of-test-dataset>`. A pipeline maintainer (e.g. willbradshaw or katherine-stansifer) can give you permission to add to the bucket.
 
@@ -176,7 +169,7 @@ aws s3 cp /path/to/my_dataset s3://nao-testing/my_dataset/ --acl public-read
 > [!NOTE]
 > Any time you update a test dataset, you must make it public again.
 
-### Running tests
+#### Running tests
 
 To run the tests locally, you need to make sure that you have a powerful enough compute instance (at least 4 cores, 14GB of RAM, and 32GB of storage). On AWS EC2, we recommend the `m5.2xlarge`. Note that you may want a more powerful instance when running tests in parallel (as described below).
 
@@ -197,7 +190,7 @@ To run all tests in the `tests` directory, use the command `nf-test test tests`.
 - Running this full suite of local tests takes hours; we recommend using the script `bin/run_parallel_test` to parallelize. 
 - Running the full test suite frequently hits API limits for Seqera container pulls; to resolve this, request a user token from Seqera as described in [troubleshooting.md](troubleshooting.md).
 
-After tests finish, you may want to clean up by running `sudo rm -rf .nf-test/`.
+After tests finish, you should clean up by running `bin/clean-nf-test.sh`.
 
 > [!NOTE]
 > Periodically delete docker images to free up space on your instance. Running the following command will delete all docker images on your system:
@@ -208,7 +201,7 @@ After tests finish, you may want to clean up by running `sudo rm -rf .nf-test/`.
 > docker system prune -af --volumes
 > ```
 
-### Updating snapshots
+#### Updating snapshots
 
 Our test suite includes end-to-end tests of the `RUN` and `DOWNSTREAM` workflows that verify their outputs on test datasets have not changed unexpectedly. These tests use `nf-test`'s [snapshots](https://www.nf-test.com/docs/assertions/snapshots/).
 
@@ -231,6 +224,16 @@ Test [7677da69] 'RUN workflow output should match snapshot'
         - Update output files in `test-data` by copying changed output files from the `.nf-test` directory to the appropriate location in `test-data`, uncompressing the files, and committing the changes.
         - Update `nf-test` snapshots by running `nf-test test <path to test that failed> --update-snapshot`; this will update the appropriate `*.snapshot` file in `tests/workflows`. Commit the changed snapshot file.
         - Flag in PR comments that the snapshot has changed, and explain why. (Without such a comment, it's easy for reviewers to miss the updated snapshot.)
+
+### `pytest`
+
+`pytest` tests should be located in the same directory as their corresponding Python script, and should be named by prepending `test_` to the script's filename (e.g., `test_my_script.py` for a script named `my_script.py`).
+
+Unlike nf-test, `pytest` tests are very fast and cheap to run. Consequently, we recommend being as comprehensive as reasonably possible when writing `pytest` suites.
+
+### Automated testing
+
+We run a subset of tests automatically on each pull request using Github Actions, as specified by configuration files in `.github/workflows`. Currently, all `pytest` tests are run on each PR, along with select workflow-level nf-test tests. We also run [Trivy](https://trivy.dev/) on all containers used by the workflow to check for security vulnerabilities. 
 
 ## GitHub issues
 We use [GitHub issues](https://github.com/naobservatory/mgs-workflow/issues) to track any issues with the pipeline: bugs, cleanup tasks, and desired new features. 
@@ -278,7 +281,7 @@ Feel free to use AI tools (Cursor, GitHub Copilot, Claude Code, etc.) to generat
 > [!NOTE]
 > During a release, new feature PRs are not merged into `dev`. Please check with a maintainer if a release is in progress.
 
-1. **Write new tests** for the changes that you make using `nf-test` if those tests don't already exist. At the very least, these tests should check that the new implementation runs to completion; tests that also verify the output on the test dataset are strongly encouraged.
+1. **Write new tests** for the changes that you make if those tests don't already exist. At the very least, these tests should check that the new implementation runs to completion; tests that also verify the output on the test dataset are strongly encouraged. As discussed above, we recommend writing end-to-end tests in `nf-test` and unit tests in language-specific testing libraries like `pytest`.
 2. **Run all relevant tests locally** and make sure they pass. "Relevant" means: 1) Any tests of any process or workflow modified by the PR; 2) Any tests for any workflows that source any such process or workflow, and 3) Any tests that use any such process or workflow in setup.
     - For **nf-test**: You may run all existing tests as described in the "Testing" section above, or identify relevant tests by recursively grepping for the process name in the `workflows`, `subworkflows`, and `tests` directories.
     - For **pytest**: If you modify Python scripts, run `pytest` on the corresponding test files to ensure unit tests pass.

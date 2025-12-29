@@ -7,35 +7,6 @@ nextflow_process {
     tag "module"
     tag "blast"
 
-    setup {
-        run("LOAD_SAMPLESHEET") {
-            script "subworkflows/local/loadSampleSheet/main.nf"
-            process {
-                """
-                input[0] = "${projectDir}/test-data/samplesheet.csv"
-                input[1] = "illumina"
-                input[2] = false
-                """
-            }
-        }
-        run("INTERLEAVE_FASTQ") {
-            script "modules/local/interleaveFastq/main.nf"
-            process {
-                '''
-                input[0] = LOAD_SAMPLESHEET.out.samplesheet
-                '''
-            }
-        }
-        run("CONVERT_FASTQ_FASTA") {
-            script "modules/local/convertFastqFasta/main.nf"
-            process {
-                '''
-                input[0] = INTERLEAVE_FASTQ.out.output
-                '''
-            }
-        }
-    }
-
     test("Should run without failures on correct input") {
         tag "interleaved"
         tag "expect_success"
@@ -50,7 +21,8 @@ nextflow_process {
                     blast_qcov_hsp_perc: params.blast_qcov_hsp_perc,
                     db_download_timeout: params.db_download_timeout
                 ]
-                input[0] = CONVERT_FASTQ_FASTA.out.output
+                input[0] = Channel.of("test")
+                    | combine(Channel.of("${projectDir}/test-data/toy-data/blast/input.fasta"))
                 input[1] = "${params.ref_dir}/results/${params.blast_db_prefix}"
                 input[2] = blast_params
                 '''
@@ -60,7 +32,7 @@ nextflow_process {
             // Should run without failures
             assert process.success
             // Output TSV should have expected format
-            def tsv_out = path(process.out.output[0][1]).csv(sep: "\t", decompress: true, header: false)
+            def tsv_out = path(process.out.output[0][1]).csv(sep: "\t", header: false, decompress: true)
             def cols_exp = "qseqid sseqid sgi staxid qlen evalue bitscore qcovs length pident mismatch gapopen sstrand qstart qend sstart send"
             assert tsv_out.columnCount == cols_exp.split(" ").size()
             // Compare to input FASTA

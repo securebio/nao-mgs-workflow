@@ -7,81 +7,6 @@ nextflow_process {
     tag "module"
     tag "filter_blast"
 
-    setup {
-        run("LOAD_SAMPLESHEET") {
-            script "subworkflows/local/loadSampleSheet/main.nf"
-            process {
-                """
-                input[0] = "${projectDir}/test-data/samplesheet.csv"
-                input[1] = "illumina"
-                input[2] = false
-                """
-            }
-        }
-        run("INTERLEAVE_FASTQ") {
-            script "modules/local/interleaveFastq/main.nf"
-            process {
-                '''
-                input[0] = LOAD_SAMPLESHEET.out.samplesheet
-                '''
-            }
-        }
-        run("CONVERT_FASTQ_FASTA") {
-            script "modules/local/convertFastqFasta/main.nf"
-            process {
-                '''
-                input[0] = INTERLEAVE_FASTQ.out.output
-                '''
-            }
-        }
-        run("BLASTN") {
-            script "modules/local/blast/main.nf"
-            process {
-                '''
-                def blast_params = [
-                    blast_db_prefix: params.blast_db_prefix,
-                    blast_perc_id: params.blast_perc_id,
-                    blast_qcov_hsp_perc: params.blast_qcov_hsp_perc,
-                    db_download_timeout: params.db_download_timeout
-                ]
-                input[0] = CONVERT_FASTQ_FASTA.out.output
-                input[1] = "${params.ref_dir}/results/${params.blast_db_prefix}"
-                input[2] = blast_params
-                '''
-            }
-        }
-        run("SORT_FILE", alias: "SORT_BLAST_1") {
-            script "modules/local/sortFile/main.nf"
-            process {
-                '''
-                input[0] = BLASTN.out.output
-                input[1] = "-t\\$\'\\t\' -k1,1 -k2,2 -k7,7nr -k9,9nr"
-                input[2] = "blast_test_1"
-                '''
-            }
-        }
-        run("FILTER_TSV") {
-            script "modules/local/filterTsv/main.nf"
-            process {
-                '''
-                input[0] = SORT_BLAST_1.out.output
-                input[1] = "1,2"
-                input[2] = "blast_test_2"
-                '''
-            }
-        }
-        run("SORT_FILE", alias: "SORT_BLAST_2") {
-            script "modules/local/sortFile/main.nf"
-            process {
-                '''
-                input[0] = FILTER_TSV.out.output
-                input[1] = "-t\\$\'\\t\' -k1,1 -k7,7nr"
-                input[2] = "blast_test_3"
-                '''
-            }
-        }
-    }
-
     test("Should run without failures on correct input") {
         tag "expect_success"
         tag "interleaved"
@@ -92,7 +17,8 @@ nextflow_process {
             }
             process {
                 '''
-                input[0] = SORT_BLAST_2.out.output
+                input[0] = Channel.of("test")
+                    | combine(Channel.of("${projectDir}/test-data/toy-data/filter-blast/input.tsv"))
                 input[1] = params.max_rank
                 input[2] = params.min_frac
                 '''
@@ -102,7 +28,7 @@ nextflow_process {
             // Should run without failures
             assert process.success
             // Output TSV should have expected columns
-            def tab_in = path(process.out.input[0][1]).csv(sep: "\t", decompress: true, header: false)
+            def tab_in = path(process.out.input[0][1]).csv(sep: "\t", header: false)
             def tab_out = path(process.out.output[0][1]).csv(sep: "\t", decompress: true)
             assert tab_in.columnCount + 2 == tab_out.columnCount
             def cols_out_exp = ["qseqid", "sseqid", "sgi", "staxid", "qlen", "evalue",

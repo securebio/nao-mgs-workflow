@@ -1,5 +1,18 @@
-# v3.0.1.6
+# v3.0.1.8-dev
+- Pruning and streamlining testing for easier releases:
+    - Separated downloading part of JOIN_RIBO_REF into a separate WGET process, and tested both parts separately
+    - Moved ADD_CONDITIONAL_TSV_COLUMN to Python and implemented pytest tests.
+    - Moved COUNT_READS_PER_CLADE tests to Pytest.
+    - Deleted extraneous tests for BOWTIE2 and CONCATENATE_FILES.
+    - Created toy data files for several tests to reduce setup burden.
+    - Added plaintext handling to BLAST process to help with testing
 
+# v3.0.1.7
+- Clarified testing documentation in `docs/developer.md`.
+- Added bin/clean-nf-test.sh for test cleanup.
+- Added sorting of ONT hits by seq_id in `DOWNSTREAM` workflow.
+
+# v3.0.1.6
 - Modified filterTsvColumnByValue to correctly handle quotation characters in FASTQ quality strings.
 - Modified Github Actions configuration to use the official Github Action to install nf-test.
 

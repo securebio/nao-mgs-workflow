@@ -1,0 +1,29 @@
+nextflow_process {
+
+    name "Test process WGET"
+    script "modules/local/wget/main.nf"
+    process "WGET"
+    config "tests/configs/index.config"
+    tag "module"
+    tag "wget"
+
+    test("Should successfully download a file from a URL") {
+        tag "expect_success"
+        when {
+            params {
+            }
+            process {
+                '''
+                input[0] = params.human_url
+                input[1] = "downloaded.fasta.gz"
+                '''
+            }
+        }
+        then {
+            assert process.success
+            def output_file = path(process.out.file[0])
+            assert output_file.exists()
+            assert output_file.size() > 0
+        }
+    }
+}

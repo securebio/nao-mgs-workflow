@@ -9,13 +9,33 @@ nextflow_process {
 
     test("Should run without failures and properly concatenate two references, adding SSU and LSU suffixes") {
         tag "expect_success"
+        setup {
+            run("COPY_FILE_BARE", alias: "COPY_SSU") {
+                script "modules/local/copyFile/main.nf"
+                process {
+                    '''
+                    input[0] = file("$projectDir/test-data/toy-data/test-random.fasta")
+                    input[1] = "ssu_ref.fasta"
+                    '''
+                }
+            }
+            run("COPY_FILE_BARE", alias: "COPY_LSU") {
+                script "modules/local/copyFile/main.nf"
+                process {
+                    '''
+                    input[0] = file("$projectDir/test-data/toy-data/test-random.fasta")
+                    input[1] = "lsu_ref.fasta"
+                    '''
+                }
+            }
+        }
         when {
             params {
             }
             process {
                 '''
-                input[0] = params.ssu_url
-                input[1] = params.lsu_url
+                input[0] = COPY_SSU.out
+                input[1] = COPY_LSU.out
                 '''
             }
         }
