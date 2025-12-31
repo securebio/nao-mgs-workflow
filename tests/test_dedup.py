@@ -1,14 +1,13 @@
-import random
-import subprocess
 import sys
+import gzip
+import random
+import pytest
+import subprocess
+import networkx as nx
 from pathlib import Path
 
 # Add parent directory to path so we can import dedup
 sys.path.insert(0, str(Path(__file__).parent.parent))
-
-import networkx as nx
-import pytest
-
 from dedup import (
     EMPTY_KMER_SENTINEL_HASH,
     ORIENT_STRICT,
@@ -976,3 +975,307 @@ class TestDeduplication:
         mapping2 = dedup_func([rp1, rp2_mid], d_params, m_params, verbose=False)
         assert mapping2["r1"] == mapping2["r2_mid"], \
             "Should detect similarity via shared minimizer in window 1"
+
+
+# ============================================================================
+# Rust Binary End-to-End Tests
+# ============================================================================
+
+class TestRustBinary:
+    """End-to-end tests for the Rust dedup_interleaved_fastq binary."""
+
+    @pytest.fixture(scope="class")
+    def binary_path(self):
+        """Build the Rust binary and return its path."""
+        project_root = Path(__file__).parent.parent
+
+        # Build the binary in release mode for faster execution
+        print("\nBuilding Rust binary...")
+        result = subprocess.run(
+            ["cargo", "build", "--release", "--bin", "dedup_interleaved_fastq"],
+            cwd=str(project_root),
+            capture_output=True,
+            text=True
+        )
+
+        if result.returncode != 0:
+            pytest.fail(f"Failed to build Rust binary:\n{result.stderr}")
+
+        binary = project_root / "target" / "release" / "dedup_interleaved_fastq"
+        if not binary.exists():
+            pytest.fail(f"Binary not found at {binary}")
+
+        return binary
+
+    def _write_fastq_gz(self, path: Path, records: list):
+        """Write FASTQ records to a gzipped file.
+
+        Args:
+            path: Output file path
+            records: List of (header, sequence, quality) tuples
+        """
+        with gzip.open(path, 'wt') as f:
+            for header, sequence, quality in records:
+                f.write(f"@{header}\n")
+                f.write(f"{sequence}\n")
+                f.write("+\n")
+                f.write(f"{quality}\n")
+
+    def _read_fastq_gz(self, path: Path) -> list:
+        """Read FASTQ records from a gzipped file.
+
+        Returns:
+            List of (header, sequence, quality) tuples
+        """
+        records = []
+        with gzip.open(path, 'rt') as f:
+            while True:
+                header = f.readline().strip()
+                if not header:
+                    break
+                sequence = f.readline().strip()
+                plus = f.readline().strip()
+                quality = f.readline().strip()
+                records.append((header[1:], sequence, quality))  # Remove @ from header
+        return records
+
+    def test_binary_basic_deduplication(self, binary_path, tmp_path):
+        """Test that the binary correctly deduplicates identical read pairs."""
+        # Create synthetic interleaved FASTQ data
+        # Format: R1, R2, R1, R2, ...
+        seq1_r1 = "ACGT" * 25  # 100bp
+        seq1_r2 = "TGCA" * 25  # 100bp
+        seq2_r1 = "GGGG" * 25  # Different sequence
+        seq2_r2 = "CCCC" * 25
+        qual = "I" * 100  # High quality
+
+        # Create input: 5 read pairs
+        # Pairs 0, 1, 2 are identical (cluster 1)
+        # Pairs 3, 4 are identical (cluster 2)
+        records = [
+            # Pair 0 (cluster 1)
+            ("read0_R1", seq1_r1, qual),
+            ("read0_R2", seq1_r2, qual),
+            # Pair 1 (cluster 1, duplicate)
+            ("read1_R1", seq1_r1, qual),
+            ("read1_R2", seq1_r2, qual),
+            # Pair 2 (cluster 1, duplicate)
+            ("read2_R1", seq1_r1, qual),
+            ("read2_R2", seq1_r2, qual),
+            # Pair 3 (cluster 2)
+            ("read3_R1", seq2_r1, qual),
+            ("read3_R2", seq2_r2, qual),
+            # Pair 4 (cluster 2, duplicate)
+            ("read4_R1", seq2_r1, qual),
+            ("read4_R2", seq2_r2, qual),
+        ]
+
+        input_file = tmp_path / "input.fastq.gz"
+        output_file = tmp_path / "output.fastq.gz"
+
+        self._write_fastq_gz(input_file, records)
+
+        # Run the binary
+        result = subprocess.run(
+            [str(binary_path), str(input_file), str(output_file)],
+            capture_output=True,
+            text=True
+        )
+
+        if result.returncode != 0:
+            pytest.fail(f"Binary failed:\n{result.stderr}")
+
+        # Read output
+        output_records = self._read_fastq_gz(output_file)
+
+        # Should have 2 exemplar pairs (4 records total: 2 R1s + 2 R2s)
+        assert len(output_records) == 4, \
+            f"Expected 4 records (2 pairs), got {len(output_records)}"
+
+        # Extract pairs from output (alternating R1/R2)
+        output_pairs = []
+        for i in range(0, len(output_records), 2):
+            r1 = output_records[i]
+            r2 = output_records[i + 1]
+            output_pairs.append((r1, r2))
+
+        # Should have exactly 2 unique pairs
+        assert len(output_pairs) == 2, \
+            f"Expected 2 output pairs, got {len(output_pairs)}"
+
+        # Verify the sequences match our two unique sequences
+        output_seqs = {(r1[1], r2[1]) for r1, r2 in output_pairs}
+        expected_seqs = {(seq1_r1, seq1_r2), (seq2_r1, seq2_r2)}
+        assert output_seqs == expected_seqs, \
+            f"Output sequences don't match expected unique sequences"
+
+    def test_binary_all_unique(self, binary_path, tmp_path):
+        """Test that the binary handles all unique reads correctly."""
+        rng = random.Random(12345)
+
+        # Create 3 unique read pairs
+        records = []
+        for i in range(3):
+            r1_seq = _random_seq(100, rng)
+            r2_seq = _random_seq(100, rng)
+            qual = "I" * 100
+            records.extend([
+                (f"read{i}_R1", r1_seq, qual),
+                (f"read{i}_R2", r2_seq, qual),
+            ])
+
+        input_file = tmp_path / "input.fastq.gz"
+        output_file = tmp_path / "output.fastq.gz"
+
+        self._write_fastq_gz(input_file, records)
+
+        # Run the binary
+        result = subprocess.run(
+            [str(binary_path), str(input_file), str(output_file)],
+            capture_output=True,
+            text=True
+        )
+
+        assert result.returncode == 0, f"Binary failed:\n{result.stderr}"
+
+        # Read output
+        output_records = self._read_fastq_gz(output_file)
+
+        # All 3 pairs should be in output (6 records)
+        assert len(output_records) == 6, \
+            f"Expected 6 records (3 unique pairs), got {len(output_records)}"
+
+    def test_binary_quality_selection(self, binary_path, tmp_path):
+        """Test that the binary selects the highest quality read as exemplar."""
+        seq = "ACGT" * 25  # 100bp
+
+        # Create 3 identical pairs with different quality scores
+        records = [
+            # Pair 0: low quality (Q=10, char '+'
+            ("read0_R1", seq, "+" * 100),
+            ("read0_R2", seq, "+" * 100),
+            # Pair 1: high quality (Q=40, char 'I')
+            ("read1_R1", seq, "I" * 100),
+            ("read1_R2", seq, "I" * 100),
+            # Pair 2: medium quality (Q=20, char '5')
+            ("read2_R1", seq, "5" * 100),
+            ("read2_R2", seq, "5" * 100),
+        ]
+
+        input_file = tmp_path / "input.fastq.gz"
+        output_file = tmp_path / "output.fastq.gz"
+
+        self._write_fastq_gz(input_file, records)
+
+        # Run the binary
+        result = subprocess.run(
+            [str(binary_path), str(input_file), str(output_file)],
+            capture_output=True,
+            text=True
+        )
+
+        assert result.returncode == 0, f"Binary failed:\n{result.stderr}"
+
+        # Read output
+        output_records = self._read_fastq_gz(output_file)
+
+        # Should have 1 exemplar pair (2 records)
+        assert len(output_records) == 2, \
+            f"Expected 2 records (1 pair), got {len(output_records)}"
+
+        # The exemplar should have high quality (all 'I')
+        assert output_records[0][2] == "I" * 100, \
+            f"Expected highest quality read as exemplar, got quality: {output_records[0][2][:10]}..."
+        assert output_records[1][2] == "I" * 100, \
+            f"Expected highest quality read as exemplar, got quality: {output_records[1][2][:10]}..."
+
+    def test_binary_with_custom_params(self, binary_path, tmp_path):
+        """Test that the binary accepts custom deduplication parameters."""
+        # Create two slightly different sequences
+        seq1 = "A" * 100
+        seq2 = "A" * 97 + "TTT"  # 3 mismatches (3% error)
+        qual = "I" * 100
+
+        records = [
+            ("read0_R1", seq1, qual),
+            ("read0_R2", seq1, qual),
+            ("read1_R1", seq2, qual),
+            ("read1_R2", seq1, qual),  # Only R1 differs
+        ]
+
+        input_file = tmp_path / "input.fastq.gz"
+        output_file = tmp_path / "output.fastq.gz"
+
+        self._write_fastq_gz(input_file, records)
+
+        # Run with strict error threshold (should NOT deduplicate)
+        result = subprocess.run(
+            [
+                str(binary_path),
+                str(input_file),
+                str(output_file),
+                "--max-error-frac", "0.02",  # 2% threshold - sequences have 3% error
+            ],
+            capture_output=True,
+            text=True
+        )
+
+        assert result.returncode == 0, f"Binary failed:\n{result.stderr}"
+
+        output_records = self._read_fastq_gz(output_file)
+
+        # Should have 2 pairs (4 records) since they don't match with strict threshold
+        assert len(output_records) == 4, \
+            f"Expected 4 records (2 pairs), got {len(output_records)}"
+
+        # Run with looser error threshold (should deduplicate)
+        output_file2 = tmp_path / "output2.fastq.gz"
+        result2 = subprocess.run(
+            [
+                str(binary_path),
+                str(input_file),
+                str(output_file2),
+                "--max-error-frac", "0.04",  # 4% threshold - sequences have 3% error
+            ],
+            capture_output=True,
+            text=True
+        )
+
+        assert result2.returncode == 0, f"Binary failed:\n{result2.stderr}"
+
+        output_records2 = self._read_fastq_gz(output_file2)
+
+        # Should have 1 pair (2 records) since they match with looser threshold
+        assert len(output_records2) == 2, \
+            f"Expected 2 records (1 pair), got {len(output_records2)}"
+
+    def test_binary_empty_input(self, binary_path, tmp_path):
+        """Test that the binary handles empty input files gracefully."""
+        input_file = tmp_path / "empty.fastq.gz"
+        output_file = tmp_path / "output.fastq.gz"
+
+        # Create an empty gzipped file
+        with gzip.open(input_file, 'wt') as f:
+            pass  # Write nothing
+
+        # Run the binary
+        result = subprocess.run(
+            [str(binary_path), str(input_file), str(output_file)],
+            capture_output=True,
+            text=True
+        )
+
+        assert result.returncode == 0, f"Binary failed on empty input:\n{result.stderr}"
+
+        # Verify no NaN in output
+        assert "NaN" not in result.stderr, \
+            f"Binary output contains NaN: {result.stderr}"
+
+        # Verify warning message for empty input
+        assert "Warning: No reads found in input file" in result.stderr, \
+            f"Expected warning about no reads in output: {result.stderr}"
+
+        # Output should be empty
+        output_records = self._read_fastq_gz(output_file)
+        assert len(output_records) == 0, \
+            f"Expected empty output for empty input, got {len(output_records)} records"

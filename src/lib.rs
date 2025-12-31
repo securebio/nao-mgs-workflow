@@ -84,16 +84,18 @@ pub struct ReadPair {
     pub rev_qual: String,
 }
 
+/// Calculate mean quality score from forward and reverse quality strings.
+fn mean_quality(fwd_qual: &str, rev_qual: &str) -> f64 {
+    let total: u32 = fwd_qual.bytes().chain(rev_qual.bytes())
+        .map(|b| (b - 33) as u32)
+        .sum();
+    let count = (fwd_qual.len() + rev_qual.len()) as f64;
+    if count == 0.0 { 0.0 } else { total as f64 / count }
+}
+
 impl ReadPair {
     pub fn mean_quality(&self) -> f64 {
-        let total: u32 = self.fwd_qual.bytes().chain(self.rev_qual.bytes())
-            .map(|b| (b - 33) as u32)
-            .sum();
-        let count = (self.fwd_qual.len() + self.rev_qual.len()) as f64;
-        if count == 0.0 {
-            return 0.0;
-        }
-        total as f64 / count
+        mean_quality(&self.fwd_qual, &self.rev_qual)
     }
 }
 
@@ -315,18 +317,19 @@ fn check_similarity(
 /// orientation, causing the same DNA fragment to be sequenced with forward/reverse
 /// swapped. Note: Rust version always uses tolerant mode (no strict mode option).
 fn reads_are_similar(
-    rp: &ReadPair,
+    fwd_seq: &str,
+    rev_seq: &str,
     exemplar: &StoredExemplar,
     dedup_params: &DedupParams,
 ) -> bool {
-    if check_similarity(&rp.fwd_seq, &exemplar.fwd_seq, dedup_params.max_offset, dedup_params.max_error_frac)
-        && check_similarity(&rp.rev_seq, &exemplar.rev_seq, dedup_params.max_offset, dedup_params.max_error_frac)
+    if check_similarity(fwd_seq, &exemplar.fwd_seq, dedup_params.max_offset, dedup_params.max_error_frac)
+        && check_similarity(rev_seq, &exemplar.rev_seq, dedup_params.max_offset, dedup_params.max_error_frac)
     {
         return true;
     }
 
-    if check_similarity(&rp.fwd_seq, &exemplar.rev_seq, dedup_params.max_offset, dedup_params.max_error_frac)
-        && check_similarity(&rp.rev_seq, &exemplar.fwd_seq, dedup_params.max_offset, dedup_params.max_error_frac)
+    if check_similarity(fwd_seq, &exemplar.rev_seq, dedup_params.max_offset, dedup_params.max_error_frac)
+        && check_similarity(rev_seq, &exemplar.fwd_seq, dedup_params.max_offset, dedup_params.max_error_frac)
     {
         return true;
     }
@@ -394,24 +397,37 @@ impl DedupContext {
         }
     }
 
-    /// Process one read pair. Returns the cluster ID it was assigned to.
+    /// Process one read pair by index (more efficient for indexed reads).
+    ///
+    /// This method is optimized for cases where reads are naturally indexed
+    /// (e.g., from enumerate), avoiding string allocation and hash lookups.
     ///
     /// Algorithm:
     /// 1. Extract minimizers and look up matching exemplars in buckets
     /// 2. Compare this read against candidates until we find a match
     /// 3a. If match found: add to existing cluster, potentially updating best_read_idx
     /// 3b. If no match: create new cluster with this read as initial exemplar
-    pub fn process_read(&mut self, read_pair: ReadPair) -> String {
-        // Intern the read ID to a compact u32 index
-        let read_idx = self.id_registry.get_or_create(&read_pair.read_id);
-        let mean_q = read_pair.mean_quality();
+    ///
+    /// Returns the cluster leader index.
+    pub fn process_read_by_index(
+        &mut self,
+        idx: usize,
+        fwd_seq: String,
+        rev_seq: String,
+        fwd_qual: String,
+        rev_qual: String,
+    ) -> u32 {
+        let read_idx = idx as u32;
+
+        // Calculate mean quality
+        let mean_q = mean_quality(&fwd_qual, &rev_qual);
 
         // Calculate score: quality is primary (scaled by 1000), length is secondary
-        let length = (read_pair.fwd_seq.len() + read_pair.rev_seq.len()) as f64;
+        let length = (fwd_seq.len() + rev_seq.len()) as f64;
         let score = mean_q * 1000.0 + length;
 
-        let fwd_mins = extract_minimizers(&read_pair.fwd_seq, &self.minimizer_params);
-        let rev_mins = extract_minimizers(&read_pair.rev_seq, &self.minimizer_params);
+        let fwd_mins = extract_minimizers(&fwd_seq, &self.minimizer_params);
+        let rev_mins = extract_minimizers(&rev_seq, &self.minimizer_params);
 
         let mut all_mins = fwd_mins;
         all_mins.extend(rev_mins);
@@ -428,7 +444,7 @@ impl DedupContext {
                     }
 
                     if let Some(candidate) = self.exemplar_store.get(candidate_idx as usize).and_then(|opt| opt.as_ref()) {
-                        if reads_are_similar(&read_pair, candidate, &self.dedup_params) {
+                        if reads_are_similar(&fwd_seq, &rev_seq, candidate, &self.dedup_params) {
                             // candidate_idx from buckets is always a cluster leader
                             matching_cluster_idx = Some(candidate_idx);
                             break 'outer;
@@ -467,8 +483,8 @@ impl DedupContext {
 
             // Store only sequences (not quality strings) to reduce memory footprint
             self.exemplar_store[read_idx as usize] = Some(StoredExemplar {
-                fwd_seq: read_pair.fwd_seq,
-                rev_seq: read_pair.rev_seq,
+                fwd_seq,
+                rev_seq,
             });
 
             // Add read to minimizer buckets (only for new exemplars)
@@ -484,6 +500,26 @@ impl DedupContext {
             self.results.resize(read_idx as usize + 1, 0);
         }
         self.results[read_idx as usize] = cluster_leader_idx;
+
+        cluster_leader_idx
+    }
+
+    /// Process one read pair. Returns the cluster ID it was assigned to.
+    ///
+    /// This method interns the read ID to an index and delegates to
+    /// process_read_by_index. See that method for algorithm details.
+    pub fn process_read(&mut self, read_pair: ReadPair) -> String {
+        // Intern the read ID to a compact u32 index
+        let read_idx = self.id_registry.get_or_create(&read_pair.read_id);
+
+        // Delegate to the index-based implementation
+        let cluster_leader_idx = self.process_read_by_index(
+            read_idx as usize,
+            read_pair.fwd_seq,
+            read_pair.rev_seq,
+            read_pair.fwd_qual,
+            read_pair.rev_qual,
+        );
 
         // Return the cluster leader's ID (as a String)
         self.id_registry.get_id(cluster_leader_idx).to_string()
@@ -522,6 +558,24 @@ impl DedupContext {
         let total_reads = self.results.len();
         let unique_clusters = self.clusters.len();
         (total_reads, unique_clusters)
+    }
+
+    /// Get indices of all exemplar reads (the best read in each cluster).
+    ///
+    /// Must be called after finalize(). Returns a HashSet of read indices where
+    /// each index represents an exemplar (a read that is the best in its cluster).
+    ///
+    /// This is much more efficient than calling get_cluster_id in a loop, as it
+    /// directly collects the best_read_idx from each cluster.
+    pub fn get_exemplar_indices(&self) -> AHashSet<usize> {
+        assert!(
+            self.finalized,
+            "get_exemplar_indices must be called after finalize()"
+        );
+        self.clusters
+            .values()
+            .map(|stats| stats.best_read_idx as usize)
+            .collect()
     }
 }
 
