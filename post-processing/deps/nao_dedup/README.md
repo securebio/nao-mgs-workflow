@@ -227,6 +227,76 @@ The library is a standard Rust crate. Build with:
 cargo build --release
 ```
 
+### Command-Line Binary
+
+A command-line tool for deduplicating interleaved FASTQ.gz files is included.
+
+#### Building
+
+```bash
+cargo build --release --bin dedup_interleaved_fastq
+```
+
+The binary will be created at `target/release/dedup_interleaved_fastq`.
+
+#### Usage
+
+Basic usage with default parameters:
+
+```bash
+./target/release/dedup_interleaved_fastq input.fastq.gz output.fastq.gz
+```
+
+With custom parameters:
+
+```bash
+./target/release/dedup_interleaved_fastq \
+  --max-offset 2 \
+  --max-error-frac 0.02 \
+  --kmer-len 15 \
+  --window-len 25 \
+  --num-windows 4 \
+  input.fastq.gz output.fastq.gz
+```
+
+View all options:
+
+```bash
+./target/release/dedup_interleaved_fastq --help
+```
+
+#### Input Format
+
+The binary expects interleaved paired-end FASTQ files where R1 and R2 reads
+alternate (R1, R2, R1, R2, ...). The input file must be gzip-compressed.
+
+The input file must not be streamed, because we process it in two passes.  So
+you can't do:
+
+```bash
+./target/release/dedup_interleaved_fastq \
+    <(aws s3 cp s3://.../input.fastq.gz -) output.fastq.gz
+```
+
+#### Output
+
+The output file contains only the exemplar read pairs (one representative per
+duplicate cluster), maintaining the interleaved format. The binary performs
+two passes:
+
+1. **Pass 1**: Reads all pairs and builds the deduplication index
+2. **Pass 2**: Writes only exemplar pairs to the output file
+
+Progress is reported during both passes, along with deduplication statistics.
+
+#### Parameters
+
+- `--max-offset`: Maximum alignment offset in bases (default: 1)
+- `--max-error-frac`: Maximum error fraction allowed (default: 0.01)
+- `--kmer-len`: K-mer length for minimizers (default: 15)
+- `--window-len`: Window length for minimizers (default: 25)
+- `--num-windows`: Number of windows per read (default: 4)
+
 ## How It Works
 
 ### 1. Minimizer Extraction
