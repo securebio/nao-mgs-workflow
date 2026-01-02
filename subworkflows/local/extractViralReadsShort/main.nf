@@ -50,7 +50,7 @@ workflow EXTRACT_VIRAL_READS_SHORT {
                                "edit_distance", "edit_distance_rev", "ref_start", 
                                "ref_start_rev", "query_rc", "query_rc_rev", "pair_status"]
          // 1. Run initial screen against viral genomes with BBDuk
-        bbduk_params = params_map
+        bbduk_params = params_map + [suffix: params_map.bbduk_suffix]
         bbduk_ch = BBDUK_HITS(reads_ch, viral_genome_path, bbduk_params)
         // 2. Carry out stringent adapter removal with FASTP and Cutadapt
         fastp_ch = FASTP(bbduk_ch.fail, params_map.adapters, true)

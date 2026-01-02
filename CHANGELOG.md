@@ -1,3 +1,6 @@
+# v3.0.1.8-dev
+- Fixed BBDUK filenames containing "_null_" suffix by correctly mapping `bbduk_suffix` to `suffix` parameter in `EXTRACT_VIRAL_READS_SHORT` and `ribo_suffix` to `suffix` parameter in `PROFILE`. (#564)
+
 # v3.0.1.7
 - Clarified testing documentation in `docs/developer.md`.
 - Added bin/clean-nf-test.sh for test cleanup.
