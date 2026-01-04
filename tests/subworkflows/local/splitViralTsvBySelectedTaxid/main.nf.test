@@ -120,6 +120,7 @@ nextflow_workflow {
 
     test("Should run without failures on valid input data") {
         tag "expect_success"
+        tag "valid_data"
         setup {
             run("LOAD_DOWNSTREAM_DATA") {
                 script "subworkflows/local/loadDownstreamData/main.nf"
@@ -197,6 +198,7 @@ nextflow_workflow {
             assert workflow.out.tsv.collect{it[1].size()}.sum() == n_parts_total
             // FASTQ extraction and merging should work as expected
             def tabs_part_2 = workflow.out.tsv.collectMany{it[1]}.collect{path(it).csv(sep: "\t",decompress: true)}
+            println(workflow.out.fastq)
             def fastqs_interleaved = workflow.out.fastq.collectMany{it[1]}.collect{path(it).fastq}
             for (int i=0; i < tabs_part_2.size(); i++) {
                 assert tabs_part_2[i].rowCount == fastqs_interleaved[i].sequences.size() / 2
