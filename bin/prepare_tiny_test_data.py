@@ -214,6 +214,58 @@ def concatenate_files(paths: List[Path], output: Path) -> None:
                 outf.write(inf.read())
     logger.info(f"Concatenated files into {output}.")
 
+def fix_fastq_read_ids(input_fastq: Path, output_fastq: Path) -> None:
+    """
+    Fix FASTQ read IDs by converting /1 and /2 suffixes to space-delimited format.
+    Converts "read_id/1" to "read_id 1" and "read_id/2" to "read_id 2".
+
+    Args:
+        input_fastq (Path): Input FASTQ file with slash-delimited mate numbers
+        output_fastq (Path): Output FASTQ file with space-delimited mate numbers
+    """
+    logger.info(f"Fixing read IDs in {input_fastq.name}...")
+    records = []
+    for record in SeqIO.parse(input_fastq, "fastq"):
+        # Replace /1 or /2 at the end of the ID with space-delimited format
+        if record.id.endswith("/1"):
+            record.id = record.id[:-2] + " 1"
+            # Clear description to prevent duplication (description includes the full header line)
+            record.description = ""
+        elif record.id.endswith("/2"):
+            record.id = record.id[:-2] + " 2"
+            # Clear description to prevent duplication (description includes the full header line)
+            record.description = ""
+
+        records.append(record)
+
+    SeqIO.write(records, output_fastq, "fastq")
+    logger.info(f"Fixed {len(records)} read IDs in {output_fastq.name}")
+
+def interleave_paired_reads(r1_file: Path, r2_file: Path, output_file: Path, file_format: str = "fastq") -> None:
+    """
+    Interleave paired-end reads from R1 and R2 files into a single file.
+
+    Args:
+        r1_file (Path): R1 (forward) reads file
+        r2_file (Path): R2 (reverse) reads file
+        output_file (Path): Output interleaved file
+        file_format (str): File format, either "fastq" or "fasta"
+    """
+    logger.info(f"Interleaving {r1_file.name} and {r2_file.name}...")
+
+    with open(r1_file, 'r') as f1, open(r2_file, 'r') as f2, open(output_file, 'w') as out:
+        r1_records = SeqIO.parse(f1, file_format)
+        r2_records = SeqIO.parse(f2, file_format)
+
+        interleaved_records = []
+        for rec1, rec2 in zip(r1_records, r2_records):
+            interleaved_records.append(rec1)
+            interleaved_records.append(rec2)
+
+        SeqIO.write(interleaved_records, out, file_format)
+
+    logger.info(f"Created interleaved file: {output_file.name}")
+
 def fastq_to_fasta(fastq_file: Path, fasta_file: Path) -> None:
     """
     Convert FASTQ file to FASTA format.
@@ -312,10 +364,15 @@ def generate_illumina_data(fasta_viral: Path,
         r1_files.append(r1)
         r2_files.append(r2)
         logger.info(f"Concatenating all Illumina reads...")
+        concat_r1_raw = tmpdir / "R1_raw.fastq"
+        concat_r2_raw = tmpdir / "R2_raw.fastq"
+        concatenate_files(r1_files, concat_r1_raw)
+        concatenate_files(r2_files, concat_r2_raw)
+        logger.info(f"Fixing read IDs to use space-delimited format...")
         concat_r1 = tmpdir / "R1.fastq"
         concat_r2 = tmpdir / "R2.fastq"
-        concatenate_files(r1_files, concat_r1)
-        concatenate_files(r2_files, concat_r2)
+        fix_fastq_read_ids(concat_r1_raw, concat_r1)
+        fix_fastq_read_ids(concat_r2_raw, concat_r2)
         logger.info(f"Generating gzipped copies of the concatenated Illumina reads...")
         gzip_r1 = concat_r1.with_suffix(".gz")
         gzip_r2 = concat_r2.with_suffix(".gz")
@@ -335,6 +392,22 @@ def generate_illumina_data(fasta_viral: Path,
         fasta_r2 = str(output_prefix_local) + "R2.fasta"
         fastq_to_fasta(Path(dest_r1), Path(fasta_r1))
         fastq_to_fasta(Path(dest_r2), Path(fasta_r2))
+
+        logger.info(f"Creating interleaved FASTQ file...")
+        interleaved_fastq = tmpdir / "interleaved.fastq"
+        interleave_paired_reads(concat_r1, concat_r2, interleaved_fastq, "fastq")
+        dest_interleaved_fastq = output_prefix_local + "interleaved.fastq"
+        shutil.copy2(str(interleaved_fastq), dest_interleaved_fastq)
+
+        logger.info(f"Creating interleaved FASTA file...")
+        interleaved_fasta = str(output_prefix_local) + "interleaved.fasta"
+        interleave_paired_reads(Path(fasta_r1), Path(fasta_r2), Path(interleaved_fasta), "fasta")
+
+        logger.info(f"Gzipping and uploading interleaved FASTQ...")
+        gzip_interleaved = interleaved_fastq.with_suffix(".fastq.gz")
+        gzip_file(interleaved_fastq, gzip_interleaved)
+        upload_to_s3(gzip_interleaved, output_prefix_s3 + "interleaved.fastq.gz")
+
         logger.info(f"Done.")
 
 def generate_ont_data(fasta_viral: Path,
