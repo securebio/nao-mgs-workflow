@@ -1,4 +1,4 @@
 label,hits_tsv,groups_tsv
-gs1,s3://nao-testing/gold-standard-test/processed/virus_hits_final.tsv.gz,s3://nao-testing/gold-standard-test/metadata/sample_groups_1.tsv
-gs2,s3://nao-testing/gold-standard-test/processed/virus_hits_final.tsv.gz,s3://nao-testing/gold-standard-test/metadata/sample_groups_1.tsv
-gs3,s3://nao-testing/gold-standard-test/processed/virus_hits_final.tsv.gz,s3://nao-testing/gold-standard-test/metadata/sample_groups_2.tsv
+tt1,s3://nao-testing/tiny-test/processed/virus_hits_final.tsv.gz,s3://nao-testing/tiny-test/metadata/sample_groups_1.tsv
+tt2,s3://nao-testing/tiny-test/processed/virus_hits_final.tsv.gz,s3://nao-testing/tiny-test/metadata/sample_groups_1.tsv
+tt3,s3://nao-testing/tiny-test/processed/virus_hits_final.tsv.gz,s3://nao-testing/tiny-test/metadata/sample_groups_2.tsv
