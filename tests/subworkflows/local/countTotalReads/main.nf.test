@@ -38,7 +38,7 @@ nextflow_workflow {
             def file_out = path(workflow.out.read_counts[0]).csv(sep: "\t", decompress: true) 
             assert file_out.rowCount == 1
             assert file_out.columnNames == ['sample', 'n_reads_single', 'n_read_pairs']
-            assert file_out.rows[0] == ["sample": "gold_standard", "n_reads_single": 165*2, "n_read_pairs": 165]
+            assert file_out.rows[0] == ["sample": "tiny_test", "n_reads_single": 50, "n_read_pairs": 25]
         }
     }
 

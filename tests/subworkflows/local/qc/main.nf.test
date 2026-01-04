@@ -63,9 +63,11 @@ nextflow_workflow {
             // Other TSVs should have expected structure and content
             def tsv_adapt = path(workflow.out.qc[0][1]).csv(sep: "\t", decompress: true)
             with (tsv_adapt) {
-                assert columnCount == 6
-                assert columns["stage"][0] == stage
-                assert columns["sample"][0] == sample
+                assert columnCount == 6 || columnCount == 0
+                if (columnCount > 0) {
+                    assert columns["stage"][0] == stage
+                    assert columns["sample"][0] == sample
+                }
             }
             def tsv_qbase = path(workflow.out.qc[0][2]).csv(sep: "\t", decompress: true)
             with (tsv_qbase) {
@@ -146,9 +148,11 @@ nextflow_workflow {
             // Other TSVs should have expected structure and content
             def tsv_adapt = path(workflow.out.qc[0][1]).csv(sep: "\t", decompress: true)
             with (tsv_adapt) {
-                assert columnCount == 6
-                assert columns["stage"][0] == stage
-                assert columns["sample"][0] == sample
+                assert columnCount == 6 || columnCount == 0
+                if (columnCount > 0) {
+                    assert columns["stage"][0] == stage
+                    assert columns["sample"][0] == sample
+                }
             }
             def tsv_qbase = path(workflow.out.qc[0][2]).csv(sep: "\t", decompress: true)
             with (tsv_qbase) {

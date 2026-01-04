@@ -22,7 +22,7 @@ nextflow_process {
                     db_download_timeout: params.db_download_timeout
                 ]
                 input[0] = Channel.of("test")
-                    | combine(Channel.of("${projectDir}/test-data/toy-data/blast/input.fasta"))
+                    | combine(Channel.of("${projectDir}/test-data/tiny-index/reads/R1.fasta"))
                 input[1] = "${params.ref_dir}/results/${params.blast_db_prefix}"
                 input[2] = blast_params
                 '''
