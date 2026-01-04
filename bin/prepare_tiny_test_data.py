@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 DESC = """
-Generate tiny Illumina test datasets from reference genomes using InSilicoSeq.
+Generate tiny Illumina and ONT test datasets from reference genomes using InSilicoSeq and NanoSim.
 """
 
 ###########
@@ -15,6 +15,7 @@ import sys
 import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Optional, Tuple, List
 import boto3
 from botocore.exceptions import ClientError, NoCredentialsError
 import shutil
@@ -28,7 +29,7 @@ import os
 class UTCFormatter(logging.Formatter):
     """Custom logging formatter that displays timestamps in UTC."""
 
-    def formatTime(self, record: logging.LogRecord, datefmt: str | None = None) -> str:
+    def formatTime(self, record: logging.LogRecord, datefmt: Optional[str] = None) -> str:
         """Format log timestamps in UTC timezone."""
         dt = datetime.fromtimestamp(record.created, timezone.utc)
         return dt.strftime("%Y-%m-%d %H:%M:%S UTC")
@@ -44,6 +45,8 @@ logger.addHandler(handler)
 ########################
 # READ FILE GENERATION #
 ########################
+
+NANOSIM_MODEL_URL = "https://raw.githubusercontent.com/bcgsc/NanoSim/master/pre-trained_models/human_giab_hg002_sub1M_kitv14_dorado_v3.2.1.tar.gz"
 
 def modify_fasta_headers(input_fasta: Path, output_fasta: Path, suffix: str) -> None:
     """
@@ -65,8 +68,8 @@ def generate_illumina(fasta_file: Path,
                    output_prefix: Path,
                    n_read_pairs: int,
                    seed: int,
-                   fragment_length: int | None = None,
-                   model: str = "NovaSeq") -> tuple[Path, Path]:
+                   fragment_length: Optional[int] = None,
+                   model: str = "NovaSeq") -> Tuple[Path, Path]:
     """
     Generate paired-end Illumina reads from a FASTA file using InSilicoSeq.
     Args:
@@ -74,10 +77,10 @@ def generate_illumina(fasta_file: Path,
         output_prefix (Path): Output prefix for generated reads
         n_read_pairs (int): Number of read pairs to generate
         seed (int): Seed for random number generators
-        fragment_length (int | None): Fragment length for paired-end reads (default: None)
+        fragment_length (Optional[int]): Fragment length for paired-end reads (default: None)
         model (str): Sequencing error model (default: NovaSeq)
     Returns:
-        tuple[Path, Path]: Paths to R1 and R2 FASTQ files
+        Tuple[Path, Path]: Paths to R1 and R2 FASTQ files
     """
     logger.info(f"Generating {n_read_pairs} read pairs from {fasta_file.name}...")
     cmd = [
@@ -103,11 +106,101 @@ def generate_illumina(fasta_file: Path,
     logger.info(f"  Generated {r1_file.name} and {r2_file.name}")
     return r1_file, r2_file
 
-def concatenate_files(paths: list[Path], output: Path) -> None:
+def download_nanosim_model(tmpdir: Path, model_url: str) -> Path:
+    """
+    Download and extract NanoSim statistical model.
+
+    Args:
+        tmpdir (Path): Temporary directory for downloads
+        model_url (str): URL to the NanoSim model tarball
+
+    Returns:
+        Path: Path to the extracted model directory
+    """
+    model_tarball = tmpdir / "nanosim_model.tar.gz"
+    model_dir = tmpdir / "nanosim_model"
+    logger.info(f"Downloading NanoSim model from {model_url}...")
+    result = subprocess.run([
+        "wget", model_url, "-O", str(model_tarball)
+    ], capture_output=True, text=True)
+
+    if result.returncode != 0:
+        logger.error("Failed to download NanoSim model")
+        logger.error(result.stderr)
+        raise subprocess.CalledProcessError(result.returncode, result.args)
+
+    logger.info("Extracting NanoSim model...")
+    model_dir.mkdir(exist_ok=True)
+    result = subprocess.run([
+        "tar", "-xzf", str(model_tarball), "-C", str(model_dir), "--strip-components=1"
+    ], capture_output=True, text=True)
+
+    if result.returncode != 0:
+        logger.error("Failed to extract NanoSim model")
+        logger.error(result.stderr)
+        raise subprocess.CalledProcessError(result.returncode, result.args)
+
+    # Clean up tarball
+    model_tarball.unlink()
+
+    return model_dir
+
+def generate_ont(fasta_file: Path,
+                 output_prefix: Path,
+                 n_reads: int,
+                 model_dir: Path,
+                 seed: int = 0) -> Path:
+    """
+    Generate ONT reads from a FASTA file using NanoSim.
+
+    Args:
+        fasta_file (Path): Input FASTA file
+        output_prefix (Path): Output prefix for generated reads
+        n_reads (int): Number of reads to generate
+        model_dir (Path): Path to NanoSim model directory
+        seed (int): Random seed (default: 0)
+
+    Returns:
+        Path: Path to output FASTQ file
+    """
+    logger.info(f"Generating {n_reads} ONT reads from {fasta_file.name}...")
+
+    # NanoSim expects the model path to point to the training prefix
+    model_prefix = model_dir / "training"
+
+    result = subprocess.run([
+        "simulator.py", "genome",
+        "-rg", str(fasta_file.resolve()),  # Use absolute path
+        "-n", str(n_reads),
+        "-s", "0.5",  # Strandedness (0.5 = equal forward/reverse)
+        "-c", str(model_prefix),
+        "-o", str(output_prefix),
+        "--seed", str(seed),
+        "--fastq"
+    ], capture_output=True, text=True, cwd=output_prefix.parent)
+
+    if result.returncode != 0:
+        logger.error(f"Failed to generate ONT reads from {fasta_file}")
+        logger.error(result.stderr)
+        raise subprocess.CalledProcessError(result.returncode, result.args)
+
+    # NanoSim creates files with specific suffixes
+    fastq_file = Path(f"{output_prefix}_aligned_reads.fastq")
+
+    if not fastq_file.exists():
+        msg = f"Expected output file not found: {fastq_file}"
+        msg += f"\nAvailable files: {list(output_prefix.parent.glob('*'))}"
+        logger.error(msg)
+        raise FileNotFoundError(msg)
+
+    logger.info(f"  Generated {fastq_file.name}")
+    return fastq_file
+
+def concatenate_files(paths: List[Path], output: Path) -> None:
     """
     Concatenate multiple files with matching extensions into a single file.
     Args:
-        paths (list[Path]): List of input files
+        paths (List[Path]): List of input files
         output (Path): Output concatenated file
     """
     # First check that all files have matching extensions
@@ -181,7 +274,7 @@ def upload_to_s3(local_file: Path, s3_uri: str) -> None:
 #################
 
 def generate_illumina_data(fasta_viral: Path,
-                           fasta_other: list[Path],
+                           fasta_other: List[Path],
                            read_pairs_per_genome: int,
                            output_prefix_local: str,
                            output_prefix_s3: str,
@@ -191,7 +284,7 @@ def generate_illumina_data(fasta_viral: Path,
 
     Args:
         fasta_viral (Path): FASTA file for viral genome
-        fasta_other (list[Path]): List of FASTA files for other genomes
+        fasta_other (List[Path]): List of FASTA files for other genomes
         read_pairs_per_genome (int): Number of read pairs to generate per genome
         output_prefix_local (str): Local path prefix for output files
         output_prefix_s3 (str): S3 URI prefix for output files
@@ -204,13 +297,13 @@ def generate_illumina_data(fasta_viral: Path,
         tmpdir = Path(tmpdir)
         r1_files = []
         r2_files = []
-        logger.info(f"Generating test data from each input file...")
+        logger.info(f"Generating Illumina test data from each input file...")
         for fasta in [fasta_viral] + fasta_other:
             prefix = tmpdir / f"{fasta.stem}"
             r1, r2 = generate_illumina(fasta, prefix, read_pairs_per_genome, seed)
             r1_files.append(r1)
             r2_files.append(r2)
-        logger.info(f"Generating extra overlapping reads from viral genomes...")
+        logger.info(f"Generating extra overlapping Illumina reads from viral genomes...")
         # Create a modified copy of the viral FASTA to avoid duplicate read IDs
         viral_modified = tmpdir / "viral_overlap.fasta"
         modify_fasta_headers(fasta_viral, viral_modified, "_overlap")
@@ -218,30 +311,99 @@ def generate_illumina_data(fasta_viral: Path,
         r1, r2 = generate_illumina(viral_modified, prefix, read_pairs_per_genome, seed, 200)
         r1_files.append(r1)
         r2_files.append(r2)
-        logger.info(f"Concatenating all reads...")
+        logger.info(f"Concatenating all Illumina reads...")
         concat_r1 = tmpdir / "R1.fastq"
         concat_r2 = tmpdir / "R2.fastq"
         concatenate_files(r1_files, concat_r1)
         concatenate_files(r2_files, concat_r2)
-        logger.info(f"Generating gzipped copies of the concatenated reads...")
+        logger.info(f"Generating gzipped copies of the concatenated Illumina reads...")
         gzip_r1 = concat_r1.with_suffix(".gz")
         gzip_r2 = concat_r2.with_suffix(".gz")
         gzip_file(concat_r1, gzip_r1)
         gzip_file(concat_r2, gzip_r2)
-        logger.info(f"Uploading reads to S3...")
+        logger.info(f"Uploading Illumina reads to S3...")
         upload_to_s3(gzip_r1, output_prefix_s3 + "R1.fastq.gz")
         upload_to_s3(gzip_r2, output_prefix_s3 + "R2.fastq.gz")
-        logger.info(f"Creating unzipped local copies...")
+        logger.info(f"Creating unzipped local copies of the Illumina reads...")
         os.makedirs(os.path.dirname(output_prefix_local), exist_ok=True)
         dest_r1 = output_prefix_local + "R1.fastq"
         dest_r2 = output_prefix_local + "R2.fastq"
         shutil.copy2(str(concat_r1), dest_r1)
         shutil.copy2(str(concat_r2), dest_r2)
-        logger.info(f"Converting FASTQs to FASTA format...")
+        logger.info(f"Converting Illumina FASTQs to FASTA format...")
         fasta_r1 = str(output_prefix_local) + "R1.fasta"
         fasta_r2 = str(output_prefix_local) + "R2.fasta"
         fastq_to_fasta(Path(dest_r1), Path(fasta_r1))
         fastq_to_fasta(Path(dest_r2), Path(fasta_r2))
+        logger.info(f"Done.")
+
+def generate_ont_data(fasta_viral: Path,
+                      fasta_other: List[Path],
+                      reads_per_genome: int,
+                      output_prefix_local: str,
+                      output_prefix_s3: str,
+                      nanosim_model_url: str,
+                      seed: int) -> None:
+    """
+    Generate ONT test read data from reference genomes and upload to S3.
+
+    Args:
+        fasta_viral (Path): FASTA file for viral genome
+        fasta_other (List[Path]): List of FASTA files for other genomes
+        reads_per_genome (int): Number of reads to generate per genome
+        output_prefix_local (str): Local path prefix for output files
+        output_prefix_s3 (str): S3 URI prefix for output files
+        nanosim_model_url (str): URL to NanoSim model tarball
+        seed (int): Seed for random number generators
+    """
+    for fasta in [fasta_viral] + fasta_other:
+        if not fasta.exists():
+            raise FileNotFoundError(f"FASTA file not found: {fasta}")
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmpdir = Path(tmpdir)
+        fastq_files = []
+
+        # Download NanoSim model
+        logger.info("Downloading NanoSim model...")
+        model_dir = download_nanosim_model(tmpdir, nanosim_model_url)
+
+        logger.info(f"Generating ONT reads from each input file...")
+        # Use different seeds for each genome to ensure unique read IDs
+
+        # Generate double reads from viral genome
+        prefix = tmpdir / fasta_viral.stem
+        viral_seed = seed
+        fastq = generate_ont(fasta_viral, prefix, reads_per_genome * 2, model_dir, viral_seed)
+        fastq_files.append(fastq)
+
+        # Generate reads from other genomes
+        for i, fasta in enumerate(fasta_other):
+            prefix = tmpdir / fasta.stem
+            genome_seed = seed + i + 1
+            fastq = generate_ont(fasta, prefix, reads_per_genome, model_dir, genome_seed)
+            fastq_files.append(fastq)
+
+        logger.info(f"Concatenating all ONT reads...")
+        concat_fastq = tmpdir / "ont.fastq"
+        concatenate_files(fastq_files, concat_fastq)
+
+        logger.info(f"Generating gzipped copy of the concatenated ONT reads...")
+        gzip_fastq = concat_fastq.with_suffix(".fastq.gz")
+        gzip_file(concat_fastq, gzip_fastq)
+
+        logger.info(f"Uploading ONT reads to S3...")
+        upload_to_s3(gzip_fastq, output_prefix_s3 + "ont.fastq.gz")
+
+        logger.info(f"Creating unzipped local copy of the ONT reads...")
+        os.makedirs(os.path.dirname(output_prefix_local), exist_ok=True)
+        dest_fastq = output_prefix_local + "ont.fastq"
+        shutil.copy2(str(concat_fastq), dest_fastq)
+
+        logger.info(f"Converting ONT FASTQ to FASTA format...")
+        fasta_file = output_prefix_local + "ont.fasta"
+        fastq_to_fasta(Path(dest_fastq), Path(fasta_file))
+
         logger.info(f"Done.")
 
 def parse_arguments() -> argparse.Namespace:
@@ -263,16 +425,16 @@ def parse_arguments() -> argparse.Namespace:
         default=[Path(f"./test-data/tiny-index/genomes/{name}.fasta") for name in ["human", "phage", "rrna"]],
     )
     parser.add_argument(
-        "--n-read-pairs", "-n",
+        "--n-reads", "-n",
         type=int,
         default=5,
-        help="Number of read pairs to generate per input file (default: 5)"
+        help="Number of reads (Illumina pairs, ONT single reads) to generate per input file (default: 5)"
     )
     parser.add_argument(
         "--output-prefix-local", "-o",
         type=str,
-        default="./test-data/tiny-index/reads/illumina/",
-        help="Local path prefix for output files (default: ./test-data/tiny-index/reads/illumina/)"
+        default="./test-data/tiny-index/reads/",
+        help="Local path prefix for output files (default: ./test-data/tiny-index/reads/)"
     )
     parser.add_argument(
         "--output-prefix-s3", "-s",
@@ -286,6 +448,12 @@ def parse_arguments() -> argparse.Namespace:
         default=827100,
         help="Seed for random number generators (default: 827100)"
     )
+    parser.add_argument(
+        "--nanosim-model-url",
+        type=str,
+        default=NANOSIM_MODEL_URL,
+        help=f"URL to NanoSim pre-trained model tarball (default: {NANOSIM_MODEL_URL})"
+    )
     return parser.parse_args()
 
 def main():
@@ -294,9 +462,18 @@ def main():
     generate_illumina_data(
         fasta_viral=args.fasta_viral,
         fasta_other=args.fasta_other,
-        read_pairs_per_genome=args.n_read_pairs,
+        read_pairs_per_genome=args.n_reads,
         output_prefix_local=args.output_prefix_local,
         output_prefix_s3=args.output_prefix_s3,
+        seed=args.seed
+    )
+    generate_ont_data(
+        fasta_viral=args.fasta_viral,
+        fasta_other=args.fasta_other,
+        reads_per_genome=args.n_reads,
+        output_prefix_local=args.output_prefix_local,
+        output_prefix_s3=args.output_prefix_s3,
+        nanosim_model_url=args.nanosim_model_url,
         seed=args.seed
     )
 
