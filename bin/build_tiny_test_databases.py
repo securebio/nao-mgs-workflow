@@ -193,6 +193,21 @@ def build_kraken_database(
         logger.error("Failed to build Kraken2 database")
         logger.error(result.stderr)
         raise subprocess.CalledProcessError(result.returncode, result.args)
+
+    # Build Bracken k-mer distribution files
+    logger.info("Building Bracken k-mer distribution files...")
+    for read_len in [100, 150]:  # Common Illumina read lengths
+        result = subprocess.run([
+            "bracken-build",
+            "-d", str(output_dir),
+            "-t", "4",
+            "-k", "25",
+            "-l", str(read_len)
+        ], capture_output=True, text=True)
+        if result.returncode != 0:
+            logger.warning(f"Failed to build Bracken distribution for read length {read_len}")
+            logger.warning(result.stderr)
+
     subprocess.run(
         ["kraken2-build", "--clean", "--db", str(output_dir)],
         check=True,
@@ -348,12 +363,14 @@ def parse_arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=DESC)
     script_dir = Path(__file__).parent
     repo_root = script_dir.parent
-    default_taxonomy_dir = repo_root / "test-data" / "tiny-index"
+    default_parent_dir = repo_root / "test-data" / "tiny-index"
+    default_genomes_dir = default_parent_dir / "genomes"
+    default_taxonomy_dir = default_parent_dir / "taxonomy"
     parser.add_argument(
         "--viral-genome",
         type=Path,
-        help="Path to HDV genome FASTA file (default: test-data/tiny-index/hdv.fasta)",
-        default=default_taxonomy_dir / "hdv.fasta"
+        help=f"Path to HDV genome FASTA file (default: {default_genomes_dir / 'hdv.fasta'})",
+        default=default_genomes_dir / "hdv.fasta"
     )
     parser.add_argument(
         "--config-file",
@@ -416,7 +433,7 @@ def run_build(args: argparse.Namespace) -> None:
     with tempfile.TemporaryDirectory() as tmpdir:
         tmpdir = Path(tmpdir)
         kraken_dir = tmpdir / "tiny-kraken2-db"
-        blast_dir = tmpdir / "blast_db"
+        blast_dir = tmpdir / "tiny_blast_db"
         kraken_dir.mkdir(parents=True, exist_ok=True)
         blast_dir.mkdir(parents=True, exist_ok=True)
 
