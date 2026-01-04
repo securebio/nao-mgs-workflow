@@ -14,13 +14,13 @@
     "adapters": "/home/ec2-user/mgs-workflow/ref/adapters.fasta",
     "genome_patterns_exclude": "/home/ec2-user/mgs-workflow/ref/hv_patterns_exclude.txt",
     "kraken_db": "https://nao-testing.s3.amazonaws.com/test-databases/tiny-kraken2-db.tar.gz",
-    "blast_db_name": "https://nao-testing.s3.amazonaws.com/test-databases/blast_db.tar.gz",
+    "blast_db_name": "https://nao-testing.s3.amazonaws.com/test-databases/tiny_blast_db.tar.gz",
     "ncbi_viral_params": "--section refseq --assembly-level complete --taxids 2847173",
     "virus_taxid": "10239",
     "viral_taxids_exclude_hard": "2731619 2732413 2732411",
     "host_taxa_screen": "vertebrate human",
     "kraken_memory": "",
     "classify_dedup_subset": "",
-    "trace_timestamp": "2025-12-28_19-24-21",
+    "trace_timestamp": "2026-01-04_13-39-44",
     "db_download_timeout": 1200
 }
