@@ -256,6 +256,8 @@ def build_blast_database(output_dir: Path, sequences: list[tuple[str, str | Path
                             if '|' in seq_id:
                                 # For formats like "ENA|AB065370|AB065370.1", take the last part
                                 seq_id = seq_id.split('|')[-1]
+                            # Replace colons with underscores - BLAST has issues with colons in sequence IDs
+                            seq_id = seq_id.replace(':', '_')
                             seq_id_to_taxid[seq_id] = taxid
                             # Write simplified header
                             lines[i] = f'>{seq_id}'

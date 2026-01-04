@@ -6,10 +6,10 @@
   "description": "Tiny BLAST Database",
   "number-of-letters": 5222,
   "number-of-sequences": 4,
-  "last-updated": "2026-01-04T13:35:00",
+  "last-updated": "2026-01-04T17:57:00",
   "number-of-volumes": 1,
-  "number-of-taxids": 3,
-  "bytes-total": 51028,
+  "number-of-taxids": 4,
+  "bytes-total": 51124,
   "bytes-to-cache": 1478,
   "files": [
     "tiny_blast_db.ndb",
