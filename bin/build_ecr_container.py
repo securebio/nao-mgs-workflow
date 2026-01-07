@@ -216,7 +216,7 @@ def build_docker_image_from_spec(
     logger.info(f"Building Docker image: {image_tag}")
     try:
         subprocess.run(
-            ["docker", "build", "-t", image_tag, str(build_dir)],
+            ["docker", "build", "--platform", "linux/amd64", "-t", image_tag, str(build_dir)],
             check=True,
         )
         logger.info(f"Built image: {image_tag}")
