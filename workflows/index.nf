@@ -17,6 +17,7 @@ include { MAKE_CONTAMINANT_INDEX } from "../subworkflows/local/makeContaminantIn
 include { MAKE_VIRUS_INDEX } from "../subworkflows/local/makeVirusIndex"
 include { MAKE_RIBO_INDEX } from "../subworkflows/local/makeRiboIndex"
 include { GET_TARBALL as GET_KRAKEN_DB } from "../modules/local/getTarball"
+include { GET_TARBALL as GET_BLAST_DB } from "../modules/local/getTarball"
 include { COPY_FILE_BARE as COPY_VERSION } from "../modules/local/copyFile"
 include { COPY_FILE_BARE as COPY_COMPAT } from "../modules/local/copyFile"
 
@@ -47,7 +48,15 @@ workflow INDEX {
         MAKE_CONTAMINANT_INDEX(params.genome_urls, params.contaminants)
         MAKE_RIBO_INDEX(JOIN_RIBO_REF.out.ribo_ref)
         // Other index files
-        DOWNLOAD_BLAST_DB(params.blast_db_name)
+        if (params.blast_db_name.startsWith("http://") || params.blast_db_name.startsWith("https://")) {
+            // Extract database name from URL (e.g., "tiny_blast_db" from "tiny_blast_db.tar.gz")
+            blast_db_name = params.blast_db_name.split("/")[-1].replaceAll(/\.tar\.gz$/, "")
+            GET_BLAST_DB(params.blast_db_name, blast_db_name, false)
+            blast_db_ch = GET_BLAST_DB.out
+        } else {
+            DOWNLOAD_BLAST_DB(params.blast_db_name)
+            blast_db_ch = DOWNLOAD_BLAST_DB.out.db
+        }
         GET_KRAKEN_DB(params.kraken_db, "kraken_db", true)
         // Prepare results for publishing
         params_str = groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(params))
@@ -74,7 +83,7 @@ workflow INDEX {
             MAKE_VIRUS_GENOME_DB.out.metadata,
             // Other reference files & directories
             JOIN_RIBO_REF.out.ribo_ref,
-            DOWNLOAD_BLAST_DB.out.db,
+            blast_db_ch,
             GET_KRAKEN_DB.out
         )
         alignment_indexes = MAKE_HUMAN_INDEX.out.bt2.mix( // Bowtie2 alignment indexes
