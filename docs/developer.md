@@ -148,6 +148,8 @@ In cases where a module is a thin wrapper around a script in another language, c
 
 #### Test datasets 
 
+##### Current test data
+
 - Small (uncompressed) test data files are in `test-data/`; larger test datasets are in S3:
     - Currently there is no set organization of the `test-data/` directory. It will be organized in the future; see issue [#349](https://github.com/naobservatory/mgs-workflow/issues/349).
     - Small "toy" data files (uncompressed, generally ~1KB or less) may be added freely to the repo in `test-data/toy-data`.
@@ -164,6 +166,17 @@ aws s3 cp /path/to/my_dataset s3://nao-testing/my_dataset/ --acl public-read
 
 > [!NOTE]
 > Any time you update a test dataset, you must make it public again.
+
+##### Planned test data
+
+In order to cut down on the time it takes to run our test suite, we are in the process of switching much of it from larger test data stored in S3 to small test datafiles stored locally. The following instructions detail how to generate this new test data; note that, as of now, this new dataset is not yet is active use in testing.
+
+1. Create new reference datasets using `bin/prepare_tiny_test_data.py`. The defaults provided should suffice in most cases.
+2. Generate the new test index:
+    a. Create a fresh launch directory and copy the config file: `cp configs/index-for-run-test.config LAUNCH_DIR/nextflow.config`.
+    b. Edit the config file to specify a base directory (`params.base_dir`) and Batch job queue (`process.queue`).
+    c. Execute the workflow from the launch directory: `nextflow run PATH_TO_REPO_DIR`. (This usually takes about 10 minutes.)
+    d. Copy the tiny index from S3 to the repo: `aws s3 cp --recursive BASE_DIR/output test-data/tiny-index/output`, followed by `rm -r test-data/tiny-index/output/logging` to remove run-specific information we don't want in the repo.
 
 #### Running tests
 
