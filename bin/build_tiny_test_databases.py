@@ -204,8 +204,9 @@ def build_kraken_database(
             "-l", str(read_len)
         ], capture_output=True, text=True)
         if result.returncode != 0:
-            logger.warning(f"Failed to build Bracken distribution for read length {read_len}")
-            logger.warning(result.stderr)
+            logger.error(f"Failed to build Bracken distribution for read length {read_len}")
+            logger.error(result.stderr)
+            raise subprocess.CalledProcessError(result.returncode, result.args)
 
     subprocess.run(
         ["kraken2-build", "--clean", "--db", str(output_dir)],
@@ -230,41 +231,38 @@ def build_blast_database(output_dir: Path, sequences: list[tuple[str, str | Path
 
     seq_id_to_taxid = {}
 
-    with tempfile.TemporaryDirectory() as tmpdir:
-        tmpdir = Path(tmpdir)
+    with open(combined_fasta, 'w') as outfile:
+        for filename, source, taxid in sequences:
+            # Download or load the sequence
+            if isinstance(source, Path):
+                with open_by_suffix(source) as f:
+                    content = f.read()
+            else:
+                content = download_sequence(source)
 
-        with open(combined_fasta, 'w') as outfile:
-            for filename, source, taxid in sequences:
-                # Download or load the sequence
-                if isinstance(source, Path):
-                    with open_by_suffix(source) as f:
-                        content = f.read()
-                else:
-                    content = download_sequence(source)
+            # Process FASTA content to simplify headers for BLAST
+            lines = content.split('\n')
+            for i, line in enumerate(lines):
+                if line.startswith('>'):
+                    # Extract simple sequence ID (e.g., "NC_000021.9" from ">NC_000021.9 ...")
+                    # or "AB065370.1" from ">ENA|AB065370|AB065370.1 ..."
+                    parts = line[1:].split()
+                    if parts:
+                        # Handle different formats
+                        seq_id = parts[0]
+                        if '|' in seq_id:
+                            # For formats like "ENA|AB065370|AB065370.1", take the last part
+                            seq_id = seq_id.split('|')[-1]
+                        # Replace colons with underscores - BLAST has issues with colons in sequence IDs
+                        seq_id = seq_id.replace(':', '_')
+                        seq_id_to_taxid[seq_id] = taxid
+                        # Write simplified header
+                        lines[i] = f'>{seq_id}'
 
-                # Process FASTA content to simplify headers for BLAST
-                lines = content.split('\n')
-                for i, line in enumerate(lines):
-                    if line.startswith('>'):
-                        # Extract simple sequence ID (e.g., "NC_000021.9" from ">NC_000021.9 ...")
-                        # or "AB065370.1" from ">ENA|AB065370|AB065370.1 ..."
-                        parts = line[1:].split()
-                        if parts:
-                            # Handle different formats
-                            seq_id = parts[0]
-                            if '|' in seq_id:
-                                # For formats like "ENA|AB065370|AB065370.1", take the last part
-                                seq_id = seq_id.split('|')[-1]
-                            # Replace colons with underscores - BLAST has issues with colons in sequence IDs
-                            seq_id = seq_id.replace(':', '_')
-                            seq_id_to_taxid[seq_id] = taxid
-                            # Write simplified header
-                            lines[i] = f'>{seq_id}'
-
-                # Write modified content to combined file
-                outfile.write('\n'.join(lines))
-                if not content.endswith('\n'):
-                    outfile.write('\n')
+            # Write modified content to combined file
+            outfile.write('\n'.join(lines))
+            if not content.endswith('\n'):
+                outfile.write('\n')
 
     # Write taxid mapping file for BLAST
     with open(taxid_map_file, 'w') as mapfile:
