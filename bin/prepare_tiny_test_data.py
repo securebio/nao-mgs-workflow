@@ -509,7 +509,7 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument(
         "--fasta-other", "-f",
         help="List of plaintext FASTA files for other genomes, provided as a comma-separated list of paths",
-        type=lambda s: s.split(","),
+        type=lambda s: [Path(p) for p in s.split(",")],
         default=[Path(f"./test-data/tiny-index/genomes/{name}.fasta") for name in ["human", "phage", "rrna"]],
     )
     parser.add_argument(
