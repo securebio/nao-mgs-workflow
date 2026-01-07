@@ -381,26 +381,34 @@ def generate_illumina_data(fasta_viral: Path,
         upload_to_s3(gzip_r1, output_prefix_s3 + "R1.fastq.gz")
         upload_to_s3(gzip_r2, output_prefix_s3 + "R2.fastq.gz")
         logger.info(f"Creating unzipped local copies of the Illumina reads...")
-        os.makedirs(os.path.dirname(output_prefix_local), exist_ok=True)
-        dest_r1 = output_prefix_local + "R1.fastq"
-        dest_r2 = output_prefix_local + "R2.fastq"
-        shutil.copy2(str(concat_r1), dest_r1)
-        shutil.copy2(str(concat_r2), dest_r2)
+        # Convert string prefix to Path - handle both directory paths and file prefixes
+        output_prefix_path = Path(output_prefix_local)
+        # Create parent directory
+        if str(output_prefix_local).endswith('/'):
+            # It's a directory path, create it
+            output_prefix_path.mkdir(parents=True, exist_ok=True)
+        else:
+            # It's a file prefix, create parent directory
+            output_prefix_path.parent.mkdir(parents=True, exist_ok=True)
+        dest_r1 = Path(output_prefix_local + "R1.fastq")
+        dest_r2 = Path(output_prefix_local + "R2.fastq")
+        shutil.copy2(str(concat_r1), str(dest_r1))
+        shutil.copy2(str(concat_r2), str(dest_r2))
         logger.info(f"Converting Illumina FASTQs to FASTA format...")
-        fasta_r1 = str(output_prefix_local) + "R1.fasta"
-        fasta_r2 = str(output_prefix_local) + "R2.fasta"
-        fastq_to_fasta(Path(dest_r1), Path(fasta_r1))
-        fastq_to_fasta(Path(dest_r2), Path(fasta_r2))
+        fasta_r1 = Path(output_prefix_local + "R1.fasta")
+        fasta_r2 = Path(output_prefix_local + "R2.fasta")
+        fastq_to_fasta(dest_r1, fasta_r1)
+        fastq_to_fasta(dest_r2, fasta_r2)
 
         logger.info(f"Creating interleaved FASTQ file...")
         interleaved_fastq = tmpdir / "interleaved.fastq"
         interleave_paired_reads(concat_r1, concat_r2, interleaved_fastq, "fastq")
-        dest_interleaved_fastq = output_prefix_local + "interleaved.fastq"
-        shutil.copy2(str(interleaved_fastq), dest_interleaved_fastq)
+        dest_interleaved_fastq = Path(output_prefix_local + "interleaved.fastq")
+        shutil.copy2(str(interleaved_fastq), str(dest_interleaved_fastq))
 
         logger.info(f"Creating interleaved FASTA file...")
-        interleaved_fasta = str(output_prefix_local) + "interleaved.fasta"
-        interleave_paired_reads(Path(fasta_r1), Path(fasta_r2), Path(interleaved_fasta), "fasta")
+        interleaved_fasta = Path(output_prefix_local + "interleaved.fasta")
+        interleave_paired_reads(fasta_r1, fasta_r2, interleaved_fasta, "fasta")
 
         logger.info(f"Gzipping and uploading interleaved FASTQ...")
         gzip_interleaved = interleaved_fastq.with_suffix(".fastq.gz")
@@ -468,13 +476,21 @@ def generate_ont_data(fasta_viral: Path,
         upload_to_s3(gzip_fastq, output_prefix_s3 + "ont.fastq.gz")
 
         logger.info(f"Creating unzipped local copy of the ONT reads...")
-        os.makedirs(os.path.dirname(output_prefix_local), exist_ok=True)
-        dest_fastq = output_prefix_local + "ont.fastq"
-        shutil.copy2(str(concat_fastq), dest_fastq)
+        # Convert string prefix to Path - handle both directory paths and file prefixes
+        output_prefix_path = Path(output_prefix_local)
+        # Create parent directory
+        if str(output_prefix_local).endswith('/'):
+            # It's a directory path, create it
+            output_prefix_path.mkdir(parents=True, exist_ok=True)
+        else:
+            # It's a file prefix, create parent directory
+            output_prefix_path.parent.mkdir(parents=True, exist_ok=True)
+        dest_fastq = Path(output_prefix_local + "ont.fastq")
+        shutil.copy2(str(concat_fastq), str(dest_fastq))
 
         logger.info(f"Converting ONT FASTQ to FASTA format...")
-        fasta_file = output_prefix_local + "ont.fasta"
-        fastq_to_fasta(Path(dest_fastq), Path(fasta_file))
+        fasta_file = Path(output_prefix_local + "ont.fasta")
+        fastq_to_fasta(dest_fastq, fasta_file)
 
         logger.info(f"Done.")
 
