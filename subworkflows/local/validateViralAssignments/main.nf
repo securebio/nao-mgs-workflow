@@ -48,9 +48,18 @@ workflow VALIDATE_VIRAL_ASSIGNMENTS {
         // 2. Cluster sequences within species and obtain representatives of largest clusters
         cluster_ch = CLUSTER_VIRAL_ASSIGNMENTS(split_ch.fastq, params_map.validation_cluster_identity,
             params_map.cluster_min_len, params_map.validation_n_clusters, Channel.of(params.platform == "ont"))
+        // Ensure [[label, [files]]] structure even if there is only one partition
+        cluster_ch_fasta = cluster_ch.fasta.map { sample, files ->
+            def file_list = files instanceof List ? files : [files]
+            [sample, file_list]
+        }
+        cluster_ch_tsv = cluster_ch.tsv.map { sample, files ->
+            def file_list = files instanceof List ? files : [files]
+            [sample, file_list]
+        }
         // 3. Concatenate data across species (prepare for group-level BLAST)
-        concat_fasta_ch = CONCATENATE_FILES_BY_EXTENSION(cluster_ch.fasta, "cluster_reps").output
-        concat_cluster_ch = CONCATENATE_TSVS_LABELED(cluster_ch.tsv, "cluster_info")
+        concat_fasta_ch = CONCATENATE_FILES_BY_EXTENSION(cluster_ch_fasta, "cluster_reps").output
+        concat_cluster_ch = CONCATENATE_TSVS_LABELED(cluster_ch_tsv, "cluster_info")
         // 4. Run BLAST on concatenated cluster representatives (single job per group)
         blast_fasta_params = params_map + [lca_prefix: "validation"]
         blast_ch = BLAST_FASTA(concat_fasta_ch, ref_dir, blast_fasta_params)
@@ -78,8 +87,8 @@ workflow VALIDATE_VIRAL_ASSIGNMENTS {
         // Extra outputs for testing
         test_in   = groups
         test_split_tsv = split_ch.tsv
-        test_cluster_tab = cluster_ch.tsv
-        test_reps_fasta = cluster_ch.fasta
+        test_cluster_tab = cluster_ch_tsv
+        test_reps_fasta = cluster_ch_fasta
         test_concat_fasta = concat_fasta_ch
         test_concat_cluster = concat_cluster_ch.output
         test_blast_db = blast_ch.blast
