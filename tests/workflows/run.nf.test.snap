@@ -1,42 +1,42 @@
 {
     "run_output_shortread": {
         "content": [
-            "bracken_reports_merged.tsv.gz:md5,aabf52a8f4b32316b8f3de81d1a82644",
-            "kraken_reports_merged.tsv.gz:md5,84f070b42b948d36ae38eaee4a61982e",
-            "merged_blast_filtered.tsv.gz:md5,72bf159dac45375739901445727fc1c9",
-            "merged_blast_input_subset.fasta.gz:md5,6868948847f1fa6a3278c6fc89f37b53",
-            "read_counts.tsv.gz:md5,8dc2e3ad82f42202262a5e67a9d91e1b",
-            "subset_qc_adapter_stats.tsv.gz:md5,43a90fc81f11a57e191f10176d3b7caf",
-            "subset_qc_basic_stats.tsv.gz:md5,5d3a44e97e249f63bdeede15cce47604",
-            "subset_qc_length_stats.tsv.gz:md5,deb6f5182ed916986640d4668459ddae",
-            "subset_qc_quality_base_stats.tsv.gz:md5,a5492c9c3b986d99848b95328b32ea7b",
-            "subset_qc_quality_sequence_stats.tsv.gz:md5,94c11e0dbcf2b58d685ab8701c04cf9b",
-            "virus_hits_final.tsv.gz:md5,965b41fe3cf17a331406b659537287f7"
+            "bracken_reports_merged.tsv.gz:md5,7fbf9af7ae2074266d5f0be4f1b2a184",
+            "kraken_reports_merged.tsv.gz:md5,b92e96228ff584c883f74b6f6e855a60",
+            "merged_blast_filtered.tsv.gz:md5,93eb652a546605bfeb9b3cd60cdca13d",
+            "merged_blast_input_subset.fasta.gz:md5,3d397fbb0790c5535618e265130cb27c",
+            "read_counts.tsv.gz:md5,c00f00d8a47a87731a969636e6043b15",
+            "subset_qc_adapter_stats.tsv.gz:md5,d15e65d588573c8ccb2687414e37f905",
+            "subset_qc_basic_stats.tsv.gz:md5,64bbfc8efab1cc3d50d77cb476630ead",
+            "subset_qc_length_stats.tsv.gz:md5,887ed49b570b2fd7d1b88ee1d69ff839",
+            "subset_qc_quality_base_stats.tsv.gz:md5,d16f68e7c6517b075dd2e15add3298f0",
+            "subset_qc_quality_sequence_stats.tsv.gz:md5,885d534e4ec4a55aeb9073fc9561a872",
+            "virus_hits_final.tsv.gz:md5,8ac0f582c952f62f40ced1ced285110b"
         ],
         "meta": {
-            "nf-test": "0.9.2",
-            "nextflow": "25.04.6"
+            "nf-test": "0.9.3",
+            "nextflow": "25.10.0"
         },
-        "timestamp": "2025-08-06T11:08:06.330477017"
+        "timestamp": "2026-01-07T18:47:34.649288139"
     },
     "run_output_ont": {
         "content": [
-            "bracken_reports_merged.tsv.gz:md5,b888f3fcfab0e718155b5f9f5ed16115",
-            "kraken_reports_merged.tsv.gz:md5,c088506d5e8bd2857e24d7180592b3aa",
-            "merged_blast_filtered.tsv.gz:md5,109fc1f2ed21882a2c2107dde1b21a89",
-            "merged_blast_input_subset.fasta.gz:md5,a15f75708e60de9e9471b946cd15e5f0",
-            "read_counts.tsv.gz:md5,29d77e5c18c62be929e3734a23d0f5c4",
-            "subset_qc_adapter_stats.tsv.gz:md5,39f84a07f0170bf84444c4420c4bfe6a",
-            "subset_qc_basic_stats.tsv.gz:md5,4cbfba11d2c4baf78d7fa2962136dde2",
-            "subset_qc_length_stats.tsv.gz:md5,08c2065d89beb325e4814f47d6468d30",
-            "subset_qc_quality_base_stats.tsv.gz:md5,da129596d0aa344f278b011ffc6003aa",
-            "subset_qc_quality_sequence_stats.tsv.gz:md5,6a98b671566f45ed85c7e3223cbc7e33",
-            "virus_hits_final.tsv.gz:md5,9e68dbc21f5d7c324aaef98d64bd434a"
+            "bracken_reports_merged.tsv.gz:md5,7fbf9af7ae2074266d5f0be4f1b2a184",
+            "kraken_reports_merged.tsv.gz:md5,731ad7486d35a4472c7226864f7a50b4",
+            "merged_blast_filtered.tsv.gz:md5,9b8a410f473ab3b3bdc213eb5bf23efa",
+            "merged_blast_input_subset.fasta.gz:md5,7a67aaa0c94ec72272721d8ca86150bf",
+            "read_counts.tsv.gz:md5,7d44efe7dc906747a465ca537cde237f",
+            "subset_qc_adapter_stats.tsv.gz:md5,d15e65d588573c8ccb2687414e37f905",
+            "subset_qc_basic_stats.tsv.gz:md5,64c55d212eecfaef26ae8a7a9354d9df",
+            "subset_qc_length_stats.tsv.gz:md5,eaad4cb5154400ee5a54caf62e17e886",
+            "subset_qc_quality_base_stats.tsv.gz:md5,9e058df5618f94d2d82e6a34fc00b0bc",
+            "subset_qc_quality_sequence_stats.tsv.gz:md5,fec19ddae461da7804d748df91afb358",
+            "virus_hits_final.tsv.gz:md5,f3d70a4df59bbc5004424997a7e446a0"
         ],
         "meta": {
-            "nf-test": "0.9.2",
-            "nextflow": "25.04.6"
+            "nf-test": "0.9.3",
+            "nextflow": "25.10.0"
         },
-        "timestamp": "2025-08-06T11:07:48.878715754"
+        "timestamp": "2026-01-07T18:48:54.364157872"
     }
 }

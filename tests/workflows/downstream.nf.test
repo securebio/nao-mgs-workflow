@@ -29,10 +29,10 @@ nextflow_pipeline {
         then {
             assert workflow.success
             assert snapshot(
-                path("${launchDir}/output/results_downstream/gs1_duplicate_reads.tsv.gz"),
-                path("${launchDir}/output/results_downstream/gs1_duplicate_stats.tsv.gz"),
-                path("${launchDir}/output/results_downstream/gs1_clade_counts.tsv.gz"),
-                path("${launchDir}/output/results_downstream/gs1_validation_hits.tsv.gz"),
+                path("${launchDir}/output/results_downstream/tt1_duplicate_reads.tsv.gz"),
+                path("${launchDir}/output/results_downstream/tt1_duplicate_stats.tsv.gz"),
+                path("${launchDir}/output/results_downstream/tt1_clade_counts.tsv.gz"),
+                path("${launchDir}/output/results_downstream/tt1_validation_hits.tsv.gz"),
             ).match("downstream_output")
         }
     }
@@ -45,7 +45,7 @@ nextflow_pipeline {
         then {
             assert workflow.success
             assert snapshot(
-                path("${launchDir}/output/results_downstream/ont_1_validation_hits.tsv.gz"),
+                path("${launchDir}/output/results_downstream/tt1_validation_hits.tsv.gz"),
             ).match("downstream_ont_output")
         }
     }
