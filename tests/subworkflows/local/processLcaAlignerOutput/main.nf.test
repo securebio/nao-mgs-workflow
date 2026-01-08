@@ -122,7 +122,7 @@ nextflow_workflow {
                 script "modules/local/sortFastq/main.nf"
                 process {
                     '''
-                    input[0] = INTERLEAVE_FASTQ.out.output
+                    input[0] = BOWTIE2.out.reads_mapped
                     '''
                 }
 
@@ -155,7 +155,7 @@ nextflow_workflow {
                         group_field: "seq_id",
                         taxid_field: "taxid",
                         score_field: "length_normalized_score",
-                        taxid_artificial: "12908",
+                        taxid_artificial: "81077",
                         prefix: "aligner"
                     ]
                     input[0] = PROCESS_VIRAL_BOWTIE2_SAM.out.output
@@ -274,8 +274,8 @@ nextflow_workflow {
                     def params_map = [
                         group_field: "seq_id",
                         taxid_field: "taxid",
-                        score_field: "length_normalized_score", 
-                        taxid_artificial: "12908",
+                        score_field: "length_normalized_score",
+                        taxid_artificial: "81077",
                         prefix: "aligner"
                     ]
                     input[0] = SORT_TSV.out.sorted

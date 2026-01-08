@@ -19,34 +19,6 @@ nextflow_workflow {
         tag "expect_success"
         tag "interleaved"
         config "tests/configs/run.config"
-        setup {
-            run("LOAD_SAMPLESHEET") {
-                script "subworkflows/local/loadSampleSheet/main.nf"
-                process {
-                    """
-                    input[0] = "${projectDir}/test-data/samplesheet.csv"
-                    input[1] = "illumina"
-                    input[2] = false
-                    """
-                }
-            }
-            run("INTERLEAVE_FASTQ") {
-                script "modules/local/interleaveFastq/main.nf"
-                process {
-                    '''
-                    input[0] = LOAD_SAMPLESHEET.out.samplesheet
-                    '''
-                }
-            }
-            run("CONVERT_FASTQ_FASTA") {
-                script "modules/local/convertFastqFasta/main.nf"
-                process {
-                    '''
-                    input[0] = INTERLEAVE_FASTQ.out.output
-                    '''
-                }
-            }
-        }
         when {
             params {
                 max_rank = 5
@@ -68,7 +40,8 @@ nextflow_workflow {
                     lca_prefix: params.lca_prefix,
                     db_download_timeout: params.db_download_timeout
                 ]
-                input[0] = CONVERT_FASTQ_FASTA.out.output
+                input[0] = Channel.of("test")
+                    | combine(Channel.of("${projectDir}/test-data/tiny-index/reads/interleaved.fasta"))
                 input[1] = params.ref_dir
                 input[2] = blast_fasta_params
                 '''
@@ -119,35 +92,6 @@ nextflow_workflow {
         tag "expect_success"
         tag "single_end"
         config "tests/configs/run.config"
-        setup {
-            run("LOAD_SAMPLESHEET") {
-                script "subworkflows/local/loadSampleSheet/main.nf"
-                process {
-                    """
-                    input[0] = "${projectDir}/test-data/single-end-samplesheet.csv"
-                    input[1] = "illumina"
-                    input[2] = true
-                    """
-                }
-            }
-            run("COPY_FILE") {
-                script "modules/local/copyFile/main.nf"
-                process {
-                    '''
-                    input[0] = LOAD_SAMPLESHEET.out.samplesheet
-                    input[1] = "input.fastq.gz"
-                    '''
-                }
-            }
-            run("CONVERT_FASTQ_FASTA") {
-                script "modules/local/convertFastqFasta/main.nf"
-                process {
-                    '''
-                    input[0] = COPY_FILE.out
-                    '''
-                }
-            }
-        }
         when {
             params {
                 max_rank = 5
@@ -170,7 +114,8 @@ nextflow_workflow {
                     lca_prefix: params.lca_prefix,
                     db_download_timeout: params.db_download_timeout
                 ]
-                input[0] = CONVERT_FASTQ_FASTA.out.output
+                input[0] = Channel.of("test")
+                    | combine(Channel.of("${projectDir}/test-data/tiny-index/reads/R1.fasta"))
                 input[1] = params.ref_dir
                 input[2] = blast_fasta_params
                 '''
@@ -221,35 +166,6 @@ nextflow_workflow {
         tag "expect_success"
         tag "ont"
         config "tests/configs/run_ont.config"
-        setup {
-            run("LOAD_SAMPLESHEET") {
-                script "subworkflows/local/loadSampleSheet/main.nf"
-                process {
-                    """
-                    input[0] = "${projectDir}/test-data/ont-samplesheet.csv"
-                    input[1] = "ont"
-                    input[2] = false
-                    """
-                }
-            }
-            run("COPY_FILE") {
-                script "modules/local/copyFile/main.nf"
-                process {
-                    '''
-                    input[0] = LOAD_SAMPLESHEET.out.samplesheet
-                    input[1] = "input.fastq.gz"
-                    '''
-                }
-            }
-            run("CONVERT_FASTQ_FASTA") {
-                script "modules/local/convertFastqFasta/main.nf"
-                process {
-                    '''
-                    input[0] = COPY_FILE.out
-                    '''
-                }
-            }
-        }
         when {
             params {
                 max_rank = 5
@@ -272,7 +188,8 @@ nextflow_workflow {
                     lca_prefix: params.lca_prefix,
                     db_download_timeout: params.db_download_timeout
                 ]
-                input[0] = CONVERT_FASTQ_FASTA.out.output
+                input[0] = Channel.of("test")
+                    | combine(Channel.of("${projectDir}/test-data/tiny-index/reads/ont.fasta"))
                 input[1] = params.ref_dir
                 input[2] = blast_fasta_params
                 '''
