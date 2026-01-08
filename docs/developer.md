@@ -181,6 +181,7 @@ In order to cut down on the time it takes to run our test suite, we are in the p
     a. Set up an environment with appropriate versions of InSilicoSeq and NanoSim, e.g. with Conda: `conda env create -f test-data/tiny-index/reads/env.yml; conda activate GenerateTestData`
     b. Run `bin/prepare_tiny_test_data.py` and commit the results to this repository.
     c. Remember to return to your normal computing environment after you're done.
+4. Commit new test index and input data to the repo. This should not generate any new files, just replace existing ones.
 
 #### Running tests
 
