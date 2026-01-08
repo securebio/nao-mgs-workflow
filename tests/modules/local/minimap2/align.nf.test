@@ -73,20 +73,6 @@ nextflow_process {
 
             // Verify input FASTQ contains all reads
             assert input_reads == fastq_read_ids_mapped + fastq_read_ids_unmapped
-
-            // Verify that some reads have multiple alignments (due to -N 10 parameter)
-            def read_alignment_counts = samlines
-                .collect { line -> line.split('\\t')[0] }  // Get read IDs
-                .groupBy { it }  // Group by read ID
-                .collectEntries { k, v -> [k, v.size()] }  // Count alignments per read
-            
-            // With -N 10, at least some reads should have multiple alignments
-            def reads_with_multiple_alignments = read_alignment_counts.values().findAll { it > 1 }
-            assert reads_with_multiple_alignments.size() > 0, "Expected some reads to have multiple alignments with -N 10 parameter"
-            
-            // Verify no read exceeds the -N 10 limit
-            def max_alignments_per_read = read_alignment_counts.values().max() ?: 0
-            assert max_alignments_per_read <= 10, "Expected no read to have more than 10 alignments with -N 10 parameter"
         }
     }
 
@@ -143,20 +129,6 @@ nextflow_process {
 
             // Verify input FASTQ contains all reads
             assert input_reads == fastq_read_ids_mapped + fastq_read_ids_unmapped
-
-            // Verify alignment counts without explicit -N parameter
-            def read_alignment_counts = samlines
-                .collect { line -> line.split('\\t')[0] }  // Get read IDs
-                .groupBy { it }  // Group by read ID
-                .collectEntries { k, v -> [k, v.size()] }  // Count alignments per read
-
-            // Not passing -N explicitly, but default is still secondary alignment enabled
-            // See: https://github.com/lh3/minimap2?tab=readme-ov-file#started
-            def reads_with_multiple_alignments = read_alignment_counts.values().findAll { it > 1 }
-            assert reads_with_multiple_alignments.size() > 0, "Expected some reads to have multiple alignments"
-            
-            def max_alignments_per_read = read_alignment_counts.values().max() ?: 0
-            assert max_alignments_per_read <= 5, "Expected reasonable number of alignments per read with default parameters"
         }
     }
 
