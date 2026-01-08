@@ -1,0 +1,5 @@
+group	taxid	parent_taxid	reads_direct_total	reads_direct_dedup	reads_clade_total	reads_clade_dedup
+tt1	1	1	0	0	10	10
+tt1	10239	1	0	0	10	10
+tt1	12475	10239	0	0	10	10
+tt1	2847173	12475	10	10	10	10

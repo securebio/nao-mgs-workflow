@@ -1,3 +1,0 @@
-name	taxid	rank	kraken2_assigned_reads	added_reads	new_est_reads	fraction_total_reads	sample	ribosomal
-Viruses	10239	D	3	0	3	1.00000	NAO-ONT-20240710-WW-RNA1-div0000	TRUE
-Viruses	10239	D	5	0	5	1.00000	NAO-ONT-20240710-WW-RNA1-div0000	FALSE
