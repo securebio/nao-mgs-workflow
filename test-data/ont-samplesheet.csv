@@ -1,2 +1,2 @@
 sample,fastq
-NAO-ONT-20240710-WW-RNA1-div0000,s3://nao-testing/ont-ww-test/NAO-ONT-20240710-WW-RNA1-div0000.250_reads.sample.fastq.gz
+tiny_test,s3://nao-testing/tiny-test/raw/tiny-test_ont.fastq.gz
