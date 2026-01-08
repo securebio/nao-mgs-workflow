@@ -22,21 +22,21 @@
     "run_output_ont": {
         "content": [
             "bracken_reports_merged.tsv.gz:md5,7fbf9af7ae2074266d5f0be4f1b2a184",
-            "kraken_reports_merged.tsv.gz:md5,731ad7486d35a4472c7226864f7a50b4",
-            "merged_blast_filtered.tsv.gz:md5,9b8a410f473ab3b3bdc213eb5bf23efa",
-            "merged_blast_input_subset.fasta.gz:md5,7a67aaa0c94ec72272721d8ca86150bf",
+            "kraken_reports_merged.tsv.gz:md5,cce4f37145ef2a1d04ad478078b9c2ea",
+            "merged_blast_filtered.tsv.gz:md5,4915c921c8d1a352406dff1d6dd5a4fc",
+            "merged_blast_input_subset.fasta.gz:md5,d771ea6fe0eab48dc6c7bb690409fda1",
             "read_counts.tsv.gz:md5,7d44efe7dc906747a465ca537cde237f",
             "subset_qc_adapter_stats.tsv.gz:md5,d15e65d588573c8ccb2687414e37f905",
-            "subset_qc_basic_stats.tsv.gz:md5,64c55d212eecfaef26ae8a7a9354d9df",
-            "subset_qc_length_stats.tsv.gz:md5,eaad4cb5154400ee5a54caf62e17e886",
-            "subset_qc_quality_base_stats.tsv.gz:md5,9e058df5618f94d2d82e6a34fc00b0bc",
-            "subset_qc_quality_sequence_stats.tsv.gz:md5,fec19ddae461da7804d748df91afb358",
-            "virus_hits_final.tsv.gz:md5,f3d70a4df59bbc5004424997a7e446a0"
+            "subset_qc_basic_stats.tsv.gz:md5,8349625b9299fdc7592fcee673fe51bc",
+            "subset_qc_length_stats.tsv.gz:md5,ac0f8e6178f1b98314183223dd3c80f0",
+            "subset_qc_quality_base_stats.tsv.gz:md5,774c65ebca63ea867b6c8c168a8ee0ce",
+            "subset_qc_quality_sequence_stats.tsv.gz:md5,06b7e165ce767ca03b64c08e3cfdc6ae",
+            "virus_hits_final.tsv.gz:md5,886411a9f46e218a784ccb4145c19a87"
         ],
         "meta": {
             "nf-test": "0.9.3",
             "nextflow": "25.10.0"
         },
-        "timestamp": "2026-01-07T18:48:54.364157872"
+        "timestamp": "2026-01-08T22:40:32.627309137"
     }
 }
