@@ -153,7 +153,7 @@ In cases where a module is a thin wrapper around a script in another language, c
 - Small (uncompressed) test data files are in `test-data/`; larger test datasets are in S3:
     - Currently there is no set organization of the `test-data/` directory. It will be organized in the future; see issue [#349](https://github.com/naobservatory/mgs-workflow/issues/349).
     - Small "toy" data files (uncompressed, generally ~1KB or less) may be added freely to the repo in `test-data/toy-data`.
-- Public test datasets are stored in `s3://nao-testing/tiny-test/`
+- Public test datasets are stored in `s3://nao-testing/tiny-test/`. (Older test files, no longer in active use, can be found in `s3://nao-testing/gold-standard-test/` and `s3://nao-testing/ont-ww-test/`.)
 - Results of workflow runs on the test datasets from S3 are in the repo in `test-data/results/`
 
 To make a new test dataset on S3, copy the test dataset to `s3://nao-testing/<name-of-test-dataset>`. A pipeline maintainer (e.g. willbradshaw or katherine-stansifer) can give you permission to add to the bucket.
@@ -167,7 +167,7 @@ aws s3 cp /path/to/my_dataset s3://nao-testing/my_dataset/ --acl public-read
 
 ##### Tiny test data
 
-In order to cut down on the time it takes to run our test suite, we are in the process of switching much of it from larger test data stored in S3 to small test datafiles stored locally. The following instructions detail how to generate this new test data:
+In order to cut down on the time it takes to run our test suite, we have switched much of it from larger test data stored in S3 to small test datafiles stored locally. The following instructions detail how to generate this new test data:
 
 1. Create new reference datasets using `bin/build_tiny_test_databases.py`. The defaults provided should suffice in most cases.
 2. Generate the new test index:
