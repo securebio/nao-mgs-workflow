@@ -1,3 +1,0 @@
-percent_gc	mean_seq_len	n_reads_single	n_read_pairs	percent_duplicates	n_bases_approx	per_base_sequence_quality	per_sequence_quality_scores	per_base_sequence_content	per_sequence_gc_content	per_base_n_content	sequence_length_distribution	sequence_duplication_levels	overrepresented_sequences	adapter_content	per_tile_sequence_quality	stage	sample
-49	580.912	250	NA	1.2000000000000028	145600	fail	pass	fail	fail	pass	warn	pass	warn	warn	NA	raw	NAO-ONT-20240710-WW-RNA1-div0000
-49	577.7348837209303	215	NA	1.3953488372092977	124400	fail	pass	fail	fail	pass	warn	pass	warn	warn	NA	cleaned	NAO-ONT-20240710-WW-RNA1-div0000

@@ -1,25 +1,25 @@
 {
     "downstream_ont_output": {
         "content": [
-            "ont_1_validation_hits.tsv.gz:md5,c8ae8cac9f2696cc60c28fb1e1be31e8"
+            "tt1_validation_hits.tsv.gz:md5,0982c5c2b47f0583a70f46691f6a9ced"
         ],
         "meta": {
             "nf-test": "0.9.3",
             "nextflow": "25.10.0"
         },
-        "timestamp": "2025-11-14T16:11:06.691438"
+        "timestamp": "2026-01-07T18:39:49.966524499"
     },
     "downstream_output": {
         "content": [
-            "gs1_duplicate_reads.tsv.gz:md5,1fec7b7960c4127f820426219d13466b",
-            "gs1_duplicate_stats.tsv.gz:md5,48f655dffa173d1c8b23572ab2039e34",
-            "gs1_clade_counts.tsv.gz:md5,e58c1489df2a1dc5df903c916c5c9ee7",
-            "gs1_validation_hits.tsv.gz:md5,a88e96cd7c3f7215ac76a9737623b028"
+            "tt1_duplicate_reads.tsv.gz:md5,73bf9f83111f05842c61cd9cad9e5857",
+            "tt1_duplicate_stats.tsv.gz:md5,dea20f8f6c3f9753f8b225fc0f8c7e52",
+            "tt1_clade_counts.tsv.gz:md5,c08ec913ad5dab545a701ed4ac851fc9",
+            "tt1_validation_hits.tsv.gz:md5,3ecee3c545b964bb409d6f62d607f923"
         ],
         "meta": {
-            "nf-test": "0.9.2",
-            "nextflow": "25.04.6"
+            "nf-test": "0.9.3",
+            "nextflow": "25.10.0"
         },
-        "timestamp": "2025-08-06T10:41:58.006912226"
+        "timestamp": "2026-01-07T18:38:51.870754246"
     }
 }

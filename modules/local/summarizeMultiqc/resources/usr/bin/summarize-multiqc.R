@@ -130,8 +130,9 @@ extract_length_data <- function(multiqc_json){
   if (is.null(datasets) || length(datasets) == 0){
     datasets <- multiqc_json$report_general_stats_headers$avg_sequence_length$dmax
     filename <- names(multiqc_json$report_saved_raw_data$multiqc_general_stats)
-    seq_num <- multiqc_json$report_saved_raw_data$multiqc_general_stats[[filename]]$`FastQC_mqc-generalstats-fastqc-total_sequences`
-    return(tibble(length=datasets, n_sequences=seq_num, file=filename))
+    seq_num <- sapply(filename, function(x) multiqc_json$report_saved_raw_data$multiqc_general_stats[[x]]$`FastQC_mqc-generalstats-fastqc-total_sequences`)
+    tab_out <- tibble(length=datasets, n_sequences=seq_num, file=filename)
+    return(tab_out)
   }
   data_out <- lapply(datasets, extract_length_data_single) %>% bind_rows()
   return(data_out)

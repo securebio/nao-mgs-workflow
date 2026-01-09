@@ -32,8 +32,8 @@ nextflow_workflow {
                 '''
                 input[0] = COPY_HITS.out
                 input[1] = "test_hits_2.tsv.gz"
-                input[2] = "gold_standard"
-                input[3] = "gold_standard2"
+                input[2] = "tiny_test"
+                input[3] = "tiny_test_2"
                 '''
             }
         }
@@ -62,9 +62,9 @@ nextflow_workflow {
                 '''
                 input[0] = COPY_GROUPS.out
                 input[1] = "test_groups_2.tsv"
-                // Did not put the last number on purpose as one sample will be gs1 and the other gs2; not including the last number guaruenttes that a unique last group is made.
-                input[2] = "gold_standard\tgs" 
-                input[3] = "gold_standard2\tgs4"
+                // Did not put the last number on purpose as one sample will be tt1 and the other tt2; not including the last number guarantees that a unique last group is made.
+                input[2] = "tiny_test\ttt" 
+                input[3] = "tiny_test_2\ttt4"
                 '''
             }
         }

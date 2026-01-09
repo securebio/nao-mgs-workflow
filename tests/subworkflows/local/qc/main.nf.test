@@ -1,3 +1,27 @@
+// Helper function: Validate TSV structure by reading lines directly and splitting by tabs.
+// This approach works even when files have only headers (no data rows),
+// which can cause issues with nf-test's CSV parser.
+def validateTsvStructure = { tsv_file, expected_col_count, expected_stage, expected_sample ->
+    def lines = path(tsv_file).linesGzip
+
+    // Verify header exists and has correct number of columns
+    assert lines.size() >= 1 : "TSV file must have at least a header row"
+    def header = lines[0].split("\t")
+    assert header.size() == expected_col_count : "Expected ${expected_col_count} columns, got ${header.size()}"
+
+    // If there are data rows, verify stage and sample columns
+    if (lines.size() > 1) {
+        def first_data_row = lines[1].split("\t", -1) // -1 keeps trailing empty strings
+        def stage_idx = header.findIndexOf { it == "stage" }
+        def sample_idx = header.findIndexOf { it == "sample" }
+
+        assert stage_idx >= 0 : "Header must contain 'stage' column"
+        assert sample_idx >= 0 : "Header must contain 'sample' column"
+        assert first_data_row[stage_idx] == expected_stage : "Expected stage '${expected_stage}', got '${first_data_row[stage_idx]}'"
+        assert first_data_row[sample_idx] == expected_sample : "Expected sample '${expected_sample}', got '${first_data_row[sample_idx]}'"
+    }
+}
+
 nextflow_workflow {
 
     name "Test subworkflow QC"
@@ -61,30 +85,14 @@ nextflow_workflow {
             def stage = tsv_basic.columns["stage"][0]
             def sample = tsv_basic.columns["sample"][0]
             // Other TSVs should have expected structure and content
-            def tsv_adapt = path(workflow.out.qc[0][1]).csv(sep: "\t", decompress: true)
-            with (tsv_adapt) {
-                assert columnCount == 6
-                assert columns["stage"][0] == stage
-                assert columns["sample"][0] == sample
-            }
-            def tsv_qbase = path(workflow.out.qc[0][2]).csv(sep: "\t", decompress: true)
-            with (tsv_qbase) {
-                assert columnCount == 5
-                assert columns["stage"][0] == stage
-                assert columns["sample"][0] == sample
-            }
-            def tsv_qseqs = path(workflow.out.qc[0][3]).csv(sep: "\t", decompress: true)
-            with (tsv_qseqs) {
-                assert columnCount == 5
-                assert columns["stage"][0] == stage
-                assert columns["sample"][0] == sample
-            }
-            def tsv_lengths = path(workflow.out.qc[0][4]).csv(sep: "\t", decompress: true)
-            with (tsv_qseqs) {
-                assert columnCount == 5
-                assert columns["stage"][0] == stage
-                assert columns["sample"][0] == sample
-            }
+            def tsv_adapt = workflow.out.qc[0][1]
+            validateTsvStructure(tsv_adapt, 6, stage, sample)
+            def tsv_qbase = workflow.out.qc[0][2]
+            validateTsvStructure(tsv_qbase, 5, stage, sample)
+            def tsv_qseqs = workflow.out.qc[0][3]
+            validateTsvStructure(tsv_qseqs, 5, stage, sample)
+            def tsv_lengths = workflow.out.qc[0][4]
+            validateTsvStructure(tsv_lengths, 5, stage, sample)
         }
     }
 
@@ -144,30 +152,14 @@ nextflow_workflow {
             def stage = tsv_basic.columns["stage"][0]
             def sample = tsv_basic.columns["sample"][0]
             // Other TSVs should have expected structure and content
-            def tsv_adapt = path(workflow.out.qc[0][1]).csv(sep: "\t", decompress: true)
-            with (tsv_adapt) {
-                assert columnCount == 6
-                assert columns["stage"][0] == stage
-                assert columns["sample"][0] == sample
-            }
-            def tsv_qbase = path(workflow.out.qc[0][2]).csv(sep: "\t", decompress: true)
-            with (tsv_qbase) {
-                assert columnCount == 5
-                assert columns["stage"][0] == stage
-                assert columns["sample"][0] == sample
-            }
-            def tsv_qseqs = path(workflow.out.qc[0][3]).csv(sep: "\t", decompress: true)
-            with (tsv_qseqs) {
-                assert columnCount == 5
-                assert columns["stage"][0] == stage
-                assert columns["sample"][0] == sample
-            }
-            def tsv_lengths = path(workflow.out.qc[0][4]).csv(sep: "\t", decompress: true)
-            with (tsv_qseqs) {
-                assert columnCount == 5
-                assert columns["stage"][0] == stage
-                assert columns["sample"][0] == sample
-            }
+            def tsv_adapt = workflow.out.qc[0][1]
+            validateTsvStructure(tsv_adapt, 6, stage, sample)
+            def tsv_qbase = workflow.out.qc[0][2]
+            validateTsvStructure(tsv_qbase, 5, stage, sample)
+            def tsv_qseqs = workflow.out.qc[0][3]
+            validateTsvStructure(tsv_qseqs, 5, stage, sample)
+            def tsv_lengths = workflow.out.qc[0][4]
+            validateTsvStructure(tsv_lengths, 5, stage, sample)
         }
     }
 

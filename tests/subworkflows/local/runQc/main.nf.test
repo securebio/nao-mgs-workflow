@@ -1,3 +1,15 @@
+// Helper function: Validate TSV structure by reading lines directly and splitting by tabs.
+// This approach works even when files have only headers (no data rows),
+// which can cause issues with nf-test's CSV parser.
+def validateTsvStructure = { tsv_file, expected_col_count ->
+    def lines = path(tsv_file).linesGzip
+
+    // Verify header exists and has correct number of columns
+    assert lines.size() >= 1 : "TSV file must have at least a header row"
+    def header = lines[0].split("\t")
+    assert header.size() == expected_col_count : "Expected ${expected_col_count} columns, got ${header.size()}"
+}
+
 nextflow_workflow {
 
     name "Test subworkflow RUN_QC"
@@ -56,14 +68,10 @@ nextflow_workflow {
             assert tsv_basic.rowCount == 2
             assert tsv_basic.columnCount == 18
             // Other TSVs should have expected structure and content
-            def tsv_adapt = path(workflow.out.qc_adapt[0]).csv(sep: "\t", decompress: true)
-            assert tsv_adapt.columnCount == 6
-            def tsv_qbase = path(workflow.out.qc_qbase[0]).csv(sep: "\t", decompress: true)
-            assert tsv_qbase.columnCount == 5
-            def tsv_qseqs = path(workflow.out.qc_qseqs[0]).csv(sep: "\t", decompress: true)
-            assert tsv_qseqs.columnCount == 5
-            def tsv_lengths = path(workflow.out.qc_lengths[0]).csv(sep: "\t", decompress: true)
-            assert tsv_lengths.columnCount == 5
+            validateTsvStructure(workflow.out.qc_adapt[0], 6)
+            validateTsvStructure(workflow.out.qc_qbase[0], 5)
+            validateTsvStructure(workflow.out.qc_qseqs[0], 5)
+            validateTsvStructure(workflow.out.qc_lengths[0], 5)
         }
     }
 
@@ -117,14 +125,10 @@ nextflow_workflow {
             assert tsv_basic.rowCount == 2
             assert tsv_basic.columnCount == 18
             // Other TSVs should have expected structure and content
-            def tsv_adapt = path(workflow.out.qc_adapt[0]).csv(sep: "\t", decompress: true)
-            assert tsv_adapt.columnCount == 6
-            def tsv_qbase = path(workflow.out.qc_qbase[0]).csv(sep: "\t", decompress: true)
-            assert tsv_qbase.columnCount == 5
-            def tsv_qseqs = path(workflow.out.qc_qseqs[0]).csv(sep: "\t", decompress: true)
-            assert tsv_qseqs.columnCount == 5
-            def tsv_lengths = path(workflow.out.qc_lengths[0]).csv(sep: "\t", decompress: true)
-            assert tsv_lengths.columnCount == 5
+            validateTsvStructure(workflow.out.qc_adapt[0], 6)
+            validateTsvStructure(workflow.out.qc_qbase[0], 5)
+            validateTsvStructure(workflow.out.qc_qseqs[0], 5)
+            validateTsvStructure(workflow.out.qc_lengths[0], 5)
         }
     }
     
@@ -164,15 +168,9 @@ nextflow_workflow {
             assert tsv_lengths.rowCount == 2
             assert tsv_lengths.columnCount == 5
             // Other TSVs should have expected structure and content
-            def tsv_adapt = path(workflow.out.qc_adapt[0]).linesGzip
-            assert tsv_adapt.size() == 1
-            assert tsv_adapt[0].split("\t").size() == 6
-            def tsv_qbase = path(workflow.out.qc_qbase[0]).linesGzip
-            assert tsv_qbase.size() == 1
-            assert tsv_qbase[0].split("\t").size() == 5
-            def tsv_qseqs = path(workflow.out.qc_qseqs[0]).linesGzip
-            assert tsv_qseqs.size() == 1
-            assert tsv_qseqs[0].split("\t").size() == 5
+            validateTsvStructure(workflow.out.qc_adapt[0], 6)
+            validateTsvStructure(workflow.out.qc_qbase[0], 5)
+            validateTsvStructure(workflow.out.qc_qseqs[0], 5)
         }
     }
 }
