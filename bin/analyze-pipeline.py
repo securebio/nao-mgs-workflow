@@ -22,6 +22,7 @@ class Process:
     file_path: Path
     line_number: int
     module_name: str = None
+    testing_only: bool = False
 
 @dataclass
 class Module:
@@ -96,13 +97,17 @@ class NextflowAnalyzer:
     def _scan_file_for_processes(self, file_path: Path, module_name: str = None):
         """Scan a file for process definitions."""
         with open(file_path) as f:
-            content = f.readlines()
-        for line_num, line in enumerate(content, 1):
+            content = f.read()
+        # Check if file contains testing_only label
+        has_testing_only = bool(re.search(r'label\s+"testing_only"', content))
+
+        for line_num, line in enumerate(content.splitlines(), 1):
             process_match = re.search(r'process\s+(\w+)\s*{', line)
             if process_match:
                 process_name = process_match.group(1)
                 process = Process(name=process_name, file_path=file_path,
-                                  line_number=line_num, module_name=module_name)
+                                  line_number=line_num, module_name=module_name,
+                                  testing_only=has_testing_only)
                 if module_name:
                     self.modules[module_name].processes[process_name] = process
                 else:
@@ -119,11 +124,17 @@ class NextflowAnalyzer:
                     }
             with open(workflow.file_path) as f:
                 content = f.read()
-                depend_matches = re.finditer(r'\s*include\s+{\s*(\S*).*}\s+from\s+[\'"](\S*)/(\S*)[\'"]\s*', content)
+                depend_matches = re.finditer(r'\s*include\s+{\s*(\S*).*}\s+from\s+[\'"](\S*)[\'"]\s*', content)
                 for match in depend_matches:
                     item = match.group(1)
-                    dirpath = match.group(2)
-                    parent = match.group(3)
+                    full_path = match.group(2).rstrip('/')
+                    # Split into dirpath and parent
+                    parts = full_path.rsplit('/', 1)
+                    if len(parts) == 2:
+                        dirpath, parent = parts
+                    else:
+                        dirpath = ''
+                        parent = parts[0]
                     if re.search("/workflows", dirpath):
                         self.workflow_dependencies[workflow_name]["workflows"].add(item)
                     elif re.search("/subworkflows/local", dirpath):
@@ -307,6 +318,7 @@ def report_unused_components(analyzer: NextflowAnalyzer, output_stream):
     output_stream.write("=== Unused Components ===\n")
     output_stream.write("=========================\n\n")
     unused = analyzer.unused_components
+
     # Unused workflows
     if unused["workflows"]:
         output_stream.write("Unused workflows:\n")
@@ -316,19 +328,57 @@ def report_unused_components(analyzer: NextflowAnalyzer, output_stream):
         output_stream.write("\n")
     else:
         output_stream.write("No unused workflows found.\n\n")
-    # Unused modules
-    if unused["modules"]:
+
+    # Separate unused modules into testing_only and regular
+    unused_modules_testing = []
+    unused_modules_regular = []
+    for name in unused["modules"]:
+        module = analyzer.modules[name]
+        # Check if any process in the module has testing_only
+        if any(proc.testing_only for proc in module.processes.values()):
+            unused_modules_testing.append(name)
+        else:
+            unused_modules_regular.append(name)
+
+    # Report regular unused modules
+    if unused_modules_regular:
         output_stream.write("Unused modules:\n")
-        for name in sorted(unused["modules"]):
+        for name in sorted(unused_modules_regular):
             path = analyzer.modules[name].path.relative_to(analyzer.pipeline_dir)
             output_stream.write(f"\t- {name} ({path})\n")
         output_stream.write("\n")
     else:
         output_stream.write("No unused modules found.\n\n")
-    # Unused processes
-    if unused["processes"]:
+
+    # Report testing_only unused modules
+    if unused_modules_testing:
+        output_stream.write("Unused modules (testing only):\n")
+        for name in sorted(unused_modules_testing):
+            path = analyzer.modules[name].path.relative_to(analyzer.pipeline_dir)
+            output_stream.write(f"\t- {name} ({path})\n")
+        output_stream.write("\n")
+
+    # Separate unused processes into testing_only and regular
+    unused_processes_testing = []
+    unused_processes_regular = []
+    for name in unused["processes"]:
+        if name in analyzer.standalone_processes:
+            process = analyzer.standalone_processes[name]
+        else:
+            # Find the process in modules
+            parent_module = [module for module in analyzer.modules.keys()
+                             if name in analyzer.modules[module].processes][0]
+            process = analyzer.modules[parent_module].processes[name]
+
+        if process.testing_only:
+            unused_processes_testing.append(name)
+        else:
+            unused_processes_regular.append(name)
+
+    # Report regular unused processes
+    if unused_processes_regular:
         output_stream.write("Unused processes:\n")
-        for name in sorted(unused["processes"]):
+        for name in sorted(unused_processes_regular):
             if name in analyzer.standalone_processes.keys():
                 path = analyzer.standalone_processes[name].file_path.relative_to(analyzer.pipeline_dir)
             else:
@@ -339,6 +389,19 @@ def report_unused_components(analyzer: NextflowAnalyzer, output_stream):
         output_stream.write("\n")
     else:
         output_stream.write("No unused processes found.\n\n")
+
+    # Report testing_only unused processes
+    if unused_processes_testing:
+        output_stream.write("Unused processes (testing only):\n")
+        for name in sorted(unused_processes_testing):
+            if name in analyzer.standalone_processes.keys():
+                path = analyzer.standalone_processes[name].file_path.relative_to(analyzer.pipeline_dir)
+            else:
+                parent_module = [module for module in analyzer.modules.keys()
+                                 if name in analyzer.modules[module].processes][0]
+                path = analyzer.modules[parent_module].path.relative_to(analyzer.pipeline_dir)
+            output_stream.write(f"\t- {name} ({path})\n")
+        output_stream.write("\n")
 
 #=============================================================================
 # Run script
