@@ -26,7 +26,7 @@ nextflow_process {
         }
     }
 
-    test("Should return all reads when target is greater than total"){
+    test("Should subset appropriately when target is less than total") {
         tag "expect_success"
         when {
             params {
