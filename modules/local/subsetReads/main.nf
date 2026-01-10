@@ -130,31 +130,34 @@ process SUBSET_READS_SINGLE_TARGET {
     input:
         tuple val(sample), path(reads)
         val readTarget
-        val suffix
         val randomSeed
     output:
-        tuple val(sample), path("${sample}_subset.${suffix}.gz")
-    shell:
-        '''
-        # Define input/output
-        in=!{reads}
-        out=!{sample}_subset.!{suffix}.gz
+        tuple val(sample), path("subset_${reads}"), emit: output
+        tuple val(sample), path("input_${reads}"), emit: input
+    script:
+        def in = reads
+        def out = "subset_${reads}"
+        def extractCmd = in.toString().endsWith(".gz") ? "zcat" : "cat"
+        def compressCmd = in.toString().endsWith(".gz") ? "gzip" : "cat"
+        """
         # Count reads and compute target fraction
-        n_reads=$(zcat ${in} | wc -l | awk '{ print $1/4 }')
-        echo "Input reads: ${n_reads}"
-        echo "Target reads: !{readTarget}"
-        if (( ${n_reads} <= !{readTarget} )); then
+        n_reads=\$(${extractCmd} ${in} | wc -l | awk '{ print \$1/4 }')
+        echo "Input reads: \${n_reads}"
+        echo "Target reads: ${readTarget}"
+        if (( \${n_reads} <= ${readTarget} )); then
             echo "Target larger than input; returning all reads."
             cp ${in} ${out}
         else
-            frac=$(awk -v a=${n_reads} -v b=!{readTarget} 'BEGIN {result = b/a; print (result > 1) ? 1.0 : result}')
-            echo "Read fraction for subsetting: ${frac}"
+            frac=\$(awk -v a=\${n_reads} -v b=${readTarget} 'BEGIN {result = b/a; print (result > 1) ? 1.0 : result}')
+            echo "Read fraction for subsetting: \${frac}"
             # Carry out subsetting
-            rseed=!{randomSeed == "" ? "\\$RANDOM" : randomSeed}
-            echo "Random seed: ${rseed}"
-            seqtk sample -s ${rseed} ${in} ${frac} | gzip -c > ${out}
+            rseed=${randomSeed == "" ? "\$RANDOM" : randomSeed}
+            echo "Random seed: \${rseed}"
+            seqtk sample -s \${rseed} ${in} \${frac} | ${compressCmd} > ${out}
         fi
         # Count reads for validation
-        echo "Output reads: $(zcat ${out} | wc -l | awk '{ print $1/4 }')"
-        '''
+        echo "Output reads: \$(${extractCmd} ${out} | wc -l | awk '{ print \$1/4 }')"
+        # Link input to output for testing
+        ln -s ${in} input_${in}
+        """
 }

@@ -1,11 +1,11 @@
 nextflow_process {
 
-    name "Test process SUBSET_READS_PAIRED_TARGET"
+    name "Test process SUBSET_READS_SINGLE_TARGET"
     script "modules/local/subsetReads/main.nf"
-    process "SUBSET_READS_PAIRED_TARGET"
+    process "SUBSET_READS_SINGLE_TARGET"
     config "tests/configs/run.config"
     tag "module"
-    tag "subset_reads_paired_target"
+    tag "subset_reads_single_target"
 
     test("Should return all reads when target is greater than total"){
         tag "expect_success"
@@ -13,7 +13,7 @@ nextflow_process {
             params {}
             process {
                 '''
-                input[0] = Channel.of(["test", ["${projectDir}/test-data/tiny-index/reads/R1.fastq", "${projectDir}/test-data/tiny-index/reads/R2.fastq"]])
+                input[0] = Channel.of(["test", "${projectDir}/test-data/tiny-index/reads/R1.fastq"])
                 input[1] = 100
                 input[2] = 42 // Arbitrary seed value
                 '''
@@ -21,8 +21,8 @@ nextflow_process {
         }
         then {
             assert process.success
-            assert path(process.out.input[0][1][0]).md5 == path(process.out.output[0][1][0]).md5
-            assert path(process.out.input[0][1][1]).md5 == path(process.out.output[0][1][1]).md5
+            assert path(process.out.input[0][1]).md5 == path(process.out.output[0][1]).md5
+            assert path(process.out.input[0][1]).md5 == path(process.out.output[0][1]).md5
         }
     }
 
@@ -34,7 +34,7 @@ nextflow_process {
             }
             process {
                 '''
-                input[0] = Channel.of(["test", ["${projectDir}/test-data/tiny-index/reads/R1.fastq", "${projectDir}/test-data/tiny-index/reads/R2.fastq"]])
+                input[0] = Channel.of(["test", "${projectDir}/test-data/tiny-index/reads/R1.fastq"])
                 input[1] = params.readTarget
                 input[2] = 42 // Arbitrary seed value
                 '''
@@ -44,8 +44,8 @@ nextflow_process {
             // Should run without errors
             assert process.success
             // Output should be subset of input
-            def fastq_in = path(process.out.input[0][1][0]).fastq
-            def fastq_out = path(process.out.output[0][1][0]).fastq
+            def fastq_in = path(process.out.input[0][1]).fastq
+            def fastq_out = path(process.out.output[0][1]).fastq
             def names_in = fastq_in.readNames
             def names_out = fastq_out.readNames
             assert names_out.size() < names_in.size()
@@ -57,12 +57,6 @@ nextflow_process {
             def tolerance = 0.1 // arbitrary
             assert names_out.size() >= params.readTarget * (1 - tolerance)
             assert names_out.size() <= params.readTarget * (1 + tolerance)
-            // IDs should match between forward and reverse subsets
-            def ids_out = names_out.collect{it.split(" ")[0]}
-            def fastq_out_rev = path(process.out.output[0][1][1]).fastq
-            def names_out_rev = fastq_out_rev.readNames
-            def ids_out_rev = names_out_rev.collect{it.split(" ")[0]}
-            assert ids_out == ids_out_rev
         }
     }
 
