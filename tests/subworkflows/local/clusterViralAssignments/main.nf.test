@@ -11,35 +11,6 @@ nextflow_workflow {
     test("Should run without failures on interleaved input data"){
         tag "expect_success"
         tag "interleaved"
-        setup {
-            run("LOAD_SAMPLESHEET") {
-                script "subworkflows/local/loadSampleSheet/main.nf"
-                process {
-                    """
-                    input[0] = "${projectDir}/test-data/samplesheet.csv"
-                    input[1] = "illumina"
-                    input[2] = false
-                    """
-                }
-            }
-            run("INTERLEAVE_FASTQ") {
-                script "modules/local/interleaveFastq/main.nf"
-                process {
-                    '''
-                    input[0] = LOAD_SAMPLESHEET.out.samplesheet
-                    '''
-                }
-            }
-            run("COPY_FILE_BARE") {
-                script "modules/local/copyFile/main.nf"
-                process {
-                    '''
-                    input[0] = INTERLEAVE_FASTQ.out.output.map{ sample, file -> file }
-                    input[1] = INTERLEAVE_FASTQ.out.output.map{ sample, file -> "${sample}_10239_interleaved.fastq.gz" }
-                    '''
-                }
-            }
-        }
         when {
             params {
                 cluster_identity = 0.95
@@ -49,12 +20,11 @@ nextflow_workflow {
             }
             workflow {
                 '''
-                def sample_id = INTERLEAVE_FASTQ.out.output.map{ sample, file -> sample }
-                input[0] = sample_id.combine(COPY_FILE_BARE.out).map{ sample, file -> tuple(sample, [file]) }
+                input[0] = Channel.of(["test", ["${projectDir}/test-data/clusterViralAssignments/test_000_interleaved.fastq"]])
                 input[1] = params.cluster_identity
                 input[2] = params.cluster_min_len
                 input[3] = params.n_clusters
-                input[4] = LOAD_SAMPLESHEET.out.single_end
+                input[4] = Channel.of(false)
                 '''
             }
         }
@@ -63,10 +33,10 @@ nextflow_workflow {
             assert workflow.success
             // Clustering should work as expected
             def fastqs_merged = workflow.out.test_merged.collect{path(it[1][0]).fastq}
-            def fastas_clustered = workflow.out.test_cluster_reps.collect{path(it[1]).fasta}
-            def tabs_clustered = workflow.out.test_cluster_summ.collect{path(it[1]).csv(sep: "\t",decompress: true, header: false)}
-            def tabs_clustered_out = workflow.out.tsv.collect{path(it[1]).csv(sep: "\t",decompress: true)}
-            def tabs_clustered_ids = workflow.out.ids.collect{path(it[1]).csv(sep: "\t", header: false)}
+            def fastas_clustered = workflow.out.test_cluster_reps.collect{path(it[1][0]).fasta}
+            def tabs_clustered = workflow.out.test_cluster_summ.collect{path(it[1][0]).csv(sep: "\t",decompress: true, header: false)}
+            def tabs_clustered_out = workflow.out.tsv.collect{path(it[1][0]).csv(sep: "\t",decompress: true)}
+            def tabs_clustered_ids = workflow.out.ids.collect{path(it[1][0]).csv(sep: "\t", header: false)}
             assert fastas_clustered.size() == fastqs_merged.size()
             assert tabs_clustered.size() == fastas_clustered.size()
             assert tabs_clustered_out.size() == tabs_clustered.size()
@@ -85,8 +55,8 @@ nextflow_workflow {
                 assert tabs_clustered_ids[i].columns["C0"].unique().size() == exp_output_ids
             }
             // Subsetting on representative ID should work as expected
-            def fastqs_subset = workflow.out.fastq.collect{path(it[1]).fastq}
-            def fastas_subset = workflow.out.fasta.collect{path(it[1]).fasta}
+            def fastqs_subset = workflow.out.fastq.collect{path(it[1][0]).fastq}
+            def fastas_subset = workflow.out.fasta.collect{path(it[1][0]).fasta}
             assert fastqs_subset.size() == fastqs_merged.size()
             assert fastas_subset.size() == fastqs_merged.size()
             for (int i=0; i < fastqs_subset.size(); i++) {
@@ -104,27 +74,6 @@ nextflow_workflow {
     test("Should run without failures on single-end input data"){
         tag "expect_success"
         tag "single_end"
-        setup {
-            run("LOAD_SAMPLESHEET") {
-                script "subworkflows/local/loadSampleSheet/main.nf"
-                process {
-                    """
-                    input[0] = "${projectDir}/test-data/single-end-samplesheet.csv"
-                    input[1] = "illumina"
-                    input[2] = true
-                    """
-                }
-            }
-            run("COPY_FILE") {
-                script "modules/local/copyFile/main.nf"
-                process {
-                    """
-                    input[0] = LOAD_SAMPLESHEET.out.samplesheet
-                    input[1] = "10239_joined.fastq.gz"
-                    """
-                }
-            }
-        }
         when {
             params {
                 cluster_identity = 0.95
@@ -134,11 +83,11 @@ nextflow_workflow {
             }
             workflow {
                 '''
-                input[0] = COPY_FILE.out.map{ sample, file -> tuple(sample, [file]) }
+                input[0] = Channel.of(["test", ["${projectDir}/test-data/clusterViralAssignments/test_000_single.fastq"]])
                 input[1] = params.cluster_identity
                 input[2] = params.cluster_min_len
                 input[3] = params.n_clusters
-                input[4] = LOAD_SAMPLESHEET.out.single_end
+                input[4] = Channel.of(true)
                 '''
             }
         }
@@ -147,10 +96,10 @@ nextflow_workflow {
             assert workflow.success
             // Clustering should work as expected
             def fastqs_merged = workflow.out.test_merged.collect{path(it[1][0]).fastq}
-            def fastas_clustered = workflow.out.test_cluster_reps.collect{path(it[1]).fasta}
-            def tabs_clustered = workflow.out.test_cluster_summ.collect{path(it[1]).csv(sep: "\t",decompress: true, header: false)}
-            def tabs_clustered_out = workflow.out.tsv.collect{path(it[1]).csv(sep: "\t",decompress: true)}
-            def tabs_clustered_ids = workflow.out.ids.collect{path(it[1]).csv(sep: "\t", header: false)}
+            def fastas_clustered = workflow.out.test_cluster_reps.collect{path(it[1][0]).fasta}
+            def tabs_clustered = workflow.out.test_cluster_summ.collect{path(it[1][0]).csv(sep: "\t",decompress: true, header: false)}
+            def tabs_clustered_out = workflow.out.tsv.collect{path(it[1][0]).csv(sep: "\t",decompress: true)}
+            def tabs_clustered_ids = workflow.out.ids.collect{path(it[1][0]).csv(sep: "\t", header: false)}
             assert fastas_clustered.size() == fastqs_merged.size()
             assert tabs_clustered.size() == fastas_clustered.size()
             assert tabs_clustered_out.size() == tabs_clustered.size()
@@ -169,8 +118,8 @@ nextflow_workflow {
                 assert tabs_clustered_ids[i].columns["C0"].unique().size() == exp_output_ids
             }
             // Subsetting on representative ID should work as expected
-            def fastqs_subset = workflow.out.fastq.collect{path(it[1]).fastq}
-            def fastas_subset = workflow.out.fasta.collect{path(it[1]).fasta}
+            def fastqs_subset = workflow.out.fastq.collect{path(it[1][0]).fastq}
+            def fastas_subset = workflow.out.fasta.collect{path(it[1][0]).fasta}
             assert fastqs_subset.size() == fastqs_merged.size()
             assert fastas_subset.size() == fastqs_merged.size()
             for (int i=0; i < fastqs_subset.size(); i++) {

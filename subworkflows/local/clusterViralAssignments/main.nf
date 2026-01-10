@@ -3,6 +3,11 @@ Cluster a channel of viral sequences with VSEARCH, process the output,
 and extract the representative sequences of the top N largest clusters.
 */
 
+def listFiles = { label, files ->
+    def file_list = files instanceof List ? files : [files]
+    [label, file_list]
+}
+
 /***************************
 | MODULES AND SUBWORKFLOWS |
 ***************************/
@@ -47,11 +52,11 @@ workflow CLUSTER_VIRAL_ASSIGNMENTS {
         rep_fastq_ch = DOWNSAMPLE_FASTN_BY_ID(id_prep_ch).output
         rep_fasta_ch = CONVERT_FASTQ_FASTA(rep_fastq_ch).output
     emit:
-        tsv = labeled_cluster_ch.output
-        ids = cluster_info_ch.ids
-        fastq = rep_fastq_ch
-        fasta = rep_fasta_ch
-        test_merged = merge_ch.single_reads
-        test_cluster_reps = cluster_ch.reps
-        test_cluster_summ = cluster_ch.summary
+        tsv = labeled_cluster_ch.output.map(listFiles)
+        ids = cluster_info_ch.ids.map(listFiles)
+        fastq = rep_fastq_ch.map(listFiles)
+        fasta = rep_fasta_ch.map(listFiles)
+        test_merged = merge_ch.single_reads.map(listFiles)
+        test_cluster_reps = cluster_ch.reps.map(listFiles)
+        test_cluster_summ = cluster_ch.summary.map(listFiles)
 }
