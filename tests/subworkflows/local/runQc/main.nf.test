@@ -22,41 +22,15 @@ nextflow_workflow {
         config "tests/configs/run.config"
         tag "expect_success"
         tag "interleaved"
-        setup {
-            run("LOAD_SAMPLESHEET") {
-                script "subworkflows/local/loadSampleSheet/main.nf"
-                workflow {
-                    '''
-                    input[0] = "${projectDir}/test-data/samplesheet.csv"
-                    input[1] = "illumina"
-                    input[2] = false
-                    '''
-                }
-            }
-            run("SUBSET_TRIM") {
-                script "subworkflows/local/subsetTrim/main.nf"
-                process {
-                    '''
-                    def subset_trim_params = [
-                        n_reads_profile: 49,
-                        adapters: params.adapters,
-                        platform: "illumina",
-                        random_seed: ""
-                    ]
-                    input[0] = LOAD_SAMPLESHEET.out.samplesheet
-                    input[1] = LOAD_SAMPLESHEET.out.single_end
-                    input[2] = subset_trim_params
-                    '''
-                }
-            }
-        }
         when {
             params {}
             workflow {
                 """
-                input[0] = SUBSET_TRIM.out.subset_reads
-                input[1] = SUBSET_TRIM.out.trimmed_subset_reads
-                input[2] = LOAD_SAMPLESHEET.out.single_end
+                input[0] = Channel.of("test")
+                    | combine(Channel.of("${projectDir}/test-data/tiny-index/reads/interleaved.fastq"))
+                input[1] = Channel.of("test")
+                    | combine(Channel.of("${projectDir}/test-data/tiny-index/reads/interleaved.fastq"))
+                input[2] = Channel.of(false)
                 """
             }
         }
@@ -79,41 +53,15 @@ nextflow_workflow {
         config "tests/configs/run.config"
         tag "expect_success"
         tag "single_end"
-        setup {
-            run("LOAD_SAMPLESHEET") {
-                script "subworkflows/local/loadSampleSheet/main.nf"
-                workflow {
-                    '''
-                    input[0] = "${projectDir}/test-data/single-end-samplesheet.csv"
-                    input[1] = "illumina"
-                    input[2] = true
-                    '''
-                }
-            }
-            run("SUBSET_TRIM") {
-                script "subworkflows/local/subsetTrim/main.nf"
-                process {
-                    '''
-                    def subset_trim_params = [
-                        n_reads_profile: 49,
-                        adapters: params.adapters,
-                        platform: "illumina",
-                        random_seed: ""
-                    ]
-                    input[0] = LOAD_SAMPLESHEET.out.samplesheet
-                    input[1] = LOAD_SAMPLESHEET.out.single_end
-                    input[2] = subset_trim_params
-                    '''
-                }
-            }
-        }
         when {
             params {}
             workflow {
                 """
-                input[0] = SUBSET_TRIM.out.subset_reads
-                input[1] = SUBSET_TRIM.out.trimmed_subset_reads
-                input[2] = LOAD_SAMPLESHEET.out.single_end
+                input[0] = Channel.of("test")
+                    | combine(Channel.of("${projectDir}/test-data/tiny-index/reads/R1.fastq"))
+                input[1] = Channel.of("test")
+                    | combine(Channel.of("${projectDir}/test-data/tiny-index/reads/R1.fastq"))
+                input[2] = Channel.of(true)
                 """
             }
         }
@@ -136,22 +84,14 @@ nextflow_workflow {
         config "tests/configs/run.config"
         tag "expect_success"
         tag "empty_input"
-        setup {
-            run("GZIP_FILE") {
-                script "modules/local/gzipFile/main.nf"
-                process {
-                    """
-                    input[0] = Channel.of("empty_sample").combine(Channel.of("${projectDir}/test-data/toy-data/empty_file.txt"))
-                    """
-                }
-            }
-        }
         when {
             params {}
             workflow {
                 """
-                input[0] = GZIP_FILE.out
-                input[1] = GZIP_FILE.out
+                input[0] = Channel.of("test")
+                    | combine(Channel.of("${projectDir}/test-data/toy-data/empty_file.txt"))
+                input[1] = Channel.of("test")
+                    | combine(Channel.of("${projectDir}/test-data/toy-data/empty_file.txt"))
                 input[2] = Channel.of(true)
                 """
             }
