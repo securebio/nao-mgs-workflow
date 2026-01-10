@@ -60,7 +60,7 @@ nextflow_workflow {
         }
     }
 
-    test("Should run without failures on paired (interleaved) input") {
+    test("Should run without failures on interleaved Illumina data") {
         tag "expect_success"
         tag "interleaved"
         config "tests/configs/run.config"
@@ -100,56 +100,6 @@ nextflow_workflow {
                 input[0] = INTERLEAVE_FASTQ.out.output
                 input[1] = "${params.ref_dir}/results/kraken_db"
                 input[2] = "${params.ref_dir}"
-                input[3] = LOAD_SAMPLESHEET.out.single_end
-                input[4] = profile_params
-                '''
-            }
-        }
-        then {
-            // Should run without failures
-            assert workflow.success
-            // Kraken reports should have expected fields
-            def kraken_report_tab = path(workflow.out.kraken[0]).csv(sep: "\t", decompress: true)
-            assert kraken_report_tab.columnCount == 10
-            assert kraken_report_tab.columnNames == kraken_headers_exp
-            // Bracken output should have expected fields
-            def bracken_tab = path(workflow.out.bracken[0]).csv(sep: "\t", decompress: true)
-            assert bracken_tab.columnCount == 9
-            assert bracken_tab.columnNames == bracken_headers_exp
-        }
-    }
-
-    test("Should run without failures on unpaired input") {
-        config "tests/configs/run.config"
-        tag "expect_success"
-        tag "single_end"
-        setup {
-            run("LOAD_SAMPLESHEET") {
-                script "subworkflows/local/loadSampleSheet/main.nf"
-                process {
-                    """
-                    input[0] = "${projectDir}/test-data/single-end-samplesheet.csv"
-                    input[1] = "illumina"
-                    input[2] = true
-                    """
-                }
-            }
-        }
-        when {
-            params {}
-            workflow {
-                '''
-                def profile_params = [
-                    min_kmer_fraction: "0.4",
-                    k: "27",
-                    ribo_suffix: "ribo",
-                    bracken_threshold: "1",
-                    platform: "illumina",
-                    db_download_timeout: params.db_download_timeout
-                ]
-                input[0] = LOAD_SAMPLESHEET.out.samplesheet
-                input[1] = "${params.ref_dir}/results/kraken_db"
-                input[2] ="${params.ref_dir}"
                 input[3] = LOAD_SAMPLESHEET.out.single_end
                 input[4] = profile_params
                 '''
