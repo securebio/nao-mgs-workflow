@@ -47,7 +47,7 @@ nextflow_process {
             assert input_fastqs.size() == 2
             // Extract species IDs from input filenames and verify they're in output filenames
             def species_ids = input_fastqs.collect { fastq ->
-                def matcher = fastq.toString() =~ /_(\d+)_in/
+                def matcher = fastq.toString() =~ /input_downsampled_\w+_(\d+)_/
                 matcher ? matcher[0][1] : null
             }
             assert species_ids.every { it != null }
