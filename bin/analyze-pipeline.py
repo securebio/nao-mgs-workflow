@@ -347,8 +347,6 @@ def report_unused_components(analyzer: NextflowAnalyzer, output_stream):
             path = analyzer.modules[name].path.relative_to(analyzer.pipeline_dir)
             output_stream.write(f"\t- {name} ({path})\n")
         output_stream.write("\n")
-    else:
-        output_stream.write("No unused modules found.\n\n")
 
     # Report testing_only unused modules
     if unused_modules_testing:
@@ -357,6 +355,10 @@ def report_unused_components(analyzer: NextflowAnalyzer, output_stream):
             path = analyzer.modules[name].path.relative_to(analyzer.pipeline_dir)
             output_stream.write(f"\t- {name} ({path})\n")
         output_stream.write("\n")
+
+    # Only report "no unused modules" if there are truly none
+    if not unused_modules_regular and not unused_modules_testing:
+        output_stream.write("No unused modules found.\n\n")
 
     # Separate unused processes into testing_only and regular
     unused_processes_testing = []
@@ -387,8 +389,6 @@ def report_unused_components(analyzer: NextflowAnalyzer, output_stream):
                 path = analyzer.modules[parent_module].path.relative_to(analyzer.pipeline_dir)
             output_stream.write(f"\t- {name} ({path})\n")
         output_stream.write("\n")
-    else:
-        output_stream.write("No unused processes found.\n\n")
 
     # Report testing_only unused processes
     if unused_processes_testing:
@@ -402,6 +402,10 @@ def report_unused_components(analyzer: NextflowAnalyzer, output_stream):
                 path = analyzer.modules[parent_module].path.relative_to(analyzer.pipeline_dir)
             output_stream.write(f"\t- {name} ({path})\n")
         output_stream.write("\n")
+
+    # Only report "no unused processes" if there are truly none
+    if not unused_processes_regular and not unused_processes_testing:
+        output_stream.write("No unused processes found.\n\n")
 
 #=============================================================================
 # Run script
