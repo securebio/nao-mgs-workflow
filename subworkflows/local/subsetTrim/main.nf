@@ -7,7 +7,6 @@ include { SUBSET_READS_PAIRED_TARGET as SUBSET_PAIRED } from "../../../modules/l
 include { FASTP } from "../../../modules/local/fastp"
 include { FILTLONG as FILTLONG_STRINGENT } from "../../../modules/local/filtlong"
 include { FILTLONG as FILTLONG_LOOSE } from "../../../modules/local/filtlong"
-
 include { INTERLEAVE_FASTQ } from "../../../modules/local/interleaveFastq"
 
 /***********
@@ -29,8 +28,8 @@ workflow SUBSET_TRIM {
         reads_ch_single = single_end_check.single.combine(reads_ch).map{it -> [it[1], it[2]] }
         reads_ch_paired = single_end_check.paired.combine(reads_ch).map{it -> [it[1], it[2]] }
         // Subset reads according to endedness (other channel will be empty)
-        subset_ch_single = SUBSET_SINGLE(reads_ch_single, params_map.n_reads_profile, "fastq", params_map.random_seed)
-        subset_ch_paired = SUBSET_PAIRED(reads_ch_paired, params_map.n_reads_profile, "fastq", params_map.random_seed)
+        subset_ch_single = SUBSET_SINGLE(reads_ch_single, params_map.n_reads_profile, params_map.random_seed).output
+        subset_ch_paired = SUBSET_PAIRED(reads_ch_paired, params_map.n_reads_profile, params_map.random_seed).output
         // Interleave reads based on endedness (other channel will be empty)
         inter_ch_single = subset_ch_single
         inter_ch_paired = INTERLEAVE_FASTQ(subset_ch_paired).output
