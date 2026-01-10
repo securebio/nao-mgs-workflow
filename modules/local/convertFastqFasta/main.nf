@@ -6,14 +6,15 @@ process CONVERT_FASTQ_FASTA {
     input:
         tuple val(sample), path(fastq)
     output:
-        tuple val(sample), path("converted_${fastq}"), emit: output
+        tuple val(sample), path("converted_*"), emit: output
         tuple val(sample), path("input_${fastq}"), emit: input
     script:
         def extractCmd = fastq.toString().endsWith(".gz") ? "zcat" : "cat"
         def compressCmd = fastq.toString().endsWith(".gz") ? "gzip" : "cat"
+        def output = "converted_${fastq}".replace(".fastq", ".fasta")
         """
         # Perform conversion
-        ${extractCmd} ${fastq} | seqtk seq -a | ${compressCmd} > converted_${fastq}
+        ${extractCmd} ${fastq} | seqtk seq -a | ${compressCmd} > ${output}
         # Link input to output for testing
         ln -s ${fastq} input_${fastq}
         """
@@ -44,18 +45,25 @@ process CONVERT_FASTQ_FASTA_LIST {
         }
         def extractCmd = check_str.endsWith(".gz") ? "zcat" : "cat"
         def compressCmd = check_str.endsWith(".gz") ? "gzip" : "cat"
+        def outputs = fastqs.collect { fastq -> "converted_${fastq}".replace(".fastq", ".fasta") }
+        def inputs = fastqs.collect { fastq -> "input_${fastq}" }
         """
-        for fastq in ${fastqs}; do
+        fastqs_array=(${fastqs})
+        outputs_array=(${outputs.join(" ")})
+        inputs_array=(${inputs.join(" ")})
+        for ((i=0; i<\${#fastqs_array[@]}; i++)); do
+            fastq="\${fastqs_array[i]}"
+            output="\${outputs_array[i]}"
+            input="\${inputs_array[i]}"
             species=\$(basename \${fastq} | grep -oP '${sample}_\\K\\d+(?=_)')
             if [ -z "\${species}" ]; then
                 >&2 echo "Error: Could not extract species from filename: \${fastq}"
                 exit 1
             fi
-            output="converted_\${fastq}"
             # Perform conversion
             ${extractCmd} \${fastq} | seqtk seq -a | ${compressCmd} > \${output}
             # Link input to output for testing
-            ln -s \${fastq} input_\${fastq}
+            ln -s \${fastq} \${input}
         done
         """
 }
