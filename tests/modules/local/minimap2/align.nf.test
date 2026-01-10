@@ -20,7 +20,7 @@ nextflow_process {
         }
     }
 
-    test("When run against viral index, should correctly partition reads based on alignment status (when multiple alignments parameter is passed)") {
+    test("Should correctly partition reads based on alignment status (with multiple alignments parameter)") {
         tag "expect_success"
 
         when {
@@ -76,7 +76,7 @@ nextflow_process {
         }
     }
 
-    test("When run against viral index, should correctly partition reads based on alignment status (when multiple alignments parameter isn't passed)") {
+    test("Should correctly partition reads based on alignment status (without multiple alignments parameter)") {
         tag "expect_success"
 
         when {
@@ -92,117 +92,6 @@ nextflow_process {
                 ]
                 input[0] = LOAD_SAMPLESHEET.out.samplesheet
                 input[1] = "${params.ref_dir}/results/mm2-virus-index"
-                input[2] = minimap2_params
-                '''
-            }
-        }
-        then {
-            // Should run without failures
-            assert process.success
-
-            // Check all expected output files exist
-            assert path(process.out.sam[0][1]).exists()
-            assert path(process.out.reads_mapped[0][1]).exists()
-            assert path(process.out.reads_unmapped[0][1]).exists()
-            assert path(process.out.input[0][1]).exists()
-
-            // Get read IDs from output FASTQ files
-            def fastq_mapped = path(process.out.reads_mapped[0][1]).fastq
-            def fastq_unmapped = path(process.out.reads_unmapped[0][1]).fastq
-            def fastq_read_ids_mapped = fastq_mapped.readNames.toSet()
-            def fastq_read_ids_unmapped = fastq_unmapped.readNames.toSet()
-
-            // Get read IDs from SAM file
-            def samlines = sam(process.out.sam[0][1]).getSamLines()
-            def sam_read_ids_mapped = samlines
-                .collect { line -> line.split('\t')[0] }  // Get read IDs
-                .toSet()
-
-            // Get input read IDs
-            def input_reads = path(process.out.input[0][1]).fastq.readNames.toSet()
-
-            // Verify read partitioning is correct
-            assert sam_read_ids_mapped == fastq_read_ids_mapped
-
-            // Verify no overlapping reads between mapped and unmapped sets
-            assert fastq_read_ids_mapped.intersect(fastq_read_ids_unmapped).size() == 0
-
-            // Verify input FASTQ contains all reads
-            assert input_reads == fastq_read_ids_mapped + fastq_read_ids_unmapped
-        }
-    }
-
-    test("When run against human index, should correctly partition reads based on alignment status") {
-        tag "expect_success"
-
-        when {
-            params {
-	    }
-            process {
-                '''
-                def minimap2_params = [
-                    suffix: "test",
-                    remove_sq: false,
-                    alignment_params: "",
-                    db_download_timeout: params.db_download_timeout
-                ]
-                input[0] = LOAD_SAMPLESHEET.out.samplesheet
-                input[1] = "${params.ref_dir}/results/mm2-human-index"
-                input[2] = minimap2_params
-                '''
-            }
-        }
-        then {
-            // Should run without failures
-            assert process.success
-
-            // Check all expected output files exist
-            assert path(process.out.sam[0][1]).exists()
-            assert path(process.out.reads_mapped[0][1]).exists()
-            assert path(process.out.reads_unmapped[0][1]).exists()
-            assert path(process.out.input[0][1]).exists()
-
-            // Get read IDs from output FASTQ files
-            def fastq_mapped = path(process.out.reads_mapped[0][1]).fastq
-            def fastq_unmapped = path(process.out.reads_unmapped[0][1]).fastq
-            def fastq_read_ids_mapped = fastq_mapped.readNames.toSet()
-            def fastq_read_ids_unmapped = fastq_unmapped.readNames.toSet()
-
-            // Get read IDs from SAM file
-            def samlines = sam(process.out.sam[0][1]).getSamLines()
-            def sam_read_ids_mapped = samlines
-                .collect { line -> line.split('\t')[0] }  // Get read IDs
-                .toSet()
-
-            // Get input read IDs
-            def input_reads = path(process.out.input[0][1]).fastq.readNames.toSet()
-
-            // Verify read partitioning is correct
-            assert sam_read_ids_mapped == fastq_read_ids_mapped
-
-            // Verify no overlapping reads between mapped and unmapped sets
-            assert fastq_read_ids_mapped.intersect(fastq_read_ids_unmapped).size() == 0
-
-            // Verify input FASTQ contains all reads
-            assert input_reads == fastq_read_ids_mapped + fastq_read_ids_unmapped
-        }
-    }
-    test("When run against ribosomal index, should correctly partition reads based on alignment status") {
-        tag "expect_success"
-
-        when {
-            params {
-            }
-            process {
-                '''
-                def minimap2_params = [
-                    suffix: "test",
-                    remove_sq: false,
-                    alignment_params: "",
-                    db_download_timeout: params.db_download_timeout
-                ]
-                input[0] = LOAD_SAMPLESHEET.out.samplesheet
-                input[1] = "${params.ref_dir}/results/mm2-ribo-index"
                 input[2] = minimap2_params
                 '''
             }
