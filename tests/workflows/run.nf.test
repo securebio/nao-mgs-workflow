@@ -20,26 +20,6 @@ nextflow_pipeline {
         }
     }
 
-    test("Short read RUN workflow should run without errors") {
-        config "tests/configs/run.config"
-        tag "run"
-        tag "main_run_shortread"
-        then {
-            // Should run without failures
-            assert workflow.success
-        }
-    }
-
-    test("ONT RUN workflow should run without errors") {
-        config "tests/configs/run_ont.config"
-        tag "run_ont"
-        tag "main_run_ont"
-        then {
-            // Should run without failures
-            assert workflow.success
-        }
-    }
-
     test("Short read RUN workflow output should match snapshot") {
         config "tests/configs/run.config"
         tag "run_output"

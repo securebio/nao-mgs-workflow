@@ -5,23 +5,6 @@ nextflow_pipeline {
     config "tests/configs/downstream.config"
     tag "workflow"
 
-    test("Short read DOWNSTREAM workflow should run without errors") {
-        tag "downstream"
-        tag "main_downstream"
-        then {
-            assert workflow.success
-        }
-    }
-
-    test("ONT DOWNSTREAM workflow should run without errors") {
-        config "tests/configs/downstream_ont.config"
-        tag "downstream_ont"
-        tag "main_downstream_ont"
-        then {
-            assert workflow.success
-        }
-    }
-
     test("DOWNSTREAM workflow output should match snapshot") {
         tag "downstream_output"
         tag "main_downstream_output"
