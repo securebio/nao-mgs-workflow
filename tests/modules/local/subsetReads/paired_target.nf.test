@@ -1,0 +1,63 @@
+nextflow_process {
+
+    name "Test process SUBSET_READS_PAIRED_TARGET"
+    script "modules/local/subsetReads/main.nf"
+    process "SUBSET_READS_PAIRED_TARGET"
+    config "tests/configs/run.config"
+    tag "module"
+    tag "subset_reads_paired_target"
+
+    test("Should return all reads when target is greater than total"){
+        tag "expect_success"
+        when {
+            params {}
+            process {
+                '''
+                input[0] = Channel.of(["test", ["${projectDir}/test-data/tiny-index/reads/R1.fastq", "${projectDir}/test-data/tiny-index/reads/R2.fastq"]])
+                input[1] = 100
+                input[2] = 42 // Arbitrary seed value
+                '''
+            }
+        }
+        then {
+            assert process.success
+            assert path(process.out.input[0][1][0]).md5 == path(process.out.output[0][1][0]).md5
+            assert path(process.out.input[0][1][1]).md5 == path(process.out.output[0][1][1]).md5
+        }
+    }
+
+    test("Should return all reads when target is greater than total"){
+        tag "expect_success"
+        when {
+            params {
+                readTarget = 10
+            }
+            process {
+                '''
+                input[0] = Channel.of(["test", ["${projectDir}/test-data/tiny-index/reads/R1.fastq", "${projectDir}/test-data/tiny-index/reads/R2.fastq"]])
+                input[1] = params.readTarget
+                input[2] = 42 // Arbitrary seed value
+                '''
+            }
+        }
+        then {
+            // Should run without errors
+            assert process.success
+            // Output should be subset of input
+            def fastq_in = path(process.out.input[0][1][0]).fastq
+            def fastq_out = path(process.out.output[0][1][0]).fastq
+            def names_in = fastq_in.readNames
+            def names_out = fastq_out.readNames
+            assert names_out.size() < names_in.size()
+            for (name in names_out){
+                assert name in names_in
+                assert fastq_out.getRecordByName(name) == fastq_in.getRecordByName(name)
+            }
+            // Number of output reads should be close to target (not exact due to independent sampling)
+            def tolerance = 0.1 // arbitrary
+            assert names_out.size() >= params.readTarget * (1 - tolerance)
+            assert names_out.size() <= params.readTarget * (1 + tolerance)
+        }
+    }
+
+}
