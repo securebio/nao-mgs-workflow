@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 DESC = """
 Parallelize nf-test execution by running tests in shards across multiple processes.
+
+This script should be invoked via the wrapper script bin/run-nf-test-parallel.sh,
+which handles sudo and environment variable passing.
 """
 
 ###########
@@ -17,9 +20,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Tuple, Optional
 from functools import partial
-
-import boto3
-from botocore.exceptions import NoCredentialsError, PartialCredentialsError
+import pwd
 
 ###########
 # LOGGING #
@@ -56,52 +57,16 @@ def strip_ansi_codes(text: str) -> str:
     ansi_escape = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
     return ansi_escape.sub('', text)
 
-def load_aws_credentials() -> None:
-    """
-    Ensure AWS credentials are available in the environment.
-    If not already set, attempt to load them using boto3's credential chain.
-    This will check environment variables, ~/.aws/credentials, IAM roles, etc.
-    Raises:
-        RuntimeError: If credentials cannot be loaded
-    """
-    if os.environ.get("AWS_ACCESS_KEY_ID") and os.environ.get("AWS_SECRET_ACCESS_KEY"):
-        logger.info("AWS credentials found in environment")
-        return
-    logger.info("AWS credentials not in environment, attempting to load via boto3...")
-    try:
-        session = boto3.Session()
-        credentials = session.get_credentials()
-        if credentials is None:
-            raise RuntimeError("Failed to load AWS credentials via boto3.")
-        frozen_creds = credentials.get_frozen_credentials()
-        os.environ["AWS_ACCESS_KEY_ID"] = frozen_creds.access_key
-        os.environ["AWS_SECRET_ACCESS_KEY"] = frozen_creds.secret_key
-        if frozen_creds.token:
-            os.environ["AWS_SESSION_TOKEN"] = frozen_creds.token
-        logger.info("AWS credentials loaded successfully via boto3")
-    except (NoCredentialsError, PartialCredentialsError) as e:
-        raise RuntimeError("Failed to load AWS credentials via boto3.") from e
-
 def construct_test_command(additional_args: List[str]) -> List[str]:
     """
     Construct the command to run a single nf-test shard.
+    Note: This script should be run with sudo via the wrapper script.
     Args:
         additional_args: Additional arguments to pass to nf-test
     Returns:
         List of command arguments
     """
-    env_vars = {
-        "PATH": os.environ.get("PATH", ""),
-        "HOME": os.environ.get("HOME", ""),
-        "AWS_ACCESS_KEY_ID": os.environ["AWS_ACCESS_KEY_ID"],
-        "AWS_SECRET_ACCESS_KEY": os.environ["AWS_SECRET_ACCESS_KEY"],
-    }
-    if "AWS_SESSION_TOKEN" in os.environ:
-        env_vars["AWS_SESSION_TOKEN"] = os.environ["AWS_SESSION_TOKEN"]
-    cmd = ["sudo", "env"]
-    for key, value in env_vars.items():
-        cmd.append(f"{key}={value}")
-    cmd.extend(["nf-test", "test"])
+    cmd = ["nf-test", "test", "--verbose", "--debug"]
     cmd.extend(additional_args)
     return cmd
 
@@ -127,7 +92,11 @@ def run_nf_test_shard(shard: int, total_shards: int,
     Returns:
         Tuple of (shard_number, exit_code, stdout, stderr, command_str)
     """
+    import pwd
+
+    # Debug: log process info
     logger.info(f"Starting shard {shard}/{total_shards}")
+
     cmd = test_command + ["--shard", f"{shard}/{total_shards}"]
     cmd_str = " ".join(cmd)
     exit_code, stdout, stderr = execute_subprocess(cmd)
@@ -176,61 +145,42 @@ def write_test_log(all_shards: List[Tuple[int, int, str, str, str]],
         out.write(f"Failed shards: {len(failed_shards)}\n")
         out.write(f"Working directory: {os.getcwd()}\n")
         out.write(f"Completed at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
-        out.write("=" * 80 + "\n")
+        out.write("=" * 80 + "\n\n")
 
         for shard_num, exit_code, stdout, stderr, cmd_str in sorted(all_shards):
             status = "PASSED" if exit_code == 0 else "FAILED"
-            out.write(f"Shard {shard_num}/{n_shards}: {status}\n")
             out.write("=" * 80 + "\n")
-            out.write(f"COMMAND STRING\n")
+            out.write(f"Shard {shard_num}/{n_shards}: {status}\n")
+            out.write("=" * 80 + "\n\n")
             out.write("-" * 80 + "\n")
-            out.write(f"{cmd_str}\n")
+            out.write(f"COMMAND STRING\n")
+            out.write("-" * 80 + "\n\n")
+            out.write(f"{cmd_str}\n\n")
             out.write("-" * 80 + "\n")
             out.write("STDOUT\n")
+            out.write("-" * 80 + "\n\n")
+            out.write(stdout.strip() + "\n\n")
             out.write("-" * 80 + "\n")
-            out.write(stdout.strip() + "\n")
-            out.write("-" * 80 + "\n")
+            out.write("STDERR\n")
+            out.write("-" * 80 + "\n\n")
             if stderr:
-                out.write("STDERR\n")
-                out.write("-" * 80 + "\n")
-                out.write(stderr.strip() + "\n")
+                out.write(stderr.strip() + "\n\n")
             else:
-                out.write("STDERR: NONE\n")
-            out.write("=" * 80 + "\n")
+                out.write("None\n\n")
 
         # If there were failures, add a failure summary section
         if failed_shards:
-            out.write("\n" + "=" * 80 + "\n")
+            out.write("=" * 80 + "\n")
             out.write("FAILURE SUMMARY\n")
             out.write("=" * 80 + "\n\n")
-
-            for shard_num, exit_code, stdout, stderr, cmd_str in failed_shards:
-                out.write(f"\nShard {shard_num} (exit code: {exit_code})\n")
-                out.write("-" * 80 + "\n")
-
-                # Extract and display failures
+            for shard_num, exit_code, stdout, stderr, cmd_str in sorted(failed_shards):
+                out.write(f"Shard {shard_num} (exit code: {exit_code}):\n")
                 failures = extract_failures_from_output(stdout + "\n" + stderr)
                 if failures:
                     for failure in failures:
-                        out.write(f"  {failure}\n")
+                        out.write(f"    - {failure}\n")
                 out.write("\n")
-
     logger.info(f"Test results written to: {output_log}")
-
-    # If there were failures, print summary to console
-    if failed_shards:
-        logger.error(f"\n{len(failed_shards)} shard(s) failed")
-        logger.error("=" * 80)
-        logger.error("FAILED TESTS SUMMARY")
-        logger.error("=" * 80)
-        for shard_num, _, stdout, stderr, _ in failed_shards:
-            failures = extract_failures_from_output(stdout + "\n" + stderr)
-            if failures:
-                logger.error(f"\nShard {shard_num}:")
-                for failure in failures:
-                    logger.error(f"  {failure}")
-        logger.error(f"\nFull details in: {output_log}")
-        logger.error("=" * 80)
 
 def update_plugins() -> None:
     """
@@ -256,15 +206,15 @@ def update_plugins() -> None:
 ##############
 
 def run_parallel_tests(n_shards: int, additional_args: List[str],
-                       output_log: Path) -> None:
+                       output_log: Path) -> int:
     """
     Run nf-test in parallel across multiple shards.
     Args:
         n_shards: Number of parallel shards to run
         additional_args: Additional arguments to pass to nf-test
         output_log: Path to consolidated error log file
-    Raises:
-        RuntimeError: If any test shards fail
+    Returns:
+        Exit code (0 for success, 1 for failure)
     """
     update_plugins()
     cmd = construct_test_command(additional_args)
@@ -289,9 +239,13 @@ def run_parallel_tests(n_shards: int, additional_args: List[str],
     write_test_log(results, failed_shards, n_shards, output_log)
 
     if failed_shards:
-        raise RuntimeError(f"{len(failed_shards)} shard(s) failed. See {output_log} for details.")
+        logger.error(f"{len(failed_shards)} shard(s) failed:")
+        for shard_num, exit_code, stdout, stderr, cmd_str in failed_shards:
+            logger.error(f"\t- Shard {shard_num} failed with exit code {exit_code}")
+        return 1
     else:
         logger.info(f"All {n_shards} shards completed successfully.")
+        return 0
 
 def parse_arguments() -> argparse.Namespace:
     """Parse command-line arguments."""
@@ -324,16 +278,16 @@ def main() -> None:
     """Main entry point."""
     args = parse_arguments()
     logger.info(f"Arguments: {args}")
-    load_aws_credentials()
     repo_root = Path(__file__).resolve().parent.parent
     original_cwd = os.getcwd()
     try:
         os.chdir(repo_root)
-        run_parallel_tests(
+        exit_code = run_parallel_tests(
             n_shards=args.n_shards,
             additional_args=args.additional_args,
             output_log=args.output_log,
         )
+        exit(exit_code)
     finally:
         os.chdir(original_cwd)
 
