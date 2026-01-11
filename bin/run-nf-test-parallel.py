@@ -10,8 +10,8 @@ Parallelize nf-test execution by running tests in shards across multiple process
 import argparse
 import logging
 import os
+import re
 import subprocess
-import tempfile
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from datetime import datetime, timezone
 from pathlib import Path
@@ -44,6 +44,17 @@ logger.addHandler(handler)
 ####################
 # HELPER FUNCTIONS #
 ####################
+
+def strip_ansi_codes(text: str) -> str:
+    """
+    Remove ANSI escape codes from text.
+    Args:
+        text: Text containing ANSI escape codes
+    Returns:
+        Text with ANSI codes removed
+    """
+    ansi_escape = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
+    return ansi_escape.sub('', text)
 
 def load_aws_credentials() -> None:
     """
@@ -94,116 +105,132 @@ def construct_test_command(additional_args: List[str]) -> List[str]:
     cmd.extend(additional_args)
     return cmd
 
-def execute_subprocess(cmd: List[str], log_file: Path, repo_root: Path) -> int:
+def execute_subprocess(cmd: List[str]) -> Tuple[int, str, str]:
     """
-    Execute a subprocess and log the output to a file.
+    Execute a subprocess and capture output.
     Args:
         cmd: Command to execute
-        log_file: Path to log file
     Returns:
-        Exit code of the subprocess
+        Tuple of (exit_code, stdout, stderr)
     """
-    with open(log_file, 'w') as f:
-        result = subprocess.run(cmd, stdout=f, stderr=f, text=True, cwd=str(repo_root))
-    return result.returncode
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    return (result.returncode, result.stdout, result.stderr)
 
 def run_nf_test_shard(shard: int, total_shards: int,
-                      test_command: List[str],
-                      log_dir: Path,
-                      repo_root: Path) -> Tuple[int, int, str]:
+                      test_command: List[str]) -> Tuple[int, int, str, str, str]:
     """
     Run a single nf-test shard.
     Args:
         shard: Shard number (1-indexed)
         total_shards: Total number of shards
         test_command: Command to run nf-test
-        log_dir: Directory to store log files
-        repo_root: Repository root directory
     Returns:
-        Tuple of (shard_number, exit_code, log_file_path)
+        Tuple of (shard_number, exit_code, stdout, stderr, command_str)
     """
-    log_file = log_dir / f"shard_{shard}.log"
     logger.info(f"Starting shard {shard}/{total_shards}")
     cmd = test_command + ["--shard", f"{shard}/{total_shards}"]
-    result = execute_subprocess(cmd, log_file, repo_root)
-    if result != 0:
-        logger.error(f"Shard {shard}/{total_shards} failed with exit code {result}")
+    cmd_str = " ".join(cmd)
+    exit_code, stdout, stderr = execute_subprocess(cmd)
+
+    # Strip ANSI escape codes from output
+    stdout = strip_ansi_codes(stdout)
+    stderr = strip_ansi_codes(stderr)
+
+    if exit_code != 0:
+        logger.error(f"Shard {shard}/{total_shards} failed with exit code {exit_code}")
     else:
         logger.info(f"Shard {shard}/{total_shards} completed successfully")
-    return (shard, result, str(log_file))
+    return (shard, exit_code, stdout, stderr, cmd_str)
 
-def extract_failures_from_log(log_file: Path) -> List[str]:
+def extract_failures_from_output(output: str) -> List[str]:
     """
-    Extract FAILED test names from a log file.
+    Extract FAILED test names from test output.
     Args:
-        log_file: Path to log file
+        output: Test output string (stdout or stderr)
     Returns:
         List of failed test names
     """
     failures = []
-    try:
-        with open(log_file, 'r') as f:
-            for line in f:
-                if "FAILED" in line:
-                    failures.append(line.strip())
-    except Exception as e:
-        logger.warning(f"Could not read log file {log_file}: {e}")
+    for line in output.splitlines():
+        if "FAILED" in line:
+            failures.append(line.strip())
     return failures
 
-def log_failures(failed_shards: List[Tuple[int, int, str]], n_shards: int, output_log: Path) -> None:
+def write_test_log(all_shards: List[Tuple[int, int, str, str, str]],
+                   failed_shards: List[Tuple[int, int, str, str, str]],
+                   n_shards: int,
+                   output_log: Path) -> None:
     """
-    Write failure information to log file and console.
+    Write comprehensive test log with all results and failure summary.
     Args:
-        failed_shards: List of (shard_num, exit_code, log_file) tuples for failed shards
+        all_shards: List of (shard_num, exit_code, stdout, stderr, cmd_str) tuples for all shards
+        failed_shards: List of (shard_num, exit_code, stdout, stderr, cmd_str) tuples for failed shards
         n_shards: Total number of shards
-        output_log: Path to consolidated error log file
+        output_log: Path to consolidated log file
     """
-    logger.error(f"{len(failed_shards)} shard(s) failed")
-
-    # Write consolidated error log to file
     with open(output_log, 'w') as out:
         out.write("=" * 80 + "\n")
-        out.write(f"PARALLEL NF-TEST FAILURE SUMMARY\n")
-        out.write(f"Failed shards: {len(failed_shards)}/{n_shards}\n")
-        out.write("=" * 80 + "\n\n")
+        out.write(f"NF-TEST RESULTS BY SHARD\n")
+        out.write(f"Total shards: {n_shards}\n")
+        out.write(f"Passed shards: {n_shards - len(failed_shards)}\n")
+        out.write(f"Failed shards: {len(failed_shards)}\n")
+        out.write(f"Working directory: {os.getcwd()}\n")
+        out.write(f"Completed at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+        out.write("=" * 80 + "\n")
 
-        for shard_num, exit_code, log_file in failed_shards:
-            out.write(f"\n{'=' * 80}\n")
-            out.write(f"SHARD {shard_num} (exit code: {exit_code})\n")
-            out.write(f"{'=' * 80}\n\n")
+        for shard_num, exit_code, stdout, stderr, cmd_str in sorted(all_shards):
+            status = "PASSED" if exit_code == 0 else "FAILED"
+            out.write(f"Shard {shard_num}/{n_shards}: {status}\n")
+            out.write("=" * 80 + "\n")
+            out.write(f"COMMAND STRING\n")
+            out.write("-" * 80 + "\n")
+            out.write(f"{cmd_str}\n")
+            out.write("-" * 80 + "\n")
+            out.write("STDOUT\n")
+            out.write("-" * 80 + "\n")
+            out.write(stdout.strip() + "\n")
+            out.write("-" * 80 + "\n")
+            if stderr:
+                out.write("STDERR\n")
+                out.write("-" * 80 + "\n")
+                out.write(stderr.strip() + "\n")
+            else:
+                out.write("STDERR: NONE\n")
+            out.write("=" * 80 + "\n")
 
-            # Extract and write failures
-            failures = extract_failures_from_log(Path(log_file))
-            if failures:
-                out.write("Failed tests:\n")
-                for failure in failures:
-                    out.write(f"  {failure}\n")
+        # If there were failures, add a failure summary section
+        if failed_shards:
+            out.write("\n" + "=" * 80 + "\n")
+            out.write("FAILURE SUMMARY\n")
+            out.write("=" * 80 + "\n\n")
+
+            for shard_num, exit_code, stdout, stderr, cmd_str in failed_shards:
+                out.write(f"\nShard {shard_num} (exit code: {exit_code})\n")
+                out.write("-" * 80 + "\n")
+
+                # Extract and display failures
+                failures = extract_failures_from_output(stdout + "\n" + stderr)
+                if failures:
+                    for failure in failures:
+                        out.write(f"  {failure}\n")
                 out.write("\n")
 
-            # Write full log
-            out.write("Full log:\n")
-            out.write("-" * 80 + "\n")
-            try:
-                with open(log_file, 'r') as f:
-                    out.write(f.read())
-            except Exception as e:
-                out.write(f"Could not read log file: {e}\n")
-            out.write("\n")
+    logger.info(f"Test results written to: {output_log}")
 
-    logger.error(f"Test failures written to: {output_log}")
-
-    # Print summary of failures to console
-    logger.error("\n" + "=" * 80)
-    logger.error("FAILED TESTS SUMMARY")
-    logger.error("=" * 80)
-    for shard_num, _, log_file in failed_shards:
-        failures = extract_failures_from_log(Path(log_file))
-        if failures:
-            logger.error(f"\nShard {shard_num}:")
-            for failure in failures:
-                logger.error(f"  {failure}")
-    logger.error(f"\nFull details in: {output_log}")
-    logger.error("=" * 80)
+    # If there were failures, print summary to console
+    if failed_shards:
+        logger.error(f"\n{len(failed_shards)} shard(s) failed")
+        logger.error("=" * 80)
+        logger.error("FAILED TESTS SUMMARY")
+        logger.error("=" * 80)
+        for shard_num, _, stdout, stderr, _ in failed_shards:
+            failures = extract_failures_from_output(stdout + "\n" + stderr)
+            if failures:
+                logger.error(f"\nShard {shard_num}:")
+                for failure in failures:
+                    logger.error(f"  {failure}")
+        logger.error(f"\nFull details in: {output_log}")
+        logger.error("=" * 80)
 
 def update_plugins() -> None:
     """
@@ -229,14 +256,13 @@ def update_plugins() -> None:
 ##############
 
 def run_parallel_tests(n_shards: int, additional_args: List[str],
-                       output_log: Path, repo_root: Path) -> None:
+                       output_log: Path) -> None:
     """
     Run nf-test in parallel across multiple shards.
     Args:
         n_shards: Number of parallel shards to run
         additional_args: Additional arguments to pass to nf-test
         output_log: Path to consolidated error log file
-        repo_root: Repository root directory
     Raises:
         RuntimeError: If any test shards fail
     """
@@ -245,28 +271,27 @@ def run_parallel_tests(n_shards: int, additional_args: List[str],
     run_shard = partial(
         run_nf_test_shard,
         total_shards=n_shards,
-        test_command=cmd,
-        repo_root=repo_root
+        test_command=cmd
     )
     logger.info(f"Running {n_shards} test shards in parallel...")
-    with tempfile.TemporaryDirectory() as tmpdir:
-        log_dir = Path(tmpdir)
-        results = []
-        with ProcessPoolExecutor(max_workers=n_shards) as executor:
-            futures = {
-                executor.submit(run_shard, shard=shard, log_dir=log_dir): shard
-                for shard in range(1, n_shards + 1)
-            }
-            for future in as_completed(futures):
-                shard_num, exit_code, log_file = future.result()
-                results.append((shard_num, exit_code, log_file))
-        # Analyze results
-        failed_shards = [(num, code, log) for num, code, log in results if code != 0]
-        if failed_shards:
-            log_failures(failed_shards, n_shards, output_log)
-            raise RuntimeError(f"{len(failed_shards)} shard(s) failed. See {output_log} for details.")
-        else:
-            logger.info(f"All {n_shards} shards completed successfully.")
+    results = []
+    with ProcessPoolExecutor(max_workers=n_shards) as executor:
+        futures = {
+            executor.submit(run_shard, shard=shard): shard
+            for shard in range(1, n_shards + 1)
+        }
+        for future in as_completed(futures):
+            shard_num, exit_code, stdout, stderr, cmd_str = future.result()
+            results.append((shard_num, exit_code, stdout, stderr, cmd_str))
+
+    # Analyze results and write log
+    failed_shards = [(num, code, out, err, cmd) for num, code, out, err, cmd in results if code != 0]
+    write_test_log(results, failed_shards, n_shards, output_log)
+
+    if failed_shards:
+        raise RuntimeError(f"{len(failed_shards)} shard(s) failed. See {output_log} for details.")
+    else:
+        logger.info(f"All {n_shards} shards completed successfully.")
 
 def parse_arguments() -> argparse.Namespace:
     """Parse command-line arguments."""
@@ -300,13 +325,17 @@ def main() -> None:
     args = parse_arguments()
     logger.info(f"Arguments: {args}")
     load_aws_credentials()
-    repo_root = Path(__file__).resolve().parent
-    run_parallel_tests(
-        n_shards=args.n_shards,
-        additional_args=args.additional_args,
-        output_log=args.output_log,
-        repo_root=repo_root
-    )
+    repo_root = Path(__file__).resolve().parent.parent
+    original_cwd = os.getcwd()
+    try:
+        os.chdir(repo_root)
+        run_parallel_tests(
+            n_shards=args.n_shards,
+            additional_args=args.additional_args,
+            output_log=args.output_log,
+        )
+    finally:
+        os.chdir(original_cwd)
 
 if __name__ == "__main__":
     main()
