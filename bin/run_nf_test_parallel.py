@@ -267,15 +267,8 @@ def run_parallel_tests(n_workers: int,
         n_workers = len(test_files)
     update_plugins()
     worker_test_files = divide_test_files(test_files, n_workers)
-    logger.info(f"Assigned test files to workers:")
-    for i, files in enumerate(worker_test_files, 1):
-        if files:
-            logger.info(f"\t- Worker {i} assigned {len(files)} test file(s)")
-    logger.info(f"Running {n_workers} workers in parallel...")
+    logger.info(f"Assigned test files to {n_workers} workers.")
     worker_args = [(i, worker_test_files[i - 1], n_workers, debug) for i in range(1, n_workers + 1)]
-
-    # Use chunksize=1 to ensure each worker gets its full assignment immediately
-    # maxtasksperchild=1 ensures each worker process is fresh (no memory leaks)
     with multiprocessing.Pool(processes=n_workers) as pool:
         results = pool.starmap(run_nf_test_worker, worker_args)
     failed_workers = [(wid, code, out, err, cmd) for wid, code, out, err, cmd in results if code != 0]
