@@ -45,3 +45,4 @@ process FASTP {
         ln -s ${reads} ${sample}_fastp_in.fastq.gz
         """
 }
+

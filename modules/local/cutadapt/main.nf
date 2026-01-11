@@ -26,3 +26,4 @@ process CUTADAPT {
         ln -s !{reads_interleaved} !{sample}_cutadapt_in.fastq.gz
         '''
 }
+

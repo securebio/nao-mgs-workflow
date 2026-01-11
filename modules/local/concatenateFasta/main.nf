@@ -12,3 +12,4 @@ process CONCATENATE_FASTA_GZIPPED {
         cat !{files} > !{name}.fasta.gz
         '''
 }
+
