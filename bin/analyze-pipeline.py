@@ -56,6 +56,12 @@ class NextflowAnalyzer:
         self.unused_components: Dict[str, Set[str]] = {}
         # Scan contents and construct lists
         self._scan_files()
+        # Create reverse mapping from process names to module names for efficient lookup
+        self._process_to_module_map = {
+            p_name: m_name
+            for m_name, module in self.modules.items()
+            for p_name in module.processes
+        }
         self._analyze_dependencies()
         self._find_unused_components()
 
@@ -127,6 +133,8 @@ class NextflowAnalyzer:
                 depend_matches = re.finditer(r'\s*include\s+{\s*(\S*).*}\s+from\s+[\'"](\S*)[\'"]\s*', content)
                 for match in depend_matches:
                     item = match.group(1)
+                    # Handle "FOO as BAR" - extract the original name before "as"
+                    original_name = item.split(' as ')[0].strip() if ' as ' in item else item
                     full_path = match.group(2).rstrip('/')
                     # Split into dirpath and parent
                     parts = full_path.rsplit('/', 1)
@@ -136,14 +144,14 @@ class NextflowAnalyzer:
                         dirpath = ''
                         parent = parts[0]
                     if re.search("/workflows", dirpath):
-                        self.workflow_dependencies[workflow_name]["workflows"].add(item)
+                        self.workflow_dependencies[workflow_name]["workflows"].add(original_name)
                     elif re.search("/subworkflows/local", dirpath):
                         self.workflow_dependencies[workflow_name]["workflows"].add(parent)
                     elif re.search("/modules/local", dirpath):
                         self.workflow_dependencies[workflow_name]["modules"].add(parent)
-                        self.workflow_dependencies[workflow_name]["processes"].add(item)
+                        self.workflow_dependencies[workflow_name]["processes"].add(original_name)
                     else:
-                        self.workflow_dependencies[workflow_name]["processes"].add(item)
+                        self.workflow_dependencies[workflow_name]["processes"].add(original_name)
 
     def _find_unused_components(self):
         """Identify modules, processes and workflows that aren't called within the main workflow."""
@@ -166,6 +174,19 @@ class NextflowAnalyzer:
         for dependent_workflow in dependent_workflows:
             modules, processes, workflows = self._extract_dependencies(dependent_workflow, modules, processes, workflows)
         return modules, processes, workflows
+
+    def get_process_info(self, process_name: str):
+        """Get process object and its file path. Returns (process, path) tuple."""
+        if process_name in self.standalone_processes:
+            process = self.standalone_processes[process_name]
+            return process, process.file_path
+        elif process_name in self._process_to_module_map:
+            module_name = self._process_to_module_map[process_name]
+            process = self.modules[module_name].processes[process_name]
+            return process, self.modules[module_name].path
+        else:
+            # Process not found - should not happen in normal operation
+            raise KeyError(f"Process '{process_name}' not found in standalone processes or modules")
 
 #=============================================================================
 # Report generation function
@@ -364,14 +385,7 @@ def report_unused_components(analyzer: NextflowAnalyzer, output_stream):
     unused_processes_testing = []
     unused_processes_regular = []
     for name in unused["processes"]:
-        if name in analyzer.standalone_processes:
-            process = analyzer.standalone_processes[name]
-        else:
-            # Find the process in modules
-            parent_module = [module for module in analyzer.modules.keys()
-                             if name in analyzer.modules[module].processes][0]
-            process = analyzer.modules[parent_module].processes[name]
-
+        process, _ = analyzer.get_process_info(name)
         if process.testing_only:
             unused_processes_testing.append(name)
         else:
@@ -381,26 +395,16 @@ def report_unused_components(analyzer: NextflowAnalyzer, output_stream):
     if unused_processes_regular:
         output_stream.write("Unused processes:\n")
         for name in sorted(unused_processes_regular):
-            if name in analyzer.standalone_processes.keys():
-                path = analyzer.standalone_processes[name].file_path.relative_to(analyzer.pipeline_dir)
-            else:
-                parent_module = [module for module in analyzer.modules.keys()
-                                 if name in analyzer.modules[module].processes][0]
-                path = analyzer.modules[parent_module].path.relative_to(analyzer.pipeline_dir)
-            output_stream.write(f"\t- {name} ({path})\n")
+            _, path = analyzer.get_process_info(name)
+            output_stream.write(f"\t- {name} ({path.relative_to(analyzer.pipeline_dir)})\n")
         output_stream.write("\n")
 
     # Report testing_only unused processes
     if unused_processes_testing:
         output_stream.write("Unused processes (testing only):\n")
         for name in sorted(unused_processes_testing):
-            if name in analyzer.standalone_processes.keys():
-                path = analyzer.standalone_processes[name].file_path.relative_to(analyzer.pipeline_dir)
-            else:
-                parent_module = [module for module in analyzer.modules.keys()
-                                 if name in analyzer.modules[module].processes][0]
-                path = analyzer.modules[parent_module].path.relative_to(analyzer.pipeline_dir)
-            output_stream.write(f"\t- {name} ({path})\n")
+            _, path = analyzer.get_process_info(name)
+            output_stream.write(f"\t- {name} ({path.relative_to(analyzer.pipeline_dir)})\n")
         output_stream.write("\n")
 
     # Only report "no unused processes" if there are truly none
