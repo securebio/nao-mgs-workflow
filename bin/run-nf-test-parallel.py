@@ -15,12 +15,11 @@ import logging
 import os
 import re
 import subprocess
-from concurrent.futures import ProcessPoolExecutor, as_completed
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Tuple, Optional
 from functools import partial
-import pwd
+import multiprocessing
 
 ###########
 # LOGGING #
@@ -94,7 +93,6 @@ def run_nf_test_shard(shard: int, total_shards: int,
     """
     import pwd
 
-    # Debug: log process info
     logger.info(f"Starting shard {shard}/{total_shards}")
 
     cmd = test_command + ["--shard", f"{shard}/{total_shards}"]
@@ -224,15 +222,10 @@ def run_parallel_tests(n_shards: int, additional_args: List[str],
         test_command=cmd
     )
     logger.info(f"Running {n_shards} test shards in parallel...")
-    results = []
-    with ProcessPoolExecutor(max_workers=n_shards) as executor:
-        futures = {
-            executor.submit(run_shard, shard=shard): shard
-            for shard in range(1, n_shards + 1)
-        }
-        for future in as_completed(futures):
-            shard_num, exit_code, stdout, stderr, cmd_str = future.result()
-            results.append((shard_num, exit_code, stdout, stderr, cmd_str))
+
+    # Use multiprocessing.Pool instead of ProcessPoolExecutor
+    with multiprocessing.Pool(processes=n_shards) as pool:
+        results = pool.map(run_shard, range(1, n_shards + 1))
 
     # Analyze results and write log
     failed_shards = [(num, code, out, err, cmd) for num, code, out, err, cmd in results if code != 0]
