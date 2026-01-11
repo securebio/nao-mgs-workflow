@@ -110,7 +110,7 @@ def execute_subprocess(cmd: List[str]) -> Tuple[int, str, str]:
 def run_nf_test_worker(worker_id: int,
                        test_files: List[Path],
                        total_workers: int,
-                       debug: bool = False) -> Tuple[int, int, str, str, str]:
+                       debug: bool) -> Tuple[int, int, str, str, str]:
     """
     Run nf-test on a specific set of test files.
     Args:
@@ -157,7 +157,8 @@ def extract_failures_from_output(output: str) -> List[str]:
 def write_test_log(all_workers: List[Tuple[int, int, str, str, str]],
                    failed_workers: List[Tuple[int, int, str, str, str]],
                    n_workers: int,
-                   output_log: Path) -> None:
+                   output_log: Path,
+                   test_files: List[Path]) -> None:
     """
     Write comprehensive test log with all results and failure summary.
 
@@ -166,6 +167,7 @@ def write_test_log(all_workers: List[Tuple[int, int, str, str, str]],
         failed_workers: List of (worker_id, exit_code, stdout, stderr, cmd_str) tuples for failed workers
         n_workers: Total number of workers
         output_log: Path to consolidated log file
+        test_files: List of test files that were run
     """
     with open(output_log, 'w') as out:
         out.write("=" * 80 + "\n")
@@ -238,15 +240,17 @@ def update_plugins() -> None:
 # MAIN LOGIC #
 ##############
 
-def run_parallel_tests(n_workers: int, test_paths: List[str],
-                       output_log: Path) -> int:
+def run_parallel_tests(n_workers: int,
+                       test_paths: List[str],
+                       output_log: Path,
+                       debug: bool) -> int:
     """
     Run nf-test in parallel by distributing test files across workers.
-
     Args:
         n_workers: Number of parallel workers to run
         test_paths: List of paths (files or directories) to search for tests
         output_log: Path to consolidated log file
+        debug: Whether to run in debug mode (produces additional logging)
     Returns:
         Exit code (0 for success, 1 for failure)
     """
@@ -255,6 +259,9 @@ def run_parallel_tests(n_workers: int, test_paths: List[str],
     if not test_files:
         raise RuntimeError("No test files found.")
     logger.info(f"Found {len(test_files)} test file(s); see {output_log} for details.")
+    if n_workers > len(test_files):
+        logger.warning(f"Number of workers ({n_workers}) exceeds number of test files ({len(test_files)}). Reducing to {len(test_files)} workers.")
+        n_workers = len(test_files)
     update_plugins()
     worker_test_files = divide_test_files(test_files, n_workers)
     logger.info(f"Assigned test files to workers:")
@@ -262,10 +269,9 @@ def run_parallel_tests(n_workers: int, test_paths: List[str],
         if files:
             logger.info(f"\t- Worker {i} assigned {len(files)} test file(s)")
     logger.info(f"Running {n_workers} workers in parallel...")
-    def run_worker(worker_id: int) -> Tuple[int, int, str, str, str]:
-        return run_nf_test_worker(worker_id, worker_test_files[worker_id - 1], n_workers)
+    worker_args = [(i, worker_test_files[i - 1], n_workers, debug) for i in range(1, n_workers + 1)]
     with multiprocessing.Pool(processes=n_workers) as pool:
-        results = pool.map(run_worker, range(1, n_workers + 1))
+        results = pool.starmap(run_nf_test_worker, worker_args)
     failed_workers = [(wid, code, out, err, cmd) for wid, code, out, err, cmd in results if code != 0]
     write_test_log(results, failed_workers, n_workers, output_log, test_files)
     if failed_workers:
@@ -299,6 +305,11 @@ def parse_arguments() -> argparse.Namespace:
         default=Path("test-logs.txt"),
         help="Path to consolidated log file (default: test-logs.txt)"
     )
+    parser.add_argument(
+        "--debug",
+        action="store_true",
+        help="Run in debug mode (produces additional logging)"
+    )
     args = parser.parse_args()
     if args.n_workers < 1:
         parser.error("n_workers must be at least 1")
@@ -318,6 +329,7 @@ def main() -> None:
             n_workers=args.n_workers,
             test_paths=args.test_paths,
             output_log=args.output_log,
+            debug=args.debug,
         )
         exit(exit_code)
     finally:

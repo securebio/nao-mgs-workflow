@@ -147,7 +147,8 @@ class TestRunNfTestWorker:
         worker_id, exit_code, stdout, stderr, cmd_str = run_nf_test_worker(
             worker_id=1,
             test_files=[],
-            total_workers=3
+            total_workers=3,
+            debug=False
         )
         assert worker_id == 1
         assert exit_code == 0
@@ -257,7 +258,7 @@ class TestRunParallelTests:
         """Test when no test files are found."""
         mock_find.return_value = []
         with pytest.raises(RuntimeError, match="No test files found"):
-            run_parallel_tests(2, ["tests"], Path("test-logs.txt"))
+            run_parallel_tests(2, ["tests"], Path("test-logs.txt"), debug=False)
         mock_find.assert_called_once_with(["tests"])
         mock_update.assert_not_called()
 
@@ -273,11 +274,11 @@ class TestRunParallelTests:
         mock_divide.return_value = [[test_files[0]], [test_files[1]]]
         mock_pool_instance = MagicMock()
         mock_pool.return_value.__enter__.return_value = mock_pool_instance
-        mock_pool_instance.map.return_value = [
+        mock_pool_instance.starmap.return_value = [
             (1, 0, "stdout1", "stderr1", "cmd1"),
             (2, 0, "stdout2", "stderr2", "cmd2"),
         ]
-        exit_code = run_parallel_tests(2, ["tests"], Path("test-logs.txt"))
+        exit_code = run_parallel_tests(2, ["tests"], Path("test-logs.txt"), debug=False)
         assert exit_code == 0
         mock_find.assert_called_once_with(["tests"])
         mock_update.assert_called_once()
@@ -296,10 +297,30 @@ class TestRunParallelTests:
         mock_divide.return_value = [[test_files[0]], [test_files[1]]]
         mock_pool_instance = MagicMock()
         mock_pool.return_value.__enter__.return_value = mock_pool_instance
-        mock_pool_instance.map.return_value = [
+        mock_pool_instance.starmap.return_value = [
             (1, 0, "stdout1", "stderr1", "cmd1"),
             (2, 1, "stdout2", "stderr2", "cmd2"),
         ]
-        exit_code = run_parallel_tests(2, ["tests"], Path("test-logs.txt"))
+        exit_code = run_parallel_tests(2, ["tests"], Path("test-logs.txt"), debug=False)
         assert exit_code == 1
         mock_write.assert_called_once()
+
+    @patch('run_nf_test_parallel.write_test_log')
+    @patch('run_nf_test_parallel.multiprocessing.Pool')
+    @patch('run_nf_test_parallel.divide_test_files')
+    @patch('run_nf_test_parallel.update_plugins')
+    @patch('run_nf_test_parallel.find_test_files')
+    def test_run_parallel_tests_adjusts_workers(self, mock_find, mock_update, mock_divide, mock_pool, mock_write):
+        """Test that number of workers is reduced when it exceeds number of test files."""
+        test_files = [Path("test1.nf.test"), Path("test2.nf.test")]
+        mock_find.return_value = test_files
+        mock_divide.return_value = [[test_files[0]], [test_files[1]]]
+        mock_pool_instance = MagicMock()
+        mock_pool.return_value.__enter__.return_value = mock_pool_instance
+        mock_pool_instance.starmap.return_value = [
+            (1, 0, "stdout1", "stderr1", "cmd1"),
+            (2, 0, "stdout2", "stderr2", "cmd2"),
+        ]
+        exit_code = run_parallel_tests(5, ["tests"], Path("test-logs.txt"), debug=False)
+        assert exit_code == 0
+        mock_divide.assert_called_once_with(test_files, 2)
