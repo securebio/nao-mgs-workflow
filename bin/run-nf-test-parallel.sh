@@ -32,4 +32,4 @@ sudo env \
   HOME="${HOME}" \
   AWS_ACCESS_KEY_ID="${AWS_ACCESS_KEY_ID}" \
   AWS_SECRET_ACCESS_KEY="${AWS_SECRET_ACCESS_KEY}" \
-  python3 bin/run-nf-test-parallel.py "$@"
+  python3 bin/run_nf_test_parallel.py "$@"
