@@ -186,20 +186,20 @@ In order to cut down on the time it takes to run our test suite, we have switche
 To run the tests locally, you need to make sure that you have a powerful enough compute instance (at least 4 cores, 14GB of RAM, and 32GB of storage). On AWS EC2, we recommend the `m5.2xlarge`. Note that you may want a more powerful instance when running tests in parallel (as described below).
 
 > [!NOTE]
-> Before running tests, to allow access to testing datasets/indexes on AWS, you will need to set up AWS credentials as described in [installation.md](installation.md), and then export them as described in the installation doc: 
+> Before running tests, to allow access to testing datasets/indexes on AWS, you will need to set up AWS credentials as described in [installation.md](installation.md), and then export them as described in the installation doc:
 >
 > ```
 > eval "$(aws configure export-credentials --format env)"
-> ``
+> ```
 
-To run specific tests, you can specify the tests by filename or by tag. Individual tests generally complete quickly (seconds to minutes):
+To run specific tests, use `bin/run-nf-test.sh` (instead of raw `nf-test test`). This script wraps `nf-test` with the necessary `sudo` permissions and environment variables to handle Docker-created files. You can specify tests by filename or by tag. Individual tests generally complete quickly (seconds to minutes):
 ```
-nf-test test tests/main.test.nf # Runs all tests in the main.test.nf file
-nf-test test --tag run # Runs test(s) with the "run" tag; this is the end-to-end test of the RUN workflow on short-read data
+bin/run-nf-test.sh tests/main.test.nf # Runs all tests in the main.test.nf file
+bin/run-nf-test.sh --tag run # Runs test(s) with the "run" tag; this is the end-to-end test of the RUN workflow on short-read data
 ```
 
-To run all tests in the `tests` directory, use the command `nf-test test tests`. 
-- Running this full suite of local tests takes hours; we recommend using the script `bin/run_parallel_test` to parallelize. 
+To run all tests in the `tests` directory, use the command `bin/run-nf-test.sh tests`.
+- Running this full suite of local tests takes hours; we recommend using the script `bin/run_parallel_test` to parallelize.
 - Running the full test suite frequently hits API limits for Seqera container pulls; to resolve this, request a user token from Seqera as described in [troubleshooting.md](troubleshooting.md).
 
 After tests finish, you should clean up by running `bin/clean-nf-test.sh`.
@@ -231,7 +231,7 @@ Test [7677da69] 'RUN workflow output should match snapshot'
         - New output files are in `.nf-test/tests/<hash>/output`. (`<hash>` is shown when the test runs; e.g., in the example error message above, the test hash begins with `7677da69`).
     - Once you are happy with the changes to the output:
         - Update output files in `test-data` by copying changed output files from the `.nf-test` directory to the appropriate location in `test-data`, uncompressing the files, and committing the changes.
-        - Update `nf-test` snapshots by running `nf-test test <path to test that failed> --update-snapshot`; this will update the appropriate `*.snapshot` file in `tests/workflows`. Commit the changed snapshot file.
+        - Update `nf-test` snapshots by running `bin/run-nf-test.sh <path to test that failed> --update-snapshot`; this will update the appropriate `*.snapshot` file in `tests/workflows`. Commit the changed snapshot file.
         - Flag in PR comments that the snapshot has changed, and explain why. (Without such a comment, it's easy for reviewers to miss the updated snapshot.)
 
 ### `pytest`
