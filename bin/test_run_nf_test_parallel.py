@@ -21,6 +21,8 @@ from run_nf_test_parallel import (
     execute_subprocess,
     run_nf_test_worker,
     update_plugins,
+    run_parallel_tests,
+    write_test_log,
 )
 
 class TestStripAnsiCodes:
@@ -243,6 +245,61 @@ class TestUpdatePlugins:
         with pytest.raises(RuntimeError, match="Plugin update timed out after 120 seconds"):
             update_plugins()
 
-if __name__ == "__main__":
-    pytest.main([__file__, "-v"])
+class TestRunParallelTests:
+    """Test parallel test execution orchestration."""
 
+    @patch('run_nf_test_parallel.write_test_log')
+    @patch('run_nf_test_parallel.multiprocessing.Pool')
+    @patch('run_nf_test_parallel.divide_test_files')
+    @patch('run_nf_test_parallel.update_plugins')
+    @patch('run_nf_test_parallel.find_test_files')
+    def test_run_parallel_tests_no_files(self, mock_find, mock_update, mock_divide, mock_pool, mock_write):
+        """Test when no test files are found."""
+        mock_find.return_value = []
+        with pytest.raises(RuntimeError, match="No test files found"):
+            run_parallel_tests(2, ["tests"], Path("test-logs.txt"))
+        mock_find.assert_called_once_with(["tests"])
+        mock_update.assert_not_called()
+
+    @patch('run_nf_test_parallel.write_test_log')
+    @patch('run_nf_test_parallel.multiprocessing.Pool')
+    @patch('run_nf_test_parallel.divide_test_files')
+    @patch('run_nf_test_parallel.update_plugins')
+    @patch('run_nf_test_parallel.find_test_files')
+    def test_run_parallel_tests_success(self, mock_find, mock_update, mock_divide, mock_pool, mock_write):
+        """Test successful parallel execution."""
+        test_files = [Path("test1.nf.test"), Path("test2.nf.test")]
+        mock_find.return_value = test_files
+        mock_divide.return_value = [[test_files[0]], [test_files[1]]]
+        mock_pool_instance = MagicMock()
+        mock_pool.return_value.__enter__.return_value = mock_pool_instance
+        mock_pool_instance.map.return_value = [
+            (1, 0, "stdout1", "stderr1", "cmd1"),
+            (2, 0, "stdout2", "stderr2", "cmd2"),
+        ]
+        exit_code = run_parallel_tests(2, ["tests"], Path("test-logs.txt"))
+        assert exit_code == 0
+        mock_find.assert_called_once_with(["tests"])
+        mock_update.assert_called_once()
+        mock_divide.assert_called_once_with(test_files, 2)
+        mock_write.assert_called_once()
+
+    @patch('run_nf_test_parallel.write_test_log')
+    @patch('run_nf_test_parallel.multiprocessing.Pool')
+    @patch('run_nf_test_parallel.divide_test_files')
+    @patch('run_nf_test_parallel.update_plugins')
+    @patch('run_nf_test_parallel.find_test_files')
+    def test_run_parallel_tests_with_failures(self, mock_find, mock_update, mock_divide, mock_pool, mock_write):
+        """Test parallel execution with some worker failures."""
+        test_files = [Path("test1.nf.test"), Path("test2.nf.test")]
+        mock_find.return_value = test_files
+        mock_divide.return_value = [[test_files[0]], [test_files[1]]]
+        mock_pool_instance = MagicMock()
+        mock_pool.return_value.__enter__.return_value = mock_pool_instance
+        mock_pool_instance.map.return_value = [
+            (1, 0, "stdout1", "stderr1", "cmd1"),
+            (2, 1, "stdout2", "stderr2", "cmd2"),
+        ]
+        exit_code = run_parallel_tests(2, ["tests"], Path("test-logs.txt"))
+        assert exit_code == 1
+        mock_write.assert_called_once()
