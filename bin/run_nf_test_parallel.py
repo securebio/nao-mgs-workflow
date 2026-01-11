@@ -22,6 +22,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Tuple, Optional
 import multiprocessing
+import time
 
 ###########
 # LOGGING #
@@ -125,12 +126,14 @@ def run_nf_test_worker(worker_id: int,
         logger.info(f"Worker {worker_id}/{total_workers}: No test files assigned")
         return (worker_id, 0, "", "", "")
     logger.info(f"Worker {worker_id}/{total_workers}: Running {len(test_files)} test file(s)")
+
     cmd = ["nf-test", "test"]
     if debug:
         cmd.append("--debug")
         cmd.append("--verbose")
     cmd.extend([str(f) for f in test_files])
     cmd_str = " ".join(cmd)
+
     exit_code, stdout, stderr = execute_subprocess(cmd)
     stdout = strip_ansi_codes(stdout)
     stderr = strip_ansi_codes(stderr)
@@ -183,7 +186,7 @@ def write_test_log(all_workers: List[Tuple[int, int, str, str, str]],
         out.write("=" * 80 + "\n\n")
         for test_file in test_files:
             out.write(f"{test_file}\n")
-        out.write("=" * 80 + "\n\n")
+        out.write("\n")
         for worker_id, exit_code, stdout, stderr, cmd_str in sorted(all_workers):
             status = "PASSED" if exit_code == 0 else "FAILED"
             out.write("=" * 80 + "\n")
@@ -270,6 +273,9 @@ def run_parallel_tests(n_workers: int,
             logger.info(f"\t- Worker {i} assigned {len(files)} test file(s)")
     logger.info(f"Running {n_workers} workers in parallel...")
     worker_args = [(i, worker_test_files[i - 1], n_workers, debug) for i in range(1, n_workers + 1)]
+
+    # Use chunksize=1 to ensure each worker gets its full assignment immediately
+    # maxtasksperchild=1 ensures each worker process is fresh (no memory leaks)
     with multiprocessing.Pool(processes=n_workers) as pool:
         results = pool.starmap(run_nf_test_worker, worker_args)
     failed_workers = [(wid, code, out, err, cmd) for wid, code, out, err, cmd in results if code != 0]
@@ -317,12 +323,12 @@ def parse_arguments() -> argparse.Namespace:
 
 def main() -> None:
     """Main entry point."""
+    logger.info(f"Initializing script.")
+    start_time = time.time()
     args = parse_arguments()
     logger.info(f"Arguments: n_workers={args.n_workers}, test_paths={args.test_paths}, output_log={args.output_log}")
-
     repo_root = Path(__file__).resolve().parent.parent
     original_cwd = os.getcwd()
-
     try:
         os.chdir(repo_root)
         exit_code = run_parallel_tests(
@@ -334,6 +340,8 @@ def main() -> None:
         exit(exit_code)
     finally:
         os.chdir(original_cwd)
+        end_time = time.time()
+        logger.info(f"Total time elapsed: {end_time - start_time:.2f} seconds")
 
 if __name__ == "__main__":
     main()
