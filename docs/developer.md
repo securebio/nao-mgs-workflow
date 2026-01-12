@@ -192,15 +192,13 @@ To run the tests locally, you need to make sure that you have a powerful enough 
 > eval "$(aws configure export-credentials --format env)"
 > ```
 
-To run specific tests, use `bin/run-nf-test.sh` (instead of raw `nf-test test`). This script wraps `nf-test` with the necessary `sudo` permissions and environment variables to handle Docker-created files. You can specify tests by filename or by tag. Individual tests generally complete quickly (seconds to minutes):
+In running tests, we don't recommend calling `nf-test test` directly, as this can easily run into issues with permissions and environment configuration. Instead, we recommend using `bin/run-nf-tesh.sh` (for serial execution) or `bin/run-nf-test-parallel.sh` (for parallel execution), which wrap `nf-test` with the necessary `sudo` permissions and environment variables. Due to the overhead associated with parallelization, we only recommend `run-nf-test-parallel.sh` for running large portions of the test suite.
+
 ```
 bin/run-nf-test.sh tests/main.test.nf # Runs all tests in the main.test.nf file
-bin/run-nf-test.sh --tag run # Runs test(s) with the "run" tag; this is the end-to-end test of the RUN workflow on short-read data
+bin/run-nf-test-parallel.sh 8 tests # Runs all tests in parallel across 8 threads.
+bin/run-nf-test-parallel.sh 8 tests --tag expect_failure # Run failure tests only across 8 threads
 ```
-
-To run all tests in the `tests` directory, use the command `bin/run-nf-test.sh tests`.
-- Running this full suite of local tests takes hours; we recommend using the script `bin/run_parallel_test` to parallelize.
-- Running the full test suite frequently hits API limits for Seqera container pulls; to resolve this, request a user token from Seqera as described in [troubleshooting.md](troubleshooting.md).
 
 After tests finish, you should clean up by running `bin/clean-nf-test.sh`.
 
