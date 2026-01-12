@@ -23,6 +23,7 @@ from pathlib import Path
 from typing import List, Tuple, Optional
 import multiprocessing
 import time
+import sys
 
 ###########
 # LOGGING #
@@ -179,7 +180,7 @@ def write_test_log(all_workers: List[Tuple[int, int, str, str, str]],
         out.write(f"Passed workers: {n_workers - len(failed_workers)}\n")
         out.write(f"Failed workers: {len(failed_workers)}\n")
         out.write(f"Working directory: {os.getcwd()}\n")
-        out.write(f"Completed at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+        out.write(f"Completed at: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')}\n")
         out.write("=" * 80 + "\n\n")
         out.write("=" * 80 + "\n")
         out.write(f"TEST FILES ({len(test_files)} total)\n")
@@ -330,7 +331,7 @@ def main() -> None:
             output_log=args.output_log,
             debug=args.debug,
         )
-        exit(exit_code)
+        sys.exit(exit_code)
     finally:
         os.chdir(original_cwd)
         end_time = time.time()
