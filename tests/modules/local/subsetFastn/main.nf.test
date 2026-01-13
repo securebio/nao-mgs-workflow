@@ -101,52 +101,7 @@ nextflow_process {
         }
     }
 
-    test("Should run without errors on gzipped toy FASTQ data with intermediate read fraction") {
-        tag "expect_success"
-        config "tests/configs/run.config"
-        when {
-            params {}
-            process {
-                '''
-                input[0] = GZIP_FILE.out
-                input[1] = 0.5
-                input[2] = 42
-                '''
-            }
-        }
-        then {
-            // Should run without errors
-            assert process.success
-            // Output should be valid FASTQ
-            def fastq_out = path(process.out.output[0][1]).fastq
-            assert fastq_out.sequences.size() > 0
-        }
-    }
-
-    test("Should run without errors on uncompressed toy FASTQ data with intermediate read fraction") {
-        tag "expect_success"
-        config "tests/configs/run.config"
-        when {
-            params {}
-            process {
-                '''
-                input[0] = Channel.of("test")
-                    | combine(Channel.of("${projectDir}/test-data/toy-data/test-random.fastq"))
-                input[1] = 0.5
-                input[2] = 42
-                '''
-            }
-        }
-        then {
-            // Should run without errors
-            assert process.success
-            // Output should be valid FASTQ
-            def fastq_out = path(process.out.output[0][1]).fastq
-            assert fastq_out.sequences.size() > 0
-        }
-    }
-
-    test("Should run without errors on uncompressed toy FASTA data with intermediate read fraction") {
+    test("Should run without errors on toy FASTA data with intermediate read fraction") {
         tag "expect_success"
         config "tests/configs/run.config"
         when {

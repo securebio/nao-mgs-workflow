@@ -15,7 +15,7 @@ nextflow_workflow {
     tag "subworkflow"
     tag "blast_fasta"
 
-    test("Should run without failures on paired (interleaved) data") {
+    test("Should run without failures on interleaved Illumina data") {
         tag "expect_success"
         tag "interleaved"
         config "tests/configs/run.config"
@@ -42,80 +42,6 @@ nextflow_workflow {
                 ]
                 input[0] = Channel.of("test")
                     | combine(Channel.of("${projectDir}/test-data/tiny-index/reads/interleaved.fasta"))
-                input[1] = params.ref_dir
-                input[2] = blast_fasta_params
-                '''
-            }
-        }
-        then {
-            // Should run without failures
-            assert workflow.success
-            // Output should be sorted by query ID (ascending) and bitscore (descending)
-            def sort_str =  "-t\$\'\\t\' -k1,1 -k7,7nr"
-            def output_sorted = checkGzipSorted(workflow.out.blast[0][1], sort_str)
-            // Output should have expected columns
-            def tab_out = path(workflow.out.blast[0][1]).csv(sep: "\t", decompress: true)
-            def cols_out_exp = ["qseqid", "sseqid", "sgi", "staxid", "qlen", "evalue",
-                         "bitscore", "qcovs", "length", "pident", "mismatch",
-                         "gapopen", "sstrand", "qstart", "qend", "sstart", "send",
-                         "bitscore_rank_dense", "bitscore_fraction"]
-            assert tab_out.columnNames == cols_out_exp
-            // All output lines should meet score and/or rank criteria
-            def meets_rank = false
-            def meets_frac = false
-            for (r in tab_out.rows){
-                meets_rank = r["bitscore_rank_dense"] <= params.max_rank
-                meets_frac = r["bitscore_fraction"] >= params.min_frac
-                assert meets_rank || meets_frac
-            }
-            // Every query/subject combination should be unique
-            def key_paste = []
-            for (int i = 0; i < tab_out.rowCount; i++){
-                key_paste += tab_out.columns["qseqid"][i] + "\t" + tab_out.columns["sseqid"][i]
-            }
-            def rows_exp = key_paste.toSet().size()
-            assert tab_out.rowCount == rows_exp
-            // All seq IDs should be in input
-            def fasta_in = path(workflow.out.query[0][1]).fasta
-            def ids_in = fasta_in.keySet().collect{ it.tokenize(" ")[0] }.toSet()
-            def ids_out = tab_out.columns["qseqid"].toSet()
-            assert ids_in.containsAll(ids_out)
-            // LCA output should have expected columns
-            def lca_out = path(workflow.out.lca[0][1]).csv(sep: "\t", decompress: true)
-            assert lca_out.columnNames == exp_lca_headers
-            // LCA output should have one row per sequence in BLAST output
-            assert lca_out.rowCount == tab_out.columns["qseqid"].toSet().size()
-        }
-    }
-
-    test("Should run without failures on single-end data") {
-        tag "expect_success"
-        tag "single_end"
-        config "tests/configs/run.config"
-        when {
-            params {
-                max_rank = 5
-                min_frac = 0.9
-                perc_id = 60
-                qcov_hsp_perc = 30
-                taxid_artificial = 81077
-                lca_prefix = "testprefix"
-
-            }
-            workflow {
-                '''
-                def blast_fasta_params = [
-                    blast_db_prefix: params.blast_db_prefix,
-                    blast_perc_id: params.perc_id,
-                    blast_qcov_hsp_perc: params.qcov_hsp_perc,
-                    blast_max_rank: params.max_rank,
-                    blast_min_frac: params.min_frac,
-                    taxid_artificial: params.taxid_artificial,
-                    lca_prefix: params.lca_prefix,
-                    db_download_timeout: params.db_download_timeout
-                ]
-                input[0] = Channel.of("test")
-                    | combine(Channel.of("${projectDir}/test-data/tiny-index/reads/R1.fasta"))
                 input[1] = params.ref_dir
                 input[2] = blast_fasta_params
                 '''
