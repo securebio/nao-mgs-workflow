@@ -55,11 +55,6 @@ process CONVERT_FASTQ_FASTA_LIST {
             fastq="\${fastqs_array[i]}"
             output="\${outputs_array[i]}"
             input="\${inputs_array[i]}"
-            species=\$(basename \${fastq} | grep -oP '${sample}_\\K\\d+(?=_)')
-            if [ -z "\${species}" ]; then
-                >&2 echo "Error: Could not extract species from filename: \${fastq}"
-                exit 1
-            fi
             # Perform conversion
             ${extractCmd} \${fastq} | seqtk seq -a | ${compressCmd} > \${output}
             # Link input to output for testing
