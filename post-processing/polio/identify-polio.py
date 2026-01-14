@@ -128,6 +128,8 @@ def bowtie2_align(bt_index, input_fastq_gz, jobs,
         "-S", "/dev/null",  # we don't want the SAM file.
         "--quiet",
         "--very-sensitive-local",
+        "--score-min", "L,0,0.4", # lower threshold
+        "-N", "1",  # allow 1bp mismatch in initial seed
         "--threads", str(jobs),
     ])
 
