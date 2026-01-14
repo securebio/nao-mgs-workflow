@@ -14,7 +14,6 @@ import argparse
 import logging
 import os
 import subprocess
-import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional, List
@@ -57,8 +56,11 @@ def create_launch_directories(base_launch_dir: Path) -> dict:
         'downstream': base_launch_dir / 'downstream'
     }
     for name, path in launch_dirs.items():
-        path.mkdir(parents=True, exist_ok=True)
-        logger.info(f"Created launch directory for {name}: {path}")
+        if not path.exists():
+            path.mkdir(parents=True, exist_ok=True)
+            logger.info(f"Created launch directory for {name}: {path}")
+        else:
+            logger.info(f"Using existing launch directory for {name}: {path}")
     return launch_dirs
 
 def execute_nextflow(launch_dir: Path,
@@ -66,7 +68,8 @@ def execute_nextflow(launch_dir: Path,
                      config_file: Path,
                      params: dict,
                      workflow_name: str,
-                     profile: str) -> None:
+                     profile: str,
+                     resume: bool) -> None:
     """
     Execute Nextflow from specified launch directory with given config and parameters.
     Args:
@@ -76,11 +79,14 @@ def execute_nextflow(launch_dir: Path,
         params: Dictionary of parameters to override
         workflow_name: Name of workflow for logging
         profile: Nextflow profile to use
+        resume: Whether to run Nextflow with the -resume flag
     """
     logger.info("=" * 80)
     logger.info(f"Starting {workflow_name} workflow")
     logger.info("=" * 80)
     cmd = ["nextflow", "run", str(repo_root)]
+    if resume:
+        cmd.append("-resume")
     cmd.extend(["-c", str(config_file)])
     cmd.extend(["-profile", profile])
     for key, value in params.items():
@@ -114,7 +120,13 @@ def parse_arguments() -> argparse.Namespace:
         "--base-dir",
         type=str,
         default="s3://nao-testing/mgs-workflow-test",
-        help="S3 base directory for INDEX workflow outputs (default: s3://nao-testing/mgs-workflow-test)"
+        help="S3 base directory for all workflow outputs (default: s3://nao-testing/mgs-workflow-test)"
+    )
+    parser.add_argument(
+        "--samplesheet",
+        type=Path,
+        default=Path("test-data/samplesheet.csv"),
+        help="Path to samplesheet for RUN workflow (default: test-data/samplesheet.csv)"
     )
     parser.add_argument(
         "--profile",
@@ -122,21 +134,50 @@ def parse_arguments() -> argparse.Namespace:
         default="test_run",
         help="Nextflow profile to use (default: test_run)"
     )
+    parser.add_argument(
+        "--resume",
+        action="store_false",
+        help="Resume from the last completed workflow (default: True)"
+    )
     return parser.parse_args()
 
 def main() -> None:
     """Main entry point."""
     logger.info("Initializing sequential workflow execution")
     args = parse_arguments()
+    logger.info(f"Parsed arguments: {args}")
     repo_root = Path(__file__).resolve().parent.parent
+    logger.info(f"Repository root: {repo_root}")
     launch_dirs = create_launch_directories(args.launch_dir)
+    # INDEX
+    index_base_dir = args.base_dir.rstrip("/") + "/index"
     execute_nextflow(
         launch_dir=launch_dirs['index'],
         repo_root=repo_root,
         config_file=repo_root / "configs" / "index-for-run-test.config",
-        params={"base_dir": args.base_dir.rstrip("/") + "/index"},
+        params={"base_dir": index_base_dir},
         workflow_name="INDEX",
-        profile=args.profile
+        profile=args.profile,
+        resume=args.resume
+    )
+    # RUN
+    run_base_dir = args.base_dir.rstrip("/") + "/run"
+    ref_dir = f"{index_base_dir}/output"
+    samplesheet_path = repo_root / args.samplesheet
+
+    execute_nextflow(
+        launch_dir=launch_dirs['run'],
+        repo_root=repo_root,
+        config_file=repo_root / "configs" / "run.config",
+        params={
+            "base_dir": run_base_dir,
+            "ref_dir": ref_dir,
+            "platform": "illumina",
+            "sample_sheet": str(samplesheet_path)
+        },
+        workflow_name="RUN",
+        profile=args.profile,
+        resume=args.resume
     )
 
 if __name__ == "__main__":
