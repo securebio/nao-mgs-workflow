@@ -33,21 +33,20 @@ for arg in "$@"; do
   fi
 done
 
-# Run tests with root privileges to access test files created by Docker.
-# We use sudo and pass along PATH, HOME, and AWS credentials to ensure
-# the tools and their dependencies are found and AWS access is preserved.
+# Run tests and fix ownership of files created by Docker.
+# Docker creates files as root, so we use sudo to change ownership back to the user.
+# We temporarily disable exit-on-error to ensure cleanup happens regardless of test results.
+set +e
 if [[ "$use_parallel" == "true" ]]; then
-  sudo env \
-    PATH="${PATH}" \
-    HOME="${HOME}" \
-    AWS_ACCESS_KEY_ID="${AWS_ACCESS_KEY_ID}" \
-    AWS_SECRET_ACCESS_KEY="${AWS_SECRET_ACCESS_KEY}" \
-    python3 bin/run_nf_test_parallel.py "$@"
+  python3 bin/run_nf_test_parallel.py "$@"
+  exit_code=$?
 else
-  sudo env \
-    PATH="${PATH}" \
-    HOME="${HOME}" \
-    AWS_ACCESS_KEY_ID="${AWS_ACCESS_KEY_ID}" \
-    AWS_SECRET_ACCESS_KEY="${AWS_SECRET_ACCESS_KEY}" \
-    nf-test test "$@"
+  nf-test test "$@"
+  exit_code=$?
 fi
+set -e
+
+# Fix ownership of test artifacts created by Docker
+sudo chown -R "$(id -u):$(id -g)" .nf-test
+
+exit $exit_code
