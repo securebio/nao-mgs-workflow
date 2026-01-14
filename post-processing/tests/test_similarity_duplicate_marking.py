@@ -71,53 +71,23 @@ def tsv_factory(tmp_path):
     return TSVFactory(tmp_path)
 
 
-def create_test_tsv_content(rows, extra_cols=None):
+def create_test_tsv_content(rows):
     """Helper to create TSV content from a list of read specifications.
 
     Args:
         rows: List of tuples (seq_id, seq, qual, prim_align_exemplar)
-              or dicts with keys: seq_id, seq, qual, prim_align_exemplar, extra_data
-        extra_cols: List of extra column names to include in header
 
     Returns:
         String containing full TSV content with header
     """
-    if extra_cols:
-        header = (
-            "\t".join(extra_cols[:1]) + "\t" if extra_cols else ""
-            "seq_id\t"
-            + ("\t".join(extra_cols[1:]) + "\t" if len(extra_cols) > 1 else "")
-            + "query_seq\tquery_seq_rev\tquery_qual\tquery_qual_rev\t"
-            "prim_align_dup_exemplar"
-            + ("\t" + "\t".join(extra_cols[2:]) if len(extra_cols) > 2 else "")
-        )
-    else:
-        header = (
-            "seq_id\tquery_seq\tquery_seq_rev\tquery_qual\tquery_qual_rev\t"
-            "prim_align_dup_exemplar"
-        )
+    header = (
+        "seq_id\tquery_seq\tquery_seq_rev\tquery_qual\tquery_qual_rev\t"
+        "prim_align_dup_exemplar"
+    )
 
     lines = [header]
-    for row in rows:
-        if isinstance(row, dict):
-            seq_id = row['seq_id']
-            seq = row['seq']
-            qual = row['qual']
-            exemplar = row['prim_align_exemplar']
-            extra_data = row.get('extra_data', [])
-            line_parts = []
-            if extra_data:
-                line_parts.extend(extra_data[:1])
-            line_parts.append(seq_id)
-            if extra_data and len(extra_data) > 1:
-                line_parts.extend(extra_data[1:2])
-            line_parts.extend([seq, seq, qual, qual, exemplar])
-            if extra_data and len(extra_data) > 2:
-                line_parts.extend(extra_data[2:])
-            lines.append("\t".join(line_parts))
-        else:
-            seq_id, seq, qual, exemplar = row
-            lines.append(f"{seq_id}\t{seq}\t{seq}\t{qual}\t{qual}\t{exemplar}")
+    for seq_id, seq, qual, exemplar in rows:
+        lines.append(f"{seq_id}\t{seq}\t{seq}\t{qual}\t{qual}\t{exemplar}")
 
     return "\n".join(lines) + "\n"
 
