@@ -179,7 +179,9 @@ fn main() -> Result<()> {
     let elapsed = start_time.elapsed();
     eprintln!("Done!");
     eprintln!(
-        "Marked similarity duplicates processing {} reads in {}s, of which {} were already known to be duplicate and {} were additionally recognized as duplicate.",
+        "Marked similarity duplicates processing {} reads in {}s, of which {} \
+        were already non-exemplars via alignment and {} were additionally \
+        recognized as non-exemplars via similarity.",
         n_reads, elapsed.as_secs(), n_prim_align_dups, n_sim_dups
     );
 
