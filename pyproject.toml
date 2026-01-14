@@ -9,6 +9,9 @@ requires-python = ">=3.12"
 dependencies = [
     "biopython>=1.85",
     "mypy>=1.18.1",
+    # Needed until https://github.com/securebio/nao-dedup/pull/12 has been
+    # merged and we've updated post-processing/nao-dedup/ to depend on the
+    # no-python version.
     "networkx",
     "pandas>=2.3.2",
     "pytest>=8.4.2",
