@@ -2,7 +2,6 @@
 """Tests for similarity_duplicate_marking binary"""
 
 import csv
-import sys
 import gzip
 import pytest
 import subprocess
