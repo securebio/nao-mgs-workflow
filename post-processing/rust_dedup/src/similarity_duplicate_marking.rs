@@ -22,7 +22,7 @@ fn main() {
     // Create deduplication context with default parameters
     let dedup_params = DedupParams::default();
     let minimizer_params = MinimizerParams::default();
-    let mut ctx = DedupContext::new(dedup_params.clone(), minimizer_params);
+    let mut ctx = DedupContext::new(dedup_params, minimizer_params);
 
     // Pass 1: Process alignment-unique reads
     let mut n_reads = 0;
