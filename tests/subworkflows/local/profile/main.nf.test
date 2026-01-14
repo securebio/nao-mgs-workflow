@@ -72,7 +72,7 @@ nextflow_workflow {
                     | combine(Channel.of("${projectDir}/test-data/tiny-index/reads/interleaved.fastq"))
                 input[1] = "${params.ref_dir}/results/kraken_db"
                 input[2] = "${params.ref_dir}"
-                input[3] = Channel.of(false)
+                input[3] = LOAD_SAMPLESHEET.out.single_end
                 input[4] = profile_params
                 '''
             }

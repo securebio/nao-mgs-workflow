@@ -7,19 +7,6 @@ nextflow_process {
     tag "module"
     tag "bbduk"
 
-    setup {
-        run("LOAD_SAMPLESHEET") {
-            script "subworkflows/local/loadSampleSheet/main.nf"
-            process {
-                """
-                input[0] = "${projectDir}/test-data/samplesheet.csv"
-                input[1] = "illumina"
-                input[2] = false
-                """
-            }
-        }
-    }
-
     test("Should run without failures and conserve reads") {
         tag "expect_success"
         tag "paired_end"
