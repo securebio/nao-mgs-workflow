@@ -30,7 +30,7 @@ nextflow_workflow {
         }
     }
 
-    test("Should handle empty partition files (no data rows)") {
+    test("Should handle header-only partition files (no data rows)") {
         tag "expect_success"
         tag "empty_partition"
         when {
@@ -39,7 +39,7 @@ nextflow_workflow {
             workflow {
                 '''
                 input[0] = Channel.of("test")
-                    | combine(Channel.of("${projectDir}/test-data/splitViralTsvBySelectedTaxid/input_empty.tsv")) // groups
+                    | combine(Channel.of("${projectDir}/test-data/splitViralTsvBySelectedTaxid/input_headers_only.tsv")) // groups
                 input[1] = Channel.of("${params.ref_dir}/results/total-virus-db-annotated.tsv.gz") // db
                 '''
             }
