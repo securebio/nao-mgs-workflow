@@ -24,12 +24,30 @@ fi
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR/.." || exit 1
 
-# nf-test needs root privileges to access test files created by Docker.
+# Check if --num-workers flag is present
+use_parallel=false
+for arg in "$@"; do
+  if [[ "$arg" == "--num-workers" ]]; then
+    use_parallel=true
+    break
+  fi
+done
+
+# Run tests with root privileges to access test files created by Docker.
 # We use sudo and pass along PATH, HOME, and AWS credentials to ensure
-# nf-test and its dependencies are found and AWS access is preserved.
-sudo env \
-  PATH="${PATH}" \
-  HOME="${HOME}" \
-  AWS_ACCESS_KEY_ID="${AWS_ACCESS_KEY_ID}" \
-  AWS_SECRET_ACCESS_KEY="${AWS_SECRET_ACCESS_KEY}" \
-  nf-test test "$@"
+# the tools and their dependencies are found and AWS access is preserved.
+if [[ "$use_parallel" == "true" ]]; then
+  sudo env \
+    PATH="${PATH}" \
+    HOME="${HOME}" \
+    AWS_ACCESS_KEY_ID="${AWS_ACCESS_KEY_ID}" \
+    AWS_SECRET_ACCESS_KEY="${AWS_SECRET_ACCESS_KEY}" \
+    python3 bin/run_nf_test_parallel.py "$@"
+else
+  sudo env \
+    PATH="${PATH}" \
+    HOME="${HOME}" \
+    AWS_ACCESS_KEY_ID="${AWS_ACCESS_KEY_ID}" \
+    AWS_SECRET_ACCESS_KEY="${AWS_SECRET_ACCESS_KEY}" \
+    nf-test test "$@"
+fi

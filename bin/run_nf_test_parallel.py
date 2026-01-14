@@ -5,8 +5,8 @@ Parallelize nf-test execution by distributing test files across multiple process
 This script finds all *.nf.test files in the specified paths and divides them
 among parallel workers, avoiding nf-test's buggy built-in sharding feature.
 
-This script should be invoked via the wrapper script bin/run-nf-test-parallel.sh,
-which handles sudo and environment variable passing.
+This script should be invoked via the wrapper script bin/run-nf-test.sh with
+the --num-workers flag, which handles sudo and environment variable passing.
 """
 
 ###########
@@ -290,8 +290,9 @@ def parse_arguments() -> argparse.Namespace:
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument(
-        "n_workers",
+        "--num-workers",
         type=int,
+        required=True,
         help="Number of parallel workers to run (recommended: number of CPU cores)"
     )
     parser.add_argument(
@@ -311,8 +312,8 @@ def parse_arguments() -> argparse.Namespace:
         help="Run in debug mode (produces additional logging)"
     )
     args = parser.parse_args()
-    if args.n_workers < 1:
-        parser.error("n_workers must be at least 1")
+    if args.num_workers < 1:
+        parser.error("--num-workers must be at least 1")
     return args
 
 def main() -> None:
@@ -320,13 +321,13 @@ def main() -> None:
     logger.info(f"Initializing script.")
     start_time = time.time()
     args = parse_arguments()
-    logger.info(f"Arguments: n_workers={args.n_workers}, test_paths={args.test_paths}, output_log={args.output_log}")
+    logger.info(f"Arguments: {args}")
     repo_root = Path(__file__).resolve().parent.parent
     original_cwd = os.getcwd()
     try:
         os.chdir(repo_root)
         exit_code = run_parallel_tests(
-            n_workers=args.n_workers,
+            n_workers=args.num_workers,
             test_paths=args.test_paths,
             output_log=args.output_log,
             debug=args.debug,
