@@ -59,14 +59,33 @@ fn main() -> Result<()> {
     let query_qual_rev_idx = find_column(&header_fields, "query_qual_rev")?;
     let prim_align_idx = find_column(&header_fields, "prim_align_dup_exemplar")?;
 
+    // Minimum number of fields required to access all required columns
+    let min_fields = [
+        seq_id_idx,
+        query_seq_idx,
+        query_seq_rev_idx,
+        query_qual_idx,
+        query_qual_rev_idx,
+        prim_align_idx,
+    ]
+    .into_iter()
+    .max()
+    .unwrap()
+        + 1;
+
     // Process reads
     for line_result in lines {
         let line = line_result.context("Failed to read line")?;
         n_reads += 1;
 
         let fields: Vec<&str> = line.split('\t').collect();
-        if fields.len() <= prim_align_idx {
-            continue;
+        if fields.len() < min_fields {
+            bail!(
+                "Malformed line {}: expected at least {} fields, got {}",
+                n_reads,
+                min_fields,
+                fields.len()
+            );
         }
 
         let seq_id = fields[seq_id_idx];
@@ -123,13 +142,17 @@ fn main() -> Result<()> {
     let mut n_sim_dups = 0;
 
     // Process data rows
-    for line_result in lines {
+    for (line_num, line_result) in lines.enumerate() {
         let line = line_result.context("Failed to read line")?;
         let fields: Vec<&str> = line.split('\t').collect();
 
-        if fields.len() <= seq_id_idx || fields.len() <= prim_align_idx {
-            eprintln!("Warning: Skipping malformed line (missing fields)");
-            continue;
+        if fields.len() < min_fields {
+            bail!(
+                "Malformed line {}: expected at least {} fields, got {}",
+                line_num + 1,
+                min_fields,
+                fields.len()
+            );
         }
 
         let seq_id = fields[seq_id_idx];
