@@ -1,3 +1,4 @@
+use anyhow::{bail, Context, Result};
 use flate2::read::GzDecoder;
 use flate2::write::GzEncoder;
 use flate2::Compression;
@@ -7,11 +8,17 @@ use std::fs::File;
 use std::io::{BufRead, BufReader, BufWriter, Write};
 use std::time::Instant;
 
-fn main() {
+fn find_column(header_fields: &[&str], name: &str) -> Result<usize> {
+    header_fields
+        .iter()
+        .position(|&f| f == name)
+        .with_context(|| format!("Missing required column: {}", name))
+}
+
+fn main() -> Result<()> {
     let args: Vec<String> = env::args().collect();
     if args.len() != 3 {
-        eprintln!("Usage: {} <input.tsv.gz> <output.tsv.gz>", args[0]);
-        std::process::exit(1);
+        bail!("Usage: {} <input.tsv.gz> <output.tsv.gz>", args[0]);
     }
 
     let input_path = &args[1];
@@ -30,35 +37,31 @@ fn main() {
 
     eprintln!("Running similarity-based deduplication on alignment-unique reads...");
 
-    let file = File::open(input_path).expect("Cannot open input file");
+    let file = File::open(input_path)
+        .with_context(|| format!("Cannot open input file: {}", input_path))?;
     let decoder = GzDecoder::new(file);
     let reader = BufReader::new(decoder);
     let mut lines = reader.lines();
 
     // Read header
-    let header = lines.next()
-        .expect("Empty input file")
-        .expect("Failed to read header");
+    let header = lines
+        .next()
+        .context("Empty input file")?
+        .context("Failed to read header")?;
 
     let header_fields: Vec<&str> = header.split('\t').collect();
 
     // Find column indices
-    let seq_id_idx = header_fields.iter().position(|&f| f == "seq_id")
-        .expect("Missing seq_id column");
-    let query_seq_idx = header_fields.iter().position(|&f| f == "query_seq")
-        .expect("Missing query_seq column");
-    let query_seq_rev_idx = header_fields.iter().position(|&f| f == "query_seq_rev")
-        .expect("Missing query_seq_rev column");
-    let query_qual_idx = header_fields.iter().position(|&f| f == "query_qual")
-        .expect("Missing query_qual column");
-    let query_qual_rev_idx = header_fields.iter().position(|&f| f == "query_qual_rev")
-        .expect("Missing query_qual_rev column");
-    let prim_align_idx = header_fields.iter().position(|&f| f == "prim_align_dup_exemplar")
-        .expect("Missing prim_align_dup_exemplar column");
+    let seq_id_idx = find_column(&header_fields, "seq_id")?;
+    let query_seq_idx = find_column(&header_fields, "query_seq")?;
+    let query_seq_rev_idx = find_column(&header_fields, "query_seq_rev")?;
+    let query_qual_idx = find_column(&header_fields, "query_qual")?;
+    let query_qual_rev_idx = find_column(&header_fields, "query_qual_rev")?;
+    let prim_align_idx = find_column(&header_fields, "prim_align_dup_exemplar")?;
 
     // Process reads
     for line_result in lines {
-        let line = line_result.expect("Failed to read line");
+        let line = line_result.context("Failed to read line")?;
         n_reads += 1;
 
         let fields: Vec<&str> = line.split('\t').collect();
@@ -88,8 +91,10 @@ fn main() {
     }
 
     let (_total_processed, unique_clusters) = ctx.stats();
-    eprintln!("Processed {} alignment-unique reads (out of {} total reads)",
-              alignment_unique_count, n_reads);
+    eprintln!(
+        "Processed {} alignment-unique reads (out of {} total reads)",
+        alignment_unique_count, n_reads
+    );
     eprintln!("Found {} unique sequence clusters", unique_clusters);
 
     // Finalize Pass 1
@@ -98,29 +103,32 @@ fn main() {
     // Pass 2: Write output with sim_dup_exemplar column
     eprintln!("Pass 2: Writing output with sim_dup_exemplar column...");
 
-    let file_in = File::open(input_path).expect("Cannot open input file");
+    let file_in = File::open(input_path)
+        .with_context(|| format!("Cannot open input file: {}", input_path))?;
     let decoder = GzDecoder::new(file_in);
     let reader = BufReader::new(decoder);
     let mut lines = reader.lines();
 
-    let file_out = File::create(output_path).expect("Cannot create output file");
+    let file_out = File::create(output_path)
+        .with_context(|| format!("Cannot create output file: {}", output_path))?;
     let encoder = GzEncoder::new(file_out, Compression::default());
     let mut writer = BufWriter::new(encoder);
 
     // Skip header line and write stored header with new column
     lines.next();
-    writeln!(writer, "{}\tsim_dup_exemplar", header.trim_end()).expect("Failed to write header");
+    writeln!(writer, "{}\tsim_dup_exemplar", header.trim_end())
+        .context("Failed to write header")?;
 
     let mut n_prim_align_dups = 0;
     let mut n_sim_dups = 0;
 
     // Process data rows
     for line_result in lines {
-        let line = line_result.expect("Failed to read line");
+        let line = line_result.context("Failed to read line")?;
         let fields: Vec<&str> = line.split('\t').collect();
 
         if fields.len() <= seq_id_idx || fields.len() <= prim_align_idx {
-            eprintln!("Error: Malformed line (missing fields)");
+            eprintln!("Warning: Skipping malformed line (missing fields)");
             continue;
         }
 
@@ -129,12 +137,13 @@ fn main() {
 
         if seq_id != prim_align_exemplar {
             // Alignment duplicate - fast path
-            writeln!(writer, "{}\tNA", line.trim_end()).expect("Failed to write line");
+            writeln!(writer, "{}\tNA", line.trim_end()).context("Failed to write line")?;
             n_prim_align_dups += 1;
         } else {
             // Alignment-unique - query for similarity exemplar
             let sim_exemplar = ctx.get_cluster_id(seq_id);
-            writeln!(writer, "{}\t{}", line.trim_end(), sim_exemplar).expect("Failed to write line");
+            writeln!(writer, "{}\t{}", line.trim_end(), sim_exemplar)
+                .context("Failed to write line")?;
 
             if sim_exemplar != seq_id {
                 n_sim_dups += 1;
@@ -142,10 +151,14 @@ fn main() {
         }
     }
 
-    writer.flush().expect("Failed to flush output");
+    writer.flush().context("Failed to flush output")?;
 
     let elapsed = start_time.elapsed();
     eprintln!("Done!");
-    eprintln!("Marked similarity duplicates processing {} reads in {}s, of which {} were already known to be duplicate and {} were additionally recognized as duplicate.",
-              n_reads, elapsed.as_secs(), n_prim_align_dups, n_sim_dups);
+    eprintln!(
+        "Marked similarity duplicates processing {} reads in {}s, of which {} were already known to be duplicate and {} were additionally recognized as duplicate.",
+        n_reads, elapsed.as_secs(), n_prim_align_dups, n_sim_dups
+    );
+
+    Ok(())
 }

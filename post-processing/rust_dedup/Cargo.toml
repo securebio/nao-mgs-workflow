@@ -10,3 +10,4 @@ path = "src/similarity_duplicate_marking.rs"
 [dependencies]
 nao_dedup = { path = "../deps/nao_dedup" }
 flate2 = "1.0"
+anyhow = "1.0"
