@@ -17,6 +17,7 @@ import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional, List
+import csv
 
 ###########
 # LOGGING #
@@ -41,6 +42,36 @@ logger.addHandler(handler)
 ####################
 # HELPER FUNCTIONS #
 ####################
+
+def generate_downstream_input(downstream_launch_dir: Path,
+                              samplesheet_path: Path,
+                              run_results_dir: str,
+                              run_id: str) -> Path:
+    """
+    Generate input files for DOWNSTREAM workflow, with each sample as its own group
+    Args:
+        downstream_launch_dir: Launch directory for downstream workflow
+        samplesheet_path: Path to samplesheet CSV
+        run_results_dir: S3 path to RUN workflow output directory
+        run_id: Run ID to use for the DOWNSTREAM workflow input file
+    Returns:
+        Path to generated input.csv file
+    """
+    input_csv_path = downstream_launch_dir / "input.csv"
+    groups_tsv_path = downstream_launch_dir / "groups.tsv"
+    hits_tsv_path = f"{run_results_dir}/virus_hits_final.tsv.gz"
+    with open(samplesheet_path, 'r') as inf, open(groups_tsv_path, 'w') as outf:
+        writer = csv.writer(outf, delimiter='\t')
+        writer.writerow(['sample', 'group'])
+        reader = csv.DictReader(inf)
+        for row in reader:
+            writer.writerow([row['sample'], row['sample']])
+    with open(input_csv_path, 'w') as inf:
+        writer = csv.writer(inf)
+        writer.writerow(['label', 'hits_tsv', 'groups_tsv'])
+        writer.writerow([run_id, hits_tsv_path, str(groups_tsv_path.resolve())])
+    logger.info(f"Generated DOWNSTREAM input file: {input_csv_path}")
+    return input_csv_path
 
 def create_launch_directories(base_launch_dir: Path) -> dict:
     """
@@ -139,6 +170,27 @@ def parse_arguments() -> argparse.Namespace:
         action="store_false",
         help="Resume from the last completed workflow (default: True)"
     )
+    parser.add_argument(
+        "--run-id",
+        type=str,
+        default="test_run",
+        help="Run ID to use for the DOWNSTREAM workflow input file (default: test_run)"
+    )
+    parser.add_argument(
+        "--skip-index",
+        action="store_true",
+        help="Skip the INDEX workflow"
+    )
+    parser.add_argument(
+        "--skip-run",
+        action="store_true",
+        help="Skip the RUN workflow"
+    )
+    parser.add_argument(
+        "--skip-downstream",
+        action="store_true",
+        help="Skip the DOWNSTREAM workflow"
+    )
     return parser.parse_args()
 
 def main() -> None:
@@ -149,36 +201,70 @@ def main() -> None:
     repo_root = Path(__file__).resolve().parent.parent
     logger.info(f"Repository root: {repo_root}")
     launch_dirs = create_launch_directories(args.launch_dir)
+
     # INDEX
     index_base_dir = args.base_dir.rstrip("/") + "/index"
-    execute_nextflow(
-        launch_dir=launch_dirs['index'],
-        repo_root=repo_root,
-        config_file=repo_root / "configs" / "index-for-run-test.config",
-        params={"base_dir": index_base_dir},
-        workflow_name="INDEX",
-        profile=args.profile,
-        resume=args.resume
-    )
+    if not args.skip_index:
+        execute_nextflow(
+            launch_dir=launch_dirs['index'],
+            repo_root=repo_root,
+            config_file=repo_root / "configs" / "index-for-run-test.config",
+            params={"base_dir": index_base_dir},
+            workflow_name="INDEX",
+            profile=args.profile,
+            resume=args.resume
+        )
+    else:
+        logger.info("Skipping INDEX workflow")
+
     # RUN
     run_base_dir = args.base_dir.rstrip("/") + "/run"
     ref_dir = f"{index_base_dir}/output"
     samplesheet_path = repo_root / args.samplesheet
+    if not args.skip_run:
+        execute_nextflow(
+            launch_dir=launch_dirs['run'],
+            repo_root=repo_root,
+            config_file=repo_root / "configs" / "run.config",
+            params={
+                "base_dir": run_base_dir,
+                "ref_dir": ref_dir,
+                "platform": "illumina",
+                "sample_sheet": str(samplesheet_path)
+            },
+            workflow_name="RUN",
+            profile=args.profile,
+            resume=args.resume
+        )
+    else:
+        logger.info("Skipping RUN workflow")
 
-    execute_nextflow(
-        launch_dir=launch_dirs['run'],
-        repo_root=repo_root,
-        config_file=repo_root / "configs" / "run.config",
-        params={
-            "base_dir": run_base_dir,
-            "ref_dir": ref_dir,
-            "platform": "illumina",
-            "sample_sheet": str(samplesheet_path)
-        },
-        workflow_name="RUN",
-        profile=args.profile,
-        resume=args.resume
-    )
+    # DOWNSTREAM
+    downstream_base_dir = args.base_dir.rstrip("/") + "/downstream"
+    run_results_dir = f"{run_base_dir}/output/results"
+    if not args.skip_downstream:
+        downstream_input_path = generate_downstream_input(
+            downstream_launch_dir=launch_dirs['downstream'],
+            samplesheet_path=samplesheet_path,
+            run_results_dir=run_results_dir,
+            run_id=args.run_id
+        )
+        execute_nextflow(
+            launch_dir=launch_dirs['downstream'],
+            repo_root=repo_root,
+            config_file=repo_root / "configs" / "downstream.config",
+            params={
+                "base_dir": downstream_base_dir,
+                "ref_dir": ref_dir,
+                "platform": "illumina",
+                "input_file": str(downstream_input_path.resolve())
+            },
+            workflow_name="DOWNSTREAM",
+            profile=args.profile,
+            resume=args.resume
+        )
+    else:
+        logger.info("Skipping DOWNSTREAM workflow")
 
 if __name__ == "__main__":
     main()
