@@ -148,7 +148,7 @@ The tool is implemented in Rust for performance:
 - **`rust_dedup/src/similarity_duplicate_marking.rs`**: Main binary that handles TSV I/O
   and calls the deduplication library
 - **`rust_dedup/Cargo.toml`**: Build configuration
-- **`deps/nao_dedup/`**: Git subtree containing the nao-dedup library (see below)
+- **`deps/nao_dedup/`**: Git submodule containing the nao-dedup library (see below)
 
 Build artifacts:
 - **`rust_dedup/target/release/similarity_duplicate_marking`**: Compiled binary
@@ -158,30 +158,25 @@ Build artifacts:
 
 ### deps/nao_dedup
 
-This is a git subtree from https://github.com/securebio/nao-dedup.
+This is a git submodule from https://github.com/securebio/nao-dedup.
 
 The library provides the core deduplication algorithm with offset-based sequence
 matching, implemented in Rust with Python bindings for testing.
+
+#### Initializing the submodule
+
+After cloning the repository, initialize the submodule:
+
+```bash
+git submodule update --init post-processing/deps/nao_dedup
+```
 
 #### Pulling in updates
 
 To pull in changes from the upstream repository:
 
 ```bash
-git subtree pull \
-    --prefix=post-processing/deps/nao_dedup \
-    https://github.com/securebio/nao-dedup \
-    main \
-    --squash
+git submodule update --remote post-processing/deps/nao_dedup
 ```
 
-#### Pushing changes upstream
-
-If you make changes to the subtree that should be pushed back to the upstream repository:
-
-```bash
-git subtree push \
-    --prefix=post-processing/deps/nao_dedup \
-    https://github.com/securebio/nao-dedup \
-    main
-```
+Then commit the updated submodule reference.
