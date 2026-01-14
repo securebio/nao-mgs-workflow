@@ -107,16 +107,9 @@ fn main() {
     let encoder = GzEncoder::new(file_out, Compression::default());
     let mut writer = BufWriter::new(encoder);
 
-    // Read and write header
-    let header = lines.next()
-        .expect("Empty input file")
-        .expect("Failed to read header");
-
+    // Skip header line and write stored header with new column
+    lines.next();
     writeln!(writer, "{}\tsim_dup_exemplar", header.trim_end()).expect("Failed to write header");
-
-    let header_fields: Vec<&str> = header.split('\t').collect();
-    let seq_id_idx = header_fields.iter().position(|&f| f == "seq_id").unwrap();
-    let prim_align_idx = header_fields.iter().position(|&f| f == "prim_align_dup_exemplar").unwrap();
 
     let mut n_prim_align_dups = 0;
     let mut n_sim_dups = 0;
