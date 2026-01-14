@@ -8,25 +8,6 @@ nextflow_workflow {
     tag "downstream"
     tag "mark_viral_duplicates"
 
-    setup {
-        run("LOAD_DOWNSTREAM_DATA") {
-            script "subworkflows/local/loadDownstreamData/main.nf"
-            process {
-                """
-                input[0] = "${projectDir}/test-data/downstream/input_file.csv"
-                """
-            }
-        }
-        run("PREPARE_GROUP_TSVS") {
-            script "subworkflows/local/prepareGroupTsvs/main.nf"
-            process {
-                '''
-                input[0] = LOAD_DOWNSTREAM_DATA.out.input
-                '''
-            }
-        }
-    }
-
     test("Should run without failures (deviation = 1)") {
         tag "expect_success"
         when {
@@ -35,7 +16,8 @@ nextflow_workflow {
             }
             workflow {
                 '''
-                input[0] = PREPARE_GROUP_TSVS.out.groups
+                input[0] = Channel.of(["tt1", "${projectDir}/test-data/markViralDuplicates/tt1_groups.tsv"])
+                    | mix(Channel.of(["tt2", "${projectDir}/test-data/markViralDuplicates/tt2_groups.tsv"]))
                 input[1] = params.deviation
                 '''
             }
@@ -44,7 +26,7 @@ nextflow_workflow {
             // Should run without failures
             assert workflow.success
             // Output should have expected dimensions
-            def tab_in = path(workflow.out.test_in[0][1]).csv(sep: "\t", decompress: true)
+            def tab_in = path(workflow.out.test_in[0][1]).csv(sep: "\t")
             def tab_out = path(workflow.out.dup[0][1]).csv(sep: "\t", decompress: true)
             def tab_meta = path(workflow.out.dup[0][2]).csv(sep: "\t", decompress: true)
             assert tab_out.rowCount == tab_in.rowCount
@@ -77,7 +59,8 @@ nextflow_workflow {
             }
             workflow {
                 '''
-                input[0] = PREPARE_GROUP_TSVS.out.groups
+                input[0] = Channel.of(["tt1", "${projectDir}/test-data/markViralDuplicates/tt1_groups.tsv"])
+                    | mix(Channel.of(["tt2", "${projectDir}/test-data/markViralDuplicates/tt2_groups.tsv"]))
                 input[1] = params.deviation
                 '''
             }
@@ -86,7 +69,7 @@ nextflow_workflow {
             // Should run without failures
             assert workflow.success
             // Output should have expected dimensions
-            def tab_in = path(workflow.out.test_in[0][1]).csv(sep: "\t", decompress: true)
+            def tab_in = path(workflow.out.test_in[0][1]).csv(sep: "\t")
             def tab_out = path(workflow.out.dup[0][1]).csv(sep: "\t", decompress: true)
             def tab_meta = path(workflow.out.dup[0][2]).csv(sep: "\t", decompress: true)
             assert tab_out.rowCount == tab_in.rowCount
@@ -119,7 +102,8 @@ nextflow_workflow {
             }
             workflow {
                 '''
-                input[0] = PREPARE_GROUP_TSVS.out.groups
+                input[0] = Channel.of(["tt1", "${projectDir}/test-data/markViralDuplicates/tt1_groups.tsv"])
+                    | mix(Channel.of(["tt2", "${projectDir}/test-data/markViralDuplicates/tt2_groups.tsv"]))
                 input[1] = params.deviation
                 '''
             }
@@ -128,7 +112,7 @@ nextflow_workflow {
             // Should run without failures
             assert workflow.success
             // Output should have expected dimensions
-            def tab_in = path(workflow.out.test_in[0][1]).csv(sep: "\t", decompress: true)
+            def tab_in = path(workflow.out.test_in[0][1]).csv(sep: "\t")
             def tab_out = path(workflow.out.dup[0][1]).csv(sep: "\t", decompress: true)
             def tab_meta = path(workflow.out.dup[0][2]).csv(sep: "\t", decompress: true)
             assert tab_out.rowCount == tab_in.rowCount

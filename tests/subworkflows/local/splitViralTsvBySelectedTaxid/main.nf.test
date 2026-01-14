@@ -11,40 +11,14 @@ nextflow_workflow {
     test("Should fail when input TSV contains duplicate read IDs") {
         tag "expect_failed"
         tag "duplicate_input"
-        setup {
-            run("LOAD_DOWNSTREAM_DATA") {
-                script "subworkflows/local/loadDownstreamData/main.nf"
-                process {
-                    """
-                    input[0] = "${projectDir}/test-data/downstream/input_file.csv"
-                    """
-                }
-            }
-            run("PREPARE_GROUP_TSVS") {
-                script "subworkflows/local/prepareGroupTsvs/main.nf"
-                process {
-                    '''
-                    input[0] = LOAD_DOWNSTREAM_DATA.out.input
-                    '''
-                }
-            }
-            run("COPY_FILE_BARE") {
-                script "modules/local/copyFile/main.nf"
-                process {
-                    '''
-                    input[0] = "${params.ref_dir}/results/total-virus-db-annotated.tsv.gz"
-                    input[1] = "virus-db.tsv.gz"
-                    '''
-                }
-            }
-        }
         when {
             params {
             }
             workflow {
                 '''
-                input[0] = PREPARE_GROUP_TSVS.out.groups
-                input[1] = COPY_FILE_BARE.out
+                input[0] = Channel.of("test")
+                    | combine(Channel.of("${projectDir}/test-data/splitViralTsvBySelectedTaxid/input_duplicate.tsv")) // groups
+                input[1] = Channel.of("${params.ref_dir}/results/total-virus-db-annotated.tsv.gz") // db
                 '''
             }
         }
@@ -56,55 +30,17 @@ nextflow_workflow {
         }
     }
 
-    test("Should handle empty partition files (no data rows)") {
+    test("Should handle header-only partition files (no data rows)") {
         tag "expect_success"
         tag "empty_partition"
-        setup {
-            run("LOAD_DOWNSTREAM_DATA") {
-                script "subworkflows/local/loadDownstreamData/main.nf"
-                process {
-                    """
-                    input[0] = "${projectDir}/test-data/downstream/input_file_single.csv"
-                    """
-                }
-            }
-            run("PREPARE_GROUP_TSVS") {
-                script "subworkflows/local/prepareGroupTsvs/main.nf"
-                process {
-                    '''
-                    input[0] = LOAD_DOWNSTREAM_DATA.out.input
-                    '''
-                }
-            }
-            run("FILTER_TSV_COLUMN_BY_VALUE", alias: "FILTER_TO_EMPTY") {
-                script "modules/local/filterTsvColumnByValue/main.nf"
-                process {
-                    // Filter to a non-existent taxid to create an empty TSV (headers only)
-                    '''
-                    input[0] = PREPARE_GROUP_TSVS.out.groups
-                    input[1] = "aligner_taxid_lca"
-                    input[2] = "99999999"
-                    input[3] = true
-                    '''
-                }
-            }
-            run("COPY_FILE_BARE") {
-                script "modules/local/copyFile/main.nf"
-                process {
-                    '''
-                    input[0] = "${params.ref_dir}/results/total-virus-db-annotated.tsv.gz"
-                    input[1] = "virus-db.tsv.gz"
-                    '''
-                }
-            }
-        }
         when {
             params {
             }
             workflow {
                 '''
-                input[0] = FILTER_TO_EMPTY.out.output
-                input[1] = COPY_FILE_BARE.out
+                input[0] = Channel.of("test")
+                    | combine(Channel.of("${projectDir}/test-data/splitViralTsvBySelectedTaxid/input_headers_only.tsv")) // groups
+                input[1] = Channel.of("${params.ref_dir}/results/total-virus-db-annotated.tsv.gz") // db
                 '''
             }
         }
@@ -121,40 +57,14 @@ nextflow_workflow {
     test("Should run without failures on valid input data") {
         tag "expect_success"
         tag "valid_data"
-        setup {
-            run("LOAD_DOWNSTREAM_DATA") {
-                script "subworkflows/local/loadDownstreamData/main.nf"
-                process {
-                    """
-                    input[0] = "${projectDir}/test-data/downstream/input_file_single.csv"
-                    """
-                }
-            }
-            run("PREPARE_GROUP_TSVS") {
-                script "subworkflows/local/prepareGroupTsvs/main.nf"
-                process {
-                    '''
-                    input[0] = LOAD_DOWNSTREAM_DATA.out.input
-                    '''
-                }
-            }
-            run("COPY_FILE_BARE") {
-                script "modules/local/copyFile/main.nf"
-                process {
-                    '''
-                    input[0] = "${params.ref_dir}/results/total-virus-db-annotated.tsv.gz"
-                    input[1] = "virus-db.tsv.gz"
-                    '''
-                }
-            }
-        }
         when {
             params {
             }
             workflow {
                 '''
-                input[0] = PREPARE_GROUP_TSVS.out.groups
-                input[1] = COPY_FILE_BARE.out
+                input[0] = Channel.of("test")
+                    | combine(Channel.of("${projectDir}/test-data/splitViralTsvBySelectedTaxid/input_valid.tsv")) // groups
+                input[1] = Channel.of("${params.ref_dir}/results/total-virus-db-annotated.tsv.gz") // db
                 '''
             }
         }
@@ -162,8 +72,8 @@ nextflow_workflow {
             // Should run without failures
             assert workflow.success
             // Sorting should work as expected
-            def tabs_in = workflow.out.test_in.collect{path(it[1]).csv(sep: "\t", decompress: true)}
-            def tabs_sort = workflow.out.test_sort.collect{path(it[1]).csv(sep: "\t", decompress: true)}
+            def tabs_in = workflow.out.test_in.collect{path(it[1]).csv(sep: "\t")}
+            def tabs_sort = workflow.out.test_sort.collect{path(it[1]).csv(sep: "\t")}
             assert tabs_sort.size() == tabs_in.size()
             for (int i=0; i < tabs_in.size(); i++) {
                 assert tabs_sort[i].rowCount == tabs_in[i].rowCount

@@ -166,16 +166,6 @@ nextflow_workflow {
         tag "expect_success"
         tag "empty_input"
         config "tests/configs/run.config"
-        setup {
-            run("GZIP_FILE") {
-                script "modules/local/gzipFile/main.nf"
-                process {
-                    """
-                    input[0] = Channel.of("empty_sample").combine(Channel.of("${projectDir}/test-data/toy-data/empty_file.txt"))
-                    """
-                }
-            }
-        }
         when {
             params {
                 max_rank = 5
@@ -198,7 +188,7 @@ nextflow_workflow {
                     lca_prefix: params.lca_prefix,
                     db_download_timeout: params.db_download_timeout
                 ]
-                input[0] = GZIP_FILE.out
+                input[0] = Channel.of(["empty_sample", "${projectDir}/test-data/toy-data/empty_file.txt"])
                 input[1] = params.ref_dir
                 input[2] = blast_fasta_params
                 '''

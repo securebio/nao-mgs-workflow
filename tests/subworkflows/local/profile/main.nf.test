@@ -12,16 +12,6 @@ nextflow_workflow {
         tag "expect_success"
         tag "empty_input"
         config "tests/configs/run.config"
-        setup {
-            run("GZIP_FILE") {
-                script "modules/local/gzipFile/main.nf"
-                process {
-                    """
-                    input[0] = Channel.of("empty_sample").combine(Channel.of("${projectDir}/test-data/toy-data/empty_file.txt"))
-                    """
-                }
-            }
-        }
         when {
             params {}
             workflow {
@@ -34,7 +24,8 @@ nextflow_workflow {
                     platform: "illumina",
                     db_download_timeout: params.db_download_timeout
                 ]
-                input[0] = GZIP_FILE.out
+                input[0] = Channel.of("test")
+                    | combine(Channel.of("${projectDir}/test-data/toy-data/empty_file.txt"))
                 input[1] = "${params.ref_dir}/results/kraken_db"
                 input[2] = "${params.ref_dir}"
                 input[3] = Channel.of(true)
@@ -64,26 +55,6 @@ nextflow_workflow {
         tag "expect_success"
         tag "interleaved"
         config "tests/configs/run.config"
-        setup {
-            run("LOAD_SAMPLESHEET") {
-                script "subworkflows/local/loadSampleSheet/main.nf"
-                process {
-                    """
-                    input[0] = "${projectDir}/test-data/samplesheet.csv"
-                    input[1] = "illumina"
-                    input[2] = false
-                    """
-                }
-            }
-            run("INTERLEAVE_FASTQ") {
-                script "modules/local/interleaveFastq/main.nf"
-                process {
-                    """
-                    input[0] = LOAD_SAMPLESHEET.out.samplesheet
-                    """
-                }
-            }
-        }
         when {
             params {
             }
@@ -97,7 +68,8 @@ nextflow_workflow {
                     platform: "illumina",
                     db_download_timeout: params.db_download_timeout
                 ]
-                input[0] = INTERLEAVE_FASTQ.out.output
+                input[0] = Channel.of("test")
+                    | combine(Channel.of("${projectDir}/test-data/tiny-index/reads/interleaved.fastq"))
                 input[1] = "${params.ref_dir}/results/kraken_db"
                 input[2] = "${params.ref_dir}"
                 input[3] = LOAD_SAMPLESHEET.out.single_end
@@ -123,18 +95,6 @@ nextflow_workflow {
         config "tests/configs/run_ont.config"
         tag "expect_success"
         tag "ont"
-        setup {
-            run("LOAD_SAMPLESHEET") {
-                script "subworkflows/local/loadSampleSheet/main.nf"
-                process {
-                    """
-                    input[0] = "${projectDir}/test-data/ont-samplesheet.csv"
-                    input[1] = "ont"
-                    input[2] = false
-                    """
-                }
-            }
-        }
         when {
             params {}
             workflow {
@@ -147,10 +107,11 @@ nextflow_workflow {
                     platform: "ont", 
                     db_download_timeout: params.db_download_timeout
                 ]
-                input[0] = LOAD_SAMPLESHEET.out.samplesheet
+                input[0] = Channel.of("test")
+                    | combine(Channel.of("${projectDir}/test-data/tiny-index/reads/ont.fastq"))
                 input[1] = "${params.ref_dir}/results/kraken_db"
                 input[2] = "${params.ref_dir}"
-                input[3] = LOAD_SAMPLESHEET.out.single_end
+                input[3] = Channel.of(true)
                 input[4] = profile_params
                 '''
             }

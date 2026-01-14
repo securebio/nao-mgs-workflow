@@ -10,26 +10,6 @@ nextflow_process {
         tag "expect_success"
         tag "interleaved"
         config "tests/configs/run.config"
-        setup {
-            run("LOAD_SAMPLESHEET") {
-                script "subworkflows/local/loadSampleSheet/main.nf"
-                process {
-                    """
-                    input[0] = "${projectDir}/test-data/samplesheet.csv"
-                    input[1] = "illumina"
-                    input[2] = false
-                    """
-                }
-            }
-            run("INTERLEAVE_FASTQ") {
-                script "modules/local/interleaveFastq/main.nf"
-                process {
-                    '''
-                    input[0] = LOAD_SAMPLESHEET.out.samplesheet
-                    '''
-                }
-            }
-        }
         when {
             params {
                 params_map = [
@@ -41,7 +21,8 @@ nextflow_process {
             }
             process {
                 '''
-                input[0] = INTERLEAVE_FASTQ.out.output
+                input[0] = Channel.of("test")
+                    | combine(Channel.of("${projectDir}/test-data/tiny-index/reads/interleaved.fastq"))
                 input[1] = "${params.ref_dir}/results/virus-genomes-masked.fasta.gz"
                 input[2] = params.params_map
                 '''
@@ -76,18 +57,6 @@ nextflow_process {
         tag "expect_success"
         tag "single_end"
         config "tests/configs/run.config"
-        setup {
-            run("LOAD_SAMPLESHEET") {
-                script "subworkflows/local/loadSampleSheet/main.nf"
-                process {
-                    """
-                    input[0] = "${projectDir}/test-data/single-end-samplesheet.csv"
-                    input[1] = "illumina"
-                    input[2] = true
-                    """
-                }
-            }
-        }
         when {
             params {
                 params_map = [
@@ -99,7 +68,8 @@ nextflow_process {
             }
             process {
                 '''
-                input[0] = LOAD_SAMPLESHEET.out.samplesheet
+                input[0] = Channel.of("test")
+                    | combine(Channel.of("${projectDir}/test-data/tiny-index/reads/R1.fastq"))
                 input[1] = "${params.ref_dir}/results/virus-genomes-masked.fasta.gz"
                 input[2] = params.params_map
                 '''

@@ -7,19 +7,6 @@ nextflow_process {
     tag "module"
     tag "bbduk"
 
-    setup {
-        run("LOAD_SAMPLESHEET") {
-            script "subworkflows/local/loadSampleSheet/main.nf"
-            process {
-                """
-                input[0] = "${projectDir}/test-data/samplesheet.csv"
-                input[1] = "illumina"
-                input[2] = false
-                """
-            }
-        }
-    }
-
     test("Should run without failures and conserve reads") {
         tag "expect_success"
         tag "paired_end"
@@ -33,7 +20,7 @@ nextflow_process {
             }
             process {
                 '''
-                input[0] = LOAD_SAMPLESHEET.out.samplesheet
+                input[0] = Channel.of(["test", ["${projectDir}/test-data/tiny-index/reads/R1.fastq", "${projectDir}/test-data/tiny-index/reads/R2.fastq"]])
                 input[1] = "${params.ref_dir}/results/virus-genomes-masked.fasta.gz"
                 input[2] = params.params_map
                 '''

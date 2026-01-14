@@ -12,16 +12,6 @@ nextflow_workflow {
         tag "expect_success"
         tag "empty_input"
         config "tests/configs/run.config"
-        setup {
-            run("GZIP_FILE") {
-                script "modules/local/gzipFile/main.nf"
-                process {
-                    """
-                    input[0] = Channel.of("empty_sample").combine(Channel.of("${projectDir}/test-data/toy-data/empty_file.txt"))
-                    """
-                }
-            }
-        }
         when {
             params {
                 max_rank = 5
@@ -44,7 +34,7 @@ nextflow_workflow {
                     taxid_artificial: params.taxid_artificial,
                     db_download_timeout: params.db_download_timeout
                 ]
-                input[0] = GZIP_FILE.out.collect{it[1]}
+                input[0] = Channel.of("${projectDir}/test-data/toy-data/empty_file.txt")
                 input[1] = params.ref_dir
                 input[2] = blast_viral_params
                 '''
@@ -72,26 +62,6 @@ nextflow_workflow {
         tag "expect_success"
         tag "interleaved"
         config "tests/configs/run.config"
-        setup {
-            run("LOAD_SAMPLESHEET") {
-                script "subworkflows/local/loadSampleSheet/main.nf"
-                process {
-                    """
-                    input[0] = "${projectDir}/test-data/samplesheet.csv"
-                    input[1] = "illumina"
-                    input[2] = false
-                    """
-                }
-            }
-            run("INTERLEAVE_FASTQ") {
-                script "modules/local/interleaveFastq/main.nf"
-                process {
-                    '''
-                    input[0] = LOAD_SAMPLESHEET.out.samplesheet
-                    '''
-                }
-            }
-        }
         when {
             params {
                 max_rank = 5
@@ -178,27 +148,6 @@ nextflow_workflow {
         tag "expect_success"
         tag "ont"
         config "tests/configs/run_ont.config"
-        setup {
-            run("LOAD_SAMPLESHEET") {
-                script "subworkflows/local/loadSampleSheet/main.nf"
-                process {
-                    """
-                    input[0] = "${projectDir}/test-data/ont-samplesheet.csv"
-                    input[1] = "ont"
-                    input[2] = false
-                    """
-                }
-            }
-            run("COPY_FILE") {
-                script "modules/local/copyFile/main.nf"
-                process {
-                    '''
-                    input[0] = LOAD_SAMPLESHEET.out.samplesheet
-                    input[1] = "input.fastq.gz"
-                    '''
-                }
-            }
-        }
         when {
             params {
                 max_rank = 5
@@ -221,7 +170,7 @@ nextflow_workflow {
                     taxid_artificial: params.taxid_artificial,
                     db_download_timeout: params.db_download_timeout
                 ]
-                input[0] = COPY_FILE.out.collect{it[1]}
+                input[0] = Channel.of("${projectDir}/test-data/tiny-index/reads/ont.fastq")
                 input[1] = params.ref_dir
                 input[2] = blast_viral_params
                 '''
