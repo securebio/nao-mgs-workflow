@@ -18,6 +18,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional, List
 import csv
+import boto3
 
 ###########
 # LOGGING #
@@ -42,6 +43,43 @@ logger.addHandler(handler)
 ####################
 # HELPER FUNCTIONS #
 ####################
+
+def resolve_samplesheet_path(samplesheet: str, run_launch_dir: Path, repo_root: Path) -> Path:
+    """
+    Resolve samplesheet path, downloading from S3 if necessary.
+
+    Args:
+        samplesheet: Path to samplesheet (local or S3)
+        run_launch_dir: RUN workflow launch directory
+        repo_root: Repository root directory
+
+    Returns:
+        Path to local samplesheet file
+    """
+    if samplesheet.startswith("s3://"):
+        # Download from S3 to RUN launch directory
+        local_path = run_launch_dir / "samplesheet.csv"
+        logger.info(f"Downloading samplesheet from {samplesheet} to {local_path}")
+
+        # Parse S3 URI
+        s3_parts = samplesheet.replace("s3://", "").split("/", 1)
+        bucket = s3_parts[0]
+        key = s3_parts[1]
+
+        # Download using boto3
+        s3_client = boto3.client('s3')
+        try:
+            s3_client.download_file(bucket, key, str(local_path))
+        except Exception as e:
+            raise RuntimeError(f"Failed to download samplesheet from S3: {e}")
+
+        return local_path
+    else:
+        # Local path - resolve relative to repo root
+        path = Path(samplesheet)
+        if not path.is_absolute():
+            path = repo_root / path
+        return path
 
 def generate_downstream_input(downstream_launch_dir: Path,
                               samplesheet_path: Path,
@@ -155,9 +193,9 @@ def parse_arguments() -> argparse.Namespace:
     )
     parser.add_argument(
         "--samplesheet",
-        type=Path,
-        default=Path("test-data/samplesheet.csv"),
-        help="Path to samplesheet for RUN workflow (default: test-data/samplesheet.csv)"
+        type=str,
+        default="test-data/samplesheet.csv",
+        help="Path to samplesheet for RUN workflow (local or S3, default: test-data/samplesheet.csv)"
     )
     parser.add_argument(
         "--profile",
@@ -220,7 +258,7 @@ def main() -> None:
     # RUN
     run_base_dir = args.base_dir.rstrip("/") + "/run"
     ref_dir = f"{index_base_dir}/output"
-    samplesheet_path = repo_root / args.samplesheet
+    samplesheet_path = resolve_samplesheet_path(args.samplesheet, launch_dirs['run'], repo_root)
     if not args.skip_run:
         execute_nextflow(
             launch_dir=launch_dirs['run'],
@@ -230,7 +268,7 @@ def main() -> None:
                 "base_dir": run_base_dir,
                 "ref_dir": ref_dir,
                 "platform": "illumina",
-                "sample_sheet": str(samplesheet_path)
+                "sample_sheet": str(samplesheet_path.resolve())
             },
             workflow_name="RUN",
             profile=args.profile,
