@@ -23,6 +23,7 @@ node_modules/*
 package-lock.json
 package.json
 
+.claude/*
 uv.lock
 
 # Post-processing build artifacts

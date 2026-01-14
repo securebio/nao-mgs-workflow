@@ -152,13 +152,13 @@ In cases where a module is a thin wrapper around a script in another language, c
 
 #### Test datasets 
 
+##### Current test data
+
 - Small (uncompressed) test data files are in `test-data/`; larger test datasets are in S3:
     - Currently there is no set organization of the `test-data/` directory. It will be organized in the future; see issue [#349](https://github.com/naobservatory/mgs-workflow/issues/349).
     - Small "toy" data files (uncompressed, generally ~1KB or less) may be added freely to the repo in `test-data/toy-data`.
-- Larger public test datasets are stored in `s3://nao-testing` (publicly available). 
-    - The "gold standard test dataset" (`s3://nao-testing/gold-standard-test/`) is the default test dataset that we use for testing the `RUN` and `DOWNSTREAM` workflows on short-read data. It is a small dataset that contains 165 reads from the [Yang 2020](https://www.sciencedirect.com/science/article/abs/pii/S0048969720358514?via%3Dihub) study.
-    - The "ONT wastewater test dataset" (`s3://nao-testing/ont-ww-test/`) is the default, small test dataset that we use for testing the `RUN` workflow on ONT (long-read) data.
-- Results of workflow runs on the test datasets from S3 are in the repo in `test-data/<dataset>-results-<workflow>`. 
+- Public test datasets are stored in `s3://nao-testing/tiny-test/`. (Older test files, no longer in active use, can be found in `s3://nao-testing/gold-standard-test/` and `s3://nao-testing/ont-ww-test/`.)
+- Results of workflow runs on the test datasets from S3 are in the repo in `test-data/results/`
 
 To make a new test dataset on S3, copy the test dataset to `s3://nao-testing/<name-of-test-dataset>`. A pipeline maintainer (e.g. willbradshaw or katherine-stansifer) can give you permission to add to the bucket.
 
@@ -169,26 +169,40 @@ aws s3 cp /path/to/my_dataset s3://nao-testing/my_dataset/ --acl public-read
 > [!NOTE]
 > Any time you update a test dataset, you must make it public again.
 
+##### Tiny test data
+
+In order to cut down on the time it takes to run our test suite, we have switched much of it from larger test data stored in S3 to small test datafiles stored locally. The following instructions detail how to generate this new test data:
+
+1. Create new reference datasets using `bin/build_tiny_test_databases.py`. The defaults provided should suffice in most cases.
+2. Generate the new test index:
+    a. Create a fresh launch directory and copy the config file: `cp configs/index-for-run-test.config LAUNCH_DIR/nextflow.config`.
+    b. Edit the config file to specify a base directory (`params.base_dir`) and Batch job queue (`process.queue`).
+    c. Execute the workflow from the launch directory: `nextflow run PATH_TO_REPO_DIR`. (This usually takes about 10 minutes.)
+    d. Copy the tiny index from S3 to the repo: `aws s3 cp --recursive BASE_DIR/output test-data/tiny-index/output`, followed by `rm -r test-data/tiny-index/output/logging/trace*` to remove run-specific information we don't want in the repo.
+3. Generate test input data (simulated ONT & Illumina reads):
+    a. Set up an environment with appropriate versions of InSilicoSeq and NanoSim, e.g. with Conda: `conda env create -f test-data/tiny-index/reads/env.yml; conda activate GenerateTestData`
+    b. Run `bin/prepare_tiny_test_data.py` and commit the results to this repository.
+    c. Remember to return to your normal computing environment after you're done.
+4. Commit new test index and input data to the repo. This should not generate any new files, just replace existing ones.
+
 #### Running tests
 
 To run the tests locally, you need to make sure that you have a powerful enough compute instance (at least 4 cores, 14GB of RAM, and 32GB of storage). On AWS EC2, we recommend the `m5.2xlarge`. Note that you may want a more powerful instance when running tests in parallel (as described below).
 
 > [!NOTE]
-> Before running tests, to allow access to testing datasets/indexes on AWS, you will need to set up AWS credentials as described in [installation.md](installation.md), and then export them as described in the installation doc: 
+> Before running tests, to allow access to testing datasets/indexes on AWS, you will need to set up AWS credentials as described in [installation.md](installation.md), and then export them as described in the installation doc:
 >
 > ```
 > eval "$(aws configure export-credentials --format env)"
-> ``
+> ```
 
-To run specific tests, you can specify the tests by filename or by tag. Individual tests generally complete quickly (seconds to minutes):
-```
-nf-test test tests/main.test.nf # Runs all tests in the main.test.nf file
-nf-test test --tag run # Runs test(s) with the "run" tag; this is the end-to-end test of the RUN workflow on short-read data
-```
+In running tests, we don't recommend calling `nf-test test` directly, as this can easily run into issues with permissions and environment configuration. Instead, we recommend using `bin/run-nf-test.sh`, which wraps `nf-test` with the necessary `sudo` permissions and environment variables. For parallel execution, use the `--num-workers` flag. Due to the overhead associated with parallelization, we only recommend parallel execution for running large portions of the test suite.
 
-To run all tests in the `tests` directory, use the command `nf-test test tests`. 
-- Running this full suite of local tests takes hours; we recommend using the script `bin/run_parallel_test` to parallelize. 
-- Running the full test suite frequently hits API limits for Seqera container pulls; to resolve this, request a user token from Seqera as described in [troubleshooting.md](troubleshooting.md).
+```
+bin/run-nf-test.sh tests/main.test.nf # Runs all tests in the main.test.nf file
+bin/run-nf-test.sh --num-workers 8 tests # Runs all tests in parallel across 8 threads.
+bin/run-nf-test.sh --num-workers 8 tests --tag expect_failure # Run failure tests only across 8 threads
+```
 
 After tests finish, you should clean up by running `bin/clean-nf-test.sh`.
 
@@ -214,15 +228,12 @@ Test [7677da69] 'RUN workflow output should match snapshot'
 ```  
 - First, make sure the changes are expected/desired:
     - Look at the md5 checksums to determine which files have changes; make sure they are what you expect.
-    - Then, find the new output files and compare them to previous output files. Make sure the changes are expected based on your code changes.
-        - Previous output files are in:
-            - `test-data/gold-standard-results` (for short-read `RUN` test with the tag `run_output`)
-            - `test-data/gold-standard-results-downstream` (for short-read `DOWNSTREAM` test with the tag `downstream`) 
-            - `test-data/ont-ww-test-results` (for ONT `RUN` test with the tag `run_output_ont`)
+    - Then, find the new output files and compare them to previous output files in `test-data/results`. Make sure the changes are expected based on your code changes.
+        - Previous output files are in `test-data/results`.
         - New output files are in `.nf-test/tests/<hash>/output`. (`<hash>` is shown when the test runs; e.g., in the example error message above, the test hash begins with `7677da69`).
     - Once you are happy with the changes to the output:
         - Update output files in `test-data` by copying changed output files from the `.nf-test` directory to the appropriate location in `test-data`, uncompressing the files, and committing the changes.
-        - Update `nf-test` snapshots by running `nf-test test <path to test that failed> --update-snapshot`; this will update the appropriate `*.snapshot` file in `tests/workflows`. Commit the changed snapshot file.
+        - Update `nf-test` snapshots by running `bin/run-nf-test.sh <path to test that failed> --update-snapshot`; this will update the appropriate `*.snapshot` file in `tests/workflows`. Commit the changed snapshot file.
         - Flag in PR comments that the snapshot has changed, and explain why. (Without such a comment, it's easy for reviewers to miss the updated snapshot.)
 
 ### `pytest`

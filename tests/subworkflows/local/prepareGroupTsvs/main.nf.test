@@ -8,77 +8,6 @@ nextflow_workflow {
     tag "downstream"
     tag "prepare_group_tsvs"
 
-    setup {
-        run("LOAD_DOWNSTREAM_DATA") {
-            script "subworkflows/local/loadDownstreamData/main.nf"
-            process {
-                """
-                input[0] = "${projectDir}/test-data/downstream/input_file.csv"
-                """
-            }
-        }
-        run("COPY_FILE", alias: "COPY_HITS") {
-            script "modules/local/copyFile/main.nf"
-            process {
-                '''
-                input[0] = LOAD_DOWNSTREAM_DATA.out.input.map{ label, hits, groups -> tuple(label, hits) }
-                input[1] = "test_hits_1.tsv.gz"
-                '''
-            }
-        }
-        run("REPLACE_STRING_IN_COMPRESSED_FILE", alias: "ADD_MORE_SAMPLES"){
-            script "modules/local/replaceString/main.nf"
-            process {
-                '''
-                input[0] = COPY_HITS.out
-                input[1] = "test_hits_2.tsv.gz"
-                input[2] = "gold_standard"
-                input[3] = "gold_standard2"
-                '''
-            }
-        }
-
-        run("CONCATENATE_TSVS_LABELED", alias: "CONCAT_HITS"){
-            script "modules/local/concatenateTsvs/main.nf"
-            process {
-                '''
-                input[0] = COPY_HITS.out.concat(ADD_MORE_SAMPLES.out.output).groupTuple()
-                input[1] = "test_hits"
-                '''
-            }
-        }
-        run("COPY_FILE", alias: "COPY_GROUPS") {
-            script "modules/local/copyFile/main.nf"
-            process {
-                '''
-                input[0] = LOAD_DOWNSTREAM_DATA.out.input.map{ label, hits, groups -> tuple(label, groups) }
-                input[1] = "test_groups_1.tsv"
-                '''
-            }
-        }
-        run("REPLACE_STRING", alias: "ADD_MORE_GROUPS"){
-            script "modules/local/replaceString/main.nf"
-            process {
-                '''
-                input[0] = COPY_GROUPS.out
-                input[1] = "test_groups_2.tsv"
-                // Did not put the last number on purpose as one sample will be gs1 and the other gs2; not including the last number guaruenttes that a unique last group is made.
-                input[2] = "gold_standard\tgs" 
-                input[3] = "gold_standard2\tgs4"
-                '''
-            }
-        }
-        run("CONCATENATE_TSVS_LABELED", alias: "CONCAT_GROUPS"){
-            script "modules/local/concatenateTsvs/main.nf"
-            process {
-                '''
-                input[0] = ADD_MORE_GROUPS.out.output.concat(COPY_GROUPS.out).groupTuple()
-                input[1] = "test_groups"
-                '''
-            }
-        }
-    }
-
     test("Should run without failures") {
         tag "expect_success"
         when {
@@ -86,7 +15,8 @@ nextflow_workflow {
             }
             workflow {
                 '''
-                input[0] = CONCAT_HITS.out.output.combine(CONCAT_GROUPS.out.output, by: 0)
+                input[0] = Channel.of(["tt1", "${projectDir}/test-data/prepareGroupTsvs/tt1_hits.tsv", "${projectDir}/test-data/prepareGroupTsvs/tt1_groups.tsv"])
+                    | mix(Channel.of(["tt2", "${projectDir}/test-data/prepareGroupTsvs/tt2_hits.tsv", "${projectDir}/test-data/prepareGroupTsvs/tt2_groups.tsv"]))
                 '''
             }
         }
@@ -94,8 +24,8 @@ nextflow_workflow {
             // Should run without failures
             assert workflow.success
             // Output of join should have expected dimensions
-            def input_tabs = workflow.out.test_in.collect{path(it[1]).csv(sep: "\t", decompress: true)}
-            def group_tabs = workflow.out.test_in.collect{path(it[2]).csv(sep: "\t", decompress: true)}
+            def input_tabs = workflow.out.test_in.collect{path(it[1]).csv(sep: "\t")}
+            def group_tabs = workflow.out.test_in.collect{path(it[2]).csv(sep: "\t")}
             def join_tabs = workflow.out.test_join.collect{path(it[1]).csv(sep: "\t", decompress: true)}
             assert input_tabs.size() == group_tabs.size()
             assert input_tabs.size() == join_tabs.size()

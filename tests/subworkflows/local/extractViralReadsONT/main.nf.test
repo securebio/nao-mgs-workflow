@@ -7,26 +7,13 @@ nextflow_workflow {
     tag "subworkflow"
     tag "extract_viral_reads_ont"
 
-    setup {
-        run("LOAD_SAMPLESHEET") {
-            script "subworkflows/local/loadSampleSheet/main.nf"
-            process {
-                """
-                input[0] = "${projectDir}/test-data/ont-samplesheet.csv"
-                input[1] = "ont"
-                input[2] = false
-                """
-            }
-        }
-    }
-
     test("Should run without failures") {
         tag "expect_success"
         tag "ont"
         when {
             workflow {
                 '''
-                input[0] = LOAD_SAMPLESHEET.out.samplesheet
+                input[0] = Channel.of(["test", "${projectDir}/test-data/tiny-index/reads/ont.fastq"])
                 input[1] = params.ref_dir
                 input[2] = "81077"
                 input[3] = params.db_download_timeout
@@ -65,22 +52,10 @@ nextflow_workflow {
         tag "empty_file"
         tag "expect_success"
         tag "ont"
-        setup {
-            run("GZIP_FILE", alias: "GZIP_EMPTY_FORWARD") {
-                script "modules/local/gzipFile/main.nf"
-                process {
-                    '''
-                    input[0] = Channel.of("empty")
-                        | combine(Channel.of("${projectDir}/test-data/toy-data/empty_file.txt"))
-                    '''
-                }
-            }
-        }
         when {
-            
             workflow {
                 '''
-                input[0] = GZIP_EMPTY_FORWARD.out
+                input[0] = Channel.of(["test", "${projectDir}/test-data/toy-data/empty_file.txt"])
                 input[1] = params.ref_dir
                 input[2] = "81077"
                 input[3] = params.db_download_timeout

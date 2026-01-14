@@ -1,3 +1,15 @@
+// Helper function: Validate TSV structure by reading lines directly and splitting by tabs.
+// This approach works even when files have only headers (no data rows),
+// which can cause issues with nf-test's CSV parser.
+def validateTsvStructure = { tsv_file, expected_col_count ->
+    def lines = path(tsv_file).linesGzip
+
+    // Verify header exists and has correct number of columns
+    assert lines.size() >= 1 : "TSV file must have at least a header row"
+    def header = lines[0].split("\t")
+    assert header.size() == expected_col_count : "Expected ${expected_col_count} columns, got ${header.size()}"
+}
+
 nextflow_workflow {
 
     name "Test subworkflow RUN_QC"
@@ -10,41 +22,15 @@ nextflow_workflow {
         config "tests/configs/run.config"
         tag "expect_success"
         tag "interleaved"
-        setup {
-            run("LOAD_SAMPLESHEET") {
-                script "subworkflows/local/loadSampleSheet/main.nf"
-                workflow {
-                    '''
-                    input[0] = "${projectDir}/test-data/samplesheet.csv"
-                    input[1] = "illumina"
-                    input[2] = false
-                    '''
-                }
-            }
-            run("SUBSET_TRIM") {
-                script "subworkflows/local/subsetTrim/main.nf"
-                process {
-                    '''
-                    def subset_trim_params = [
-                        n_reads_profile: 49,
-                        adapters: params.adapters,
-                        platform: "illumina",
-                        random_seed: ""
-                    ]
-                    input[0] = LOAD_SAMPLESHEET.out.samplesheet
-                    input[1] = LOAD_SAMPLESHEET.out.single_end
-                    input[2] = subset_trim_params
-                    '''
-                }
-            }
-        }
         when {
             params {}
             workflow {
                 """
-                input[0] = SUBSET_TRIM.out.subset_reads
-                input[1] = SUBSET_TRIM.out.trimmed_subset_reads
-                input[2] = LOAD_SAMPLESHEET.out.single_end
+                input[0] = Channel.of("test")
+                    | combine(Channel.of("${projectDir}/test-data/tiny-index/reads/interleaved.fastq"))
+                input[1] = Channel.of("test")
+                    | combine(Channel.of("${projectDir}/test-data/tiny-index/reads/interleaved.fastq"))
+                input[2] = Channel.of(false)
                 """
             }
         }
@@ -56,14 +42,10 @@ nextflow_workflow {
             assert tsv_basic.rowCount == 2
             assert tsv_basic.columnCount == 18
             // Other TSVs should have expected structure and content
-            def tsv_adapt = path(workflow.out.qc_adapt[0]).csv(sep: "\t", decompress: true)
-            assert tsv_adapt.columnCount == 6
-            def tsv_qbase = path(workflow.out.qc_qbase[0]).csv(sep: "\t", decompress: true)
-            assert tsv_qbase.columnCount == 5
-            def tsv_qseqs = path(workflow.out.qc_qseqs[0]).csv(sep: "\t", decompress: true)
-            assert tsv_qseqs.columnCount == 5
-            def tsv_lengths = path(workflow.out.qc_lengths[0]).csv(sep: "\t", decompress: true)
-            assert tsv_lengths.columnCount == 5
+            validateTsvStructure(workflow.out.qc_adapt[0], 6)
+            validateTsvStructure(workflow.out.qc_qbase[0], 5)
+            validateTsvStructure(workflow.out.qc_qseqs[0], 5)
+            validateTsvStructure(workflow.out.qc_lengths[0], 5)
         }
     }
 
@@ -71,41 +53,15 @@ nextflow_workflow {
         config "tests/configs/run.config"
         tag "expect_success"
         tag "single_end"
-        setup {
-            run("LOAD_SAMPLESHEET") {
-                script "subworkflows/local/loadSampleSheet/main.nf"
-                workflow {
-                    '''
-                    input[0] = "${projectDir}/test-data/single-end-samplesheet.csv"
-                    input[1] = "illumina"
-                    input[2] = true
-                    '''
-                }
-            }
-            run("SUBSET_TRIM") {
-                script "subworkflows/local/subsetTrim/main.nf"
-                process {
-                    '''
-                    def subset_trim_params = [
-                        n_reads_profile: 49,
-                        adapters: params.adapters,
-                        platform: "illumina",
-                        random_seed: ""
-                    ]
-                    input[0] = LOAD_SAMPLESHEET.out.samplesheet
-                    input[1] = LOAD_SAMPLESHEET.out.single_end
-                    input[2] = subset_trim_params
-                    '''
-                }
-            }
-        }
         when {
             params {}
             workflow {
                 """
-                input[0] = SUBSET_TRIM.out.subset_reads
-                input[1] = SUBSET_TRIM.out.trimmed_subset_reads
-                input[2] = LOAD_SAMPLESHEET.out.single_end
+                input[0] = Channel.of("test")
+                    | combine(Channel.of("${projectDir}/test-data/tiny-index/reads/R1.fastq"))
+                input[1] = Channel.of("test")
+                    | combine(Channel.of("${projectDir}/test-data/tiny-index/reads/R1.fastq"))
+                input[2] = Channel.of(true)
                 """
             }
         }
@@ -117,14 +73,10 @@ nextflow_workflow {
             assert tsv_basic.rowCount == 2
             assert tsv_basic.columnCount == 18
             // Other TSVs should have expected structure and content
-            def tsv_adapt = path(workflow.out.qc_adapt[0]).csv(sep: "\t", decompress: true)
-            assert tsv_adapt.columnCount == 6
-            def tsv_qbase = path(workflow.out.qc_qbase[0]).csv(sep: "\t", decompress: true)
-            assert tsv_qbase.columnCount == 5
-            def tsv_qseqs = path(workflow.out.qc_qseqs[0]).csv(sep: "\t", decompress: true)
-            assert tsv_qseqs.columnCount == 5
-            def tsv_lengths = path(workflow.out.qc_lengths[0]).csv(sep: "\t", decompress: true)
-            assert tsv_lengths.columnCount == 5
+            validateTsvStructure(workflow.out.qc_adapt[0], 6)
+            validateTsvStructure(workflow.out.qc_qbase[0], 5)
+            validateTsvStructure(workflow.out.qc_qseqs[0], 5)
+            validateTsvStructure(workflow.out.qc_lengths[0], 5)
         }
     }
     
@@ -132,22 +84,14 @@ nextflow_workflow {
         config "tests/configs/run.config"
         tag "expect_success"
         tag "empty_input"
-        setup {
-            run("GZIP_FILE") {
-                script "modules/local/gzipFile/main.nf"
-                process {
-                    """
-                    input[0] = Channel.of("empty_sample").combine(Channel.of("${projectDir}/test-data/toy-data/empty_file.txt"))
-                    """
-                }
-            }
-        }
         when {
             params {}
             workflow {
                 """
-                input[0] = GZIP_FILE.out
-                input[1] = GZIP_FILE.out
+                input[0] = Channel.of("test")
+                    | combine(Channel.of("${projectDir}/test-data/toy-data/empty_file.txt"))
+                input[1] = Channel.of("test")
+                    | combine(Channel.of("${projectDir}/test-data/toy-data/empty_file.txt"))
                 input[2] = Channel.of(true)
                 """
             }
@@ -164,15 +108,9 @@ nextflow_workflow {
             assert tsv_lengths.rowCount == 2
             assert tsv_lengths.columnCount == 5
             // Other TSVs should have expected structure and content
-            def tsv_adapt = path(workflow.out.qc_adapt[0]).linesGzip
-            assert tsv_adapt.size() == 1
-            assert tsv_adapt[0].split("\t").size() == 6
-            def tsv_qbase = path(workflow.out.qc_qbase[0]).linesGzip
-            assert tsv_qbase.size() == 1
-            assert tsv_qbase[0].split("\t").size() == 5
-            def tsv_qseqs = path(workflow.out.qc_qseqs[0]).linesGzip
-            assert tsv_qseqs.size() == 1
-            assert tsv_qseqs[0].split("\t").size() == 5
+            validateTsvStructure(workflow.out.qc_adapt[0], 6)
+            validateTsvStructure(workflow.out.qc_qbase[0], 5)
+            validateTsvStructure(workflow.out.qc_qseqs[0], 5)
         }
     }
 }

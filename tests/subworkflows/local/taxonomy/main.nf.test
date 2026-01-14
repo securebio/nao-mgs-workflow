@@ -10,26 +10,6 @@ nextflow_workflow {
         tag "expect_success"
         tag "interleaved"
         config "tests/configs/run.config"
-        setup {
-            run("LOAD_SAMPLESHEET") {
-                script "subworkflows/local/loadSampleSheet/main.nf"
-                process {
-                    """
-                    input[0] = "${projectDir}/test-data/samplesheet.csv"
-                    input[1] = "illumina"
-                    input[2] = false
-                    """
-                }
-            }
-            run("INTERLEAVE_FASTQ") {
-                script "modules/local/interleaveFastq/main.nf"
-                process {
-                    """
-                    input[0] = LOAD_SAMPLESHEET.out.samplesheet
-                    """
-                }
-            }
-        }
         when {
             params {
             }
@@ -40,9 +20,10 @@ nextflow_workflow {
                     bracken_threshold: 5, 
                     db_download_timeout: params.db_download_timeout
                 ]
-                input[0] = INTERLEAVE_FASTQ.out.output
+                input[0] = Channel.of("test")
+                    | combine(Channel.of("${projectDir}/test-data/tiny-index/reads/interleaved.fastq"))
                 input[1] = "${params.ref_dir}/results/kraken_db"
-                input[2] = LOAD_SAMPLESHEET.out.single_end
+                input[2] = Channel.of(false)
                 input[3] = taxonomy_params
                 '''
             }
@@ -52,11 +33,12 @@ nextflow_workflow {
             assert workflow.success
             // Read output should have a nonzero number of lines divisible by four
             def countGzipLines = { file -> path(file).linesGzip.size() }
+            def countPlainLines = { file -> path(file).readLines().size() }
             def single_read_lines = countGzipLines(workflow.out.single_reads[0][1])
             assert single_read_lines > 0
             assert single_read_lines % 4 == 0
             // Merged read count should equal input read count
-            def input_read_lines = countGzipLines(workflow.out.input_reads[0][1])
+            def input_read_lines = countPlainLines(workflow.out.input_reads[0][1])
             assert single_read_lines == input_read_lines / 2
             // Kraken output lines should match input reads
             def kraken_output_lines = countGzipLines(workflow.out.kraken_output[0][1])
@@ -83,27 +65,6 @@ nextflow_workflow {
         tag "expect_success"
         tag "single_end"
         config "tests/configs/run.config"
-        setup {
-            run("LOAD_SAMPLESHEET") {
-                script "subworkflows/local/loadSampleSheet/main.nf"
-                process {
-                    """
-                    input[0] = "${projectDir}/test-data/single-end-samplesheet.csv"
-                    input[1] = "illumina"
-                    input[2] = true
-                    """
-                }
-            }
-            run("COPY_FILE") {
-                script "modules/local/copyFile/main.nf"
-                process {
-                    """
-                    input[0] = LOAD_SAMPLESHEET.out.samplesheet
-                    input[1] = "reads.fastq.gz"
-                    """
-                }
-            }
-        }
         when {
             params {}
             workflow {
@@ -113,9 +74,10 @@ nextflow_workflow {
                     bracken_threshold: 5, 
                     db_download_timeout: params.db_download_timeout
                 ]
-                input[0] = COPY_FILE.out
+                input[0] = Channel.of("test")
+                    | combine(Channel.of("${projectDir}/test-data/tiny-index/reads/R1.fastq"))
                 input[1] = "${params.ref_dir}/results/kraken_db"
-                input[2] = LOAD_SAMPLESHEET.out.single_end
+                input[2] = Channel.of(true)
                 input[3] = taxonomy_params
                 '''
             }
@@ -124,18 +86,17 @@ nextflow_workflow {
             // Should run without failures
             assert workflow.success
             // Read output should have a nonzero number of lines divisible by four
-            def countGzipLines = { file -> path(file).linesGzip.size() }
-            def single_read_lines = countGzipLines(workflow.out.single_reads[0][1])
+            def single_read_lines = path(workflow.out.single_reads[0][1]).readLines().size()
             assert single_read_lines > 0
             assert single_read_lines % 4 == 0
             // "Merged" reads should exactly equal input reads
             def input_read_md5 = path(workflow.out.input_reads[0][1]).md5
             def single_read_md5 = path(workflow.out.single_reads[0][1]).md5
             assert single_read_md5 == input_read_md5
-            def input_read_lines = countGzipLines(workflow.out.input_reads[0][1])
+            def input_read_lines = path(workflow.out.input_reads[0][1]).readLines().size()
             assert single_read_lines == input_read_lines
             // Kraken output lines should match input reads
-            def kraken_output_lines = countGzipLines(workflow.out.kraken_output[0][1])
+            def kraken_output_lines = path(workflow.out.kraken_output[0][1]).linesGzip.size()
             assert kraken_output_lines == single_read_lines / 4
             // Kraken reports should have expected fields
             def kraken_report_tab = path(workflow.out.kraken_reports[0]).csv(sep: "\t", decompress: true)
@@ -156,17 +117,6 @@ nextflow_workflow {
         tag "empty_file"
         tag "expect_success"
         config "tests/configs/run.config"
-        setup {
-            run("GZIP_FILE", alias: "GZIP_EMPTY") {
-                script "modules/local/gzipFile/main.nf"
-                process {
-                    '''
-                    input[0] = Channel.of("test_empty")
-                        | combine(Channel.of("${projectDir}/test-data/toy-data/empty_file.txt"))
-                    '''
-                }
-            }
-        }
         when {
             params {}
             workflow {
@@ -176,7 +126,8 @@ nextflow_workflow {
                     bracken_threshold: 5, 
                     db_download_timeout: params.db_download_timeout
                 ]
-                input[0] = GZIP_EMPTY.out
+                input[0] = Channel.of("test_empty")
+                    | combine(Channel.of("${projectDir}/test-data/toy-data/empty_file.txt"))
                 input[1] = "${params.ref_dir}/results/kraken_db"
                 input[2] = Channel.of(true)
                 input[3] = taxonomy_params
@@ -188,11 +139,11 @@ nextflow_workflow {
             assert workflow.success
             
             // Single reads should be empty
-            def countGzipLines = { file -> path(file).linesGzip.size() }
-            def single_read_lines = countGzipLines(workflow.out.single_reads[0][1])
+            def single_read_lines = path(workflow.out.single_reads[0][1]).readLines().size()
             assert single_read_lines == 0
             
             // Kraken output should have only header row
+            def countGzipLines = { file -> path(file).linesGzip.size() }
             def kraken_output_lines = countGzipLines(workflow.out.kraken_output[0][1])
             assert kraken_output_lines == 0
             

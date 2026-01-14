@@ -5,23 +5,6 @@ nextflow_pipeline {
     config "tests/configs/downstream.config"
     tag "workflow"
 
-    test("Short read DOWNSTREAM workflow should run without errors") {
-        tag "downstream"
-        tag "main_downstream"
-        then {
-            assert workflow.success
-        }
-    }
-
-    test("ONT DOWNSTREAM workflow should run without errors") {
-        config "tests/configs/downstream_ont.config"
-        tag "downstream_ont"
-        tag "main_downstream_ont"
-        then {
-            assert workflow.success
-        }
-    }
-
     test("DOWNSTREAM workflow output should match snapshot") {
         tag "downstream_output"
         tag "main_downstream_output"
@@ -29,10 +12,10 @@ nextflow_pipeline {
         then {
             assert workflow.success
             assert snapshot(
-                path("${launchDir}/output/results_downstream/gs1_duplicate_reads.tsv.gz"),
-                path("${launchDir}/output/results_downstream/gs1_duplicate_stats.tsv.gz"),
-                path("${launchDir}/output/results_downstream/gs1_clade_counts.tsv.gz"),
-                path("${launchDir}/output/results_downstream/gs1_validation_hits.tsv.gz"),
+                path("${launchDir}/output/results_downstream/tt1_duplicate_reads.tsv.gz"),
+                path("${launchDir}/output/results_downstream/tt1_duplicate_stats.tsv.gz"),
+                path("${launchDir}/output/results_downstream/tt1_clade_counts.tsv.gz"),
+                path("${launchDir}/output/results_downstream/tt1_validation_hits.tsv.gz"),
             ).match("downstream_output")
         }
     }
@@ -45,7 +28,7 @@ nextflow_pipeline {
         then {
             assert workflow.success
             assert snapshot(
-                path("${launchDir}/output/results_downstream/ont_1_validation_hits.tsv.gz"),
+                path("${launchDir}/output/results_downstream/tt1_validation_hits.tsv.gz"),
             ).match("downstream_ont_output")
         }
     }

@@ -33,37 +33,35 @@ process MINIMAP2 {
         tuple val(sample), path("${sample}_${params_map.suffix}_minimap2_mapped.sam.gz"), emit: sam
         tuple val(sample), path("${sample}_${params_map.suffix}_minimap2_mapped.fastq.gz"), emit: reads_mapped
         tuple val(sample), path("${sample}_${params_map.suffix}_minimap2_unmapped.fastq.gz"), emit: reads_unmapped
-        tuple val(sample), path("${sample}_${params_map.suffix}_minimap2_in.fastq.gz"), emit: input
-    shell:
-        '''
+        tuple val(sample), path("input_${reads}"), emit: input
+    script:
+        def extractCmd = reads.toString().endsWith(".gz") ? "zcat" : "cat"
+        def sam = "${sample}_${params_map.suffix}_minimap2_mapped.sam.gz"
+        def al = "${sample}_${params_map.suffix}_minimap2_mapped.fastq.gz"
+        def un = "${sample}_${params_map.suffix}_minimap2_unmapped.fastq.gz"
+        """
         set -eou pipefail
-        suffix="!{params_map.suffix}"
         # Download Minimap2 index if not already present
-        download-db.sh !{index_dir} !{params_map.db_download_timeout}
+        download-db.sh "${index_dir}" "${params_map.db_download_timeout}"
         # Prepare inputs
-        reads="!{reads}"
-        idx_dir_name=\$(basename "!{index_dir}")
-        sam="!{sample}_${suffix}_minimap2_mapped.sam.gz"
-        al="!{sample}_${suffix}_minimap2_mapped.fastq.gz"
-        un="!{sample}_${suffix}_minimap2_unmapped.fastq.gz"
-
+        idx_dir_name=\$(basename "${index_dir}")
         # Run pipeline
         # Outputs a SAM file for all reads, which is then partitioned based on alignment status
         #   - First branch (samtools view -u -f 4 -) filters SAM to unaligned reads and saves FASTQ
         #   - Second branch (samtools view -u -F 4 -) filters SAM to aligned reads and saves FASTQ
         #   - Third branch (samtools view -h -F 4 -) also filters SAM to aligned reads and saves SAM
-        zcat ${reads} \
-            | minimap2 -a !{params_map.alignment_params} /scratch/${idx_dir_name}/mm2_index.mmi /dev/fd/0 \
+        ${extractCmd} ${reads} \
+            | minimap2 -a ${params_map.alignment_params} /scratch/\${idx_dir_name}/mm2_index.mmi /dev/fd/0 \
             | tee \
                 >(samtools view -u -f 4 - \
                     | samtools fastq - | gzip -c > ${un}) \
                 >(samtools view -u -F 4 - \
                     | samtools fastq - | gzip -c > ${al}) \
             | samtools view -h -F 4 - \
-            !{ params_map.remove_sq ? "| grep -v '^@SQ'" : "" } | gzip -c > ${sam}
+            ${ params_map.remove_sq ? "| grep -v '^@SQ'" : "" } | gzip -c > ${sam}
         # Link input to output for testing
-        ln -s ${reads} !{sample}_${suffix}_minimap2_in.fastq.gz
-        '''
+        ln -s ${reads} input_${reads}
+        """
 }
 
 // Run minimap2 in non-streamed mode on a single input FASTQ file and partition reads based on alignment status

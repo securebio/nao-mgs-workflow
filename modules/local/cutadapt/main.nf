@@ -27,20 +27,3 @@ process CUTADAPT {
         '''
 }
 
-process CUTADAPT_MASK {
-    label "cutadapt"
-    label "large"
-    input:
-        path(seq_db)
-        path(adapters)
-        path(label)
-    output:
-        path("${label}_cutadapt_masked.fasta.gz"), emit: masked
-        path("${label}_cutadapt_log.txt"), emit: log
-    shell:
-        ''' 
-        out=!{label}_cutadapt_masked.fasta.gz
-        log=!{label}_cutadapt_log.txt
-        cutadapt --action=mask -b file:!{adapters} -j !{task.cpus} -e 0.2 -o ${out} !{seq_db} > ${log}
-        '''
-}

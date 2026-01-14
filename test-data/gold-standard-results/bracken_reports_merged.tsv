@@ -1,3 +1,0 @@
-name	taxid	rank	kraken2_assigned_reads	added_reads	new_est_reads	fraction_total_reads	sample	ribosomal
-Viruses	10239	D	1	0	1	1.00000	gold_standard	TRUE
-Viruses	10239	D	41	0	41	1.00000	gold_standard	FALSE

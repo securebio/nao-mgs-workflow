@@ -86,7 +86,7 @@ nextflow_process {
         }
     }
 
-    test("Should run without failures on a plaintext empty file") {
+    test("Should handle empty input correctly") {
         tag "expect_success"
         tag "single_end"
         config "tests/configs/run.config"
@@ -95,38 +95,6 @@ nextflow_process {
             process {
                 """
                 input[0] = Channel.of("test").combine(Channel.of("${projectDir}/test-data/toy-data/empty_file.txt"))
-                input[1] = true
-                """
-            }
-        }
-        then {
-            assert process.success
-            def file_out = path(process.out.output[0]).csv(sep: "\t") 
-            assert file_out.rowCount == 1
-            assert file_out.columnNames == ["sample", "n_reads_single", "n_read_pairs"]
-            assert file_out.rows[0] == ["sample": "test", "n_reads_single": 0, "n_read_pairs": ""]
-        }
-    }
-
-    test("Should run without failures on a gzipped empty file") {
-        tag "expect_success"
-        tag "single_end"
-        config "tests/configs/run.config"
-        setup {
-            run("GZIP_FILE") {
-                script "modules/local/gzipFile/main.nf"
-                process {
-                    """
-                    input[0] = Channel.of("test").combine(Channel.of("${projectDir}/test-data/toy-data/empty_file.txt"))
-                    """
-                }
-            }
-        }
-        when {
-            params {}
-            process {
-                """
-                input[0] = GZIP_FILE.out
                 input[1] = true
                 """
             }

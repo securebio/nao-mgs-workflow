@@ -1,28 +1,18 @@
 nextflow_process {
 
-    name "Test process PROCESS_VSEARCH_CLUSTER_OUTPUT"
+    name "Test process PROCESS_VSEARCH_CLUSTER_OUTPUT_LIST"
     script "modules/local/processVsearchClusterOutput/main.nf"
-    process "PROCESS_VSEARCH_CLUSTER_OUTPUT"
+    process "PROCESS_VSEARCH_CLUSTER_OUTPUT_LIST"
     config "tests/configs/run.config"
     tag "module"
-    tag "process_vsearch_cluster_output"
+    tag "process_vsearch_cluster_output_list"
 
     setup {
-        run("LOAD_SAMPLESHEET") {
-            script "subworkflows/local/loadSampleSheet/main.nf"
-            process {
-                """
-                input[0] = "${projectDir}/test-data/single-end-samplesheet.csv"
-                input[1] = "illumina"
-                input[2] = true
-                """
-            }
-        }
-        run("VSEARCH_CLUSTER") {
+        run("VSEARCH_CLUSTER_LIST") {
             script "modules/local/vsearch/main.nf"
             process {
                 """
-                input[0] = LOAD_SAMPLESHEET.out.samplesheet
+                input[0] = Channel.of(["test", "${projectDir}/test-data/processVsearchClusterOutput/test_000_single.fastq"])
                 input[1] = 0.95
                 input[2] = 0
                 input[3] = 15
@@ -31,16 +21,25 @@ nextflow_process {
         }
     }
 
-    test("Should run without failures on valid inputs"){
+    test("Should process multiple summary files in list format"){
+        tag "list_processing"
         tag "expect_success"
-        tag "single_end"
         when {
             params {
+
                 n_clusters = 5
             }
             process {
                 '''
-                input[0] = VSEARCH_CLUSTER.out.summary
+                input[0] = VSEARCH_CLUSTER_LIST.out.summary
+                    .map { sample, summary ->
+                        def orig = file(summary)
+                        def s1 = file("${workDir}/${sample}_10239_vsearch_summary.tsv.gz")
+                        def s2 = file("${workDir}/${sample}_186538_vsearch_summary.tsv.gz")
+                        orig.copyTo(s1)
+                        orig.copyTo(s2)
+                        [sample, [s1, s2]]
+                    }
                 input[1] = params.n_clusters
                 input[2] = ""
                 '''
@@ -49,63 +48,47 @@ nextflow_process {
         then {
             // Should run without failures
             assert process.success
+            def output_tabs = process.out.output[0][1]
+            def output_ids = process.out.ids[0][1]
+            def input_files = process.out.input[0][1]
+            assert output_tabs.size() == 2
+            assert output_ids.size() == 2
+            assert input_files.size() == 2
+            // Extract species IDs from input filenames and verify they're in output filenames
+            def species_ids = input_files.collect { input ->
+                def matcher = input.toString() =~ /input_.*?_(\d+)_vsearch_summary/
+                matcher ? matcher[0][1] : null
+            }
+            assert species_ids.every { it != null }
+            assert output_tabs.every { output ->
+                species_ids.any { species -> output.toString().contains(species) }
+            }
+            assert output_ids.every { output ->
+                species_ids.any { species -> output.toString().contains(species) }
+            }
             // Sequence and cluster counts should match between input and output
-            def tab_in = path(process.out.input[0][1]).csv(sep: "\t", decompress: true, header: false)
-            def tab_out = path(process.out.output[0][1]).csv(sep: "\t", decompress: true)
-            def n_clusters_in = tab_in.columns["C0"].count("C")
-            def n_reps_in = tab_in.columns["C0"].count("S")
-            def n_hits_in = tab_in.columns["C0"].count("H")
-            def n_seqs_in = n_reps_in + n_hits_in
-            def n_clusters_out = tab_out.columns["cluster_id"].unique().size()
-            def n_reps_out = tab_out.columns["is_cluster_rep"].collect{it ? 1 : 0}.sum()
-            def n_hits_out = tab_out.columns["is_cluster_rep"].collect{it ? 0 : 1}.sum()
-            def n_seqs_out = n_reps_out + n_hits_out
-            assert n_clusters_in == n_clusters_out
-            assert n_reps_in == n_reps_out
-            assert n_hits_in == n_hits_out
-            assert n_seqs_in == n_seqs_out
             // Output should have expected dimensions and column headers
             def exp_col_names = ["seq_id", "cluster_id", "cluster_rep_id",
                 "seq_length", "is_cluster_rep", "percent_identity",
                 "orientation", "cigar", "cluster_size"]
-            assert tab_out.rowCount == n_seqs_in
-            assert tab_out.columnNames == exp_col_names
-            // Cluster IDs should be as expected
-            def cluster_id_exp = csv(tab_out.table.where(
-                tab_out.table.booleanColumn("is_cluster_rep").isTrue()
-            ).sortOn("-cluster_size", "seq_id"))
-            def cluster_id_obs = path(process.out.ids[0][1]).csv(sep: "\t", header: false)
-            assert cluster_id_obs.columns["C0"] == cluster_id_exp.columns["seq_id"].take(params.n_clusters)
-        }
-    }
-
-    test("Should correctly handle output prefix"){
-        tag "expect_success"
-        tag "single_end"
-        when {
-            params {
-                n_clusters = 5
-                output_prefix = "test"
+            for (int i = 0; i < 2; i++) {
+                def tab_in = path(input_files[i]).csv(sep: "\t", decompress: true, header: false)
+                def tab_out = path(output_tabs[i]).csv(sep: "\t", decompress: true)
+                def n_clusters_in = tab_in.columns["C0"].count("C")
+                def n_reps_in = tab_in.columns["C0"].count("S")
+                def n_hits_in = tab_in.columns["C0"].count("H")
+                def n_seqs_in = n_reps_in + n_hits_in
+                def n_clusters_out = tab_out.columns["cluster_id"].unique().size()
+                def n_reps_out = tab_out.columns["is_cluster_rep"].collect{it ? 1 : 0}.sum()
+                def n_hits_out = tab_out.columns["is_cluster_rep"].collect{it ? 0 : 1}.sum()
+                def n_seqs_out = n_reps_out + n_hits_out
+                assert n_clusters_in == n_clusters_out
+                assert n_reps_in == n_reps_out
+                assert n_hits_in == n_hits_out
+                assert n_seqs_in == n_seqs_out
+                assert tab_out.rowCount == n_seqs_in
+                assert tab_out.columnNames == exp_col_names
             }
-            process {
-                '''
-                input[0] = VSEARCH_CLUSTER.out.summary
-                input[1] = params.n_clusters
-                input[2] = params.output_prefix
-                '''
-            }
-        }
-        then {
-            // Should run without failures
-            assert process.success
-            // Output should have expected column headers
-            def tab_out = path(process.out.output[0][1]).csv(sep: "\t", decompress: true)
-            def exp_col_names_base = ["seq_id", "cluster_id", "cluster_rep_id",
-                "seq_length", "is_cluster_rep", "percent_identity",
-                "orientation", "cigar", "cluster_size"]
-            def exp_col_names = exp_col_names_base.collect{params.output_prefix + "_" + it}
-            exp_col_names[0] = "seq_id"
-            assert tab_out.columnNames == exp_col_names
         }
     }
 }

@@ -71,102 +71,6 @@ nextflow_workflow {
     test("Should run without failures on Bowtie2 output") {
         tag "expect_success"
         tag "bowtie2"
-        setup {
-            run("LOAD_SAMPLESHEET") {
-                script "subworkflows/local/loadSampleSheet/main.nf"
-                process {
-                    """
-                    input[0] = "${projectDir}/test-data/samplesheet.csv"
-                    input[1] = "illumina"
-                    input[2] = false
-                    """
-                }
-            }
-            run("INTERLEAVE_FASTQ") {
-                script "modules/local/interleaveFastq/main.nf"
-                process {
-                    '''
-                    input[0] = LOAD_SAMPLESHEET.out.samplesheet
-                    '''
-                }
-            }
-            run("BOWTIE2") {
-                    script "modules/local/bowtie2/main.nf"
-                    process {
-                        '''
-                        def params_map = [
-                            par_string: "--local --very-sensitive-local --score-min G,0.1,19 -k 10",
-                            suffix: "virus",
-                            remove_sq: true,
-                            debug: false,
-                            interleaved: true,
-                            db_download_timeout: params.db_download_timeout
-                        ]
-                        input[0] = INTERLEAVE_FASTQ.out.output 
-                        input[1] = "${params.ref_dir}/results/bt2-virus-index"
-                        input[2] = params_map
-                        '''
-                    }
-            }
-            run("SORT_FILE") {
-                script "modules/local/sortFile/main.nf"
-                process {
-                    '''
-                    input[0] = BOWTIE2.out.sam
-                    input[1] = "-t\\$\'\\t\' -k1,1"
-                    input[2] = "sam"
-                    '''
-                }
-            }
-            run("SORT_FASTQ"){
-                script "modules/local/sortFastq/main.nf"
-                process {
-                    '''
-                    input[0] = INTERLEAVE_FASTQ.out.output
-                    '''
-                }
-
-            }
-            run("FILTER_VIRAL_SAM"){
-                script "modules/local/filterViralSam/main.nf"
-                process {
-                    '''
-                    input[0] = SORT_FILE.out.output.combine(SORT_FASTQ.out.output, by: 0)
-                    input[1] = 5
-                    '''
-                }
-            }
-            run("PROCESS_VIRAL_BOWTIE2_SAM") {
-                script "modules/local/processViralBowtie2Sam/main.nf"
-                process {
-                    '''
-                    input[0] = FILTER_VIRAL_SAM.out.sam
-                    input[1] = "${params.ref_dir}/results/virus-genome-metadata-gid.tsv.gz"
-                    input[2] = "${params.ref_dir}/results/total-virus-db-annotated.tsv.gz"
-                    input[3] = true
-                    '''
-                }
-            }
-            run("LCA_TSV") {
-                script "modules/local/lcaTsv/main.nf"
-                process {
-                    '''
-                    def params_map = [
-                        group_field: "seq_id",
-                        taxid_field: "taxid",
-                        score_field: "length_normalized_score",
-                        taxid_artificial: "12908",
-                        prefix: "aligner"
-                    ]
-                    input[0] = PROCESS_VIRAL_BOWTIE2_SAM.out.output
-                    input[1] = "${params.ref_dir}/results/taxonomy-nodes.dmp"
-                    input[2] = "${params.ref_dir}/results/taxonomy-names.dmp"
-                    input[3] = params_map
-                    '''
-                }
-            }
-
-        }
         when {
             params {
                 col_keep_no_prefix = ["seq_id", "sample", "aligner_taxid_lca"]
@@ -175,8 +79,8 @@ nextflow_workflow {
             }
             workflow {
                 """
-                input[0] = LCA_TSV.out.output
-                input[1] = PROCESS_VIRAL_BOWTIE2_SAM.out.output
+                input[0] = Channel.of(["test", "${projectDir}/test-data/processLcaAlignerOutput/lca_bowtie.tsv"])
+                input[1] = Channel.of(["test", "${projectDir}/test-data/processLcaAlignerOutput/tab_bowtie.tsv"])
                 input[2] = params.col_keep_no_prefix
                 input[3] = params.col_keep_add_prefix
                 input[4] = params.column_prefix
@@ -212,81 +116,6 @@ nextflow_workflow {
     test("Should run without failures on Minimap2 output") {
         tag "expect_success"
         tag "minimap2"
-        setup {
-            run("LOAD_SAMPLESHEET") {
-                script "subworkflows/local/loadSampleSheet/main.nf"
-                process {
-                    """
-                    input[0] = "${projectDir}/test-data/ont-samplesheet.csv"
-                    input[1] = "ont"
-                    input[2] = false
-                    """
-                }
-            }
-            run("INTERLEAVE_FASTQ") {
-                script "modules/local/interleaveFastq/main.nf"
-                process {
-                    '''
-                    input[0] = LOAD_SAMPLESHEET.out.samplesheet
-                    '''
-                }
-            }
-            run("MINIMAP2") {
-                    script "modules/local/minimap2/main.nf"
-                    process {
-                        '''
-                        def params_map = [
-                            suffix: "virus",
-                            remove_seq: false,
-                            alignment_params: "-N 10", 
-                            db_download_timeout: params.db_download_timeout
-                        ]
-                        input[0] = INTERLEAVE_FASTQ.out.output 
-                        input[1] = "${params.ref_dir}/results/mm2-virus-index"
-                        input[2] = params_map
-                        '''
-                    }
-                }
-            run("PROCESS_VIRAL_MINIMAP2_SAM") {
-                script "modules/local/processViralMinimap2Sam/main.nf"
-                process {
-                    '''
-                    input[0] = MINIMAP2.out.sam.join(INTERLEAVE_FASTQ.out.output)
-                    input[1] = "${params.ref_dir}/results/virus-genome-metadata-gid.tsv.gz"
-                    input[2] = "${params.ref_dir}/results/total-virus-db-annotated.tsv.gz"
-                    '''
-                }
-            }
-            run("SORT_TSV") {
-                script "modules/local/sortTsv/main.nf"
-                process {
-                    '''
-                    input[0] = PROCESS_VIRAL_MINIMAP2_SAM.out.output
-                    input[1] = "seq_id"
-                    '''
-                }
-
-            }
-            run("LCA_TSV") {
-                script "modules/local/lcaTsv/main.nf"
-                process {
-                    '''
-                    def params_map = [
-                        group_field: "seq_id",
-                        taxid_field: "taxid",
-                        score_field: "length_normalized_score", 
-                        taxid_artificial: "12908",
-                        prefix: "aligner"
-                    ]
-                    input[0] = SORT_TSV.out.sorted
-                    input[1] = "${params.ref_dir}/results/taxonomy-nodes.dmp"
-                    input[2] = "${params.ref_dir}/results/taxonomy-names.dmp"
-                    input[3] = params_map
-                    '''
-                }
-            }
-
-        }
         when {
             params {
                 col_keep_no_prefix = ["seq_id", "sample", "aligner_taxid_lca"]
@@ -295,8 +124,8 @@ nextflow_workflow {
             }
             workflow {
                 """
-                input[0] = LCA_TSV.out.output
-                input[1] = SORT_TSV.out.sorted
+                input[0] = Channel.of(["test", "${projectDir}/test-data/processLcaAlignerOutput/lca_minimap.tsv"])
+                input[1] = Channel.of(["test", "${projectDir}/test-data/processLcaAlignerOutput/tab_minimap.tsv"])
                 input[2] = params.col_keep_no_prefix
                 input[3] = params.col_keep_add_prefix
                 input[4] = params.column_prefix
@@ -334,45 +163,6 @@ nextflow_workflow {
         tag "empty_input"
         tag "expect_success"
         
-        setup {
-            run("COPY_FILE_BARE", alias: "COPY_LCA_EMPTY") {
-                script "modules/local/copyFile/main.nf"
-                process {
-                    '''
-                    input[0] = "${projectDir}/test-data/toy-data/empty_file.txt"
-                    input[1] = "empty_lca.txt"
-                    '''
-                }
-            }
-            run("GZIP_FILE", alias: "GZIP_LCA_EMPTY") {
-                script "modules/local/gzipFile/main.nf"
-                process {
-                    '''
-                    input[0] = Channel.of("test")
-                        | combine(COPY_LCA_EMPTY.out)
-                    '''
-                }
-            }
-            run("COPY_FILE_BARE", alias: "COPY_BOWTIE_EMPTY") {
-                script "modules/local/copyFile/main.nf"
-                process {
-                    '''
-                    input[0] = "${projectDir}/test-data/toy-data/empty_file.txt"
-                    input[1] = "empty_bowtie.txt"
-                    '''
-                }
-            }
-            run("GZIP_FILE", alias: "GZIP_BOWTIE_EMPTY") {
-                script "modules/local/gzipFile/main.nf"
-                process {
-                    '''
-                    input[0] = Channel.of("test")
-                        | combine(COPY_BOWTIE_EMPTY.out)
-                    '''
-                }
-            }
-        }
-
         when {
             params {
                 col_keep_no_prefix = ["seq_id", "aligner_taxid_lca"]
@@ -381,8 +171,8 @@ nextflow_workflow {
             }
             workflow {
                 """
-                input[0] = GZIP_LCA_EMPTY.out
-                input[1] = GZIP_BOWTIE_EMPTY.out
+                input[0] = Channel.of(["test", "${projectDir}/test-data/toy-data/empty_file.txt"])
+                input[1] = Channel.of(["test", "${projectDir}/test-data/toy-data/empty_file.txt"])
                 input[2] = params.col_keep_no_prefix
                 input[3] = params.col_keep_add_prefix
                 input[4] = params.column_prefix
@@ -400,32 +190,12 @@ nextflow_workflow {
             assert outputLines == 0
         }
     }
+
     test("Should handle file with header only") {
         tag "empty_input"
         tag "header_only"
         tag "expect_success"
         
-        setup {
-            run("GZIP_FILE", alias: "GZIP_BOWTIE2_SAM_PROCESSED_HEADER_ONLY") {
-                script "modules/local/gzipFile/main.nf"
-                process {
-                    '''
-                    input[0] = Channel.of("test")
-                        | combine(Channel.of("${projectDir}/test-data/toy-data/process-lca-aligner/header-only-bowtie2-sam-processed.tsv"))
-                    '''
-                }
-            }
-            run("GZIP_FILE", alias: "GZIP_LCA_HEADER_ONLY") {
-                script "modules/local/gzipFile/main.nf"
-                process {
-                    '''
-                    input[0] = Channel.of("test")
-                        | combine(Channel.of("${projectDir}/test-data/toy-data/process-lca-aligner/header-only-lca.tsv"))
-                    '''
-                }
-            }
-        }
-
         when {
             params {
                 col_keep_no_prefix = ["seq_id", "aligner_taxid_lca", "aligner_taxid_top", 
@@ -444,8 +214,8 @@ nextflow_workflow {
             }
             workflow {
                 """
-                input[0] = GZIP_LCA_HEADER_ONLY.out
-                input[1] = GZIP_BOWTIE2_SAM_PROCESSED_HEADER_ONLY.out
+                input[0] = Channel.of(["test", "${projectDir}/test-data/processLcaAlignerOutput/header-only-lca.tsv"])
+                input[1] = Channel.of(["test", "${projectDir}/test-data/processLcaAlignerOutput/header-only-bowtie2-sam-processed.tsv"])
                 input[2] = params.col_keep_no_prefix
                 input[3] = params.col_keep_add_prefix
                 input[4] = params.column_prefix

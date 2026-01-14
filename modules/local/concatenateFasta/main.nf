@@ -13,33 +13,3 @@ process CONCATENATE_FASTA_GZIPPED {
         '''
 }
 
-// Concatenate gzipped FASTA files within a directory
-process CONCATENATE_FASTA_GZIPPED_DIR {
-    label "single"
-    label "coreutils"
-    input:
-        path(dir)
-        val(name)
-        val(suffix)
-    output:
-        path("${name}.fasta.gz")
-    shell:
-        '''
-        cat !{dir}/*.!{suffix} > !{name}.fasta.gz
-        '''
-}
-// Concatenate gzipped FASTA files within a directory of subdirectories
-process CONCATENATE_FASTA_GZIPPED_DIR_DEEP {
-    label "single"
-    label "coreutils"
-    input:
-        path(dir)
-        val(name)
-        val(suffix)
-    output:
-        path("${name}.fasta.gz")
-    shell:
-        '''
-        cat !{dir}/*/*.!{suffix} > !{name}.fasta.gz
-        '''
-}

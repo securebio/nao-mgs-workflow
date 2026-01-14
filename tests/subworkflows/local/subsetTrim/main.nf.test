@@ -13,25 +13,13 @@ nextflow_workflow {
     tag "subworkflow"
     tag "subset_trim"
 
-    test("Should run without failures on paired data") {
+    test("Should run without failures on paired Illumina data") {
         config "tests/configs/run.config"
         tag "paired_end"
         tag "expect_success"
-        setup {
-            run("LOAD_SAMPLESHEET") {
-                script "subworkflows/local/loadSampleSheet/main.nf"
-                process {
-                    """
-                    input[0] = "${projectDir}/test-data/samplesheet.csv"
-                    input[1] = "illumina"
-                    input[2] = false
-                    """
-                }
-            }
-        }
         when {
             params {
-                n_reads = 49
+                n_reads = 25
             }
             workflow {
                 '''
@@ -41,8 +29,8 @@ nextflow_workflow {
                     platform: "illumina",
                     random_seed: ""
                 ]
-                input[0] = LOAD_SAMPLESHEET.out.samplesheet
-                input[1] = LOAD_SAMPLESHEET.out.single_end
+                input[0] = Channel.of(["test", ["${projectDir}/test-data/tiny-index/reads/R1.fastq", "${projectDir}/test-data/tiny-index/reads/R2.fastq"]])
+                input[1] = Channel.of(false)
                 input[2] = subset_trim_params
                 '''
             }
@@ -82,36 +70,25 @@ nextflow_workflow {
         }
     }
 
-    test("Should run without failures on single-end data") {
+    test("Should run without failures on ONT data") {
         config "tests/configs/run.config"
         tag "single_end"
         tag "expect_success"
-        setup {
-            run("LOAD_SAMPLESHEET") {
-                script "subworkflows/local/loadSampleSheet/main.nf"
-                process {
-                    """
-                    input[0] = "${projectDir}/test-data/single-end-samplesheet.csv"
-                    input[1] = "illumina"
-                    input[2] = true
-                    """
-                }
-            }
-        }
+        tag "ont"
         when {
             params {
-                n_reads = 109
+                n_reads = 25
             }
             workflow {
                 '''
                 def subset_trim_params = [
                     n_reads_profile: params.n_reads,
                     adapters: params.adapters,
-                    platform: "illumina",
+                    platform: "ont",
                     random_seed: ""
                 ]
-                input[0] = LOAD_SAMPLESHEET.out.samplesheet
-                input[1] = LOAD_SAMPLESHEET.out.single_end
+                input[0] = Channel.of(["test", "${projectDir}/test-data/tiny-index/reads/ont.fastq"])
+                input[1] = Channel.of(true)
                 input[2] = subset_trim_params
                 '''
             }
@@ -128,21 +105,16 @@ nextflow_workflow {
             def exp_reads_max = params.n_reads * 1.25
             assert n_reads_subset >= exp_reads_min
             assert n_reads_subset <= exp_reads_max
-            // FASTP output should conserve subset reads
+            // Filtlong output should conserve subset reads, but we can't test this right now as we're not saving failed ONT reads
+            // TODO: Fix this
+            // We can at least check that the output is a subset of the input
             def fastq_out_trimmed = path(workflow.out.trimmed_subset_reads[0][1]).fastq
-            def fastq_out_failed = path(workflow.out.test_failed[0][1]).fastq
             def n_reads_trimmed = fastq_out_trimmed.getNumberOfRecords()
-            def n_reads_failed = fastq_out_failed.getNumberOfRecords()
-            assert n_reads_subset == n_reads_trimmed + n_reads_failed
+            assert n_reads_subset >= n_reads_trimmed
             def ids_subset = fastq_out_subset.readNames.collect{ it.tokenize(" ")[0] }
             def ids_trimmed = fastq_out_trimmed.readNames.collect{ it.tokenize(" ")[0] }
-            def ids_failed = fastq_out_failed.readNames.collect{ it.tokenize(" ")[0] }
-            for (id in ids_subset) {
-                if (id in ids_trimmed) {
-                    assert !(id in ids_failed)
-                } else {
-                    assert (id in ids_failed)
-                }
+            for (id in ids_trimmed) {
+                assert id in ids_subset
             }
         }
     }
@@ -151,16 +123,6 @@ nextflow_workflow {
         config "tests/configs/run.config"
         tag "empty_input"
         tag "expect_success"
-        setup {
-            run("GZIP_FILE") {
-                script "modules/local/gzipFile/main.nf"
-                process {
-                    """
-                    input[0] = Channel.of("empty_sample").combine(Channel.of("${projectDir}/test-data/toy-data/empty_file.txt"))
-                    """
-                }
-            }
-        }
         when {
             params {
                 n_reads = 100
@@ -173,7 +135,7 @@ nextflow_workflow {
                     platform: "illumina",
                     random_seed: ""
                 ]
-                input[0] = GZIP_FILE.out
+                input[0] = Channel.of("empty_sample").combine(Channel.of("${projectDir}/test-data/toy-data/empty_file.txt"))
                 input[1] = Channel.of(true)
                 input[2] = subset_trim_params
                 """

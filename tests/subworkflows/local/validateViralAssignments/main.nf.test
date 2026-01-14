@@ -11,33 +11,6 @@ nextflow_workflow {
     test("Should fail when input TSV contains duplicate read IDs") {
         tag "expect_failed"
         tag "duplicate_input"
-        setup {
-            run("LOAD_DOWNSTREAM_DATA") {
-                script "subworkflows/local/loadDownstreamData/main.nf"
-                process {
-                    """
-                    input[0] = "${projectDir}/test-data/downstream/input_file.csv"
-                    """
-                }
-            }
-            run("PREPARE_GROUP_TSVS") {
-                script "subworkflows/local/prepareGroupTsvs/main.nf"
-                process {
-                    '''
-                    input[0] = LOAD_DOWNSTREAM_DATA.out.input
-                    '''
-                }
-            }
-            run("COPY_FILE_BARE") {
-                script "modules/local/copyFile/main.nf"
-                process {
-                    '''
-                    input[0] = "${params.ref_dir}/results/total-virus-db-annotated.tsv.gz"
-                    input[1] = "virus-db.tsv.gz"
-                    '''
-                }
-            }
-        }
         when {
             params {
                 n_clusters = 3
@@ -57,8 +30,9 @@ nextflow_workflow {
                     taxid_artificial: params.taxid_artificial,
                     db_download_timeout: params.db_download_timeout
                 ]
-                input[0] = PREPARE_GROUP_TSVS.out.groups // groups
-                input[1] = COPY_FILE_BARE.out // db
+                input[0] = Channel.of("test")
+                    | combine(Channel.of("${projectDir}/test-data/validateViralAssignments/input_duplicate.tsv")) // groups
+                input[1] = Channel.of("${params.ref_dir}/results/total-virus-db-annotated.tsv.gz") // db
                 input[2] = params.ref_dir
                 input[3] = validation_params
                 '''
@@ -74,33 +48,6 @@ nextflow_workflow {
 
     test("Should run without failures on valid input data") {
         tag "expect_success"
-        setup {
-            run("LOAD_DOWNSTREAM_DATA") {
-                script "subworkflows/local/loadDownstreamData/main.nf"
-                process {
-                    """
-                    input[0] = "${projectDir}/test-data/downstream/input_file_single.csv"
-                    """
-                }
-            }
-            run("PREPARE_GROUP_TSVS") {
-                script "subworkflows/local/prepareGroupTsvs/main.nf"
-                process {
-                    '''
-                    input[0] = LOAD_DOWNSTREAM_DATA.out.input
-                    '''
-                }
-            }
-            run("COPY_FILE_BARE") {
-                script "modules/local/copyFile/main.nf"
-                process {
-                    '''
-                    input[0] = "${params.ref_dir}/results/total-virus-db-annotated.tsv.gz"
-                    input[1] = "virus-db.tsv.gz"
-                    '''
-                }
-            }
-        }
         when {
             params {
                 n_clusters = 3
@@ -120,8 +67,9 @@ nextflow_workflow {
                     taxid_artificial: params.taxid_artificial,
                     db_download_timeout: params.db_download_timeout
                 ]
-                input[0] = PREPARE_GROUP_TSVS.out.groups // groups
-                input[1] = COPY_FILE_BARE.out // db
+                input[0] = Channel.of("test")
+                    | combine(Channel.of("${projectDir}/test-data/validateViralAssignments/input_valid.tsv")) // groups
+                input[1] = Channel.of("${params.ref_dir}/results/total-virus-db-annotated.tsv.gz") // db
                 input[2] = params.ref_dir
                 input[3] = validation_params
                 '''
@@ -201,7 +149,7 @@ nextflow_workflow {
             }
             // Propagation should work as expected (now working on group-level data)
             def tabs_propagate = workflow.out.test_propagate.collect{path(it[1]).csv(sep: "\t", decompress: true)}
-            def tabs_in = workflow.out.test_in.collect{path(it[1]).csv(sep: "\t",decompress: true)}
+            def tabs_in = workflow.out.test_in.collect{path(it[1]).csv(sep: "\t")}
             def concat_cluster = workflow.out.test_concat_cluster.collect{path(it[1]).csv(sep: "\t", decompress: true)}
             assert tabs_propagate.size() == tabs_validate.size()
             for (int i=0; i < tabs_propagate.size(); i++) {

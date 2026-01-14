@@ -6,37 +6,17 @@ nextflow_workflow {
     tag "subworkflow"
     tag "merge_join_reads"
 
-    test("Should run without failures on paired (interleaved) input") {
+    test("Should run without failures on interleaved input") {
         tag "expect_success"
         tag "interleaved"
         config "tests/configs/run.config"
-        setup {
-            run("LOAD_SAMPLESHEET") {
-                script "subworkflows/local/loadSampleSheet/main.nf"
-                process {
-                    """
-                    input[0] = "${projectDir}/test-data/samplesheet.csv"
-                    input[1] = "illumina"
-                    input[2] = false
-                    """
-                }
-            }
-            run("INTERLEAVE_FASTQ") {
-                script "modules/local/interleaveFastq/main.nf"
-                process {
-                    """
-                    input[0] = LOAD_SAMPLESHEET.out.samplesheet
-                    """
-                }
-            }
-        }
         when {
             params {
             }
             workflow {
                 '''
-                input[0] = INTERLEAVE_FASTQ.out.output
-                input[1] = LOAD_SAMPLESHEET.out.single_end
+                input[0] = Channel.of(["test", "${projectDir}/test-data/tiny-index/reads/interleaved.fastq"])
+                input[1] = Channel.of(false)
                 '''
             }
         }
@@ -62,33 +42,12 @@ nextflow_workflow {
         tag "expect_success"
         tag "single_end"
         config "tests/configs/run.config"
-        setup {
-            run("LOAD_SAMPLESHEET") {
-                script "subworkflows/local/loadSampleSheet/main.nf"
-                process {
-                    """
-                    input[0] = "${projectDir}/test-data/single-end-samplesheet.csv"
-                    input[1] = "illumina"
-                    input[2] = true
-                    """
-                }
-            }
-            run("COPY_FILE") {
-                script "modules/local/copyFile/main.nf"
-                process {
-                    """
-                    input[0] = LOAD_SAMPLESHEET.out.samplesheet
-                    input[1] = "reads.fastq.gz"
-                    """
-                }
-            }
-        }
         when {
             params {}
             workflow {
                 '''
-                input[0] = COPY_FILE.out
-                input[1] = LOAD_SAMPLESHEET.out.single_end
+                input[0] = Channel.of(["test", "${projectDir}/test-data/tiny-index/reads/R1.fastq"])
+                input[1] = Channel.of(true)
                 '''
             }
         }

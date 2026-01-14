@@ -11,6 +11,8 @@
     - Deleted extraneous tests for BOWTIE2 and CONCATENATE_FILES.
     - Created toy data files for several tests to reduce setup burden.
     - Added plaintext handling to BLAST process to help with testing
+    - Created custom tiny reference datasets and switched tests to use them for increased speed
+- Implemented code for generating and uploading containers to ECR Public, and replaced Wave container paths with ECR paths. Among other benefits, this allows us to run the entire test suite without running into pull-rate limit errors.
 
 # v3.0.1.7
 - Clarified testing documentation in `docs/developer.md`.

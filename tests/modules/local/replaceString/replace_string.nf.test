@@ -13,8 +13,8 @@ nextflow_process {
 
         when {
             params {
-                old_string = "gs3"
-                new_string = "gs4"
+                old_string = "tt3"
+                new_string = "tt4"
             }
             process {
                 """

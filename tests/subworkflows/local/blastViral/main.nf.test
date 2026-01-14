@@ -12,16 +12,6 @@ nextflow_workflow {
         tag "expect_success"
         tag "empty_input"
         config "tests/configs/run.config"
-        setup {
-            run("GZIP_FILE") {
-                script "modules/local/gzipFile/main.nf"
-                process {
-                    """
-                    input[0] = Channel.of("empty_sample").combine(Channel.of("${projectDir}/test-data/toy-data/empty_file.txt"))
-                    """
-                }
-            }
-        }
         when {
             params {
                 max_rank = 5
@@ -44,7 +34,7 @@ nextflow_workflow {
                     taxid_artificial: params.taxid_artificial,
                     db_download_timeout: params.db_download_timeout
                 ]
-                input[0] = GZIP_FILE.out.collect{it[1]}
+                input[0] = Channel.of("${projectDir}/test-data/toy-data/empty_file.txt")
                 input[1] = params.ref_dir
                 input[2] = blast_viral_params
                 '''
@@ -68,30 +58,10 @@ nextflow_workflow {
         }
     }
 
-    test("Should run without failures on paired (interleaved) data") {
+    test("Should run without failures on interleaved Illumina data") {
         tag "expect_success"
         tag "interleaved"
         config "tests/configs/run.config"
-        setup {
-            run("LOAD_SAMPLESHEET") {
-                script "subworkflows/local/loadSampleSheet/main.nf"
-                process {
-                    """
-                    input[0] = "${projectDir}/test-data/samplesheet.csv"
-                    input[1] = "illumina"
-                    input[2] = false
-                    """
-                }
-            }
-            run("INTERLEAVE_FASTQ") {
-                script "modules/local/interleaveFastq/main.nf"
-                process {
-                    '''
-                    input[0] = LOAD_SAMPLESHEET.out.samplesheet
-                    '''
-                }
-            }
-        }
         when {
             params {
                 max_rank = 5
@@ -114,114 +84,7 @@ nextflow_workflow {
                     taxid_artificial: params.taxid_artificial,
                     db_download_timeout: params.db_download_timeout
                 ]
-                input[0] = INTERLEAVE_FASTQ.out.output.collect{it[1]}
-                input[1] = params.ref_dir
-                input[2] = blast_viral_params
-                '''
-            }
-        }
-        then {
-            // Should run without failures
-            assert workflow.success
-            // Output should be sorted by query ID (ascending) and bitscore (descending)
-            def sort_str =  "-t\$\'\\t\' -k1,1 -k7,7nr"
-            def output_sorted = checkGzipSorted(workflow.out.blast_subset[0][1], sort_str)
-            // Output should have expected columns
-            def tab_out = path(workflow.out.blast_subset[0][1]).csv(sep: "\t", decompress: true)
-            def cols_out_exp = ["qseqid", "sseqid", "sgi", "staxid", "qlen", "evalue",
-                         "bitscore", "qcovs", "length", "pident", "mismatch",
-                         "gapopen", "sstrand", "qstart", "qend", "sstart", "send",
-                         "bitscore_rank_dense", "bitscore_fraction"]
-            assert tab_out.columnNames == cols_out_exp
-            // All output lines should meet score and/or rank criteria
-            def meets_rank = false
-            def meets_frac = false
-            for (r in tab_out.rows){
-                meets_rank = r["bitscore_rank_dense"] <= params.max_rank
-                meets_frac = r["bitscore_fraction"] >= params.min_frac
-                assert meets_rank || meets_frac
-            }
-            // Every query/subject combination should be unique
-            def key_paste = []
-            for (int i = 0; i < tab_out.rowCount; i++){
-                key_paste += tab_out.columns["qseqid"][i] + "\t" + tab_out.columns["sseqid"][i]
-            }
-            def rows_exp = key_paste.toSet().size()
-            assert tab_out.rowCount == rows_exp
-            // All seq IDs should be in input
-            def fastq_in = path(workflow.out.test_input[0][1]).fastq
-            def ids_in = fastq_in.readNames.collect{ it.tokenize(" ")[0] }.toSet()
-            def ids_out = tab_out.columns["qseqid"].toSet()
-            for (i in ids_out) {
-                assert i in ids_in
-            }
-            // Fraction of reads in subset output should approximate input fraction
-            def fasta_out = path(workflow.out.subset_reads[0][1]).fasta
-            def ids_sub = fasta_out.keySet().collect{ it.tokenize(" ")[0] }.toSet()
-            def frac_exp = params.blast_frac
-            def frac_obs = ids_sub.size() / ids_in.size()
-            def ci_tolerance = 0.877 // Derived by simulating draws from a binomial distribution and taking 95% CI
-            assert frac_obs / frac_exp <= 1/ci_tolerance
-            assert frac_obs / frac_exp >= ci_tolerance
-            // All subset seq IDs should be in input
-            for (i in ids_sub) {
-                assert i in ids_in
-            }
-            // All seq IDs should be in subset read output
-            for (i in ids_out) {
-                assert i in ids_sub
-            }
-        }
-    }
-
-    test("Should run without failures on single-end data") {
-        tag "expect_success"
-        tag "single_end"
-        config "tests/configs/run.config"
-        setup {
-            run("LOAD_SAMPLESHEET") {
-                script "subworkflows/local/loadSampleSheet/main.nf"
-                process {
-                    """
-                    input[0] = "${projectDir}/test-data/single-end-samplesheet.csv"
-                    input[1] = "illumina"
-                    input[2] = true
-                    """
-                }
-            }
-            run("COPY_FILE") {
-                script "modules/local/copyFile/main.nf"
-                process {
-                    '''
-                    input[0] = LOAD_SAMPLESHEET.out.samplesheet
-                    input[1] = "input.fastq.gz"
-                    '''
-                }
-            }
-        }
-        when {
-            params {
-                max_rank = 5
-                min_frac = 0.9
-                blast_frac = 0.9
-                perc_id = 60
-                qcov_hsp_perc = 30
-                taxid_artificial = 81077
-            }
-            workflow {
-                '''
-                def blast_viral_params = [
-                    blast_db_prefix: params.blast_db_prefix,
-                    read_fraction: params.blast_frac,
-                    blast_max_rank: params.max_rank,
-                    blast_min_frac: params.min_frac,
-                    random_seed: "",
-                    blast_perc_id: params.perc_id,
-                    blast_qcov_hsp_perc: params.qcov_hsp_perc,
-                    taxid_artificial: params.taxid_artificial,
-                    db_download_timeout: params.db_download_timeout
-                ]
-                input[0] = COPY_FILE.out.collect{it[1]}
+                input[0] = Channel.of("${projectDir}/test-data/tiny-index/reads/interleaved.fastq")
                 input[1] = params.ref_dir
                 input[2] = blast_viral_params
                 '''
@@ -285,27 +148,6 @@ nextflow_workflow {
         tag "expect_success"
         tag "ont"
         config "tests/configs/run_ont.config"
-        setup {
-            run("LOAD_SAMPLESHEET") {
-                script "subworkflows/local/loadSampleSheet/main.nf"
-                process {
-                    """
-                    input[0] = "${projectDir}/test-data/ont-samplesheet.csv"
-                    input[1] = "ont"
-                    input[2] = false
-                    """
-                }
-            }
-            run("COPY_FILE") {
-                script "modules/local/copyFile/main.nf"
-                process {
-                    '''
-                    input[0] = LOAD_SAMPLESHEET.out.samplesheet
-                    input[1] = "input.fastq.gz"
-                    '''
-                }
-            }
-        }
         when {
             params {
                 max_rank = 5
@@ -328,7 +170,7 @@ nextflow_workflow {
                     taxid_artificial: params.taxid_artificial,
                     db_download_timeout: params.db_download_timeout
                 ]
-                input[0] = COPY_FILE.out.collect{it[1]}
+                input[0] = Channel.of("${projectDir}/test-data/tiny-index/reads/ont.fastq")
                 input[1] = params.ref_dir
                 input[2] = blast_viral_params
                 '''

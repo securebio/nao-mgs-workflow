@@ -1,3 +1,0 @@
-percent_gc	mean_seq_len	n_reads_single	n_read_pairs	percent_duplicates	n_bases_approx	per_base_sequence_quality	per_sequence_quality_scores	per_base_sequence_content	per_sequence_gc_content	per_base_n_content	sequence_length_distribution	sequence_duplication_levels	overrepresented_sequences	adapter_content	per_tile_sequence_quality	stage	sample
-46	150.24761904761905	210	105	4.285714285714278	31500	pass	pass	fail	fail	pass	warn	pass	fail	fail	NA	raw	gold_standard
-47	145.31764705882352	170	85	7.058823529411768	24700	pass	pass	fail	fail	pass	warn	pass	fail	pass	NA	cleaned	gold_standard
