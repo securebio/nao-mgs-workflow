@@ -54,29 +54,29 @@ process SUBSET_READS_SINGLE_TARGET {
         tuple val(sample), path("subset_${reads}"), emit: output
         tuple val(sample), path("input_${reads}"), emit: input
     script:
-        def in = reads
-        def out = "subset_${reads}"
-        def extractCmd = in.toString().endsWith(".gz") ? "zcat" : "cat"
-        def compressCmd = in.toString().endsWith(".gz") ? "gzip" : "cat"
+        def in1 = reads
+        def out1 = "subset_${reads}"
+        def extractCmd = in1.toString().endsWith(".gz") ? "zcat" : "cat"
+        def compressCmd = in1.toString().endsWith(".gz") ? "gzip" : "cat"
         """
         # Count reads and compute target fraction
-        n_reads=\$(${extractCmd} ${in} | wc -l | awk '{ print \$1/4 }')
+        n_reads=\$(${extractCmd} ${in1} | wc -l | awk '{ print \$1/4 }')
         echo "Input reads: \${n_reads}"
         echo "Target reads: ${readTarget}"
         if (( \${n_reads} <= ${readTarget} )); then
             echo "Target larger than input; returning all reads."
-            cp ${in} ${out}
+            cp ${in1} ${out1}
         else
             frac=\$(awk -v a=\${n_reads} -v b=${readTarget} 'BEGIN {result = b/a; print (result > 1) ? 1.0 : result}')
             echo "Read fraction for subsetting: \${frac}"
             # Carry out subsetting
             rseed=${randomSeed == "" ? "\$RANDOM" : randomSeed}
             echo "Random seed: \${rseed}"
-            seqtk sample -s \${rseed} ${in} \${frac} | ${compressCmd} > ${out}
+            seqtk sample -s \${rseed} ${in1} \${frac} | ${compressCmd} > ${out1}
         fi
         # Count reads for validation
-        echo "Output reads: \$(${extractCmd} ${out} | wc -l | awk '{ print \$1/4 }')"
+        echo "Output reads: \$(${extractCmd} ${out1} | wc -l | awk '{ print \$1/4 }')"
         # Link input to output for testing
-        ln -s ${in} input_${in}
+        ln -s ${in1} input_${in1}
         """
 }

@@ -24,12 +24,29 @@ fi
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR/.." || exit 1
 
-# nf-test needs root privileges to access test files created by Docker.
-# We use sudo and pass along PATH, HOME, and AWS credentials to ensure
-# nf-test and its dependencies are found and AWS access is preserved.
-sudo env \
-  PATH="${PATH}" \
-  HOME="${HOME}" \
-  AWS_ACCESS_KEY_ID="${AWS_ACCESS_KEY_ID}" \
-  AWS_SECRET_ACCESS_KEY="${AWS_SECRET_ACCESS_KEY}" \
+# Check if --num-workers flag is present
+use_parallel=false
+for arg in "$@"; do
+  if [[ "$arg" == "--num-workers" ]]; then
+    use_parallel=true
+    break
+  fi
+done
+
+# Run tests and fix ownership of files created by Docker.
+# Docker creates files as root, so we use sudo to change ownership back to the user.
+# We temporarily disable exit-on-error to ensure cleanup happens regardless of test results.
+set +e
+if [[ "$use_parallel" == "true" ]]; then
+  python3 bin/run_nf_test_parallel.py "$@"
+  exit_code=$?
+else
   nf-test test "$@"
+  exit_code=$?
+fi
+set -e
+
+# Fix ownership of test artifacts created by Docker
+sudo chown -R "$(id -u):$(id -g)" .nf-test
+
+exit $exit_code

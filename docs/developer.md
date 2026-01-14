@@ -192,12 +192,12 @@ To run the tests locally, you need to make sure that you have a powerful enough 
 > eval "$(aws configure export-credentials --format env)"
 > ```
 
-In running tests, we don't recommend calling `nf-test test` directly, as this can easily run into issues with permissions and environment configuration. Instead, we recommend using `bin/run-nf-tesh.sh` (for serial execution) or `bin/run-nf-test-parallel.sh` (for parallel execution), which wrap `nf-test` with the necessary `sudo` permissions and environment variables. Due to the overhead associated with parallelization, we only recommend `run-nf-test-parallel.sh` for running large portions of the test suite.
+In running tests, we don't recommend calling `nf-test test` directly, as this can easily run into issues with permissions and environment configuration. Instead, we recommend using `bin/run-nf-test.sh`, which wraps `nf-test` with the necessary `sudo` permissions and environment variables. For parallel execution, use the `--num-workers` flag. Due to the overhead associated with parallelization, we only recommend parallel execution for running large portions of the test suite.
 
 ```
 bin/run-nf-test.sh tests/main.test.nf # Runs all tests in the main.test.nf file
-bin/run-nf-test-parallel.sh 8 tests # Runs all tests in parallel across 8 threads.
-bin/run-nf-test-parallel.sh 8 tests --tag expect_failure # Run failure tests only across 8 threads
+bin/run-nf-test.sh --num-workers 8 tests # Runs all tests in parallel across 8 threads.
+bin/run-nf-test.sh --num-workers 8 tests --tag expect_failure # Run failure tests only across 8 threads
 ```
 
 After tests finish, you should clean up by running `bin/clean-nf-test.sh`.
