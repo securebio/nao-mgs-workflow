@@ -84,7 +84,7 @@ nextflow_workflow {
                     taxid_artificial: params.taxid_artificial,
                     db_download_timeout: params.db_download_timeout
                 ]
-                input[0] = Channel.of("${projectDir}/test-data/tiny-index/reads/interleaved.fastq")
+                input[0] = INTERLEAVE_FASTQ.out.output.collect{it[1]}
                 input[1] = params.ref_dir
                 input[2] = blast_viral_params
                 '''
