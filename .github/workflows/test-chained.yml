@@ -1,4 +1,4 @@
-name: Integration Test (Chain Workflows)
+name: Nextflow integration test (chain workflows)
 
 on:
   pull_request:
