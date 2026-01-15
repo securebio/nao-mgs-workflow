@@ -272,7 +272,7 @@ def main() -> None:
             },
             workflow_name="RUN",
             profile=args.profile,
-            resume=args.resume
+            resume=not args.no_resume
         )
     else:
         logger.info("Skipping RUN workflow")
@@ -299,7 +299,7 @@ def main() -> None:
             },
             workflow_name="DOWNSTREAM",
             profile=args.profile,
-            resume=args.resume
+            resume=not args.no_resume
         )
     else:
         logger.info("Skipping DOWNSTREAM workflow")
