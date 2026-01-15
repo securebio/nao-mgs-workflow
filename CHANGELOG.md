@@ -1,4 +1,7 @@
 # v3.0.1.8-dev
+- Added similarity-based duplicate marking tool in `post-processing/`:
+    - New Rust tool (`rust_dedup/`) for similarity-based duplicate detection to supplement alignment-based deduplication
+    - Uses nao-dedup library (added as git submodule in `post-processing/deps/nao_dedup/`)
 - Pruning and streamlining testing for easier releases:
     - Separated downloading part of JOIN_RIBO_REF into a separate WGET process, and tested both parts separately
     - Moved ADD_CONDITIONAL_TSV_COLUMN to Python and implemented pytest tests.

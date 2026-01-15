@@ -1,0 +1,13 @@
+[package]
+name = "rust_dedup"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "similarity_duplicate_marking"
+path = "src/similarity_duplicate_marking.rs"
+
+[dependencies]
+nao_dedup = { path = "../deps/nao_dedup" }
+flate2 = "1.0"
+anyhow = "1.0"

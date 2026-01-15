@@ -9,6 +9,10 @@ requires-python = ">=3.12"
 dependencies = [
     "biopython>=1.85",
     "mypy>=1.18.1",
+    # Needed until https://github.com/securebio/nao-dedup/pull/12 has been
+    # merged and we've updated post-processing/nao-dedup/ to depend on the
+    # no-python version.
+    "networkx",
     "pandas>=2.3.2",
     "pytest>=8.4.2",
     "ruff>=0.13.0",
@@ -18,9 +22,15 @@ dependencies = [
 packages = []
 
 # Tool configurations below:
-# - [tool.mypy]: Type checking configuration  
+# - [tool.mypy]: Type checking configuration
 # - [tool.ruff]: Linting and formatting configuration
-# - pytest configuration would go in [tool.pytest.ini_options] (none currently)
+# - [tool.pytest.ini_options]: Pytest configuration
+
+[tool.pytest.ini_options]
+norecursedirs = [
+    # Exclude dependencies from test discovery
+    "post-processing/deps",
+]
 
 [tool.mypy]
 python_version = 3.12
