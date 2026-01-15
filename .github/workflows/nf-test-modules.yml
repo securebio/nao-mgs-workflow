@@ -61,6 +61,7 @@ jobs:
       - name: Run index workflow
         run: bin/run-nf-test.sh --num-workers 16 tests/modules --output-log test-logs-modules.txt
       - name: Upload test results
+        if: failure()
         uses: actions/upload-artifact@v4
         with:
           name: test-logs-modules
