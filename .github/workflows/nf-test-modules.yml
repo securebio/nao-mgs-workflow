@@ -25,6 +25,8 @@ jobs:
       AWS_ACCESS_KEY_ID: ${{secrets.NAO_TESTING_ACCESS_KEY }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.NAO_TESTING_SECRET_ACCESS_KEY }}
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
       - name: Setup nf-test environment
         uses: ./.github/actions/setup-nf-test
         with:
