@@ -12,13 +12,13 @@ stage as inputs to the next via S3 paths.
 
 import argparse
 import logging
-import os
 import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional, List
+from typing import Optional
 import csv
 import boto3
+from botocore.exceptions import ClientError
 
 ###########
 # LOGGING #
@@ -70,7 +70,7 @@ def resolve_samplesheet_path(samplesheet: str, run_launch_dir: Path, repo_root: 
         s3_client = boto3.client('s3')
         try:
             s3_client.download_file(bucket, key, str(local_path))
-        except Exception as e:
+        except ClientError as e:
             raise RuntimeError(f"Failed to download samplesheet from S3: {e}")
 
         return local_path
@@ -204,9 +204,9 @@ def parse_arguments() -> argparse.Namespace:
         help="Nextflow profile to use (default: test_run)"
     )
     parser.add_argument(
-        "--resume",
-        action="store_false",
-        help="Resume from the last completed workflow (default: True)"
+        "--no-resume",
+        action="store_true",
+        help="Do not resume from the last completed workflow (default: False)"
     )
     parser.add_argument(
         "--run-id",
@@ -250,7 +250,7 @@ def main() -> None:
             params={"base_dir": index_base_dir},
             workflow_name="INDEX",
             profile=args.profile,
-            resume=args.resume
+            resume=not args.no_resume
         )
     else:
         logger.info("Skipping INDEX workflow")
