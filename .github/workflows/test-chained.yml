@@ -20,7 +20,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  integration-test:
+  integration-test-chained:
     runs-on: ubuntu-latest
     timeout-minutes: 90
     env:
