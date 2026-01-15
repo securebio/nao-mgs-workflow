@@ -1,0 +1,45 @@
+name: Integration Test (Chain Workflows)
+
+on:
+  pull_request:
+    branches:
+      - main
+      - stable
+      - ci-test
+    paths:
+      - 'tests/modules/**'
+      - 'modules/**'
+      - 'tests/subworkflows/**'
+      - 'subworkflows/**'
+      - 'tests/workflows/**
+      - 'workflows/**'
+      - 'bin/chain_workflows.py'
+
+concurrency:
+  group: ci-integration-test-pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  integration-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      AWS_ACCESS_KEY_ID: ${{secrets.NAO_TESTING_ACCESS_KEY }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.NAO_TESTING_SECRET_ACCESS_KEY }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup nf-test environment
+        uses: ./.github/actions/setup-nf-test
+        with:
+          aws_access_key_id: ${{ secrets.NAO_TESTING_ACCESS_KEY }}
+          aws_secret_access_key: ${{ secrets.NAO_TESTING_SECRET_ACCESS_KEY }}
+
+      - name: Install Python dependencies
+        run: |
+          pip install boto3
+
+      - name: Run chain workflows integration test
+        run: |
+          bin/chain_workflows.py
