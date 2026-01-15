@@ -176,14 +176,16 @@ fn main() -> Result<()> {
 
     writer.flush().context("Failed to flush output")?;
 
-    let elapsed = start_time.elapsed();
+    let elapsed = start_time.elapsed().as_secs();
     eprintln!("Done!");
+
+    let rem_after_align = n_reads - n_prim_align_dups;
+    let final_exemplars = rem_after_align - n_sim_dups;
     eprintln!(
-        "Marked similarity duplicates processing {} reads in {}s, of which {} \
-        were already non-exemplars via alignment and {} were additionally \
-        recognized as non-exemplars via similarity.",
-        n_reads, elapsed.as_secs(), n_prim_align_dups, n_sim_dups
-    );
+        "Processed {n_reads} reads in {elapsed}s. \
+         Retained {rem_after_align} exemplars after alignment checks, \
+         further reduced to {final_exemplars} via similarity marking."
+            );
 
     Ok(())
 }
