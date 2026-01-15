@@ -1,0 +1,68 @@
+name: nf-test modules test
+
+on:
+  pull_request:
+    branches:
+      - main
+      - dev
+      - stable
+      - ci-test
+    paths:
+      - 'tests/modules/**'
+      - 'modules/**'
+
+concurrency:
+  group: ci-nf-test-modules-pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  test-modules:
+    runs-on:
+      groups: ubuntu-larger
+      labels: ubuntu-16
+    timeout-minutes: 15
+    env:
+      AWS_ACCESS_KEY_ID: ${{secrets.NAO_TESTING_ACCESS_KEY }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.NAO_TESTING_SECRET_ACCESS_KEY }}
+    steps:
+      - name: Maximize build space
+        run: |
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /opt/hostedtoolcache/CodeQL
+          sudo docker image prune --all --force
+          sudo docker builder prune --all --force
+          sudo apt-get remove -y '^aspnetcore-.*' '^dotnet-.*' '^llvm-.*' 'php.*' '^mongodb-.*' '^mysql-.*' azure-cli google-chrome-stable firefox powershell mono-devel libgl1-mesa-dri
+          sudo apt-get autoremove -y
+          sudo apt-get clean
+          df -h
+      - name: Configure AWS CLI
+        run: |
+          aws configure set aws_access_key_id ${{ secrets.NAO_TESTING_ACCESS_KEY }}
+          aws configure set aws_secret_access_key ${{ secrets.NAO_TESTING_SECRET_ACCESS_KEY }}
+          aws configure set default.region us-east-1
+      - name: Login to ECR Public
+        run: |
+          aws ecr-public get-login-password --region us-east-1 | docker login --username AWS --password-stdin public.ecr.aws
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+      - name: Setup Nextflow (25.10.0)
+        uses: nf-core/setup-nextflow@v1
+        with:
+          version: "25.10.0"
+      - name: Setup nf-test
+        uses: nf-core/setup-nf-test@v1
+      - name: Run index workflow
+        run: bin/run-nf-test.sh --num-workers 16 tests/modules --output-log test-logs-modules.txt
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-logs-modules
+          path: test-logs-modules.txt
+          retention-days: 2
