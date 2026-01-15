@@ -6,6 +6,13 @@ on:
       - main
       - dev
       - stable
+    paths:
+      - 'tests/modules/**'
+      - 'modules/**'
+
+concurrency:
+  group: ci-nf-test-modules-pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
 
 jobs:
   test-modules:
@@ -50,6 +57,11 @@ jobs:
           version: "25.10.0"
       - name: Setup nf-test
         uses: nf-core/setup-nf-test@v1
-
       - name: Run index workflow
-        run: bin/run-nf-test.sh --num-workers 16 tests/modules
+        run: bin/run-nf-test.sh --num-workers 16 tests/modules --output-log test-logs-modules.txt
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-logs-modules
+          path: test-logs-modules.txt
+          retention-days: 2
