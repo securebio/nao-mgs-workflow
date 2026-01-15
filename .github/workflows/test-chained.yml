@@ -11,7 +11,7 @@ on:
       - 'modules/**'
       - 'tests/subworkflows/**'
       - 'subworkflows/**'
-      - 'tests/workflows/**
+      - 'tests/workflows/**'
       - 'workflows/**'
       - 'bin/chain_workflows.py'
 
