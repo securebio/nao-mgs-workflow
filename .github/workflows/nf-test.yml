@@ -18,7 +18,7 @@ concurrency:
 jobs:
   test-modules:
     runs-on:
-      groups: ubuntu-larger
+      group: ubuntu-larger
       labels: ubuntu-16
     timeout-minutes: 15
     env:
