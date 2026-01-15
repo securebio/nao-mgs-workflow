@@ -1,0 +1,45 @@
+name: nf-test subworkflows test
+
+on:
+  pull_request:
+    branches:
+      - main
+      - dev
+      - stable
+      - ci-test
+    paths:
+      - 'tests/modules/**'
+      - 'modules/**'
+      - 'tests/subworkflows/**'
+      - 'subworkflows/**'
+
+concurrency:
+  group: ci-nf-test-subworkflows-pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  test-subworkflows:
+    runs-on:
+      group: ubuntu-larger
+      labels: ubuntu-16
+    timeout-minutes: 20
+    env:
+      AWS_ACCESS_KEY_ID: ${{secrets.NAO_TESTING_ACCESS_KEY }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.NAO_TESTING_SECRET_ACCESS_KEY }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup nf-test environment
+        uses: ./.github/actions/setup-nf-test
+        with:
+          aws_access_key_id: ${{ secrets.NAO_TESTING_ACCESS_KEY }}
+          aws_secret_access_key: ${{ secrets.NAO_TESTING_SECRET_ACCESS_KEY }}
+      - name: Run subworkflow tests
+        run: bin/run-nf-test.sh --num-workers 16 tests/subworkflows --output-log test-logs-subworkflows.txt
+      - name: Upload test results
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-logs-subworkflows
+          path: test-logs-subworkflows.txt
+          retention-days: 2

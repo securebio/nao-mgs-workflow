@@ -26,7 +26,7 @@ nextflow_process {
             }
         }
         then {
-            assert process.success
+            assert process.success // Basic success test
             def inputData = path("${projectDir}/test-data/toy-data/test_tab_single.tsv").csv(sep: "\t", decompress: false)
             def outputData = path(process.out.tsv[0][1]).csv(sep: "\t", decompress: false)
             assert outputData.rowCount == inputData.rowCount

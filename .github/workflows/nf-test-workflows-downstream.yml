@@ -1,0 +1,45 @@
+name: nf-test DOWNSTREAM workflow test
+
+on:
+  pull_request:
+    branches:
+      - main
+      - dev
+      - stable
+      - ci-test
+    paths:
+      - 'tests/modules/**'
+      - 'modules/**'
+      - 'tests/subworkflows/**'
+      - 'subworkflows/**'
+      - 'tests/workflows/downstream*'
+      - 'workflows/downstream*'
+
+concurrency:
+  group: ci-nf-test-workflows-downstream-pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  test-subworkflows:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      AWS_ACCESS_KEY_ID: ${{secrets.NAO_TESTING_ACCESS_KEY }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.NAO_TESTING_SECRET_ACCESS_KEY }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup nf-test environment
+        uses: ./.github/actions/setup-nf-test
+        with:
+          aws_access_key_id: ${{ secrets.NAO_TESTING_ACCESS_KEY }}
+          aws_secret_access_key: ${{ secrets.NAO_TESTING_SECRET_ACCESS_KEY }}
+      - name: Run workflow tests
+        run: bin/run-nf-test.sh --num-workers 4 tests/workflows/downstream.nf.test --output-log test-logs-workflows-downstream.txt
+      - name: Upload test results
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-logs-workflows-downstream
+          path: test-logs-workflows-downstream.txt
+          retention-days: 2
