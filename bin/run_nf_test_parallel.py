@@ -112,7 +112,8 @@ def execute_subprocess(cmd: List[str]) -> Tuple[int, str, str]:
 def run_nf_test_worker(worker_id: int,
                        test_files: List[Path],
                        total_workers: int,
-                       debug: bool) -> Tuple[int, int, str, str, str]:
+                       debug: bool,
+                       ci: bool) -> Tuple[int, int, str, str, str]:
     """
     Run nf-test on a specific set of test files.
     Args:
@@ -120,6 +121,7 @@ def run_nf_test_worker(worker_id: int,
         test_files: List of test files for this worker to run
         total_workers: Total number of workers
         debug: Whether to run in debug mode
+        ci: Whether to run nf-test in CI mode
     Returns:
         Tuple of (worker_id, exit_code, stdout, stderr, command_str)
     """
@@ -132,6 +134,8 @@ def run_nf_test_worker(worker_id: int,
     if debug:
         cmd.append("--debug")
         cmd.append("--verbose")
+    if ci:
+        cmd.append("--ci")
     cmd.extend([str(f) for f in test_files])
     cmd_str = " ".join(cmd)
 
@@ -247,7 +251,8 @@ def update_plugins() -> None:
 def run_parallel_tests(n_workers: int,
                        test_paths: List[str],
                        output_log: Path,
-                       debug: bool) -> int:
+                       debug: bool,
+                       ci: bool) -> int:
     """
     Run nf-test in parallel by distributing test files across workers.
     Args:
@@ -255,6 +260,7 @@ def run_parallel_tests(n_workers: int,
         test_paths: List of paths (files or directories) to search for tests
         output_log: Path to consolidated log file
         debug: Whether to run in debug mode (produces additional logging)
+        ci: Whether to run nf-test in CI mode
     Returns:
         Exit code (0 for success, 1 for failure)
     """
@@ -269,7 +275,7 @@ def run_parallel_tests(n_workers: int,
     update_plugins()
     worker_test_files = divide_test_files(test_files, n_workers)
     logger.info(f"Assigned test files to {n_workers} workers.")
-    worker_args = [(i, worker_test_files[i - 1], n_workers, debug) for i in range(1, n_workers + 1)]
+    worker_args = [(i, worker_test_files[i - 1], n_workers, debug, ci) for i in range(1, n_workers + 1)]
     with multiprocessing.Pool(processes=n_workers) as pool:
         results = pool.starmap(run_nf_test_worker, worker_args)
     failed_workers = [(wid, code, out, err, cmd) for wid, code, out, err, cmd in results if code != 0]
@@ -311,6 +317,11 @@ def parse_arguments() -> argparse.Namespace:
         action="store_true",
         help="Run in debug mode (produces additional logging)"
     )
+    parser.add_argument(
+        "--ci",
+        action="store_true",
+        help="Run nf-test in CI mode"
+    )
     args = parser.parse_args()
     if args.num_workers < 1:
         parser.error("--num-workers must be at least 1")
@@ -331,6 +342,7 @@ def main() -> None:
             test_paths=args.test_paths,
             output_log=args.output_log,
             debug=args.debug,
+            ci=args.ci,
         )
         sys.exit(exit_code)
     finally:
