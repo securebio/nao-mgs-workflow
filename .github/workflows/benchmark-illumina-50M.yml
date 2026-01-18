@@ -1,4 +1,4 @@
-name: Nextflow integration test (chain workflows)
+name: Benchmark test (Illumina 50M)
 
 on:
   pull_request:
@@ -16,13 +16,13 @@ on:
       - 'bin/chain_workflows.py'
 
 concurrency:
-  group: ci-integration-test-pr-${{ github.event.pull_request.number }}
+  group: benchmark-illumina-50M-pr-${{ github.event.pull_request.number }}
   cancel-in-progress: true
 
 jobs:
-  integration-test-chained:
+  benchmark-illumina-50M:
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 360
     env:
       AWS_ACCESS_KEY_ID: ${{secrets.NAO_TESTING_ACCESS_KEY }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.NAO_TESTING_SECRET_ACCESS_KEY }}
@@ -41,13 +41,16 @@ jobs:
         run: |
           pip install boto3
 
-      - name: Run chain workflows integration test
+      - name: Run benchmark workflow
         run: |
-          bin/chain_workflows.py --no-resume
+          bin/chain_workflows.py \
+            --ref-dir s3://nao-mgs-index/20250825/output/ \
+            --samplesheet s3://nao-testing/benchmarks/Illumina_50M/samplesheet.csv \
+            --launch-dir test_run_benchmark_50M \
+            --base-dir s3://nao-testing/mgs-workflow-test/benchmark-illumina-50M/
 
       - name: Cleanup Nextflow working directories
         if: always()
         run: |
-          cd test_run/index && nextflow clean -f || true
-          cd ../run && nextflow clean -f || true
+          cd test_run_benchmark_50M/run && nextflow clean -f || true
           cd ../downstream && nextflow clean -f || true
