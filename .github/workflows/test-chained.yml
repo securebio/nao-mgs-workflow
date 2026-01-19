@@ -43,11 +43,4 @@ jobs:
 
       - name: Run chain workflows integration test
         run: |
-          bin/chain_workflows.py --no-resume
-
-      - name: Cleanup Nextflow working directories
-        if: always()
-        run: |
-          aws s3 rm --recursive s3://nao-testing/mgs-workflow-test/index/work || true
-          aws s3 rm --recursive s3://nao-testing/mgs-workflow-test/run/work || true
-          aws s3 rm --recursive s3://nao-testing/mgs-workflow-test/downstream/work || true
+          bin/chain_workflows.py --no-resume --base-dir s3://nao-testing-scratch/mgs-workflow-test

@@ -47,10 +47,4 @@ jobs:
             --ref-dir s3://nao-mgs-index/20250825/output/ \
             --samplesheet s3://nao-testing/benchmarks/Illumina_50M/samplesheet.csv \
             --launch-dir test_run_benchmark_50M \
-            --base-dir s3://nao-testing/mgs-workflow-test/benchmark-illumina-50M/
-
-      - name: Cleanup Nextflow working directories
-        if: always()
-        run: |
-          aws s3 rm --recursive s3://nao-testing/mgs-workflow-test/benchmark-illumina-50M/run/work || true
-          aws s3 rm --recursive s3://nao-testing/mgs-workflow-test/benchmark-illumina-50M/downstream/work || true
+            --base-dir s3://nao-testing-scratch/mgs-workflow-test/benchmark-illumina-50M/
