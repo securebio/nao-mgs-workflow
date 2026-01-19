@@ -20,7 +20,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  test-subworkflows:
+  test-workflows-run:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
@@ -35,7 +35,7 @@ jobs:
           aws_access_key_id: ${{ secrets.NAO_TESTING_ACCESS_KEY }}
           aws_secret_access_key: ${{ secrets.NAO_TESTING_SECRET_ACCESS_KEY }}
       - name: Run workflow tests
-        run: bin/run-nf-test.sh --num-workers 4 tests/workflows/run.nf.test --output-log test-logs-workflows-run.txt
+        run: bin/run-nf-test.sh --num-workers 4 tests/workflows/run.nf.test --output-log test-logs-workflows-run.txt --ci
       - name: Upload test results
         if: failure()
         uses: actions/upload-artifact@v4

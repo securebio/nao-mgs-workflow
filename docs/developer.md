@@ -244,7 +244,9 @@ Unlike nf-test, `pytest` tests are very fast and cheap to run. Consequently, we 
 
 ### Automated testing
 
-We run a subset of tests automatically on each pull request using Github Actions, as specified by configuration files in `.github/workflows`. Currently, all `pytest` tests are run on each PR, along with select workflow-level nf-test tests. We also run [Trivy](https://trivy.dev/) on all containers used by the workflow to check for security vulnerabilities. 
+We run the full test suite automatically on each pull request using GitHub Actions with larger runners and parallelization, as specified by configuration files in `.github/workflows`. This includes all `pytest` tests and all `nf-test` tests (modules, subworkflows, and workflows). We also run [Trivy](https://trivy.dev/) on all containers used by the workflow to check for security vulnerabilities.
+
+Because the CI runs the complete test suite, **running tests locally before pushing is no longer required**. However, running relevant tests locally can still be useful for faster feedback during development, especially when iterating on a specific module or workflow. 
 
 ## GitHub issues
 We use [GitHub issues](https://github.com/naobservatory/mgs-workflow/issues) to track any issues with the pipeline: bugs, cleanup tasks, and desired new features. 
@@ -293,21 +295,17 @@ Feel free to use AI tools (Cursor, GitHub Copilot, Claude Code, etc.) to generat
 > During a release, new feature PRs are not merged into `dev`. Please check with a maintainer if a release is in progress.
 
 1. **Write new tests** for the changes that you make if those tests don't already exist. At the very least, these tests should check that the new implementation runs to completion; tests that also verify the output on the test dataset are strongly encouraged. As discussed above, we recommend writing end-to-end tests in `nf-test` and unit tests in language-specific testing libraries like `pytest`.
-2. **Run all relevant tests locally** and make sure they pass. "Relevant" means: 1) Any tests of any process or workflow modified by the PR; 2) Any tests for any workflows that source any such process or workflow, and 3) Any tests that use any such process or workflow in setup.
-    - For **nf-test**: You may run all existing tests as described in the "Testing" section above, or identify relevant tests by recursively grepping for the process name in the `workflows`, `subworkflows`, and `tests` directories.
-    - For **pytest**: If you modify Python scripts, run `pytest` on the corresponding test files to ensure unit tests pass.
-    - **Note which tests were run in your PR description.**
-    - If you make any changes that affect the output of the pipeline, list/describe the changes that occurred in the pull request. 
-3. **Update the `CHANGELOG.md` file** with the changes that you are making, and update the `pipeline-version.txt` and `pyproject.toml` file with the new version number.
+    - If you make any changes that affect the output of the pipeline, list/describe the changes that occurred in the pull request.
+2. **Update the `CHANGELOG.md` file** with the changes that you are making, and update the `pipeline-version.txt` and `pyproject.toml` file with the new version number.
     - More information on how to update the `CHANGELOG.md` file can be found [here](./versioning.md). Note that, before merging to `main`, version numbers should have the `-dev` suffix. This suffix should be used to denote development versions in `CHANGELOG.md`, `pipeline-version.txt`, and `pyproject.toml`, and should only be removed when preparing to merge to `main`.
-4. **Update the expected-output-{run,downstream}.txt files** with any changes to the output of the RUN or DOWNSTREAM workflows.
-5. **Pass automated tests on GitHub Actions**. These run automatically when you open a pull request.
-6. **Write a meaningful description** of your changes in the PR description and give it a meaningful title. 
-    - In comments, feel free to flag any open questions or places where you need careful review. 
-7. **Request review** from a maintainer on your changes. Current maintainers are jeffkaufman, willbradshaw, and katherine-stansifer. 
+3. **Update the expected-output-{run,downstream}.txt files** with any changes to the output of the RUN or DOWNSTREAM workflows.
+4. **Pass automated tests on GitHub Actions**. These run automatically when you open a pull request.
+5. **Write a meaningful description** of your changes in the PR description and give it a meaningful title.
+    - In comments, feel free to flag any open questions or places where you need careful review.
+6. **Request review** from a maintainer on your changes. Current maintainers are jeffkaufman, willbradshaw, and katherine-stansifer.
     - Make sure to assign the PR to the desired reviewer so that they see your PR (put them in the "Assignees" section on GitHub as well as in the "Reviewers" section).
         - If the reviewer is not satisfied and requests changes, they should then change the "Assignee" to be the person who originally submitted the code. This may result in a few loops of "Assignee" being switched between the reviewer and the author.
-8. To merge, you must **have an approving review** on your final changes, and all conversations must be resolved. After merging, please delete your branch!
+7. To merge, you must **have an approving review** on your final changes, and all conversations must be resolved. After merging, please delete your branch!
 
 ### Squash merging
 
