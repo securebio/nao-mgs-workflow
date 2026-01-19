@@ -22,7 +22,7 @@ concurrency:
 jobs:
   benchmark-illumina-50M:
     runs-on: ubuntu-latest
-    timeout-minutes: 360
+    timeout-minutes: 120
     env:
       AWS_ACCESS_KEY_ID: ${{secrets.NAO_TESTING_ACCESS_KEY }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.NAO_TESTING_SECRET_ACCESS_KEY }}
@@ -52,5 +52,5 @@ jobs:
       - name: Cleanup Nextflow working directories
         if: always()
         run: |
-          cd test_run_benchmark_50M/run && nextflow clean -f || true
-          cd ../downstream && nextflow clean -f || true
+          aws s3 rm --recursive s3://nao-testing/mgs-workflow-test/benchmark-illumina-50M/run/work || true
+          aws s3 rm --recursive s3://nao-testing/mgs-workflow-test/benchmark-illumina-50M/downstream/work || true

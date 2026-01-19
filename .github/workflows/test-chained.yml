@@ -48,6 +48,6 @@ jobs:
       - name: Cleanup Nextflow working directories
         if: always()
         run: |
-          cd test_run/index && nextflow clean -f || true
-          cd ../run && nextflow clean -f || true
-          cd ../downstream && nextflow clean -f || true
+          aws s3 rm --recursive s3://nao-testing/mgs-workflow-test/index/work || true
+          aws s3 rm --recursive s3://nao-testing/mgs-workflow-test/run/work || true
+          aws s3 rm --recursive s3://nao-testing/mgs-workflow-test/downstream/work || true
