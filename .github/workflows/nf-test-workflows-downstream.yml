@@ -58,3 +58,14 @@ jobs:
           name: test-logs-workflows-downstream
           path: test-logs-workflows-downstream.txt
           retention-days: 2
+
+  status-check:
+    needs: [check-changes, test-workflows-downstream]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check status
+        run: |
+          if [ "${{ needs.test-workflows-downstream.result }}" == "failure" ]; then
+            exit 1
+          fi
