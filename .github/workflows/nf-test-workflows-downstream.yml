@@ -7,20 +7,35 @@ on:
       - dev
       - stable
       - ci-test
-    paths:
-      - 'tests/modules/**'
-      - 'modules/**'
-      - 'tests/subworkflows/**'
-      - 'subworkflows/**'
-      - 'tests/workflows/downstream*'
-      - 'workflows/downstream*'
 
 concurrency:
   group: ci-nf-test-workflows-downstream-pr-${{ github.event.pull_request.number }}
   cancel-in-progress: true
 
 jobs:
+  check-changes:
+    runs-on: ubuntu-latest
+    outputs:
+      should_run: ${{ steps.filter.outputs.downstream }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Check for relevant changes
+        uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            downstream:
+              - 'tests/modules/**'
+              - 'modules/**'
+              - 'tests/subworkflows/**'
+              - 'subworkflows/**'
+              - 'tests/workflows/downstream*'
+              - 'workflows/downstream*'
+
   test-workflows-downstream:
+    needs: check-changes
+    if: needs.check-changes.outputs.should_run == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
