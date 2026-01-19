@@ -6,6 +6,9 @@ on:
       - main
       - dev
       - stable
+      - ci-test
+    paths:
+      - '**/*.py'
 
 jobs:
   pytest:
