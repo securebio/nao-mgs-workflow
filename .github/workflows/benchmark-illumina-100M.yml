@@ -1,19 +1,14 @@
 name: Benchmark test (Illumina 100M)
 
 on:
+  push:
+    branches:
+      - dev
   pull_request:
     branches:
       - main
       - stable
       - ci-test
-    paths:
-      - 'tests/modules/**'
-      - 'modules/**'
-      - 'tests/subworkflows/**'
-      - 'subworkflows/**'
-      - 'tests/workflows/**'
-      - 'workflows/**'
-      - 'bin/chain_workflows.py'
 
 concurrency:
   group: benchmark-illumina-100M-pr-${{ github.event.pull_request.number }}
@@ -31,17 +26,34 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Check for relevant changes
+        uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            relevant:
+              - 'tests/modules/**'
+              - 'modules/**'
+              - 'tests/subworkflows/**'
+              - 'subworkflows/**'
+              - 'tests/workflows/**'
+              - 'workflows/**'
+              - 'bin/chain_workflows.py'
+
       - name: Setup nf-test environment
+        if: steps.filter.outputs.relevant == 'true'
         uses: ./.github/actions/setup-nf-test
         with:
           aws_access_key_id: ${{ secrets.NAO_TESTING_ACCESS_KEY }}
           aws_secret_access_key: ${{ secrets.NAO_TESTING_SECRET_ACCESS_KEY }}
 
       - name: Install Python dependencies
+        if: steps.filter.outputs.relevant == 'true'
         run: |
           pip install boto3
 
       - name: Run benchmark workflow
+        if: steps.filter.outputs.relevant == 'true'
         run: |
           bin/chain_workflows.py \
             --ref-dir s3://nao-mgs-index/20250825/output/ \
