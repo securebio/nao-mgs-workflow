@@ -7,9 +7,6 @@ on:
       - dev
       - stable
       - ci-test
-    paths:
-      - 'tests/modules/**'
-      - 'modules/**'
 
 concurrency:
   group: ci-nf-test-modules-pr-${{ github.event.pull_request.number }}
@@ -27,15 +24,25 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+      - name: Check for relevant changes
+        uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            modules:
+              - 'tests/modules/**'
+              - 'modules/**'
       - name: Setup nf-test environment
+        if: steps.filter.outputs.modules == 'true'
         uses: ./.github/actions/setup-nf-test
         with:
           aws_access_key_id: ${{ secrets.NAO_TESTING_ACCESS_KEY }}
           aws_secret_access_key: ${{ secrets.NAO_TESTING_SECRET_ACCESS_KEY }}
       - name: Run module tests
+        if: steps.filter.outputs.modules == 'true'
         run: bin/run-nf-test.sh --num-workers 16 tests/modules --output-log test-logs-modules.txt
       - name: Upload test results
-        if: failure()
+        if: failure() && steps.filter.outputs.modules == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: test-logs-modules

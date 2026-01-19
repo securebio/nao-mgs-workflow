@@ -148,7 +148,8 @@ class TestRunNfTestWorker:
             worker_id=1,
             test_files=[],
             total_workers=3,
-            debug=False
+            debug=False,
+            ci=False
         )
         assert worker_id == 1
         assert exit_code == 0
@@ -169,7 +170,8 @@ class TestRunNfTestWorker:
             worker_id=1,
             test_files=test_files,
             total_workers=2,
-            debug=False
+            debug=False,
+            ci=False
         )
         assert worker_id == 1
         assert exit_code == expected_exit
@@ -180,22 +182,28 @@ class TestRunNfTestWorker:
         mock_execute.assert_called_once()
         assert mock_execute.call_args[0][0] == exp_call_args
 
+    @pytest.mark.parametrize("debug,ci,expected_flags", [
+        (True, False, ["--debug", "--verbose"]),
+        (False, True, ["--ci"]),
+        (True, True, ["--debug", "--verbose", "--ci"]),
+    ])
     @patch('run_nf_test_parallel.execute_subprocess')
-    def test_worker_with_debug(self, mock_execute):
-        """Test worker with debug mode."""
+    def test_worker_with_flags(self, mock_execute, debug, ci, expected_flags):
+        """Test worker with debug and CI mode flags."""
         mock_execute.return_value = (0, "test1", "test2")
         test_files = [Path("test1.nf.test"), Path("test2.nf.test")]
         worker_id, exit_code, stdout, stderr, cmd_str = run_nf_test_worker(
             worker_id=1,
             test_files=test_files,
             total_workers=2,
-            debug=True
+            debug=debug,
+            ci=ci
         )
         assert worker_id == 1
         assert exit_code == 0
         assert stdout == "test1"
         assert stderr == "test2"
-        exp_call_args = ["nf-test", "test", "--debug", "--verbose"] + [str(test_file) for test_file in test_files]
+        exp_call_args = ["nf-test", "test"] + expected_flags + [str(test_file) for test_file in test_files]
         assert cmd_str == " ".join(exp_call_args)
         mock_execute.assert_called_once()
         assert mock_execute.call_args[0][0] == exp_call_args
@@ -258,7 +266,7 @@ class TestRunParallelTests:
         """Test when no test files are found."""
         mock_find.return_value = []
         with pytest.raises(RuntimeError, match="No test files found"):
-            run_parallel_tests(2, ["tests"], Path("test-logs.txt"), debug=False)
+            run_parallel_tests(2, ["tests"], Path("test-logs.txt"), debug=False, ci=False)
         mock_find.assert_called_once_with(["tests"])
         mock_update.assert_not_called()
 
@@ -278,7 +286,7 @@ class TestRunParallelTests:
             (1, 0, "stdout1", "stderr1", "cmd1"),
             (2, 0, "stdout2", "stderr2", "cmd2"),
         ]
-        exit_code = run_parallel_tests(2, ["tests"], Path("test-logs.txt"), debug=False)
+        exit_code = run_parallel_tests(2, ["tests"], Path("test-logs.txt"), debug=False, ci=False)
         assert exit_code == 0
         mock_find.assert_called_once_with(["tests"])
         mock_update.assert_called_once()
@@ -301,7 +309,7 @@ class TestRunParallelTests:
             (1, 0, "stdout1", "stderr1", "cmd1"),
             (2, 1, "stdout2", "stderr2", "cmd2"),
         ]
-        exit_code = run_parallel_tests(2, ["tests"], Path("test-logs.txt"), debug=False)
+        exit_code = run_parallel_tests(2, ["tests"], Path("test-logs.txt"), debug=False, ci=False)
         assert exit_code == 1
         mock_write.assert_called_once()
 
@@ -321,6 +329,31 @@ class TestRunParallelTests:
             (1, 0, "stdout1", "stderr1", "cmd1"),
             (2, 0, "stdout2", "stderr2", "cmd2"),
         ]
-        exit_code = run_parallel_tests(5, ["tests"], Path("test-logs.txt"), debug=False)
+        exit_code = run_parallel_tests(5, ["tests"], Path("test-logs.txt"), debug=False, ci=False)
         assert exit_code == 0
         mock_divide.assert_called_once_with(test_files, 2)
+
+    @patch('run_nf_test_parallel.write_test_log')
+    @patch('run_nf_test_parallel.multiprocessing.Pool')
+    @patch('run_nf_test_parallel.divide_test_files')
+    @patch('run_nf_test_parallel.update_plugins')
+    @patch('run_nf_test_parallel.find_test_files')
+    def test_run_parallel_tests_passes_ci_flag(self, mock_find, mock_update, mock_divide, mock_pool, mock_write):
+        """Test that CI flag is passed through to workers."""
+        test_files = [Path("test1.nf.test"), Path("test2.nf.test")]
+        mock_find.return_value = test_files
+        mock_divide.return_value = [[test_files[0]], [test_files[1]]]
+        mock_pool_instance = MagicMock()
+        mock_pool.return_value.__enter__.return_value = mock_pool_instance
+        mock_pool_instance.starmap.return_value = [
+            (1, 0, "stdout1", "stderr1", "cmd1"),
+            (2, 0, "stdout2", "stderr2", "cmd2"),
+        ]
+        exit_code = run_parallel_tests(2, ["tests"], Path("test-logs.txt"), debug=False, ci=True)
+        assert exit_code == 0
+        # Verify starmap was called with worker args that include ci=True
+        starmap_call_args = mock_pool_instance.starmap.call_args[0]
+        worker_args = starmap_call_args[1]
+        # Each worker_args tuple is (worker_id, test_files, total_workers, debug, ci)
+        for args in worker_args:
+            assert args[4] is True  # ci flag should be True

@@ -7,20 +7,13 @@ on:
       - dev
       - stable
       - ci-test
-    paths:
-      - 'tests/modules/**'
-      - 'modules/**'
-      - 'tests/subworkflows/**'
-      - 'subworkflows/**'
-      - 'tests/workflows/downstream*'
-      - 'workflows/downstream*'
 
 concurrency:
   group: ci-nf-test-workflows-downstream-pr-${{ github.event.pull_request.number }}
   cancel-in-progress: true
 
 jobs:
-  test-subworkflows:
+  test-workflows-downstream:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
@@ -29,15 +22,29 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+      - name: Check for relevant changes
+        uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            downstream:
+              - 'tests/modules/**'
+              - 'modules/**'
+              - 'tests/subworkflows/**'
+              - 'subworkflows/**'
+              - 'tests/workflows/downstream*'
+              - 'workflows/downstream*'
       - name: Setup nf-test environment
+        if: steps.filter.outputs.downstream == 'true'
         uses: ./.github/actions/setup-nf-test
         with:
           aws_access_key_id: ${{ secrets.NAO_TESTING_ACCESS_KEY }}
           aws_secret_access_key: ${{ secrets.NAO_TESTING_SECRET_ACCESS_KEY }}
       - name: Run workflow tests
-        run: bin/run-nf-test.sh --num-workers 4 tests/workflows/downstream.nf.test --output-log test-logs-workflows-downstream.txt
+        if: steps.filter.outputs.downstream == 'true'
+        run: bin/run-nf-test.sh --num-workers 4 tests/workflows/downstream.nf.test --output-log test-logs-workflows-downstream.txt --ci
       - name: Upload test results
-        if: failure()
+        if: failure() && steps.filter.outputs.downstream == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: test-logs-workflows-downstream

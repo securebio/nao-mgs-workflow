@@ -58,7 +58,9 @@ lint.select = [
 
 # Ignored rules
 lint.ignore = [
-  "E501" # Ignore line too long
+  "E402", # Ignore module level import not at top of file
+  "E501", # Ignore line too long
+  "N802", # Ignore function name should be lowercase
 ]
 
 # Basic exclusions
