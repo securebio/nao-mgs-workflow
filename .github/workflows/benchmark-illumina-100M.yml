@@ -1,0 +1,50 @@
+name: Benchmark test (Illumina 100M)
+
+on:
+  pull_request:
+    branches:
+      - main
+      - stable
+      - ci-test
+    paths:
+      - 'tests/modules/**'
+      - 'modules/**'
+      - 'tests/subworkflows/**'
+      - 'subworkflows/**'
+      - 'tests/workflows/**'
+      - 'workflows/**'
+      - 'bin/chain_workflows.py'
+
+concurrency:
+  group: benchmark-illumina-100M-pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  benchmark-illumina-100M:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      AWS_ACCESS_KEY_ID: ${{secrets.NAO_TESTING_ACCESS_KEY }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.NAO_TESTING_SECRET_ACCESS_KEY }}
+      TOWER_ACCESS_TOKEN: ${{ secrets.TOWER_ACCESS_TOKEN }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup nf-test environment
+        uses: ./.github/actions/setup-nf-test
+        with:
+          aws_access_key_id: ${{ secrets.NAO_TESTING_ACCESS_KEY }}
+          aws_secret_access_key: ${{ secrets.NAO_TESTING_SECRET_ACCESS_KEY }}
+
+      - name: Install Python dependencies
+        run: |
+          pip install boto3
+
+      - name: Run benchmark workflow
+        run: |
+          bin/chain_workflows.py \
+            --ref-dir s3://nao-mgs-index/20250825/output/ \
+            --samplesheet s3://nao-testing/benchmarks/Illumina_100M/samplesheet.csv \
+            --launch-dir test_run_benchmark_100M \
+            --base-dir s3://nao-testing-scratch/mgs-workflow-test/benchmark-illumina-100M/
