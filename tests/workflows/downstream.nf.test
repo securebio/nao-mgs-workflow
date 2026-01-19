@@ -26,7 +26,6 @@ nextflow_pipeline {
         tag "main_downstream_output_ont"
         tag "snapshot_ont"
         then {
-            assert workflow.failed
             assert workflow.success
             assert snapshot(
                 path("${launchDir}/output/results_downstream/tt1_validation_hits.tsv.gz"),
