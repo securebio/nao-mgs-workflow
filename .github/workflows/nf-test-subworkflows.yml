@@ -7,11 +7,6 @@ on:
       - dev
       - stable
       - ci-test
-    paths:
-      - 'tests/modules/**'
-      - 'modules/**'
-      - 'tests/subworkflows/**'
-      - 'subworkflows/**'
 
 concurrency:
   group: ci-nf-test-subworkflows-pr-${{ github.event.pull_request.number }}
@@ -29,15 +24,27 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+      - name: Check for relevant changes
+        uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            subworkflows:
+              - 'tests/modules/**'
+              - 'modules/**'
+              - 'tests/subworkflows/**'
+              - 'subworkflows/**'
       - name: Setup nf-test environment
+        if: steps.filter.outputs.subworkflows == 'true'
         uses: ./.github/actions/setup-nf-test
         with:
           aws_access_key_id: ${{ secrets.NAO_TESTING_ACCESS_KEY }}
           aws_secret_access_key: ${{ secrets.NAO_TESTING_SECRET_ACCESS_KEY }}
       - name: Run subworkflow tests
+        if: steps.filter.outputs.subworkflows == 'true'
         run: bin/run-nf-test.sh --num-workers 16 tests/subworkflows --output-log test-logs-subworkflows.txt
       - name: Upload test results
-        if: failure()
+        if: failure() && steps.filter.outputs.subworkflows == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: test-logs-subworkflows
