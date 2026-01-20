@@ -1,0 +1,42 @@
+name: Changelog Check
+
+on:
+  pull_request:
+    branches:
+      - dev
+
+jobs:
+  changelog:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check for non-documentation changes
+        uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            non_docs:
+              - '**'
+              - '!**/*.md'
+              - '!docs/**'
+              - '!*.md'
+
+      - name: Check for CHANGELOG update
+        uses: dorny/paths-filter@v3
+        id: changelog
+        with:
+          filters: |
+            updated:
+              - 'CHANGELOG.md'
+
+      - name: Require CHANGELOG update
+        if: steps.filter.outputs.non_docs == 'true' && steps.changelog.outputs.updated != 'true'
+        run: |
+          echo "::error::This PR modifies non-documentation files but does not update CHANGELOG.md"
+          echo ""
+          echo "Please add an entry to CHANGELOG.md describing your changes."
+          exit 1
