@@ -228,6 +228,13 @@ def parse_arguments() -> argparse.Namespace:
         help="Run ID to use for the DOWNSTREAM workflow input file (default: test_run)",
     )
     parser.add_argument(
+        "--ref-dir",
+        type=str,
+        default=None,
+        help="S3 path to an existing index directory (s3://.../output) to use instead of running INDEX workflow. "
+             "When provided, --skip-index is implied and this path is used as ref_dir for RUN and DOWNSTREAM."
+    )
+    parser.add_argument(
         "--skip-index",
         action="store_true",
         help="Skip the INDEX workflow",
@@ -256,7 +263,8 @@ def main() -> None:
 
     # INDEX
     index_base_dir = args.base_dir.rstrip("/") + "/index"
-    if not args.skip_index:
+    skip_index = args.skip_index or args.ref_dir is not None
+    if not skip_index:
         execute_nextflow(
             launch_dir=launch_dirs["index"],
             repo_root=repo_root,
@@ -267,14 +275,16 @@ def main() -> None:
             resume=not args.no_resume,
         )
     else:
-        logger.info("Skipping INDEX workflow")
+        if args.ref_dir:
+            logger.info(f"Skipping INDEX workflow (using provided ref_dir: {args.ref_dir})")
+        else:
+            logger.info("Skipping INDEX workflow")
 
     # RUN
     run_base_dir = args.base_dir.rstrip("/") + "/run"
-    ref_dir = f"{index_base_dir}/output"
-    samplesheet_path = resolve_samplesheet_path(
-        args.samplesheet, launch_dirs["run"], repo_root
-    )
+    # Use provided ref_dir if specified, otherwise use the INDEX output directory
+    ref_dir = args.ref_dir.rstrip("/") if args.ref_dir else f"{index_base_dir}/output"
+    samplesheet_path = resolve_samplesheet_path(args.samplesheet, launch_dirs['run'], repo_root)
     if not args.skip_run:
         execute_nextflow(
             launch_dir=launch_dirs["run"],
