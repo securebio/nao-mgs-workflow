@@ -25,13 +25,12 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
       - name: Check for relevant changes
         uses: dorny/paths-filter@v3
         id: filter
         with:
           filters: |
-            relevant:
+            chained:
               - 'tests/modules/**'
               - 'modules/**'
               - 'tests/subworkflows/**'
@@ -39,21 +38,19 @@ jobs:
               - 'tests/workflows/**'
               - 'workflows/**'
               - 'bin/chain_workflows.py'
-
       - name: Setup nf-test environment
-        if: steps.filter.outputs.relevant == 'true'
+        if: steps.filter.outputs.chained == 'true'
         uses: ./.github/actions/setup-nf-test
         with:
           aws_access_key_id: ${{ secrets.NAO_TESTING_ACCESS_KEY }}
           aws_secret_access_key: ${{ secrets.NAO_TESTING_SECRET_ACCESS_KEY }}
 
       - name: Install Python dependencies
-        if: steps.filter.outputs.relevant == 'true'
+        if: steps.filter.outputs.chained == 'true'
         run: |
           pip install boto3
-
       - name: Run chain workflows integration test
-        if: steps.filter.outputs.relevant == 'true'
+        if: steps.filter.outputs.chained == 'true'
         run: |
           bin/chain_workflows.py \
             --no-resume \
