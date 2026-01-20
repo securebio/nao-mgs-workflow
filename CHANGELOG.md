@@ -16,6 +16,7 @@
     - Chained `INDEX -> RUN -> DOWNSTREAM` integration test on toy data runs before PRs to `main` (`.github/workflows/test-chained.yml`)
     - Added test to enforce `CHANGELOG.md` updates in PRs to `dev` (`.github/workflows/check-changelog.yml`)
     - Consolidated version & output tracking into `pyproject.toml` & added a test for version consistency between `pyproject.toml` and `CHANGELOG.md`.
+    - Moved release documentation from private internal docs to `docs/developer.md`.
 
 # v3.0.1.7
 - Clarified testing documentation in `docs/developer.md`.
