@@ -56,7 +56,7 @@ jobs:
         if: steps.filter.outputs.relevant == 'true'
         run: |
           bin/chain_workflows.py \
-            --ref-dir s3://nao-mgs-index/20250825/output/ \
+            --ref-dir s3://nao-testing/mgs-workflow-test/index-latest/ \
             --samplesheet s3://nao-testing/benchmarks/Illumina_100M/samplesheet.csv \
             --launch-dir test_run_benchmark_100M \
             --base-dir s3://nao-testing-scratch/mgs-workflow-test/benchmark-illumina-100M/
