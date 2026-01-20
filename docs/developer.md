@@ -343,7 +343,7 @@ Only pipeline maintainers should author a new release. The process for going thr
         i. Check for new releases of reference databases and update `configs/index.config`.
         ii. Update `index-min-pipeline-version` and `pipeline-min-index-version` in the `[tool.mgs-workflow]` section of `pyproject.toml` to reflect any changes to compatibility restrictions.
         iii. Delete `s3://nao-testing/mgs-workflow-test/index-latest`, then run the `INDEX` workflow to generate a new index at that location. (This will update the index used by relevant Github Actions checks.)
-    d. Check for new required output files and update `expected-outputs-run.txt` and `expected-outputs-downstream.txt`.
+    d. Check for new required output files and update the `expected-outputs-*` lists in `pyproject.toml`.
     e. Check for new Nextflow releases and update `.github/actions/setup-nf-test/action.yml` to point to the latest version.
 3. Open a PR to merge the release branch into `dev`. Once approved, squash-merge, then open a new PR from `dev` into `main`. Then:
     a. Set the PR title to "Merge dev to main -- release X.Y.Z.W".

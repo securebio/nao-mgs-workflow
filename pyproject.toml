@@ -79,3 +79,42 @@ target-version = "py312"
 index-min-pipeline-version = "2.8.1.2"
 # Minimum index version required by this pipeline version
 pipeline-min-index-version = "2.8.1.2"
+
+# Expected output files for each workflow (used by external validation tools)
+expected-outputs-run = [
+    "input/adapters.fasta",
+    "input/params-index.json",
+    "input/params-run.json",
+    "input/samplesheet.csv",
+    "logging/pyproject.toml",
+    "logging/pyproject-index.toml",
+    "logging/time.txt",
+    "results/bracken_reports_merged.tsv.gz",
+    "results/kraken_reports_merged.tsv.gz",
+    "results/read_counts.tsv.gz",
+    "results/subset_qc_adapter_stats.tsv.gz",
+    "results/subset_qc_basic_stats.tsv.gz",
+    "results/subset_qc_length_stats.tsv.gz",
+    "results/subset_qc_quality_base_stats.tsv.gz",
+    "results/subset_qc_quality_sequence_stats.tsv.gz",
+    "results/virus_hits_final.tsv.gz",
+]
+
+expected-outputs-downstream = [
+    "input_downstream/input_file.csv",
+    "input_downstream/params-downstream.json",
+    "logging_downstream/pyproject.toml",
+    "logging_downstream/time.txt",
+    "results_downstream/{GROUP}_clade_counts.tsv.gz",
+    "results_downstream/{GROUP}_duplicate_reads.tsv.gz",
+    "results_downstream/{GROUP}_duplicate_stats.tsv.gz",
+    "results_downstream/{GROUP}_validation_hits.tsv.gz",
+]
+
+expected-outputs-downstream-ont = [
+    "input_downstream/input_file.csv",
+    "input_downstream/params-downstream.json",
+    "logging_downstream/pyproject.toml",
+    "logging_downstream/time.txt",
+    "results_downstream/{GROUP}_validation_hits.tsv.gz",
+]
