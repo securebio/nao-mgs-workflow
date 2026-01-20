@@ -52,7 +52,4 @@ jobs:
       - name: Run chain workflows integration test
         if: steps.filter.outputs.chained == 'true'
         run: |
-          bin/chain_workflows.py \
-            --no-resume \
-            --base-dir s3://nao-testing-scratch/mgs-workflow-test/test-chained/ \
-            --launch-dir test_run_chained/
+          bin/chain_workflows.py --no-resume --base-dir s3://nao-testing-scratch/mgs-workflow-test
