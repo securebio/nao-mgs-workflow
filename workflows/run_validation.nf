@@ -8,9 +8,9 @@
 
 include { EXTRACT_VIRAL_HITS_TO_FASTQ_NOREF_LABELED as EXTRACT_FASTQ } from "../modules/local/extractViralHitsToFastqNoref"
 include { BLAST_VIRAL } from "../subworkflows/local/blastViral"
-include { COPY_FILE_BARE as COPY_VERSION } from "../modules/local/copyFile"
+include { COPY_FILE_BARE as COPY_PYPROJECT } from "../modules/local/copyFile"
 include { COPY_FILE_BARE as COPY_INDEX_PARAMS } from "../modules/local/copyFile"
-include { COPY_FILE_BARE as COPY_INDEX_PIPELINE_VERSION } from "../modules/local/copyFile"
+include { COPY_FILE_BARE as COPY_INDEX_PYPROJECT } from "../modules/local/copyFile"
 
 /****************
 | MAIN WORKFLOW |
@@ -44,14 +44,13 @@ workflow RUN_VALIDATION {
         params_str = groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(params))
         params_ch = Channel.of(params_str).collectFile(name: "params-run.json")
         time_ch = Channel.of(start_time_str + "\n").collectFile(name: "time.txt")
-        pipeline_version_path = file("${projectDir}/pipeline-version.txt")
-        pipeline_version_newpath = pipeline_version_path.getFileName().toString()
-        version_ch = COPY_VERSION(Channel.fromPath(pipeline_version_path), pipeline_version_newpath)
+        pipeline_pyproject_path = file("${projectDir}/pyproject.toml")
+        pyproject_ch = COPY_PYPROJECT(Channel.fromPath(pipeline_pyproject_path), "pyproject.toml")
         index_params_ch = COPY_INDEX_PARAMS(Channel.fromPath("${params.ref_dir}/input/index-params.json"), "params-index.json")
-        index_pipeline_version_ch = COPY_INDEX_PIPELINE_VERSION(Channel.fromPath("${params.ref_dir}/logging/pipeline-version.txt"), "pipeline-version-index.txt")
+        index_pyproject_ch = COPY_INDEX_PYPROJECT(Channel.fromPath("${params.ref_dir}/logging/pyproject.toml"), "pyproject-index.toml")
 
     emit:
         input_validation = index_params_ch.mix(params_ch)
-        logging_validation = index_pipeline_version_ch.mix(time_ch, version_ch)
+        logging_validation = index_pyproject_ch.mix(time_ch, pyproject_ch)
         results_validation = BLAST_VIRAL.out.blast_subset.mix(BLAST_VIRAL.out.subset_reads)
 }

@@ -16,10 +16,8 @@ include { PROFILE} from "../subworkflows/local/profile"
 include { BLAST_VIRAL } from "../subworkflows/local/blastViral"
 include { CHECK_VERSION_COMPATIBILITY } from "../subworkflows/local/checkVersionCompatibility"
 include { COPY_FILE_BARE as COPY_INDEX_PARAMS } from "../modules/local/copyFile"
-include { COPY_FILE_BARE as COPY_INDEX_PIPELINE_VERSION } from "../modules/local/copyFile"
-include { COPY_FILE_BARE as COPY_INDEX_COMPAT } from "../modules/local/copyFile"
-include { COPY_FILE_BARE as COPY_VERSION } from "../modules/local/copyFile"
-include { COPY_FILE_BARE as COPY_PIPELINE_COMPAT } from "../modules/local/copyFile"
+include { COPY_FILE_BARE as COPY_INDEX_PYPROJECT } from "../modules/local/copyFile"
+include { COPY_FILE_BARE as COPY_PYPROJECT } from "../modules/local/copyFile"
 include { COPY_FILE_BARE as COPY_SAMPLESHEET } from "../modules/local/copyFile"
 include { COPY_FILE_BARE as COPY_ADAPTERS } from "../modules/local/copyFile"
 
@@ -31,12 +29,9 @@ include { COPY_FILE_BARE as COPY_ADAPTERS } from "../modules/local/copyFile"
 workflow RUN {
     main:
     // Check index/pipeline version compatibility
-    pipeline_version_path = file("${projectDir}/pipeline-version.txt")
-    index_version_path = file("${params.ref_dir}/logging/pipeline-version.txt")
-    pipeline_min_index_version_path = file("${projectDir}/pipeline-min-index-version.txt")
-    index_min_pipeline_version_path = file("${params.ref_dir}/logging/index-min-pipeline-version.txt")
-    CHECK_VERSION_COMPATIBILITY(pipeline_version_path, index_version_path,
-        pipeline_min_index_version_path, index_min_pipeline_version_path)
+    pipeline_pyproject_path = file("${projectDir}/pyproject.toml")
+    index_pyproject_path = file("${params.ref_dir}/logging/pyproject.toml")
+    CHECK_VERSION_COMPATIBILITY(pipeline_pyproject_path, index_pyproject_path)
 
     // Setting reference paths
     kraken_db_path = "${params.ref_dir}/results/kraken_db"
@@ -103,27 +98,22 @@ workflow RUN {
     // Get index files for publishing
     index_params_path = file("${params.ref_dir}/input/index-params.json")
     index_params_ch = COPY_INDEX_PARAMS(Channel.fromPath(index_params_path), "params-index.json")
-    index_pipeline_version_ch = COPY_INDEX_PIPELINE_VERSION(Channel.fromPath(index_version_path), "pipeline-version-index.txt")
-    index_min_pipeline_version_newpath = index_min_pipeline_version_path.getFileName().toString()
-    index_compatibility_ch = COPY_INDEX_COMPAT(Channel.fromPath(index_min_pipeline_version_path), index_min_pipeline_version_newpath)
+    index_pyproject_ch = COPY_INDEX_PYPROJECT(Channel.fromPath(index_pyproject_path), "pyproject-index.toml")
 
     // Prepare other publishing variables
     params_str = groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(params))
     params_ch = Channel.of(params_str).collectFile(name: "params-run.json")
     time_ch = start_time_str.map { it + "\n" }.collectFile(name: "time.txt")
-    pipeline_version_newpath = pipeline_version_path.getFileName().toString()
     // Note: we send these input/logging files through a COPY_FILE_BASE process
     // because nextflow 25.04 now only publishes files that have passed through the working directory.
     // We first tried collectFile() as an alternative; however it intermittantly gives serialization errors.
-    version_ch = COPY_VERSION(Channel.fromPath(pipeline_version_path), pipeline_version_newpath)
-    pipeline_min_index_version_newpath = pipeline_min_index_version_path.getFileName().toString()
-    pipeline_compatibility_ch = COPY_PIPELINE_COMPAT(Channel.fromPath(pipeline_min_index_version_path), pipeline_min_index_version_newpath)
+    pyproject_ch = COPY_PYPROJECT(Channel.fromPath(pipeline_pyproject_path), "pyproject.toml")
     samplesheet_ch = COPY_SAMPLESHEET(Channel.fromPath(params.sample_sheet), "samplesheet.csv")
     adapters_ch = COPY_ADAPTERS(Channel.fromPath(params.adapters), "adapters.fasta")
 
     emit:
         input_run = index_params_ch.mix(samplesheet_ch, adapters_ch, params_ch)
-        logging_run = index_pipeline_version_ch.mix(index_compatibility_ch, time_ch, version_ch, pipeline_compatibility_ch)
+        logging_run = index_pyproject_ch.mix(time_ch, pyproject_ch)
         intermediates_run = hits_fastq.mix(inter_lca, inter_aligner)
         reads_raw_viral = bbduk_match
         reads_trimmed_viral = bbduk_trimmed

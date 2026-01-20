@@ -338,10 +338,10 @@ Only pipeline maintainers should author a new release. The process for going thr
 1. Stop approving new feature PRs into `dev`.
 2. Create a release branch `release/USER_HANDLE/X.Y.Z.W` (see [here](./versioning.md) for information on our versioning system). In this branch:
     a. Review and consolidate additions `CHANGELOG.md`; these often get somewhat disjointed across many small PRs to `dev`.
-    b. Update the version number in `CHANGELOG.md`, `pipeline-version.txt` and `pyproject.toml` to remove any `-dev` suffix and reflect the magnitude of changes (again, see [here](./versioning.md) for information on the versioning schema).
+    b. Update the version number in `CHANGELOG.md` and `pyproject.toml` to remove any `-dev` suffix and reflect the magnitude of changes (again, see [here](./versioning.md) for information on the versioning schema).
     c. Check if the changes in the release necessitate a new index version. (Most releases do not.) If so:
         i. Check for new releases of reference databases and update `configs/index.config`.
-        ii. Update `index-min-pipeline-version.txt` and `pipeline-min-index-version.txt` to reflect any changes to compatibility restrictions.
+        ii. Update `index-min-pipeline-version` and `pipeline-min-index-version` in the `[tool.mgs-workflow]` section of `pyproject.toml` to reflect any changes to compatibility restrictions.
         iii. Delete `s3://nao-testing/mgs-workflow-test/index-latest`, then run the `INDEX` workflow to generate a new index at that location. (This will update the index used by relevant Github Actions checks.)
     d. Check for new required output files and update `expected-outputs-run.txt` and `expected-outputs-downstream.txt`.
     e. Check for new Nextflow releases and update `.github/actions/setup-nf-test/action.yml` to point to the latest version.

@@ -2,8 +2,8 @@
 | SUBWORKFLOW: VERSION COMPATIBILITY CHECKING |
 **********************************************/
 
-/* Takes in pipeline and index versions plus respective compatibilities
-and raises an error if they are incompatible. */
+/* Takes in pipeline and index pyproject.toml paths and raises an error
+if their versions are incompatible. */
 
 /**********************
 | AUXILIARY FUNCTIONS |
@@ -37,7 +37,7 @@ def isVersionLess(version1, version2) {
     def maxLength = Math.max(v1IntComponents.size(), v2IntComponents.size())
     def paddedV1 = v1IntComponents + [0] * (maxLength - v1IntComponents.size())
     def paddedV2 = v2IntComponents + [0] * (maxLength - v2IntComponents.size())
-    
+
     // Find first differing component
     def diff = (0..<maxLength).find { i -> paddedV1[i] != paddedV2[i] }
     return diff != null ? paddedV1[diff] < paddedV2[diff] : false
@@ -49,16 +49,18 @@ def isVersionLess(version1, version2) {
 
 workflow CHECK_VERSION_COMPATIBILITY {
     take:
-        pipeline_version_path
-        index_version_path
-        pipeline_min_index_version_path
-        index_min_pipeline_version_path
+        pipeline_pyproject_path  // Local pyproject.toml
+        index_pyproject_path     // Index's pyproject.toml from S3
     main:
-        // Read files and extract versions
-        def pipeline_version = file(pipeline_version_path).readLines().first()
-        def index_version = file(index_version_path).readLines().first()
-        def pipeline_min_index_version = file(pipeline_min_index_version_path).readLines().first()
-        def index_min_pipeline_version = file(index_min_pipeline_version_path).readLines().first()
+        // Read version info from pyproject.toml files using VersionUtils
+        def pipelineVersions = VersionUtils.readVersions(pipeline_pyproject_path)
+        def indexVersions = VersionUtils.readVersions(index_pyproject_path)
+
+        def pipeline_version = pipelineVersions.pipeline
+        def index_version = indexVersions.pipeline
+        def pipeline_min_index_version = pipelineVersions.pipelineMinIndex
+        def index_min_pipeline_version = indexVersions.indexMinPipeline
+
         // Check version compatibilities
         if (isVersionLess(pipeline_version, index_min_pipeline_version)) {
             def msg_a = "Pipeline version is older than index minimum: ${pipeline_version} < ${index_min_pipeline_version}"

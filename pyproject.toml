@@ -73,3 +73,9 @@ exclude = [
 
 # Target Python version
 target-version = "py312"
+
+[tool.mgs-workflow]
+# Minimum pipeline version required to use indexes built with this pipeline version
+index-min-pipeline-version = "2.8.1.2"
+# Minimum index version required by this pipeline version
+pipeline-min-index-version = "2.8.1.2"
