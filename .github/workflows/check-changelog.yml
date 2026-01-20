@@ -23,7 +23,6 @@ jobs:
               - '**'
               - '!**/*.md'
               - '!docs/**'
-              - '!*.md'
 
       - name: Check for CHANGELOG update
         uses: dorny/paths-filter@v3
