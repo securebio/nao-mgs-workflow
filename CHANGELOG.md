@@ -11,6 +11,10 @@
     - Added plaintext handling to BLAST process to help with testing
     - Created custom tiny reference datasets and switched tests to use them for increased speed
 - Implemented code for generating and uploading containers to ECR Public, and replaced Wave container paths with ECR paths. Among other benefits, this allows us to run the entire test suite without running into pull-rate limit errors.
+- Streamlining releases by moving large tests into Github Actions
+    - Whole `nf-test` suite now runs on PRs to main (`.github/workflows/nf-test-*`)
+    - Chained `INDEX -> RUN -> DOWNSTREAM` integration test on toy data runs before PRs to `main` (`.github/workflows/test-chained.yml`)
+    - Added test to enforce `CHANGELOG.md` updates in PRs to `dev` (`.github/workflows/check-changelog.yml`)
 
 # v3.0.1.7
 - Clarified testing documentation in `docs/developer.md`.
