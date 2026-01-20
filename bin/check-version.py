@@ -42,7 +42,10 @@ def main() -> int:
 
     # Check versions match
     if pyproject_version != changelog_version:
-        print("ERROR: Version mismatch between pyproject.toml and CHANGELOG.md")
+        print(
+            "ERROR: Version mismatch between pyproject.toml and CHANGELOG.md",
+            file=sys.stderr,
+        )
         return 1
     print("OK: Versions match")
 
@@ -60,7 +63,8 @@ def main() -> int:
         if args.base_branch in ("main", "stable"):
             if is_dev_version:
                 print(
-                    f"ERROR: PRs to {args.base_branch} must not have -dev version suffix"
+                    f"ERROR: PRs to {args.base_branch} must not have -dev version suffix",
+                    file=sys.stderr,
                 )
                 return 1
             print(f"OK: Non-dev version correct for PR to {args.base_branch}")
@@ -68,14 +72,20 @@ def main() -> int:
         # Rule 2: Release branch PRs to dev must NOT have -dev suffix
         if args.base_branch == "dev" and is_release_branch:
             if is_dev_version:
-                print("ERROR: Release PRs to dev must not have -dev version suffix")
+                print(
+                    "ERROR: Release PRs to dev must not have -dev version suffix",
+                    file=sys.stderr,
+                )
                 return 1
             print("OK: Non-dev version correct for release PR")
 
         # Rule 3: Non-release PRs to dev MUST have -dev suffix
         if args.base_branch == "dev" and not is_release_branch:
             if not is_dev_version:
-                print("ERROR: Non-release PRs to dev must have -dev version suffix")
+                print(
+                    "ERROR: Non-release PRs to dev must have -dev version suffix",
+                    file=sys.stderr,
+                )
                 return 1
             print("OK: Dev version suffix correct for feature PR")
 

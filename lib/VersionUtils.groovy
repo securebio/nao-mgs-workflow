@@ -12,7 +12,7 @@ class VersionUtils {
      * @param pyprojectPath Path to the pyproject.toml file
      * @return Map with keys: pipeline, indexMinPipeline, pipelineMinIndex
      */
-    static Map readVersions(pyprojectPath) {
+    static Map readVersions(Object pyprojectPath) {
         def toml = new TomlSlurper().parse(new File(pyprojectPath.toString()))
         return [
             pipeline: toml.project.version,
