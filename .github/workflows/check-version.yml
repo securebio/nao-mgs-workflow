@@ -1,4 +1,4 @@
-name: Check Version Consistency
+name: Check version consistency
 
 on:
   pull_request:
