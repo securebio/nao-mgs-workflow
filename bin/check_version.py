@@ -41,11 +41,12 @@ def get_changelog_version(path: str = "CHANGELOG.md") -> str:
     with open(path) as f:
         first_line = f.readline().strip()
     # Expected format: "# vX.Y.Z.W" or "# vX.Y.Z.W-dev"
-    if not first_line.startswith("# v"):
+    prefix = "# v"
+    if not first_line.startswith(prefix):
         raise ValueError(
-            f"{path} first line must start with '# v', got: {first_line!r}"
+            f"{path} first line must start with '{prefix}', got: {first_line!r}"
         )
-    version = first_line[4:]  # Strip "# v" prefix
+    version = first_line.removeprefix(prefix)
     return validate_version(version, path)
 
 
