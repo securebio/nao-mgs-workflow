@@ -338,32 +338,32 @@ Only pipeline maintainers should author a new release. The process for going thr
 1. Stop approving new feature PRs into `dev`.
 2. Create a release branch `release/USER_HANDLE/X.Y.Z.W` (see [here](./versioning.md) for information on our versioning system). In this branch:
 
-    a. Review and consolidate additions `CHANGELOG.md`; these often get somewhat disjointed across many small PRs to `dev`.
-    b. Update the version number in `CHANGELOG.md`, `pipeline-version.txt` and `pyproject.toml` to remove any `-dev` suffix and reflect the magnitude of changes (again, see [here](./versioning.md) for information on the versioning schema).
-    c. Check if the changes in the release necessitate a new index version. Most releases do not; the primary reason one would is if changes to processes or workflows would cause an incompatibility between the contents of the index and the expectations of the RUN or DOWNSTREAM workflows. If this is the case:
+    1. Review and consolidate additions `CHANGELOG.md`; these often get somewhat disjointed across many small PRs to `dev`.
+    2. Update the version number in `CHANGELOG.md`, `pipeline-version.txt` and `pyproject.toml` to remove any `-dev` suffix and reflect the magnitude of changes (again, see [here](./versioning.md) for information on the versioning schema).
+    3. Check if the changes in the release necessitate a new index version. Most releases do not; the primary reason one would is if changes to processes or workflows would cause an incompatibility between the contents of the index and the expectations of the RUN or DOWNSTREAM workflows. If this is the case:
 
-        i. Check for new releases of reference databases and update `configs/index.config`[^refs].
-        ii. Update `index-min-pipeline-version.txt` and `pipeline-min-index-version.txt` to reflect any changes to compatibility restrictions.
-        iii. Delete `s3://nao-testing/mgs-workflow-test/index-latest`, then run the `INDEX` workflow to generate a new index at that location. (This will update the index used by relevant Github Actions checks.)
+        1. Check for new releases of reference databases and update `configs/index.config`[^refs].
+        2. Update `index-min-pipeline-version.txt` and `pipeline-min-index-version.txt` to reflect any changes to compatibility restrictions.
+        3. Delete `s3://nao-testing/mgs-workflow-test/index-latest`, then run the `INDEX` workflow to generate a new index at that location. (This will update the index used by relevant Github Actions checks.)
 
-    d. Check for new required output files and update `expected-outputs-run.txt` and `expected-outputs-downstream.txt`.
-    e. Check for new Nextflow releases and update `.github/actions/setup-nf-test/action.yml` to point to the latest version.
+    4. Check for new required output files and update `expected-outputs-run.txt` and `expected-outputs-downstream.txt`.
+    5. Check for new Nextflow releases and update `.github/actions/setup-nf-test/action.yml` to point to the latest version.
 
 3. Open a PR to merge the release branch into `dev`. Once approved, squash-merge, then open a new PR from `dev` into `main`. Then:
 
-    a. Set the PR title to "Merge dev to main -- release X.Y.Z.W".
-    b. Quickly review the PR changes to ensure the changed files are consistent with the changes noted in `CHANGELOG.md` (no need to review file contents deeply at this stage).
-    c. Double check that documentation and tests have been updated to stay consistent with changes to the pipeline.
-    d. Wait for additional long-running pre-release checks to complete in Github Actions.
+    1. Set the PR title to "Merge dev to main -- release X.Y.Z.W".
+    2. Quickly review the PR changes to ensure the changed files are consistent with the changes noted in `CHANGELOG.md` (no need to review file contents deeply at this stage).
+    3. Double check that documentation and tests have been updated to stay consistent with changes to the pipeline.
+    4. Wait for additional long-running pre-release checks to complete in Github Actions.
 
 4. If any issues or test failures arise in the preceding steps, fix them with new bugfix PRs into `dev`, then rebase the release branch onto `dev`.
 5. Once all checks pass and the PR to `main` is approved merge it **without squashing**, then create a new release through the Github UI:
 
-    a. Title **and tag** the release with the new version number (without any prepending "v")
-    b. For the release description, use the changelog entry for that version
+    1. Title **and tag** the release with the new version number (without any prepending "v")
+    2. For the release description, use the changelog entry for that version
 
 6. Ask a repo admin to reset `dev` to `main`. If the new release is a point release (i.e. only the fourth number in the version changes), they should reset `stable` to `main` as well.
 
-    a. Non-point releases are only merged to `stable` if we want to update the current stable version and re-run past data with it, which occurs only infrequently.
+    1. Non-point releases are only merged to `stable` if we want to update the current stable version and re-run past data with it, which occurs only infrequently.
 
 [^refs]: For reference genomes, check for updated releases for human, cow, pig, and mouse; do not update carp; update *E. coli* if there is a new release for the same strain. Check [SILVA](https://www.arb-silva.de/download/archive/) for rRNA databases and [here](https://benlangmead.github.io/aws-indexes/k2) for Kraken2 databases.
