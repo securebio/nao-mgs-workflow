@@ -15,7 +15,7 @@
     - Whole `nf-test` suite now runs on PRs to main (`.github/workflows/nf-test-*`)
     - Chained `INDEX -> RUN -> DOWNSTREAM` integration test on toy data runs before PRs to `main` (`.github/workflows/test-chained.yml`)
     - Added test to enforce `CHANGELOG.md` updates in PRs to `dev` (`.github/workflows/check-changelog.yml`)
-    - Moved release documentation from private internal docs to `docs/developer.md`.
+    - Moved release documentation from private internal docs to `docs/developer.md` and updated formatting to match Github requirements.
 
 # v3.0.1.7
 - Clarified testing documentation in `docs/developer.md`.
