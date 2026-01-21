@@ -1,0 +1,120 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mgs-workflow"
+version = "3.0.1.8-dev"
+requires-python = ">=3.12"
+dependencies = [
+    "biopython>=1.85",
+    "mypy>=1.18.1",
+    # Needed until https://github.com/securebio/nao-dedup/pull/12 has been
+    # merged and we've updated post-processing/nao-dedup/ to depend on the
+    # no-python version.
+    "networkx",
+    "pandas>=2.3.2",
+    "pytest>=8.4.2",
+    "ruff>=0.13.0",
+]
+
+[tool.setuptools]
+packages = []
+
+# Tool configurations below:
+# - [tool.mypy]: Type checking configuration
+# - [tool.ruff]: Linting and formatting configuration
+# - [tool.pytest.ini_options]: Pytest configuration
+
+[tool.pytest.ini_options]
+norecursedirs = [
+    # Exclude dependencies from test discovery
+    "post-processing/deps",
+]
+
+[tool.mypy]
+python_version = 3.12
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+
+[tool.ruff]
+# Comprehensive rule selection
+lint.select = [
+    "E",   # pycodestyle errors
+    "F",   # pyflakes (unused imports, etc.)
+    "I",   # isort
+    "B",   # bugbear (likely bugs and design problems)
+    "C4",  # comprehensions (better list/dict comprehensions)
+    "UP",  # pyupgrade (modernize Python code)
+    "N",   # naming (PEP8 naming conventions)
+    "COM", # commas (trailing commas)
+    "PIE", # misc. lints (unnecessary code)
+    "RET", # return statements (consistent returns)
+    "SIM", # simplify (code simplification)
+]
+
+# Ignored rules
+lint.ignore = [
+  "E402", # Ignore module level import not at top of file
+  "E501", # Ignore line too long
+  "N802", # Ignore function name should be lowercase
+]
+
+# Basic exclusions
+exclude = [
+    ".git",
+    "__pycache__",
+    "build",
+    "dist",
+]
+
+# Target Python version
+target-version = "py312"
+
+[tool.mgs-workflow]
+# Minimum pipeline version required to use indexes built with this pipeline version
+index-min-pipeline-version = "2.8.1.2"
+# Minimum index version required by this pipeline version
+pipeline-min-index-version = "2.8.1.2"
+
+# Expected output files for each workflow (used by external validation tools)
+expected-outputs-run = [
+    "input/adapters.fasta",
+    "input/params-index.json",
+    "input/params-run.json",
+    "input/samplesheet.csv",
+    "logging/pyproject.toml",
+    "logging/pyproject-index.toml",
+    "logging/time.txt",
+    "results/bracken_reports_merged.tsv.gz",
+    "results/kraken_reports_merged.tsv.gz",
+    "results/read_counts.tsv.gz",
+    "results/subset_qc_adapter_stats.tsv.gz",
+    "results/subset_qc_basic_stats.tsv.gz",
+    "results/subset_qc_length_stats.tsv.gz",
+    "results/subset_qc_quality_base_stats.tsv.gz",
+    "results/subset_qc_quality_sequence_stats.tsv.gz",
+    "results/virus_hits_final.tsv.gz",
+]
+
+expected-outputs-downstream = [
+    "input_downstream/input_file.csv",
+    "input_downstream/params-downstream.json",
+    "logging_downstream/pyproject.toml",
+    "logging_downstream/time.txt",
+    "results_downstream/{GROUP}_clade_counts.tsv.gz",
+    "results_downstream/{GROUP}_duplicate_reads.tsv.gz",
+    "results_downstream/{GROUP}_duplicate_stats.tsv.gz",
+    "results_downstream/{GROUP}_validation_hits.tsv.gz",
+]
+
+expected-outputs-downstream-ont = [
+    "input_downstream/input_file.csv",
+    "input_downstream/params-downstream.json",
+    "logging_downstream/pyproject.toml",
+    "logging_downstream/time.txt",
+    "results_downstream/{GROUP}_validation_hits.tsv.gz",
+]
