@@ -21,6 +21,33 @@ include { COPY_FILE_BARE as COPY_PYPROJECT } from "../modules/local/copyFile"
 include { COPY_FILE_BARE as COPY_SAMPLESHEET } from "../modules/local/copyFile"
 include { COPY_FILE_BARE as COPY_ADAPTERS } from "../modules/local/copyFile"
 
+/***********************
+| AUXILIARY FUNCTIONS |
+***********************/
+
+def getIndexPyprojectPath(ref_dir) {
+    /* Get the pyproject.toml path for an index, with backwards compatibility
+    for old indexes that use separate version text files. */
+    def index_pyproject_file = file("${ref_dir}/logging/pyproject.toml")
+    if (index_pyproject_file.exists()) {
+        return index_pyproject_file
+    }
+    // Fall back to old format - generate pyproject content from old files
+    def index_version = file("${ref_dir}/logging/pipeline-version.txt").text.trim()
+    def index_min_pipeline = file("${ref_dir}/logging/index-min-pipeline-version.txt").text.trim()
+    def pyproject_content = """\
+[project]
+version = "${index_version}"
+
+[tool.mgs-workflow]
+index-min-pipeline-version = "${index_min_pipeline}"
+"""
+    def temp_file = File.createTempFile("index-pyproject", ".toml")
+    temp_file.text = pyproject_content
+    temp_file.deleteOnExit()
+    return file(temp_file.absolutePath)
+}
+
 /*****************
 | MAIN WORKFLOWS |
 *****************/
@@ -30,7 +57,7 @@ workflow RUN {
     main:
     // Check index/pipeline version compatibility
     pipeline_pyproject_path = file("${projectDir}/pyproject.toml")
-    index_pyproject_path = file("${params.ref_dir}/logging/pyproject.toml")
+    index_pyproject_path = getIndexPyprojectPath(params.ref_dir)
     CHECK_VERSION_COMPATIBILITY(pipeline_pyproject_path, index_pyproject_path)
 
     // Setting reference paths
