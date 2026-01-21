@@ -5,9 +5,21 @@
 /* Takes in pipeline and index pyproject.toml paths and raises an error
 if their versions are incompatible. */
 
+import groovy.toml.TomlSlurper
+
 /**********************
 | AUXILIARY FUNCTIONS |
 **********************/
+
+def readVersions(Object pyprojectPath) {
+    /* Read version information from a pyproject.toml file. */
+    def toml = new TomlSlurper().parse(new File(pyprojectPath.toString()))
+    return [
+        pipeline: toml.project.version,
+        indexMinPipeline: toml.tool?.'mgs-workflow'?.'index-min-pipeline-version',
+        pipelineMinIndex: toml.tool?.'mgs-workflow'?.'pipeline-min-index-version'
+    ]
+}
 
 def isVersionLess(version1, version2) {
     /* Compare two semantic versions and return a boolean stating
@@ -52,9 +64,9 @@ workflow CHECK_VERSION_COMPATIBILITY {
         pipeline_pyproject_path  // Local pyproject.toml
         index_pyproject_path     // Index's pyproject.toml from S3
     main:
-        // Read version info from pyproject.toml files using VersionUtils
-        def pipelineVersions = VersionUtils.readVersions(pipeline_pyproject_path)
-        def indexVersions = VersionUtils.readVersions(index_pyproject_path)
+        // Read version info from pyproject.toml files
+        def pipelineVersions = readVersions(pipeline_pyproject_path)
+        def indexVersions = readVersions(index_pyproject_path)
 
         def pipeline_version = pipelineVersions.pipeline
         def index_version = indexVersions.pipeline
