@@ -9,15 +9,31 @@ Enforces:
 """
 
 import argparse
+import re
 import sys
 import tomllib
+
+VERSION_PATTERN = re.compile(r"^\d+\.\d+\.\d+\.\d+(-dev)?$")
+
+
+def validate_version(version: str, source: str) -> str:
+    """Validate version string matches expected format.
+
+    Returns the version if valid, raises ValueError if not.
+    """
+    if not VERSION_PATTERN.match(version):
+        raise ValueError(
+            f"Invalid version format in {source}: {version!r}. "
+            "Expected format: X.Y.Z.W or X.Y.Z.W-dev"
+        )
+    return version
 
 
 def get_pyproject_version(path: str = "pyproject.toml") -> str:
     """Extract version from pyproject.toml."""
     with open(path, "rb") as f:
         data = tomllib.load(f)
-    return data["project"]["version"]
+    return validate_version(data["project"]["version"], path)
 
 
 def get_changelog_version(path: str = "CHANGELOG.md") -> str:
@@ -25,7 +41,12 @@ def get_changelog_version(path: str = "CHANGELOG.md") -> str:
     with open(path) as f:
         first_line = f.readline().strip()
     # Expected format: "# vX.Y.Z.W" or "# vX.Y.Z.W-dev"
-    return first_line.lstrip("# v")
+    if not first_line.startswith("# v"):
+        raise ValueError(
+            f"{path} first line must start with '# v', got: {first_line!r}"
+        )
+    version = first_line[4:]  # Strip "# v" prefix
+    return validate_version(version, path)
 
 
 def main() -> int:
