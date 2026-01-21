@@ -1,0 +1,22 @@
+name: Check version consistency
+
+on:
+  pull_request:
+    branches: [main, dev, stable]
+
+jobs:
+  check-version:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Check version consistency
+        run: |
+          python bin/check_version.py \
+            --base-branch "${{ github.base_ref }}" \
+            --head-branch "${{ github.head_ref }}"

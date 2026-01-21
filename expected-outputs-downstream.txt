@@ -1,8 +1,0 @@
-input_downstream/input_file.csv
-input_downstream/params-downstream.json
-logging_downstream/pipeline-version.txt
-logging_downstream/time.txt
-results_downstream/{GROUP}_clade_counts.tsv.gz
-results_downstream/{GROUP}_duplicate_reads.tsv.gz
-results_downstream/{GROUP}_duplicate_stats.tsv.gz
-results_downstream/{GROUP}_validation_hits.tsv.gz

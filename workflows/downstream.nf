@@ -11,7 +11,7 @@ include { PREPARE_GROUP_TSVS } from "../subworkflows/local/prepareGroupTsvs"
 include { MARK_VIRAL_DUPLICATES } from "../subworkflows/local/markViralDuplicates"
 include { VALIDATE_VIRAL_ASSIGNMENTS } from "../subworkflows/local/validateViralAssignments"
 include { COUNT_READS_PER_CLADE } from "../modules/local/countReadsPerClade"
-include { COPY_FILE_BARE as COPY_VERSION } from "../modules/local/copyFile"
+include { COPY_FILE_BARE as COPY_PYPROJECT } from "../modules/local/copyFile"
 include { COPY_FILE_BARE as COPY_INPUT } from "../modules/local/copyFile"
 include { SORT_TSV as SORT_ONT_HITS } from "../modules/local/sortTsv"
 /*****************
@@ -53,15 +53,14 @@ workflow DOWNSTREAM {
         params_str = groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(params))
         params_ch = Channel.of(params_str).collectFile(name: "params-downstream.json")
         time_ch = start_time_str.map { it + "\n" }.collectFile(name: "time.txt")
-        version_path = file("${projectDir}/pipeline-version.txt")
-        version_newpath = version_path.getFileName().toString()
-        version_ch = COPY_VERSION(Channel.fromPath(version_path), version_newpath)
+        pipeline_pyproject_path = file("${projectDir}/pyproject.toml")
+        pyproject_ch = COPY_PYPROJECT(Channel.fromPath(pipeline_pyproject_path), "pyproject.toml")
         input_newpath = file(params.input_file).getFileName().toString()
         input_file_ch = COPY_INPUT(Channel.fromPath(params.input_file), input_newpath)
 
     emit:
        input_downstream = params_ch.mix(input_file_ch)
-       logging_downstream = time_ch.mix(version_ch)
+       logging_downstream = time_ch.mix(pyproject_ch)
        intermediates_downstream = VALIDATE_VIRAL_ASSIGNMENTS.out.blast_results.mix(
                                         PREPARE_GROUP_TSVS.out.zero_vv_logs,
                                   )

@@ -339,14 +339,14 @@ Only pipeline maintainers should author a new release. The process for going thr
 2. Create a release branch `release/USER_HANDLE/X.Y.Z.W` (see [here](./versioning.md) for information on our versioning system). In this branch:
 
     1. Review and consolidate additions to `CHANGELOG.md`; these often get somewhat disjointed across many small PRs to `dev`.
-    2. Update the version number in `CHANGELOG.md`, `pipeline-version.txt` and `pyproject.toml` to remove any `-dev` suffix and reflect the magnitude of changes (again, see [here](./versioning.md) for information on the versioning schema).
+    2. Update the version number in `CHANGELOG.md` and `pyproject.toml` to remove any `-dev` suffix and reflect the magnitude of changes (again, see [here](./versioning.md) for information on the versioning schema).
     3. Check if the changes in the release necessitate a new index version. Most releases do not; the primary reason one would is if changes to processes or workflows would cause an incompatibility between the contents of the index and the expectations of the RUN or DOWNSTREAM workflows. If this is the case:
 
         1. Check for new releases of reference databases and update `configs/index.config`[^refs].
-        2. Update `index-min-pipeline-version.txt` and `pipeline-min-index-version.txt` to reflect any changes to compatibility restrictions.
+        2. Update `index-min-pipeline-version` and `pipeline-min-index-version` in the `[tool.mgs-workflow]` section of `pyproject.toml` to reflect any changes to compatibility restrictions.
         3. Delete `s3://nao-testing/mgs-workflow-test/index-latest`, then run the `INDEX` workflow to generate a new index at that location. (This will update the index used by relevant Github Actions checks.)
 
-    4. Check for new required output files and update `expected-outputs-run.txt` and `expected-outputs-downstream.txt`.
+    4. Check for new required output files and update the `expected-outputs-*` lists in `pyproject.toml`.
     5. Check for new Nextflow releases and update `.github/actions/setup-nf-test/action.yml` to point to the latest version.
 
 3. Open a PR to merge the release branch into `dev`. Once approved, squash-merge, then open a new PR from `dev` into `main`. Then:
