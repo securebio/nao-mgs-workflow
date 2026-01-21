@@ -13,10 +13,8 @@ nextflow_workflow {
             params {}
             workflow {
                 """
-                input[0] = file("${projectDir}/test-data/toy-data/versions/version1001.txt")
-                input[1] = file("${projectDir}/test-data/toy-data/versions/version1001.txt")
-                input[2] = file("${projectDir}/test-data/toy-data/versions/version1001.txt")
-                input[3] = file("${projectDir}/test-data/toy-data/versions/version1001.txt")
+                input[0] = file("${projectDir}/test-data/checkVersionCompatibility/pyproject-1000-1000.toml")
+                input[1] = file("${projectDir}/test-data/checkVersionCompatibility/pyproject-1000-1000.toml")
                 """
             }
         }
@@ -33,10 +31,8 @@ nextflow_workflow {
             params {}
             workflow {
                 """
-                input[0] = file("${projectDir}/test-data/toy-data/versions/version1001.txt")
-                input[1] = file("${projectDir}/test-data/toy-data/versions/version1001.txt")
-                input[2] = file("${projectDir}/test-data/toy-data/versions/version1000.txt")
-                input[3] = file("${projectDir}/test-data/toy-data/versions/version1000.txt")
+                input[0] = file("${projectDir}/test-data/checkVersionCompatibility/pyproject-1000-1000.toml")
+                input[1] = file("${projectDir}/test-data/checkVersionCompatibility/pyproject-1001-1000.toml")
                 """
             }
         }
@@ -53,10 +49,8 @@ nextflow_workflow {
             params {}
             workflow {
                 """
-                input[0] = file("${projectDir}/test-data/toy-data/versions/version1001.txt")
-                input[1] = file("${projectDir}/test-data/toy-data/versions/version1000.txt")
-                input[2] = file("${projectDir}/test-data/toy-data/versions/version1001.txt")
-                input[3] = file("${projectDir}/test-data/toy-data/versions/version1000.txt")
+                input[0] = file("${projectDir}/test-data/checkVersionCompatibility/pyproject-1001-1001.toml")
+                input[1] = file("${projectDir}/test-data/checkVersionCompatibility/pyproject-1000-1000.toml")
                 """
             }
         }
@@ -76,10 +70,8 @@ nextflow_workflow {
             params {}
             workflow {
                 """
-                input[0] = file("${projectDir}/test-data/toy-data/versions/version1000.txt")
-                input[1] = file("${projectDir}/test-data/toy-data/versions/version1001.txt")
-                input[2] = file("${projectDir}/test-data/toy-data/versions/version1000.txt")
-                input[3] = file("${projectDir}/test-data/toy-data/versions/version1001.txt")
+                input[0] = file("${projectDir}/test-data/checkVersionCompatibility/pyproject-1000-1000.toml")
+                input[1] = file("${projectDir}/test-data/checkVersionCompatibility/pyproject-1001-1001.toml")
                 """
             }
         }
@@ -99,10 +91,8 @@ nextflow_workflow {
             params {}
             workflow {
                 """
-                input[0] = file("${projectDir}/test-data/toy-data/versions/version1000.txt")
-                input[1] = file("${projectDir}/test-data/toy-data/versions/version1000.txt")
-                input[2] = file("${projectDir}/test-data/toy-data/versions/version1000.txt")
-                input[3] = file("${projectDir}/test-data/toy-data/versions/version-invalid.txt")
+                input[0] = file("${projectDir}/test-data/checkVersionCompatibility/pyproject-1000-1000.toml")
+                input[1] = file("${projectDir}/test-data/checkVersionCompatibility/pyproject-invalid.toml")
                 """
             }
         }
