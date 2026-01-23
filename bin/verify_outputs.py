@@ -55,6 +55,8 @@ DEFAULT_PYPROJECT_PATH = Path(__file__).parent.parent / "pyproject.toml"
 EXCLUDED_PATTERNS = [
     "logging/trace*",
     "logging_downstream/trace*",
+    "intermediates/*",
+    "results/merged_blast_*",
 ]
 
 #=============================================================================
