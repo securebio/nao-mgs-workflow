@@ -8,6 +8,8 @@ from verify_outputs import (
     expand_group_placeholder,
     get_expected_outputs,
     is_excluded,
+    list_files,
+    list_local_files,
     list_s3_files,
     parse_groups_from_file,
     report_verification,
@@ -143,6 +145,29 @@ class TestReportVerification:
     def test_error_includes_workflow_name(self):
         with pytest.raises(ValueError, match="MY_WORKFLOW"):
             report_verification("MY_WORKFLOW", {"file.txt"}, set())
+
+
+class TestListLocalFiles:
+    def test_lists_files_recursively(self, tmp_path):
+        (tmp_path / "a.txt").write_text("a")
+        (tmp_path / "subdir").mkdir()
+        (tmp_path / "subdir" / "b.txt").write_text("b")
+        result = list_local_files(str(tmp_path))
+        assert result == {"a.txt", "subdir/b.txt"}
+
+    def test_empty_directory(self, tmp_path):
+        assert list_local_files(str(tmp_path)) == set()
+
+    def test_nonexistent_directory(self, tmp_path):
+        with pytest.raises(ValueError, match="does not exist"):
+            list_local_files(str(tmp_path / "nonexistent"))
+
+
+class TestListFiles:
+    def test_local_path(self, tmp_path):
+        (tmp_path / "file.txt").write_text("content")
+        result = list_files(str(tmp_path))
+        assert result == {"file.txt"}
 
 
 class TestListS3Files:

@@ -57,8 +57,25 @@ EXCLUDED_PATTERNS = [
 ]
 
 #=============================================================================
-# S3 helpers
+# File listing helpers
 #=============================================================================
+
+def list_local_files(local_path: str) -> set[str]:
+    """
+    List all files under a local directory path.
+    Args:
+        local_path (str): Local directory path
+    Returns:
+        set[str]: Set of relative paths (relative to local_path)
+    """
+    base = Path(local_path)
+    if not base.is_dir():
+        raise ValueError(f"Directory does not exist: {local_path}")
+    files = set()
+    for file_path in base.rglob("*"):
+        if file_path.is_file():
+            files.add(str(file_path.relative_to(base)))
+    return files
 
 def list_s3_files(s3_path: str) -> set[str]:
     """
@@ -85,6 +102,18 @@ def list_s3_files(s3_path: str) -> set[str]:
                 if relative_path:
                     files.add(relative_path)
     return files
+
+def list_files(path: str) -> set[str]:
+    """
+    List all files under a path (S3 or local).
+    Args:
+        path (str): S3 URI or local directory path
+    Returns:
+        set[str]: Set of relative paths
+    """
+    if path.startswith("s3://"):
+        return list_s3_files(path)
+    return list_local_files(path)
 
 def download_s3_file(s3_path: str, local_path: Path) -> None:
     """
@@ -258,7 +287,7 @@ def verify_outputs(
     Verify outputs for a single workflow.
     Args:
         workflow_name (str): Name for logging (e.g., "RUN", "DOWNSTREAM")
-        output_dir (str): S3 path to output directory
+        output_dir (str): Path to output directory (local or S3)
         expected_patterns (list[str]): Expected output patterns (may contain {GROUP})
         excluded_patterns (list[str]): Patterns to exclude from unexpected file detection
         groups (list[str] | None): Group names for placeholder expansion (None to skip)
@@ -270,7 +299,7 @@ def verify_outputs(
         expected = expand_group_placeholder(expected_patterns, groups)
     else:
         expected = set(expected_patterns)
-    actual = list_s3_files(output_dir)
+    actual = list_files(output_dir)
     logger.info(f"Expected: {len(expected)} files, Actual: {len(actual)} files")
     missing, unexpected = compare_outputs(expected, actual, excluded_patterns)
     report_verification(workflow_name, missing, unexpected)
@@ -291,7 +320,7 @@ def parse_args() -> argparse.Namespace:
         "--output-dir",
         type=str,
         required=True,
-        help="S3 path to output directory to verify",
+        help="Path to output directory to verify (local or S3)",
     )
     parser.add_argument(
         "--expected-outputs-key",
