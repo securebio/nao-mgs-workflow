@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
 """Unit tests for verify_outputs.py"""
 
+from unittest.mock import patch
+
 import pytest
 
 from verify_outputs import (
+    main,
     compare_outputs,
     expand_group_placeholder,
     get_expected_outputs,
@@ -174,3 +177,106 @@ class TestListS3Files:
     def test_invalid_s3_path(self):
         with pytest.raises(ValueError, match="Invalid S3 path"):
             list_s3_files("/local/path")
+
+
+class TestMain:
+    def test_success(self, tmp_path):
+        # Create pyproject.toml with expected outputs
+        pyproject = tmp_path / "pyproject.toml"
+        pyproject.write_text("""
+[tool.mgs-workflow]
+expected-outputs-run = ["results/output.txt"]
+""")
+        # Create output directory with matching files
+        output_dir = tmp_path / "output"
+        (output_dir / "results").mkdir(parents=True)
+        (output_dir / "results" / "output.txt").write_text("data")
+
+        with patch("sys.argv", [
+            "verify_outputs.py",
+            "--output-dir", str(output_dir),
+            "--expected-outputs-key", "run",
+            "--pyproject", str(pyproject),
+        ]):
+            main()  # Should not raise
+
+    def test_missing_files_raises(self, tmp_path):
+        pyproject = tmp_path / "pyproject.toml"
+        pyproject.write_text("""
+[tool.mgs-workflow]
+expected-outputs-run = ["results/output.txt", "results/other.txt"]
+""")
+        output_dir = tmp_path / "output"
+        (output_dir / "results").mkdir(parents=True)
+        (output_dir / "results" / "output.txt").write_text("data")
+
+        with patch("sys.argv", [
+            "verify_outputs.py",
+            "--output-dir", str(output_dir),
+            "--expected-outputs-key", "run",
+            "--pyproject", str(pyproject),
+        ]):
+            with pytest.raises(ValueError, match="1 missing"):
+                main()
+
+    def test_unexpected_files_raises(self, tmp_path):
+        pyproject = tmp_path / "pyproject.toml"
+        pyproject.write_text("""
+[tool.mgs-workflow]
+expected-outputs-run = ["results/output.txt"]
+""")
+        output_dir = tmp_path / "output"
+        (output_dir / "results").mkdir(parents=True)
+        (output_dir / "results" / "output.txt").write_text("data")
+        (output_dir / "results" / "extra.txt").write_text("extra")
+
+        with patch("sys.argv", [
+            "verify_outputs.py",
+            "--output-dir", str(output_dir),
+            "--expected-outputs-key", "run",
+            "--pyproject", str(pyproject),
+        ]):
+            with pytest.raises(ValueError, match="1 unexpected"):
+                main()
+
+    def test_with_groups(self, tmp_path):
+        pyproject = tmp_path / "pyproject.toml"
+        pyproject.write_text("""
+[tool.mgs-workflow]
+expected-outputs-downstream = ["{GROUP}/output.txt"]
+""")
+        groups_file = tmp_path / "groups.tsv"
+        groups_file.write_text("sample\tgroup\ns1\tgroup_a\n")
+
+        output_dir = tmp_path / "output"
+        (output_dir / "group_a").mkdir(parents=True)
+        (output_dir / "group_a" / "output.txt").write_text("data")
+
+        with patch("sys.argv", [
+            "verify_outputs.py",
+            "--output-dir", str(output_dir),
+            "--expected-outputs-key", "downstream",
+            "--pyproject", str(pyproject),
+            "--groups", str(groups_file),
+        ]):
+            main()  # Should not raise
+
+    def test_excluded_files_not_flagged(self, tmp_path):
+        pyproject = tmp_path / "pyproject.toml"
+        pyproject.write_text("""
+[tool.mgs-workflow]
+expected-outputs-run = ["results/output.txt"]
+""")
+        output_dir = tmp_path / "output"
+        (output_dir / "results").mkdir(parents=True)
+        (output_dir / "results" / "output.txt").write_text("data")
+        (output_dir / "logging").mkdir()
+        (output_dir / "logging" / "trace-123.txt").write_text("trace")
+
+        with patch("sys.argv", [
+            "verify_outputs.py",
+            "--output-dir", str(output_dir),
+            "--expected-outputs-key", "run",
+            "--pyproject", str(pyproject),
+        ]):
+            main()  # Should not raise - trace file is excluded by default
