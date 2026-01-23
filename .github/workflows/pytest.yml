@@ -48,4 +48,4 @@ jobs:
       - name: Run pytest
         if: steps.filter.outputs.python == 'true'
         run: |
-          python -m pytest modules/local/*/resources/usr/bin/test_*.py post-processing/tests/ -v --tb=short
+          python -m pytest bin/test_*.py modules/local/*/resources/usr/bin/test_*.py post-processing/tests/ -v --tb=short
