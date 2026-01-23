@@ -93,7 +93,7 @@ def list_s3_files(s3_path: str) -> set[str]:
     path_without_scheme = s3_path.removeprefix("s3://")
     parts = path_without_scheme.split("/", 1)
     bucket = parts[0]
-    prefix = parts[1].rstrip("/") + "/" if len(parts) > 1 else ""
+    prefix = f'{parts[1].rstrip("/")}/' if len(parts) > 1 and parts[1] else ""
     s3_client = boto3.client("s3")
     files = set()
     paginator = s3_client.get_paginator("list_objects_v2")
