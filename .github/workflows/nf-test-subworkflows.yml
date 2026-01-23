@@ -34,6 +34,8 @@ jobs:
               - 'modules/**'
               - 'tests/subworkflows/**'
               - 'subworkflows/**'
+              - 'configs/**'
+              - 'tests/configs/**'
       - name: Setup nf-test environment
         if: steps.filter.outputs.subworkflows == 'true'
         uses: ./.github/actions/setup-nf-test

@@ -38,6 +38,8 @@ jobs:
               - 'tests/workflows/**'
               - 'workflows/**'
               - 'bin/chain_workflows.py'
+              - 'configs/**'
+              - 'tests/configs/**'
       - name: Setup nf-test environment
         if: steps.filter.outputs.chained == 'true'
         uses: ./.github/actions/setup-nf-test

@@ -39,6 +39,8 @@ jobs:
               - 'tests/workflows/**'
               - 'workflows/**'
               - 'bin/chain_workflows.py'
+              - 'configs/**'
+              - 'tests/configs/**'
 
       - name: Setup nf-test environment
         if: steps.filter.outputs.relevant == 'true'
