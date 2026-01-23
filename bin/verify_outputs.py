@@ -164,7 +164,7 @@ def parse_groups_from_file(groups_file: str) -> list[str]:
         list[str]: List of unique group names
     """
     delimiter = "\t" if groups_file.endswith(".tsv") else ","
-    with open(groups_file) as f:
+    with open(groups_file, encoding="utf-8", newline="") as f:
         reader = csv.DictReader(f, delimiter=delimiter)
         fieldnames = reader.fieldnames or []
         if "group" in fieldnames:
