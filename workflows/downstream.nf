@@ -55,8 +55,7 @@ workflow DOWNSTREAM {
         time_ch = start_time_str.map { it + "\n" }.collectFile(name: "time.txt")
         pipeline_pyproject_path = file("${projectDir}/pyproject.toml")
         pyproject_ch = COPY_PYPROJECT(Channel.fromPath(pipeline_pyproject_path), "pyproject.toml")
-        input_newpath = file(params.input_file).getFileName().toString()
-        input_file_ch = COPY_INPUT(Channel.fromPath(params.input_file), input_newpath)
+        input_file_ch = COPY_INPUT(Channel.fromPath(params.input_file), "input_file.csv")
 
     emit:
        input_downstream = params_ch.mix(input_file_ch)
