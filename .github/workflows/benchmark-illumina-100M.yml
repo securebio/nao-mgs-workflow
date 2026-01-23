@@ -39,6 +39,7 @@ jobs:
               - 'tests/workflows/**'
               - 'workflows/**'
               - 'bin/chain_workflows.py'
+              - 'bin/verify_outputs.py'
               - 'configs/**'
               - 'tests/configs/**'
               - '.github/workflows/benchmark-illumina-100M.yml'
@@ -63,3 +64,18 @@ jobs:
             --samplesheet s3://nao-testing/benchmarks/Illumina_100M/samplesheet.csv \
             --launch-dir test_run_benchmark_100M \
             --base-dir s3://nao-testing-scratch/mgs-workflow-test/benchmark-illumina-100M/
+
+      - name: Verify RUN workflow outputs
+        if: steps.filter.outputs.relevant == 'true'
+        run: |
+          python bin/verify_outputs.py \
+            --output-dir s3://nao-testing-scratch/mgs-workflow-test/benchmark-illumina-100M/run/output \
+            --expected-outputs-key run
+
+      - name: Verify DOWNSTREAM workflow outputs
+        if: steps.filter.outputs.relevant == 'true'
+        run: |
+          python bin/verify_outputs.py \
+            --output-dir s3://nao-testing-scratch/mgs-workflow-test/benchmark-illumina-100M/downstream/output \
+            --expected-outputs-key downstream \
+            --input-csv test_run_benchmark_100M/downstream/input.csv
