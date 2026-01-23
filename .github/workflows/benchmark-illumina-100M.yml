@@ -41,6 +41,7 @@ jobs:
               - 'bin/chain_workflows.py'
               - 'configs/**'
               - 'tests/configs/**'
+              - '.github/workflows/benchmark-illumina-100M.yml'
 
       - name: Setup nf-test environment
         if: steps.filter.outputs.relevant == 'true'

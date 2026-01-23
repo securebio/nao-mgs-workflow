@@ -36,6 +36,7 @@ jobs:
               - 'workflows/downstream*'
               - 'configs/**'
               - 'tests/configs/**'
+              - '.github/workflows/nf-test-workflows-downstream.yml'
 
       - name: Setup nf-test environment
         if: steps.filter.outputs.downstream == 'true'
