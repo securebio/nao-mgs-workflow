@@ -93,7 +93,7 @@ def list_s3_files(s3_path: str) -> set[str]:
     path_without_scheme = s3_path.removeprefix("s3://")
     parts = path_without_scheme.split("/", 1)
     bucket = parts[0]
-    prefix = parts[1].rstrip("/") + "/" if len(parts) > 1 else ""
+    prefix = f'{parts[1].rstrip("/")}/' if len(parts) > 1 and parts[1] else ""
     s3_client = boto3.client("s3")
     files = set()
     paginator = s3_client.get_paginator("list_objects_v2")
@@ -164,7 +164,7 @@ def parse_groups_from_file(groups_file: str) -> list[str]:
         list[str]: List of unique group names
     """
     delimiter = "\t" if groups_file.endswith(".tsv") else ","
-    with open(groups_file) as f:
+    with open(groups_file, encoding="utf-8", newline="") as f:
         reader = csv.DictReader(f, delimiter=delimiter)
         fieldnames = reader.fieldnames or []
         if "group" in fieldnames:
