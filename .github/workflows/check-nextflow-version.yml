@@ -1,0 +1,19 @@
+name: Check Nextflow version is latest
+
+on:
+  pull_request:
+    branches: [main, dev, stable]
+
+jobs:
+  check-nextflow-version:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Check Nextflow version is latest
+        run: python bin/check_nextflow_version.py
