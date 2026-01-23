@@ -44,10 +44,10 @@ runs:
         java-version: '21'
         distribution: 'temurin'
 
-    - name: Setup Nextflow (25.10.0)
+    - name: Setup Nextflow (25.10.3)
       uses: nf-core/setup-nextflow@v1
       with:
-        version: "25.10.0"
+        version: "25.10.3"
 
     - name: Setup nf-test
       uses: nf-core/setup-nf-test@v1
