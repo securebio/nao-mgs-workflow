@@ -157,25 +157,42 @@ def get_expected_outputs(pyproject_path: Path, workflow: str) -> list[str]:
 
 def parse_groups_from_file(groups_file: str) -> list[str]:
     """
-    Extract unique groups from a groups TSV (uses 'group' column) or samplesheet (uses 'sample' column).
+    Extract unique groups from a groups TSV or samplesheet.
     Args:
-        groups_file (str): Local path to groups TSV or samplesheet CSV
+        groups_file (str): Local path to groups TSV (uses 'group' column) or samplesheet (uses 'sample' column)
     Returns:
         list[str]: List of unique group names
     """
-    # Detect delimiter from file extension
     delimiter = "\t" if groups_file.endswith(".tsv") else ","
     with open(groups_file) as f:
         reader = csv.DictReader(f, delimiter=delimiter)
-        if "group" in reader.fieldnames:
+        fieldnames = reader.fieldnames or []
+        if "group" in fieldnames:
             column = "group"
-        elif "sample" in reader.fieldnames:
+        elif "sample" in fieldnames:
             column = "sample"
         else:
             raise ValueError(
                 f"File must have 'group' or 'sample' column: {groups_file}"
             )
         groups = {row[column] for row in reader}
+    return sorted(groups)
+
+def parse_groups_from_input_csv(input_csv: str) -> list[str]:
+    """
+    Extract unique groups from a downstream input CSV by following groups_tsv references.
+    Args:
+        input_csv (str): Local path to input CSV with 'groups_tsv' column
+    Returns:
+        list[str]: List of unique group names from all referenced groups files
+    """
+    groups = set()
+    with open(input_csv) as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            groups_tsv_path = row["groups_tsv"]
+            referenced_groups = resolve_groups(groups_tsv_path)
+            groups.update(referenced_groups)
     return sorted(groups)
 
 def resolve_groups(groups_file: str) -> list[str]:
@@ -333,10 +350,10 @@ def parse_args() -> argparse.Namespace:
         help="Key in pyproject.toml specifying expected outputs",
     )
     parser.add_argument(
-        "--groups",
+        "--input-csv",
         type=str,
         default=None,
-        help="Optional: path to groups TSV or samplesheet (local or S3) for {GROUP} expansion",
+        help="Optional: path to downstream input CSV for {GROUP} expansion (extracts groups from groups_tsv references)",
     )
     parser.add_argument(
         "--pyproject",
@@ -368,8 +385,8 @@ def main() -> None:
     logger.info(f"Parsed arguments: {args}")
     excluded_patterns = EXCLUDED_PATTERNS + args.exclude
     logger.info(f"Excluded patterns: {excluded_patterns}")
-    if args.groups:
-        groups = resolve_groups(args.groups)
+    if args.input_csv:
+        groups = parse_groups_from_input_csv(args.input_csv)
         logger.info(f"Groups: {groups}")
     else:
         groups = None

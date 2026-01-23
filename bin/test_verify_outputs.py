@@ -15,6 +15,7 @@ from verify_outputs import (
     list_local_files,
     list_s3_files,
     parse_groups_from_file,
+    parse_groups_from_input_csv,
     report_verification,
     resolve_groups,
 )
@@ -96,6 +97,26 @@ class TestResolveGroups:
         groups_file = tmp_path / "groups.tsv"
         groups_file.write_text("sample\tgroup\ns1\tgroup_a\ns2\tgroup_b\n")
         assert resolve_groups(str(groups_file)) == ["group_a", "group_b"]
+
+
+class TestParseGroupsFromInputCsv:
+    def test_single_groups_file(self, tmp_path):
+        groups_file = tmp_path / "groups.tsv"
+        groups_file.write_text("sample\tgroup\ns1\tgroup_a\ns2\tgroup_b\n")
+        input_csv = tmp_path / "input.csv"
+        input_csv.write_text(f"label,hits_tsv,groups_tsv\nrun1,hits.tsv,{groups_file}\n")
+        assert parse_groups_from_input_csv(str(input_csv)) == ["group_a", "group_b"]
+
+    def test_multiple_groups_files(self, tmp_path):
+        groups1 = tmp_path / "groups1.tsv"
+        groups1.write_text("sample\tgroup\ns1\talpha\n")
+        groups2 = tmp_path / "groups2.tsv"
+        groups2.write_text("sample\tgroup\ns2\tbeta\ns3\tgamma\n")
+        input_csv = tmp_path / "input.csv"
+        input_csv.write_text(
+            f"label,hits_tsv,groups_tsv\nrun1,h1.tsv,{groups1}\nrun2,h2.tsv,{groups2}\n"
+        )
+        assert parse_groups_from_input_csv(str(input_csv)) == ["alpha", "beta", "gamma"]
 
 
 class TestGetExpectedOutputs:
@@ -239,14 +260,19 @@ expected-outputs-run = ["results/output.txt"]
             with pytest.raises(ValueError, match="1 unexpected"):
                 main()
 
-    def test_with_groups(self, tmp_path):
+    def test_with_input_csv(self, tmp_path):
         pyproject = tmp_path / "pyproject.toml"
         pyproject.write_text("""
 [tool.mgs-workflow]
 expected-outputs-downstream = ["{GROUP}/output.txt"]
 """)
+        # Create groups TSV that the input CSV will reference
         groups_file = tmp_path / "groups.tsv"
         groups_file.write_text("sample\tgroup\ns1\tgroup_a\n")
+
+        # Create input CSV that references the groups file
+        input_csv = tmp_path / "input.csv"
+        input_csv.write_text(f"label,hits_tsv,groups_tsv\nrun1,hits.tsv,{groups_file}\n")
 
         output_dir = tmp_path / "output"
         (output_dir / "group_a").mkdir(parents=True)
@@ -257,7 +283,7 @@ expected-outputs-downstream = ["{GROUP}/output.txt"]
             "--output-dir", str(output_dir),
             "--expected-outputs-key", "downstream",
             "--pyproject", str(pyproject),
-            "--groups", str(groups_file),
+            "--input-csv", str(input_csv),
         ]):
             main()  # Should not raise
 
