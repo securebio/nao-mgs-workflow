@@ -11,7 +11,7 @@
     - Added plaintext handling to BLAST process to help with testing
     - Created custom tiny reference datasets and switched tests to use them for increased speed
 - Implemented code for generating and uploading containers to ECR Public, and replaced Wave container paths with ECR paths. Among other benefits, this allows us to run the entire test suite without running into pull-rate limit errors.
-- Added a minimum Nextflow version via `manifest` statement in `configs/profiles.config`.
+- Added a minimum Nextflow version via `manifest` statement in `configs/profiles.config`, along with functionality to check whether this minimum version is up-to-date with the latest Nextflow release.
 - Streamlining releases by moving large tests into Github Actions
     - Whole `nf-test` suite now runs on PRs to main (`.github/workflows/nf-test-*`)
     - Chained `INDEX -> RUN -> DOWNSTREAM` integration test on toy data runs before PRs to `main` (`.github/workflows/test-chained.yml`)
