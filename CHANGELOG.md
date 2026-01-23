@@ -15,6 +15,8 @@
 - Streamlining releases by moving large tests into Github Actions
     - Whole `nf-test` suite now runs on PRs to main (`.github/workflows/nf-test-*`)
     - Chained `INDEX -> RUN -> DOWNSTREAM` integration test on toy data runs before PRs to `main` (`.github/workflows/test-chained.yml`)
+    - Chained `RUN -> DOWNSTREAM` integration tests for real benchmark data.
+    - Verification that outputs of integration tests match the expected outputs specified in `pyproject.toml`
     - Added test to enforce `CHANGELOG.md` updates in PRs to `dev` (`.github/workflows/check-changelog.yml`)
     - Consolidated version & output tracking into `pyproject.toml` & added a test for version consistency between `pyproject.toml` and `CHANGELOG.md`.
     - Moved release documentation from private internal docs to `docs/developer.md` and updated formatting to match Github requirements.
