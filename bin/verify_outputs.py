@@ -56,6 +56,7 @@ EXCLUDED_PATTERNS = [
     "logging/trace*",
     "logging_downstream/trace*",
     "intermediates/*",
+    "intermediates_downstream/*",
     "results/merged_blast_*",
 ]
 

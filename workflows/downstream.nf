@@ -43,7 +43,7 @@ workflow DOWNSTREAM {
             viral_hits_ch = MARK_VIRAL_DUPLICATES.out.dup.map { label, tab, _stats -> [label, tab] }
             dup_output_ch = MARK_VIRAL_DUPLICATES.out.dup
             // Generate clade counts
-            clade_counts_ch = COUNT_READS_PER_CLADE(viral_hits_ch, viral_db)
+            clade_counts_ch = COUNT_READS_PER_CLADE(viral_hits_ch, viral_db).output
         }
         // Validate taxonomic assignments
         def validation_params = params.collectEntries { k, v -> [k, v] }
