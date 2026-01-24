@@ -22,6 +22,15 @@ DEFAULT_CONFIG_PATH = Path(__file__).parent.parent / "configs" / "profiles.confi
 DEFAULT_GITHUB_API_URL = (
     "https://api.github.com/repos/nextflow-io/nextflow/releases/latest"
 )
+GITHUB_RELEASES_URL = (
+    "https://api.github.com/repos/nextflow-io/nextflow/releases"
+)
+
+# Known broken Nextflow versions that should be excluded from version checks.
+# Add versions here when they have critical bugs that affect the pipeline.
+EXCLUDED_VERSIONS = {
+    "25.10.3",  # AWS Batch job submission issues
+}
 
 # Pattern to extract version from config: nextflowVersion = '!>=25.10.0'
 NEXTFLOW_VERSION_PATTERN = re.compile(
@@ -91,6 +100,39 @@ def get_latest_version(api_url: str) -> str:
     tag = data["tag_name"].removeprefix("v")
     return validate_semver(tag, api_url)
 
+
+def get_latest_non_excluded_version(excluded: set[str]) -> str:
+    """
+    Fetch the latest Nextflow release version that is not in the excluded set.
+
+    Args:
+        excluded (set[str]): Set of version strings to exclude.
+
+    Returns:
+        str: The latest non-excluded Nextflow release version.
+    """
+    request = urllib.request.Request(
+        GITHUB_RELEASES_URL,
+        headers={"Accept": "application/vnd.github.v3+json"},
+    )
+    with urllib.request.urlopen(request, timeout=30) as response:
+        releases = json.loads(response.read().decode())
+
+    for release in releases:
+        if release.get("prerelease") or release.get("draft"):
+            continue
+        tag = release["tag_name"].removeprefix("v")
+        try:
+            version = validate_semver(tag, GITHUB_RELEASES_URL)
+        except ValueError:
+            continue
+        if version not in excluded:
+            return version
+
+    raise ValueError(
+        f"Could not find any non-excluded release. Excluded: {excluded}"
+    )
+
 def compare_versions(version1: str, version2: str) -> None:
     """
     Compare two version strings, raising an error if they
@@ -127,8 +169,16 @@ def main() -> None:
     print(f"Pinned Nextflow version: {pinned}")
     latest = get_latest_version(args.api_url)
     print(f"Latest Nextflow version: {latest}")
-    compare_versions(pinned, latest)
-    print("OK: Pinned version matches latest release")
+
+    if latest in EXCLUDED_VERSIONS:
+        print(f"Latest version {latest} is excluded (known issues)")
+        target = get_latest_non_excluded_version(EXCLUDED_VERSIONS)
+        print(f"Latest non-excluded version: {target}")
+    else:
+        target = latest
+
+    compare_versions(pinned, target)
+    print("OK: Pinned version matches target release")
 
 if __name__ == "__main__":
     main()
