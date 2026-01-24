@@ -25,6 +25,7 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
       - name: Check for relevant changes
         uses: dorny/paths-filter@v3
         id: filter
@@ -42,6 +43,7 @@ jobs:
               - 'configs/**'
               - 'tests/configs/**'
               - '.github/workflows/test-chained.yml'
+
       - name: Setup nf-test environment
         if: steps.filter.outputs.chained == 'true'
         uses: ./.github/actions/setup-nf-test
@@ -53,10 +55,13 @@ jobs:
         if: steps.filter.outputs.chained == 'true'
         run: |
           pip install boto3
+
       - name: Run chain workflows integration test
         if: steps.filter.outputs.chained == 'true'
         run: |
-          bin/chain_workflows.py --no-resume --base-dir s3://nao-testing-scratch/mgs-workflow-test
+          bin/chain_workflows.py \
+              --no-resume \
+              --base-dir s3://nao-testing-scratch/mgs-workflow-test/chained-test/
 
       - name: Verify RUN workflow outputs
         if: steps.filter.outputs.chained == 'true'
