@@ -68,13 +68,13 @@ jobs:
         if: steps.filter.outputs.chained == 'true'
         run: |
           python bin/verify_outputs.py \
-            --output-dir s3://nao-testing-scratch/mgs-workflow-test/run/output \
+            --output-dir s3://nao-testing-scratch/mgs-workflow-test/chained-test/run/output \
             --expected-outputs-key run
 
       - name: Verify DOWNSTREAM workflow outputs
         if: steps.filter.outputs.chained == 'true'
         run: |
           python bin/verify_outputs.py \
-            --output-dir s3://nao-testing-scratch/mgs-workflow-test/downstream/output \
+            --output-dir s3://nao-testing-scratch/mgs-workflow-test/chained-test/downstream/output \
             --expected-outputs-key downstream \
-            --input-csv test_run/downstream/input.csv
+            --input-csv test_run_chained/downstream/input.csv
