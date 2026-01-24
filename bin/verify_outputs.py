@@ -103,7 +103,8 @@ def list_s3_files(s3_path: str) -> set[str]:
             key = obj["Key"]
             if key.startswith(prefix):
                 relative_path = key.removeprefix(prefix)
-                if relative_path:
+                # Skip empty paths and directory markers (paths ending with /)
+                if relative_path and not relative_path.endswith("/"):
                     files.add(relative_path)
     return files
 
@@ -370,6 +371,14 @@ def parse_args() -> argparse.Namespace:
         help=f"Additional exclusion patterns (can be repeated). "
              f"Default exclusions: {EXCLUDED_PATTERNS}",
     )
+    parser.add_argument(
+        "--exclude-outputs-from",
+        type=str,
+        action="append",
+        default=[],
+        choices=["run", "downstream", "downstream-ont"],
+        help="Exclude expected outputs from another workflow (useful when workflows share output directory)",
+    )
     return parser.parse_args()
 
 #=============================================================================
@@ -385,6 +394,11 @@ def main() -> None:
     args = parse_args()
     logger.info(f"Parsed arguments: {args}")
     excluded_patterns = EXCLUDED_PATTERNS + args.exclude
+    # Add expected outputs from other workflows as exclusions
+    for other_workflow in args.exclude_outputs_from:
+        other_outputs = get_expected_outputs(args.pyproject, other_workflow)
+        excluded_patterns.extend(other_outputs)
+        logger.info(f"Excluding {len(other_outputs)} patterns from {other_workflow}")
     logger.info(f"Excluded patterns: {excluded_patterns}")
     if args.input_csv:
         groups = parse_groups_from_input_csv(args.input_csv)

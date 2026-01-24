@@ -306,3 +306,71 @@ expected-outputs-run = ["results/output.txt"]
             "--pyproject", str(pyproject),
         ]):
             main()  # Should not raise - trace file is excluded by default
+
+    def test_exclude_outputs_from_other_workflow(self, tmp_path):
+        """Test that --exclude-outputs-from excludes another workflow's expected outputs."""
+        pyproject = tmp_path / "pyproject.toml"
+        pyproject.write_text("""
+[tool.mgs-workflow]
+expected-outputs-run = ["results/run_output.txt"]
+expected-outputs-downstream = ["results/downstream_output.txt"]
+""")
+        output_dir = tmp_path / "output"
+        (output_dir / "results").mkdir(parents=True)
+        (output_dir / "results" / "downstream_output.txt").write_text("downstream")
+        (output_dir / "results" / "run_output.txt").write_text("run")
+
+        with patch("sys.argv", [
+            "verify_outputs.py",
+            "--output-dir", str(output_dir),
+            "--expected-outputs-key", "downstream",
+            "--pyproject", str(pyproject),
+            "--exclude-outputs-from", "run",
+        ]):
+            main()  # Should not raise - run_output.txt is excluded
+
+    def test_exclude_outputs_from_without_flag_fails(self, tmp_path):
+        """Test that without --exclude-outputs-from, other workflow's outputs are unexpected."""
+        pyproject = tmp_path / "pyproject.toml"
+        pyproject.write_text("""
+[tool.mgs-workflow]
+expected-outputs-run = ["results/run_output.txt"]
+expected-outputs-downstream = ["results/downstream_output.txt"]
+""")
+        output_dir = tmp_path / "output"
+        (output_dir / "results").mkdir(parents=True)
+        (output_dir / "results" / "downstream_output.txt").write_text("downstream")
+        (output_dir / "results" / "run_output.txt").write_text("run")
+
+        with patch("sys.argv", [
+            "verify_outputs.py",
+            "--output-dir", str(output_dir),
+            "--expected-outputs-key", "downstream",
+            "--pyproject", str(pyproject),
+        ]):
+            with pytest.raises(ValueError, match="1 unexpected"):
+                main()
+
+
+class TestListS3FilesDirectoryMarkers:
+    """Test that S3 directory markers are filtered out."""
+
+    def test_filters_directory_markers(self):
+        mock_paginator = type("Paginator", (), {
+            "paginate": lambda self, **kwargs: [
+                {
+                    "Contents": [
+                        {"Key": "prefix/file.txt"},
+                        {"Key": "prefix/subdir/"},
+                        {"Key": "prefix/subdir/file2.txt"},
+                        {"Key": "prefix/"},
+                    ]
+                }
+            ]
+        })()
+
+        with patch("boto3.client") as mock_client:
+            mock_client.return_value.get_paginator.return_value = mock_paginator
+            result = list_s3_files("s3://bucket/prefix")
+
+        assert result == {"file.txt", "subdir/file2.txt"}
