@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Unit tests for verify_outputs.py"""
 
-from unittest.mock import patch
+from unittest.mock import patch, MagicMock
 
 import pytest
 
