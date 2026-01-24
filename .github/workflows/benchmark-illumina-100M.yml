@@ -62,9 +62,9 @@ jobs:
           bin/chain_workflows.py \
             --no-resume \
             --base-dir s3://nao-testing-scratch/mgs-workflow-test/benchmark-illumina-100M/
+            --launch-dir test_run_benchmark_100M/
             --ref-dir s3://nao-testing/mgs-workflow-test/index-latest/output/ \
             --samplesheet s3://nao-testing/benchmarks/Illumina_100M/samplesheet.csv \
-            --launch-dir test_run_benchmark_100M/
 
       - name: Verify RUN workflow outputs
         if: steps.filter.outputs.relevant == 'true'
