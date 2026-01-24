@@ -117,7 +117,7 @@ class TestMain:
         captured = capsys.readouterr()
         assert "Pinned Nextflow version: 25.10.0" in captured.out
         assert "Latest Nextflow version: 25.10.0" in captured.out
-        assert "OK: Pinned version matches latest release" in captured.out
+        assert "OK: Pinned version matches target release" in captured.out
 
     def test_versions_mismatch(self, tmp_path):
         config = tmp_path / "profiles.config"
