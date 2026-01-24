@@ -1,0 +1,27 @@
+nextflow_process {
+
+    name "Test EXTRACT_VERSIONS"
+    script "modules/local/extractVersions/main.nf"
+    process "EXTRACT_VERSIONS"
+    config "tests/configs/run.config"
+    tag "extract_versions"
+    tag "module"
+
+    test("Should extract versions from pyproject.toml files") {
+        when {
+            process {
+                """
+                input[0] = file("${projectDir}/pyproject.toml")
+                input[1] = file("${projectDir}/test-data/extractVersions/pyproject-index.toml")
+                """
+            }
+        }
+        then {
+            assert process.success
+            assert process.out.pipeline_version
+            assert process.out.index_version
+            assert process.out.pipeline_min_index
+            assert process.out.index_min_pipeline
+        }
+    }
+}
