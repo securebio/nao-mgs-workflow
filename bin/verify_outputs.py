@@ -189,7 +189,7 @@ def parse_groups_from_input_csv(input_csv: str) -> list[str]:
         list[str]: List of unique group names from all referenced groups files
     """
     groups = set()
-    with open(input_csv) as f:
+    with open(input_csv, encoding="utf-8", newline="") as f:
         reader = csv.DictReader(f)
         for row in reader:
             groups_tsv_path = row["groups_tsv"]
