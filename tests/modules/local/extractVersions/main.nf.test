@@ -12,7 +12,7 @@ nextflow_process {
             process {
                 """
                 input[0] = file("${projectDir}/pyproject.toml")
-                input[1] = file("${projectDir}/test-data/extractVersions/pyproject-index.toml")
+                input[1] = file("${projectDir}/pyproject.toml")
                 """
             }
         }
