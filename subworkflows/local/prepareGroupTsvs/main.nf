@@ -9,7 +9,8 @@ include { JOIN_TSVS } from "../../../modules/local/joinTsvs"
 include { VALIDATE_GROUPING } from "../../../modules/local/validateGrouping"
 include { PARTITION_TSV } from "../../../modules/local/partitionTsv"
 include { CONCATENATE_TSVS_LABELED } from "../../../modules/local/concatenateTsvs"
-include { CONCATENATE_TSVS_LABELED as CONCATENATE_EMPTY_SAMPLES_LIST } from "../../../modules/local/concatenateTsvs"
+include { CONCATENATE_TSVS_LABELED as CONCATENATE_PARTIAL_GROUP_LOGS } from "../../../modules/local/concatenateTsvs"
+include { CONCATENATE_TSVS_LABELED as CONCATENATE_EMPTY_GROUP_LOGS } from "../../../modules/local/concatenateTsvs"
 
 /***********
 | WORKFLOW |
@@ -27,7 +28,8 @@ workflow PREPARE_GROUP_TSVS {
         combined_sorted_ch = input_sorted_ch.combine(groups_sorted_ch, by: 0)
         // 2. Validate grouping and filter zero-VV samples
         validated_grouping_ch = VALIDATE_GROUPING(combined_sorted_ch).output
-        zero_vv_log_ch = VALIDATE_GROUPING.out.zero_vv_log
+        partial_group_log_ch = VALIDATE_GROUPING.out.partial_group_log
+        empty_group_log_ch = VALIDATE_GROUPING.out.empty_group_log
         // 3. Join with inner join (guaranteed to succeed after validation)
         joined_ch = JOIN_TSVS(validated_grouping_ch, "sample", "inner", "input").output
         joined_sorted_ch = SORT_JOINED_GROUPS(joined_ch, "group").sorted
@@ -53,12 +55,16 @@ workflow PREPARE_GROUP_TSVS {
         partitioned_grouped_ch = partitioned_flattened_ch.groupTuple()
         // 6. Concatenate TSVs for each group
         concat_ch = CONCATENATE_TSVS_LABELED(partitioned_grouped_ch, "grouped").output
-        // 7. Concatenate zero VV logs into single consolidated file
-        zero_vv_log_grouped_ch = zero_vv_log_ch.map { _label, file -> ["all_samples", file] }.groupTuple()
-        consolidated_zero_vv_ch = CONCATENATE_EMPTY_SAMPLES_LIST(zero_vv_log_grouped_ch, "zero_vv_consolidated").output
+        // 7. Concatenate partial group logs (empty samples with non-empty group-mates)
+        partial_log_grouped_ch = partial_group_log_ch.map { _label, file -> ["all_samples", file] }.groupTuple()
+        consolidated_partial_ch = CONCATENATE_PARTIAL_GROUP_LOGS(partial_log_grouped_ch, "partial_group_consolidated").output
+        // 8. Concatenate empty group logs (empty samples with empty group-mates only)
+        empty_log_grouped_ch = empty_group_log_ch.map { _label, file -> ["all_samples", file] }.groupTuple()
+        consolidated_empty_ch = CONCATENATE_EMPTY_GROUP_LOGS(empty_log_grouped_ch, "empty_group_consolidated").output
     emit:
         groups = concat_ch
-        zero_vv_logs = consolidated_zero_vv_ch
+        partial_group_logs = consolidated_partial_ch
+        empty_group_logs = consolidated_empty_ch
         test_in = input_files
         test_join = joined_ch
         test_part = partitioned_ch
