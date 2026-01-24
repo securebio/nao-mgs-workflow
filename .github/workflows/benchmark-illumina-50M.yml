@@ -1,4 +1,4 @@
-name: Benchmark test (Illumina 100M)
+name: Benchmark test (Illumina 50M)
 
 on:
   push:
@@ -11,11 +11,11 @@ on:
       - ci-test
 
 concurrency:
-  group: benchmark-illumina-100M-pr-${{ github.event.pull_request.number }}
+  group: benchmark-illumina-50M-pr-${{ github.event.pull_request.number }}
   cancel-in-progress: true
 
 jobs:
-  benchmark-illumina-100M:
+  benchmark-illumina-50M:
     runs-on: ubuntu-latest
     timeout-minutes: 120
     env:
@@ -42,7 +42,7 @@ jobs:
               - 'bin/verify_outputs.py'
               - 'configs/**'
               - 'tests/configs/**'
-              - '.github/workflows/benchmark-illumina-100M.yml'
+              - '.github/workflows/benchmark-illumina-50M.yml'
 
       - name: Setup nf-test environment
         if: steps.filter.outputs.relevant == 'true'
@@ -61,22 +61,22 @@ jobs:
         run: |
           bin/chain_workflows.py \
             --no-resume \
-            --base-dir s3://nao-testing-scratch/mgs-workflow-test/benchmark-illumina-100M/ \
-            --launch-dir test_run_benchmark_100M/ \
+            --base-dir s3://nao-testing-scratch/mgs-workflow-test/benchmark-illumina-50M/ \
+            --launch-dir test_run_benchmark_50M/ \
             --ref-dir s3://nao-testing/mgs-workflow-test/index-latest/output/ \
-            --samplesheet s3://nao-testing/benchmarks/Illumina_100M/samplesheet.csv
+            --samplesheet s3://nao-testing/benchmarks/Illumina_50M/samplesheet.csv
 
       - name: Verify RUN workflow outputs
         if: steps.filter.outputs.relevant == 'true'
         run: |
           python bin/verify_outputs.py \
-            --output-dir s3://nao-testing-scratch/mgs-workflow-test/benchmark-illumina-100M/run/output \
+            --output-dir s3://nao-testing-scratch/mgs-workflow-test/benchmark-illumina-50M/run/output \
             --expected-outputs-key run
 
       - name: Verify DOWNSTREAM workflow outputs
         if: steps.filter.outputs.relevant == 'true'
         run: |
           python bin/verify_outputs.py \
-            --output-dir s3://nao-testing-scratch/mgs-workflow-test/benchmark-illumina-100M/downstream/output \
+            --output-dir s3://nao-testing-scratch/mgs-workflow-test/benchmark-illumina-50M/downstream/output \
             --expected-outputs-key downstream \
-            --input-csv test_run_benchmark_100M/downstream/input.csv
+            --input-csv test_run_benchmark_50M/downstream/input.csv
