@@ -356,18 +356,19 @@ class TestListS3FilesDirectoryMarkers:
     """Test that S3 directory markers are filtered out."""
 
     def test_filters_directory_markers(self):
-        mock_paginator = type("Paginator", (), {
-            "paginate": lambda self, **kwargs: [
-                {
-                    "Contents": [
-                        {"Key": "prefix/file.txt"},
-                        {"Key": "prefix/subdir/"},
-                        {"Key": "prefix/subdir/file2.txt"},
-                        {"Key": "prefix/"},
-                    ]
-                }
-            ]
-        })()
+        # Using MagicMock for a more standard and readable mock.
+        # This requires `from unittest.mock import MagicMock` to be added to imports.
+        mock_paginator = MagicMock()
+        mock_paginator.paginate.return_value = [
+            {
+                "Contents": [
+                    {"Key": "prefix/file.txt"},
+                    {"Key": "prefix/subdir/"},
+                    {"Key": "prefix/subdir/file2.txt"},
+                    {"Key": "prefix/"},
+                ]
+            }
+        ]
 
         with patch("boto3.client") as mock_client:
             mock_client.return_value.get_paginator.return_value = mock_paginator
