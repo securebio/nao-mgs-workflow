@@ -120,6 +120,8 @@ def create_empty_outputs(
     output_path.mkdir(parents=True, exist_ok=True)
     created_files: list[str] = []
     for group in sorted(groups):
+        if ".." in group or "/" in group:
+            raise ValueError(f"Invalid group name: '{group}' contains path traversal characters.")
         for pattern in patterns:
             filename = pattern.replace("{GROUP}", group)
             filepath = output_path / filename
