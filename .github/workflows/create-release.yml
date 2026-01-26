@@ -1,0 +1,47 @@
+name: Create Release
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  create-release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write  # Required to create releases and tags
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Fetch all history for proper tagging
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Extract version from pyproject.toml
+        id: version
+        run: |
+          VERSION=$(python -c "import tomllib; print(tomllib.load(open('pyproject.toml', 'rb'))['project']['version'])")
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Version: $VERSION"
+
+      - name: Extract changelog for version
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          python bin/extract_changelog.py "$VERSION" > changelog_body.md
+          echo "Extracted changelog for version $VERSION"
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+
+          # Create release with tag
+          gh release create "$VERSION" \
+            --title "$VERSION" \
+            --notes-file changelog_body.md
+
+          echo "Created release and tag for version $VERSION"
