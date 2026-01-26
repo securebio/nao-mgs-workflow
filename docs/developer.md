@@ -357,11 +357,7 @@ Only pipeline maintainers should author a new release. The process for going thr
     4. Wait for additional long-running pre-release checks to complete in Github Actions.
 
 4. If any issues or test failures arise in the preceding steps, fix them with new bugfix PRs into `dev`, then rebase the release branch onto `dev`.
-5. Once all checks pass and the PR to `main` is approved merge it **without squashing**, then create a new release through the Github UI:
-
-    1. Title **and tag** the release with the new version number (without any prepending "v")
-    2. For the release description, use the changelog entry for that version
-
+5. Once all checks pass and the PR to `main` is approved, merge it **without squashing**. A GitHub Actions workflow will automatically create a new release with the version as both the title and tag, using the corresponding changelog entry as the release description.
 6. Ask a repo admin to reset `dev` to `main`. If the new release is a point release (i.e. only the fourth number in the version changes), they should reset `stable` to `main` as well.
 
     1. Non-point releases are only merged to `stable` if we want to update the current stable version and re-run past data with it, which occurs only infrequently.
