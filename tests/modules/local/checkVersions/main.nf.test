@@ -1,0 +1,75 @@
+nextflow_process {
+
+    name "Test CHECK_VERSIONS"
+    script "modules/local/checkVersions/main.nf"
+    process "CHECK_VERSIONS"
+    config "tests/configs/run.config"
+    tag "check_versions"
+    tag "module"
+
+    test("Should pass when versions are compatible") {
+        when {
+            process {
+                """
+                input[0] = "2.0.0"  // pipeline_version
+                input[1] = "1.5.0"  // index_version
+                input[2] = "1.0.0"  // pipeline_min_index
+                input[3] = "1.5.0"  // index_min_pipeline
+                """
+            }
+        }
+        then {
+            assert process.success
+        }
+    }
+
+    test("Should pass when min versions are empty") {
+        when {
+            process {
+                """
+                input[0] = "2.0.0"  // pipeline_version
+                input[1] = "1.5.0"  // index_version
+                input[2] = ""       // pipeline_min_index (empty)
+                input[3] = ""       // index_min_pipeline (empty)
+                """
+            }
+        }
+        then {
+            assert process.success
+        }
+    }
+
+    test("Should fail when pipeline version is too old") {
+        when {
+            process {
+                """
+                input[0] = "1.0.0"  // pipeline_version (too old)
+                input[1] = "1.5.0"  // index_version
+                input[2] = "1.0.0"  // pipeline_min_index
+                input[3] = "2.0.0"  // index_min_pipeline (requires 2.0.0)
+                """
+            }
+        }
+        then {
+            assert process.failed
+            assert process.errorReport.contains("Pipeline version is older than index minimum")
+        }
+    }
+
+    test("Should fail when index version is too old") {
+        when {
+            process {
+                """
+                input[0] = "2.0.0"  // pipeline_version
+                input[1] = "0.5.0"  // index_version (too old)
+                input[2] = "1.0.0"  // pipeline_min_index (requires 1.0.0)
+                input[3] = "1.0.0"  // index_min_pipeline
+                """
+            }
+        }
+        then {
+            assert process.failed
+            assert process.errorReport.contains("Index version is older than pipeline minimum")
+        }
+    }
+}

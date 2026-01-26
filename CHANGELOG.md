@@ -11,12 +11,12 @@
     - Added plaintext handling to BLAST process to help with testing
     - Created custom tiny reference datasets and switched tests to use them for increased speed
 - Implemented code for generating and uploading containers to ECR Public, and replaced Wave container paths with ECR paths. Among other benefits, this allows us to run the entire test suite without running into pull-rate limit errors.
-- Added a minimum Nextflow version via `manifest` statement in `configs/profiles.config`, along with functionality to check whether this minimum version is up-to-date with the latest Nextflow release.
+- Added a minimum Nextflow version via `manifest` statement in `configs/profiles.config`, along with functionality to check whether this minimum version is up-to-date with the latest Nextflow release, while excluding releases that are known to cause bugs.
 - Streamlining releases by moving large tests into Github Actions
     - Whole `nf-test` suite now runs on PRs to main (`.github/workflows/nf-test-*`)
     - Chained `INDEX -> RUN -> DOWNSTREAM` integration test on toy data runs before PRs to `main` (`.github/workflows/test-chained.yml`)
     - Added test to enforce `CHANGELOG.md` updates in PRs to `dev` (`.github/workflows/check-changelog.yml`)
-    - Consolidated version & output tracking into `pyproject.toml` & added a test for version consistency between `pyproject.toml` and `CHANGELOG.md`.
+    - Consolidated version & output tracking into `pyproject.toml`, added a test for version consistency between `pyproject.toml` and `CHANGELOG.md`, and updated that test to handle version information in S3 files.
     - Moved release documentation from private internal docs to `docs/developer.md` and updated formatting to match Github requirements.
 - Fixed bug where DOWNSTREAM produced no output for groups without vertebrate-viral hits; now produces empty files with appropriate group names.
 

@@ -2,7 +2,7 @@ name: Check version consistency
 
 on:
   pull_request:
-    branches: [main, dev, stable]
+    branches: [main, dev, stable, ci-test]
 
 jobs:
   check-version:
