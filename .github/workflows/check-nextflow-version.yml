@@ -2,7 +2,7 @@ name: Check Nextflow version is latest
 
 on:
   pull_request:
-    branches: [main, dev, stable]
+    branches: [main, dev, stable, ci-test]
 
 jobs:
   check-nextflow-version:
