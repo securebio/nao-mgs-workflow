@@ -34,7 +34,6 @@ jobs:
               - 'modules/**'
               - 'configs/**'
               - 'tests/configs/**'
-              - '.github/workflows/nf-test-modules.yml'
       - name: Setup nf-test environment
         if: steps.filter.outputs.modules == 'true'
         uses: ./.github/actions/setup-nf-test

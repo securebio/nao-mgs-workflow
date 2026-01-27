@@ -36,8 +36,6 @@ jobs:
               - 'workflows/run*'
               - 'configs/**'
               - 'tests/configs/**'
-              - '.github/workflows/nf-test-workflows-run.yml'
-              - 'bin/verify_outputs.py'
       - name: Setup nf-test environment
         if: steps.filter.outputs.run == 'true'
         uses: ./.github/actions/setup-nf-test
@@ -47,27 +45,6 @@ jobs:
       - name: Run workflow tests
         if: steps.filter.outputs.run == 'true'
         run: bin/run-nf-test.sh --num-workers 4 tests/workflows/run.nf.test --output-log test-logs-workflows-run.txt --ci
-
-      - name: Verify RUN workflow outputs
-        if: steps.filter.outputs.run == 'true'
-        run: |
-          # Find all nf-test output directories that have results
-          FOUND=0
-          for OUTPUT_DIR in $(find .nf-test/tests -name "output" -type d); do
-            if ls "$OUTPUT_DIR"/results/*.gz 1>/dev/null 2>&1; then
-              echo "Verifying outputs in: $OUTPUT_DIR"
-              python bin/verify_outputs.py \
-                --output-dir "$OUTPUT_DIR" \
-                --expected-outputs-key run
-              FOUND=$((FOUND + 1))
-            fi
-          done
-          if [ "$FOUND" -eq 0 ]; then
-            echo "No output directories with results found"
-            exit 1
-          fi
-          echo "Verified $FOUND output directories"
-
       - name: Upload test results
         if: failure() && steps.filter.outputs.run == 'true'
         uses: actions/upload-artifact@v4

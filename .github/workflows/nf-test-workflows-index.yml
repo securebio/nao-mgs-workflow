@@ -36,7 +36,6 @@ jobs:
               - 'workflows/index*'
               - 'configs/**'
               - 'tests/configs/**'
-              - '.github/workflows/nf-test-workflows-index.yml'
       - name: Setup nf-test environment
         if: steps.filter.outputs.index == 'true'
         uses: ./.github/actions/setup-nf-test

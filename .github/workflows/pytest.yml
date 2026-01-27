@@ -26,7 +26,6 @@ jobs:
           filters: |
             python:
               - '**/*.py'
-              - '.github/workflows/pytest.yml'
 
       - name: Set up Python 3.12
         if: steps.filter.outputs.python == 'true'
