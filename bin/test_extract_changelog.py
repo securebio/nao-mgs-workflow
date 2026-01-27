@@ -5,7 +5,7 @@ import pytest
 from pathlib import Path
 
 import sys
-sys.path.insert(0, str(Path(__file__).parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 from extract_changelog import (
     parse_version_header,
     extract_changelog,
