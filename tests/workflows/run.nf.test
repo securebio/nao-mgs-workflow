@@ -14,7 +14,7 @@ def getExpectedOutputs = { pyprojectPath, workflowKey, groupName ->
 
 // Get observed output files, excluding intermediates and trace files
 def getObservedOutputs = { outputDir ->
-    def excludePatterns = ["intermediates", "trace", "merged_blast"]
+    def excludePatterns = ["intermediates", "trace", "merged_blast"] // TODO: Remove BLAST validation header when no longer needed
     def observedFiles = []
     outputDir.eachFileRecurse(FILES) { file ->
         def relPath = outputDir.relativize(file).toString()
