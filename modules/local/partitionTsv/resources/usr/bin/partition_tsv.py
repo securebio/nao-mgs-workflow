@@ -53,8 +53,7 @@ def partition(input_path, column):
         # Read first line of data and initialize first output file
         fields = read_line(inf)
         if fields is None: # Empty apart from headers
-            outf = initialize_output_file(input_path, "empty", headers)
-            outf.close()
+            print_log("Input file has no data rows, skipping partition.")
             return
         index = fields[column_index]
         file_index = index

@@ -32,4 +32,28 @@ nextflow_pipeline {
             ).match("downstream_ont_output")
         }
     }
+
+    test("Should create empty output files for groups with no hits") {
+        tag "downstream_empty_groups"
+        tag "empty_input"
+        when {
+            params {
+                input_file = "${projectDir}/test-data/downstream/input_file_empty_only.csv"
+            }
+        }
+        then {
+            assert workflow.success
+            // Verify exactly the expected empty output files are created
+            def resultsDir = path("${launchDir}/output/results_downstream")
+            def actualFiles = resultsDir.list().collect { it.getFileName().toString() }.sort()
+            // Dynamically extract expected patterns from pyproject.toml (non-ONT section only)
+            def pyprojectText = path("${projectDir}/pyproject.toml").text
+            def sectionMatch = (pyprojectText =~ /expected-outputs-downstream = \[([\s\S]*?)\]/)
+            def sectionText = sectionMatch[0][1]
+            def expectedFiles = (sectionText =~ /"results_downstream\/([^"]*\{GROUP\}[^"]*)"/)
+                .collect { it[1].replace("{GROUP}", "empty_group") }
+                .sort()
+            assert actualFiles == expectedFiles : "Expected files ${expectedFiles} but got ${actualFiles}"
+        }
+    }
 }
