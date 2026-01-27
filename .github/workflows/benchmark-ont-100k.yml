@@ -1,4 +1,4 @@
-name: Benchmark test (ONT 2M)
+name: Benchmark test (ONT 100k)
 
 on:
   push:
@@ -11,11 +11,11 @@ on:
       - ci-test
 
 concurrency:
-  group: benchmark-ont-2M-pr-${{ github.event.pull_request.number }}
+  group: benchmark-ont-100k-pr-${{ github.event.pull_request.number }}
   cancel-in-progress: true
 
 jobs:
-  benchmark-ont-2M:
+  benchmark-ont-100k:
     runs-on: ubuntu-latest
     timeout-minutes: 120
     env:
@@ -41,7 +41,7 @@ jobs:
               - 'bin/chain_workflows.py'
               - 'configs/**'
               - 'tests/configs/**'
-              - '.github/workflows/benchmark-ont-2M.yml'
+              - '.github/workflows/benchmark-ont-100k.yml'
 
       - name: Setup nf-test environment
         if: steps.filter.outputs.relevant == 'true'
@@ -60,7 +60,7 @@ jobs:
         run: |
           bin/chain_workflows.py \
             --ref-dir s3://nao-testing/mgs-workflow-test/index-latest/output/ \
-            --samplesheet s3://nao-testing/benchmarks/ONT_2M/samplesheet.csv \
-            --launch-dir test_run_benchmark_ont_2M \
-            --base-dir s3://nao-testing-scratch/mgs-workflow-test/benchmark-ont-2M/ \
+            --samplesheet s3://nao-testing/benchmarks/ONT_100k/samplesheet.csv \
+            --launch-dir test_run_benchmark_ont_100k \
+            --base-dir s3://nao-testing-scratch/mgs-workflow-test/benchmark-ont-100k/ \
             --platform ont
