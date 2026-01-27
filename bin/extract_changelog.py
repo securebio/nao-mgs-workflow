@@ -62,7 +62,7 @@ def extract_changelog(version: str, changelog_path: Path = DEFAULT_CHANGELOG_PAT
     found_version = False
     in_section = False
 
-    with open(changelog_path) as f:
+    with open(changelog_path, encoding="utf-8") as f:
         for line in f:
             header_version = parse_version_header(line)
 
