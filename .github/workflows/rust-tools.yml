@@ -38,10 +38,8 @@ jobs:
         run: cargo test --workspace --release --manifest-path rust-tools/Cargo.toml
 
       # --- Container build (recompiles inside Docker for reproducibility) ---
-      - uses: docker/setup-buildx-action@v3
-
       - name: Build container
-        run: docker build -f docker/nao-rust-tools.Dockerfile -t nao-rust-tools:local .
+        run: docker build --progress=plain -f docker/nao-rust-tools.Dockerfile -t nao-rust-tools:local .
 
       - name: Save container for tests
         run: docker save nao-rust-tools:local | gzip > rust-tools.tar.gz
