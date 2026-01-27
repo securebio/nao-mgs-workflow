@@ -72,7 +72,7 @@ All Rust tools live in the centralized `rust-tools/` directory, organized as a C
 3. Update `docker/nao-rust-tools.Dockerfile`:
    - The builder stage already builds the entire workspace
    - In the runtime stage: add `COPY --from=builder` to include the new binary
-4. Use `label "rust-tools"` in your Nextflow process
+4. Use `label "rust_tools"` in your Nextflow process
 5. Add a comment above the process noting: `// Tool source: rust-tools/{tool_name}/`
 
 **Local development:**

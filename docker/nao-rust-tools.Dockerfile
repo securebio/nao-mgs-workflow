@@ -20,7 +20,7 @@ FROM debian:bookworm-slim
 # toolchain (e.g., stack unwinding primitives, 128-bit integer operations).
 # This is standard for dynamically-linked Rust binaries.
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends libgcc-s1 \
+    && apt-get install -y --no-install-recommends libgcc-s1 procps \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy compiled binaries from builder
