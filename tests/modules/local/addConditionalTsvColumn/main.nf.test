@@ -45,4 +45,41 @@ nextflow_process {
             }
         }
     }
+
+    test("Should preserve quote characters without CSV escaping") {
+        // Regression test for FASTQ quality strings containing " (ASCII 34 = Phred+33 quality 1)
+        // CSV escaping would double quotes and wrap fields, corrupting quality string lengths
+        tag "expect_success"
+        tag "quote_regression"
+        when {
+            params {
+                column_params = [
+                    chk_col: "x",
+                    match_val: "0",
+                    if_col: "y",
+                    else_col: "z",
+                    new_hdr: "selected"
+                ]
+            }
+            process {
+                """
+                input[0] = ["sample1", file("${projectDir}/test-data/addConditionalTsvColumn/test_tab_with_quotes.tsv")]
+                input[1] = params.column_params
+                """
+            }
+        }
+        then {
+            assert process.success
+            def outputLines = path(process.out.tsv[0][1]).readLines()
+            assert outputLines.size() == 4
+            // Header with new column
+            assert outputLines[0] == 'x\ty\tz\tselected'
+            // Row 1: x=0, so selected=y (AAAA"BBBB)
+            assert outputLines[1] == '0\tAAAA"BBBB\tother\tAAAA"BBBB'
+            // Row 2: x=1, so selected=z (CCCC"DDDD)
+            assert outputLines[2] == '1\tno_quotes\tCCCC"DDDD\tCCCC"DDDD'
+            // Row 3: x=0, so selected=y (EE"FF"GG)
+            assert outputLines[3] == '0\tEE"FF"GG\tmore\tEE"FF"GG'
+        }
+    }
 }

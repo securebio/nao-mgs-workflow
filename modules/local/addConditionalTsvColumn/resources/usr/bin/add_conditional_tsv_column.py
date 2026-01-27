@@ -61,13 +61,13 @@ def add_conditional_column(input_path, chk_col, match_val, if_col, else_col, new
         # Validate required columns exist
         validate_columns(reader.fieldnames, chk_col, if_col, else_col)
 
-        # Write header with new column
+        # Write header with new column (use simple tab-join to avoid CSV quoting)
         fieldnames_out = list(reader.fieldnames) + [new_hdr]
-        writer = csv.DictWriter(outf, fieldnames=fieldnames_out, delimiter='\t', lineterminator='\n')
-        writer.writeheader()
+        outf.write("\t".join(fieldnames_out) + "\n")
 
-        # Process and write data rows using generator for memory efficiency
-        writer.writerows(process_rows(reader, chk_col, match_val, if_col, else_col, new_hdr))
+        # Process and write data rows using simple tab-join to avoid CSV quoting
+        for row in process_rows(reader, chk_col, match_val, if_col, else_col, new_hdr):
+            outf.write("\t".join(row[col] for col in fieldnames_out) + "\n")
 
 def main():
     # Parse arguments using named parameters
