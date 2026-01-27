@@ -1,7 +1,6 @@
 import pytest
-import tempfile
-import os
 from validate_grouping import validate_grouping
+
 
 def write_tsv(path, header, rows):
     with open(path, 'w') as f:
@@ -9,74 +8,119 @@ def write_tsv(path, header, rows):
         for row in rows:
             f.write('\t'.join(row) + '\n')
 
-def test_validate_grouping_basic():
-    with tempfile.TemporaryDirectory() as tmp:
-        grouping_path = os.path.join(tmp, 'grouping.tsv')
-        virus_hits_path = os.path.join(tmp, 'virus_hits.tsv')
-        validated_output = os.path.join(tmp, 'validated_grouping.tsv')
-        samples_without_vv_hits = os.path.join(tmp, 'samples_without_vv_hits.tsv')
 
-        # Case 1: Pass when there is a sample in the virus hits file that is not in the grouping file, check outputs
-        write_tsv(grouping_path, ['group', 'sample'], [['g1', 'S1']])
-        write_tsv(virus_hits_path, ['sample'], [['S1'], ['S2']])
-        validate_grouping(grouping_path, virus_hits_path, samples_without_vv_hits, validated_output)
-        # Output should be untouched because S1 is in both; S2 doesn't affect output since it's not in grouping
-        with open(validated_output) as f:
-            lines = [l.strip() for l in f if l.strip()]
-        assert lines == ['group\tsample', 'g1\tS1']
-        # Output should have header only
-        with open(samples_without_vv_hits) as f:
-            unused_lines = [l.strip() for l in f if l.strip()]
-        assert unused_lines == ['sample']
+def read_tsv_lines(path):
+    """Read TSV file and return list of stripped non-empty lines."""
+    with open(path) as f:
+        return [line.strip() for line in f if line.strip()]
 
-        # Case 2: Pass when grouping is superset, check outputs
-        write_tsv(grouping_path, ['group', 'sample'], [['g1', 'S1'], ['g2', 'S2']])
-        write_tsv(virus_hits_path, ['sample'], [['S1']])
-        validate_grouping(grouping_path, virus_hits_path, samples_without_vv_hits, validated_output)
-        with open(validated_output) as f:
-            lines = [l.strip() for l in f if l.strip()]
-        assert lines == ['group\tsample', 'g1\tS1']
-        with open(samples_without_vv_hits) as f:
-            unused_lines = [l.strip() for l in f if l.strip()]
-        assert unused_lines == ['sample', 'S2']
 
-def test_validate_grouping_empty_files():
-    """Test that the code correctly handles an empty virus hits file with non-empty grouping file."""
-    with tempfile.TemporaryDirectory() as tmp:
-        grouping_path = os.path.join(tmp, 'grouping.tsv')
-        virus_hits_path = os.path.join(tmp, 'virus_hits.tsv')
-        validated_output = os.path.join(tmp, 'validated_grouping.tsv')
-        samples_without_vv_hits = os.path.join(tmp, 'samples_without_vv_hits.tsv')
+@pytest.fixture
+def paths(tmp_path):
+    """Create standard paths for test files."""
+    return {
+        'grouping': tmp_path / 'grouping.tsv',
+        'virus_hits': tmp_path / 'virus_hits.tsv',
+        'validated': tmp_path / 'validated_grouping.tsv',
+        'partial': tmp_path / 'partial_group.tsv',
+        'empty': tmp_path / 'empty_group.tsv',
+    }
 
-        # Case: Empty virus hits file with non-empty grouping
-        write_tsv(grouping_path, ['group', 'sample'], [['g1', 'S1'], ['g2', 'S2']])
-        write_tsv(virus_hits_path, ['sample'], [])  # Empty data, just header
-        validate_grouping(grouping_path, virus_hits_path, samples_without_vv_hits, validated_output)
-        with open(validated_output) as f:
-            validated_lines = [l.strip() for l in f if l.strip()]
-        assert validated_lines == ['group\tsample']
-        with open(samples_without_vv_hits) as f:
-            unused_lines = [l.strip() for l in f if l.strip()]
-        assert set(unused_lines) == {'sample', 'S1', 'S2'}
 
-def test_validate_grouping_perfect_match():
-    """Test that when all samples in grouping are present in virus hits, 
-    the validated output contains all samples from grouping."""
-    with tempfile.TemporaryDirectory() as tmp:
-        grouping_path = os.path.join(tmp, 'grouping.tsv')
-        virus_hits_path = os.path.join(tmp, 'virus_hits.tsv')
-        validated_output = os.path.join(tmp, 'validated_grouping.tsv')
-        samples_without_vv_hits = os.path.join(tmp, 'samples_without_vv_hits.tsv')
+def run_validation(paths, grouping_rows, hits_samples):
+    """Helper to set up files and run validation."""
+    write_tsv(paths['grouping'], ['group', 'sample'], grouping_rows)
+    write_tsv(paths['virus_hits'], ['sample'], [[s] for s in hits_samples])
+    validate_grouping(
+        str(paths['grouping']),
+        str(paths['virus_hits']),
+        str(paths['validated']),
+        str(paths['partial']),
+        str(paths['empty']),
+    )
+    return {
+        'validated': read_tsv_lines(paths['validated']),
+        'partial': read_tsv_lines(paths['partial']),
+        'empty': read_tsv_lines(paths['empty']),
+    }
 
-        # Case: All samples in grouping have virus hits
-        write_tsv(grouping_path, ['group', 'sample'], [['g1', 'S1'], ['g1', 'S2'], ['g2', 'S3']])
-        write_tsv(virus_hits_path, ['sample'], [['S1'], ['S2'], ['S3']])
-        validate_grouping(grouping_path, virus_hits_path, samples_without_vv_hits, validated_output)
-        with open(validated_output) as f:
-            validated_lines = [l.strip() for l in f if l.strip()]
-        expected_lines = ['group\tsample', 'g1\tS1', 'g1\tS2', 'g2\tS3']
-        assert validated_lines == expected_lines
-        with open(samples_without_vv_hits) as f:
-            unused_lines = [l.strip() for l in f if l.strip()]
-        assert unused_lines == ['sample']
 
+class TestValidateGrouping:
+    """Tests for validate_grouping function."""
+
+    @pytest.mark.parametrize("grouping,hits,expected_validated,expected_partial,expected_empty", [
+        # Sample in hits but not in grouping - should be ignored
+        (
+            [['g1', 'S1']],
+            ['S1', 'S2'],
+            {'g1\tS1'},
+            set(),
+            set(),
+        ),
+        # Sample without hits, group has other samples with hits -> partial
+        (
+            [['g1', 'S1'], ['g1', 'S2']],
+            ['S1'],
+            {'g1\tS1'},
+            {'S2\tg1'},
+            set(),
+        ),
+        # Sample without hits, entire group has no hits -> empty
+        (
+            [['g1', 'S1'], ['g2', 'S2']],
+            ['S1'],
+            {'g1\tS1'},
+            set(),
+            {'S2\tg2'},
+        ),
+        # All samples have hits - both partial and empty should be empty
+        (
+            [['g1', 'S1'], ['g1', 'S2'], ['g2', 'S3']],
+            ['S1', 'S2', 'S3'],
+            {'g1\tS1', 'g1\tS2', 'g2\tS3'},
+            set(),
+            set(),
+        ),
+        # Empty virus hits - all samples go to empty group
+        (
+            [['g1', 'S1'], ['g2', 'S2']],
+            [],
+            set(),
+            set(),
+            {'S1\tg1', 'S2\tg2'},
+        ),
+        # Mixed: partial and empty groups present
+        # g1: S1 has hits, S2 no hits (partial)
+        # g2: S3 no hits, S4 no hits (empty)
+        # g3: S5 has hits (complete)
+        (
+            [['g1', 'S1'], ['g1', 'S2'], ['g2', 'S3'], ['g2', 'S4'], ['g3', 'S5']],
+            ['S1', 'S5'],
+            {'g1\tS1', 'g3\tS5'},
+            {'S2\tg1'},
+            {'S3\tg2', 'S4\tg2'},
+        ),
+        # Multiple samples in same empty group
+        (
+            [['g1', 'S1'], ['g1', 'S2'], ['g1', 'S3']],
+            [],
+            set(),
+            set(),
+            {'S1\tg1', 'S2\tg1', 'S3\tg1'},
+        ),
+    ])
+    def test_categorization(self, paths, grouping, hits, expected_validated, expected_partial, expected_empty):
+        """Test that samples are correctly categorized into validated, partial, and empty outputs."""
+        result = run_validation(paths, grouping, hits)
+
+        # Check validated output
+        assert result['validated'][0] == 'group\tsample'
+        assert set(result['validated'][1:]) == expected_validated
+
+        # Check partial group output
+        assert result['partial'][0] == 'sample\tgroup'
+        assert set(result['partial'][1:]) == expected_partial
+
+        # Check empty group output
+        assert result['empty'][0] == 'sample\tgroup'
+        assert set(result['empty'][1:]) == expected_empty

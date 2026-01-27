@@ -84,6 +84,12 @@ nextflow_workflow {
                     assert output_tabs[i].columnNames == tab.columnNames
                 }
             }
+            // Partial group logs should have sample and group columns
+            def partial_log_cols = path(workflow.out.partial_group_logs[0][1]).linesGzip[0].split("\t") as List
+            assert partial_log_cols == ["sample", "group"]
+            // Empty group logs should have sample and group columns
+            def empty_log_cols = path(workflow.out.empty_group_logs[0][1]).linesGzip[0].split("\t") as List
+            assert empty_log_cols == ["sample", "group"]
         }
     }
 }
