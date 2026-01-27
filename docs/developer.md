@@ -362,8 +362,8 @@ Only pipeline maintainers should author a new release. The process for going thr
     1. Title **and tag** the release with the new version number (without any prepending "v")
     2. For the release description, use the changelog entry for that version
 
-6. Ask a repo admin to reset `dev` to `main`. If the new release is a point release (i.e. only the fourth number in the version changes), they should reset `stable` to `main` as well.
+6. GitHub Actions will automatically reset `dev` and `ci-test` branches to match `main`. If this is a point release (i.e. only the fourth version number changes, X.Y.Z.W → X.Y.Z.W+1), `stable` will also be reset to `main` automatically.
 
-    1. Non-point releases are only merged to `stable` if we want to update the current stable version and re-run past data with it, which occurs only infrequently.
+    1. Non-point releases are NOT automatically merged to `stable`. To update `stable` with a non-point release, a repo admin must manually reset the branch.
 
 [^refs]: For reference genomes, check for updated releases for human, cow, pig, and mouse; do not update carp; update *E. coli* if there is a new release for the same strain. Check [SILVA](https://www.arb-silva.de/download/archive/) for rRNA databases and [here](https://benlangmead.github.io/aws-indexes/k2) for Kraken2 databases.
