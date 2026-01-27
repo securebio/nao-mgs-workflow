@@ -357,13 +357,11 @@ Only pipeline maintainers should author a new release. The process for going thr
     4. Wait for additional long-running pre-release checks to complete in Github Actions.
 
 4. If any issues or test failures arise in the preceding steps, fix them with new bugfix PRs into `dev`, then rebase the release branch onto `dev`.
-5. Once all checks pass and the PR to `main` is approved merge it **without squashing**, then create a new release through the Github UI:
+5. Once all checks pass and the PR to `main` is approved, merge it **without squashing**. GitHub Actions workflows will automatically:
+    1. Create a new release with the version as both the title and tag, using the corresponding changelog entry as the release description
+    2. Reset `dev` and `ci-test` branches to match `main`
+    3. Reset `stable` to `main` only if this is a point release (i.e. only the fourth version number changes, X.Y.Z.W → X.Y.Z.W+1)
 
-    1. Title **and tag** the release with the new version number (without any prepending "v")
-    2. For the release description, use the changelog entry for that version
-
-6. Ask a repo admin to reset `dev` to `main`. If the new release is a point release (i.e. only the fourth number in the version changes), they should reset `stable` to `main` as well.
-
-    1. Non-point releases are only merged to `stable` if we want to update the current stable version and re-run past data with it, which occurs only infrequently.
+Note: Non-point releases are NOT automatically merged to `stable`. To update `stable` with a non-point release (e.g., to re-run past data with a newer pipeline version), a repo admin must manually reset the branch. This occurs only infrequently.
 
 [^refs]: For reference genomes, check for updated releases for human, cow, pig, and mouse; do not update carp; update *E. coli* if there is a new release for the same strain. Check [SILVA](https://www.arb-silva.de/download/archive/) for rRNA databases and [here](https://benlangmead.github.io/aws-indexes/k2) for Kraken2 databases.
