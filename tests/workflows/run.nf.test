@@ -1,3 +1,29 @@
+import static groovy.io.FileType.FILES
+
+// Get expected output files from pyproject.toml
+def getExpectedOutputs = { pyprojectPath, workflowKey, groupName ->
+    def pyprojectText = pyprojectPath.text
+    def key = "expected-outputs-${workflowKey}"
+    def sectionMatch = (pyprojectText =~ /${key} = \[([\s\S]*?)\]/)
+    def expectedFiles = (sectionMatch[0][1] =~ /"([^"]+)"/).collect { it[1] }
+    if (groupName != null) {
+        expectedFiles = expectedFiles.collect { it.replace("{GROUP}", groupName) }
+    }
+    return expectedFiles.sort()
+}
+
+// Get observed output files, excluding intermediates and trace files
+def getObservedOutputs = { outputDir ->
+    def excludePatterns = ["intermediates", "trace", "merged_blast"]
+    def observedFiles = []
+    outputDir.eachFileRecurse(FILES) { file ->
+        def relPath = outputDir.relativize(file).toString()
+        def excluded = excludePatterns.any { pattern -> relPath.contains(pattern) }
+        if (!excluded) observedFiles << relPath
+    }
+    return observedFiles.sort()
+}
+
 nextflow_pipeline {
 
     name "Test workflow RUN"
@@ -26,6 +52,11 @@ nextflow_pipeline {
         tag "main_run_output_shortread"
         then {
             assert workflow.success
+            // Verify expected outputs match pyproject.toml
+            def expected = getExpectedOutputs(path("${projectDir}/pyproject.toml"), "run", null)
+            def observed = getObservedOutputs(path("${launchDir}/output"))
+            assert observed == expected : "Expected ${expected} but got ${observed}"
+            // Verify file contents match snapshot
             assert snapshot(
                 path("${launchDir}/output/results/bracken_reports_merged.tsv.gz"),
                 path("${launchDir}/output/results/kraken_reports_merged.tsv.gz"),
@@ -48,6 +79,11 @@ nextflow_pipeline {
         tag "main_run_output_ont"
         then {
             assert workflow.success
+            // Verify expected outputs match pyproject.toml
+            def expected = getExpectedOutputs(path("${projectDir}/pyproject.toml"), "run", null)
+            def observed = getObservedOutputs(path("${launchDir}/output"))
+            assert observed == expected : "Expected ${expected} but got ${observed}"
+            // Verify file contents match snapshot
             assert snapshot(
                 path("${launchDir}/output/results/bracken_reports_merged.tsv.gz"),
                 path("${launchDir}/output/results/kraken_reports_merged.tsv.gz"),
