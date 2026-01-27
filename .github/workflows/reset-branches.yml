@@ -1,0 +1,44 @@
+name: Reset branches after release
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  reset-branches:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Generate token from GitHub App
+        id: generate-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.RELEASE_BOT_APP_ID }}
+          private-key: ${{ secrets.RELEASE_BOT_PRIVATE_KEY }}
+
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Fetch all history for branch operations
+          token: ${{ steps.generate-token.outputs.token }}
+
+      - name: Reset dev branch to main
+        run: |
+          echo "Resetting dev branch to match main..."
+          MAIN_SHA=$(git rev-parse main)
+          echo "Main is at commit: $MAIN_SHA"
+
+          git checkout dev
+          git reset --hard main
+          git push --force origin dev
+
+          echo "Successfully reset dev to main"
+
+      - name: Reset ci-test branch to main
+        run: |
+          echo "Resetting ci-test branch to match main..."
+
+          git checkout ci-test
+          git reset --hard main
+          git push --force origin ci-test
+
+          echo "Successfully reset ci-test to main"
