@@ -126,3 +126,4 @@ class TestAddConditionalColumn:
         assert result == expected_output
         # Explicitly verify no CSV escaping occurred (doubled quotes or wrapping)
         assert '""' not in result, "Quotes should not be doubled (CSV escaping)"
+
