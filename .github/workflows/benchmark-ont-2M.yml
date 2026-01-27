@@ -62,4 +62,5 @@ jobs:
             --ref-dir s3://nao-testing/mgs-workflow-test/index-latest/output/ \
             --samplesheet s3://nao-testing/benchmarks/ONT_2M/samplesheet.csv \
             --launch-dir test_run_benchmark_ont_2M \
-            --base-dir s3://nao-testing-scratch/mgs-workflow-test/benchmark-ont-2M/
+            --base-dir s3://nao-testing-scratch/mgs-workflow-test/benchmark-ont-2M/ \
+            --platform ont

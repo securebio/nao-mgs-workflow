@@ -249,6 +249,13 @@ def parse_arguments() -> argparse.Namespace:
         action="store_true",
         help="Skip the DOWNSTREAM workflow",
     )
+    parser.add_argument(
+        "--platform",
+        type=str,
+        choices=["illumina", "ont"],
+        default="illumina",
+        help="Sequencing platform (default: illumina)",
+    )
     return parser.parse_args()
 
 
@@ -293,7 +300,7 @@ def main() -> None:
             params={
                 "base_dir": run_base_dir,
                 "ref_dir": ref_dir,
-                "platform": "illumina",
+                "platform": args.platform,
                 "sample_sheet": str(samplesheet_path.resolve()),
             },
             workflow_name="RUN",
@@ -320,7 +327,7 @@ def main() -> None:
             params={
                 "base_dir": downstream_base_dir,
                 "ref_dir": ref_dir,
-                "platform": "illumina",
+                "platform": args.platform,
                 "input_file": str(downstream_input_path.resolve()),
             },
             workflow_name="DOWNSTREAM",
