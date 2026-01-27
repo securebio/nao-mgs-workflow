@@ -11,6 +11,7 @@ include { PREPARE_GROUP_TSVS } from "../subworkflows/local/prepareGroupTsvs"
 include { MARK_VIRAL_DUPLICATES } from "../subworkflows/local/markViralDuplicates"
 include { VALIDATE_VIRAL_ASSIGNMENTS } from "../subworkflows/local/validateViralAssignments"
 include { COUNT_READS_PER_CLADE } from "../modules/local/countReadsPerClade"
+include { CREATE_EMPTY_GROUP_OUTPUTS } from "../modules/local/createEmptyGroupOutputs"
 include { COPY_FILE_BARE as COPY_PYPROJECT } from "../modules/local/copyFile"
 include { COPY_FILE_BARE as COPY_INPUT } from "../modules/local/copyFile"
 include { SORT_TSV as SORT_ONT_HITS } from "../modules/local/sortTsv"
@@ -49,6 +50,12 @@ workflow DOWNSTREAM {
         def validation_params = params.collectEntries { k, v -> [k, v] }
         validation_params["cluster_min_len"] = 15
         VALIDATE_VIRAL_ASSIGNMENTS(viral_hits_ch, viral_db, params.ref_dir, validation_params)
+        // Create empty output files for groups with no virus hits
+        CREATE_EMPTY_GROUP_OUTPUTS(
+            PREPARE_GROUP_TSVS.out.empty_group_logs.map { _label, file -> file },
+            file("${projectDir}/pyproject.toml"),
+            params.platform
+        )
         // Publish results
         params_str = groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(params))
         params_ch = Channel.of(params_str).collectFile(name: "params-downstream.json")
@@ -61,10 +68,12 @@ workflow DOWNSTREAM {
        input_downstream = params_ch.mix(input_file_ch)
        logging_downstream = time_ch.mix(pyproject_ch)
        intermediates_downstream = VALIDATE_VIRAL_ASSIGNMENTS.out.blast_results.mix(
-                                        PREPARE_GROUP_TSVS.out.zero_vv_logs,
+                                        PREPARE_GROUP_TSVS.out.partial_group_logs,
+                                        PREPARE_GROUP_TSVS.out.empty_group_logs,
                                   )
         results_downstream = dup_output_ch.mix(
                                 clade_counts_ch,
-                                VALIDATE_VIRAL_ASSIGNMENTS.out.annotated_hits
+                                VALIDATE_VIRAL_ASSIGNMENTS.out.annotated_hits,
+                                CREATE_EMPTY_GROUP_OUTPUTS.out.outputs.flatten()
         )
 }
