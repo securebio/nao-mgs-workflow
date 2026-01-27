@@ -16,11 +16,12 @@
     - Whole `nf-test` suite now runs on PRs to main (`.github/workflows/nf-test-*`)
     - Chained `INDEX -> RUN -> DOWNSTREAM` integration test on toy data runs before PRs to `main` (`.github/workflows/test-chained.yml`)
     - Added test to enforce `CHANGELOG.md` updates in PRs to `dev` (`.github/workflows/check-changelog.yml`)
-    - Consolidated version & output tracking into `pyproject.toml` & added a test for version consistency between `pyproject.toml` and `CHANGELOG.md`.
+    - Consolidated version & output tracking into `pyproject.toml`, added a test for version consistency between `pyproject.toml` and `CHANGELOG.md`, and updated that test to handle version information in S3 files.
     - Moved release documentation from private internal docs to `docs/developer.md` and updated formatting to match Github requirements.
     - Automated release creation and tagging on merge to `main` (`.github/workflows/create-release.yml`)
         - Added pre-merge validation to check changelog sections and prevent duplicate releases (`.github/workflows/check-release.yml`)
         - Created `bin/extract_changelog.py` to extract changelog content for releases
+- Fixed bug where DOWNSTREAM produced no output for groups without vertebrate-viral hits; now produces empty files with appropriate group names.
 
 # v3.0.1.7
 - Clarified testing documentation in `docs/developer.md`.
