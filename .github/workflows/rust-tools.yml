@@ -1,0 +1,108 @@
+name: Rust Tools CI
+
+on:
+  push:
+    branches: [dev, main]
+    paths:
+      - 'rust-tools/**'
+      - 'docker/nao-rust-tools.Dockerfile'
+      - '.github/workflows/rust-tools.yml'
+  pull_request:
+    branches: [dev, main]
+    paths:
+      - 'rust-tools/**'
+      - 'docker/nao-rust-tools.Dockerfile'
+      - '.github/workflows/rust-tools.yml'
+
+concurrency:
+  group: ci-rust-tools-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-rust-container:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      # --- Rust unit tests (runs on GitHub runner, not in Docker) ---
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rust-tools
+
+      - name: Run Rust unit tests
+        run: cargo test --workspace --release --manifest-path rust-tools/Cargo.toml
+
+      # --- Container build (recompiles inside Docker for reproducibility) ---
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build container
+        run: docker build -f docker/nao-rust-tools.Dockerfile -t nao-rust-tools:local .
+
+      - name: Save container for tests
+        run: docker save nao-rust-tools:local | gzip > rust-tools.tar.gz
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rust-container
+          path: rust-tools.tar.gz
+          retention-days: 1
+
+  test-integration:
+    needs: build-rust-container
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.NAO_TESTING_ACCESS_KEY }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.NAO_TESTING_SECRET_ACCESS_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Load Rust container
+        uses: actions/download-artifact@v4
+        with:
+          name: rust-container
+      - run: gunzip -c rust-tools.tar.gz | docker load
+
+      - name: Setup nf-test environment
+        uses: ./.github/actions/setup-nf-test
+        with:
+          aws_access_key_id: ${{ secrets.NAO_TESTING_ACCESS_KEY }}
+          aws_secret_access_key: ${{ secrets.NAO_TESTING_SECRET_ACCESS_KEY }}
+
+      - name: Run nf-tests for markAlignmentDuplicates
+        run: bin/run-nf-test.sh tests/modules/local/markAlignmentDuplicates/ --ci -profile rust_dev
+
+  push-to-ecr:
+    needs: test-integration
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Load Rust container
+        uses: actions/download-artifact@v4
+        with:
+          name: rust-container
+      - run: gunzip -c rust-tools.tar.gz | docker load
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.NAO_TESTING_ACCESS_KEY }}
+          aws-secret-access-key: ${{ secrets.NAO_TESTING_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+
+      - name: Push to ECR
+        run: |
+          aws ecr-public get-login-password --region us-east-1 | \
+            docker login --username AWS --password-stdin public.ecr.aws
+
+          BRANCH_TAG=${{ github.ref == 'refs/heads/main' && 'main' || 'dev' }}
+          REPO=public.ecr.aws/q0n1c7g8/nao-mgs-workflow/rust-tools
+
+          docker tag nao-rust-tools:local $REPO:$BRANCH_TAG
+          docker push $REPO:$BRANCH_TAG
