@@ -6,6 +6,7 @@ on:
       - main
       - dev
       - stable
+      - ci-test
     paths:
       - 'configs/containers.config'
 
