@@ -42,3 +42,129 @@ If submitting a PR that affects our CI, the recommended process is:
 3. Get approval from a reviewer while still on `ci-test`;
 4. After making any final changes and checking that all tests pass, switch the destination branch to `dev`;
 5. Merge the PR.
+
+## Development tests
+
+These tests run on PRs to `main`, `dev`, `stable`, and `ci-test`. They must pass before code can be merged.
+
+### nf-test
+
+We have five nf-test workflows that test different parts of the pipeline. All use conditional execution via `dorny/paths-filter` and depend on the `.github/actions/setup-nf-test/` action for environment setup.
+
+**Common paths that trigger all nf-test workflows:**
+- `configs/**`
+- `tests/configs/**`
+- `.github/actions/setup-nf-test/**`
+
+| Workflow | Tests | Runner | Timeout | Additional trigger paths |
+|----------|-------|--------|---------|--------------------------|
+| `nf-test-modules.yml` | `tests/modules/` | `ubuntu-16` | 15 min | `modules/**`, `tests/modules/**` |
+| `nf-test-subworkflows.yml` | `tests/subworkflows/` | `ubuntu-16` | 20 min | `modules/**`, `tests/modules/**`, `subworkflows/**`, `tests/subworkflows/**` |
+| `nf-test-workflows-index.yml` | `tests/workflows/index.nf.test` | `ubuntu-latest` | 15 min | `modules/**`, `tests/modules/**`, `subworkflows/**`, `tests/subworkflows/**`, `workflows/index*`, `tests/workflows/index*` |
+| `nf-test-workflows-run.yml` | `tests/workflows/run.nf.test` | `ubuntu-latest` | 15 min | `modules/**`, `tests/modules/**`, `subworkflows/**`, `tests/subworkflows/**`, `workflows/run*`, `tests/workflows/run*` |
+| `nf-test-workflows-downstream.yml` | `tests/workflows/downstream.nf.test` | `ubuntu-latest` | 15 min | `modules/**`, `tests/modules/**`, `subworkflows/**`, `tests/subworkflows/**`, `workflows/downstream*`, `tests/workflows/downstream*` |
+
+Each workflow should also be triggered by changes to its own workflow file (e.g., `.github/workflows/nf-test-modules.yml`).
+
+### Python unit tests (`pytest.yml`)
+
+Runs pytest on Python scripts in `bin/`, module resource directories, and `post-processing/tests/`.
+
+| Property | Value |
+|----------|-------|
+| Runner | `ubuntu-latest` |
+| Timeout | 10 minutes |
+
+**Triggers full run when these paths change:**
+- `**/*.py`
+- `.github/workflows/pytest.yml`
+
+### Trivy container scan (`trivy-scan.yml`)
+
+Scans all containers defined in `configs/containers.config` for security vulnerabilities using [Trivy](https://trivy.dev/).
+
+| Property | Value |
+|----------|-------|
+| Runner | `ubuntu-latest` |
+| Timeout | 30 minutes |
+
+**Triggers full run when these paths change:**
+- `configs/containers.config`
+- `.github/workflows/trivy-scan.yml`
+
+### Version and changelog checks
+
+These checks run unconditionally (no path filtering) to ensure version consistency across the codebase.
+
+| Workflow | Description | Branches |
+|----------|-------------|----------|
+| `check-version.yml` | Runs `bin/check_version.py` to verify version numbers are consistent | all |
+| `check-nextflow-version.yml` | Runs `bin/check_nextflow_version.py` to ensure Nextflow version is current | all |
+| `check-changelog.yml` | Requires `CHANGELOG.md` update if non-documentation files changed | `dev`, `ci-test` only |
+
+The changelog check uses path filtering to determine whether an update is *required*, but the check itself always runs. It triggers when any file changes except `**/*.md` and `docs/**`.
+
+## Release tests
+
+These tests run on PRs to `main`, `stable`, and `ci-test`, and also run automatically on push to `dev`. They are slower or more expensive than development tests and are not required for merging to `dev`, but must pass before merging to `main`.
+
+All release tests use conditional execution and share a common set of trigger paths:
+- `modules/**`, `tests/modules/**`
+- `subworkflows/**`, `tests/subworkflows/**`
+- `workflows/**`, `tests/workflows/**`
+- `bin/chain_workflows.py`
+- `configs/**`, `tests/configs/**`
+- `.github/actions/setup-nf-test/**`
+
+Each workflow is also triggered by changes to its own workflow file.
+
+### Integration test (`test-chained.yml`)
+
+Runs the full pipeline on small test data using `bin/chain_workflows.py`, executing INDEX, RUN, and DOWNSTREAM workflows in sequence.
+
+| Property | Value |
+|----------|-------|
+| Runner | `ubuntu-latest` |
+| Timeout | 120 minutes |
+
+### Benchmark tests
+
+These tests run the pipeline on larger benchmark datasets to verify performance and correctness at scale.
+
+| Workflow | Dataset | Platform | Timeout |
+|----------|---------|----------|---------|
+| `benchmark-illumina-100M.yml` | Illumina 100M reads | Illumina | 120 min |
+| `benchmark-ont-100k.yml` | ONT 100k reads | ONT | 120 min |
+
+Both benchmarks use `ubuntu-latest` runners and execute via AWS Batch using Nextflow Tower.
+
+### Release readiness check (`check-release.yml`)
+
+Runs only on PRs to `main`. Verifies that:
+1. The version in `pyproject.toml` has a corresponding changelog section
+2. The version has not already been released on GitHub
+
+This check runs unconditionally (no path filtering).
+
+## Non-test automation
+
+These workflows perform automated actions rather than running tests.
+
+### Create release (`create-release.yml`)
+
+Triggered on push to `main`. Automatically creates a GitHub release and tag based on:
+1. The version number extracted from `pyproject.toml`
+2. The changelog section for that version extracted by `bin/extract_changelog.py`
+
+### Reset branches (`reset-branches.yml`)
+
+Triggered on push to `main`. After a release is merged, this workflow:
+1. Resets `dev` to match `main` (force push)
+2. Resets `ci-test` to match `main` (force push)
+3. Conditionally resets `stable` to match `main` only for point releases (where the first three version numbers X.Y.Z match)
+
+This uses a GitHub App token for authentication to allow force pushes to protected branches.
+
+### Label issues (`label-issues.yml`)
+
+Triggered when issues are opened. Automatically adds the `repo:mgs-workflow` label to new issues for tracking across the organization.
