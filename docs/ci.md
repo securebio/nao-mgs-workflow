@@ -14,7 +14,7 @@ Our CI workflows fall into three broad categories:
 
 ### Runners and billing
 
-Most of our CI workflows use Github's standard `ubuntu-latest` runner for execution. We have 3,000 free minutes of execution with this runner per month across our entire SecureBio Github account, which is enough for most purposes. This runner is also quite throttled in its [resources](https://docs.github.com/en/actions/reference/runners/github-hosted-runners) and will struggle with demanding tasks.
+Most of our CI workflows use GitHub's standard `ubuntu-latest` runner for execution. We have 3,000 free minutes of execution with this runner per month across our entire SecureBio GitHub account, which is enough for most purposes. This runner is also quite throttled in its [resources](https://docs.github.com/en/actions/reference/runners/github-hosted-runners) and will struggle with demanding tasks.
 
 For tests that demand multiple cores or other substantial resources, we use custom runners set up in the SecureBio Team account. These cost a small amount of money per minute of execution: for example, the `ubuntu-16` runner we use for several tests [costs](https://docs.github.com/en/billing/reference/actions-runner-pricing) about $0.04 per minute. These costs are small enough to generally not be a concern, but developers should take care if adding very long-running tests or doing extensive iterative testing of a new CI workflow.
 
