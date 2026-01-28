@@ -135,27 +135,18 @@ class TestExtractChangelog:
         result = extract_changelog(version, changelog)
         assert result == expected
 
-    @pytest.mark.parametrize("content,version,expected", [
-        # Empty section (only blank lines)
-        (
-            "# v1.0.0.0\n\n\n# v0.9.0.0\n- Old\n",
-            "1.0.0.0",
-            "",
-        ),
-    ])
-    def test_edge_cases(self, tmp_path, content, version, expected):
-        """Test edge cases."""
-        changelog = tmp_path / "CHANGELOG.md"
-        changelog.write_text(content)
-        result = extract_changelog(version, changelog)
-        assert result == expected
-
     @pytest.mark.parametrize("content,version,match", [
         # Version not found
         (
             "# v1.0.0.0\n- Feature\n\n# v0.9.0.0\n- Old\n",
             "2.0.0.0",
             "Version 2.0.0.0 not found",
+        ),
+        # Version found but no content
+        (
+            "# v1.0.0.0\n\n# v0.9.0.0\n- Old\n",
+            "1.0.0.0",
+            "Version 1.0.0.0 found in CHANGELOG.md but contains no content",
         ),
     ])
     def test_errors(self, tmp_path, content, version, match):

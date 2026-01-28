@@ -86,6 +86,11 @@ def extract_changelog(version: str, changelog_path: Path = DEFAULT_CHANGELOG_PAT
             f"Version {version} not found in {changelog_path}. "
             f"Expected header format: '# v{version}' or '# {version}'"
         )
+    
+    # Raise an error if the content is empty / contains only whitespace
+    has_content = any(line.strip() for line in content_lines)
+    if not has_content:
+        raise ValueError(f"Version {version} found in {changelog_path.name} but contains no content")
 
     return "".join(content_lines)
 
