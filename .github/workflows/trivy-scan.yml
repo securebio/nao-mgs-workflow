@@ -9,6 +9,7 @@ on:
       - ci-test
     paths:
       - 'configs/containers.config'
+      - '.github/workflows/trivy-scan.yml'
 
 jobs:
   scan-containers:
