@@ -18,7 +18,12 @@
     - Added test to enforce `CHANGELOG.md` updates in PRs to `dev` (`.github/workflows/check-changelog.yml`)
     - Consolidated version & output tracking into `pyproject.toml`, added a test for version consistency between `pyproject.toml` and `CHANGELOG.md`, and updated that test to handle version information in S3 files.
     - Moved release documentation from private internal docs to `docs/developer.md` and updated formatting to match Github requirements.
+    - Added verification of expected outputs to workflow tests.
+    - Automated branch resets after release (`.github/workflows/reset-branches.yml`)
+        - Automatically resets `dev` and `ci-test` branches to `main` after each release
+        - Automatically resets `stable` to `main` for point releases (when only the 4th version number changes)
 - Fixed bug where DOWNSTREAM produced no output for groups without vertebrate-viral hits; now produces empty files with appropriate group names.
+- Add issue auto-labeling (for Linear integration).
 
 # v3.0.1.7
 - Clarified testing documentation in `docs/developer.md`.
