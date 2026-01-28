@@ -349,17 +349,14 @@ Only pipeline maintainers should author a new release. The process for going thr
         2. Update `index-min-pipeline-version` and `pipeline-min-index-version` in the `[tool.mgs-workflow]` section of `pyproject.toml` to reflect any changes to compatibility restrictions.
         3. Delete `s3://nao-testing/mgs-workflow-test/index-latest`, then run the `INDEX` workflow to generate a new index at that location. (This will update the index used by relevant Github Actions checks.)
 
-    4. Check for new required output files and update the `expected-outputs-*` lists in `pyproject.toml`.
-    5. Check for new Nextflow releases and update `.github/actions/setup-nf-test/action.yml` to point to the latest version.
+3. Open a PR to merge the release branch into `dev`, wait for CI tests to complete, and resolve any failing tests. Then:
 
-3. Open a PR to merge the release branch into `dev`. Once approved, squash-merge, then open a new PR from `dev` into `main`. Then:
-
-    1. Set the PR title to "Merge dev to main -- release X.Y.Z.W".
+    1. Squash-merge the PR into `dev`, then open a new PR from `dev` into `main` entitled "Merge dev to main -- release X.Y.Z.W".
     2. Quickly review the PR changes to ensure the changed files are consistent with the changes noted in `CHANGELOG.md` (no need to review file contents deeply at this stage).
     3. Double check that documentation and tests have been updated to stay consistent with changes to the pipeline.
     4. Wait for additional long-running pre-release checks to complete in Github Actions.
+    5. If any issues or test failures arise in the preceding steps, fix them with new bugfix PRs into `dev`, then rebase the release branch onto `dev`.
 
-4. If any issues or test failures arise in the preceding steps, fix them with new bugfix PRs into `dev`, then rebase the release branch onto `dev`.
 5. Once all checks pass and the PR to `main` is approved, merge it **without squashing**. A Github Actions workflow will automatically create and tag a new release and reset other branches (`dev` & `ci-test`, plus `stable` if only the fourth version number has changed) to match `main`.
 
     1. Non-point releases are NOT automatically merged to `stable`. To update `stable` with a non-point release, a repo admin must manually reset the branch.
