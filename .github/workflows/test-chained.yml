@@ -55,11 +55,7 @@ jobs:
         with:
           aws_access_key_id: ${{ secrets.NAO_TESTING_ACCESS_KEY }}
           aws_secret_access_key: ${{ secrets.NAO_TESTING_SECRET_ACCESS_KEY }}
-      # Load Rust container AFTER setup-nf-test (which prunes docker images)
-      - name: Load Rust container
-        if: steps.filter.outputs.chained == 'true' && needs.setup-rust.outputs.rust-changed == 'true'
-        uses: ./.github/actions/load-rust-container
-
+      # We don't load the local rust container here - see comment in "Run chain workflows" step.
       - name: Install Python dependencies
         if: steps.filter.outputs.chained == 'true'
         run: |
@@ -67,6 +63,10 @@ jobs:
       - name: Run chain workflows integration test
         if: steps.filter.outputs.chained == 'true'
         run: |
-          # If rust changed, add rust_dev to the profile list
-          PROFILE="${{ needs.setup-rust.outputs.rust-changed == 'true' && 'test_run,rust_dev' || 'test_run' }}"
-          bin/chain_workflows.py --no-resume --base-dir s3://nao-testing-scratch/mgs-workflow-test --profile "$PROFILE" --nextflow-args="${{ needs.setup-rust.outputs.container-args }}"
+          # We don't use rust_dev profile here, even when rust code has changed. The rust_dev
+          # profile disables Wave, but this test uses Fusion which requires Wave. This is fine:
+          # - rust-tools.yml has its own integration test for rust changes
+          # - This is a "release test" (see docs/ci.md), not required for merging to dev
+          # - After merge to dev, rust-tools.yml pushes new container to ECR :dev
+          # - PRs from dev to main use ECR :dev with Wave enabled, so rust changes get tested
+          bin/chain_workflows.py --no-resume --base-dir s3://nao-testing-scratch/mgs-workflow-test --nextflow-args="${{ needs.setup-rust.outputs.container-args }}"
