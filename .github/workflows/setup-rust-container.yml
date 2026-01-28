@@ -13,13 +13,14 @@
 #       needs: setup-rust
 #       steps:
 #         - uses: actions/checkout@v4
+#         - name: Setup nf-test environment
+#           uses: ./.github/actions/setup-nf-test
+#           ...
+#         # IMPORTANT: Load Rust container AFTER setup-nf-test, because
+#         # setup-nf-test runs `docker image prune --all` which would delete it!
 #         - name: Load Rust container (if built)
 #           if: needs.setup-rust.outputs.rust-changed == 'true'
-#           uses: actions/download-artifact@v4
-#           with:
-#             name: rust-container
-#         - if: needs.setup-rust.outputs.rust-changed == 'true'
-#           run: gunzip -c rust-tools.tar.gz | docker load
+#           uses: ./.github/actions/load-rust-container
 #         - name: Run tests
 #           run: bin/run-nf-test.sh ... ${{ needs.setup-rust.outputs.profile-args }}
 

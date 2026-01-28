@@ -45,16 +45,16 @@ jobs:
               - '.github/actions/setup-nf-test/**'
               - 'rust-tools/**'
               - 'docker/nao-rust-tools.Dockerfile'
-      # Load locally-built Rust container if Rust code changed
-      - name: Load Rust container
-        if: steps.filter.outputs.subworkflows == 'true' && needs.setup-rust.outputs.rust-changed == 'true'
-        uses: ./.github/actions/load-rust-container
       - name: Setup nf-test environment
         if: steps.filter.outputs.subworkflows == 'true'
         uses: ./.github/actions/setup-nf-test
         with:
           aws_access_key_id: ${{ secrets.NAO_TESTING_ACCESS_KEY }}
           aws_secret_access_key: ${{ secrets.NAO_TESTING_SECRET_ACCESS_KEY }}
+      # Load Rust container AFTER setup-nf-test (which prunes docker images)
+      - name: Load Rust container
+        if: steps.filter.outputs.subworkflows == 'true' && needs.setup-rust.outputs.rust-changed == 'true'
+        uses: ./.github/actions/load-rust-container
       - name: Run subworkflow tests
         if: steps.filter.outputs.subworkflows == 'true'
         run: bin/run-nf-test.sh --num-workers 16 tests/subworkflows --output-log test-logs-subworkflows.txt ${{ needs.setup-rust.outputs.profile-args }}
