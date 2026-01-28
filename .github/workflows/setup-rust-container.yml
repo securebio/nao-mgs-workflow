@@ -21,8 +21,16 @@
 #         - name: Load Rust container (if built)
 #           if: needs.setup-rust.outputs.rust-changed == 'true'
 #           uses: ./.github/actions/load-rust-container
-#         - name: Run tests
-#           run: bin/run-nf-test.sh ... ${{ needs.setup-rust.outputs.profile-args }}
+#         - name: Run tests (nf-test)
+#           run: |
+#             # If rust changed, use rust_dev profile; otherwise use container-args
+#             RUST_ARGS="${{ needs.setup-rust.outputs.rust-changed == 'true' && '--profile=rust_dev' || needs.setup-rust.outputs.container-args }}"
+#             bin/run-nf-test.sh ... $RUST_ARGS
+#         # Or for chain_workflows.py (uses single-dash -profile):
+#         - name: Run tests (chain_workflows)
+#           run: |
+#             PROFILE="${{ needs.setup-rust.outputs.rust-changed == 'true' && 'test_run,rust_dev' || 'test_run' }}"
+#             bin/chain_workflows.py --profile $PROFILE --nextflow-args="${{ needs.setup-rust.outputs.container-args }}"
 
 name: Setup Rust Container
 
@@ -30,11 +38,11 @@ on:
   workflow_call:
     outputs:
       rust-changed:
-        description: '"true" if Rust code changed and container was built, "false" otherwise'
+        description: '"true" if Rust code changed and container was built, "false" otherwise. When true, use rust_dev profile.'
         value: ${{ jobs.setup.outputs.rust-changed }}
-      profile-args:
-        description: 'Args to append to nf-test/nextflow commands for container selection'
-        value: ${{ jobs.setup.outputs.profile-args }}
+      container-args:
+        description: 'Extra nextflow args for container version (e.g., "--rust_tools_version dev"). Empty when rust-changed=true or using main.'
+        value: ${{ jobs.setup.outputs.container-args }}
 
 jobs:
   setup:
@@ -42,7 +50,7 @@ jobs:
     timeout-minutes: 15
     outputs:
       rust-changed: ${{ steps.check.outputs.rust-changed }}
-      profile-args: ${{ steps.check.outputs.profile-args }}
+      container-args: ${{ steps.check.outputs.container-args }}
 
     steps:
       - uses: actions/checkout@v4
@@ -58,19 +66,20 @@ jobs:
           if git diff --quiet origin/main -- $RUST_PATHS 2>/dev/null; then
             echo "Rust code matches main, using ECR :main"
             echo "rust-changed=false" >> $GITHUB_OUTPUT
-            echo "profile-args=" >> $GITHUB_OUTPUT
+            echo "container-args=" >> $GITHUB_OUTPUT
 
           # Check if Rust files are identical to dev
           elif git diff --quiet origin/dev -- $RUST_PATHS 2>/dev/null; then
             echo "Rust code matches dev, using ECR :dev"
             echo "rust-changed=false" >> $GITHUB_OUTPUT
-            echo "profile-args=--rust_tools_version dev" >> $GITHUB_OUTPUT
+            echo "container-args=--rust_tools_version dev" >> $GITHUB_OUTPUT
 
-          # Rust code has changed - need to build
+          # Rust code has changed - need to build local container
+          # Callers should use the rust_dev profile (--profile=rust_dev for nf-test, -profile rust_dev for nextflow)
           else
             echo "Rust code has changed, will build local container"
             echo "rust-changed=true" >> $GITHUB_OUTPUT
-            echo "profile-args=--profile=rust_dev" >> $GITHUB_OUTPUT
+            echo "container-args=" >> $GITHUB_OUTPUT
           fi
 
       # Compute hash of Rust source for cache key

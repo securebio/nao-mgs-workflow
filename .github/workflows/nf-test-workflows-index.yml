@@ -57,7 +57,9 @@ jobs:
         uses: ./.github/actions/load-rust-container
       - name: Run workflow tests
         if: steps.filter.outputs.index == 'true'
-        run: bin/run-nf-test.sh --num-workers 4 tests/workflows/index.nf.test --output-log test-logs-workflows-index.txt ${{ needs.setup-rust.outputs.profile-args }}
+        run: |
+          RUST_ARGS="${{ needs.setup-rust.outputs.rust-changed == 'true' && '--profile=rust_dev' || needs.setup-rust.outputs.container-args }}"
+          bin/run-nf-test.sh --num-workers 4 tests/workflows/index.nf.test --output-log test-logs-workflows-index.txt $RUST_ARGS
       - name: Upload test results
         if: failure() && steps.filter.outputs.index == 'true'
         uses: actions/upload-artifact@v4
