@@ -127,3 +127,22 @@ expected-outputs-downstream-ont = [
     "logging_downstream/time.txt",
     "results_downstream/{GROUP}_validation_hits.tsv.gz",
 ]
+
+[tool.bumpversion]
+current_version = "3.0.1.8"
+parse = "(?P<major>\\d+)\\.(?P<schema>\\d+)\\.(?P<results>\\d+)\\.(?P<point>\\d+)"
+serialize = ["{major}.{schema}.{results}.{point}"]
+commit = false
+tag = false
+
+[[tool.bumpversion.files]]
+filename = "pyproject.toml"
+regex = true
+search = "name = \"mgs-workflow\"\\nversion = \"{current_version}\""
+replace = "name = \"mgs-workflow\"\\nversion = \"{new_version}\""
+
+[[tool.bumpversion.files]]
+filename = "CHANGELOG.md"
+regex = true
+search = "^# Unreleased\\nbump_type: \\w+\\n"
+replace = "# v{new_version}\\n"

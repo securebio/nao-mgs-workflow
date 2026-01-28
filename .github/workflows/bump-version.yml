@@ -1,0 +1,59 @@
+name: Bump Version
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  bump-version:
+    runs-on: ubuntu-latest
+    # Skip if this is a version bump commit (avoid infinite loop)
+    if: "!contains(github.event.head_commit.message, '[release]')"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install bump-my-version
+        run: pip install bump-my-version
+
+      - name: Extract bump type from CHANGELOG
+        id: bump_type
+        run: |
+          bump_type=$(grep -oP '^bump_type:\s*\K\w+' CHANGELOG.md || echo "")
+          if [ -z "$bump_type" ]; then
+            echo "ERROR: No bump_type found in CHANGELOG.md Unreleased section"
+            exit 1
+          fi
+          if ! echo "$bump_type" | grep -qE '^(major|schema|results|point)$'; then
+            echo "ERROR: Invalid bump_type '$bump_type'. Must be: major, schema, results, or point"
+            exit 1
+          fi
+          echo "type=$bump_type" >> $GITHUB_OUTPUT
+          echo "Found bump_type: $bump_type"
+
+      - name: Bump version
+        run: |
+          bump-my-version bump ${{ steps.bump_type.outputs.type }}
+          echo "New version: $(bump-my-version show current_version)"
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Commit and push
+        run: |
+          version=$(bump-my-version show current_version)
+          git add pyproject.toml CHANGELOG.md
+          git commit -m "[release] Bump version to $version"
+          git push

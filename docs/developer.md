@@ -332,8 +332,8 @@ Feel free to use AI tools (Cursor, GitHub Copilot, Claude Code, etc.) to generat
 
 1. **Write new tests** for the changes that you make if those tests don't already exist. At the very least, these tests should check that the new implementation runs to completion; tests that also verify the output on the test dataset are strongly encouraged. As discussed above, we recommend writing end-to-end tests in `nf-test` and unit tests in language-specific testing libraries like `pytest`.
     - If you make any changes that affect the output of the pipeline, list/describe the changes that occurred in the pull request.
-2. **Update the `CHANGELOG.md` file** with the changes that you are making, and update the `pipeline-version.txt` and `pyproject.toml` file with the new version number.
-    - More information on how to update the `CHANGELOG.md` file can be found [here](./versioning.md). Note that, before merging to `main`, version numbers should have the `-dev` suffix. This suffix should be used to denote development versions in `CHANGELOG.md`, `pipeline-version.txt`, and `pyproject.toml`, and should only be removed when preparing to merge to `main`.
+2. **Update the `CHANGELOG.md` file** with the changes that you are making under the `# Unreleased` section.
+    - More information on how to update the `CHANGELOG.md` file can be found [here](./versioning.md). Version numbers are automatically managed on merge to `main`.
 3. **Update the expected-output-{run,downstream}.txt files** with any changes to the output of the RUN or DOWNSTREAM workflows.
 4. **Pass automated tests on GitHub Actions**. These run automatically when you open a pull request.
 5. **Write a meaningful description** of your changes in the PR description and give it a meaningful title.
@@ -369,13 +369,47 @@ Try rebasing branch B onto `dev` first (`git rebase dev`). If rebasing doesn't w
 
 By default, all changes are made on individual branches, and merged into `dev`. Periodically, a collection of `dev` changes are merged to `main` as a new release. New releases are fairly frequent (historically, we have made a new release every 2-4 weeks).
 
+### Automated version management
+
+Version bumps are automated via GitHub Actions. The workflow uses the `# Unreleased` section and `bump_type:` directive in `CHANGELOG.md` to determine how to bump the version on merge to `main`.
+
+**CHANGELOG format during development:**
+```markdown
+# Unreleased
+bump_type: point
+
+- Change 1
+- Change 2
+
+# v3.0.1.8
+...
+```
+
+**Valid bump types:**
+- `major`: Bumps first version number (e.g., 3.0.1.8 → 4.0.0.0)
+- `schema`: Bumps second version number (e.g., 3.0.1.8 → 3.1.0.0)
+- `results`: Bumps third version number (e.g., 3.0.1.8 → 3.0.2.0)
+- `point`: Bumps fourth version number (e.g., 3.0.1.8 → 3.0.1.9)
+
+**On merge to `main`, automation will:**
+1. Extract `bump_type` from CHANGELOG.md
+2. Bump version in `pyproject.toml` according to bump type
+3. Replace `# Unreleased\nbump_type: X` with `# vX.Y.Z.W` in CHANGELOG.md
+4. Create and push a `[release]` commit
+5. Create a GitHub release with the changelog content
+6. Reset `dev` and `ci-test` branches to match `main`
+7. Add a new `# Unreleased` section to `dev` CHANGELOG
+8. For point releases only, reset `stable` to match `main`
+
+### Release process
+
 Only pipeline maintainers should author a new release. The process for going through a new release is as follows:
 
 1. Stop approving new feature PRs into `dev`.
 2. Create a release branch `release/USER_HANDLE/X.Y.Z.W` (see [here](./versioning.md) for information on our versioning system). In this branch:
 
     1. Review and consolidate additions to `CHANGELOG.md`; these often get somewhat disjointed across many small PRs to `dev`.
-    2. Update the version number in `CHANGELOG.md` and `pyproject.toml` to remove any `-dev` suffix and reflect the magnitude of changes (again, see [here](./versioning.md) for information on the versioning schema).
+    2. Update the `bump_type:` directive to reflect the magnitude of changes (see bump types above and [versioning.md](./versioning.md) for guidance).
     3. Check if the changes in the release necessitate a new index version. Most releases do not; the primary reason one would is if changes to processes or workflows would cause an incompatibility between the contents of the index and the expectations of the RUN or DOWNSTREAM workflows. If this is the case:
 
         1. Check for new releases of reference databases and update `configs/index.config`[^refs].
@@ -390,7 +424,7 @@ Only pipeline maintainers should author a new release. The process for going thr
     4. Wait for additional long-running pre-release checks to complete in Github Actions.
     5. If any issues or test failures arise in the preceding steps, fix them with new bugfix PRs into `dev`, then rebase the release branch onto `dev`.
 
-4. Once all checks pass, merge the PR into main **without squashing**[^approval]. A Github Actions workflow will automatically create and tag a new release and reset other branches (`dev` & `ci-test`, plus `stable` if only the fourth version number has changed) to match `main`.
+4. Once all checks pass, merge the PR into main **without squashing**[^approval]. GitHub Actions will automatically bump the version, create and tag a new release, and reset other branches (`dev` & `ci-test`, plus `stable` if only the fourth version number has changed) to match `main`.
 
     1. Non-point releases are NOT automatically merged to `stable`. To update `stable` with a non-point release, a repo admin must manually reset the branch.
 

@@ -14,4 +14,4 @@ Users relying on pipeline outputs should take the following actions in response 
 3. **Schema change or higher:** Update downstream code to reflect new output schema.
 4. **Major change:** Review new code and outputs thoroughly; be prepared for major changes to downstream code.
 
-Note that, when a version has not yet been merged to `master`, it should have the suffix `-dev`.
+During development, changes are tracked in the `# Unreleased` section of `CHANGELOG.md`. The `bump_type:` directive below `# Unreleased` specifies which version number will be incremented on merge to `main`. Version numbers are automatically updated by GitHub Actions when changes are merged to `main`.

@@ -15,34 +15,41 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Extract version from pyproject.toml
+      - name: Install bump-my-version
+        run: pip install bump-my-version
+
+      - name: Validate CHANGELOG and extract bump_type
+        id: bump_type
+        run: |
+          # Use check_version.py to validate Unreleased section, bump_type, and content
+          python bin/check_version.py --base-branch main
+
+          # Extract bump_type for version calculation
+          bump_type=$(grep -oP '^bump_type:\s*\K\w+' CHANGELOG.md)
+          echo "type=$bump_type" >> $GITHUB_OUTPUT
+
+      - name: Calculate new version
         id: version
         run: |
-          VERSION=$(python -c "import tomllib; print(tomllib.load(open('pyproject.toml', 'rb'))['project']['version'])")
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "Version: $VERSION"
-
-      - name: Check changelog section is extractable
-        run: |
-          VERSION="${{ steps.version.outputs.version }}"
-          echo "Verifying changelog section for version $VERSION is extractable..."
-
-          # Try to extract the changelog (will fail if section doesn't exist or is malformed)
-          python bin/extract_changelog.py "$VERSION" > /dev/null
-
-          echo "OK: Changelog section exists and is extractable"
+          # Use bump-my-version to calculate what the new version would be
+          current=$(bump-my-version show current_version)
+          new=$(bump-my-version show new_version --increment ${{ steps.bump_type.outputs.type }})
+          echo "current=$current" >> $GITHUB_OUTPUT
+          echo "new=$new" >> $GITHUB_OUTPUT
+          echo "Current version: $current"
+          echo "New version after bump: $new"
 
       - name: Check release does not already exist
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          VERSION="${{ steps.version.outputs.version }}"
+          VERSION="${{ steps.version.outputs.new }}"
           echo "Checking if release $VERSION already exists on GitHub..."
 
           # Check if release exists (gh release view returns exit code 1 if not found)
           if gh release view "$VERSION" &>/dev/null; then
             echo "ERROR: Release $VERSION already exists on GitHub"
-            echo "Please increment the version number before merging to main"
+            echo "This version would be created by the current bump_type"
             exit 1
           fi
 

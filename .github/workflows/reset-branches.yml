@@ -7,6 +7,8 @@ on:
 jobs:
   reset-branches:
     runs-on: ubuntu-latest
+    # Only run on release commits created by bump-version workflow
+    if: contains(github.event.head_commit.message, '[release]')
 
     steps:
       - name: Generate token from GitHub App
@@ -32,6 +34,38 @@ jobs:
           git push --force origin dev
 
           echo "Successfully reset dev to main"
+
+      - name: Configure git for commits
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Add Unreleased section to dev CHANGELOG
+        run: |
+          git checkout dev
+
+          # Check if Unreleased section already exists
+          if grep -q "^# Unreleased" CHANGELOG.md; then
+            echo "Unreleased section already exists, skipping"
+            exit 0
+          fi
+
+          # Prepend Unreleased section using heredoc to avoid YAML escaping issues
+          cat > /tmp/unreleased_header.txt << 'HEADER'
+          # Unreleased
+          bump_type: <REQUIRED: point | results | schema | major>
+
+          HEADER
+          # Remove leading whitespace from heredoc (caused by indentation)
+          sed -i 's/^          //' /tmp/unreleased_header.txt
+          cat /tmp/unreleased_header.txt CHANGELOG.md > /tmp/new_changelog.md
+          mv /tmp/new_changelog.md CHANGELOG.md
+
+          git add CHANGELOG.md
+          git commit -m "Prepare CHANGELOG for next development cycle"
+          git push origin dev
+
+          echo "Added Unreleased section to CHANGELOG.md"
 
       - name: Reset ci-test branch to main
         run: |
