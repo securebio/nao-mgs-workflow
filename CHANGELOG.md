@@ -1,3 +1,6 @@
+# v3.0.1.9-dev
+- Add Rust build system to CI and rust-tools container to ECR.
+
 # v3.0.1.8
 
 ## Streamlining release process
