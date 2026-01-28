@@ -1,3 +1,9 @@
+# v3.0.1.9-dev
+
+- Minor refinements to release process from testing on v3.0.1.9:
+    - Switched from treating the release bot's App ID as a secret to a variable.
+    - Updated documentation to remove requirement for review on final PR into `main`.
+
 # v3.0.1.8
 
 ## Streamlining release process
