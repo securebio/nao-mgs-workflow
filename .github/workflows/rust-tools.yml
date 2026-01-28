@@ -60,17 +60,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Load Rust container
-        uses: actions/download-artifact@v4
-        with:
-          name: rust-container
-      - run: gunzip -c rust-tools.tar.gz | docker load
-
       - name: Setup nf-test environment
         uses: ./.github/actions/setup-nf-test
         with:
           aws_access_key_id: ${{ secrets.NAO_TESTING_ACCESS_KEY }}
           aws_secret_access_key: ${{ secrets.NAO_TESTING_SECRET_ACCESS_KEY }}
+
+      - name: Load Rust container
+        uses: actions/download-artifact@v4
+        with:
+          name: rust-container
+      - run: gunzip -c rust-tools.tar.gz | docker load
 
       - name: Run nf-tests for markAlignmentDuplicates
         run: bin/run-nf-test.sh tests/modules/local/markAlignmentDuplicates/ --ci --profile=rust_dev
