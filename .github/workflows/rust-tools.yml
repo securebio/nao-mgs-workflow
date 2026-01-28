@@ -94,6 +94,17 @@ jobs:
           aws-secret-access-key: ${{ secrets.NAO_TESTING_SECRET_ACCESS_KEY }}
           aws-region: us-east-1
 
+      # Scan the container for vulnerabilities before pushing (mirrors trivy-scan.yml for other containers)
+      - name: Install Trivy
+        run: |
+          wget -qO - https://aquasecurity.github.io/trivy-repo/deb/public.key | sudo apt-key add -
+          echo "deb https://aquasecurity.github.io/trivy-repo/deb $(lsb_release -sc) main" | sudo tee -a /etc/apt/sources.list.d/trivy.list
+          sudo apt-get update
+          sudo apt-get install -y trivy
+
+      - name: Run Trivy vulnerability scan
+        run: trivy image --scanners vuln --severity CRITICAL,HIGH --exit-code 1 nao-rust-tools:local
+
       - name: Push to ECR
         run: |
           aws ecr-public get-login-password --region us-east-1 | \
