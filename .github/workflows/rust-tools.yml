@@ -73,7 +73,7 @@ jobs:
           aws_secret_access_key: ${{ secrets.NAO_TESTING_SECRET_ACCESS_KEY }}
 
       - name: Run nf-tests for markAlignmentDuplicates
-        run: bin/run-nf-test.sh tests/modules/local/markAlignmentDuplicates/ --ci -profile rust_dev
+        run: bin/run-nf-test.sh tests/modules/local/markAlignmentDuplicates/ --ci --profile=rust_dev
 
   push-to-ecr:
     needs: test-integration

@@ -69,7 +69,7 @@ jobs:
           else
             echo "Rust code has changed, will build local container"
             echo "rust-changed=true" >> $GITHUB_OUTPUT
-            echo "profile-args=-profile rust_dev" >> $GITHUB_OUTPUT
+            echo "profile-args=--profile=rust_dev" >> $GITHUB_OUTPUT
           fi
 
       # Compute hash of Rust source for cache key
