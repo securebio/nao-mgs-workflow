@@ -15,6 +15,7 @@
 - Streamlining releases by moving large tests into Github Actions
     - Whole `nf-test` suite now runs on PRs to main (`.github/workflows/nf-test-*`)
     - Chained `INDEX -> RUN -> DOWNSTREAM` integration test on toy data runs before PRs to `main` (`.github/workflows/test-chained.yml`)
+    - Chained `RUN -> DOWNSTREAM` integration tests on real benchmark data (Illumina and ONT) before PRs to `main` (`.github/workflows/benchmark*.yml`)
     - Added test to enforce `CHANGELOG.md` updates in PRs to `dev` (`.github/workflows/check-changelog.yml`)
     - Consolidated version & output tracking into `pyproject.toml`, added a test for version consistency between `pyproject.toml` and `CHANGELOG.md`, and updated that test to handle version information in S3 files.
     - Moved release documentation from private internal docs to `docs/developer.md` and updated formatting to match Github requirements.
@@ -23,6 +24,7 @@
         - Automatically resets `dev` and `ci-test` branches to `main` after each release
         - Automatically resets `stable` to `main` for point releases (when only the 4th version number changes)
 - Fixed bug where DOWNSTREAM produced no output for groups without vertebrate-viral hits; now produces empty files with appropriate group names.
+- Fixed quote-handling bug causing DOWNSTREAM to fail if ONT FASTQ quality scores contain quote characters.
 - Add issue auto-labeling (for Linear integration).
 
 # v3.0.1.7
