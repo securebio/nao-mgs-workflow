@@ -660,12 +660,23 @@ IIIIIIIIIIIIIIII"""
         # All reads should have the same qname
         assert all(a.qname == 'read1' for a in alignments)
 
-    def test_up_secondary_alignments_same_coordinates_different_cigar(self):
-        # Two unapired (UP) secondary read1 alignments with same (rname, pos, pnext) but different CIGARs
-        sam_content = """read1\t97\tchr1\t1000\t0\t50M\t=\t900\t0\tACGTACGTACGTACGTACGTACGTACGTACGT\tIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIII\tAS:i:100\tYT:Z:UP
+    @pytest.mark.parametrize(
+        "score1,score2,expected_cigar",
+        [
+            (100, 100, "1S49M"),  # Same scores: keep first alignment
+            (100, 90, "1S49M"),   # First has higher score: keep first
+            (90, 100, "10S40M"),  # Second has higher score: keep second
+        ],
+    )
+    def test_up_secondary_alignments_same_coordinates_different_cigar(
+        self, score1, score2, expected_cigar
+    ):
+        # Two unpaired (UP) secondary read1 alignments with same (rname, pos, pnext) but different CIGARs
+        # The alignment with the higher score should be kept; if equal, the first one is kept
+        sam_content = f"""read1\t97\tchr1\t1000\t0\t50M\t=\t900\t0\tACGTACGTACGTACGTACGTACGTACGTACGT\tIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIII\tAS:i:100\tYT:Z:UP
 read1\t145\tchr1\t900\t255\t50M\t=\t1000\t0\tTGCATGCATGCATGCATGCATGCATGCATGCA\tIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIII\tAS:i:94\tYT:Z:UP
-read1\t353\tchr1\t950\t255\t1S49M\t=\t900\t0\tACGTACGTACGTACGTACGTACGTACGTACGT\tIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIII\tAS:i:100\tYT:Z:UP
-read1\t353\tchr1\t950\t255\t10S40M\t=\t900\t0\tACGTACGTACGTACGTACGTACGTACGTACGT\tIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIII\tAS:i:100\tYT:Z:UP"""
+read1\t353\tchr1\t950\t255\t1S49M\t=\t900\t0\tACGTACGTACGTACGTACGTACGTACGTACGT\tIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIII\tAS:i:{score1}\tYT:Z:UP
+read1\t353\tchr1\t950\t255\t10S40M\t=\t900\t0\tACGTACGTACGTACGTACGTACGTACGTACGT\tIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIII\tAS:i:{score2}\tYT:Z:UP"""
 
         filtered_content = """@read1/1
 ACGTACGTACGTACGTACGTACGTACGTACGT
@@ -682,7 +693,7 @@ IIIIIIIIIIIIIIIIIIIIIIIIIIIIIIII"""
 
         filter_viral_sam(sam_file, filtered_file, output_file, 10.0)
 
-        with open(output_file, 'r') as f:
+        with open(output_file) as f:
             output_lines = f.readlines()
 
         # Parse all alignments
@@ -718,6 +729,11 @@ IIIIIIIIIIIIIIIIIIIIIIIIIIIIIIII"""
         secondary_read2 = [a for a in secondary_alignments if a.flag & 128]
         assert len(secondary_read1) == 1, f"Expected 1 secondary read1, got {len(secondary_read1)}"
         assert len(secondary_read2) == 1, f"Expected 1 secondary read2, got {len(secondary_read2)}"
+
+        # Verify the correct alignment was kept based on score
+        assert secondary_read1[0].cigar == expected_cigar, (
+            f"Expected CIGAR {expected_cigar}, got {secondary_read1[0].cigar}"
+        )
 
 
 class TestGrouping:
