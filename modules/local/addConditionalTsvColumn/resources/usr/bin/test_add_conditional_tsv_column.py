@@ -96,22 +96,21 @@ class TestAddConditionalColumn:
         with pytest.raises(ValueError, match="could not find all requested columns in header"):
             add_conditional_tsv_column.add_conditional_column(**kwargs)
 
-    def test_fields_with_quote_characters_not_escaped(self, tsv_factory):
+    @pytest.mark.parametrize("quote_string", [
+        'AAAA"BBBB',
+        "AAAA'BBBB",
+    ])
+    def test_fields_with_quote_characters_not_escaped(self, tsv_factory, quote_string):
         """Test that fields containing quote characters are not CSV-escaped.
 
         This is important for FASTQ quality strings which may contain the '"'
         character (ASCII 34 = Phred quality score 1). CSV escaping would double
         the quotes and wrap the field, corrupting the quality string length.
         """
-        # Quality string contains " characters (ASCII 34 = Phred+33 quality 1)
-        quality_with_quotes = 'AAAA"BBBB'
-        input_content = f"x\ty\tz\n0\t{quality_with_quotes}\tother\n1\tno_quotes\t{quality_with_quotes}\n"
-        # Output should preserve quotes exactly, not escape them
-        expected_output = f"x\ty\tz\tselected\n0\t{quality_with_quotes}\tother\t{quality_with_quotes}\n1\tno_quotes\t{quality_with_quotes}\t{quality_with_quotes}\n"
-
+        input_content = f"x\ty\tz\n0\t{quote_string}\tother\n1\tno_quotes\t{quote_string}\n"
+        expected_output = f"x\ty\tz\tselected\n0\t{quote_string}\tother\t{quote_string}\n1\tno_quotes\t{quote_string}\t{quote_string}\n"
         input_file = tsv_factory.create_plain("input.tsv", input_content)
         output_file = tsv_factory.get_path("output.tsv")
-
         add_conditional_tsv_column.add_conditional_column(
             input_file,
             chk_col="x",
@@ -121,9 +120,9 @@ class TestAddConditionalColumn:
             new_hdr="selected",
             out_path=output_file,
         )
-
         result = tsv_factory.read_plain(output_file)
         assert result == expected_output
         # Explicitly verify no CSV escaping occurred (doubled quotes or wrapping)
         assert '""' not in result, "Quotes should not be doubled (CSV escaping)"
+        assert "''" not in result, "Quotes should not be doubled (CSV escaping)"
 
