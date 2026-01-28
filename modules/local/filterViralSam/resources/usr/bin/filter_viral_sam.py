@@ -256,6 +256,11 @@ def group_unpaired_alignments(
 
     An intermediate dictionary is used to map pair keys to group IDs.
 
+    After grouping, deduplicates within each group to keep at most one read1 and one
+    read2 alignment. When multiple alignments exist for the same orientation (e.g., two
+    read1s with different CIGAR strings but identical coordinates), the alignment with
+    the highest alignment score is kept.
+
     Args:
         alignments (list[SamAlignment]): List of SamAlignment objects with pair_status "UP"
 
@@ -263,7 +268,7 @@ def group_unpaired_alignments(
         Dict[int, list[SamAlignment]]: Dictionary mapping group IDs to lists of alignments in each group
     """
     by_group: Dict[int, list[SamAlignment]] = defaultdict(list)
-    pair_key_to_group = {}
+    pair_key_to_group: dict[tuple, int] = {}
     group_idx = 0
 
     for alignment in alignments:
@@ -292,7 +297,26 @@ def group_unpaired_alignments(
         # Get the group ID for this key and add the alignment
         group_id = pair_key_to_group[pair_key]
         by_group[group_id].append(alignment)
-    return dict(by_group)
+    # Deduplicate within each group: keep at most one read1 and one read2.
+    # This handles cases where multiple alignments with the same orientation
+    # (e.g., two read1s with different CIGAR strings) get grouped together
+    # due to having identical (rname, pos_min, pos_max).
+    filtered_groups: dict[int, list[SamAlignment]] = {}
+    for group_id, group_alignments in by_group.items():
+        read1_alns = [a for a in group_alignments if a.flag & 64]
+        read2_alns = [a for a in group_alignments if a.flag & 128]
+        # Sort by alignment score (descending) to keep highest-scoring alignment
+        read1_alns.sort(key=lambda a: a.alignment_score or 0, reverse=True)
+        read2_alns.sort(key=lambda a: a.alignment_score or 0, reverse=True)
+        result = []
+        if read1_alns:
+            result.append(read1_alns[0])
+        if read2_alns:
+            result.append(read2_alns[0])
+        if len(read1_alns) > 1 or len(read2_alns) > 1:
+            logger.debug(f"Group {group_id}: deduplicated {len(group_alignments)} to {len(result)} alignments")
+        filtered_groups[group_id] = result
+    return filtered_groups
 
 
 def group_other_alignments(

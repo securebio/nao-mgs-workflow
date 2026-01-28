@@ -660,6 +660,66 @@ IIIIIIIIIIIIIIII"""
         # All reads should have the same qname
         assert all(a.qname == 'read1' for a in alignments)
 
+    def test_up_secondary_alignments_same_coordinates_different_cigar(self):
+        # Two unapired (UP) secondary read1 alignments with same (rname, pos, pnext) but different CIGARs
+        sam_content = """read1\t97\tchr1\t1000\t0\t50M\t=\t900\t0\tACGTACGTACGTACGTACGTACGTACGTACGT\tIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIII\tAS:i:100\tYT:Z:UP
+read1\t145\tchr1\t900\t255\t50M\t=\t1000\t0\tTGCATGCATGCATGCATGCATGCATGCATGCA\tIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIII\tAS:i:94\tYT:Z:UP
+read1\t353\tchr1\t950\t255\t1S49M\t=\t900\t0\tACGTACGTACGTACGTACGTACGTACGTACGT\tIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIII\tAS:i:100\tYT:Z:UP
+read1\t353\tchr1\t950\t255\t10S40M\t=\t900\t0\tACGTACGTACGTACGTACGTACGTACGTACGT\tIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIII\tAS:i:100\tYT:Z:UP"""
+
+        filtered_content = """@read1/1
+ACGTACGTACGTACGTACGTACGTACGTACGT
++
+IIIIIIIIIIIIIIIIIIIIIIIIIIIIIIII
+@read1/2
+TGCATGCATGCATGCATGCATGCATGCATGCA
++
+IIIIIIIIIIIIIIIIIIIIIIIIIIIIIIII"""
+
+        sam_file = self.create_temp_file(sam_content, '.sam')
+        filtered_file = self.create_temp_file(filtered_content, '.fastq')
+        output_file = os.path.join(self.temp_dir, 'output.sam')
+
+        filter_viral_sam(sam_file, filtered_file, output_file, 10.0)
+
+        with open(output_file, 'r') as f:
+            output_lines = f.readlines()
+
+        # Parse all alignments
+        alignments = [SamAlignment.from_sam_line(line.strip()) for line in output_lines]
+
+        # Key assertion: No two consecutive alignments should both be read1 or both be read2
+        # This is what process_viral_bowtie2_sam.py expects
+        for i in range(len(alignments) - 1):
+            curr_is_read1 = bool(alignments[i].flag & 64)
+            next_is_read1 = bool(alignments[i + 1].flag & 64)
+            assert curr_is_read1 != next_is_read1, (
+                f"Consecutive alignments at positions {i} and {i+1} are both "
+                f"{'read1' if curr_is_read1 else 'read2'}: "
+                f"flags {alignments[i].flag} and {alignments[i + 1].flag}"
+            )
+
+        # Separate primary and secondary
+        primary_alignments = [a for a in alignments if a.flag < 256]
+        secondary_alignments = [a for a in alignments if a.flag >= 256]
+
+        # Primary: should have 2 alignments (the original read1 and read2)
+        assert len(primary_alignments) == 2
+
+        # Secondary: should have 2 alignments (one read1 + one synthetic read2 mate)
+        # The duplicate read1 with a different CIGAR is deduplicated
+        assert len(secondary_alignments) == 2, (
+            f"Expected 2 secondary alignments (1 read1 + 1 synthetic read2), "
+            f"got {len(secondary_alignments)}"
+        )
+
+        # Verify secondary has one read1 and one read2
+        secondary_read1 = [a for a in secondary_alignments if a.flag & 64]
+        secondary_read2 = [a for a in secondary_alignments if a.flag & 128]
+        assert len(secondary_read1) == 1, f"Expected 1 secondary read1, got {len(secondary_read1)}"
+        assert len(secondary_read2) == 1, f"Expected 1 secondary read2, got {len(secondary_read2)}"
+
+
 class TestGrouping:
     def test_group_concordant_pairs_by_alignment_scores(self):
         # Test that secondary alignments for concordant paired reads with the same 
