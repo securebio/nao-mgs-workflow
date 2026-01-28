@@ -42,6 +42,7 @@ jobs:
               - 'configs/**'
               - 'tests/configs/**'
               - '.github/workflows/benchmark-ont-100k.yml'
+              - '.github/actions/setup-nf-test/**'
 
       - name: Setup nf-test environment
         if: steps.filter.outputs.relevant == 'true'

@@ -3,6 +3,7 @@ This section is solely for developers of the pipeline. We thank you greatly for 
 - Coding style
 - Containers
 - Testing
+- Continuous integration (CI)
 - GitHub issues
 - Pull requests (PRs)
 - New releases
@@ -246,7 +247,9 @@ Unlike nf-test, `pytest` tests are very fast and cheap to run. Consequently, we 
 
 We run the full test suite automatically on each pull request using GitHub Actions with larger runners and parallelization, as specified by configuration files in `.github/workflows`. This includes all `pytest` tests and all `nf-test` tests (modules, subworkflows, and workflows). We also run [Trivy](https://trivy.dev/) on all containers used by the workflow to check for security vulnerabilities.
 
-Because the CI runs the complete test suite, **running tests locally before pushing is no longer required**. However, running relevant tests locally can still be useful for faster feedback during development, especially when iterating on a specific module or workflow. 
+Because the CI runs the complete test suite, **running tests locally before pushing is no longer required**. However, running relevant tests locally can still be useful for faster feedback during development, especially when iterating on a specific module or workflow.
+
+For comprehensive documentation of all CI workflows, see [ci.md](ci.md). 
 
 ## GitHub issues
 We use [GitHub issues](https://github.com/naobservatory/mgs-workflow/issues) to track any issues with the pipeline: bugs, cleanup tasks, and desired new features. 
