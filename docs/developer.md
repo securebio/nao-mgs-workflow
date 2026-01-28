@@ -357,7 +357,7 @@ Only pipeline maintainers should author a new release. The process for going thr
     4. Wait for additional long-running pre-release checks to complete in Github Actions.
     5. If any issues or test failures arise in the preceding steps, fix them with new bugfix PRs into `dev`, then rebase the release branch onto `dev`.
 
-5. Once all checks pass and the PR to `main` is approved, merge it **without squashing**. A Github Actions workflow will automatically create and tag a new release and reset other branches (`dev` & `ci-test`, plus `stable` if only the fourth version number has changed) to match `main`.
+4. Once all checks pass and the PR to `main` is approved, merge it **without squashing**. A Github Actions workflow will automatically create and tag a new release and reset other branches (`dev` & `ci-test`, plus `stable` if only the fourth version number has changed) to match `main`.
 
     1. Non-point releases are NOT automatically merged to `stable`. To update `stable` with a non-point release, a repo admin must manually reset the branch.
 
