@@ -70,8 +70,8 @@ All Rust tools live in the centralized `rust-tools/` directory, organized as a C
 1. Create your Rust project in `rust-tools/{tool_name}/` with `Cargo.toml` and `src/main.rs`
 2. Add it as a workspace member in `rust-tools/Cargo.toml`
 3. Update `docker/nao-rust-tools.Dockerfile`:
-   - The builder stage already builds the entire workspace
-   - In the runtime stage: add `COPY --from=builder` to include the new binary
+   - The builder stage already builds the entire workspace, so you shouldn't have to change anything here.
+   - In the runtime stage: add `COPY --from=builder` to include the new binary.
 4. Use `label "rust_tools"` in your Nextflow process
 5. Add a comment above the process noting: `// Tool source: rust-tools/{tool_name}/`
 

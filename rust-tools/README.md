@@ -1,7 +1,7 @@
 # Rust Tools
 
 Rust utilities that run as part of the Nextflow pipeline. These are compiled into the
-`nao-rust-tools` container and used by processes with `label 'rust_tools'`.
+`nao-rust-tools` container and used by processes with `label "rust_tools"`.
 
 ## Current Tools
 

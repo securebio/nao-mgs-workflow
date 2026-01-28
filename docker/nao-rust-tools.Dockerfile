@@ -24,11 +24,8 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy compiled binaries from builder
-# Workspace builds output to rust-tools/target/release/
+# Add additional binaries here as tools are added to the workspace
 COPY --from=builder /build/rust-tools/target/release/mark_duplicates /usr/local/bin/
-
-# Add additional binaries here as tools are added to the workspace:
-# COPY --from=builder /build/rust-tools/target/release/future_tool /usr/local/bin/
 
 # Verify binaries are executable
 RUN mark_duplicates --help
