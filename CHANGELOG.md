@@ -19,6 +19,9 @@
     - Added test to enforce `CHANGELOG.md` updates in PRs to `dev` (`.github/workflows/check-changelog.yml`)
     - Consolidated version & output tracking into `pyproject.toml`, added a test for version consistency between `pyproject.toml` and `CHANGELOG.md`, and updated that test to handle version information in S3 files.
     - Moved release documentation from private internal docs to `docs/developer.md` and updated formatting to match Github requirements.
+    - Automated release creation and tagging on merge to `main` (`.github/workflows/create-release.yml`)
+        - Added pre-merge validation to check changelog sections and prevent duplicate releases (`.github/workflows/check-release.yml`)
+        - Created `bin/extract_changelog.py` to extract changelog content for releases
     - Added verification of expected outputs to workflow tests.
     - Automated branch resets after release (`.github/workflows/reset-branches.yml`)
         - Automatically resets `dev` and `ci-test` branches to `main` after each release
