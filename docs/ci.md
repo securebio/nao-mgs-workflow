@@ -1,6 +1,6 @@
 # Continuous Integration (CI)
 
-We use continuous integration (CI) via Github Actions to perform a number of automated tests on each PR, as well as other non-test actions in certain cases. Our CI workflows are configured in `.github/workflows`.
+We use continuous integration (CI) via GitHub Actions to perform a number of automated tests on each PR, as well as other non-test actions in certain cases. Our CI workflows are configured in `.github/workflows`.
 
 ## Overview
 
