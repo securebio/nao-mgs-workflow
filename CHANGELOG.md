@@ -21,7 +21,12 @@
     - Automated release creation and tagging on merge to `main` (`.github/workflows/create-release.yml`)
         - Added pre-merge validation to check changelog sections and prevent duplicate releases (`.github/workflows/check-release.yml`)
         - Created `bin/extract_changelog.py` to extract changelog content for releases
+    - Added verification of expected outputs to workflow tests.
+    - Automated branch resets after release (`.github/workflows/reset-branches.yml`)
+        - Automatically resets `dev` and `ci-test` branches to `main` after each release
+        - Automatically resets `stable` to `main` for point releases (when only the 4th version number changes)
 - Fixed bug where DOWNSTREAM produced no output for groups without vertebrate-viral hits; now produces empty files with appropriate group names.
+- Add issue auto-labeling (for Linear integration).
 
 # v3.0.1.7
 - Clarified testing documentation in `docs/developer.md`.
