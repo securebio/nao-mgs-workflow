@@ -15,7 +15,12 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Determine which Rust container to use (ECR or locally-built)
+  setup-rust:
+    uses: ./.github/workflows/setup-rust-container.yml
+
   integration-test-chained:
+    needs: setup-rust
     runs-on: ubuntu-latest
     timeout-minutes: 120
     env:
@@ -42,6 +47,17 @@ jobs:
               - 'tests/configs/**'
               - '.github/workflows/test-chained.yml'
               - '.github/actions/setup-nf-test/**'
+              - 'rust-tools/**'
+              - 'docker/nao-rust-tools.Dockerfile'
+      # Load locally-built Rust container if Rust code changed
+      - name: Download Rust container
+        if: steps.filter.outputs.chained == 'true' && needs.setup-rust.outputs.rust-changed == 'true'
+        uses: actions/download-artifact@v4
+        with:
+          name: rust-container
+      - name: Load Rust container
+        if: steps.filter.outputs.chained == 'true' && needs.setup-rust.outputs.rust-changed == 'true'
+        run: gunzip -c rust-tools.tar.gz | docker load
       - name: Setup nf-test environment
         if: steps.filter.outputs.chained == 'true'
         uses: ./.github/actions/setup-nf-test
@@ -56,4 +72,4 @@ jobs:
       - name: Run chain workflows integration test
         if: steps.filter.outputs.chained == 'true'
         run: |
-          bin/chain_workflows.py --no-resume --base-dir s3://nao-testing-scratch/mgs-workflow-test
+          bin/chain_workflows.py --no-resume --base-dir s3://nao-testing-scratch/mgs-workflow-test ${{ needs.setup-rust.outputs.profile-args }}

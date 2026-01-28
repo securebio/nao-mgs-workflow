@@ -13,7 +13,12 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Determine which Rust container to use (ECR or locally-built)
+  setup-rust:
+    uses: ./.github/workflows/setup-rust-container.yml
+
   test-workflows-index:
+    needs: setup-rust
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
@@ -38,6 +43,17 @@ jobs:
               - 'tests/configs/**'
               - '.github/workflows/nf-test-workflows-index.yml'
               - '.github/actions/setup-nf-test/**'
+              - 'rust-tools/**'
+              - 'docker/nao-rust-tools.Dockerfile'
+      # Load locally-built Rust container if Rust code changed
+      - name: Download Rust container
+        if: steps.filter.outputs.index == 'true' && needs.setup-rust.outputs.rust-changed == 'true'
+        uses: actions/download-artifact@v4
+        with:
+          name: rust-container
+      - name: Load Rust container
+        if: steps.filter.outputs.index == 'true' && needs.setup-rust.outputs.rust-changed == 'true'
+        run: gunzip -c rust-tools.tar.gz | docker load
       - name: Setup nf-test environment
         if: steps.filter.outputs.index == 'true'
         uses: ./.github/actions/setup-nf-test
@@ -46,7 +62,7 @@ jobs:
           aws_secret_access_key: ${{ secrets.NAO_TESTING_SECRET_ACCESS_KEY }}
       - name: Run workflow tests
         if: steps.filter.outputs.index == 'true'
-        run: bin/run-nf-test.sh --num-workers 4 tests/workflows/index.nf.test --output-log test-logs-workflows-index.txt
+        run: bin/run-nf-test.sh --num-workers 4 tests/workflows/index.nf.test --output-log test-logs-workflows-index.txt ${{ needs.setup-rust.outputs.profile-args }}
       - name: Upload test results
         if: failure() && steps.filter.outputs.index == 'true'
         uses: actions/upload-artifact@v4
