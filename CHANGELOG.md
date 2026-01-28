@@ -29,6 +29,7 @@
 - Fixed bug where DOWNSTREAM produced no output for groups without vertebrate-viral hits; now produces empty files with appropriate group names.
 - Fixed quote-handling bug causing DOWNSTREAM to fail if ONT FASTQ quality scores contain quote characters.
 - Add issue auto-labeling (for Linear integration).
+- Adds thorough CI documentation in `docs/ci.md`.
 
 # v3.0.1.7
 - Clarified testing documentation in `docs/developer.md`.
