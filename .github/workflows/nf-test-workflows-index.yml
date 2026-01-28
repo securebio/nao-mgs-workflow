@@ -46,14 +46,9 @@ jobs:
               - 'rust-tools/**'
               - 'docker/nao-rust-tools.Dockerfile'
       # Load locally-built Rust container if Rust code changed
-      - name: Download Rust container
-        if: steps.filter.outputs.index == 'true' && needs.setup-rust.outputs.rust-changed == 'true'
-        uses: actions/download-artifact@v4
-        with:
-          name: rust-container
       - name: Load Rust container
         if: steps.filter.outputs.index == 'true' && needs.setup-rust.outputs.rust-changed == 'true'
-        run: gunzip -c rust-tools.tar.gz | docker load
+        uses: ./.github/actions/load-rust-container
       - name: Setup nf-test environment
         if: steps.filter.outputs.index == 'true'
         uses: ./.github/actions/setup-nf-test

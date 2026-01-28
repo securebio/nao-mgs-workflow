@@ -31,7 +31,7 @@ COPY --from=builder /build/rust-tools/target/release/mark_duplicates /usr/local/
 # COPY --from=builder /build/rust-tools/target/release/future_tool /usr/local/bin/
 
 # Verify binaries are executable
-RUN mark_duplicates --version || echo "mark_duplicates installed"
+RUN mark_duplicates --help
 
 # Default to shell for debugging
 CMD ["/bin/sh"]

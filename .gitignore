@@ -15,6 +15,7 @@ pipeline_report.txt
 .nf-test/
 .nf-test*
 **/Cargo.lock
+!rust-tools/Cargo.lock
 **/target
 
 .vscode/*
