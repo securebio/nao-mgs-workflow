@@ -231,7 +231,8 @@ def main() -> None:
     try:
         args = parse_arguments()
         logger.info(f"Arguments: {args}")
-        download_database(args.source_path, args.timeout_seconds)
+        local_path = download_database(args.source_path, args.timeout_seconds)
+        print(local_path)  # Output path for shell capture
     finally:
         elapsed = time.time() - start_time
         logger.info(f"Total time elapsed: {elapsed:.2f} seconds")

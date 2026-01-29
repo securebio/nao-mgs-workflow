@@ -195,6 +195,16 @@ class TestMain:
     @patch('download_db.download_database')
     def test_main(self, mock_download, argv, expected_args):
         """Test that main parses args and calls download_database."""
+        mock_download.return_value = Path("/scratch/db_abc123")
         with patch('sys.argv', argv):
             main()
             mock_download.assert_called_once_with(*expected_args)
+
+    @patch('download_db.download_database')
+    def test_main_prints_path(self, mock_download, capsys):
+        """Test that main prints the local path to stdout."""
+        mock_download.return_value = Path("/scratch/kraken_db_abc12345")
+        with patch('sys.argv', ['download_db.py', 's3://bucket/db']):
+            main()
+        captured = capsys.readouterr()
+        assert captured.out.strip() == "/scratch/kraken_db_abc12345"
