@@ -8,6 +8,10 @@ inputs:
   aws_secret_access_key:
     description: 'AWS Secret Access Key'
     required: true
+  load_rust_container:
+    description: 'Whether to load the locally-built Rust container from artifacts (set to "true" when Rust code changed)'
+    required: false
+    default: 'false'
 
 runs:
   using: 'composite'
@@ -25,6 +29,18 @@ runs:
         sudo apt-get autoremove -y
         sudo apt-get clean
         df -h
+
+    # Load Rust container AFTER docker prune (which would delete it if loaded earlier)
+    - name: Download Rust container artifact
+      if: ${{ inputs.load_rust_container == 'true' }}
+      uses: actions/download-artifact@v4
+      with:
+        name: rust-container
+
+    - name: Load Rust container into Docker
+      if: ${{ inputs.load_rust_container == 'true' }}
+      shell: bash
+      run: gunzip -c rust-tools.tar.gz | docker load
 
     - name: Configure AWS CLI
       shell: bash

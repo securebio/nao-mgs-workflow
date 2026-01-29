@@ -49,10 +49,7 @@ jobs:
         with:
           aws_access_key_id: ${{ secrets.NAO_TESTING_ACCESS_KEY }}
           aws_secret_access_key: ${{ secrets.NAO_TESTING_SECRET_ACCESS_KEY }}
-      # Load Rust container AFTER setup-nf-test (which prunes docker images)
-      - name: Load Rust container
-        if: steps.filter.outputs.modules == 'true' && needs.setup-rust.outputs.rust-changed == 'true'
-        uses: ./.github/actions/load-rust-container
+          load_rust_container: ${{ needs.setup-rust.outputs.rust-changed }}
       - name: Run module tests
         if: steps.filter.outputs.modules == 'true'
         run: |

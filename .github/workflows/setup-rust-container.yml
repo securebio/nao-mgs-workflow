@@ -15,12 +15,10 @@
 #         - uses: actions/checkout@v4
 #         - name: Setup nf-test environment
 #           uses: ./.github/actions/setup-nf-test
-#           ...
-#         # IMPORTANT: Load Rust container AFTER setup-nf-test, because
-#         # setup-nf-test runs `docker image prune --all` which would delete it!
-#         - name: Load Rust container (if built)
-#           if: needs.setup-rust.outputs.rust-changed == 'true'
-#           uses: ./.github/actions/load-rust-container
+#           with:
+#             aws_access_key_id: ${{ secrets.NAO_TESTING_ACCESS_KEY }}
+#             aws_secret_access_key: ${{ secrets.NAO_TESTING_SECRET_ACCESS_KEY }}
+#             load_rust_container: ${{ needs.setup-rust.outputs.rust-changed }}
 #         - name: Run tests (nf-test)
 #           run: |
 #             # If rust changed, use rust_dev profile; otherwise use container-args
