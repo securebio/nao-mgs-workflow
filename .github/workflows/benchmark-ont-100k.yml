@@ -73,4 +73,4 @@ jobs:
             --launch-dir test_run_benchmark_ont_100k \
             --base-dir s3://nao-testing-scratch/mgs-workflow-test/benchmark-ont-100k/ \
             --platform ont \
-            --rust_tools_version "$RUST_VERSION"
+            --nextflow-args "--rust_tools_version $RUST_VERSION"

@@ -72,4 +72,4 @@ jobs:
             --samplesheet s3://nao-testing/benchmarks/Illumina_100M/samplesheet.csv \
             --launch-dir test_run_benchmark_100M \
             --base-dir s3://nao-testing-scratch/mgs-workflow-test/benchmark-illumina-100M/ \
-            --rust_tools_version "$RUST_VERSION"
+            --nextflow-args "--rust_tools_version $RUST_VERSION"
