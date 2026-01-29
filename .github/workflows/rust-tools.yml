@@ -3,15 +3,7 @@ name: Rust Tools CI
 on:
   push:
     branches: [dev, main]
-    paths:
-      - 'rust-tools/**'
-      - 'docker/nao-rust-tools.Dockerfile'
-      - '.github/workflows/rust-tools.yml'
   pull_request:
-    paths:
-      - 'rust-tools/**'
-      - 'docker/nao-rust-tools.Dockerfile'
-      - '.github/workflows/rust-tools.yml'
 
 concurrency:
   group: ci-rust-tools-${{ github.event.pull_request.number || github.ref }}
@@ -21,29 +13,48 @@ jobs:
   build-rust-container:
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    outputs:
+      rust-changed: ${{ steps.filter.outputs.rust }}
     steps:
       - uses: actions/checkout@v4
 
+      - name: Check for Rust changes
+        uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            rust:
+              - 'rust-tools/**'
+              - 'docker/nao-rust-tools.Dockerfile'
+              - '.github/workflows/rust-tools.yml'
+
       # --- Rust unit tests (runs on GitHub runner, not in Docker) ---
       - name: Install Rust toolchain
+        if: steps.filter.outputs.rust == 'true'
         uses: dtolnay/rust-toolchain@stable
 
       - name: Cache Rust dependencies
+        if: steps.filter.outputs.rust == 'true'
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: rust-tools
 
       - name: Run Rust unit tests
+        if: steps.filter.outputs.rust == 'true'
         run: cargo test --workspace --release --manifest-path rust-tools/Cargo.toml
 
       # --- Container build (recompiles inside Docker for reproducibility) ---
       - name: Build container
+        if: steps.filter.outputs.rust == 'true'
         run: docker build --progress=plain -f docker/nao-rust-tools.Dockerfile -t nao-rust-tools:local .
 
       - name: Save container for ECR push
+        if: steps.filter.outputs.rust == 'true'
         run: docker save nao-rust-tools:local | gzip > rust-tools.tar.gz
 
-      - uses: actions/upload-artifact@v4
+      - name: Upload container artifact
+        if: steps.filter.outputs.rust == 'true'
+        uses: actions/upload-artifact@v4
         with:
           name: rust-container
           path: rust-tools.tar.gz
@@ -51,7 +62,7 @@ jobs:
 
   push-to-ecr:
     needs: build-rust-container
-    if: github.event_name == 'push'
+    if: github.event_name == 'push' && needs.build-rust-container.outputs.rust-changed == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:

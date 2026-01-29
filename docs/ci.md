@@ -65,6 +65,10 @@ We have five nf-test workflows that test different parts of the pipeline:
 
 Runs our entire pytest suite across `bin`, `modules`, and `post-processing/tests/`.
 
+### Rust tools (`rust-tools.yml`)
+
+Runs Rust unit tests and builds the `nao-rust-tools` container when Rust source files change. This workflow runs on all PRs but uses `dorny/paths-filter` to trivially succeed (~10 seconds) when no Rust files have changed. When Rust files are modified, it runs `cargo test` and builds the container. On push to `dev` or `main`, it also pushes the container to ECR.
+
 ### Trivy container scan (`trivy-scan.yml`)
 
 Scans all containers defined in `configs/containers.config` for security vulnerabilities using [Trivy](https://trivy.dev/).
