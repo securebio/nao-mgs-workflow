@@ -4,7 +4,10 @@
 # If unchanged, tests can use the existing ECR container.
 # If changed, it builds a local container for the calling workflow to use.
 #
-# Usage in other workflows:
+# Used by: nf-test-*.yml workflows (5 total). NOT used by release tests
+# (test-chained.yml, benchmark-*.yml) which require Wave/Fusion and use ECR directly.
+#
+# Usage in nf-test workflows:
 #   jobs:
 #     setup-rust:
 #       uses: ./.github/workflows/setup-rust-container.yml
@@ -19,16 +22,11 @@
 #             aws_access_key_id: ${{ secrets.NAO_TESTING_ACCESS_KEY }}
 #             aws_secret_access_key: ${{ secrets.NAO_TESTING_SECRET_ACCESS_KEY }}
 #             load_rust_container: ${{ needs.setup-rust.outputs.rust-changed }}
-#         - name: Run tests (nf-test)
+#         - name: Run tests
 #           run: |
 #             # If rust changed, use rust_dev profile; otherwise use container-args
 #             RUST_ARGS="${{ needs.setup-rust.outputs.rust-changed == 'true' && '--profile=rust_dev' || needs.setup-rust.outputs.container-args }}"
 #             bin/run-nf-test.sh ... $RUST_ARGS
-#         # Or for chain_workflows.py (uses single-dash -profile):
-#         - name: Run tests (chain_workflows)
-#           run: |
-#             PROFILE="${{ needs.setup-rust.outputs.rust-changed == 'true' && 'test_run,rust_dev' || 'test_run' }}"
-#             bin/chain_workflows.py --profile $PROFILE --nextflow-args="${{ needs.setup-rust.outputs.container-args }}"
 
 name: Setup Rust Container
 
