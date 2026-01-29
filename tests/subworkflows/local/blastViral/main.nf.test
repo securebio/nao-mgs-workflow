@@ -130,7 +130,7 @@ nextflow_workflow {
             def ids_sub = fasta_out.keySet().collect{ it.tokenize(" ")[0] }.toSet()
             def frac_exp = params.blast_frac
             def frac_obs = ids_sub.size() / ids_in.size()
-            def ci_tolerance = 0.877 // Derived by simulating draws from a binomial distribution and taking 95% CI
+            def ci_tolerance = 0.80 // 99% CI tolerance for binomial distribution with n=25, p=0.9
             assert frac_obs / frac_exp <= 1/ci_tolerance
             assert frac_obs / frac_exp >= ci_tolerance
             // All subset seq IDs should be in input
@@ -216,7 +216,7 @@ nextflow_workflow {
             def ids_sub = fasta_out.keySet().collect{ it.tokenize(" ")[0] }.toSet()
             def frac_exp = params.blast_frac
             def frac_obs = ids_sub.size() / ids_in.size()
-            def ci_tolerance = 0.877 // Derived by simulating draws from a binomial distribution and taking 95% CI
+            def ci_tolerance = 0.80 // 99% CI tolerance for binomial distribution with n=25, p=0.9
             assert frac_obs / frac_exp <= 1/ci_tolerance
             assert frac_obs / frac_exp >= ci_tolerance
             // All subset seq IDs should be in input
