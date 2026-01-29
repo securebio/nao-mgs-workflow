@@ -9,10 +9,9 @@ same database simultaneously.
 
 Key features:
 - File locking prevents concurrent downloads of the same database
-- Source path tracking ensures cached data matches the requested source
+- Unique cache directories per source path (using hash suffix) prevent collisions
 - Incremental sync (via aws s3 sync --delete or rsync --delete) ensures local
   copy matches remote, removing stale files from previous runs
-- Automatic cache invalidation when source path changes
 
 The scratch directory (/scratch by default) is typically a shared volume mounted
 across AWS Batch workers, allowing databases to be reused across jobs on the
@@ -25,10 +24,10 @@ same instance.
 
 import argparse
 import fcntl
+import hashlib
 import logging
 import os
 import re
-import shutil
 import subprocess
 import time
 from contextlib import contextmanager
@@ -74,6 +73,16 @@ def parse_source_path(path: str) -> tuple[str, bool]:
         return f"s3://{path_without_prefix}", True
     return normalized, False
 
+def get_cache_name(source_path: str) -> str:
+    """
+    Generate a unique cache directory name from source path.
+    Uses basename for readability plus a hash suffix to avoid collisions
+    when different sources have the same basename.
+    """
+    basename = os.path.basename(source_path.rstrip("/"))
+    path_hash = hashlib.sha256(source_path.encode()).hexdigest()[:8]
+    return f"{basename}_{path_hash}"
+
 @contextmanager
 def file_lock(lock_file: Path, timeout_seconds: int | None = None):
     """
@@ -107,45 +116,6 @@ def file_lock(lock_file: Path, timeout_seconds: int | None = None):
         fcntl.flock(fd, fcntl.LOCK_UN)
         os.close(fd)
         logger.info("Released lock")
-
-##################
-# DATABASE CACHE #
-##################
-
-class DatabaseCache:
-    """
-    Manages a cached database in the scratch directory.
-    Tracks the source path used to populate the cache and handles
-    invalidation when the source changes.
-    """
-    def __init__(self, db_name: str, scratch_dir: Path = Path("/scratch")):
-        self.db_name = db_name
-        self.local_path = scratch_dir / db_name
-        self.lock_file = scratch_dir / f"{db_name}.lock"
-        self._source_marker = self.local_path / ".source_path"
-
-    def get_cached_source(self) -> str | None:
-        """Return the source path used to populate this cache, or None if not cached."""
-        if not self._source_marker.exists():
-            return None
-        return self._source_marker.read_text().strip()
-
-    def set_cached_source(self, source_path: str) -> None:
-        """Record the source path used to populate this cache."""
-        self._source_marker.write_text(source_path)
-
-    def clear(self) -> None:
-        """Remove the cached database directory."""
-        if self.local_path.exists():
-            logger.info(f"Removing stale cache: {self.local_path}")
-            shutil.rmtree(self.local_path)
-
-    def invalidate_if_source_changed(self, source_path: str) -> None:
-        """Clear cache if it was populated from a different source."""
-        cached_source = self.get_cached_source()
-        if cached_source is not None and cached_source != source_path:
-            logger.warning(f"Cache was populated from different source: {cached_source}")
-            self.clear()
 
 #####################
 # DATABASE TRANSFER #
@@ -219,21 +189,21 @@ def download_database(
     # Parse source path
     source_path, is_s3 = parse_source_path(source_path)
     logger.info(f"Normalized source path: {source_path} (S3: {is_s3})")
-    # Set up cache
-    db_name = os.path.basename(source_path.rstrip("/"))
-    cache = DatabaseCache(db_name, scratch_dir)
+    # Set up cache with unique name based on source path
+    cache_name = get_cache_name(source_path)
+    local_path = scratch_dir / cache_name
+    lock_file = scratch_dir / f"{cache_name}.lock"
+    logger.info(f"Cache directory: {local_path}")
     # Ensure scratch directory exists
     scratch_dir.mkdir(parents=True, exist_ok=True)
-    with file_lock(cache.lock_file, timeout_seconds):
-        cache.invalidate_if_source_changed(source_path)
-        cache.local_path.mkdir(parents=True, exist_ok=True)
+    with file_lock(lock_file, timeout_seconds):
+        local_path.mkdir(parents=True, exist_ok=True)
         if is_s3:
-            sync_from_s3(source_path, cache.local_path)
+            sync_from_s3(source_path, local_path)
         else:
-            sync_from_local(source_path, cache.local_path)
-        cache.set_cached_source(source_path)
-        logger.info(f"Database available at: {cache.local_path}")
-        return cache.local_path
+            sync_from_local(source_path, local_path)
+        logger.info(f"Database available at: {local_path}")
+        return local_path
 
 def parse_arguments() -> argparse.Namespace:
     """Parse command-line arguments."""
