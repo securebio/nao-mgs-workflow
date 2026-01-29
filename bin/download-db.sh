@@ -66,6 +66,10 @@ if [ -f "${SOURCE_MARKER}" ]; then
     CACHED_SOURCE=$(cat "${SOURCE_MARKER}")
     if [ "${CACHED_SOURCE}" != "${SOURCE_PATH}" ]; then
         echo "Cached ${DB_NAME} is from different source (${CACHED_SOURCE}), clearing cache..."
+        if [[ -z "${DB_NAME}" || "${DB_NAME}" == "/" ]]; then
+            echo "Error: Invalid DB name derived from source. Aborting to prevent accidental deletion." >&2
+            exit 1
+        fi
         rm -rf "${LOCAL_PATH}"
     fi
 fi
