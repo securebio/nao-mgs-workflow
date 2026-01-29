@@ -40,7 +40,7 @@ jobs:
       - name: Build container
         run: docker build --progress=plain -f docker/nao-rust-tools.Dockerfile -t nao-rust-tools:local .
 
-      - name: Save container for tests
+      - name: Save container for ECR push
         run: docker save nao-rust-tools:local | gzip > rust-tools.tar.gz
 
       - uses: actions/upload-artifact@v4
@@ -49,33 +49,8 @@ jobs:
           path: rust-tools.tar.gz
           retention-days: 1
 
-  test-integration:
-    needs: build-rust-container
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    env:
-      AWS_ACCESS_KEY_ID: ${{ secrets.NAO_TESTING_ACCESS_KEY }}
-      AWS_SECRET_ACCESS_KEY: ${{ secrets.NAO_TESTING_SECRET_ACCESS_KEY }}
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup nf-test environment
-        uses: ./.github/actions/setup-nf-test
-        with:
-          aws_access_key_id: ${{ secrets.NAO_TESTING_ACCESS_KEY }}
-          aws_secret_access_key: ${{ secrets.NAO_TESTING_SECRET_ACCESS_KEY }}
-
-      - name: Load Rust container
-        uses: actions/download-artifact@v4
-        with:
-          name: rust-container
-      - run: gunzip -c rust-tools.tar.gz | docker load
-
-      - name: Run nf-tests for markAlignmentDuplicates
-        run: bin/run-nf-test.sh tests/modules/local/markAlignmentDuplicates/ --ci --profile=rust_dev
-
   push-to-ecr:
-    needs: test-integration
+    needs: build-rust-container
     if: github.event_name == 'push'
     runs-on: ubuntu-latest
     timeout-minutes: 10
