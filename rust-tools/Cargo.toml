@@ -1,5 +1,5 @@
 [workspace]
-members = ["mark_duplicates"]
+members = ["mark_duplicates", "process_vsearch_cluster_output"]
 resolver = "2"
 
 [profile.release]
