@@ -53,7 +53,7 @@ docker run hello-world
 
 ## 3. Create Seqera account
 
-Create a Seqera account to access Wave container services and increase your API rate limits:
+Create a Seqera account to increase your API rate limits:
 
 1. Create a free Seqera account at [cloud.seqera.io](http://cloud.seqera.io/)
 2. Click on the user icon, then click the "User tokens" section
