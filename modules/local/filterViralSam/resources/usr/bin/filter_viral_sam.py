@@ -256,6 +256,10 @@ def group_unpaired_alignments(
 
     An intermediate dictionary is used to map pair keys to group IDs.
 
+    After grouping, deduplicates within each group to keep only the highest-scoring
+    alignment. This handles cases where multiple alignments with different CIGAR
+    strings share the same coordinates.
+
     Args:
         alignments (list[SamAlignment]): List of SamAlignment objects with pair_status "UP"
 
@@ -263,7 +267,7 @@ def group_unpaired_alignments(
         Dict[int, list[SamAlignment]]: Dictionary mapping group IDs to lists of alignments in each group
     """
     by_group: Dict[int, list[SamAlignment]] = defaultdict(list)
-    pair_key_to_group = {}
+    pair_key_to_group: dict[tuple, int] = {}
     group_idx = 0
 
     for alignment in alignments:
@@ -292,7 +296,17 @@ def group_unpaired_alignments(
         # Get the group ID for this key and add the alignment
         group_id = pair_key_to_group[pair_key]
         by_group[group_id].append(alignment)
-    return dict(by_group)
+    # Deduplicate within each group: keep only the highest-scoring alignment.
+    # For UP alignments, each group contains only one orientation (all read1s
+    # or all read2s), but multiple alignments can share the same (rname,
+    # pos_min, pos_max) while having different CIGAR strings.
+    filtered_groups: dict[int, list[SamAlignment]] = {}
+    for group_id, group_alignments in by_group.items():
+        if len(group_alignments) > 1:
+            group_alignments.sort(key=lambda a: a.alignment_score or 0, reverse=True)
+            logger.debug(f"Group {group_id}: deduplicated {len(group_alignments)} to 1 alignment")
+        filtered_groups[group_id] = [group_alignments[0]]
+    return filtered_groups
 
 
 def group_other_alignments(

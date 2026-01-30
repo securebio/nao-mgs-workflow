@@ -41,13 +41,13 @@ mkdir -p /scratch
 
 # Create lock file path
 LOCK_FILE="/scratch/${DB_NAME}.lock"
-COMPLETION_FILE="${LOCAL_PATH}/download_complete.txt"
+SOURCE_MARKER="${LOCAL_PATH}/.source_path"
 
 # We want to make sure lock is released even if the script exits unexpectedly
 # Note that the trap will also handle release on successful completion
 cleanup() {
   flock -u 200 || true
-  exec 200>&- 
+  exec 200>&-
 }
 trap cleanup EXIT ERR INT TERM
 
@@ -60,24 +60,38 @@ else
     flock -x 200
 fi
 
-# Check if database already downloaded/copied
-if [ ! -f "${COMPLETION_FILE}" ]; then
-    if [ "$IS_S3" = true ]; then
-        echo "Downloading ${DB_NAME} from ${SOURCE_PATH} to ${LOCAL_PATH}..."
-        
-        # Configure AWS S3 settings for optimal transfer
-        aws configure set default.s3.max_concurrent_requests 20
-        aws configure set default.s3.multipart_threshold 64MB
-        aws configure set default.s3.multipart_chunksize 16MB
-        
-        aws s3 sync "${SOURCE_PATH}" "${LOCAL_PATH}" && touch "${COMPLETION_FILE}"
-    else
-        echo "Copying ${DB_NAME} from ${SOURCE_PATH} to ${LOCAL_PATH}..."
-        
-        cp -r "${SOURCE_PATH}/." "${LOCAL_PATH}" && touch "${COMPLETION_FILE}"
+# Check if cached data is from the same source path
+# If source path differs or doesn't exist, clear the cache and re-download
+if [ -f "${SOURCE_MARKER}" ]; then
+    CACHED_SOURCE=$(cat "${SOURCE_MARKER}")
+    if [ "${CACHED_SOURCE}" != "${SOURCE_PATH}" ]; then
+        echo "Cached ${DB_NAME} is from different source (${CACHED_SOURCE}), clearing cache..."
+        if [[ -z "${DB_NAME}" || "${DB_NAME}" == "/" ]]; then
+            echo "Error: Invalid DB name derived from source. Aborting to prevent accidental deletion." >&2
+            exit 1
+        fi
+        rm -rf "${LOCAL_PATH}"
     fi
-    
-    echo "Transfer of ${DB_NAME} completed"
-else
-    echo "${DB_NAME} already available"
 fi
+
+# Sync database (aws s3 sync is incremental, so this is fast if already up-to-date)
+mkdir -p "${LOCAL_PATH}"
+if [ "$IS_S3" = true ]; then
+    echo "Syncing ${DB_NAME} from ${SOURCE_PATH} to ${LOCAL_PATH}..."
+
+    # Configure AWS S3 settings for optimal transfer
+    aws configure set default.s3.max_concurrent_requests 20
+    aws configure set default.s3.multipart_threshold 64MB
+    aws configure set default.s3.multipart_chunksize 16MB
+
+    aws s3 sync "${SOURCE_PATH}" "${LOCAL_PATH}" --delete
+else
+    echo "Copying ${DB_NAME} from ${SOURCE_PATH} to ${LOCAL_PATH}..."
+
+    rsync -a --delete "${SOURCE_PATH}/" "${LOCAL_PATH}/"
+fi
+
+# Record the source path for future cache validation
+echo "${SOURCE_PATH}" > "${SOURCE_MARKER}"
+
+echo "Transfer of ${DB_NAME} completed"
