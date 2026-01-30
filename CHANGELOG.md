@@ -1,4 +1,4 @@
-# v3.0.1.9-dev
+# v3.0.1.9
 
 - Fix UP secondary alignment deduplication in filterViralSam (#621)
 - Minor refinements to release process from testing on v3.0.1.9:
