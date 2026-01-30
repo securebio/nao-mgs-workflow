@@ -13,13 +13,7 @@ use flate2::Compression;
 
 /// Get path to the compiled binary
 fn binary_path() -> PathBuf {
-    let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    path.pop(); // Go up from process_vsearch_cluster_output to rust-tools
-    path.push("target");
-    // Use debug for tests (faster compilation)
-    path.push("debug");
-    path.push("process_vsearch_cluster_output");
-    path
+    PathBuf::from(env!("CARGO_BIN_EXE_process_vsearch_cluster_output"))
 }
 
 /// Get path to test fixtures directory
