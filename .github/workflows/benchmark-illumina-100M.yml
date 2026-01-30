@@ -65,7 +65,6 @@ jobs:
         if: steps.filter.outputs.relevant == 'true'
         run: |
           # Use ECR container - see docs/ci.md for Rust container strategy.
-          # PRs to stable use :main; all other cases use :dev.
           RUST_VERSION="${{ github.base_ref == 'stable' && 'main' || 'dev' }}"
           bin/chain_workflows.py \
             --ref-dir s3://nao-testing/mgs-workflow-test/index-latest/output/ \

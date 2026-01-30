@@ -65,7 +65,6 @@ jobs:
         if: steps.filter.outputs.chained == 'true'
         run: |
           # Use ECR container (Wave/Fusion requirement - can't use local containers).
-          # PRs to stable (from main) use :main; all other cases use :dev.
           # See docs/ci.md for full explanation of Rust container strategy.
           RUST_VERSION="${{ github.base_ref == 'stable' && 'main' || 'dev' }}"
           bin/chain_workflows.py --no-resume \

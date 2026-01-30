@@ -52,9 +52,7 @@ jobs:
           load_rust_container: ${{ needs.setup-rust.outputs.rust-changed }}
       - name: Run module tests
         if: steps.filter.outputs.modules == 'true'
-        run: |
-          RUST_ARGS="${{ needs.setup-rust.outputs.rust-changed == 'true' && '--profile=rust_dev' || needs.setup-rust.outputs.container-args }}"
-          bin/run-nf-test.sh --num-workers 16 tests/modules --output-log test-logs-modules.txt $RUST_ARGS
+        run: bin/run-nf-test.sh --num-workers 16 tests/modules --output-log test-logs-modules.txt ${{ needs.setup-rust.outputs.nextflow-args }}
       - name: Upload test results
         if: failure() && steps.filter.outputs.modules == 'true'
         uses: actions/upload-artifact@v4
