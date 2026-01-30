@@ -22,7 +22,8 @@ process MASK_GENOME_FASTA {
 		ref=${adapters} \
 		stats=${params_map.name_pattern}-mask-adapters-entropy.stats.txt \
 		k=${params_map.k} hdist=${params_map.hdist} mm=f mask=N rcomp=t \
-		entropy=${params_map.entropy} entropymask=t mink=8 hdist2=1
+		entropy=${params_map.entropy} entropymask=t mink=8 hdist2=1 \
+		-Xmx${task.memory.toGiga()}g
 
 	# second pass – poly-X masking
 	bbduk.sh \
@@ -30,6 +31,7 @@ process MASK_GENOME_FASTA {
 		out=${params_map.name_pattern}-masked.fasta.gz \
 		literal=${polyx} \
 		stats=${params_map.name_pattern}-mask-polyx.stats.txt \
-		k=${params_map.polyx_len} hdist=0 mm=f mask=N rcomp=F
+		k=${params_map.polyx_len} hdist=0 mm=f mask=N rcomp=F \
+		-Xmx${task.memory.toGiga()}g
 	"""
 }

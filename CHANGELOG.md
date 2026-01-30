@@ -4,6 +4,10 @@
 - Minor refinements to release process from testing on v3.0.1.9:
     - Switched from treating the release bot's App ID as a secret to a variable.
     - Updated documentation to remove requirement for review on final PR into `main`.
+- Fix several sources of stochastic test failures:
+    - Added missing memory specifications to BBTools processes
+    - Broadened tolerable results ranges for probabilistic tests
+    - Fixed bug in `download-db.sh` that was causing inter-run contamination of reference files
 
 # v3.0.1.8
 
