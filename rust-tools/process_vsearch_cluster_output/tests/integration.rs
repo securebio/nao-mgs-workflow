@@ -15,11 +15,10 @@ fn fixtures_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures")
 }
 
-fn gzip_file(input_path: &PathBuf, output_path: &PathBuf) {
-    let input = fs::read_to_string(input_path).unwrap();
+fn gzip_content(content: &str, output_path: &PathBuf) {
     let file = File::create(output_path).unwrap();
     let mut encoder = GzEncoder::new(file, Compression::default());
-    encoder.write_all(input.as_bytes()).unwrap();
+    encoder.write_all(content.as_bytes()).unwrap();
 }
 
 fn read_gzipped_lines(path: &PathBuf) -> Vec<String> {
@@ -39,10 +38,13 @@ struct TestFiles {
 
 impl TestFiles {
     fn new(prefix: &str) -> Self {
+        Self::with_content(prefix, &fs::read_to_string(fixtures_dir().join("tiny.uc")).unwrap())
+    }
+
+    fn with_content(prefix: &str, content: &str) -> Self {
         let fixtures = fixtures_dir();
-        let input_uc = fixtures.join("tiny.uc");
         let input_gz = fixtures.join(format!("{}.uc.gz", prefix));
-        gzip_file(&input_uc, &input_gz);
+        gzip_content(content, &input_gz);
         Self {
             input_gz,
             output_tsv: fixtures.join(format!("{}_output.tsv.gz", prefix)),
@@ -132,21 +134,13 @@ fn test_with_prefix() {
 
 #[test]
 fn test_empty_input() {
-    let fixtures = fixtures_dir();
-    let empty_uc = fixtures.join("empty.uc");
-    let empty_gz = fixtures.join("empty.uc.gz");
-    let output_tsv = fixtures.join("empty_output.tsv.gz");
-    let output_ids = fixtures.join("empty_output_ids.txt");
-
-    // Create empty UC file (no sequences to cluster)
-    fs::write(&empty_uc, "").unwrap();
-    gzip_file(&empty_uc, &empty_gz);
+    let files = TestFiles::with_content("empty", "");
 
     let output = Command::new(binary_path())
         .args([
-            empty_gz.to_str().unwrap(),
-            output_tsv.to_str().unwrap(),
-            output_ids.to_str().unwrap(),
+            files.input_gz.to_str().unwrap(),
+            files.output_tsv.to_str().unwrap(),
+            files.output_ids.to_str().unwrap(),
             "-n", "10",
         ])
         .output()
@@ -155,36 +149,24 @@ fn test_empty_input() {
     assert!(output.status.success(), "Failed on empty input: {}", String::from_utf8_lossy(&output.stderr));
 
     // TSV should have header only
-    let lines = read_gzipped_lines(&output_tsv);
+    let lines = read_gzipped_lines(&files.output_tsv);
     assert_eq!(lines.len(), 1, "Should have header only");
     assert!(lines[0].starts_with("seq_id\t"));
 
     // IDs file should be empty
-    let ids = read_lines(&output_ids);
+    let ids = read_lines(&files.output_ids);
     assert_eq!(ids.len(), 0, "Should have no IDs");
-
-    fs::remove_file(&empty_uc).ok();
-    fs::remove_file(&empty_gz).ok();
-    fs::remove_file(&output_tsv).ok();
-    fs::remove_file(&output_ids).ok();
 }
 
 #[test]
 fn test_error_on_malformed_input() {
-    let fixtures = fixtures_dir();
-    let malformed_uc = fixtures.join("malformed.uc");
-    let malformed_gz = fixtures.join("malformed.uc.gz");
-    let output_tsv = fixtures.join("malformed_output.tsv.gz");
-    let output_ids = fixtures.join("malformed_output_ids.txt");
-
-    fs::write(&malformed_uc, "S\t0\t100\tonly_four_fields\n").unwrap();
-    gzip_file(&malformed_uc, &malformed_gz);
+    let files = TestFiles::with_content("malformed", "S\t0\t100\tonly_four_fields\n");
 
     let output = Command::new(binary_path())
         .args([
-            malformed_gz.to_str().unwrap(),
-            output_tsv.to_str().unwrap(),
-            output_ids.to_str().unwrap(),
+            files.input_gz.to_str().unwrap(),
+            files.output_tsv.to_str().unwrap(),
+            files.output_ids.to_str().unwrap(),
             "-n", "10",
         ])
         .output()
@@ -193,9 +175,4 @@ fn test_error_on_malformed_input() {
     assert!(!output.status.success());
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(stderr.contains("expected") && stderr.contains("fields"), "Error: {}", stderr);
-
-    fs::remove_file(&malformed_uc).ok();
-    fs::remove_file(&malformed_gz).ok();
-    fs::remove_file(&output_tsv).ok();
-    fs::remove_file(&output_ids).ok();
 }
