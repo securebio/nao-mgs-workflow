@@ -28,7 +28,7 @@ When running the pipeline via Seqera Platform, you may encounter errors like:
 error [io.seqera.wave.plugin.exception.BadResponseException]: Wave invalid response: POST https://wave.seqera.io/v1alpha2/container [400] {"message":"Container image 'public.ecr.aws/q0n1c7g8/nao-mgs-workflow/python:cb756b23e8c4f9cd' does not exist or access is not authorized"}
 ```
 
-This occurs because Wave needs AWS ECR registry credentials to pull container images. To fix this, configure AWS ECR credentials in your Seqera account as described in the [installation guide](./installation.md#3-configure-seqera-credentials-optional).
+This occurs because Wave needs AWS ECR registry credentials to pull container images. To fix this, configure AWS ECR credentials in your Seqera account as described in the [installation guide](./installation.md#4-configure-seqera-ecr-credentials).
 
 ## Resource constraint errors
 
@@ -45,14 +45,9 @@ Jobs may sometimes fail due to using up [too many API requests to get the contai
 Task failed to start - CannotPullImageManifestError: Error response from daemon: toomanyrequests: Request exceeded pull rate limit for IP XX.XXX.XX.XX
 ```
 
-To fix this, you can [obtain a user token](https://metagenomics-pipelines.readthedocs.io/en/latest/nf_tower.html) from Seqera, which will increase your API limit by 4x. To do this:
+To fix this, create a Seqera account and configure your access token as described in the [installation guide](./installation.md#3-create-seqera-account). This increases your API rate limit by 4x.
 
-1. Create a seqera account [here](http://cloud.seqera.io/) for free.
-2. Click on the user icon, then click the 'User tokens' section.
-3. Now click 'Add Token' to create a token for your account. Name it whatever you want (e.g. "my-nextflow-token"). Copy the token, and store it somewhere.
-4. Finally, you need to provide your user token to Nextflow. You can do this by either (a) setting the environment variable `TOWER_ACCESS_TOKEN` to your token value, or (b) setting the variable `tower.accessToken` to your token value in your Nextflow configuration file (in this case, we recommend adding this to `configs/profiles.config` to apply to all subsequent pipeline runs).
-
-If you still keep running into this same issue, you may consider contacting Seqera for more options.
+If you still keep running into this issue, you may consider contacting Seqera for more options.
 
 ## Automatic reference file caching
 - With the `standard`/`batch` profiles, the pipeline implements automatic caching of large reference files in the `/scratch/` directory 

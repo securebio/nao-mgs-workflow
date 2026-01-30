@@ -1,5 +1,6 @@
 # v3.0.1.10-dev
 
+- Update documentation on Seqera ECR credentials (#631)
 - Removed Cutadapt from RUN workflow to reduce runtime and complexity. FASTP alone now handles adapter trimming for the short-read viral identification pipeline.
 - Add Rust build system to CI and rust-tools container to ECR.
 - Fix CI bug where `--rust_tools_version dev` was passed to test runner instead of via environment variable.
