@@ -1,5 +1,9 @@
-# v3.0.1.9-dev
+# v3.0.1.10-dev
+
 - Add Rust build system to CI and rust-tools container to ECR.
+
+# v3.0.1.9
+
 - Fix UP secondary alignment deduplication in filterViralSam (#621)
 - Minor refinements to release process from testing on v3.0.1.9:
     - Switched from treating the release bot's App ID as a secret to a variable.
