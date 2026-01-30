@@ -70,7 +70,7 @@ Runs our entire pytest suite across `bin`, `modules`, and `post-processing/tests
 Scans all containers defined in `configs/containers.config` for security vulnerabilities using [Trivy](https://trivy.dev/).
 
 > [!NOTE]
-> As of 2025-01-28, the Trivy test is expected to fail and is not required to pass to merge PRs.
+> As of 2026-01-28, the Trivy test is expected to fail and is not required to pass to merge PRs.
 
 ### Version and changelog checks
 
