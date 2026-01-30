@@ -51,11 +51,20 @@ newgrp docker
 docker run hello-world
 ```
 
-## 3. Clone this repository
+## 3. Configure Seqera credentials
+
+Because containers are pulled from a public AWS ECR and not from Wave containers, you need to configure AWS ECR registry credentials in your Seqera account. This allows Wave to pull container images from AWS ECR.
+
+1. Log in to your Seqera Platform account
+2. Navigate to your workspace credentials
+3. Add AWS registry credentials following the [Seqera documentation](https://docs.seqera.io/platform-cloud/credentials/aws_registry_credentials)
+4. Ensure the credentials have access to `public.ecr.aws`
+
+## 4. Clone this repository
 
 Clone this repo into a new directory as normal.
 
-## 4. Run tests
+## 5. Run tests
 
 If possible, we recommend validating the pipeline's basic functionality in your hands by running our test suite. To do this, you'll need sufficient resources on your machine to run our tests locally. You'll need:
 - 4 CPU cores
@@ -71,7 +80,7 @@ To run the tests, clone this repository onto your machine, navigate to the repo 
 nf-test test
 ```
 
-## 5. Run index/reference workflow
+## 6. Run index/reference workflow
 
 > [!TIP]
 > If someone else in your organization already uses this pipeline, it's likely they've already run the index workflow and generated an output directory. If this is the case, you can reduce costs and increase reproducibility by using theirs instead of generating your own. If you want to do this, skip this step, and edit `configs/run.config` (or `configs/run_ont.config`) such that `params.ref_dir` points to `INDEX_DIR/output`.
@@ -97,7 +106,7 @@ nextflow run PATH_TO_REPO_DIR -resume
 
 Wait for the workflow to run to completion; this is likely to take several hours at least.
 
-## 6. Run the pipeline on test data
+## 7. Run the pipeline on test data
 
 To confirm that the pipeline works in your hands, we recommend running it on a small test dataset, such as the one provided at `s3://nao-testing/gold-standard-test/raw/`, before running it on larger input data. To do this with our test dataset, follow the instructions below, or do it yourself according to the directions given [here](./usage.md).
 

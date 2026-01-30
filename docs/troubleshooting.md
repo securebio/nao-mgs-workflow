@@ -20,6 +20,16 @@ docker: failed to register layer: write /usr/lib/jvm/java-11-openjdk-amd64/lib/m
 
 This is a fairly well-known problem, which can arise even when there is substantial free storage space accessible to your EC2 instance. Following the steps recommended [here](https://www.baeldung.com/linux/docker-fix-no-space-error) or [here](https://forums.docker.com/t/docker-no-space-left-on-device/69205) typically resolves the issue, either by deleting Docker assets to free up space (e.g. via `docker system prune --all --force`) or by giving Docker more space.
 
+## Wave container access errors
+
+When running the pipeline via Seqera Platform, you may encounter errors like:
+
+```
+error [io.seqera.wave.plugin.exception.BadResponseException]: Wave invalid response: POST https://wave.seqera.io/v1alpha2/container [400] {"message":"Container image 'public.ecr.aws/q0n1c7g8/nao-mgs-workflow/python:cb756b23e8c4f9cd' does not exist or access is not authorized"}
+```
+
+This occurs because Wave needs AWS ECR registry credentials to pull container images. To fix this, configure AWS ECR credentials in your Seqera account as described in the [installation guide](./installation.md#3-configure-seqera-credentials-optional).
+
 ## Resource constraint errors
 
 Jobs may sometimes fail due to insufficient memory or CPU availability, especially on very large datasets or small instances. To fix this, you can:
