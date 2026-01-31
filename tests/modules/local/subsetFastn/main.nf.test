@@ -1,0 +1,245 @@
+nextflow_process {
+
+    name "Test process SUBSET_FASTN"
+    script "modules/local/subsetFastn/main.nf"
+    process "SUBSET_FASTN"
+    config "tests/configs/run.config"
+    tag "module"
+    tag "subset_fastn"
+
+    setup {
+        run("GZIP_FILE") {
+            script "modules/local/gzipFile/main.nf"
+            process {
+                '''
+                input[0] = Channel.of("test")
+                    | combine(Channel.of("${projectDir}/test-data/toy-data/test-random.fastq"))
+                '''
+            }
+        }
+    }
+
+    test("Should fail when read fraction is greater than 1"){
+        tag "expect_failed"
+        config "tests/configs/run.config"
+        when {
+            params {}
+            process {
+                '''
+                input[0] = GZIP_FILE.out
+                input[1] = 2
+                input[2] = 42 // Arbitrary defined seed value
+                '''
+            }
+        }
+        then {
+            assert process.failed
+            assert process.exitStatus == 1
+            assert process.errorReport.contains("ERROR: Read fraction must be between 0 and 1")
+        }
+    }
+
+    test("Should fail when read fraction is less than 0"){
+        tag "expect_failed"
+        config "tests/configs/run.config"
+        when {
+            params {}
+            process {
+                '''
+                input[0] = GZIP_FILE.out
+                input[1] = -1
+                input[2] = 42
+                '''
+            }
+        }
+        then {
+            assert process.failed
+            assert process.exitStatus == 1
+            assert process.errorReport.contains("ERROR: Read fraction must be between 0 and 1")
+        }
+    }
+
+    test("Should exactly copy input if fraction equals 1"){
+        tag "expect_success"
+        config "tests/configs/run.config"
+        when {
+            params {}
+            process {
+                '''
+                input[0] = GZIP_FILE.out
+                input[1] = 1
+                input[2] = 42
+                '''
+            }
+        }
+        then {
+            // Should run without errors
+            assert process.success
+            // Output should exactly match input
+            assert path(process.out.output[0][1]).md5 == path(process.out.input[0][1]).md5
+        }
+    }
+
+    test("Should return empty output if fraction equals 0") {
+        tag "expect_success"
+        config "tests/configs/run.config"
+        when {
+            params {}
+            process {
+                '''
+                input[0] = GZIP_FILE.out
+                input[1] = 0
+                input[2] = 42
+                '''
+            }
+        }
+        then {
+            // Should run without errors
+            assert process.success
+            // Output should be empty (but gzipped)
+            assert path(process.out.output[0][1]).linesGzip.size() == 0
+        }
+    }
+
+    test("Should run without errors on toy FASTA data with intermediate read fraction") {
+        tag "expect_success"
+        config "tests/configs/run.config"
+        when {
+            params {}
+            process {
+                '''
+                input[0] = Channel.of("test")
+                    | combine(Channel.of("${projectDir}/test-data/toy-data/test-random.fasta"))
+                input[1] = 0.5
+                input[2] = 42
+                '''
+            }
+        }
+        then {
+            // Should run without errors
+            assert process.success
+            // Output should be valid FASTA
+            def fasta_out = path(process.out.output[0][1]).fasta
+            assert fasta_out.keySet().size() > 0
+        }
+    }
+
+    test("Should run correctly on interleaved input FASTQ") {
+        tag "expect_success"
+        tag "real_data"
+        config "tests/configs/run.config"
+        setup {
+            run("LOAD_SAMPLESHEET") {
+                script "subworkflows/local/loadSampleSheet/main.nf"
+                process {
+                    '''
+                    input[0] = "${projectDir}/test-data/samplesheet.csv"
+                    input[1] = "illumina"
+                    input[2] = false
+                    '''
+                }
+            }
+            run("INTERLEAVE_FASTQ") {
+                script "modules/local/interleaveFastq/main.nf"
+                process {
+                    '''
+                    input[0] = LOAD_SAMPLESHEET.out.samplesheet
+                    '''
+                }
+            }
+        }
+        when {
+            params {
+                read_fraction = 0.5
+            }
+            process {
+                '''
+                input[0] = INTERLEAVE_FASTQ.out.output
+                input[1] = params.read_fraction
+                input[2] = 42
+                '''
+            }
+        }
+        then {
+            // Should run without errors
+            assert process.success
+            // Output should be valid interleaved FASTQ
+            def fastq_out = path(process.out.output[0][1]).fastq
+            def names_out = fastq_out.readNames
+            def ids_out = names_out.collect{ it.tokenize(" ")[0] }
+            assert ids_out.size() % 2 == 0
+            for (i in ids_out) {
+                assert ids_out.count(i) == 2
+            }
+            // All output reads should be in input
+            def fastq_in = path(process.out.input[0][1]).fastq
+            def names_in = fastq_in.readNames
+            for (n in names_out) {
+                assert n in names_in
+            }
+            // Fraction of read pairs in output should approximate input fraction
+            // As each read is sampled independently, the fraction won't be exact, so need some tolerance
+            // Using 99% CI tolerance of 0.48 (derived from binomial distribution with n=25, p=0.5)
+            def frac_exp = params.read_fraction
+            def frac_obs = names_out.size() / names_in.size()
+            def ci_tolerance = 0.48
+            assert frac_obs / frac_exp <= 1/ci_tolerance
+            assert frac_obs / frac_exp >= ci_tolerance
+        }
+    }
+
+    test("Should run correctly on single-end input FASTQ") {
+        tag "expect_success"
+        tag "real_data"
+        config "tests/configs/run.config"
+        setup {
+            run("LOAD_SAMPLESHEET") {
+                script "subworkflows/local/loadSampleSheet/main.nf"
+                process {
+                    '''
+                    input[0] = "${projectDir}/test-data/single-end-samplesheet.csv"
+                    input[1] = "illumina"
+                    input[2] = true
+                    '''
+                }
+            }
+        }
+        when {
+            params {
+                read_fraction = 0.5
+            }
+            process {
+                '''
+                input[0] = LOAD_SAMPLESHEET.out.samplesheet
+                input[1] = params.read_fraction
+                input[2] = 42
+                '''
+            }
+        }
+        then {
+            // Should run without errors
+            assert process.success
+            // Output should be valid single-end FASTQ
+            def fastq_out = path(process.out.output[0][1]).fastq
+            def names_out = fastq_out.readNames
+            def ids_out = names_out.collect{ it.tokenize(" ")[0] }
+            for (i in ids_out) {
+                assert ids_out.count(i) == 1
+            }
+            // All output reads should be in input
+            def fastq_in = path(process.out.input[0][1]).fastq
+            def names_in = fastq_in.readNames
+            for (n in names_out) {
+                assert n in names_in
+            }
+            // Fraction of read pairs in output should approximate input fraction
+            // Using 99% CI tolerance of 0.48 (derived from binomial distribution with n=25, p=0.5)
+            def frac_exp = params.read_fraction
+            def frac_obs = names_out.size() / names_in.size()
+            def ci_tolerance = 0.48
+            assert frac_obs / frac_exp <= 1/ci_tolerance
+            assert frac_obs / frac_exp >= ci_tolerance
+        }
+    }
+
+}
