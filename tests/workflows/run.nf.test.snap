@@ -3,8 +3,6 @@
         "content": [
             "bracken_reports_merged.tsv.gz:md5,7fbf9af7ae2074266d5f0be4f1b2a184",
             "kraken_reports_merged.tsv.gz:md5,b92e96228ff584c883f74b6f6e855a60",
-            "merged_blast_filtered.tsv.gz:md5,93eb652a546605bfeb9b3cd60cdca13d",
-            "merged_blast_input_subset.fasta.gz:md5,3d397fbb0790c5535618e265130cb27c",
             "read_counts.tsv.gz:md5,c00f00d8a47a87731a969636e6043b15",
             "subset_qc_adapter_stats.tsv.gz:md5,d15e65d588573c8ccb2687414e37f905",
             "subset_qc_basic_stats.tsv.gz:md5,64bbfc8efab1cc3d50d77cb476630ead",
@@ -23,8 +21,6 @@
         "content": [
             "bracken_reports_merged.tsv.gz:md5,7fbf9af7ae2074266d5f0be4f1b2a184",
             "kraken_reports_merged.tsv.gz:md5,cce4f37145ef2a1d04ad478078b9c2ea",
-            "merged_blast_filtered.tsv.gz:md5,4915c921c8d1a352406dff1d6dd5a4fc",
-            "merged_blast_input_subset.fasta.gz:md5,d771ea6fe0eab48dc6c7bb690409fda1",
             "read_counts.tsv.gz:md5,7d44efe7dc906747a465ca537cde237f",
             "subset_qc_adapter_stats.tsv.gz:md5,d15e65d588573c8ccb2687414e37f905",
             "subset_qc_basic_stats.tsv.gz:md5,8349625b9299fdc7592fcee673fe51bc",
