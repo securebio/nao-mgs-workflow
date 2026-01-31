@@ -1,5 +1,19 @@
-# v3.0.2.0-dev
+# v3.0.1.10-dev
+
 - Removed Cutadapt from RUN workflow to reduce runtime and complexity. FASTP alone now handles adapter trimming for the short-read viral identification pipeline.
+- Add Rust build system to CI and rust-tools container to ECR.
+- Fix CI bug where `--rust_tools_version dev` was passed to test runner instead of via environment variable.
+
+# v3.0.1.9
+
+- Fix UP secondary alignment deduplication in filterViralSam (#621)
+- Minor refinements to release process from testing on v3.0.1.9:
+    - Switched from treating the release bot's App ID as a secret to a variable.
+    - Updated documentation to remove requirement for review on final PR into `main`.
+- Fix several sources of stochastic test failures:
+    - Added missing memory specifications to BBTools processes
+    - Broadened tolerable results ranges for probabilistic tests
+    - Fixed bug in `download-db.sh` that was causing inter-run contamination of reference files
 
 # v3.0.1.8
 

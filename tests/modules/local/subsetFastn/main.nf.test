@@ -179,11 +179,12 @@ nextflow_process {
             }
             // Fraction of read pairs in output should approximate input fraction
             // As each read is sampled independently, the fraction won't be exact, so need some tolerance
-            // Derived a tolerance of 16% by simulating draws from a binomial distribution and taking 95% CI
+            // Using 99% CI tolerance of 0.48 (derived from binomial distribution with n=25, p=0.5)
             def frac_exp = params.read_fraction
             def frac_obs = names_out.size() / names_in.size()
-            assert frac_obs / frac_exp <= 10/8.4
-            assert frac_obs / frac_exp >= 8.4/10
+            def ci_tolerance = 0.48
+            assert frac_obs / frac_exp <= 1/ci_tolerance
+            assert frac_obs / frac_exp >= ci_tolerance
         }
     }
 
@@ -232,10 +233,12 @@ nextflow_process {
                 assert n in names_in
             }
             // Fraction of read pairs in output should approximate input fraction
+            // Using 99% CI tolerance of 0.48 (derived from binomial distribution with n=25, p=0.5)
             def frac_exp = params.read_fraction
             def frac_obs = names_out.size() / names_in.size()
-            assert frac_obs / frac_exp <= 10/8.4
-            assert frac_obs / frac_exp >= 8.4/10
+            def ci_tolerance = 0.48
+            assert frac_obs / frac_exp <= 1/ci_tolerance
+            assert frac_obs / frac_exp >= ci_tolerance
         }
     }
 

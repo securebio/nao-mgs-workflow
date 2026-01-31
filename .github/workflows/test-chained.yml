@@ -1,30 +1,37 @@
 name: Nextflow integration test (chain workflows)
 
+# This is a "release test" - see docs/ci.md for explanation of trigger strategy.
+# Uses workflow_run to sequence after rust-tools.yml, ensuring ECR has the latest container.
 on:
-  push:
-    branches:
-      - dev
   pull_request:
-    branches:
-      - main
-      - stable
-      - ci-test
+    branches: [main, stable, ci-test]
+  workflow_run:
+    workflows: ["Rust Tools CI"]
+    types: [completed]
+    branches: [dev]
 
 concurrency:
-  group: ci-integration-test-pr-${{ github.event.pull_request.number }}
+  group: ci-integration-test-${{ github.event.pull_request.number || github.event.workflow_run.head_branch || github.ref }}
   cancel-in-progress: true
 
 jobs:
   integration-test-chained:
     runs-on: ubuntu-latest
     timeout-minutes: 120
+    # For workflow_run events, only run if rust-tools succeeded
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
     env:
       AWS_ACCESS_KEY_ID: ${{secrets.NAO_TESTING_ACCESS_KEY }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.NAO_TESTING_SECRET_ACCESS_KEY }}
       TOWER_ACCESS_TOKEN: ${{ secrets.TOWER_ACCESS_TOKEN }}
     steps:
+      # workflow_run events run in default branch context, so we must explicitly
+      # checkout the commit that triggered rust-tools.yml. See docs/ci.md.
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+
       - name: Check for relevant changes
         uses: dorny/paths-filter@v3
         id: filter
@@ -42,6 +49,7 @@ jobs:
               - 'tests/configs/**'
               - '.github/workflows/test-chained.yml'
               - '.github/actions/setup-nf-test/**'
+
       - name: Setup nf-test environment
         if: steps.filter.outputs.chained == 'true'
         uses: ./.github/actions/setup-nf-test
@@ -51,9 +59,14 @@ jobs:
 
       - name: Install Python dependencies
         if: steps.filter.outputs.chained == 'true'
-        run: |
-          pip install boto3
+        run: pip install boto3
+
       - name: Run chain workflows integration test
         if: steps.filter.outputs.chained == 'true'
         run: |
-          bin/chain_workflows.py --no-resume --base-dir s3://nao-testing-scratch/mgs-workflow-test
+          # Use ECR container (Wave/Fusion requirement - can't use local containers).
+          # See docs/ci.md for full explanation of Rust container strategy.
+          RUST_VERSION="${{ github.base_ref == 'stable' && 'main' || 'dev' }}"
+          bin/chain_workflows.py --no-resume \
+            --base-dir s3://nao-testing-scratch/mgs-workflow-test \
+            --nextflow-args "--rust_tools_version $RUST_VERSION"

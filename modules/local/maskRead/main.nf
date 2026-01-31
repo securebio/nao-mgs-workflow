@@ -17,7 +17,7 @@ process MASK_FASTQ_READS {
         out=!{sample}_masked.fastq.gz
 
         # Define parameters
-        par="window=!{window_size} entropy=!{entropy}"
+        par="window=!{window_size} entropy=!{entropy} -Xmx!{task.memory.toGiga()}g"
 
         # If input is empty, create empty gzipped output (bbmask errors on empty input)
         if [[ -z "$(zcat "!{reads}" | head)" ]]; then

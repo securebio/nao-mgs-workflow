@@ -47,9 +47,7 @@ These guidelines represent best practices to implement in new code, though some 
 - New scripts should be in Rust (preferred) or Python (acceptable if performance is not critical).  We have a few legacy scripts in R but discourage adding new R scripts.
 - Organization:
     - Python and R scripts for a module go in `resources/usr/bin/`
-    - Rust source code for a module goes in `src` and the binary (compiled with `cargo build --release`) goes in `resources/usr/bin`
-        - Note that additional files created by Cargo (`Cargo.lock`, `Cargo.toml`) are not stored in the repo.
-        - Note that in the future we will remove binaries from the repo and implement a build process instead; see Issue [#164](https://github.com/naobservatory/mgs-workflow/issues/164). Feel free to recompile existing binaries as source code is updated, but please check with a maintainer before adding new binaries to the repo.
+    - Rust source code lives in the centralized `rust-tools/` directory at the repository root, organized as a Cargo workspace. Compiled binaries are NOT stored in the repository; they are built into the `nao-rust-tools` container via CI.
 - Rely on the standard library as much as possible. 
     - Widely used 3rd-party libraries (e.g. `pandas` or `boto3`) are OK on a case-by-case basis if they allow for much cleaner or more performant code. Please flag use of these libraries in PR comments so the reviewer can assess.
     - Avoid third-party libraries that are not widely used, or that bring in a ton of dependencies of their own.
@@ -62,8 +60,43 @@ These guidelines represent best practices to implement in new code, though some 
     - Type hints are encouraged but not currently required.
     - Linting and type checking are encouraged (our go-to tools are `ruff` for linting and `mypy` for type checking), but not currently required.
     - Formatting applied (including in nested directories) will follow the configuration in `pyproject.toml`.
-    - After making any formatting changes, carefully review the diff to ensure no unintended modifications were introduced that could affect functionality. 
-    
+    - After making any formatting changes, carefully review the diff to ensure no unintended modifications were introduced that could affect functionality.
+
+### Rust
+
+All Rust tools live in the centralized `rust-tools/` directory, organized as a Cargo workspace. Compiled binaries are NOT stored in the repository; instead, they are built into the `nao-rust-tools` container via GitHub Actions CI.
+
+**Adding a new Rust tool:**
+1. Create your Rust project in `rust-tools/{tool_name}/` with `Cargo.toml` and `src/main.rs`
+2. Add it as a workspace member in `rust-tools/Cargo.toml`
+3. Update `docker/nao-rust-tools.Dockerfile`:
+   - The builder stage already builds the entire workspace, so you shouldn't have to change anything here.
+   - In the runtime stage: add `COPY --from=builder <path to binary in builder> /usr/local/bin/` to include the new binary.
+4. Use `label "rust_tools"` in your Nextflow process
+5. Add a comment above the process noting: `// Tool source: rust-tools/{tool_name}/`
+
+**Local development:**
+```bash
+# After making changes to Rust source:
+./bin/build-rust-local.sh
+
+# Run workflow with local container:
+nextflow run main.nf -profile rust_dev ...
+```
+
+**Testing on AWS Batch:**
+```bash
+# Build, tag with your username, and push to ECR:
+./bin/build-rust-local.sh
+docker tag nao-rust-tools:local public.ecr.aws/q0n1c7g8/nao-mgs-workflow/rust-tools:dev-$(whoami)
+docker push public.ecr.aws/q0n1c7g8/nao-mgs-workflow/rust-tools:dev-$(whoami)
+
+# Run on Batch with your container:
+nextflow run main.nf --rust_tools_version dev-$(whoami) -profile batch ...
+```
+
+**Note:** The container is automatically rebuilt by GitHub Actions when Rust source files change on `dev` or `main`. Use `--rust_tools_version dev` to test against the dev branch build.
+
 ## Containers
 
 Where possible, we use [Seqera Wave containers](https://docs.seqera.io/wave), managed programmatically via YAML files in the `containers` directory. To build a new Wave container:
@@ -357,8 +390,9 @@ Only pipeline maintainers should author a new release. The process for going thr
     4. Wait for additional long-running pre-release checks to complete in Github Actions.
     5. If any issues or test failures arise in the preceding steps, fix them with new bugfix PRs into `dev`, then rebase the release branch onto `dev`.
 
-4. Once all checks pass and the PR to `main` is approved, merge it **without squashing**. A Github Actions workflow will automatically create and tag a new release and reset other branches (`dev` & `ci-test`, plus `stable` if only the fourth version number has changed) to match `main`.
+4. Once all checks pass, merge the PR into main **without squashing**[^approval]. A Github Actions workflow will automatically create and tag a new release and reset other branches (`dev` & `ci-test`, plus `stable` if only the fourth version number has changed) to match `main`.
 
     1. Non-point releases are NOT automatically merged to `stable`. To update `stable` with a non-point release, a repo admin must manually reset the branch.
 
 [^refs]: For reference genomes, check for updated releases for human, cow, pig, and mouse; do not update carp; update *E. coli* if there is a new release for the same strain. Check [SILVA](https://www.arb-silva.de/download/archive/) for rRNA databases and [here](https://benlangmead.github.io/aws-indexes/k2) for Kraken2 databases.
+[^approval]: Note that, to streamline the release process, we no longer require an approving review for PRs into `main`. (We still require an approving review for `release` PRs into `dev`.)

@@ -65,12 +65,16 @@ We have five nf-test workflows that test different parts of the pipeline:
 
 Runs our entire pytest suite across `bin`, `modules`, and `post-processing/tests/`.
 
+### Rust tools (`rust-tools.yml`)
+
+Runs Rust unit tests and builds the `nao-rust-tools` container when Rust source files change. This workflow runs on all PRs but uses `dorny/paths-filter` to trivially succeed (~10 seconds) when no Rust files have changed. When Rust files are modified, it runs `cargo test` and builds the container. On push to `dev` or `main`, it also pushes the container to ECR.
+
 ### Trivy container scan (`trivy-scan.yml`)
 
 Scans all containers defined in `configs/containers.config` for security vulnerabilities using [Trivy](https://trivy.dev/).
 
 > [!NOTE]
-> As of 2025-01-28, the Trivy test is expected to fail and is not required to pass to merge PRs.
+> As of 2026-01-28, the Trivy test is expected to fail and is not required to pass to merge PRs.
 
 ### Version and changelog checks
 
@@ -84,7 +88,47 @@ These checks run unconditionally (no path filtering) to ensure version consisten
 
 ## Release tests
 
-These tests run on PRs to `main`, `stable`, and `ci-test`, and also run automatically on push to `dev`. They are slower or more expensive than development tests and are not required for merging to `dev`, but must pass before merging to `main`.
+These tests run on PRs to `main`, `stable`, and `ci-test`, and also run automatically after code is merged to `dev`. They are slower or more expensive than development tests and are not required for merging to `dev`, but must pass before merging to `main`.
+
+### Trigger strategy and Rust container sequencing
+
+Release tests use Wave/Fusion for container orchestration, which requires pulling containers from ECR rather than using locally-built images. This creates a sequencing constraint: when code with Rust changes merges to `dev`, `rust-tools.yml` must finish pushing the new container to ECR before release tests try to pull it.
+
+To ensure correct sequencing, release tests use a `workflow_run` trigger instead of `push`:
+
+```yaml
+on:
+  pull_request:
+    branches: [main, stable, ci-test]
+  workflow_run:
+    workflows: ["Rust Tools CI"]
+    types: [completed]
+    branches: [dev]
+```
+
+This means:
+- **PRs to main/stable/ci-test**: Run directly (ECR `:dev` is already up-to-date from previous merge)
+- **Push to dev**: Wait for `rust-tools.yml` to complete, then run (ECR `:dev` now has the new container)
+
+**Important `workflow_run` quirk:** When triggered by `workflow_run`, GitHub sets `GITHUB_SHA` and `GITHUB_REF` to the *default branch* (main), not the branch that triggered the original workflow. The checkout step must explicitly use `github.event.workflow_run.head_sha` to get the correct commit:
+
+```yaml
+- uses: actions/checkout@v4
+  with:
+    ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+```
+
+The fallback `|| github.sha` handles `pull_request` events where the workflow_run context doesn't exist.
+
+Release tests also skip execution if `rust-tools.yml` failed:
+
+```yaml
+if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
+```
+
+**Rust container version selection:** These tests use ECR containers (`:dev` or `:main`) based on the PR target branch:
+- PRs to `stable` (typically hotfixes from main) → use `:main`
+- All other cases (PRs to main, pushes to dev) → use `:dev`
 
 ### Integration test (`test-chained.yml`)
 

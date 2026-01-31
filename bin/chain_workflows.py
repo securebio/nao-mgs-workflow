@@ -13,6 +13,7 @@ stage as inputs to the next via S3 paths.
 import argparse
 import csv
 import logging
+import shlex
 import subprocess
 from datetime import UTC, datetime
 from pathlib import Path
@@ -149,6 +150,7 @@ def execute_nextflow(
     workflow_name: str,
     profile: str,
     resume: bool,
+    extra_args: str = "",
 ) -> None:
     """
     Execute Nextflow from specified launch directory with given config and parameters.
@@ -160,6 +162,7 @@ def execute_nextflow(
         workflow_name: Name of workflow for logging
         profile: Nextflow profile to use
         resume: Whether to run Nextflow with the -resume flag
+        extra_args: Additional arguments to pass to Nextflow
     """
     logger.info("=" * 80)
     logger.info(f"Starting {workflow_name} workflow")
@@ -171,6 +174,8 @@ def execute_nextflow(
     cmd.extend(["-profile", profile])
     for key, value in params.items():
         cmd.append(f"--{key}={value}")
+    if extra_args:
+        cmd.extend(shlex.split(extra_args))
     logger.info(f"Executing Nextflow from {launch_dir}")
     logger.info(f"Command: {' '.join(cmd)}")
     result = subprocess.run(cmd, cwd=launch_dir)
@@ -256,6 +261,12 @@ def parse_arguments() -> argparse.Namespace:
         default="illumina",
         help="Sequencing platform (default: illumina)",
     )
+    parser.add_argument(
+        "--nextflow-args",
+        type=str,
+        default="",
+        help="Additional arguments to pass through to Nextflow (e.g., '-profile rust_dev' or '--rust_tools_version dev')",
+    )
     return parser.parse_args()
 
 
@@ -280,6 +291,7 @@ def main() -> None:
             workflow_name="INDEX",
             profile=args.profile,
             resume=not args.no_resume,
+            extra_args=args.nextflow_args,
         )
     else:
         if args.ref_dir:
@@ -306,6 +318,7 @@ def main() -> None:
             workflow_name="RUN",
             profile=args.profile,
             resume=not args.no_resume,
+            extra_args=args.nextflow_args,
         )
     else:
         logger.info("Skipping RUN workflow")
@@ -333,6 +346,7 @@ def main() -> None:
             workflow_name="DOWNSTREAM",
             profile=args.profile,
             resume=not args.no_resume,
+            extra_args=args.nextflow_args,
         )
     else:
         logger.info("Skipping DOWNSTREAM workflow")

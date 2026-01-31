@@ -6,6 +6,7 @@ channels:
 dependencies:
   - conda-forge::coreutils=9.5
   - conda-forge::curl=8.17.0
+  - conda-forge::rsync=3.4.1
   - conda-forge::unzip=6.0
   - conda-forge::awscli=2.31.36
   - bioconda::minimap2=2.28
