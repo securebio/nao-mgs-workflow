@@ -21,34 +21,29 @@ runs:
       run: |
         RUST_PATHS="rust-tools/ docker/nao-rust-tools.Dockerfile"
 
-        # Check if Rust files are identical to main
         if git diff --quiet origin/main -- $RUST_PATHS 2>/dev/null; then
           echo "Rust code matches main, using ECR :main"
-          echo "rust-changed=false" >> $GITHUB_OUTPUT
-          echo "rust-version=main" >> $GITHUB_OUTPUT
-          echo "nextflow-args=" >> $GITHUB_OUTPUT
-
-        # Check if Rust files are identical to dev
+          RUST_CHANGED=false RUST_VERSION=main NEXTFLOW_ARGS=""
         elif git diff --quiet origin/dev -- $RUST_PATHS 2>/dev/null; then
           echo "Rust code matches dev, using ECR :dev"
-          echo "rust-changed=false" >> $GITHUB_OUTPUT
-          echo "rust-version=dev" >> $GITHUB_OUTPUT
-          echo "nextflow-args=" >> $GITHUB_OUTPUT
-
-        # Rust code has changed - need to build local container
+          RUST_CHANGED=false RUST_VERSION=dev NEXTFLOW_ARGS=""
         else
           echo "Rust code has changed, will build local container"
-          echo "rust-changed=true" >> $GITHUB_OUTPUT
-          echo "rust-version=" >> $GITHUB_OUTPUT
-          echo "nextflow-args=--profile=rust_dev" >> $GITHUB_OUTPUT
+          RUST_CHANGED=true RUST_VERSION="" NEXTFLOW_ARGS="--profile=rust_dev"
         fi
+
+        {
+          echo "rust-changed=$RUST_CHANGED"
+          echo "rust-version=$RUST_VERSION"
+          echo "nextflow-args=$NEXTFLOW_ARGS"
+        } >> $GITHUB_OUTPUT
 
     - name: Compute Rust source hash
       if: steps.check.outputs.rust-changed == 'true'
       id: hash
       shell: bash
       run: |
-        HASH=$(find rust-tools/ -type f | sort | xargs cat | cat - docker/nao-rust-tools.Dockerfile | sha256sum | cut -d' ' -f1)
+        HASH=$({ find rust-tools/ -type f -print0 | sort -z | xargs -0 cat; cat docker/nao-rust-tools.Dockerfile; } | sha256sum | cut -d' ' -f1)
         echo "hash=${HASH:0:16}" >> $GITHUB_OUTPUT
         echo "Rust source hash: ${HASH:0:16}"
 
