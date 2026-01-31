@@ -1,5 +1,4 @@
 // Convert FASTQ files (interleaved or single-end) into FASTA format
-// TODO: Expand to work on non-gzipped files
 
 process CONVERT_FASTQ_FASTA {
     label "single"
