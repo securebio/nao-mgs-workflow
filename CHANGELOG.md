@@ -1,3 +1,10 @@
+# v3.1.0.0-dev
+
+- Remove BLAST validation from RUN workflow. BLAST validation is now only available in the DOWNSTREAM workflow via VALIDATE_VIRAL_ASSIGNMENTS.
+    - Deleted `BLAST_VIRAL` subworkflow, `SUBSET_FASTN` module, and `RUN_VALIDATION` workflow.
+    - Removed `blast_viral_fraction` and related BLAST parameters from RUN workflow configs.
+    - Removed unused `EXTRACT_VIRAL_HITS_TO_FASTQ_NOREF_LABELED` process (non-LIST version).
+
 # v3.0.1.10-dev
 
 - Add Rust build system to CI and rust-tools container to ECR.

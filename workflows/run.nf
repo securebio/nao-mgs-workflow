@@ -13,7 +13,6 @@ include { EXTRACT_VIRAL_READS_ONT } from "../subworkflows/local/extractViralRead
 include { SUBSET_TRIM } from "../subworkflows/local/subsetTrim"
 include { RUN_QC } from "../subworkflows/local/runQc"
 include { PROFILE} from "../subworkflows/local/profile"
-include { BLAST_VIRAL } from "../subworkflows/local/blastViral"
 include { CHECK_VERSION_COMPATIBILITY } from "../subworkflows/local/checkVersionCompatibility"
 include { COPY_FILE_BARE as COPY_INDEX_PARAMS } from "../modules/local/copyFile"
 include { COPY_FILE_BARE as COPY_INDEX_PYPROJECT } from "../modules/local/copyFile"
@@ -99,17 +98,6 @@ workflow RUN {
         bbduk_match = EXTRACT_VIRAL_READS_SHORT.out.bbduk_match
         bbduk_trimmed = EXTRACT_VIRAL_READS_SHORT.out.bbduk_trimmed
     }
-    // BLAST validation on host-viral reads (optional)
-    if ( params.blast_viral_fraction > 0 ) {
-        def blast_viral_params = params.collectEntries { k, v -> [k, v] }
-        blast_viral_params["read_fraction"] = params.blast_viral_fraction // rename to match subworkflow input
-        BLAST_VIRAL(hits_fastq, params.ref_dir, blast_viral_params)
-        blast_subset_ch = BLAST_VIRAL.out.blast_subset
-        blast_reads_ch = BLAST_VIRAL.out.subset_reads
-    } else {
-        blast_subset_ch = Channel.empty()
-        blast_reads_ch = Channel.empty()
-    }
 
     // Subset reads to target number, and trim adapters
     def subset_trim_params = params.collectEntries { k, v -> [k, v] }
@@ -146,5 +134,5 @@ workflow RUN {
         reads_trimmed_viral = bbduk_trimmed
         // Lots of results; split across 2 channels (QC, and other)
         qc_results_run = COUNT_TOTAL_READS.out.read_counts.mix(RUN_QC.out.qc_basic, RUN_QC.out.qc_adapt, RUN_QC.out.qc_qbase, RUN_QC.out.qc_qseqs, RUN_QC.out.qc_lengths)
-        other_results_run = hits_final.mix(PROFILE.out.bracken, PROFILE.out.kraken, blast_subset_ch, blast_reads_ch)
+        other_results_run = hits_final.mix(PROFILE.out.bracken, PROFILE.out.kraken)
 }

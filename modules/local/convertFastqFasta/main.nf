@@ -1,29 +1,7 @@
-// Convert a single FASTQ file (interleaved or single-end) into FASTA format
-
-process CONVERT_FASTQ_FASTA {
-    label "single"
-    label "seqtk"
-    input:
-        tuple val(sample), path(fastq)
-    output:
-        tuple val(sample), path("converted_*"), emit: output
-        tuple val(sample), path("input_${fastq}"), emit: input
-    script:
-        def extractCmd = fastq.toString().endsWith(".gz") ? "zcat" : "cat"
-        def compressCmd = fastq.toString().endsWith(".gz") ? "gzip" : "cat"
-        def output = "converted_${fastq}".replace(".fastq", ".fasta")
-        """
-        # Perform conversion
-        ${extractCmd} ${fastq} | seqtk seq -a | ${compressCmd} > ${output}
-        # Link input to output for testing
-        ln -s ${fastq} input_${fastq}
-        """
-}
-
-// Convert a single FASTQ file (interleaved or single-end) into FASTA format
+// Convert FASTQ files (interleaved or single-end) into FASTA format
 // TODO: Expand to work on non-gzipped files
 
-process CONVERT_FASTQ_FASTA_LIST {
+process CONVERT_FASTQ_FASTA {
     label "single"
     label "seqtk"
     input:
