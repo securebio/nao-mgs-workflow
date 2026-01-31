@@ -1,6 +1,7 @@
 # v3.0.1.10-dev
 
 - Add Rust build system to CI and rust-tools container to ECR.
+- Fix CI bug where `--rust_tools_version dev` was passed to test runner instead of via environment variable.
 
 # v3.0.1.9
 
