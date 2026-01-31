@@ -1,3 +1,6 @@
+# v3.0.2.0-dev
+- Removed Cutadapt from RUN workflow to reduce runtime and complexity. FASTP alone now handles adapter trimming for the short-read viral identification pipeline.
+
 # v3.0.1.8
 
 ## Streamlining release process
