@@ -90,25 +90,27 @@ nextflow_workflow {
 
         then {
             assert workflow.success
-            
-            def lcaData = path(workflow.out.lca_tsv[0]).csv(sep: "\t", decompress: true)
-            def alignerData = path(workflow.out.aligner_tsv[0]).csv(sep: "\t", decompress: true)
-            def outputData = path(workflow.out.viral_hits_tsv[0]).csv(sep: "\t", decompress: true)
-            
+
+            // Outputs are now tuple(sample, file), so access [1] for the file
+            // Note: lca_tsv and aligner_tsv are plain TSV, viral_hits_tsv is gzipped
+            def lcaData = path(workflow.out.lca_tsv[0][1]).csv(sep: "\t")
+            def alignerData = path(workflow.out.aligner_tsv[0][1]).csv(sep: "\t")
+            def outputData = path(workflow.out.viral_hits_tsv[0][1]).csv(sep: "\t", decompress: true)
+
             def colsNoPrefix = params.col_keep_no_prefix
             def colsAddPrefix = params.col_keep_add_prefix
-            
+
             validateOutputStructure(outputData, colsNoPrefix, colsAddPrefix, params.column_prefix)
-            
+
             def outputSeqIds = outputData.columns["seq_id"].toSet()
             def lcaSeqIds = lcaData.columns["seq_id"].toSet()
             def alignerSeqIds = alignerData.columns["seq_id"].toSet()
             validateJoinIntegrity(outputSeqIds, lcaSeqIds, alignerSeqIds)
-            
+
             def primaryAlignerSeqIdsSet = getPrimaryAlignmentSeqIds(alignerData)
             def expectedSeqIds = primaryAlignerSeqIdsSet.intersect(lcaSeqIds)
             assert outputSeqIds == expectedSeqIds
-            
+
             validateDataIntegrity(outputData, lcaData, alignerData, colsNoPrefix, colsAddPrefix, params.column_prefix)
         }
     }
@@ -135,25 +137,27 @@ nextflow_workflow {
 
         then {
             assert workflow.success
-            
-            def lcaData = path(workflow.out.lca_tsv[0]).csv(sep: "\t", decompress: true)
-            def alignerData = path(workflow.out.aligner_tsv[0]).csv(sep: "\t", decompress: true)
-            def outputData = path(workflow.out.viral_hits_tsv[0]).csv(sep: "\t", decompress: true)
-            
+
+            // Outputs are now tuple(sample, file), so access [1] for the file
+            // Note: lca_tsv and aligner_tsv are plain TSV, viral_hits_tsv is gzipped
+            def lcaData = path(workflow.out.lca_tsv[0][1]).csv(sep: "\t")
+            def alignerData = path(workflow.out.aligner_tsv[0][1]).csv(sep: "\t")
+            def outputData = path(workflow.out.viral_hits_tsv[0][1]).csv(sep: "\t", decompress: true)
+
             def colsNoPrefix = params.col_keep_no_prefix
             def colsAddPrefix = params.col_keep_add_prefix
-            
+
             validateOutputStructure(outputData, colsNoPrefix, colsAddPrefix, params.column_prefix)
-            
+
             def outputSeqIds = outputData.columns["seq_id"].toSet()
             def lcaSeqIds = lcaData.columns["seq_id"].toSet()
             def alignerSeqIds = alignerData.columns["seq_id"].toSet()
             validateJoinIntegrity(outputSeqIds, lcaSeqIds, alignerSeqIds)
-            
+
             def primaryAlignerSeqIdsSet = getPrimaryAlignmentSeqIds(alignerData)
             def expectedSeqIds = primaryAlignerSeqIdsSet.intersect(lcaSeqIds)
             assert outputSeqIds == expectedSeqIds
-            
+
             validateDataIntegrity(outputData, lcaData, alignerData, colsNoPrefix, colsAddPrefix, params.column_prefix)
         }
     }
@@ -162,7 +166,7 @@ nextflow_workflow {
     test("Should handle empty input files") {
         tag "empty_input"
         tag "expect_success"
-        
+
         when {
             params {
                 col_keep_no_prefix = ["seq_id", "aligner_taxid_lca"]
@@ -182,10 +186,11 @@ nextflow_workflow {
 
         then {
             assert workflow.success
-            
-            def outputFile = path(workflow.out.viral_hits_tsv[0])
+
+            // Output is now tuple(sample, file), so access [1] for the file
+            def outputFile = path(workflow.out.viral_hits_tsv[0][1])
             assert outputFile.exists()
-            
+
             def outputLines = outputFile.linesGzip.size()
             assert outputLines == 0
         }
@@ -195,20 +200,20 @@ nextflow_workflow {
         tag "empty_input"
         tag "header_only"
         tag "expect_success"
-        
+
         when {
             params {
-                col_keep_no_prefix = ["seq_id", "aligner_taxid_lca", "aligner_taxid_top", 
+                col_keep_no_prefix = ["seq_id", "aligner_taxid_lca", "aligner_taxid_top",
                                       "aligner_length_normalized_score_mean", "aligner_taxid_lca_combined",
                                       "aligner_n_assignments_combined", "aligner_length_normalized_score_mean_combined",
-                                      "aligner_taxid_lca_artificial", "aligner_n_assignments_artificial", 
+                                      "aligner_taxid_lca_artificial", "aligner_n_assignments_artificial",
                                       "aligner_length_normalized_score_mean_artificial"]
-                col_keep_add_prefix = ["genome_id_all", "taxid_all", "fragment_length", 
+                col_keep_add_prefix = ["genome_id_all", "taxid_all", "fragment_length",
                                        "best_alignment_score", "best_alignment_score_rev",
-                                       "edit_distance", "edit_distance_rev", "ref_start", 
+                                       "edit_distance", "edit_distance_rev", "ref_start",
                                        "ref_start_rev", "query_len", "query_len_rev",
-                                       "query_seq", "query_seq_rev", "query_rc", 
-                                       "query_rc_rev", "query_qual", "query_qual_rev", 
+                                       "query_seq", "query_seq_rev", "query_rc",
+                                       "query_rc_rev", "query_qual", "query_qual_rev",
                                        "pair_status"]
                 column_prefix = "prim_align_"
             }
@@ -225,20 +230,21 @@ nextflow_workflow {
 
         then {
             assert workflow.success
-            
-            def outputFile = path(workflow.out.viral_hits_tsv[0])
+
+            // Output is now tuple(sample, file), so access [1] for the file
+            def outputFile = path(workflow.out.viral_hits_tsv[0][1])
             assert outputFile.exists()
-            
+
             def outputLines = outputFile.linesGzip
             assert outputLines.size() == 1
 
             def colsNoPrefix = params.col_keep_no_prefix
             def colsAddPrefix = params.col_keep_add_prefix
-            
+
             for (col in colsNoPrefix) {
                 outputLines.contains(col)
             }
-            
+
             for (col in colsAddPrefix) {
                 outputLines.contains("${params.column_prefix}${col}".toString())
             }
