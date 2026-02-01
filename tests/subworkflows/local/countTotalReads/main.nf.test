@@ -21,7 +21,8 @@ nextflow_workflow {
         }
         then {
             assert workflow.success
-            def file_out = path(workflow.out.read_counts[0]).csv(sep: "\t", decompress: true) 
+            // Output is now tuple(sample, file), so access [1] for the file
+            def file_out = path(workflow.out.read_counts[0][1]).csv(sep: "\t")
             assert file_out.rowCount == 1
             assert file_out.columnNames == ['sample', 'n_reads_single', 'n_read_pairs']
             assert file_out.rows[0] == ["sample": "test", "n_reads_single": 50, "n_read_pairs": 25]
@@ -45,7 +46,8 @@ nextflow_workflow {
 
         then {
             assert workflow.success
-            def file_out = path(workflow.out.read_counts[0]).csv(sep: "\t", decompress: true) 
+            // Output is now tuple(sample, file), so access [1] for the file
+            def file_out = path(workflow.out.read_counts[0][1]).csv(sep: "\t")
             assert file_out.rowCount == 1
             assert file_out.columnNames == ['sample', 'n_reads_single', 'n_read_pairs']
             assert file_out.rows[0] == ["sample": "empty_sample", "n_reads_single": 0, "n_read_pairs": ""]
