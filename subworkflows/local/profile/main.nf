@@ -14,8 +14,8 @@ include { ADD_FIXED_COLUMN as ADD_KRAKEN_RIBO } from "../../../modules/local/add
 include { ADD_FIXED_COLUMN as ADD_BRACKEN_RIBO } from "../../../modules/local/addFixedColumn"
 include { ADD_FIXED_COLUMN as ADD_KRAKEN_NORIBO } from "../../../modules/local/addFixedColumn"
 include { ADD_FIXED_COLUMN as ADD_BRACKEN_NORIBO } from "../../../modules/local/addFixedColumn"
-include { CONCATENATE_TSVS as CONCATENATE_KRAKEN } from "../../../modules/local/concatenateTsvs"
-include { CONCATENATE_TSVS as CONCATENATE_BRACKEN } from "../../../modules/local/concatenateTsvs"
+include { CONCATENATE_TSVS_LABELED as CONCATENATE_KRAKEN_PER_SAMPLE } from "../../../modules/local/concatenateTsvs"
+include { CONCATENATE_TSVS_LABELED as CONCATENATE_BRACKEN_PER_SAMPLE } from "../../../modules/local/concatenateTsvs"
 
 /****************
 | MAIN WORKFLOW |
@@ -25,7 +25,7 @@ workflow PROFILE {
     take:
         reads_ch
         kraken_db_ch
-        ref_dir 
+        ref_dir
         single_end
         params_map // min_kmer_fraction, k, ribo_suffix, bracken_threshold, platform, db_download_timeout
     main:
@@ -47,15 +47,20 @@ workflow PROFILE {
         taxonomy_params = params_map + [classification_level: "D"]
         tax_ribo_ch = TAXONOMY_RIBO(ribo_in, kraken_db_ch, single_end, taxonomy_params)
         tax_noribo_ch = TAXONOMY_NORIBO(noribo_in, kraken_db_ch, single_end, taxonomy_params)
-        // Add ribosomal status to output TSVs
+        // Add ribosomal status to output TSVs (now working with tuple(sample, file))
         kr_ribo = ADD_KRAKEN_RIBO(tax_ribo_ch.kraken_reports, "ribosomal", "TRUE", "ribo")
         kr_noribo = ADD_KRAKEN_NORIBO(tax_noribo_ch.kraken_reports, "ribosomal", "FALSE", "noribo")
         br_ribo = ADD_BRACKEN_RIBO(tax_ribo_ch.bracken, "ribosomal", "TRUE", "ribo")
         br_noribo = ADD_BRACKEN_NORIBO(tax_noribo_ch.bracken, "ribosomal", "FALSE", "noribo")
-        // Concatenate output TSVs
-        kr_out = CONCATENATE_KRAKEN(kr_ribo.output.combine(kr_noribo.output), "kraken_reports_merged")
-        br_out = CONCATENATE_BRACKEN(br_ribo.output.combine(br_noribo.output), "bracken_reports_merged")
+        // Concatenate ribo + noribo per sample (not across samples)
+        // Join by sample to get tuple(sample, ribo_file, noribo_file), then restructure for CONCATENATE_TSVS_LABELED
+        kr_combined = kr_ribo.output.join(kr_noribo.output)
+            .map { sample, ribo_file, noribo_file -> [sample, [ribo_file, noribo_file]] }
+        kr_per_sample = CONCATENATE_KRAKEN_PER_SAMPLE(kr_combined, "kraken")
+        br_combined = br_ribo.output.join(br_noribo.output)
+            .map { sample, ribo_file, noribo_file -> [sample, [ribo_file, noribo_file]] }
+        br_per_sample = CONCATENATE_BRACKEN_PER_SAMPLE(br_combined, "bracken")
     emit:
-        bracken = br_out.output
-        kraken = kr_out.output
+        bracken = br_per_sample.output  // tuple(sample, file) per sample
+        kraken = kr_per_sample.output   // tuple(sample, file) per sample
 }
