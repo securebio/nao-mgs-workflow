@@ -27,7 +27,8 @@ nextflow_workflow {
             def sam_ids = samlines
                 .collect { line -> line.split('\t')[0] }  // Get read IDs
                 .toSet()
-            def hits_final = path(workflow.out.hits_final[0]).csv(sep: "\t", decompress: true)
+            // hits_final is now tuple(sample, file), so access [1] for the file
+            def hits_final = path(workflow.out.hits_final[0][1]).csv(sep: "\t", decompress: true)
             def hits_final_read_ids_list = hits_final.columns["seq_id"]  // Keep as list to check for duplicates
             def hits_final_read_ids_set = hits_final_read_ids_list.toSet()
             assert hits_final_read_ids_list.size() == hits_final_read_ids_set.size(), 
@@ -76,8 +77,9 @@ nextflow_workflow {
             def samlines = sam(workflow.out.test_minimap2_virus[0][1]).getSamLines()
 	    assert samlines.size() == 0
             // Tabular output files should have only header lines
+            // hits_final is now tuple(sample, file), so access [1] for the file
             def tabular_files = [
-                path(workflow.out.hits_final[0]),
+                path(workflow.out.hits_final[0][1]),
             ]
             def tabular_lines = tabular_files.collect{ it.linesGzip.toList() }
             assert tabular_lines.every{ it.size() == 1 }
