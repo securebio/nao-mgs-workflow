@@ -1,0 +1,7 @@
+mean_phred_score	n_sequences	file	stage	sample
+28	1	tiny_test_filtlong	raw	tiny_test
+29	0	tiny_test_filtlong	raw	tiny_test
+30	0	tiny_test_filtlong	raw	tiny_test
+31	1	tiny_test_filtlong	raw	tiny_test
+32	14	tiny_test_filtlong	raw	tiny_test
+33	9	tiny_test_filtlong	raw	tiny_test
