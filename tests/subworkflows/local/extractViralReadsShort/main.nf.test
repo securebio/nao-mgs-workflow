@@ -19,7 +19,6 @@ nextflow_workflow {
                 def short_params = [
                     aln_score_threshold: params.bt2_score_threshold,
                     adapters: params.adapters,
-                    cutadapt_error_rate: params.cutadapt_error_rate,
                     min_kmer_hits: "1",
                     k: "24",
                     bbduk_suffix: "viral",
@@ -78,7 +77,6 @@ nextflow_workflow {
                 def short_params = [
                     aln_score_threshold: params.bt2_score_threshold,
                     adapters: params.adapters,
-                    cutadapt_error_rate: params.cutadapt_error_rate,
                     min_kmer_hits: "1",
                     k: "24",
                     bbduk_suffix: "viral",

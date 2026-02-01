@@ -1,5 +1,6 @@
 # v3.0.1.10-dev
 
+- Removed Cutadapt from RUN workflow to reduce runtime and complexity. FASTP alone now handles adapter trimming for the short-read viral identification pipeline.
 - Add Rust build system to CI and rust-tools container to ECR.
 - Fix CI bug where `--rust_tools_version dev` was passed to test runner instead of via environment variable.
 
@@ -13,6 +14,7 @@
     - Added missing memory specifications to BBTools processes
     - Broadened tolerable results ranges for probabilistic tests
     - Fixed bug in `download-db.sh` that was causing inter-run contamination of reference files
+- Moved DB download functionality to `download_db.py` and implemented unit tests
 
 # v3.0.1.8
 
