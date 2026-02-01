@@ -5,10 +5,12 @@ Unit tests for download-db.py
 Run with: pytest bin/test_download_db.py
 """
 
+import fcntl
+import subprocess
+
 import pytest
 from pathlib import Path
 from unittest.mock import patch, MagicMock
-import subprocess
 
 from download_db import (
     parse_source_path,
@@ -66,18 +68,13 @@ class TestFileLock:
 
     def test_lock_timeout(self, tmp_path):
         """Test that timeout raises TimeoutError when lock is held by another."""
-        import fcntl
-        import os
         lock_file = tmp_path / "test.lock"
-        fd = os.open(str(lock_file), os.O_RDWR | os.O_CREAT)
-        fcntl.flock(fd, fcntl.LOCK_EX)
-        try:
+        with open(lock_file, "w") as f:
+            fcntl.flock(f, fcntl.LOCK_EX)
             with pytest.raises(TimeoutError, match="Timed out waiting for lock"):
                 with file_lock(lock_file, timeout_seconds=0.2):
                     pass
-        finally:
-            fcntl.flock(fd, fcntl.LOCK_UN)
-            os.close(fd)
+            # Lock is released when file is closed
 
 class TestConfigureAwsS3Transfer:
     """Test AWS S3 transfer configuration."""
@@ -107,11 +104,11 @@ class TestSyncFromS3:
     @patch('download_db.subprocess.run')
     def test_sync_from_s3_success(self, mock_run, mock_configure):
         """Test successful S3 sync."""
-        mock_run.return_value = MagicMock(returncode=0, stderr="")
         sync_from_s3("s3://bucket/db", Path("/scratch/db"))
         mock_configure.assert_called_once()
         mock_run.assert_called_once_with(
             ["aws", "s3", "sync", "s3://bucket/db", "/scratch/db", "--delete"],
+            check=True,
             capture_output=True,
             text=True,
         )
@@ -119,9 +116,9 @@ class TestSyncFromS3:
     @patch('download_db.configure_aws_s3_transfer')
     @patch('download_db.subprocess.run')
     def test_sync_from_s3_failure(self, mock_run, mock_configure):
-        """Test S3 sync failure raises RuntimeError."""
-        mock_run.return_value = MagicMock(returncode=1, stderr="Access Denied")
-        with pytest.raises(RuntimeError, match="aws s3 sync failed: Access Denied"):
+        """Test S3 sync failure raises CalledProcessError."""
+        mock_run.side_effect = subprocess.CalledProcessError(1, "aws s3 sync")
+        with pytest.raises(subprocess.CalledProcessError):
             sync_from_s3("s3://bucket/db", Path("/scratch/db"))
 
 class TestSyncFromLocal:
@@ -130,19 +127,19 @@ class TestSyncFromLocal:
     @patch('download_db.subprocess.run')
     def test_sync_from_local_success(self, mock_run):
         """Test successful local sync."""
-        mock_run.return_value = MagicMock(returncode=0, stderr="")
         sync_from_local("/source/db", Path("/scratch/db"))
         mock_run.assert_called_once_with(
             ["rsync", "-a", "--delete", "/source/db/", "/scratch/db/"],
+            check=True,
             capture_output=True,
             text=True,
         )
 
     @patch('download_db.subprocess.run')
     def test_sync_from_local_failure(self, mock_run):
-        """Test local sync failure raises RuntimeError."""
-        mock_run.return_value = MagicMock(returncode=1, stderr="Permission denied")
-        with pytest.raises(RuntimeError, match="rsync failed: Permission denied"):
+        """Test local sync failure raises CalledProcessError."""
+        mock_run.side_effect = subprocess.CalledProcessError(1, "rsync")
+        with pytest.raises(subprocess.CalledProcessError):
             sync_from_local("/source/db", Path("/scratch/db"))
 
 class TestDownloadDatabase:

@@ -93,13 +93,12 @@ def file_lock(lock_file: Path, timeout_seconds: int | None = None):
         TimeoutError: If the lock cannot be acquired within the timeout period
     """
     lock_file.parent.mkdir(parents=True, exist_ok=True)
-    fd = os.open(str(lock_file), os.O_RDWR | os.O_CREAT)
-    try:
+    with open(lock_file, "w") as f:
         if timeout_seconds is not None:
             start_time = time.time()
             while True:
                 try:
-                    fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
                     break
                 except BlockingIOError:
                     if time.time() - start_time >= timeout_seconds:
@@ -108,13 +107,11 @@ def file_lock(lock_file: Path, timeout_seconds: int | None = None):
                         )
                     time.sleep(0.1)
         else:
-            fcntl.flock(fd, fcntl.LOCK_EX)
+            fcntl.flock(f, fcntl.LOCK_EX)
         logger.info(f"Acquired lock: {lock_file}")
         yield
-    finally:
-        fcntl.flock(fd, fcntl.LOCK_UN)
-        os.close(fd)
-        logger.info("Released lock")
+    # Lock is released when file is closed
+    logger.info("Released lock")
 
 #####################
 # DATABASE TRANSFER #
@@ -142,13 +139,12 @@ def sync_from_s3(source_path: str, local_path: Path) -> None:
     """
     logger.info(f"Syncing from S3: {source_path} -> {local_path}")
     configure_aws_s3_transfer()
-    result = subprocess.run(
+    subprocess.run(
         ["aws", "s3", "sync", source_path, str(local_path), "--delete"],
+        check=True,
         capture_output=True,
         text=True,
     )
-    if result.returncode != 0:
-        raise RuntimeError(f"aws s3 sync failed: {result.stderr}")
     logger.info("S3 sync completed")
 
 def sync_from_local(source_path: str, local_path: Path) -> None:
@@ -157,13 +153,12 @@ def sync_from_local(source_path: str, local_path: Path) -> None:
     The --delete flag removes destination files not present in the source.
     """
     logger.info(f"Syncing from local path: {source_path} -> {local_path}")
-    result = subprocess.run(
+    subprocess.run(
         ["rsync", "-a", "--delete", f"{source_path}/", f"{local_path}/"],
+        check=True,
         capture_output=True,
         text=True,
     )
-    if result.returncode != 0:
-        raise RuntimeError(f"rsync failed: {result.stderr}")
     logger.info("Local sync completed")
 
 ##############
