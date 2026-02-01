@@ -16,6 +16,7 @@ include { SORT_TSV as SORT_LCA } from "../../../modules/local/sortTsv"
 include { JOIN_TSVS } from "../../../modules/local/joinTsvs"
 include { FILTER_TSV_COLUMN_BY_VALUE } from "../../../modules/local/filterTsvColumnByValue"
 include { PROCESS_LCA_ALIGNER_OUTPUT } from "../../../subworkflows/local/processLcaAlignerOutput/"
+include { COPY_FILE as RENAME_VIRUS_HITS } from "../../../modules/local/copyFile"
 
 /***********
 | WORKFLOW |
@@ -84,12 +85,14 @@ workflow EXTRACT_VIRAL_READS_ONT {
             col_keep_add_prefix,
             "prim_align_"
         )
+        // Rename virus hits to clean file name
+        renamed_hits_ch = RENAME_VIRUS_HITS(processed_ch.viral_hits_tsv, "virus_hits.tsv.gz")
         // Pull out clean reads from mapped reads to feed into BLAST
         virus_fastq_ch = virus_minimap2_ch.reads_mapped
         clean_virus_fastq_ch = EXTRACT_SHARED_FASTQ_READS(virus_fastq_ch.join(filtered_ch.reads))
         fastq_ch = CONCATENATE_FILES(clean_virus_fastq_ch.output.map{ it[1] }.collect(), "virus_hits_final", "fastq.gz")
     emit:
-        hits_final = processed_ch.viral_hits_tsv        // tuple(sample, file) per sample
+        hits_final = renamed_hits_ch                    // tuple(sample, file) per sample
         inter_lca = processed_ch.lca_tsv                // tuple(sample, file) per sample
         inter_minimap2 = processed_ch.aligner_tsv       // tuple(sample, file) per sample
         hits_fastq = fastq_ch.output

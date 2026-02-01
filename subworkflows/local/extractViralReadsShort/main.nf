@@ -18,6 +18,7 @@ include { SORT_FASTQ } from "../../../modules/local/sortFastq"
 include { SORT_FILE } from "../../../modules/local/sortFile"
 include { FILTER_VIRAL_SAM } from "../../../modules/local/filterViralSam"
 include { PROCESS_LCA_ALIGNER_OUTPUT } from "../../../subworkflows/local/processLcaAlignerOutput/"
+include { COPY_FILE as RENAME_VIRUS_HITS } from "../../../modules/local/copyFile"
 
 /***********
 | WORKFLOW |
@@ -97,7 +98,9 @@ workflow EXTRACT_VIRAL_READS_SHORT {
             col_keep_add_prefix,
             "prim_align_"
         )
-        // 10. Extract filtered virus hits in FASTQ format
+        // 10. Rename virus hits to clean file name
+        renamed_hits_ch = RENAME_VIRUS_HITS(processed_ch.viral_hits_tsv, "virus_hits.tsv.gz")
+        // 11. Extract filtered virus hits in FASTQ format
         // This requires concatenated TSV and FASTQ, so we concatenate the per-sample viral_hits for this step
         viral_hits_for_fastq = processed_ch.viral_hits_tsv.map { _sample, file -> file }.collect().ifEmpty([])
         viral_hits_concat = CONCATENATE_VIRAL_HITS_FOR_FASTQ(viral_hits_for_fastq, "virus_hits_for_fastq")
@@ -107,7 +110,7 @@ workflow EXTRACT_VIRAL_READS_SHORT {
     emit:
         bbduk_match = bbduk_ch.fail
         bbduk_trimmed = fastp_ch.reads
-        hits_final = processed_ch.viral_hits_tsv        // tuple(sample, file) per sample
+        hits_final = renamed_hits_ch                    // tuple(sample, file) per sample
         inter_lca = processed_ch.lca_tsv                // tuple(sample, file) per sample
         inter_bowtie = processed_ch.aligner_tsv         // tuple(sample, file) per sample
         hits_prelca = bowtie2_tsv_ch.output
