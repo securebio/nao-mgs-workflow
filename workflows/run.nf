@@ -20,6 +20,7 @@ include { COPY_FILE_BARE as COPY_INDEX_PYPROJECT } from "../modules/local/copyFi
 include { COPY_FILE_BARE as COPY_PYPROJECT } from "../modules/local/copyFile"
 include { COPY_FILE_BARE as COPY_SAMPLESHEET } from "../modules/local/copyFile"
 include { COPY_FILE_BARE as COPY_ADAPTERS } from "../modules/local/copyFile"
+include { COPY_FILE_BARE as COPY_TIME } from "../modules/local/copyFile"
 
 /***********************
 | AUXILIARY FUNCTIONS |
@@ -130,10 +131,11 @@ workflow RUN {
     // Prepare other publishing variables
     params_str = groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(params))
     params_ch = Channel.of(params_str).collectFile(name: "params-run.json")
-    time_ch = start_time_str.map { it + "\n" }.collectFile(name: "time.txt")
+    time_file = start_time_str.map { it + "\n" }.collectFile(name: "time.txt")
     // Note: we send these input/logging files through a COPY_FILE_BASE process
     // because nextflow 25.04 now only publishes files that have passed through the working directory.
     // We first tried collectFile() as an alternative; however it intermittantly gives serialization errors.
+    time_ch = COPY_TIME(time_file, "time.txt")
     pyproject_ch = COPY_PYPROJECT(Channel.fromPath(pipeline_pyproject_path), "pyproject.toml")
     samplesheet_ch = COPY_SAMPLESHEET(Channel.fromPath(params.sample_sheet), "samplesheet.csv")
     adapters_ch = COPY_ADAPTERS(Channel.fromPath(params.adapters), "adapters.fasta")
@@ -144,7 +146,7 @@ workflow RUN {
         intermediates_run = hits_fastq.mix(inter_lca, inter_aligner)
         reads_raw_viral = bbduk_match
         reads_trimmed_viral = bbduk_trimmed
-        // Lots of results; split across 2 channels (QC, and other)
-        qc_results_run = COUNT_TOTAL_READS.out.read_counts.mix(RUN_QC.out.qc_basic, RUN_QC.out.qc_adapt, RUN_QC.out.qc_qbase, RUN_QC.out.qc_qseqs, RUN_QC.out.qc_lengths)
+        qc_results_run = COUNT_TOTAL_READS.out.read_counts
+            .mix(RUN_QC.out.pre_qc, RUN_QC.out.post_qc)
         other_results_run = hits_final.mix(PROFILE.out.bracken, PROFILE.out.kraken, blast_subset_ch, blast_reads_ch)
 }
