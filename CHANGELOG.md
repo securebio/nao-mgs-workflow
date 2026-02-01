@@ -14,6 +14,7 @@
     - Added missing memory specifications to BBTools processes
     - Broadened tolerable results ranges for probabilistic tests
     - Fixed bug in `download-db.sh` that was causing inter-run contamination of reference files
+- Moved DB download functionality to `download_db.py` and implemented unit tests
 
 # v3.0.1.8
 
