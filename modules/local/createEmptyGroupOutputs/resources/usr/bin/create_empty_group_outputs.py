@@ -2,7 +2,7 @@
 """
 Create empty output files for groups with no virus hits.
 
-Reads empty group names from a TSV file and creates empty gzipped files
+Takes a comma-separated list of group names and creates empty gzipped files
 for each expected per-group output defined in pyproject.toml.
 """
 
@@ -12,7 +12,6 @@ for each expected per-group output defined in pyproject.toml.
 
 # Standard library imports
 import argparse
-import csv
 import gzip
 import io
 import logging
@@ -63,24 +62,6 @@ def open_by_suffix(filename: str | Path, mode: str = "r") -> io.TextIOWrapper:
 #=============================================================================
 # Core functions
 #=============================================================================
-
-def get_unique_groups(tsv_path: str) -> set[str]:
-    """
-    Extract unique group names from a TSV file.
-    Args:
-        tsv_path (str): Path to gzipped TSV file with 'group' column.
-    Returns:
-        set[str]: Set of unique group names found in the file.
-    """
-    groups: set[str] = set()
-    with open_by_suffix(tsv_path, "r") as f:
-        reader = csv.DictReader(f, delimiter="\t")
-        if "group" not in (reader.fieldnames or []):
-            logger.warning(f"'group' column not found in {tsv_path}")
-            return groups
-        for row in reader:
-            groups.add(row["group"])
-    return groups
 
 def get_group_output_patterns(pyproject_path: str, platform: str) -> list[str]:
     """
@@ -143,8 +124,8 @@ def parse_args() -> argparse.Namespace:
     """
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
-        "empty_groups_tsv",
-        help="Path to TSV file listing empty groups (must have 'group' column)",
+        "missing_groups",
+        help="Comma-separated list of group names with no hits (can be empty string)",
     )
     parser.add_argument(
         "pyproject_toml",
@@ -172,12 +153,12 @@ def main() -> None:
     logger.info("Initializing script.")
     args = parse_args()
     logger.info(f"Arguments: {args}")
-    logger.info("Getting unique groups from empty groups TSV.")
-    groups = get_unique_groups(args.empty_groups_tsv)
+    # Parse comma-separated groups
+    groups = set(g.strip() for g in args.missing_groups.split(",") if g.strip())
     if not groups:
-        logger.info("No empty groups found, nothing to create")
+        logger.info("No missing groups provided, nothing to create")
         return
-    logger.info(f"Found {len(groups)} empty groups: {sorted(groups)}")
+    logger.info(f"Found {len(groups)} missing groups: {sorted(groups)}")
     patterns = get_group_output_patterns(args.pyproject_toml, args.platform)
     if not patterns:
         logger.warning("No per-group output patterns found in pyproject.toml")
