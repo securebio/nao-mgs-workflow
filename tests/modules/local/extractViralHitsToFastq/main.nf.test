@@ -13,7 +13,7 @@ nextflow_process {
             script "modules/local/gzipFile/main.nf"
             process {
                 '''
-                input[0] = Channel.of("test_fastq")
+                input[0] = Channel.of("test_sample")
                     | combine(Channel.of("${projectDir}/test-data/toy-data/test-random.fastq"))
                 '''
             }
@@ -22,7 +22,7 @@ nextflow_process {
             script "modules/local/gzipFile/main.nf"
             process {
                 '''
-                input[0] = Channel.of("test_fastq")
+                input[0] = Channel.of("test_sample")
                     | combine(Channel.of("${projectDir}/test-data/toy-data/test_tab_sorted.tsv"))
                 '''
             }
@@ -31,7 +31,7 @@ nextflow_process {
             script "modules/local/gzipFile/main.nf"
             process {
                 '''
-                input[0] = Channel.of("test_fastq")
+                input[0] = Channel.of("test_sample")
                     | combine(Channel.of("${projectDir}/test-data/toy-data/virus-hits-test.tsv"))
                 '''
             }
@@ -44,8 +44,7 @@ nextflow_process {
             params {}
             process {
                 '''
-                input[0] = GZIP_SORTED.out.map{it[1]}
-                input[1] = GZIP_FASTQ.out.map{it[1]}
+                input[0] = GZIP_SORTED.out.join(GZIP_FASTQ.out)
                 '''
             }
         }
@@ -62,23 +61,24 @@ nextflow_process {
             params {}
             process {
                 '''
-                input[0] = GZIP_HITS.out.map{it[1]}
-                input[1] = GZIP_FASTQ.out.map{it[1]}
+                input[0] = GZIP_HITS.out.join(GZIP_FASTQ.out)
                 '''
             }
         }
         then {
             // Should run without failures
             assert process.success
+            // Output should include sample name
+            assert process.out.fastq[0][0] == "test_sample"
             // Output IDs should match input TSV
-            def tab_in = path(process.out.input_tsv[0]).csv(sep: "\t", decompress: true)
-            def ids_out = path(process.out.ids[0]).csv(sep: "\t", decompress: true, header: false)
+            def tab_in = path(process.out.input_tsv[0][1]).csv(sep: "\t", decompress: true)
+            def ids_out = path(process.out.ids[0][1]).csv(sep: "\t", decompress: true, header: false)
             assert ids_out.columnCount == 1
             assert tab_in.rowCount == ids_out.rowCount
             assert tab_in.columns["seq_id"] == ids_out.columns["C0"]
             // Output FASTQ should have appropriate line count (interleaved)
-            def fastq_in = path(process.out.input_fastq[0]).fastq
-            def fastq_out = path(process.out.fastq[0]).fastq
+            def fastq_in = path(process.out.input_fastq[0][1]).fastq
+            def fastq_out = path(process.out.fastq[0][1]).fastq
             assert fastq_in.getNumberOfRecords() % 2 == 0
             assert fastq_out.getNumberOfRecords() % 2 == 0
             // Output FASTQ should be subset of input FASTQ
@@ -107,7 +107,7 @@ nextflow_process {
                 script "modules/local/gzipFile/main.nf"
                 process {
                     '''
-                    input[0] = Channel.of("test_empty")
+                    input[0] = Channel.of("test_sample")
                         | combine(Channel.of("${projectDir}/test-data/toy-data/empty_file.txt"))
                     '''
                 }
@@ -117,20 +117,22 @@ nextflow_process {
             params {}
             process {
                 '''
-                input[0] = GZIP_EMPTY.out.map{it[1]}
-                input[1] = GZIP_FASTQ.out.map{it[1]}
+                input[0] = GZIP_EMPTY.out.join(GZIP_FASTQ.out)
                 '''
             }
         }
         then {
             // Should run without failures
             assert process.success
-            
+
+            // Output should include sample name
+            assert process.out.fastq[0][0] == "test_sample"
+
             // Output files should be empty
-            def ids_out = path(process.out.ids[0])
+            def ids_out = path(process.out.ids[0][1])
             assert ids_out.linesGzip.size() == 0
-            
-            def fastq_out = path(process.out.fastq[0])
+
+            def fastq_out = path(process.out.fastq[0][1])
             assert fastq_out.linesGzip.size() == 0
         }
     }
@@ -143,7 +145,7 @@ nextflow_process {
                 script "modules/local/headTsv/main.nf"
                 process {
                     '''
-                    input[0] = Channel.of("test_header_only")
+                    input[0] = Channel.of("test_sample")
                         | combine(Channel.of("${projectDir}/test-data/toy-data/empty_file.txt"))
                     input[1] = "seq_id,kraken2_assigned_host_virus,aligner_length_normalized_score"
                     input[2] = "header_only"
@@ -163,20 +165,22 @@ nextflow_process {
             params {}
             process {
                 '''
-                input[0] = GZIP_HEADER_ONLY.out.map{it[1]}
-                input[1] = GZIP_FASTQ.out.map{it[1]}
+                input[0] = GZIP_HEADER_ONLY.out.join(GZIP_FASTQ.out)
                 '''
             }
         }
         then {
             // Should run without failures
             assert process.success
-            
+
+            // Output should include sample name
+            assert process.out.fastq[0][0] == "test_sample"
+
             // Output files should be empty
-            def ids_out = path(process.out.ids[0])
+            def ids_out = path(process.out.ids[0][1])
             assert ids_out.linesGzip.size() == 0
-            
-            def fastq_out = path(process.out.fastq[0])
+
+            def fastq_out = path(process.out.fastq[0][1])
             assert fastq_out.linesGzip.size() == 0
         }
     }
