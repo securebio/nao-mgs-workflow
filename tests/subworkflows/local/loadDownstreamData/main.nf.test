@@ -39,13 +39,29 @@ nextflow_workflow {
                 assert sample == filename.replace("_virus_hits.tsv.gz", "")
                 assert group != null && group.length() > 0, "Group should not be empty"
             }
-            // Verify groups output: tuple(label, groups_file)
-            assert workflow.out.groups.size() == inputCsv.rowCount
-            workflow.out.groups.each { grp ->
-                assert grp.size() == 2
-                assert expectedLabels.contains(grp[0])
-            }
+            // Verify missing_groups is empty when all samples have hits
+            assert workflow.out.missing_groups[0].size() == 0, "No groups should be missing"
             assert workflow.out.start_time_str != null
+        }
+    }
+
+    test("Should identify missing groups") {
+        tag "expect_success"
+        tag "missing_groups"
+        when {
+            params {}
+            workflow {
+                """
+                input[0] = file("${projectDir}/test-data/downstream/input_file_missing_groups.csv")
+                """
+            }
+        }
+        then {
+            assert workflow.success
+            // Verify missing_groups contains expected groups
+            def missingGroups = workflow.out.missing_groups[0]
+            assert missingGroups.size() > 0, "Should have missing groups"
+            assert missingGroups.contains("missing_group"), "Should identify 'missing_group' as missing"
         }
     }
 
