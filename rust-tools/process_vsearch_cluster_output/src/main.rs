@@ -1,3 +1,7 @@
+//! Two-pass streaming processor for VSEARCH UC format:
+//!   Pass 1: Scan file to build cluster_size and cluster_rep lookup tables
+//!   Pass 2: Stream through again, enriching each sequence record with cluster metadata
+
 use std::collections::HashMap;
 use std::error::Error;
 use std::fs::File;
@@ -14,6 +18,7 @@ const CLUSTER_ID: usize = 1;
 const SIZE: usize = 2;
 const PERCENT_ID: usize = 3;
 const ORIENTATION: usize = 4;
+// 5 and 6 intentionally skipped https://www.drive5.com/usearch/manual/opt_uc.html
 const CIGAR: usize = 7;
 const SEQ_ID: usize = 8;
 const CLUSTER_REP_ID: usize = 9;
@@ -66,20 +71,20 @@ where
 }
 
 fn format_header(prefix: &str) -> String {
-    if prefix.is_empty() {
-        "seq_id\tcluster_id\tcluster_rep_id\tseq_length\tis_cluster_rep\tpercent_identity\torientation\tcigar\tcluster_size".to_string()
-    } else {
-        format!(
-            "seq_id\t{p}_cluster_id\t{p}_cluster_rep_id\t{p}_seq_length\t{p}_is_cluster_rep\t{p}_percent_identity\t{p}_orientation\t{p}_cigar\t{p}_cluster_size",
-            p = prefix
-        )
-    }
+    let cols = ["cluster_id", "cluster_rep_id", "seq_length", "is_cluster_rep",
+                "percent_identity", "orientation", "cigar", "cluster_size"];
+    let sep = if prefix.is_empty() { "\t".to_string() } else { format!("\t{}_", prefix) };
+    // seq_id is never prefixed — it serves as a common join key across outputs
+    format!("seq_id{}{}", sep, cols.join(&sep))
+}
+
+struct LookupTables {
+    cluster_sizes: HashMap<u64, u64>,
+    cluster_reps: HashMap<u64, String>,
 }
 
 /// Pass 1: Build cluster_sizes and cluster_reps lookup tables
-fn build_lookup_tables(
-    input_path: &str,
-) -> Result<(HashMap<u64, u64>, HashMap<u64, String>), Box<dyn Error>> {
+fn build_lookup_tables(input_path: &str) -> Result<LookupTables, Box<dyn Error>> {
     eprintln!("Pass 1: Building lookup tables...");
 
     let reader = open_gz_reader(input_path)?;
@@ -98,22 +103,22 @@ fn build_lookup_tables(
         }
 
         match fields[REC_TYPE] {
-            "C" => {
+            "C" => { // cluster metadata
                 let cluster_id: u64 = parse_field(&fields, CLUSTER_ID, line_num, "cluster_id")?;
                 let cluster_size: u64 = parse_field(&fields, SIZE, line_num, "cluster_size")?;
                 cluster_sizes.insert(cluster_id, cluster_size);
             }
-            "S" => {
+            "S" => { // cluster representative
                 let cluster_id: u64 = parse_field(&fields, CLUSTER_ID, line_num, "cluster_id")?;
                 cluster_reps.insert(cluster_id, fields[SEQ_ID].to_string());
             }
-            "H" => {}
+            "H" => {} // hit (non-representative sequence)
             other => return Err(format!("Line {}: unknown record type '{}'", line_num, other).into()),
         }
     }
 
     eprintln!("Pass 1 complete: {} clusters, {} representatives", cluster_sizes.len(), cluster_reps.len());
-    Ok((cluster_sizes, cluster_reps))
+    Ok(LookupTables { cluster_sizes, cluster_reps })
 }
 
 /// Pass 2: Stream through file and write TSV output
@@ -143,7 +148,7 @@ fn write_tsv_output(
         }
 
         match fields[REC_TYPE] {
-            "H" => {
+            "H" => { // hit (non-representative sequence)
                 let cluster_id: u64 = parse_field(&fields, CLUSTER_ID, line_num, "cluster_id")?;
                 let cluster_size = cluster_sizes.get(&cluster_id).ok_or_else(|| {
                     format!("Line {}: cluster_id {} not found in lookup table", line_num, cluster_id)
@@ -153,7 +158,7 @@ fn write_tsv_output(
                     fields[PERCENT_ID], fields[ORIENTATION], fields[CIGAR], cluster_size)?;
                 records_written += 1;
             }
-            "S" => {
+            "S" => { // cluster representative
                 let cluster_id: u64 = parse_field(&fields, CLUSTER_ID, line_num, "cluster_id")?;
                 let seq_length: u64 = parse_field(&fields, SIZE, line_num, "seq_length")?;
                 let cluster_size = cluster_sizes.get(&cluster_id).ok_or_else(|| {
@@ -163,7 +168,7 @@ fn write_tsv_output(
                     fields[SEQ_ID], cluster_id, fields[SEQ_ID], seq_length, seq_length, cluster_size)?;
                 records_written += 1;
             }
-            "C" => {}
+            "C" => {} // cluster metadata (already processed in pass 1)
             other => return Err(format!("Line {}: unknown record type '{}'", line_num, other).into()),
         }
     }
@@ -212,9 +217,9 @@ fn main() -> Result<(), Box<dyn Error>> {
     eprintln!("  N clusters: {}", args.n_clusters);
     eprintln!("  Prefix: {}", if args.output_prefix.is_empty() { "(none)" } else { &args.output_prefix });
 
-    let (cluster_sizes, cluster_reps) = build_lookup_tables(&args.vsearch_db)?;
-    write_tsv_output(&args.vsearch_db, &args.output_db, &args.output_prefix, &cluster_sizes)?;
-    write_top_representatives(&args.output_ids, args.n_clusters, &cluster_sizes, &cluster_reps)?;
+    let tables = build_lookup_tables(&args.vsearch_db)?;
+    write_tsv_output(&args.vsearch_db, &args.output_db, &args.output_prefix, &tables.cluster_sizes)?;
+    write_top_representatives(&args.output_ids, args.n_clusters, &tables.cluster_sizes, &tables.cluster_reps)?;
 
     eprintln!("Done.");
     Ok(())
