@@ -14,7 +14,7 @@ def getExpectedOutputs = { pyprojectPath, workflowKey, groupName ->
 
 // Get observed output files, excluding intermediates and trace files
 def getObservedOutputs = { outputDir ->
-    def excludePatterns = ["intermediates", "trace", "merged_blast"] // TODO: Remove BLAST validation header when no longer needed
+    def excludePatterns = ["intermediates", "trace"]
     def observedFiles = []
     outputDir.eachFileRecurse(FILES) { file ->
         def relPath = outputDir.relativize(file).toString()
@@ -60,8 +60,6 @@ nextflow_pipeline {
             assert snapshot(
                 path("${launchDir}/output/results/bracken_reports_merged.tsv.gz"),
                 path("${launchDir}/output/results/kraken_reports_merged.tsv.gz"),
-                path("${launchDir}/output/results/merged_blast_filtered.tsv.gz"),
-                path("${launchDir}/output/results/merged_blast_input_subset.fasta.gz"),
                 path("${launchDir}/output/results/read_counts.tsv.gz"),
                 path("${launchDir}/output/results/subset_qc_adapter_stats.tsv.gz"),
                 path("${launchDir}/output/results/subset_qc_basic_stats.tsv.gz"),
@@ -87,8 +85,6 @@ nextflow_pipeline {
             assert snapshot(
                 path("${launchDir}/output/results/bracken_reports_merged.tsv.gz"),
                 path("${launchDir}/output/results/kraken_reports_merged.tsv.gz"),
-                path("${launchDir}/output/results/merged_blast_filtered.tsv.gz"),
-                path("${launchDir}/output/results/merged_blast_input_subset.fasta.gz"),
                 path("${launchDir}/output/results/read_counts.tsv.gz"),
                 path("${launchDir}/output/results/subset_qc_adapter_stats.tsv.gz"),
                 path("${launchDir}/output/results/subset_qc_basic_stats.tsv.gz"),

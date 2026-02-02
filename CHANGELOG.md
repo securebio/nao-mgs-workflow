@@ -1,5 +1,11 @@
-# v3.0.1.10-dev
+# v3.1.0.0-dev
 
+- Remove BLAST validation from RUN workflow. BLAST validation is now only available in the DOWNSTREAM workflow via VALIDATE_VIRAL_ASSIGNMENTS.
+    - Deleted `BLAST_VIRAL` subworkflow, `SUBSET_FASTN` module, and `RUN_VALIDATION` workflow.
+    - Removed `blast_viral_fraction` and related BLAST parameters from RUN workflow configs.
+    - Removed unused `EXTRACT_VIRAL_HITS_TO_FASTQ_NOREF_LABELED` process (non-LIST version).
+- Removed Cutadapt from RUN workflow to reduce runtime and complexity. FASTP alone now handles adapter trimming for the short-read viral identification pipeline.
+- Update documentation on Seqera ECR credentials.
 - Add Rust build system to CI and rust-tools container to ECR.
 - Fix CI bug where `--rust_tools_version dev` was passed to test runner instead of via environment variable.
 - Convert `setup-rust-container` from reusable workflow to composite action, simplifying CI check reporting.
@@ -15,6 +21,7 @@
     - Added missing memory specifications to BBTools processes
     - Broadened tolerable results ranges for probabilistic tests
     - Fixed bug in `download-db.sh` that was causing inter-run contamination of reference files
+- Moved DB download functionality to `download_db.py` and implemented unit tests
 
 # v3.0.1.8
 

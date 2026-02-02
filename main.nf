@@ -1,5 +1,4 @@
 include { RUN } from "./workflows/run"
-include { RUN_VALIDATION } from "./workflows/run_validation"
 include { INDEX } from "./workflows/index"
 include { DOWNSTREAM } from "./workflows/downstream"
 
@@ -9,8 +8,6 @@ workflow {
           INDEX()
         } else if (params.mode == "run") {
             RUN()
-        } else if (params.mode == "run_validation") {
-            RUN_VALIDATION()
         } else if (params.mode == "downstream") {
             DOWNSTREAM()
         }
@@ -29,10 +26,6 @@ workflow {
         reads_trimmed_viral = params.mode == 'run' ? RUN.out.reads_trimmed_viral : Channel.empty()
         qc_results_run = params.mode == 'run' ? RUN.out.qc_results_run : Channel.empty()
         other_results_run = params.mode == 'run' ? RUN.out.other_results_run : Channel.empty()
-        // RUN_VALIDATION workflow publishing
-        input_validation = params.mode == 'run_validation' ? RUN_VALIDATION.out.input_validation  : Channel.empty()
-        logging_validation = params.mode == 'run_validation' ? RUN_VALIDATION.out.logging_validation  : Channel.empty()
-        results_validation = params.mode == 'run_validation' ? RUN_VALIDATION.out.results_validation  : Channel.empty()
         // DOWNSTREAM workflow publishing
         input_downstream = params.mode == 'downstream' ? DOWNSTREAM.out.input_downstream  : Channel.empty()
         logging_downstream = params.mode == 'downstream' ? DOWNSTREAM.out.logging_downstream  : Channel.empty()
@@ -84,19 +77,6 @@ output {
         tags nextflow_file_class: "publish", "nextflow.io/temporary": "false"
     }
     other_results_run {
-        path "results"
-        tags nextflow_file_class: "publish", "nextflow.io/temporary": "false"
-    }
-    // RUN_VALIDATION workflow output
-    input_validation {
-        path "input"
-        tags nextflow_file_class: "publish", "nextflow.io/temporary": "false"
-    }
-    logging_validation {
-        path "logging"
-        tags nextflow_file_class: "publish", "nextflow.io/temporary": "false"
-    }
-    results_validation {
         path "results"
         tags nextflow_file_class: "publish", "nextflow.io/temporary": "false"
     }
