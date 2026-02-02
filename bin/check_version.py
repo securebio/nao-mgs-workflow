@@ -59,6 +59,11 @@ def get_changelog_version(path: str = "CHANGELOG.md") -> str | None:
 def validate_unreleased_section(path: str = "CHANGELOG.md") -> tuple[str, list[str]]:
     """Validate the # Unreleased section in CHANGELOG.md.
 
+    Enforces:
+    - Line 1 must be "# Unreleased"
+    - Line 2 must be "bump_type: <type>" (to match pyproject.toml search pattern)
+    - Content must exist after bump_type line
+
     Returns (bump_type, content_lines) if valid.
     Raises ValueError if validation fails.
     """
@@ -66,36 +71,39 @@ def validate_unreleased_section(path: str = "CHANGELOG.md") -> tuple[str, list[s
         lines = f.readlines()
     if not lines or lines[0].strip() != "# Unreleased":
         raise ValueError(f"{path} must start with '# Unreleased'")
-    # Find bump_type directive
-    bump_type = None
-    content_lines = []
-    for line in lines[1:]:
-        stripped = line.strip()
-        # Check if we've hit the next version header
-        if stripped.startswith("# v"):
-            break
-        # Look for bump_type directive
-        if stripped.startswith("bump_type:"):
-            bump_type = stripped.split(":", 1)[1].strip()
-            continue
-        # Collect non-empty content lines
-        if stripped and not stripped.startswith("#"):
-            content_lines.append(stripped)
-    # Validate bump_type
-    if bump_type is None:
+    # Validate bump_type is on line 2 (matches pyproject.toml search pattern)
+    if len(lines) < 2:
         raise ValueError(
-            f"{path}: No 'bump_type:' directive found after '# Unreleased'. "
+            f"{path}: Missing 'bump_type:' directive on line 2 after '# Unreleased'. "
             "Add 'bump_type: point' (or major/schema/results)",
         )
+    line2 = lines[1].strip()
+    if not line2.startswith("bump_type:"):
+        raise ValueError(
+            f"{path}: Line 2 must be 'bump_type: <type>', got: {line2!r}. "
+            "The bump_type directive must immediately follow '# Unreleased' "
+            "(no blank lines or content before it)",
+        )
+    bump_type = line2.split(":", 1)[1].strip()
     if bump_type not in VALID_BUMP_TYPES:
         raise ValueError(
             f"{path}: Invalid bump_type '{bump_type}'. "
             f"Must be one of: {', '.join(sorted(VALID_BUMP_TYPES))}",
         )
+    # Collect content lines after bump_type
+    content_lines = []
+    for line in lines[2:]:
+        stripped = line.strip()
+        # Check if we've hit the next version header
+        if stripped.startswith("# v"):
+            break
+        # Collect non-empty content lines (excluding sub-headers)
+        if stripped and not stripped.startswith("#"):
+            content_lines.append(stripped)
     # Validate content exists
     if not content_lines:
         raise ValueError(
-            f"{path}: '# Unreleased' section has no content. "
+            f"{path}: '# Unreleased' section has no content after bump_type. "
             "Add changelog entries before merging to main",
         )
     return bump_type, content_lines

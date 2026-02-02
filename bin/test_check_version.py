@@ -87,7 +87,9 @@ class TestValidateUnreleasedSection:
 
     @pytest.mark.parametrize("content,match", [
         ("# v1.2.3.4\n- Change\n", "must start with '# Unreleased'"),
-        ("# Unreleased\n\n- Change\n", "No 'bump_type:' directive"),
+        ("# Unreleased\n", "Missing 'bump_type:'"),
+        ("# Unreleased\n\n- Change\n", "Line 2 must be 'bump_type:"),
+        ("# Unreleased\n- Change\nbump_type: point\n", "Line 2 must be 'bump_type:"),
         ("# Unreleased\nbump_type: invalid\n\n- Change\n", "Invalid bump_type"),
         ("# Unreleased\nbump_type: point\n\n# v1.0.0.0\n- Old\n", "has no content"),
     ])

@@ -57,3 +57,14 @@ jobs:
             echo "  point   - Minor changes (X.Y.Z.W)"
             exit 1
           fi
+
+      - name: Check for content in Unreleased section
+        run: |
+          # Extract lines 3+ until next version header, excluding blank lines and sub-headers
+          content=$(awk 'NR>=3 && /^# v/{exit} NR>=3' CHANGELOG.md | grep -v '^[[:space:]]*$' | grep -v '^##' || true)
+          if [ -z "$content" ]; then
+            echo "::error::CHANGELOG.md '# Unreleased' section has no content after bump_type"
+            echo ""
+            echo "Add changelog entries describing your changes before merging."
+            exit 1
+          fi
