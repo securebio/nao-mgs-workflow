@@ -14,23 +14,27 @@ include { COUNT_READS_PER_CLADE } from "../modules/local/countReadsPerClade"
 include { CREATE_EMPTY_GROUP_OUTPUTS } from "../modules/local/createEmptyGroupOutputs"
 include { COPY_FILE_BARE as COPY_PYPROJECT } from "../modules/local/copyFile"
 include { COPY_FILE_BARE as COPY_INPUT } from "../modules/local/copyFile"
+include { COPY_FILE_BARE as COPY_TIME } from "../modules/local/copyFile"
 include { SORT_TSV as SORT_ONT_HITS } from "../modules/local/sortTsv"
+
 /*****************
 | MAIN WORKFLOWS |
 *****************/
 
 workflow DOWNSTREAM {
     main:
-        // Prepare channel from input TSV file
+        // Prepare channels from input CSV file
         LOAD_DOWNSTREAM_DATA(params.input_file)
-        input_ch = LOAD_DOWNSTREAM_DATA.out.input
         start_time_str = LOAD_DOWNSTREAM_DATA.out.start_time_str
-        // Add group information, partition into per-group TSVs
-        PREPARE_GROUP_TSVS(input_ch)
+
+        // Concatenate per-sample hits into per-group TSVs, adding group column
+        PREPARE_GROUP_TSVS(LOAD_DOWNSTREAM_DATA.out.hits)
         group_ch = PREPARE_GROUP_TSVS.out.groups
+
         // Prepare inputs for clade counting and validating taxonomic assignments
         viral_db_path = "${params.ref_dir}/results/total-virus-db-annotated.tsv.gz"
         viral_db = channel.value(viral_db_path)
+
         // Conditionally mark duplicates and generate clade counts based on platform
         if (params.platform == "ont") {
             // ONT: Skip duplicate marking and clade counting, but still sort by seq_id
@@ -46,31 +50,34 @@ workflow DOWNSTREAM {
             // Generate clade counts
             clade_counts_ch = COUNT_READS_PER_CLADE(viral_hits_ch, viral_db).output
         }
+
         // Validate taxonomic assignments
         def validation_params = params.collectEntries { k, v -> [k, v] }
         validation_params["cluster_min_len"] = 15
         VALIDATE_VIRAL_ASSIGNMENTS(viral_hits_ch, viral_db, params.ref_dir, validation_params)
+
         // Create empty output files for groups with no virus hits
         CREATE_EMPTY_GROUP_OUTPUTS(
-            PREPARE_GROUP_TSVS.out.empty_group_logs.map { _label, file -> file },
+            LOAD_DOWNSTREAM_DATA.out.missing_groups,
             file("${projectDir}/pyproject.toml"),
             params.platform
         )
-        // Publish results
+
+        // Prepare publishing channels
         params_str = groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(params))
         params_ch = Channel.of(params_str).collectFile(name: "params-downstream.json")
-        time_ch = start_time_str.map { it + "\n" }.collectFile(name: "time.txt")
         pipeline_pyproject_path = file("${projectDir}/pyproject.toml")
         pyproject_ch = COPY_PYPROJECT(Channel.fromPath(pipeline_pyproject_path), "pyproject.toml")
         input_file_ch = COPY_INPUT(Channel.fromPath(params.input_file), "input_file.csv")
+        // Note: time_ch passes through COPY_TIME because Nextflow 25.04 only publishes files
+        // that have passed through the working directory
+        time_file = start_time_str.map { it + "\n" }.collectFile(name: "time.txt")
+        time_ch = COPY_TIME(time_file, "time.txt")
 
     emit:
        input_downstream = params_ch.mix(input_file_ch)
        logging_downstream = time_ch.mix(pyproject_ch)
-       intermediates_downstream = VALIDATE_VIRAL_ASSIGNMENTS.out.blast_results.mix(
-                                        PREPARE_GROUP_TSVS.out.partial_group_logs,
-                                        PREPARE_GROUP_TSVS.out.empty_group_logs,
-                                  )
+       intermediates_downstream = VALIDATE_VIRAL_ASSIGNMENTS.out.blast_results
         results_downstream = dup_output_ch.mix(
                                 clade_counts_ch,
                                 VALIDATE_VIRAL_ASSIGNMENTS.out.annotated_hits,
