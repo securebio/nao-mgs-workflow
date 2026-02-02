@@ -28,7 +28,8 @@ nextflow_workflow {
                     blast_max_rank: params.blast_max_rank,
                     blast_min_frac: params.blast_min_frac,
                     taxid_artificial: params.taxid_artificial,
-                    db_download_timeout: params.db_download_timeout
+                    db_download_timeout: params.db_download_timeout,
+                    platform: params.platform
                 ]
                 input[0] = Channel.of("test")
                     | combine(Channel.of("${projectDir}/test-data/validateViralAssignments/input_duplicate.tsv")) // groups
@@ -65,7 +66,8 @@ nextflow_workflow {
                     blast_max_rank: params.blast_max_rank,
                     blast_min_frac: params.blast_min_frac,
                     taxid_artificial: params.taxid_artificial,
-                    db_download_timeout: params.db_download_timeout
+                    db_download_timeout: params.db_download_timeout,
+                    platform: params.platform
                 ]
                 input[0] = Channel.of("test")
                     | combine(Channel.of("${projectDir}/test-data/validateViralAssignments/input_valid.tsv")) // groups
@@ -168,6 +170,50 @@ nextflow_workflow {
                 assert tabs_regrouped[i].rowCount == tabs_in[i].rowCount
                 assert tabs_regrouped[i].columns["seq_id"].unique().toSorted() == tabs_in[i].columns["seq_id"].unique().toSorted()
             }
+        }
+    }
+
+    test("Should create empty validation_hits for header-only input") {
+        tag "expect_success"
+        tag "empty_input"
+        when {
+            params {
+                n_clusters = 3
+                taxid_artificial = 81077
+            }
+            workflow {
+                '''
+                def validation_params = [
+                    validation_cluster_identity: params.validation_cluster_identity,
+                    cluster_min_len: 15,
+                    validation_n_clusters: params.n_clusters,
+                    blast_db_prefix: params.blast_db_prefix,
+                    blast_perc_id: params.blast_perc_id,
+                    blast_qcov_hsp_perc: params.blast_qcov_hsp_perc,
+                    blast_max_rank: params.blast_max_rank,
+                    blast_min_frac: params.blast_min_frac,
+                    taxid_artificial: params.taxid_artificial,
+                    db_download_timeout: params.db_download_timeout,
+                    platform: params.platform
+                ]
+                input[0] = Channel.of("empty_group")
+                    | combine(Channel.of("${projectDir}/test-data/validateViralAssignments/input_header_only.tsv")) // groups
+                input[1] = Channel.of("${params.ref_dir}/results/total-virus-db-annotated.tsv.gz") // db
+                input[2] = params.ref_dir
+                input[3] = validation_params
+                '''
+            }
+        }
+        then {
+            // Should run without failures
+            assert workflow.success
+            // Should produce one empty validation_hits file for the group
+            assert workflow.out.annotated_hits.size() == 1
+            def output = workflow.out.annotated_hits[0]
+            assert output[0] == "empty_group"
+            assert output[1].toString().contains("validation_hits")
+            // The file should be empty
+            assert path(output[1]).linesGzip.size() == 0
         }
     }
 
