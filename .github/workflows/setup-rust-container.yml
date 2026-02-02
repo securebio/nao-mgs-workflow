@@ -14,11 +14,11 @@ on:
       rust-changed:
         description: '"true" if Rust code changed and container was built, "false" otherwise. When true, use rust_dev profile.'
         value: ${{ jobs.setup.outputs.rust-changed }}
-      container-args:
-        description: 'Extra nextflow args for container version (e.g., "--rust_tools_version dev"). Empty when rust-changed=true or using main.'
-        value: ${{ jobs.setup.outputs.container-args }}
+      rust-version:
+        description: 'Rust tools ECR tag to use ("main" or "dev"). Set as RUST_TOOLS_VERSION env var in calling workflow.'
+        value: ${{ jobs.setup.outputs.rust-version }}
       nextflow-args:
-        description: 'Ready-to-use nextflow args: "--profile=rust_dev" when rust changed, or container-args otherwise. Use directly without conditional logic.'
+        description: 'Extra nextflow args: "--profile=rust_dev" when rust changed, empty otherwise.'
         value: ${{ jobs.setup.outputs.nextflow-args }}
 
 jobs:
@@ -27,7 +27,7 @@ jobs:
     timeout-minutes: 15
     outputs:
       rust-changed: ${{ steps.check.outputs.rust-changed }}
-      container-args: ${{ steps.check.outputs.container-args }}
+      rust-version: ${{ steps.check.outputs.rust-version }}
       nextflow-args: ${{ steps.check.outputs.nextflow-args }}
 
     steps:
@@ -44,21 +44,21 @@ jobs:
           if git diff --quiet origin/main -- $RUST_PATHS 2>/dev/null; then
             echo "Rust code matches main, using ECR :main"
             echo "rust-changed=false" >> $GITHUB_OUTPUT
-            echo "container-args=" >> $GITHUB_OUTPUT
+            echo "rust-version=main" >> $GITHUB_OUTPUT
             echo "nextflow-args=" >> $GITHUB_OUTPUT
 
           # Check if Rust files are identical to dev
           elif git diff --quiet origin/dev -- $RUST_PATHS 2>/dev/null; then
             echo "Rust code matches dev, using ECR :dev"
             echo "rust-changed=false" >> $GITHUB_OUTPUT
-            echo "container-args=--rust_tools_version dev" >> $GITHUB_OUTPUT
-            echo "nextflow-args=--rust_tools_version dev" >> $GITHUB_OUTPUT
+            echo "rust-version=dev" >> $GITHUB_OUTPUT
+            echo "nextflow-args=" >> $GITHUB_OUTPUT
 
           # Rust code has changed - need to build local container
           else
             echo "Rust code has changed, will build local container"
             echo "rust-changed=true" >> $GITHUB_OUTPUT
-            echo "container-args=" >> $GITHUB_OUTPUT
+            echo "rust-version=" >> $GITHUB_OUTPUT
             echo "nextflow-args=--profile=rust_dev" >> $GITHUB_OUTPUT
           fi
 

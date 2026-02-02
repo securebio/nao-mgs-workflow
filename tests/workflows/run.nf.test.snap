@@ -9,13 +9,13 @@
             "subset_qc_length_stats.tsv.gz:md5,887ed49b570b2fd7d1b88ee1d69ff839",
             "subset_qc_quality_base_stats.tsv.gz:md5,d16f68e7c6517b075dd2e15add3298f0",
             "subset_qc_quality_sequence_stats.tsv.gz:md5,885d534e4ec4a55aeb9073fc9561a872",
-            "virus_hits_final.tsv.gz:md5,8ac0f582c952f62f40ced1ced285110b"
+            "virus_hits_final.tsv.gz:md5,08ef9710c114d575feb0fe0184fa7e8b"
         ],
         "meta": {
             "nf-test": "0.9.3",
-            "nextflow": "25.10.0"
+            "nextflow": "25.10.3"
         },
-        "timestamp": "2026-01-07T18:47:34.649288139"
+        "timestamp": "2026-01-31T21:39:01.336538373"
     },
     "run_output_ont": {
         "content": [

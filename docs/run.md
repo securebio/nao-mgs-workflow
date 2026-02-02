@@ -202,8 +202,7 @@ flowchart LR
 A(Raw reads) --> B["BBDuk <br> (viral index)"]
 B --> M(BBDuk-screened raw reads)
 B --> C[FASTP]
-C --> D[Cutadapt]
-D --> E["Bowtie2 <br> (viral index)"]
+C --> E["Bowtie2 <br> (viral index)"]
 E --> F["Bowtie2 <br> (human index)"]
 F --> G["Bowtie2 <br> (other contaminants index)"]
 G --> H[Filter by alignment score and read subset]
@@ -220,7 +219,6 @@ E
 end
 subgraph "Trim and clean reads"
 C
-D
 end
 subgraph "Remove contaminants"
 F
@@ -231,7 +229,7 @@ style K fill:#000,color:#fff,stroke:#000
 style L fill:#000,color:#fff,stroke:#000
 ```
 1. To begin with, the raw reads are screened against a database of vertebrate-infecting viral genomes generated from Genbank by the index workflow. This initial screen is performed using [BBDuk](https://jgi.doe.gov/data-and-tools/software-tools/bbtools/bb-tools-user-guide/bbduk-guide/), which flags any read that contains at least one 24-mer matching any vertebrate-infecting viral genome. The purpose of this initial screen is to rapidly and sensitively identify putative vertebrate-infecting viral reads while discarding the vast majority of non-viral reads, reducing the cost associated with the rest of this phase.
-2. Surviving reads undergo adapter and quality trimming with [FASTP](https://github.com/OpenGene/fastp) and [Cutadapt](https://cutadapt.readthedocs.io/en/stable/) to remove adapter contamination and low-quality/low-complexity reads.
+2. Surviving reads undergo adapter and quality trimming with [FASTP](https://github.com/OpenGene/fastp) to remove adapter contamination and low-quality/low-complexity reads.
 3. Next, reads are aligned to the previously-mentioned database of vertebrate-infecting viral genomes with [Bowtie2](https://bowtie-bio.sourceforge.net/bowtie2/index.shtml) using quite permissive parameters that allow multiple alignments to be returned and are designed to capture as many putative vertebrate viral reads as possible. The output files are processed to generate new read files containing any read pair for which at least one read matches the vertebrate viral database.
 4. The output of the previous step is passed to a further filtering step, in which reads matching a series of common contaminant sequences are removed. This is done by aligning surviving reads to these contaminants using Bowtie2 in series. Contaminants to be screened against include reference genomes from human, cow, pig, carp, mouse and *E. coli*, as well as various genetic engineering vectors.
 5. The reads that survive contaminant filtering then go through an alignment score filtering step to get rid of low quality alignments. 
