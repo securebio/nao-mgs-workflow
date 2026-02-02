@@ -88,6 +88,8 @@ fn test_happy_path() {
     assert_eq!(lines.len(), 7);
 
     // Check column count and boolean format
+    // Booleans should be "True" or "False", matching Python, and we should have
+    // both values (both H and S records)
     let mut found_true = false;
     let mut found_false = false;
     for line in lines.iter().skip(1) {
