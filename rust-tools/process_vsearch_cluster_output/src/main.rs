@@ -73,6 +73,7 @@ where
 fn format_header(prefix: &str) -> String {
     let cols = ["cluster_id", "cluster_rep_id", "seq_length", "is_cluster_rep",
                 "percent_identity", "orientation", "cigar", "cluster_size"];
+    // Separator includes prefix so join() prefixes each column automatically
     let sep = if prefix.is_empty() { "\t".to_string() } else { format!("\t{}_", prefix) };
     // seq_id is never prefixed — it serves as a common join key across outputs
     format!("seq_id{}{}", sep, cols.join(&sep))
