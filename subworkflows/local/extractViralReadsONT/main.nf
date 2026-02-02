@@ -92,9 +92,9 @@ workflow EXTRACT_VIRAL_READS_ONT {
         clean_virus_fastq_ch = EXTRACT_SHARED_FASTQ_READS(virus_fastq_ch.join(filtered_ch.reads))
         fastq_ch = CONCATENATE_FILES(clean_virus_fastq_ch.output.map{ it[1] }.collect(), "virus_hits_final", "fastq.gz")
     emit:
-        hits_final = renamed_hits_ch                    // tuple(sample, file) per sample
-        inter_lca = processed_ch.lca_tsv                // tuple(sample, file) per sample
-        inter_minimap2 = processed_ch.aligner_tsv       // tuple(sample, file) per sample
+        hits_final = renamed_hits_ch
+        inter_lca = processed_ch.lca_tsv
+        inter_minimap2 = processed_ch.aligner_tsv
         hits_fastq = fastq_ch.output
         test_minimap2_virus = virus_sam_ch
         test_fastq_filtered_human = human_minimap2_ch.reads_unmapped
