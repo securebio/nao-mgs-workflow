@@ -1,2 +1,2 @@
-label,hits_tsv,groups_tsv
-ont1,s3://nao-testing/tiny-test/processed/virus_hits_final_ont.tsv.gz,s3://nao-testing/tiny-test/metadata/sample_groups_ont.tsv
+label,results_dir,groups_tsv
+tt1,s3://nao-testing/tiny-test/processed/ont/,s3://nao-testing/tiny-test/metadata/sample_groups_tiny_test.tsv

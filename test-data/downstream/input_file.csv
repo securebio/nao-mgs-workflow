@@ -1,4 +1,4 @@
-label,hits_tsv,groups_tsv
-tt1,s3://nao-testing/tiny-test/processed/virus_hits_final.tsv.gz,s3://nao-testing/tiny-test/metadata/sample_groups_1.tsv
-tt2,s3://nao-testing/tiny-test/processed/virus_hits_final.tsv.gz,s3://nao-testing/tiny-test/metadata/sample_groups_1.tsv
-tt3,s3://nao-testing/tiny-test/processed/virus_hits_final.tsv.gz,s3://nao-testing/tiny-test/metadata/sample_groups_2.tsv
+label,results_dir,groups_tsv
+tt1,s3://nao-testing/tiny-test/processed/short/,s3://nao-testing/tiny-test/metadata/sample_groups_1.tsv
+tt2,s3://nao-testing/tiny-test/processed/short/,s3://nao-testing/tiny-test/metadata/sample_groups_1.tsv
+tt3,s3://nao-testing/tiny-test/processed/short/,s3://nao-testing/tiny-test/metadata/sample_groups_2.tsv
