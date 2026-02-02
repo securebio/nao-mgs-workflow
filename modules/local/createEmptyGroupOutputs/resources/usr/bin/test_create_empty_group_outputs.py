@@ -129,19 +129,20 @@ class TestParseArgs:
         """Test parsing of required arguments."""
         monkeypatch.setattr(
             "sys.argv",
-            ["prog", "g1,g2,g3", "pyproject.toml", "output/"],
+            ["prog", "g1,g2,g3", "pyproject.toml"],
         )
         args = parse_args()
         assert args.missing_groups == "g1,g2,g3"
         assert args.pyproject_toml == "pyproject.toml"
-        assert args.output_dir == "output/"
+        assert args.output_dir == "./"  # default
         assert args.platform == "illumina"  # default
+        assert args.pattern_filter is None  # default
 
     def test_parses_empty_groups(self, monkeypatch):
         """Test parsing of empty groups string."""
         monkeypatch.setattr(
             "sys.argv",
-            ["prog", "", "pyproject.toml", "output/"],
+            ["prog", "", "pyproject.toml"],
         )
         args = parse_args()
         assert args.missing_groups == ""
@@ -151,10 +152,28 @@ class TestParseArgs:
         """Test parsing of --platform option."""
         monkeypatch.setattr(
             "sys.argv",
-            ["prog", "g1,g2", "pyproject.toml", "output/", "--platform", platform],
+            ["prog", "g1,g2", "pyproject.toml", "--platform", platform],
         )
         args = parse_args()
         assert args.platform == platform
+
+    def test_parses_output_dir_option(self, monkeypatch):
+        """Test parsing of --output-dir option."""
+        monkeypatch.setattr(
+            "sys.argv",
+            ["prog", "g1,g2", "pyproject.toml", "--output-dir", "output/"],
+        )
+        args = parse_args()
+        assert args.output_dir == "output/"
+
+    def test_parses_pattern_filter_option(self, monkeypatch):
+        """Test parsing of --pattern-filter option."""
+        monkeypatch.setattr(
+            "sys.argv",
+            ["prog", "g1,g2", "pyproject.toml", "--pattern-filter", "validation_hits"],
+        )
+        args = parse_args()
+        assert args.pattern_filter == "validation_hits"
 
 
 #=============================================================================
@@ -191,3 +210,31 @@ class TestIntegration:
         assert groups == {"empty_g1", "empty_g2"}
         assert patterns == expected_patterns
         assert len(created) == len(groups) * len(patterns)
+
+    def test_pattern_filter(self, tmp_path):
+        """Test that pattern_filter correctly filters output patterns."""
+        groups = {"g1"}
+
+        # Create pyproject.toml with multiple patterns
+        pyproject_path = tmp_path / "pyproject.toml"
+        write_pyproject(
+            pyproject_path,
+            illumina_outputs=[
+                "results/{GROUP}_clade.tsv.gz",
+                "results/{GROUP}_dup.tsv.gz",
+                "results/{GROUP}_validation_hits.tsv.gz",
+            ],
+            ont_outputs=[],
+        )
+
+        # Get patterns and filter
+        patterns = get_group_output_patterns(str(pyproject_path), "illumina")
+        filtered_patterns = [p for p in patterns if "validation_hits" in p]
+
+        # Run the workflow with filtered patterns
+        output_dir = tmp_path / "output"
+        created = create_empty_outputs(groups, filtered_patterns, str(output_dir))
+
+        # Verify only validation_hits file was created
+        assert len(created) == 1
+        assert "g1_validation_hits.tsv.gz" in created[0]

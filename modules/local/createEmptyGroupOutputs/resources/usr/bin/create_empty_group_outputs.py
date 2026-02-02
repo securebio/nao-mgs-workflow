@@ -132,14 +132,20 @@ def parse_args() -> argparse.Namespace:
         help="Path to pyproject.toml containing expected outputs",
     )
     parser.add_argument(
-        "output_dir",
-        help="Directory to write empty output files",
+        "--output-dir",
+        default="./",
+        help="Directory to write empty output files (default: current directory)",
     )
     parser.add_argument(
         "--platform",
         choices=["illumina", "ont"],
         default="illumina",
         help="Platform to determine which expected outputs to use (default: illumina)",
+    )
+    parser.add_argument(
+        "--pattern-filter",
+        default=None,
+        help="Only create outputs matching this substring (e.g., 'validation_hits')",
     )
     return parser.parse_args()
 
@@ -160,6 +166,9 @@ def main() -> None:
         return
     logger.info(f"Found {len(groups)} missing groups: {sorted(groups)}")
     patterns = get_group_output_patterns(args.pyproject_toml, args.platform)
+    if args.pattern_filter:
+        patterns = [p for p in patterns if args.pattern_filter in p]
+        logger.info(f"Filtered to patterns containing '{args.pattern_filter}'")
     if not patterns:
         logger.warning("No per-group output patterns found in pyproject.toml")
         return

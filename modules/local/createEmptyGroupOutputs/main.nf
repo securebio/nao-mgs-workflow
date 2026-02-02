@@ -6,12 +6,15 @@ process CREATE_EMPTY_GROUP_OUTPUTS {
         val(missing_groups)
         path(pyproject_toml)
         val(platform)
+        val(pattern_filter)
     output:
         path("*_*.tsv.gz"), emit: outputs, optional: true
     script:
         def groups_arg = missing_groups.join(',')
-        def platform_arg = platform == "ont" ? "--platform ont" : "--platform illumina"
+        def opts = ["--platform ${platform == 'ont' ? 'ont' : 'illumina'}"]
+        if (pattern_filter) opts << "--pattern-filter ${pattern_filter}"
+        def opts_str = opts.join(' ')
         """
-        create_empty_group_outputs.py "${groups_arg}" ${pyproject_toml} ./ ${platform_arg}
+        create_empty_group_outputs.py "${groups_arg}" ${pyproject_toml} ${opts_str}
         """
 }
