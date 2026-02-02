@@ -10,6 +10,7 @@
 - Fix CI bug where `--rust_tools_version dev` was passed to test runner instead of via environment variable.
 - Convert `setup-rust-container` from reusable workflow to composite action, simplifying CI check reporting.
 - Remove confusing `workflow_run` triggers from integration tests (benchmark and test-chained workflows).
+- Refactored processVsearchClusterOutput module to use streaming Rust implementation rather than memory-intensive Python/Pandas.
 
 # v3.0.1.9
 
