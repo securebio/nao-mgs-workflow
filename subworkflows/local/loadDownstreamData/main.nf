@@ -51,7 +51,7 @@ workflow LOAD_DOWNSTREAM_DATA {
 
         // Find groups with no hits by comparing all groups vs groups with hits
         all_groups = groups_ch.map { _label, _sample, group -> group }.unique().collect().map { ["key", it] }
-        groups_with_hits = hits_with_groups.map { _label, _sample, _file, group -> group }.unique().collect().map { ["key", it] }
+        groups_with_hits = hits_with_groups.map { _label, _sample, _file, group -> group }.unique().collect().ifEmpty([]).map { ["key", it] }
         missing_groups = all_groups.join(groups_with_hits)
             .map { _key, all, with_hits -> (all as Set) - (with_hits as Set) }
 
