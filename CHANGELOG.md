@@ -4,6 +4,11 @@
     - Deleted `BLAST_VIRAL` subworkflow, `SUBSET_FASTN` module, and `RUN_VALIDATION` workflow.
     - Removed `blast_viral_fraction` and related BLAST parameters from RUN workflow configs.
     - Removed unused `EXTRACT_VIRAL_HITS_TO_FASTQ_NOREF_LABELED` process (non-LIST version).
+    - Removed `EXTRACT_VIRAL_HITS_TO_FASTQ` process and `hits_fastq` output from RUN workflow (output was published but never consumed by downstream processes).
+- RUN workflow now outputs per-sample `{sample}_virus_hits.tsv.gz` files instead of concatenating all samples.
+    - Updated modules to use `tuple(sample, file)` channel structure.
+    - DOWNSTREAM workflow updated to auto-discover per-sample files from `results_dir` and parse groups from `groups_tsv`.
+    - Deleted obsolete `validatePerSampleGrouping` module.
 - Removed Cutadapt from RUN workflow to reduce runtime and complexity. FASTP alone now handles adapter trimming for the short-read viral identification pipeline.
 - Update documentation on Seqera ECR credentials.
 - Add Rust build system to CI and rust-tools container to ECR.
