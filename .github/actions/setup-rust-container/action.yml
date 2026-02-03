@@ -2,9 +2,6 @@ name: 'Setup Rust Container'
 description: 'Determine Rust tools container version and optionally build if changed'
 
 outputs:
-  rust-changed:
-    description: '"true" if Rust code changed and container was built'
-    value: ${{ steps.check.outputs.rust-changed }}
   rust-version:
     description: 'Rust tools ECR tag ("main" or "dev")'
     value: ${{ steps.check.outputs.rust-version }}
