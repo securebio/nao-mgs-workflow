@@ -51,11 +51,35 @@ newgrp docker
 docker run hello-world
 ```
 
-## 3. Clone this repository
+## 3. Create Seqera account
+
+Create a Seqera account to increase your API rate limits:
+
+1. Create a free Seqera account at [cloud.seqera.io](http://cloud.seqera.io/)
+2. Click on the user icon, then click the "User tokens" section
+3. Click "Add Token" to create a token for your account. Name it whatever you want (e.g., "my-nextflow-token"). Copy the token and store it somewhere safe.
+4. Export your token as an environment variable before running the pipeline:
+
+```bash
+export TOWER_ACCESS_TOKEN=<your-token>
+```
+
+Alternatively, you can set `tower.accessToken` in your Nextflow configuration file (we recommend adding this to `configs/profiles.config` to apply to all subsequent pipeline runs).
+
+## 4. Configure Seqera ECR credentials
+
+This pipeline's containers are pulled from a public AWS ECR repository. You need to configure AWS ECR registry credentials in your Seqera account to allow Wave to pull container images.
+
+1. Log in to your Seqera Platform account
+2. Navigate to your workspace credentials
+3. Add AWS registry credentials following the [Seqera documentation](https://docs.seqera.io/platform-cloud/credentials/aws_registry_credentials)
+4. Ensure the credentials have access to `public.ecr.aws`
+
+## 5. Clone this repository
 
 Clone this repo into a new directory as normal.
 
-## 4. Run tests
+## 6. Run tests
 
 If possible, we recommend validating the pipeline's basic functionality in your hands by running our test suite. To do this, you'll need sufficient resources on your machine to run our tests locally. You'll need:
 - 4 CPU cores
@@ -71,7 +95,7 @@ To run the tests, clone this repository onto your machine, navigate to the repo 
 nf-test test
 ```
 
-## 5. Run index/reference workflow
+## 7. Run index/reference workflow
 
 > [!TIP]
 > If someone else in your organization already uses this pipeline, it's likely they've already run the index workflow and generated an output directory. If this is the case, you can reduce costs and increase reproducibility by using theirs instead of generating your own. If you want to do this, skip this step, and edit `configs/run.config` (or `configs/run_ont.config`) such that `params.ref_dir` points to `INDEX_DIR/output`.
@@ -97,7 +121,7 @@ nextflow run PATH_TO_REPO_DIR -resume
 
 Wait for the workflow to run to completion; this is likely to take several hours at least.
 
-## 6. Run the pipeline on test data
+## 8. Run the pipeline on test data
 
 To confirm that the pipeline works in your hands, we recommend running it on a small test dataset, such as the one provided at `s3://nao-testing/gold-standard-test/raw/`, before running it on larger input data. To do this with our test dataset, follow the instructions below, or do it yourself according to the directions given [here](./usage.md).
 

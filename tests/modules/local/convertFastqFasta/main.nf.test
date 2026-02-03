@@ -19,40 +19,62 @@ nextflow_process {
         }
     }
 
-    test("Should run without failures on correct input") {
+    test("Should process multiple FASTQ files in list format") {
+        tag "list_processing"
         tag "expect_success"
         when {
-            params {
-            }
+            params {}
             process {
                 '''
                 input[0] = GZIP_FILE.out
+                    .map { sample, fastq ->
+                        def orig = file(fastq)
+                        def f1 = file("${workDir}/downsampled_${sample}_10239_joined.fastq.gz")
+                        def f2 = file("${workDir}/downsampled_${sample}_186538_joined.fastq.gz")
+                        orig.copyTo(f1)
+                        orig.copyTo(f2)
+                        [sample, [f1, f2]]
+                    }
                 '''
             }
         }
         then {
             // Should run without failures
             assert process.success
-            // Input and output read counts should match
-            def fastq_in = path(process.out.input[0][1]).fastq
-            def fasta_out = path(process.out.output[0][1]).fasta
-            def names_in = fastq_in.readNames
-            def seqs_in = fastq_in.sequences
-            def names_out = fasta_out.keySet()
-            def seqs_out = fasta_out.values()
-            assert names_in.size() == names_out.size()
-            // Can't actually check the read orders are identical as the nf-test
-            // fasta plugin only returns an unordered map, but can at least
-            // check that the sorted lists of IDs match and each ID is tied
-            // to the correct sequence
-            assert names_in.sort() == names_out.sort()
-            assert seqs_in.sort() == seqs_out.sort()
-            for (name in names_in) {
-                def seq_in = fastq_in.records[name].getReadString()
-                def seq_out = fasta_out[name]
-                assert seq_in == seq_out
+            def output_fastas = process.out.output[0][1]
+            def input_fastqs = process.out.input[0][1]
+            assert output_fastas.size() == 2
+            assert input_fastqs.size() == 2
+            // Extract species IDs from input filenames and verify they're in output filenames
+            def species_ids = input_fastqs.collect { fastq ->
+                def matcher = fastq.toString() =~ /input_downsampled_\w+_(\d+)_/
+                matcher ? matcher[0][1] : null
             }
+            assert species_ids.every { it != null }
+            assert output_fastas.every { fasta ->
+                species_ids.any { species -> fasta.toString().contains(species) }
+            }
+            // Input and output read counts should match
+            def total_reads_in = 0
+            def total_reads_out = 0
+            for (int i = 0; i < 2; i++) {
+                def fastq_in = path(input_fastqs[i]).fastq
+                def fasta_out = path(output_fastas[i]).fasta
+                def names_in = fastq_in.readNames
+                def seqs_in = fastq_in.sequences
+                def names_out = fasta_out.keySet()
+                def seqs_out = fasta_out.values()
+                assert names_in.size() == names_out.size()
+                // Can't actually check the read orders are identical as the nf-test
+                // fasta plugin only returns an unordered map, but can at least
+                // check that the sorted lists of IDs match and each ID is tied
+                // to the correct sequence
+                assert names_in.sort() == names_out.sort()
+                assert seqs_in.sort() == seqs_out.sort()
+                total_reads_in += names_in.size()
+                total_reads_out += names_out.size()
+            }
+            assert total_reads_in == total_reads_out
         }
     }
-
 }

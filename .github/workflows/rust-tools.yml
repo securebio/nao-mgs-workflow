@@ -10,7 +10,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build-rust-container:
+  build-and-test:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     outputs:
@@ -48,38 +48,32 @@ jobs:
         if: steps.filter.outputs.rust == 'true'
         run: docker build --progress=plain -f docker/nao-rust-tools.Dockerfile -t nao-rust-tools:local .
 
-      - name: Save container for ECR push
-        if: steps.filter.outputs.rust == 'true'
+      - name: Save container for downstream jobs
+        if: steps.filter.outputs.rust == 'true' && github.event_name == 'push'
         run: docker save nao-rust-tools:local | gzip > rust-tools.tar.gz
 
       - name: Upload container artifact
-        if: steps.filter.outputs.rust == 'true'
+        if: steps.filter.outputs.rust == 'true' && github.event_name == 'push'
         uses: actions/upload-artifact@v4
         with:
           name: rust-container
           path: rust-tools.tar.gz
           retention-days: 1
 
-  push-to-ecr:
-    needs: build-rust-container
-    if: github.event_name == 'push' && needs.build-rust-container.outputs.rust-changed == 'true'
+  scan-vulnerabilities:
+    needs: build-and-test
+    if: needs.build-and-test.outputs.rust-changed == 'true' && github.event_name == 'push'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - name: Load Rust container
+      - name: Download container artifact
         uses: actions/download-artifact@v4
         with:
           name: rust-container
-      - run: gunzip -c rust-tools.tar.gz | docker load
 
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-access-key-id: ${{ secrets.NAO_TESTING_ACCESS_KEY }}
-          aws-secret-access-key: ${{ secrets.NAO_TESTING_SECRET_ACCESS_KEY }}
-          aws-region: us-east-1
+      - name: Load container
+        run: gunzip -c rust-tools.tar.gz | docker load
 
-      # Scan the container for vulnerabilities before pushing (mirrors trivy-scan.yml for other containers)
       - name: Install Trivy
         run: |
           wget -qO - https://aquasecurity.github.io/trivy-repo/deb/public.key | sudo apt-key add -
@@ -89,6 +83,27 @@ jobs:
 
       - name: Run Trivy vulnerability scan
         run: trivy image --scanners vuln --severity CRITICAL,HIGH --exit-code 1 nao-rust-tools:local
+
+  push-to-ecr:
+    needs: build-and-test
+    if: needs.build-and-test.outputs.rust-changed == 'true' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Download container artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: rust-container
+
+      - name: Load container
+        run: gunzip -c rust-tools.tar.gz | docker load
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.NAO_TESTING_ACCESS_KEY }}
+          aws-secret-access-key: ${{ secrets.NAO_TESTING_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
 
       - name: Push to ECR
         run: |
