@@ -9,7 +9,7 @@ We use continuous integration (CI) via GitHub Actions to perform a number of aut
 Our CI workflows fall into three broad categories:
 
 1. **Development tests:** Quick tests that must pass before code can be merged into `dev` or `main`.
-2. **Release tests:** Slow or expensive tests that must pass for a PR to be merged into `main`. To enable rapid development, these tests are not required on PRs into `dev`; however, they still run automatically after code has been merged into `dev` to help surface issues before a release.
+2. **Release tests:** Slow or expensive tests that must pass for a PR to be merged into `main`. To enable rapid development, these tests are not required on PRs into `dev`.
 3. **Non-test automation:** Workflows that perform actions like creating releases, managing branches, or tagging issues.
 
 ### Runners and billing
@@ -99,6 +99,9 @@ Release tests use Wave/Fusion for container orchestration. The `setup-rust-conta
 - Otherwise → build the container locally (with GitHub Actions caching by content hash)
 
 This approach avoids complex sequencing between workflows while ensuring tests always run against the correct Rust code.
+
+> [!NOTE]
+> There is a rare edge case: if you merge Rust changes to `dev` and immediately open a PR to `main` before `rust-tools.yml` finishes pushing to ECR, the PR could use a stale `:dev` container. To avoid this, check the [Actions tab](https://github.com/securebio/nao-mgs-workflow/actions/workflows/rust-tools.yml) and wait for the "Rust Tools CI" workflow triggered by your merge to complete before opening release PRs with Rust changes.
 
 ### Integration test (`test-chained.yml`)
 
