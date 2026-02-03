@@ -16,8 +16,6 @@ class TestParseVersionHeader:
     @pytest.mark.parametrize("line,expected", [
         ("# v1.2.3.4", "1.2.3.4"),
         ("# 1.2.3.4", "1.2.3.4"),
-        ("# v1.2.3.4-dev", "1.2.3.4-dev"),
-        ("# 1.2.3.4-dev", "1.2.3.4-dev"),
         ("# v0.0.0.0", "0.0.0.0"),
         ("# v10.20.30.40", "10.20.30.40"),
         ("#v1.2.3.4", "1.2.3.4"),  # No space after #
@@ -34,7 +32,8 @@ class TestParseVersionHeader:
         "## v1.2.3.4",  # Wrong markdown level
         "v1.2.3.4",  # No #
         "# Version 1.2.3.4",  # Wrong prefix
-        "# v1.2.3.4-beta",  # Wrong suffix (not -dev)
+        "# v1.2.3.4-dev",  # Wrong suffix
+        "# v1.2.3.4-beta",  # Wrong suffix
         "# va.b.c.d",  # Non-numeric
         "",  # Empty
         "   ",  # Whitespace only
@@ -58,12 +57,6 @@ class TestExtractChangelog:
             "# 1.0.0.0\n- Feature\n\n# 0.9.0.0\n- Old\n",
             "1.0.0.0",
             "- Feature\n",
-        ),
-        # Dev version
-        (
-            "# v1.0.0.1-dev\n- Dev feature\n- Another dev feature\n\n# v1.0.0.0\n- Released\n",
-            "1.0.0.1-dev",
-            "- Dev feature\n- Another dev feature\n",
         ),
         # First version in changelog
         (
@@ -166,7 +159,7 @@ class TestExtractChangelog:
         """Test with a realistic changelog format similar to the actual project."""
         changelog = tmp_path / "CHANGELOG.md"
         changelog.write_text(
-            "# v3.0.1.8-dev\n"
+            "# v3.0.1.8\n"
             "- Added similarity-based duplicate marking tool in `post-processing/`:\n"
             "    - New Rust tool (`rust_dedup/`) for similarity-based duplicate detection\n"
             "    - Uses nao-dedup library (added as git submodule)\n"
