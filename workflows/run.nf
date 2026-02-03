@@ -75,10 +75,7 @@ workflow RUN {
     // Extract and count human-viral reads
     if ( params.platform == "ont" ) {
         EXTRACT_VIRAL_READS_ONT(samplesheet_ch, params.ref_dir, params.taxid_artificial, params.db_download_timeout)
-        hits_fastq = EXTRACT_VIRAL_READS_ONT.out.hits_fastq
         hits_final = EXTRACT_VIRAL_READS_ONT.out.hits_final
-        inter_lca = EXTRACT_VIRAL_READS_ONT.out.inter_lca
-        inter_aligner = EXTRACT_VIRAL_READS_ONT.out.inter_minimap2
         inter_lca = EXTRACT_VIRAL_READS_ONT.out.inter_lca
         inter_aligner = EXTRACT_VIRAL_READS_ONT.out.inter_minimap2
         bbduk_match = Channel.empty()
@@ -88,12 +85,9 @@ workflow RUN {
         short_params["aln_score_threshold"] = params.bt2_score_threshold // rename to match
         short_params["min_kmer_hits"] = "1"
         short_params["bbduk_suffix"] = "viral"
-        short_params["k"] = "24" 
+        short_params["k"] = "24"
         EXTRACT_VIRAL_READS_SHORT(samplesheet_ch, params.ref_dir, short_params)
-        hits_fastq = EXTRACT_VIRAL_READS_SHORT.out.hits_fastq
         hits_final = EXTRACT_VIRAL_READS_SHORT.out.hits_final
-        inter_lca = EXTRACT_VIRAL_READS_SHORT.out.inter_lca
-        inter_aligner = EXTRACT_VIRAL_READS_SHORT.out.inter_bowtie
         inter_lca = EXTRACT_VIRAL_READS_SHORT.out.inter_lca
         inter_aligner = EXTRACT_VIRAL_READS_SHORT.out.inter_bowtie
         bbduk_match = EXTRACT_VIRAL_READS_SHORT.out.bbduk_match
@@ -131,7 +125,7 @@ workflow RUN {
     emit:
         input_run = index_params_ch.mix(samplesheet_ch, adapters_ch, params_ch)
         logging_run = index_pyproject_ch.mix(time_ch, pyproject_ch)
-        intermediates_run = hits_fastq.mix(inter_lca, inter_aligner)
+        intermediates_run = inter_lca.mix(inter_aligner)
         reads_raw_viral = bbduk_match
         reads_trimmed_viral = bbduk_trimmed
         qc_results_run = COUNT_TOTAL_READS.out.read_counts
