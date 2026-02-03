@@ -8,6 +8,8 @@
 - Update documentation on Seqera ECR credentials.
 - Add Rust build system to CI and rust-tools container to ECR.
 - Fix CI bug where `--rust_tools_version dev` was passed to test runner instead of via environment variable.
+- Convert `setup-rust-container` from reusable workflow to composite action, simplifying CI check reporting.
+- Remove confusing `workflow_run` triggers from integration tests (benchmark and test-chained workflows).
 
 # v3.0.1.9
 

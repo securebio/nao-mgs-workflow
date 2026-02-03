@@ -1,0 +1,71 @@
+name: 'Setup Rust Container'
+description: 'Determine Rust tools container version and optionally build if changed'
+
+outputs:
+  rust-version:
+    description: 'Rust tools ECR tag ("main" or "dev")'
+    value: ${{ steps.check.outputs.rust-version }}
+  nextflow-args:
+    description: '"--profile=rust_dev" when rust changed, empty otherwise'
+    value: ${{ steps.check.outputs.nextflow-args }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Check for Rust changes vs main/dev
+      id: check
+      shell: bash
+      run: |
+        RUST_PATHS="rust-tools/ docker/nao-rust-tools.Dockerfile"
+
+        if git diff --quiet origin/main -- $RUST_PATHS 2>/dev/null; then
+          echo "Rust code matches main, using ECR :main"
+          RUST_CHANGED=false RUST_VERSION=main NEXTFLOW_ARGS=""
+        elif git diff --quiet origin/dev -- $RUST_PATHS 2>/dev/null; then
+          echo "Rust code matches dev, using ECR :dev"
+          RUST_CHANGED=false RUST_VERSION=dev NEXTFLOW_ARGS=""
+        else
+          echo "Rust code has changed, will build local container"
+          RUST_CHANGED=true RUST_VERSION="" NEXTFLOW_ARGS="--profile=rust_dev"
+        fi
+
+        {
+          echo "rust-changed=$RUST_CHANGED"
+          echo "rust-version=$RUST_VERSION"
+          echo "nextflow-args=$NEXTFLOW_ARGS"
+        } >> $GITHUB_OUTPUT
+
+    - name: Compute Rust source hash
+      if: steps.check.outputs.rust-changed == 'true'
+      id: hash
+      shell: bash
+      run: |
+        HASH=$({ find rust-tools/ -type f -print0 | sort -z | xargs -0 cat; cat docker/nao-rust-tools.Dockerfile; } | sha256sum | cut -d' ' -f1)
+        echo "hash=${HASH:0:16}" >> $GITHUB_OUTPUT
+        echo "Rust source hash: ${HASH:0:16}"
+
+    - name: Restore Rust container from cache
+      if: steps.check.outputs.rust-changed == 'true'
+      id: cache
+      uses: actions/cache@v4
+      with:
+        path: rust-tools.tar.gz
+        key: rust-container-${{ steps.hash.outputs.hash }}
+
+    - name: Build Rust container
+      if: steps.check.outputs.rust-changed == 'true' && steps.cache.outputs.cache-hit != 'true'
+      shell: bash
+      run: |
+        echo "Cache miss - building Rust tools container..."
+        docker build --progress=plain -f docker/nao-rust-tools.Dockerfile -t nao-rust-tools:local .
+        docker save nao-rust-tools:local | gzip > rust-tools.tar.gz
+
+    - name: Report cache hit
+      if: steps.check.outputs.rust-changed == 'true' && steps.cache.outputs.cache-hit == 'true'
+      shell: bash
+      run: echo "Cache hit - using cached container"
+
+    - name: Load Rust container into Docker
+      if: steps.check.outputs.rust-changed == 'true'
+      shell: bash
+      run: gunzip -c rust-tools.tar.gz | docker load

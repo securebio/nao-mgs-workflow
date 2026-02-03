@@ -1,36 +1,25 @@
 name: Nextflow integration test (chain workflows)
 
-# This is a "release test" - see docs/ci.md for explanation of trigger strategy.
-# Uses workflow_run to sequence after rust-tools.yml, ensuring ECR has the latest container.
+# Release test - only runs on PRs to main/stable
 on:
   pull_request:
     branches: [main, stable, ci-test]
-  workflow_run:
-    workflows: ["Rust Tools CI"]
-    types: [completed]
-    branches: [dev]
 
 concurrency:
-  group: ci-integration-test-${{ github.event.pull_request.number || github.event.workflow_run.head_branch || github.ref }}
+  group: ci-integration-test-${{ github.event.pull_request.number }}
   cancel-in-progress: true
 
 jobs:
   integration-test-chained:
     runs-on: ubuntu-latest
     timeout-minutes: 120
-    # For workflow_run events, only run if rust-tools succeeded
-    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
     env:
       AWS_ACCESS_KEY_ID: ${{secrets.NAO_TESTING_ACCESS_KEY }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.NAO_TESTING_SECRET_ACCESS_KEY }}
       TOWER_ACCESS_TOKEN: ${{ secrets.TOWER_ACCESS_TOKEN }}
     steps:
-      # workflow_run events run in default branch context, so we must explicitly
-      # checkout the commit that triggered rust-tools.yml. See docs/ci.md.
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
 
       - name: Check for relevant changes
         uses: dorny/paths-filter@v3
