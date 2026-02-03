@@ -333,7 +333,8 @@ Feel free to use AI tools (Cursor, GitHub Copilot, Claude Code, etc.) to generat
 1. **Write new tests** for the changes that you make if those tests don't already exist. At the very least, these tests should check that the new implementation runs to completion; tests that also verify the output on the test dataset are strongly encouraged. As discussed above, we recommend writing end-to-end tests in `nf-test` and unit tests in language-specific testing libraries like `pytest`.
     - If you make any changes that affect the output of the pipeline, list/describe the changes that occurred in the pull request.
 2. **Update the `CHANGELOG.md` file** with the changes that you are making under the `# Unreleased` section.
-    - More information on how to update the `CHANGELOG.md` file can be found [here](./versioning.md). Version numbers are automatically managed on merge to `main`.
+    - Version numbers are automatically managed on merge to `main` based on the `bump_type` directive in the `# Unreleased` section which should be one of `point | results | schema | major`.
+    - More information on how to update the `CHANGELOG.md` file can be found [here](./versioning.md). 
 3. **Update the expected-output-{run,downstream}.txt files** with any changes to the output of the RUN or DOWNSTREAM workflows.
 4. **Pass automated tests on GitHub Actions**. These run automatically when you open a pull request.
 5. **Write a meaningful description** of your changes in the PR description and give it a meaningful title.
@@ -368,40 +369,6 @@ Try rebasing branch B onto `dev` first (`git rebase dev`). If rebasing doesn't w
 ## New releases
 
 By default, all changes are made on individual branches, and merged into `dev`. Periodically, a collection of `dev` changes are merged to `main` as a new release. New releases are fairly frequent (historically, we have made a new release every 2-4 weeks).
-
-### Automated version management
-
-Version bumps are automated via GitHub Actions. The workflow uses the `# Unreleased` section and `bump_type:` directive in `CHANGELOG.md` to determine how to bump the version on merge to `main`.
-
-**CHANGELOG format during development:**
-```markdown
-# Unreleased
-bump_type: point
-
-- Change 1
-- Change 2
-
-# v3.0.1.8
-...
-```
-
-**Valid bump types:**
-- `major`: Bumps first version number (e.g., 3.0.1.8 → 4.0.0.0)
-- `schema`: Bumps second version number (e.g., 3.0.1.8 → 3.1.0.0)
-- `results`: Bumps third version number (e.g., 3.0.1.8 → 3.0.2.0)
-- `point`: Bumps fourth version number (e.g., 3.0.1.8 → 3.0.1.9)
-
-**On merge to `main`, automation will:**
-1. Extract `bump_type` from CHANGELOG.md
-2. Bump version in `pyproject.toml` according to bump type
-3. Replace `# Unreleased\nbump_type: X` with `# vX.Y.Z.W` in CHANGELOG.md
-4. Create and push a `[release]` commit
-5. Create a GitHub release with the changelog content
-6. Reset `dev` and `ci-test` branches to match `main`
-7. Add a new `# Unreleased` section to `dev` CHANGELOG
-8. For point releases only, reset `stable` to match `main`
-
-### Release process
 
 Only pipeline maintainers should author a new release. The process for going through a new release is as follows:
 

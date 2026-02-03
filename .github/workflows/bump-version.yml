@@ -36,15 +36,13 @@ jobs:
       - name: Extract bump type from CHANGELOG
         id: bump_type
         run: |
-          bump_type=$(grep -oP '^bump_type:\s*\K\w+' CHANGELOG.md || echo "")
-          if [ -z "$bump_type" ]; then
-            echo "ERROR: No bump_type found in CHANGELOG.md Unreleased section"
+          # Validate CHANGELOG starts with "# Unreleased" followed by valid bump_type on line 2
+          if ! head -n 2 CHANGELOG.md | grep -Pzo "^# Unreleased\nbump_type: (major|schema|results|point)" > /dev/null; then
+            echo "ERROR: CHANGELOG.md must start with '# Unreleased' followed by valid 'bump_type:'"
+            echo "Valid bump_type values: major, schema, results, point"
             exit 1
           fi
-          if ! echo "$bump_type" | grep -qE '^(major|schema|results|point)$'; then
-            echo "ERROR: Invalid bump_type '$bump_type'. Must be: major, schema, results, or point"
-            exit 1
-          fi
+          bump_type=$(sed -n '2s/^bump_type: *//p' CHANGELOG.md)
           echo "type=$bump_type" >> $GITHUB_OUTPUT
           echo "Found bump_type: $bump_type"
 
