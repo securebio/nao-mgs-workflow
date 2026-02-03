@@ -43,7 +43,7 @@ workflow PROCESS_LCA_ALIGNER_OUTPUT {
         // Step 7: Add sample column to LCA TSV for intermediate output
         lca_labeled_ch = ADD_SAMPLE_COLUMN_LCA(lca_tsv, "sample", "viral_lca")
     emit:
-        viral_hits_tsv = renamed_ch.output              // tuple(sample, file) per sample
-        aligner_tsv = aligner_labeled_tsv.output        // tuple(sample, file) per sample
-        lca_tsv = lca_labeled_ch.output                 // tuple(sample, file) per sample
+        viral_hits_tsv = renamed_ch.output
+        aligner_tsv = aligner_labeled_tsv.output
+        lca_tsv = lca_labeled_ch.output
 }
