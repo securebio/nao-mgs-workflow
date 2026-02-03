@@ -67,15 +67,15 @@ jobs:
 
           echo "Added Unreleased section to CHANGELOG.md"
 
-      - name: Reset ci-test branch to main
+      - name: Reset ci-test branch to dev
         run: |
-          echo "Resetting ci-test branch to match main..."
+          echo "Resetting ci-test branch to match dev..."
 
           git checkout ci-test
-          git reset --hard main
+          git reset --hard dev
           git push --force origin ci-test
 
-          echo "Successfully reset ci-test to main"
+          echo "Successfully reset ci-test to dev"
 
       - name: Set up Python
         uses: actions/setup-python@v5
