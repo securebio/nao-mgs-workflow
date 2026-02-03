@@ -129,7 +129,7 @@ expected-outputs-downstream-ont = [
 ]
 
 [tool.bumpversion]
-current_version = "3.0.1.9"
+current_version = "3.1.0.0"
 parse = "(?P<major>\\d+)\\.(?P<schema>\\d+)\\.(?P<results>\\d+)\\.(?P<point>\\d+)"
 serialize = ["{major}.{schema}.{results}.{point}"]
 commit = false
