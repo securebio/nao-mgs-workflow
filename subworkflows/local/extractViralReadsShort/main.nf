@@ -10,9 +10,6 @@ include { BOWTIE2 as BOWTIE2_HUMAN } from "../../../modules/local/bowtie2"
 include { BOWTIE2 as BOWTIE2_OTHER } from "../../../modules/local/bowtie2"
 include { PROCESS_VIRAL_BOWTIE2_SAM } from "../../../modules/local/processViralBowtie2Sam"
 include { SORT_TSV as SORT_BOWTIE_VIRAL } from "../../../modules/local/sortTsv"
-include { CONCATENATE_FILES } from "../../../modules/local/concatenateFiles"
-include { CONCATENATE_TSVS as CONCATENATE_VIRAL_HITS_FOR_FASTQ } from "../../../modules/local/concatenateTsvs"
-include { EXTRACT_VIRAL_HITS_TO_FASTQ } from "../../../modules/local/extractViralHitsToFastq"
 include { LCA_TSV } from "../../../modules/local/lcaTsv"
 include { SORT_FASTQ } from "../../../modules/local/sortFastq"
 include { SORT_FILE } from "../../../modules/local/sortFile"
@@ -100,13 +97,6 @@ workflow EXTRACT_VIRAL_READS_SHORT {
         )
         // 10. Rename virus hits to clean file name
         renamed_hits_ch = RENAME_VIRUS_HITS(processed_ch.viral_hits_tsv, "virus_hits.tsv.gz")
-        // 11. Extract filtered virus hits in FASTQ format
-        // This requires concatenated TSV and FASTQ, so we concatenate the per-sample viral_hits for this step
-        viral_hits_for_fastq = processed_ch.viral_hits_tsv.map { _sample, file -> file }.collect().ifEmpty([])
-        viral_hits_concat = CONCATENATE_VIRAL_HITS_FOR_FASTQ(viral_hits_for_fastq, "virus_hits_for_fastq")
-        fastq_unfiltered_collect = other_bt2_ch.reads_unmapped.map{ _sample, file -> file }.collect().ifEmpty([])
-        fastq_unfiltered_concat = CONCATENATE_FILES(fastq_unfiltered_collect, "reads_unfiltered", "fastq.gz")
-        fastq_ch = EXTRACT_VIRAL_HITS_TO_FASTQ(viral_hits_concat.output, fastq_unfiltered_concat.output)
     emit:
         bbduk_match = bbduk_ch.fail
         bbduk_trimmed = fastp_ch.reads
@@ -114,7 +104,6 @@ workflow EXTRACT_VIRAL_READS_SHORT {
         inter_lca = processed_ch.lca_tsv                // tuple(sample, file) per sample
         inter_bowtie = processed_ch.aligner_tsv         // tuple(sample, file) per sample
         hits_prelca = bowtie2_tsv_ch.output
-        hits_fastq = fastq_ch.fastq
         test_reads = other_bt2_ch.reads_unmapped
         test_filt_bowtie = bowtie2_filtered_ch.sam
         test_unfilt_bowtie = bowtie2_ch.sam
