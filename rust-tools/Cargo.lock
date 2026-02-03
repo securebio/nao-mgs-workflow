@@ -185,6 +185,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "process_vsearch_cluster_output"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "flate2",
+]
+
+[[package]]
 name = "quote"
 version = "1.0.44"
 source = "registry+https://github.com/rust-lang/crates.io-index"

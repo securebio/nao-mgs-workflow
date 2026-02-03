@@ -26,9 +26,11 @@ RUN apt-get update \
 # Copy compiled binaries from builder
 # Add additional binaries here as tools are added to the workspace
 COPY --from=builder /build/rust-tools/target/release/mark_duplicates /usr/local/bin/
+COPY --from=builder /build/rust-tools/target/release/process_vsearch_cluster_output /usr/local/bin/
 
 # Verify binaries are executable
 RUN mark_duplicates --help
+RUN process_vsearch_cluster_output --help
 
 # Default to shell for debugging
 CMD ["/bin/sh"]
