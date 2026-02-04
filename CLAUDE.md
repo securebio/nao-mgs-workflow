@@ -184,3 +184,37 @@ Refer to `docs/developer.md` for comprehensive coding style guidelines. Key poin
 - Nextflow: `lower_snake_case` for variables, `UPPER_SNAKE_CASE` for processes
 - Keep PRs small and focused
 - Avoid over-engineering; only make requested changes
+
+## Versioning and Changelog
+
+**Both of these are required for PRs and CI will fail if they're missing.**
+
+### Version bumping
+- Every released change to the pipeline must be accompanied by a version bump in `pyproject.toml`. See `docs/versioning.md` for the versioning scheme and guidance on which version component to increment.
+- If the current version in `pyproject.toml` is a non-development version (e.g. `A.B.C.D`), you should update it to a new development version (`X.Y.Z.W-dev`) before merging to `dev`. The numerical part of the new version should reflect what the version *will be* once a release is made.
+  - For example, if the current version is `3.0.1.2` and the changes you want to merge amount to a point release, you should change the version number to `3.0.1.3-dev`. If they amount to a schema release, you should change it to `3.1.0.0-dev`. In both cases, the `-dev` suffix will be removed during the release process.
+- If the current version is already a development version, you should only change it if the changes you want to merge would justify a larger version bump than the one currently planned.
+  - For example, if the current version is `3.0.1.3-dev`, and the changes you want to merge amount to a point release, then the version should stay as-is. If instead they amount to a results release, you should change it to `3.0.2.0-dev`.
+- At the time a release is made, the only change needed to the version number should be the removal of the `-dev` suffix. As such, the new version number should always reflect the largest changes made since the last release.
+
+### CHANGELOG.md
+- For a PR into `dev` to pass CI, it must include updates to `CHANGELOG.md`, and the topmost heading in that file must match the version in `pyproject.toml`.
+- If the topmost heading in the changelog is for a non-development version, create a new entry for the development version in which to put updates. Do not change any entry for a non-development version.
+- If the topmost heading is for a development version, you should (1) update it according to the same procedure outlined for the `pyproject.toml` version, then (2) add new suggested changes to that entry.
+- The CHANGELOG should never contain entries for multiple development versions at once.
+
+### Backwards Compatibility Trackers
+`pyproject.toml` contains two compatibility version fields:
+- `index-min-pipeline-version`: Minimum pipeline version needed to use indexes built with this version
+- `pipeline-min-index-version`: Minimum index version required by this pipeline version
+
+**When to update these:** Only when changes create incompatibilities between the index and RUN/DOWNSTREAM workflows. Most PRs do NOT need to update these. Examples requiring updates:
+- Changes to index file structure or naming
+- Changes to how RUN/DOWNSTREAM consume index files
+- New required index components
+
+When in doubt, ask the user.
+
+## Maintaining This File
+
+**Before context compaction:** Review the current conversation for user suggestions, workflow patterns, or lessons learned that should be documented here. If the user has provided guidance on preferred workflows or corrections to your approach, consider adding them to CLAUDE.md so future sessions benefit from this context.
