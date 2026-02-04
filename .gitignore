@@ -33,3 +33,4 @@ post-processing/bin/
 post-processing/obj/
 
 .DS_Store
+*.egg-info/*
