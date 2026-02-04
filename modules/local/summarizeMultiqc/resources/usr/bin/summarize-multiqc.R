@@ -18,7 +18,7 @@ option_list = list(
   make_option(c("-o", "--output_dir"), type="character", default=NULL,
               help="Path to output directory."),
   make_option(c("-p", "--prefix"), type="character", default=NULL,
-              help="Output file prefix (if NULL, uses stage_sample).")
+              help="Output file prefix (if NULL, uses sample name).")
 )
 opt_parser = OptionParser(option_list=option_list);
 opt = parse_args(opt_parser);
