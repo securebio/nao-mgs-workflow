@@ -15,7 +15,7 @@ This file contains guidelines for Claude Code when working on this repository.
 Use `gh pr create` with a HEREDOC for the body to ensure proper formatting:
 
 ```bash
-gh pr create --base dev --title "Brief descriptive title" --body "$(cat <<'EOF'
+gh pr create --base dev --assignee @me --title "Brief descriptive title" --body "$(cat <<'EOF'
 Short prose summary explaining what this PR does and why.
 
 **Changes:**
