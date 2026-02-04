@@ -18,6 +18,7 @@ Exit codes:
 import argparse
 import gzip
 import logging
+import shutil
 import sys
 import tempfile
 import time
@@ -140,7 +141,7 @@ def decompressed_path(data_file: Path) -> Generator[Path, None, None]:
         return
     with tempfile.NamedTemporaryFile(mode="w", suffix=".tsv", delete=True) as tmp:
         with gzip.open(data_file, "rt") as f_in:
-            tmp.write(f_in.read())
+            shutil.copyfileobj(f_in, tmp)
         tmp.flush()
         yield Path(tmp.name)
 
