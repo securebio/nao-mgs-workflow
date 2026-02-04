@@ -1,13 +1,32 @@
 // Helper function: Validate TSV structure by reading lines directly and splitting by tabs.
-// This approach works even when files have only headers (no data rows),
-// which can cause issues with nf-test's CSV parser.
-def validateTsvStructure = { tsv_file, expected_col_count ->
+def validateTsvStructure = { tsv_file, expected_col_count, expected_stage, expected_sample ->
     def lines = path(tsv_file).linesGzip
-
-    // Verify header exists and has correct number of columns
     assert lines.size() >= 1 : "TSV file must have at least a header row"
     def header = lines[0].split("\t")
     assert header.size() == expected_col_count : "Expected ${expected_col_count} columns, got ${header.size()}"
+    if (lines.size() > 1) {
+        def first_data_row = lines[1].split("\t", -1)
+        def stage_idx = header.findIndexOf { it == "stage" }
+        def sample_idx = header.findIndexOf { it == "sample" }
+        assert stage_idx >= 0 : "Header must contain 'stage' column"
+        assert sample_idx >= 0 : "Header must contain 'sample' column"
+        assert first_data_row[stage_idx] == expected_stage : "Expected stage '${expected_stage}', got '${first_data_row[stage_idx]}'"
+        assert first_data_row[sample_idx] == expected_sample : "Expected sample '${expected_sample}', got '${first_data_row[sample_idx]}'"
+    }
+}
+
+// Helper function: Validate a QC tuple (sample, basic, adapt, qbase, qseqs, lengths)
+def validateQcTuple = { qc_tuple, expected_stage ->
+    def tsv_basic = path(qc_tuple[1]).csv(sep: "\t", decompress: true)
+    assert tsv_basic.rowCount == 1
+    assert tsv_basic.columnCount == 18
+    assert tsv_basic.columns["stage"][0] == expected_stage
+    def stage = tsv_basic.columns["stage"][0]
+    def sample = tsv_basic.columns["sample"][0]
+    validateTsvStructure(qc_tuple[2], 6, stage, sample)
+    validateTsvStructure(qc_tuple[3], 5, stage, sample)
+    validateTsvStructure(qc_tuple[4], 5, stage, sample)
+    validateTsvStructure(qc_tuple[5], 5, stage, sample)
 }
 
 nextflow_workflow {
@@ -35,17 +54,9 @@ nextflow_workflow {
             }
         }
         then {
-            // Should run without failures
             assert workflow.success
-            // Basic stats TSV should have expected structure and content
-            def tsv_basic = path(workflow.out.qc_basic[0]).csv(sep: "\t", decompress: true)
-            assert tsv_basic.rowCount == 2
-            assert tsv_basic.columnCount == 18
-            // Other TSVs should have expected structure and content
-            validateTsvStructure(workflow.out.qc_adapt[0], 6)
-            validateTsvStructure(workflow.out.qc_qbase[0], 5)
-            validateTsvStructure(workflow.out.qc_qseqs[0], 5)
-            validateTsvStructure(workflow.out.qc_lengths[0], 5)
+            validateQcTuple(workflow.out.pre_qc[0], "raw")
+            validateQcTuple(workflow.out.post_qc[0], "cleaned")
         }
     }
 
@@ -66,20 +77,12 @@ nextflow_workflow {
             }
         }
         then {
-            // Should run without failures
             assert workflow.success
-            // Basic stats TSV should have expected structure and content
-            def tsv_basic = path(workflow.out.qc_basic[0]).csv(sep: "\t", decompress: true)
-            assert tsv_basic.rowCount == 2
-            assert tsv_basic.columnCount == 18
-            // Other TSVs should have expected structure and content
-            validateTsvStructure(workflow.out.qc_adapt[0], 6)
-            validateTsvStructure(workflow.out.qc_qbase[0], 5)
-            validateTsvStructure(workflow.out.qc_qseqs[0], 5)
-            validateTsvStructure(workflow.out.qc_lengths[0], 5)
+            validateQcTuple(workflow.out.pre_qc[0], "raw")
+            validateQcTuple(workflow.out.post_qc[0], "cleaned")
         }
     }
-    
+
     test("Should handle empty input files properly") {
         config "tests/configs/run.config"
         tag "expect_success"
@@ -97,20 +100,9 @@ nextflow_workflow {
             }
         }
         then {
-            // Should run without failures
             assert workflow.success
-            // Basic stats TSV should have expected structure and content
-            def tsv_basic = path(workflow.out.qc_basic[0]).csv(sep: "\t", decompress: true)
-            assert tsv_basic.rowCount == 2
-            assert tsv_basic.columnCount == 18
-            // Lengths TSV should have expected structure and content
-            def tsv_lengths = path(workflow.out.qc_lengths[0]).csv(sep: "\t", decompress: true)
-            assert tsv_lengths.rowCount == 2
-            assert tsv_lengths.columnCount == 5
-            // Other TSVs should have expected structure and content
-            validateTsvStructure(workflow.out.qc_adapt[0], 6)
-            validateTsvStructure(workflow.out.qc_qbase[0], 5)
-            validateTsvStructure(workflow.out.qc_qseqs[0], 5)
+            validateQcTuple(workflow.out.pre_qc[0], "raw")
+            validateQcTuple(workflow.out.post_qc[0], "cleaned")
         }
     }
 }

@@ -11,7 +11,9 @@
 - Convert `setup-rust-container` from reusable workflow to composite action, simplifying CI check reporting.
 - Remove confusing `workflow_run` triggers from integration tests (benchmark and test-chained workflows).
 - Refactored processVsearchClusterOutput module to use streaming Rust implementation rather than memory-intensive Python/Pandas.
-- Changed read counts output from concatenated `read_counts.tsv.gz` to per-sample `{sample}_read_counts.tsv` files.
+- Changed RUN outputs to per-sample format:
+    - Read counts: `read_counts.tsv.gz` → `{sample}_read_counts.tsv`
+    - QC stats: `subset_qc_*_stats.tsv.gz` → `{sample}_qc_*_stats_raw.tsv.gz` and `{sample}_qc_*_stats_cleaned.tsv.gz`
     - Removed `COUNT_TOTAL_READS` subworkflow; `COUNT_READS` module is now called directly from RUN workflow.
 
 # v3.0.1.9
