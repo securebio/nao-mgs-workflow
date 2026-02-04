@@ -8,6 +8,7 @@ version = "3.1.0.0-dev"
 requires-python = ">=3.12"
 dependencies = [
     "biopython>=1.85",
+    "frictionless>=5.18.0",
     "mypy>=1.18.1",
     # Needed until https://github.com/securebio/nao-dedup/pull/12 has been
     # merged and we've updated post-processing/nao-dedup/ to depend on the

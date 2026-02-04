@@ -1,0 +1,52 @@
+{
+  "$schema": "https://datapackage.org/profiles/2.0/tableschema.json",
+  "title": "Duplicate Stats",
+  "description": "Per-group duplicate read statistics from the DOWNSTREAM workflow. Each row represents a duplicate group: a set of reads with matching alignment positions (within configurable tolerance) to the same genome.",
+  "fields": [
+    {
+      "name": "prim_align_genome_id_all",
+      "title": "Genome ID",
+      "description": "NCBI accession ID(s) of the genome(s) that reads in this duplicate group aligned to. For split alignments where forward and reverse reads map to different genomes, IDs are joined with '/' and sorted alphabetically.",
+      "type": "string",
+      "constraints": {
+        "required": true,
+        "minLength": 1
+      },
+      "example": "NC_059681.1"
+    },
+    {
+      "name": "prim_align_dup_exemplar",
+      "title": "Exemplar Read ID",
+      "description": "Query name (read ID) of the exemplar read selected to represent this duplicate group. The exemplar is the read with the highest average quality score; ties are broken by query name.",
+      "type": "string",
+      "constraints": {
+        "required": true,
+        "minLength": 1
+      },
+      "example": "NC_059681.1_0_0"
+    },
+    {
+      "name": "prim_align_dup_count",
+      "title": "Duplicate Count",
+      "description": "Number of reads in this duplicate group. A value of 1 indicates a unique read with no duplicates.",
+      "type": "integer",
+      "constraints": {
+        "required": true,
+        "minimum": 1
+      },
+      "example": 1
+    },
+    {
+      "name": "prim_align_dup_pairwise_match_frac",
+      "title": "Pairwise Match Fraction",
+      "description": "Quality control metric indicating the fraction of all pairwise comparisons within the duplicate group that match according to the position tolerance. A value of 1.0 indicates perfect transitivity (all pairs match); lower values may indicate fuzzy grouping edge cases.",
+      "type": "number",
+      "constraints": {
+        "required": true,
+        "minimum": 0,
+        "maximum": 1
+      },
+      "example": 1.0
+    }
+  ]
+}
