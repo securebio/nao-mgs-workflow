@@ -52,11 +52,11 @@ When the user asks you to handle PR review comments, follow this workflow:
 **1. Review all comments and suggest responses:**
 Fetch and analyze all review comments, then present the user with a summary and your suggested response for each:
 - Is it a valid concern that should be addressed?
-- Is it out of scope for the current PR?
 - Is it a minor stylistic suggestion?
+- Is it a reasonable, substantive suggestion that's out of scope? If so, propose creating a GitHub issue to track it.
 
 **2. Get user approval:**
-Wait for the user to approve your suggested responses before taking any action. The user may modify suggestions or provide different guidance.
+Wait for the user to approve your suggested responses before taking any action. The user may modify suggestions or provide different guidance. If you proposed creating issues for out-of-scope suggestions, confirm which ones the user wants created.
 
 **3. Make any required fixes:**
 If comments require code changes, implement them first and push the changes.
@@ -67,9 +67,23 @@ If comments require code changes, implement them first and push the changes.
 Response patterns (always include the prefix):
 - For implemented fixes: `[Claude Code] Done`
 - For out-of-scope suggestions: `[Claude Code] Reasonable suggestion but out of scope`
+- For out-of-scope suggestions with issue created: `[Claude Code] Reasonable suggestion but out of scope for this PR. Opened #<issue_number> to track.`
 - For declined minor suggestions: `[Claude Code] Minor stylistic nit, not done`
 
-**5. Resolve concluded threads:**
+**5. Create issues for substantive out-of-scope suggestions:**
+If the user approved creating issues, use `gh issue create` before responding to the thread. Issues must be self-contained (they sync to external project management tools), so quote the suggestion and explain it fully rather than just linking to the PR:
+```bash
+gh issue create --title "Brief description" --body "$(cat <<'EOF'
+<Full explanation of the suggested improvement>
+
+**Original suggestion from PR #<number> review:**
+> <quoted suggestion text>
+
+EOF
+)"
+```
+
+**6. Resolve concluded threads:**
 After responding, resolve each thread using the GraphQL API:
 
 ```bash
