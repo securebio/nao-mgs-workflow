@@ -199,6 +199,32 @@ Refer to `docs/developer.md` for comprehensive coding style guidelines. Key poin
 - Keep PRs small and focused
 - Avoid over-engineering; only make requested changes
 
+### Python Style
+
+For all Python scripts, follow the patterns established in `bin/build_tiny_test_databases.py`:
+
+- Flexible `open_by_suffix()` pattern for handling files that may or may not be compressed
+- Use Python 3.12+ native type hints, not the `typing` module (e.g. `list[str]` instead of `List[str]`, etc)
+- Logging with the `logging` standard library and `UTCFormatter` class
+- `parse_arguments()` function for argparse
+- `main()` entry point with timing and logging
+- `DESC` docstring at the top describing the script's purpose
+- Use context managers (`with` statements) instead of try/finally where appropriate
+- Section headers with `###` dividers, e.g.: 
+
+```
+###########
+# IMPORTS #
+###########
+```
+
+All Python scripts should have corresponding Pytest scripts in the same directory (`**/script.py` -> `**/test_script.py`). When writing tests:
+
+- Make sure all functions and methods (except for argument parsing and logging) have at least basic test coverage.
+- The order of tests should match the order of functions/methods in the source script.
+- Use `@pytest.mark.parametrize` wherever possible to minimize redundancy between tests. After writing tests, always review them again to identify and remove unnecessary redundancy.
+- Distinguish clearly between unit tests of high-level functions (which can be useful even if heavily mocked) and integration tests of the whole code stack (which should keep mocks to a minimum).
+
 ## Versioning and Changelog
 
 **Both of these are required for PRs and CI will fail if they're missing.**
