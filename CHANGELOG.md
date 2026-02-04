@@ -1,5 +1,6 @@
 # v3.1.0.0-dev
 
+- Add `CLAUDE.md` with guidelines for Claude Code: GitHub interaction policies, PR workflows, testing, versioning, and changelog updates.
 - Remove BLAST validation from RUN workflow. BLAST validation is now only available in the DOWNSTREAM workflow via VALIDATE_VIRAL_ASSIGNMENTS.
     - Deleted `BLAST_VIRAL` subworkflow, `SUBSET_FASTN` module, and `RUN_VALIDATION` workflow.
     - Removed `blast_viral_fraction` and related BLAST parameters from RUN workflow configs.
