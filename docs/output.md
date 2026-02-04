@@ -54,8 +54,8 @@ Main heading represents the folder name, and subheadings represent a description
 - `virus_hits_final.tsv.gz`: TSV output from EXTRACT_VIRAL_READS, giving information about each read pair assigned to a host-infecting virus, using the LCA taxid assignment as the source of truth. Contains both LCA-based taxonomic assignments (columns with `aligner_` prefix) that utilize multiple alignments per read, and read sequence information plus primary alignment details (columns with `prim_align_` prefix) for the DOWNSTREAM workflow. See [virus_hits_final.md](./virus_hits_final.md) for documentation of column names.
 
 #### Taxonomic identification
-- `bracken_reports_merged.tsv.gz`: Bracken output reports in TSV format, labeled by sample and ribosomal status, for subset samples produced by SUBSET_TRIM.
-- `kraken_reports_merged.tsv.gz`: Kraken output reports in TSV format, labeled by sample and ribosomal status, for subset samples produced by SUBSET_TRIM.
+- `{sample}_bracken.tsv.gz`: Bracken output reports in TSV format for a given sample, labeled by ribosomal status, for subset samples produced by SUBSET_TRIM.
+- `{sample}_kraken.tsv.gz`: Kraken output reports in TSV format for a given sample, labeled by ribosomal status, for subset samples produced by SUBSET_TRIM.
 
 #### BLAST
 - `merged_blast_filtered.tsv.gz`: Filtered tabular BLASTN output for putative vertebrate viral reads.
