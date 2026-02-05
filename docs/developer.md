@@ -396,3 +396,10 @@ Only pipeline maintainers should author a new release. The process for going thr
 
 [^refs]: For reference genomes, check for updated releases for human, cow, pig, and mouse; do not update carp; update *E. coli* if there is a new release for the same strain. Check [SILVA](https://www.arb-silva.de/download/archive/) for rRNA databases and [here](https://benlangmead.github.io/aws-indexes/k2) for Kraken2 databases.
 [^approval]: Note that, to streamline the release process, we no longer require an approving review for PRs into `main`. (We still require an approving review for `release` PRs into `dev`.)
+
+## Schemas
+
+- We are currently in the process of defining and enforcing [schemas](../schemas/) for our output files, using the [table schema standard](https://datapackage.org/standard/table-schema/) and [frictionless Python framework](https://framework.frictionlessdata.io/).
+- Not all output files yet have schemas; those that have been added are used to validate test outputs in Github Actions to ensure that the output produced matches the schema.
+- If an input to DOWNSTREAM has no data, the `createEmptyGroupOutputs` module will generate header-only outputs based on schemas where available. Output files with no corresponding schema will be empty.
+- Under our [versioning policy](./versioning.md), changes to schema `title` and `description` fields can be made in point (4th-number) releases. Any other schema change must be a schema (2nd-number) or major (1st-number) release.
