@@ -404,3 +404,4 @@ Only pipeline maintainers should author a new release. The process for going thr
 - If you are working on a change that affects pipeline outputs, it's a good idea to review the schema files for affected outputs where available, to know what's expected for each column.
 - If an input to DOWNSTREAM has no data, the `createEmptyGroupOutputs` module will generate header-only outputs based on schemas where available. Output files with no corresponding schema will be empty.
 - Under our [versioning policy](./versioning.md), changes to schema `title` and `description` fields can be made in point (4th-number) releases. Any other schema change must be a schema (2nd-number) or major (1st-number) release, accompanied by explicit alerts to owners of dependent codebases.
+- If you are developing code external to this repository that depends on its outputs, you should review the corresponding schemas to understand what guarantees you can expect.
