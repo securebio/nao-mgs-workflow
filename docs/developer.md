@@ -401,5 +401,6 @@ Only pipeline maintainers should author a new release. The process for going thr
 
 - We are currently in the process of defining and enforcing [schemas](../schemas/) for our output files, using the [table schema standard](https://datapackage.org/standard/table-schema/) and [frictionless Python framework](https://framework.frictionlessdata.io/).
 - Not all output files yet have schemas; those that have been added are used to validate test outputs in Github Actions to ensure that the output produced matches the schema.
+- If you are working on a change that affects pipeline outputs, it's a good idea to review the schema files for affected outputs where available, to know what's expected for each column.
 - If an input to DOWNSTREAM has no data, the `createEmptyGroupOutputs` module will generate header-only outputs based on schemas where available. Output files with no corresponding schema will be empty.
-- Under our [versioning policy](./versioning.md), changes to schema `title` and `description` fields can be made in point (4th-number) releases. Any other schema change must be a schema (2nd-number) or major (1st-number) release.
+- Under our [versioning policy](./versioning.md), changes to schema `title` and `description` fields can be made in point (4th-number) releases. Any other schema change must be a schema (2nd-number) or major (1st-number) release, accompanied by explicit alerts to owners of dependent codebases.
