@@ -191,6 +191,98 @@ class TestValidateFile:
         assert not is_valid
         assert len(errors) > 0
 
+    def test_empty_data_file_is_valid(self, tmp_path: Path, simple_schema: Path) -> None:
+        """Header-only files should validate successfully."""
+        data_file = tmp_path / "test.tsv"
+        data_file.write_text("col1\tcol2\n")
+        is_valid, errors = validate_file(data_file, simple_schema)
+        assert is_valid
+        assert errors == []
+
+    @pytest.mark.parametrize(
+        "schema_fields,data,should_pass",
+        [
+            # Required constraint
+            (
+                [{"name": "col1", "type": "string", "constraints": {"required": True}}],
+                "col1\n\n",
+                False,
+            ),
+            # Pattern constraint - invalid
+            (
+                [{"name": "id", "type": "string", "constraints": {"pattern": "^[^/]+(/[^/]+)?$"}}],
+                "id\nfoo/bar/baz\n",
+                False,
+            ),
+            # Pattern constraint - valid
+            (
+                [{"name": "id", "type": "string", "constraints": {"pattern": "^[^/]+(/[^/]+)?$"}}],
+                "id\nNC_001234.1\nAB/CD\n",
+                True,
+            ),
+            # Enum constraint - invalid
+            (
+                [{"name": "status", "type": "string", "constraints": {"enum": ["pass", "fail"]}}],
+                "status\nunknown\n",
+                False,
+            ),
+            # Minimum constraint - invalid
+            (
+                [{"name": "count", "type": "integer", "constraints": {"minimum": 0}}],
+                "count\n-5\n",
+                False,
+            ),
+            # Maximum constraint - invalid
+            (
+                [{"name": "frac", "type": "number", "constraints": {"maximum": 1.0}}],
+                "frac\n1.5\n",
+                False,
+            ),
+        ],
+        ids=["required", "pattern_invalid", "pattern_valid", "enum", "minimum", "maximum"],
+    )
+    def test_constraint_validation(
+        self, tmp_path: Path, schema_fields: list, data: str, should_pass: bool
+    ) -> None:
+        schema = {
+            "$schema": "https://datapackage.org/profiles/2.0/tableschema.json",
+            "fields": schema_fields,
+        }
+        schema_path = tmp_path / "test.schema.json"
+        schema_path.write_text(json.dumps(schema))
+        data_file = tmp_path / "test.tsv"
+        data_file.write_text(data)
+        is_valid, errors = validate_file(data_file, schema_path)
+        assert is_valid == should_pass
+        if not should_pass:
+            assert len(errors) > 0
+
+    def test_missing_values_handled(self, tmp_path: Path) -> None:
+        """Values in missingValues should be treated as null."""
+        schema = {
+            "$schema": "https://datapackage.org/profiles/2.0/tableschema.json",
+            "missingValues": ["", "NA"],
+            "fields": [
+                {"name": "col1", "type": "integer"},
+                {"name": "col2", "type": "integer"},
+            ],
+        }
+        schema_path = tmp_path / "test.schema.json"
+        schema_path.write_text(json.dumps(schema))
+        data_file = tmp_path / "test.tsv"
+        # Both "NA" and "" should be treated as null, not as invalid integers
+        data_file.write_text("col1\tcol2\n42\tNA\nNA\t99\n100\t\n")
+        is_valid, errors = validate_file(data_file, schema_path)
+        assert is_valid
+
+    def test_multiple_errors_all_reported(self, tmp_path: Path, simple_schema: Path) -> None:
+        """Multiple validation errors should all be reported."""
+        data_file = tmp_path / "test.tsv"
+        data_file.write_text("col1\tcol2\nfoo\tnot_int_1\nbar\tnot_int_2\nbaz\tnot_int_3\n")
+        is_valid, errors = validate_file(data_file, simple_schema)
+        assert not is_valid
+        assert len(errors) >= 3
+
 ####################
 # validate_outputs #
 ####################
