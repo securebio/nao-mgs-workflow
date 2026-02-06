@@ -12,7 +12,8 @@
       "type": "string",
       "constraints": {
         "required": true,
-        "minLength": 1
+        "minLength": 1,
+        "pattern": "^[^/]+(/[^/]+)?$"
       },
       "example": "AB010145.1"
     },
