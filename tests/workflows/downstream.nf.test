@@ -47,7 +47,7 @@ nextflow_pipeline {
                 path("${launchDir}/output/results_downstream/tt1_duplicate_stats.tsv.gz"),
                 path("${launchDir}/output/results_downstream/tt1_clade_counts.tsv.gz"),
                 path("${launchDir}/output/results_downstream/tt1_validation_hits.tsv.gz"),
-            ).match("downstream_output")
+            ).match("downstream_output_shortread")
         }
     }
 
@@ -65,7 +65,7 @@ nextflow_pipeline {
             // Verify file contents match snapshot
             assert snapshot(
                 path("${launchDir}/output/results_downstream/tt1_validation_hits.tsv.gz"),
-            ).match("downstream_ont_output")
+            ).match("downstream_output_ont")
         }
     }
 

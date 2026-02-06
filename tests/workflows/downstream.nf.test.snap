@@ -1,5 +1,5 @@
 {
-    "downstream_ont_output": {
+    "downstream_output_ont": {
         "content": [
             "tt1_validation_hits.tsv.gz:md5,0982c5c2b47f0583a70f46691f6a9ced"
         ],
@@ -9,7 +9,7 @@
         },
         "timestamp": "2026-01-07T18:39:49.966524499"
     },
-    "downstream_output": {
+    "downstream_output_shortread": {
         "content": [
             "tt1_duplicate_reads.tsv.gz:md5,73bf9f83111f05842c61cd9cad9e5857",
             "tt1_duplicate_stats.tsv.gz:md5,dea20f8f6c3f9753f8b225fc0f8c7e52",
