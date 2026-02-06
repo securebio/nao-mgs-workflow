@@ -10,7 +10,7 @@ import pysam
 import gzip
 import bz2
 import math
-from Bio import SeqIO
+from Bio.Seq import Seq
 
 # Utility functions
 
@@ -33,11 +33,31 @@ def join_line(fields):
     return "\t".join(map(str, fields)) + "\n"
 
 
+def read_fastq_record(fh):
+    """Read one FASTQ record (4 lines). Returns (read_id, seq, qual) or None at EOF."""
+    header = fh.readline().strip()
+    if not header:
+        return None
+    seq = fh.readline().strip()
+    fh.readline()  # + line
+    qual = fh.readline().strip()
+    read_id = header[1:].split()[0]  # Strip @ prefix, take first field
+    return (read_id, seq, qual)
+
+
 # Alignment-level functions
 
 
-def parse_sam_alignment(read, genbank_metadata, viral_taxids, clean_query_record):
-    """Parse a Minimap2 SAM alignment."""
+def parse_sam_alignment(read, genbank_metadata, viral_taxids, clean_seq, clean_qual):
+    """Parse a Minimap2 SAM alignment.
+
+    Args:
+        read: pysam AlignedSegment
+        genbank_metadata: dict of genome_id -> [taxid, species_taxid]
+        viral_taxids: set of viral taxid strings
+        clean_seq: unmasked read sequence string
+        clean_qual: unmasked read quality string (Phred+33 ASCII)
+    """
     out = {}
     out["seq_id"] = read.query_name
 
@@ -54,13 +74,12 @@ def parse_sam_alignment(read, genbank_metadata, viral_taxids, clean_query_record
 
     # Adding original read sequence and quality
     if read.is_reverse:
-        # When minimap2 maps to the RC version of a strand, if returns the RC version of the read
-        clean_query_record = clean_query_record.reverse_complement()
-
-    query_seq_clean = clean_query_record.seq
-    query_qual_clean_numeric = clean_query_record.letter_annotations["phred_quality"]
-    # Turn numeric quality scores back into Phred+33 scores.
-    query_qual_clean = "".join([chr(x + 33) for x in query_qual_clean_numeric])
+        # When minimap2 maps to the RC version of a strand, return the RC version
+        query_seq_clean = str(Seq(clean_seq).reverse_complement())
+        query_qual_clean = clean_qual[::-1]
+    else:
+        query_seq_clean = clean_seq
+        query_qual_clean = clean_qual
 
     out["map_qual"] = read.mapping_quality
     out["ref_start"] = read.reference_start
@@ -69,13 +88,13 @@ def parse_sam_alignment(read, genbank_metadata, viral_taxids, clean_query_record
     out["best_alignment_score"] = read.get_tag("AS")
     out["next_alignment_score"] = "NA"
     out["length_normalized_score"] = out["best_alignment_score"] / math.log(
-        len(clean_query_record.seq)
+        len(clean_seq)
     )
 
     out["query_seq"] = query_seq_clean
     out["query_rc"] = read.is_reverse
     out["query_qual"] = query_qual_clean
-    out["query_len"] = len(clean_query_record.seq)
+    out["query_len"] = len(clean_seq)
     out["classification"] = (
         "supplementary"
         if read.is_supplementary
@@ -103,8 +122,11 @@ def extract_viral_taxid(genome_id, genbank_metadata, viral_taxids):
 # File-level functions
 
 
-def process_sam(sam_file, out_file, genbank_metadata, viral_taxids, clean_read_dict):
-    """Process a Minimap2 SAM file."""
+def process_sam(sam_file, out_file, genbank_metadata, viral_taxids, fastq_file):
+    """Process a Minimap2 SAM file using streaming merge join with sorted FASTQ.
+
+    Both sam_file and fastq_file must be sorted by read ID.
+    """
     with open_by_suffix(out_file, "w") as out_fh:
         header = (
             "seq_id\t"
@@ -127,18 +149,35 @@ def process_sam(sam_file, out_file, genbank_metadata, viral_taxids, clean_read_d
         )
         out_fh.write(header)
         try:
-            with pysam.AlignmentFile(sam_file, "r") as sam_file:
+            with pysam.AlignmentFile(sam_file, "r") as sam_fh, open(
+                fastq_file
+            ) as fastq_fh:
                 num_reads = 0
-                for read in sam_file:
+                fastq_record = read_fastq_record(fastq_fh)
+                for read in sam_fh:
                     num_reads += 1
                     print_log(f"Processing read: {read.query_name}")
                     if read.is_unmapped:
                         continue
                     read_id = read.query_name
 
-                    clean_query_record = clean_read_dict[read_id]
+                    # Advance FASTQ pointer until we find or pass this read ID
+                    while fastq_record is not None and fastq_record[0] < read_id:
+                        fastq_record = read_fastq_record(fastq_fh)
+
+                    if fastq_record is None or fastq_record[0] != read_id:
+                        raise ValueError(
+                            f"Read {read_id} found in SAM but not in FASTQ. "
+                            "Ensure both files are sorted by read ID and FASTQ "
+                            "contains all reads in the SAM file."
+                        )
+
+                    clean_seq = fastq_record[1]
+                    clean_qual = fastq_record[2]
+                    # Don't advance FASTQ — next SAM row may have same read ID
+
                     line = parse_sam_alignment(
-                        read, genbank_metadata, viral_taxids, clean_query_record
+                        read, genbank_metadata, viral_taxids, clean_seq, clean_qual
                     )
                     if line is None:
                         continue
@@ -162,11 +201,7 @@ def process_sam(sam_file, out_file, genbank_metadata, viral_taxids, clean_read_d
 
 
 def parse_arguments():
-    """Parse and return command-line arguments.
-
-    Returns:
-        Parsed argument namespace
-    """
+    """Parse and return command-line arguments."""
     parser = argparse.ArgumentParser(
         description="Process Minimap2 SAM output into a TSV with viral alignment information."
     )
@@ -180,9 +215,9 @@ def parse_arguments():
     parser.add_argument(
         "-r",
         "--reads",
-        type=lambda f: open_by_suffix(f, "r"),
-        default=sys.stdin,
-        help="Path to FASTQ that contains the non-masked version of viral reads (default: stdin).",
+        type=str,
+        required=True,
+        help="Path to sorted FASTQ file with non-masked viral reads.",
     )
     parser.add_argument(
         "-m",
@@ -222,6 +257,7 @@ def main():
         start_time = time.time()
         # Print parameters
         print_log("SAM file path: {}".format(sam_file))
+        print_log("FASTQ file path: {}".format(clean_reads))
         print_log("Genbank metadata file path: {}".format(meta_path))
         print_log("Viral DB file path: {}".format(vdb_path))
         print_log("Output path: {}".format(out_file))
@@ -242,15 +278,9 @@ def main():
 
         print_log(f"Imported {len(viral_taxids)} virus taxa.")
 
-        # Import clean reads
-        clean_read_dict = {}
-        for record in SeqIO.parse(clean_reads, "fastq"):
-            read_id = record.id
-            clean_read_dict[read_id] = record
-
-        # Process SAM
+        # Process SAM with streaming FASTQ merge join
         print_log("Processing SAM file...")
-        process_sam(sam_file, out_file, genbank_metadata, viral_taxids, clean_read_dict)
+        process_sam(sam_file, out_file, genbank_metadata, viral_taxids, clean_reads)
         print_log("File processed.")
 
         # Finish time tracking
@@ -260,8 +290,6 @@ def main():
     except Exception as e:
         print_log(f"Error: {str(e)}")
         sys.exit(1)
-    finally:
-        args.reads.close()  # Only close args.reads since args.sam is a string
 
 
 if __name__ == "__main__":

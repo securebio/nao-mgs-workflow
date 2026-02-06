@@ -7,6 +7,7 @@ include { MINIMAP2 as MINIMAP2_HUMAN } from "../../../modules/local/minimap2"
 include { MINIMAP2_NON_STREAMED as MINIMAP2_CONTAM } from "../../../modules/local/minimap2"
 include { FILTLONG } from "../../../modules/local/filtlong"
 include { MASK_FASTQ_READS } from "../../../modules/local/maskRead"
+include { EXTRACT_SHARED_FASTQ_READS as EXTRACT_VIRAL_FILTERED_READS } from "../../../modules/local/extractSharedFastq"
 include { PROCESS_VIRAL_MINIMAP2_SAM } from "../../../modules/local/processViralMinimap2Sam"
 include { LCA_TSV } from "../../../modules/local/lcaTsv"
 include { SORT_TSV as SORT_MINIMAP2_VIRAL } from "../../../modules/local/sortTsv"
@@ -61,8 +62,12 @@ workflow EXTRACT_VIRAL_READS_ONT {
         virus_minimap2_params = minimap2_base_params + [suffix: "virus", alignment_params: "-N 10"]
         virus_minimap2_ch = MINIMAP2_VIRUS(no_contam_ch, minimap2_virus_index, virus_minimap2_params)
         virus_sam_ch = virus_minimap2_ch.sam
+        // Pre-filter unmasked reads to only virus-mapped reads before SAM processing
+        viral_filtered_reads_ch = EXTRACT_VIRAL_FILTERED_READS(
+            virus_minimap2_ch.reads_mapped.join(filtered_ch.reads)
+        )
         // Group cleaned reads and sam files by sample
-        sam_fastq_ch = virus_sam_ch.join(filtered_ch)
+        sam_fastq_ch = virus_sam_ch.join(viral_filtered_reads_ch.output)
         // Generate TSV of viral hits, and sort
         processed_minimap2_ch = PROCESS_VIRAL_MINIMAP2_SAM(sam_fastq_ch, genome_meta_path, virus_db_path)
         processed_minimap2_sorted_ch = SORT_MINIMAP2_VIRAL(processed_minimap2_ch.output, "seq_id")
