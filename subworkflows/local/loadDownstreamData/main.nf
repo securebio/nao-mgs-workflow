@@ -23,7 +23,7 @@ workflow LOAD_DOWNSTREAM_DATA {
 
         // Helper to resolve paths: absolute and S3 paths used as-is, relative paths resolved against input_base_dir
         def resolvePath = { path ->
-            (path.startsWith('s3://') || path.startsWith('/')) ? file(path) : file(input_base_dir, path)
+            (path.startsWith('s3://') || path.startsWith('/')) ? file(path) : file(input_base_dir).resolve(path)
         }
 
         // Construct input channel
