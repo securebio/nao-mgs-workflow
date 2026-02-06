@@ -29,7 +29,6 @@ Main heading represents the folder name, and subheadings represent a description
 
 ### `intermediates/`
 
-- `virus_hits_final.fastq.gz`: Filtered viral hits in FASTQ format.
 - `aligner_hits_all.tsv.gz`: List of all putative viral alignments (primary, secondary and supplementary) from the aligner used in the `RUN` workflow (bowtie2 for EXTRACT_VIRAL_READS_SHORT or minimap2 for EXTRACT_VIRAL_READS_ONT) with modified columns from the [SAM specification](https://samtools.github.io/hts-specs/SAMv1.pdf).
 - `lca_hits_all.tsv.gz`: List of putative viral reads after having applied LCA to `aligner_hits_all.tsv.gz`, along with columns representing summary statistics.
 - `reads/raw_viral/*`: Directory containing raw reads corresponding to those reads that survive initial viral screening with BBDuk. (Note: this is not currently produced for ONT data.)
@@ -56,10 +55,6 @@ Main heading represents the folder name, and subheadings represent a description
 #### Taxonomic identification
 - `bracken_reports_merged.tsv.gz`: Bracken output reports in TSV format, labeled by sample and ribosomal status, for subset samples produced by SUBSET_TRIM.
 - `kraken_reports_merged.tsv.gz`: Kraken output reports in TSV format, labeled by sample and ribosomal status, for subset samples produced by SUBSET_TRIM.
-
-#### BLAST
-- `merged_blast_filtered.tsv.gz`: Filtered tabular BLASTN output for putative vertebrate viral reads.
-- `merged_blast_input_subset.fasta.gz`: Subset interleaved FASTA used as input to BLASTN (useful for identifying which reads were included in the subset for downstream analysis).
 
 ## Index workflow
 
