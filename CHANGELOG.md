@@ -35,6 +35,7 @@
     - Removed `COUNT_TOTAL_READS` subworkflow; `COUNT_READS` module is now called directly from RUN workflow.
     - Viral hits: `virus_hits_final.tsv.gz` → `{sample}_virus_hits.tsv.gz`
 - Updated required Nextflow version to 25.10.4.
+- Refactored extractViralReadsONT and process_viral_minimap2_sam.py so that processViralMinimap2Sam requires O(1) instead of O(num reads) memory.
 
 # v3.0.1.9
 
