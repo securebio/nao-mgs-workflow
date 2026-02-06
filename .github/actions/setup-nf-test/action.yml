@@ -75,3 +75,7 @@ runs:
 
     - name: Setup nf-test
       uses: nf-core/setup-nf-test@v1
+
+    - name: Clean nf-test directory
+      shell: bash
+      run: rm -rf .nf-test
