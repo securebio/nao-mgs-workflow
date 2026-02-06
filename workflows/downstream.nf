@@ -60,8 +60,8 @@ workflow DOWNSTREAM {
         CREATE_EMPTY_GROUP_OUTPUTS(
             LOAD_DOWNSTREAM_DATA.out.missing_groups,
             file("${projectDir}/pyproject.toml"),
-            params.platform,
-            ""
+            file("${projectDir}/schemas"),
+            params.platform
         )
 
         // Prepare publishing channels

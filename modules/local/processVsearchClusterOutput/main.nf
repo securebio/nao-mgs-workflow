@@ -1,6 +1,7 @@
 // Process tabular output from VSEARCH clustering into a unified output format
+// Tool source: rust-tools/process_vsearch_cluster_output/
 process PROCESS_VSEARCH_CLUSTER_OUTPUT_LIST {
-    label "pandas"
+    label "rust_tools"
     label "single"
     input:
         tuple val(sample), path(summaries)
@@ -22,7 +23,7 @@ process PROCESS_VSEARCH_CLUSTER_OUTPUT_LIST {
             out_db=${sample}_\${species}_vsearch_tab.tsv.gz
             out_id=${sample}_\${species}_vsearch_ids.txt
             par="-n ${n_clusters} ${prefix_string}"
-            process_vsearch_cluster_output.py \${par} \${summary} \${out_db} \${out_id}
+            process_vsearch_cluster_output \${par} \${summary} \${out_db} \${out_id}
             ln -s \${summary} input_\${summary}
         done
         """

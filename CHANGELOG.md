@@ -1,5 +1,11 @@
 # v3.1.0.0-dev
 
+- Add datapackage table-schema support for workflow outputs (proof-of-concept with `duplicate_stats`):
+    - Created `schemas/` directory with `duplicate_stats.schema.json` table-schema definition.
+    - Added `bin/validate_schemas.py` script to validate output files against schemas using frictionless library.
+    - Updated `CREATE_EMPTY_GROUP_OUTPUTS` to generate headers from schemas for empty output files.
+    - Added schema validation step to DOWNSTREAM workflow CI after nf-test.
+    - Created reusable `.github/actions/setup-python` composite action for Python environment setup.
 - Remove BLAST validation from RUN workflow. BLAST validation is now only available in the DOWNSTREAM workflow via VALIDATE_VIRAL_ASSIGNMENTS.
     - Deleted `BLAST_VIRAL` subworkflow, `SUBSET_FASTN` module, and `RUN_VALIDATION` workflow.
     - Removed `blast_viral_fraction` and related BLAST parameters from RUN workflow configs.
@@ -15,6 +21,9 @@
 - Fix CI bug where `--rust_tools_version dev` was passed to test runner instead of via environment variable.
 - Convert `setup-rust-container` from reusable workflow to composite action, simplifying CI check reporting.
 - Remove confusing `workflow_run` triggers from integration tests (benchmark and test-chained workflows).
+- Refactored processVsearchClusterOutput module to use streaming Rust implementation rather than memory-intensive Python/Pandas.
+- Changed read counts output from concatenated `read_counts.tsv.gz` to per-sample `{sample}_read_counts.tsv` files.
+    - Removed `COUNT_TOTAL_READS` subworkflow; `COUNT_READS` module is now called directly from RUN workflow.
 
 # v3.0.1.9
 

@@ -7,7 +7,7 @@
 ***************************/
 
 include { LOAD_SAMPLESHEET } from "../subworkflows/local/loadSampleSheet"
-include { COUNT_TOTAL_READS } from "../subworkflows/local/countTotalReads"
+include { COUNT_READS } from "../modules/local/countReads"
 include { EXTRACT_VIRAL_READS_SHORT } from "../subworkflows/local/extractViralReadsShort"
 include { EXTRACT_VIRAL_READS_ONT } from "../subworkflows/local/extractViralReadsONT"
 include { SUBSET_TRIM } from "../subworkflows/local/subsetTrim"
@@ -70,7 +70,7 @@ workflow RUN {
     single_end_ch = LOAD_SAMPLESHEET.out.single_end
 
     // Count reads in files
-    COUNT_TOTAL_READS(samplesheet_ch, single_end_ch)
+    COUNT_READS(samplesheet_ch, single_end_ch)
 
     // Extract and count human-viral reads
     if ( params.platform == "ont" ) {

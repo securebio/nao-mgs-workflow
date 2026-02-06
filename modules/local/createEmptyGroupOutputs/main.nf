@@ -5,6 +5,7 @@ process CREATE_EMPTY_GROUP_OUTPUTS {
     input:
         val(missing_groups)
         path(pyproject_toml)
+        path(schema_dir)
         val(platform)
         val(pattern_filter)
     output:
@@ -15,6 +16,6 @@ process CREATE_EMPTY_GROUP_OUTPUTS {
         if (pattern_filter) opts << "--pattern-filter ${pattern_filter}"
         def opts_str = opts.join(' ')
         """
-        create_empty_group_outputs.py "${groups_arg}" ${pyproject_toml} ${opts_str}
+        create_empty_group_outputs.py "${groups_arg}" ${pyproject_toml} ${opts_str} --schema-dir ${schema_dir}
         """
 }

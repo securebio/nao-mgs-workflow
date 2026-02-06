@@ -37,7 +37,7 @@ Main heading represents the folder name, and subheadings represent a description
 ### `results/`
 
 #### QC
-- `read_counts.tsv.gz`: Total number of raw reads in each sample.
+- `{sample}_read_counts.tsv`: Total number of raw reads for a given sample.
 - `subset_qc_adapter_stats.tsv.gz`: Adapter statistics calculated by FASTQC for subset sample before and after adapter trimming, given as a percentage of reads containing adapter content (`pc_adapters`) at each position along the read (`position`) for each adapter detected (`adapter`) for each read in the read pair (`read_pair`).
 - `subset_qc_basic_stats.tsv.gz`: Summary statistics for each subset sample before and after adapter trimming, including:
     - GC content (`percent GC`);
