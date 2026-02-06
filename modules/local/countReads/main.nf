@@ -8,7 +8,7 @@ process COUNT_READS {
         tuple val(sample), path("${sample}_read_counts.tsv"), emit: output
         tuple val(sample), path("${sample}_reads_in.fastq.gz"), emit: input
     script:
-        def readFile = single_end ? reads : reads[0]
+        def readFile = single_end ? reads : reads[0] // For paired-end data, count the forward reads
         def extractCmd = readFile.toString().endsWith(".gz") ? "zcat" : "cat"
         """
         set -eou pipefail

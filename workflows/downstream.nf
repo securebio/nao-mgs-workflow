@@ -54,6 +54,7 @@ workflow DOWNSTREAM {
         CREATE_EMPTY_GROUP_OUTPUTS(
             PREPARE_GROUP_TSVS.out.empty_group_logs.map { _label, file -> file },
             file("${projectDir}/pyproject.toml"),
+            file("${projectDir}/schemas"),
             params.platform
         )
         // Publish results
