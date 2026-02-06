@@ -8,6 +8,10 @@ on:
       - stable
       - ci-test
 
+permissions:
+  id-token: write
+  contents: read
+
 concurrency:
   group: ci-nf-test-subworkflows-pr-${{ github.event.pull_request.number }}
   cancel-in-progress: true
@@ -19,8 +23,6 @@ jobs:
       labels: ubuntu-16
     timeout-minutes: 20
     env:
-      AWS_ACCESS_KEY_ID: ${{secrets.NAO_TESTING_ACCESS_KEY }}
-      AWS_SECRET_ACCESS_KEY: ${{ secrets.NAO_TESTING_SECRET_ACCESS_KEY }}
       RUST_TOOLS_VERSION: ${{ needs.setup-rust.outputs.rust-version }}
     steps:
       - name: Checkout
@@ -47,9 +49,6 @@ jobs:
       - name: Setup nf-test environment
         if: steps.filter.outputs.subworkflows == 'true'
         uses: ./.github/actions/setup-nf-test
-        with:
-          aws_access_key_id: ${{ secrets.NAO_TESTING_ACCESS_KEY }}
-          aws_secret_access_key: ${{ secrets.NAO_TESTING_SECRET_ACCESS_KEY }}
       - name: Setup Rust container
         if: steps.filter.outputs.subworkflows == 'true'
         id: rust
