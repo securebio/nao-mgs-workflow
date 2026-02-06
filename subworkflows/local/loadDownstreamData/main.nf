@@ -5,6 +5,7 @@
 workflow LOAD_DOWNSTREAM_DATA {
     take:
         input_file
+        input_base_dir  // Base directory for resolving relative paths in input CSV (use projectDir or launchDir)
     main:
         // Start time
         start_time = new Date()
@@ -20,9 +21,14 @@ workflow LOAD_DOWNSTREAM_DATA {
                 Please ensure the input file has the correct columns in the specified order.""".stripIndent())
         }
 
+        // Helper to resolve paths: absolute and S3 paths used as-is, relative paths resolved against input_base_dir
+        def resolvePath = { path ->
+            (path.startsWith('s3://') || path.startsWith('/')) ? file(path) : file(input_base_dir, path)
+        }
+
         // Construct input channel
         input_ch = Channel.fromPath(input_file).splitCsv(header: true)
-            | map { row -> tuple(row.label, file(row.hits_tsv), file(row.groups_tsv)) }
+            | map { row -> tuple(row.label, resolvePath(row.hits_tsv), resolvePath(row.groups_tsv)) }
 
     emit:
         input = input_ch

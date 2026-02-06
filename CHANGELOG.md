@@ -1,5 +1,10 @@
 # v3.1.0.0-dev
 
+- Add support for relative paths in DOWNSTREAM input CSV files:
+    - Relative paths (not starting with `/` or `s3://`) are resolved against `params.input_base_dir` (defaults to `projectDir`).
+    - Users can set `params.input_base_dir = launchDir` in their config to resolve paths relative to the launch directory.
+    - S3 URIs and absolute paths continue to work as before.
+    - Switched DOWNSTREAM tests to use local relative paths instead of S3 URIs.
 - Add datapackage table-schema support for workflow outputs (proof-of-concept with `duplicate_stats`):
     - Created `schemas/` directory with `duplicate_stats.schema.json` table-schema definition.
     - Added `bin/validate_schemas.py` script to validate output files against schemas using frictionless library.

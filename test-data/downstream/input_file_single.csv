@@ -1,2 +1,2 @@
 label,hits_tsv,groups_tsv
-tt1,s3://nao-testing/tiny-test/processed/virus_hits_final.tsv.gz,s3://nao-testing/tiny-test/metadata/sample_groups_1.tsv
+tt1,test-data/results/run-short/virus_hits_final.tsv,test-data/downstream/sample_groups_1.tsv
