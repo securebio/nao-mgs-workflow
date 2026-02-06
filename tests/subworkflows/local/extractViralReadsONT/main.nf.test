@@ -33,18 +33,17 @@ nextflow_workflow {
             assert hits_final_read_ids_list.size() == hits_final_read_ids_set.size(), 
                 "Found duplicate read IDs in final output: expected ${hits_final_read_ids_set.size()} unique IDs but got ${hits_final_read_ids_list.size()} total entries"
             assert sam_ids.size() > 0
-            assert hits_final_read_ids_set.every { it in sam_ids }, 
+            assert hits_final_read_ids_set.every { it in sam_ids },
                 "All read IDs in final output should exist in SAM file"
-            // Check the the human and contam filtering work and produce FASTQ files that are subsets of the prior FASTQ file.
+            // Check that human and contam filtering work and produce FASTQ files that are subsets of the prior FASTQ file
             def fastq_filtered_human = path(workflow.out.test_fastq_filtered_human[0][1]).fastq
             def fastq_filtered_contam = path(workflow.out.test_fastq_filtered_contam[0][1]).fastq
-            def fastq_viral_hits = path(workflow.out.hits_fastq[0]).fastq
             def human_filter_num = fastq_filtered_human.readNames.size()
             def contam_filter_num = fastq_filtered_contam.readNames.size()
-            def virus_filter_num = fastq_viral_hits.readNames.size()
+            def virus_hits_num = hits_final_read_ids_set.size()
             assert human_filter_num > contam_filter_num
-            assert contam_filter_num > virus_filter_num
-            assert virus_filter_num > 0
+            assert contam_filter_num > virus_hits_num
+            assert virus_hits_num > 0
         }
     }
 
@@ -66,7 +65,6 @@ nextflow_workflow {
             assert workflow.success
             // FASTQ and SAM output files should be empty
             def fastq_files = [
-                path(workflow.out.hits_fastq[0]),
                 path(workflow.out.test_fastq_filtered_human[0][1]),
                 path(workflow.out.test_fastq_filtered_contam[0][1])
             ]

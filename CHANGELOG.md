@@ -10,6 +10,8 @@
     - Deleted `BLAST_VIRAL` subworkflow, `SUBSET_FASTN` module, and `RUN_VALIDATION` workflow.
     - Removed `blast_viral_fraction` and related BLAST parameters from RUN workflow configs.
     - Removed unused `EXTRACT_VIRAL_HITS_TO_FASTQ_NOREF_LABELED` process (non-LIST version).
+    - Removed `hits_fastq` output from `EXTRACT_VIRAL_READS_SHORT` and `EXTRACT_VIRAL_READS_ONT` subworkflows (this concatenated interleaved FASTQ was used for BLAST validation).
+    - Removed unused FASTQ extraction includes (`CONCATENATE_FILES`, `EXTRACT_VIRAL_HITS_TO_FASTQ`, `EXTRACT_SHARED_FASTQ_READS`).
 - Removed Cutadapt from RUN workflow to reduce runtime and complexity. FASTP alone now handles adapter trimming for the short-read viral identification pipeline.
 - Update documentation on Seqera ECR credentials.
 - Add Rust build system to CI and rust-tools container to ECR.
@@ -19,6 +21,7 @@
 - Refactored processVsearchClusterOutput module to use streaming Rust implementation rather than memory-intensive Python/Pandas.
 - Changed RUN outputs to per-sample format:
     - Read counts: `read_counts.tsv.gz` → `{sample}_read_counts.tsv`
+    - QC stats: `subset_qc_*_stats.tsv.gz` → `{sample}_qc_*_stats_raw.tsv.gz` and `{sample}_qc_*_stats_cleaned.tsv.gz`
     - Taxonomy: `bracken_reports_merged.tsv.gz` → `{sample}_bracken.tsv.gz`, `kraken_reports_merged.tsv.gz` → `{sample}_kraken.tsv.gz`
     - Removed `COUNT_TOTAL_READS` subworkflow; `COUNT_READS` module is now called directly from RUN workflow.
 
