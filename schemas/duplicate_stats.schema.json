@@ -1,0 +1,54 @@
+{
+  "$schema": "https://datapackage.org/profiles/2.0/tableschema.json",
+  "title": "Summary Statistics for Alignment-Based Duplicate Marking",
+  "description": "Summary statistics for groups of duplicate reads identified by the DOWNSTREAM workflow. Each row represents a single duplicate group: a set of reads aligned to the same genome, with matching start coordinates (within configurable tolerance) for both forward and reverse reads. Groups are defined based on the primary alignment of each read and do not account for LCA information.",
+  "missingValues": ["", "NA"],
+  "primaryKey": ["prim_align_dup_exemplar"],
+  "fields": [
+    {
+      "name": "prim_align_genome_id_all",
+      "title": "Genome ID",
+      "description": "NCBI accession ID(s) of the genome(s) that reads in this duplicate group aligned to in their primary alignment. For split alignments where forward and reverse reads map to different genomes, genome IDs are joined with '/' and sorted alphabetically.",
+      "type": "string",
+      "constraints": {
+        "required": true,
+        "minLength": 1,
+        "pattern": "^[^/]+(/[^/]+)?$"
+      },
+      "example": "AB010145.1"
+    },
+    {
+      "name": "prim_align_dup_exemplar",
+      "title": "Exemplar Read ID",
+      "description": "Query name (read ID) of the exemplar read selected to represent this duplicate group. Each group has a single exemplar read, which is the read with the highest average quality score; ties are broken lexicographically by query name.",
+      "type": "string",
+      "constraints": {
+        "minLength": 1
+      },
+      "example": "LH00642:91:22WT52LT4:1:1273:22803:11579"
+    },
+    {
+      "name": "prim_align_dup_count",
+      "title": "Duplicate Count",
+      "description": "Number of reads in this duplicate group. A value of 1 indicates a unique read with no duplicates.",
+      "type": "integer",
+      "constraints": {
+        "required": true,
+        "minimum": 1
+      },
+      "example": 1
+    },
+    {
+      "name": "prim_align_dup_pairwise_match_frac",
+      "title": "Pairwise Match Fraction",
+      "description": "Quality control metric indicating the fraction of all pairwise comparisons within the duplicate group that match according to the position tolerance. A value of 1.0 indicates perfect transitivity (all pairs match); lower values indicate fuzzy grouping edge cases.",
+      "type": "number",
+      "constraints": {
+        "required": true,
+        "minimum": 0,
+        "maximum": 1
+      },
+      "example": 0.99
+    }
+  ]
+}
