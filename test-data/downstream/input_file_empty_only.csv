@@ -1,2 +1,2 @@
-label,hits_tsv,groups_tsv
-empty_test,s3://nao-testing/tiny-test/empty/virus_hits_empty.tsv.gz,s3://nao-testing/tiny-test/empty/sample_groups_empty.tsv
+label,results_dir,groups_tsv
+empty_test,s3://nao-testing/tiny-test/empty/,s3://nao-testing/tiny-test/empty/sample_groups_empty.tsv

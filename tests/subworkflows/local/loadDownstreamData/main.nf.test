@@ -24,10 +24,9 @@ nextflow_workflow {
             // Should produce correctly-structured output
             def tab_in = path(workflow.out.test_input[0]).csv
             assert workflow.out.input.size() == tab_in.rowCount
-            def currentDir = new File(".").getAbsolutePath()
             for (int i=0; i < tab_in.rowCount; i++){
                 assert workflow.out.input[i][0] == tab_in.columns["label"][i]
-                assert tab_in.columns["hits_tsv"][i].contains(workflow.out.input[i][1])
+                assert workflow.out.input[i][1].toString().endsWith(".tsv.gz")
                 assert tab_in.columns["groups_tsv"][i].contains(workflow.out.input[i][2])
             }
         }

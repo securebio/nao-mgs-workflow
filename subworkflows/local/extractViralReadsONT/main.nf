@@ -14,6 +14,7 @@ include { SORT_TSV as SORT_LCA } from "../../../modules/local/sortTsv"
 include { JOIN_TSVS } from "../../../modules/local/joinTsvs"
 include { FILTER_TSV_COLUMN_BY_VALUE } from "../../../modules/local/filterTsvColumnByValue"
 include { PROCESS_LCA_ALIGNER_OUTPUT } from "../../../subworkflows/local/processLcaAlignerOutput/"
+include { COPY_FILE as RENAME_VIRUS_HITS } from "../../../modules/local/copyFile"
 
 /***********
 | WORKFLOW |
@@ -82,8 +83,10 @@ workflow EXTRACT_VIRAL_READS_ONT {
             col_keep_add_prefix,
             "prim_align_"
         )
+        // Rename virus hits to clean file name
+        renamed_hits_ch = RENAME_VIRUS_HITS(processed_ch.viral_hits_tsv, "virus_hits.tsv.gz")
     emit:
-        hits_final = processed_ch.viral_hits_tsv
+        hits_final = renamed_hits_ch
         inter_lca = processed_ch.lca_tsv
         inter_minimap2 = processed_ch.aligner_tsv
         test_minimap2_virus = virus_sam_ch
