@@ -1,5 +1,6 @@
 # v3.1.0.0-dev
 
+- Migrate GitHub Actions AWS auth from static keys to OIDC role assumption (#585)
 - Add CI validation to ensure test-data/results files stay in sync with workflow snapshot MD5 sums:
     - Created `bin/validate_test_data_sync.py` script to validate local test data against nf-test snapshot MD5 sums.
     - Added `.github/workflows/validate-test-data.yml` CI workflow to run validation on PRs.
