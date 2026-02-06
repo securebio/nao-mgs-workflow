@@ -9,7 +9,7 @@ on:
       - ci-test
 
 jobs:
-  validate:
+  validate-test-data-sync:
     runs-on: ubuntu-latest
     timeout-minutes: 5
 
