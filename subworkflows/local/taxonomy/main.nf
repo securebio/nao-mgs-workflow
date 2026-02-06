@@ -43,6 +43,6 @@ workflow TAXONOMY {
         single_reads = single_read_ch
         bbmerge_summary = summarize_bbmerge_ch
         kraken_output = kraken_ch.output
-        kraken_reports = kraken_label_ch.output  // tuple(sample, file) per sample
-        bracken = bracken_label_ch.output        // tuple(sample, file) per sample
+        kraken_reports = kraken_label_ch.output
+        bracken = bracken_label_ch.output
 }

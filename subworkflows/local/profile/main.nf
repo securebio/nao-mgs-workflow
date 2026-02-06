@@ -47,13 +47,12 @@ workflow PROFILE {
         taxonomy_params = params_map + [classification_level: "D"]
         tax_ribo_ch = TAXONOMY_RIBO(ribo_in, kraken_db_ch, single_end, taxonomy_params)
         tax_noribo_ch = TAXONOMY_NORIBO(noribo_in, kraken_db_ch, single_end, taxonomy_params)
-        // Add ribosomal status to output TSVs (now working with tuple(sample, file))
+        // Add ribosomal status to output TSVs
         kr_ribo = ADD_KRAKEN_RIBO(tax_ribo_ch.kraken_reports, "ribosomal", "TRUE", "ribo")
         kr_noribo = ADD_KRAKEN_NORIBO(tax_noribo_ch.kraken_reports, "ribosomal", "FALSE", "noribo")
         br_ribo = ADD_BRACKEN_RIBO(tax_ribo_ch.bracken, "ribosomal", "TRUE", "ribo")
         br_noribo = ADD_BRACKEN_NORIBO(tax_noribo_ch.bracken, "ribosomal", "FALSE", "noribo")
-        // Concatenate ribo + noribo per sample (not across samples)
-        // Join by sample to get tuple(sample, ribo_file, noribo_file), then restructure for CONCATENATE_TSVS_LABELED
+        // Concatenate ribo + noribo for each sample
         kr_combined = kr_ribo.output.join(kr_noribo.output)
             .map { sample, ribo_file, noribo_file -> [sample, [ribo_file, noribo_file]] }
         kr_per_sample = CONCATENATE_KRAKEN_PER_SAMPLE(kr_combined, "kraken")
@@ -61,6 +60,6 @@ workflow PROFILE {
             .map { sample, ribo_file, noribo_file -> [sample, [ribo_file, noribo_file]] }
         br_per_sample = CONCATENATE_BRACKEN_PER_SAMPLE(br_combined, "bracken")
     emit:
-        bracken = br_per_sample.output  // tuple(sample, file) per sample
-        kraken = kr_per_sample.output   // tuple(sample, file) per sample
+        bracken = br_per_sample.output
+        kraken = kr_per_sample.output
 }
