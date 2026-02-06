@@ -399,9 +399,27 @@ Only pipeline maintainers should author a new release. The process for going thr
 
 ## Schemas
 
-- We are currently in the process of defining and enforcing [schemas](../schemas/) for our output files, using the [table schema standard](https://datapackage.org/standard/table-schema/) and [frictionless Python framework](https://framework.frictionlessdata.io/).
-- Not all output files yet have schemas; those that have been added are used to validate test outputs in Github Actions to ensure that the output produced matches the schema.
-- If you are working on a change that affects pipeline outputs, it's a good idea to review the schema files for affected outputs where available, to know what's expected for each column.
+We are currently in the process of defining and enforcing [schemas](../schemas/) for our output files, using the [table schema standard](https://datapackage.org/standard/table-schema/) and [frictionless Python framework](https://framework.frictionlessdata.io/). Not all output files yet have schemas; those that have been added are used to validate test outputs in Github Actions to ensure that the output produced matches the schema.
+
+### Policy
+
+All new tabular output files should have a complete schema, and all existing schemas should be maintained. To add a new schema, create a corresponding JSON file in `schemas`. All schemas should have:
+
+- A `fields` entry with subentries for each column in the associated output file (no missing columns). Each column subentry should at minimum have `name`, `type`, `title`, & `description` fields. Most should also have a `constraints` fields delimiting permitted values.
+- A `primaryKey` entry describing a set of fields that are collectively guaranteed to uniquely identify each row (can often be a single field).
+- A `missingValues` entry listing permitted null values (typically `""` and `"NA"`).
+
+### Versioning and guarantees
+
+Under our [versioning policy](./versioning.md), changes to schema `title` and `description` fields can be made in point (4th-number) releases. Any other schema change must be a schema (2nd-number) or major (1st-number) release, accompanied by explicit alerts to owners of dependent codebases.
+
+**What the schema guarantees:** Consumers can rely on the schema to define the complete structure and validation rules for an output file. Any behavior encoded in the schema (column names, types, constraints) is guaranteed to be stable within a schema version.
+
+**What the schema does not guarantee:** Formatting or semantics not explicitly encoded in schema constraints are not guaranteed. For example, if a string field contains a formatted value (like `taxid:name`) but no `pattern` constraint enforces this format, the format may change in a point release. If you need to parse a field's contents programmatically, request that appropriate constraints be added to the schema.
+
+### Working with schemas
+
+- If you are working on a change that affects pipeline outputs, review the schema files for affected outputs where available, to know what's expected for each column.
 - If an input to DOWNSTREAM has no data, the `createEmptyGroupOutputs` module will generate header-only outputs based on schemas where available. Output files with no corresponding schema will be empty.
-- Under our [versioning policy](./versioning.md), changes to schema `title` and `description` fields can be made in point (4th-number) releases. Any other schema change must be a schema (2nd-number) or major (1st-number) release, accompanied by explicit alerts to owners of dependent codebases.
+- To validate output files locally, run `bin/validate_schemas.py`.
 - If you are developing code external to this repository that depends on its outputs, you should review the corresponding schemas to understand what guarantees you can expect.
