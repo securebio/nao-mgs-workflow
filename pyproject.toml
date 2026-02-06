@@ -8,6 +8,7 @@ version = "3.1.0.0-dev"
 requires-python = ">=3.12"
 dependencies = [
     "biopython>=1.85",
+    "frictionless>=5.18.0",
     "mypy>=1.18.1",
     # Needed until https://github.com/securebio/nao-dedup/pull/12 has been
     # merged and we've updated post-processing/nao-dedup/ to depend on the
@@ -89,9 +90,9 @@ expected-outputs-run = [
     "logging/pyproject.toml",
     "logging/pyproject-index.toml",
     "logging/time.txt",
+    "results/{SAMPLE}_read_counts.tsv",
     "results/bracken_reports_merged.tsv.gz",
     "results/kraken_reports_merged.tsv.gz",
-    "results/read_counts.tsv.gz",
     "results/subset_qc_adapter_stats.tsv.gz",
     "results/subset_qc_basic_stats.tsv.gz",
     "results/subset_qc_length_stats.tsv.gz",

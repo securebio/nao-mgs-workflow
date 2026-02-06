@@ -7,7 +7,7 @@
 ***************************/
 
 include { LOAD_SAMPLESHEET } from "../subworkflows/local/loadSampleSheet"
-include { COUNT_TOTAL_READS } from "../subworkflows/local/countTotalReads"
+include { COUNT_READS } from "../modules/local/countReads"
 include { EXTRACT_VIRAL_READS_SHORT } from "../subworkflows/local/extractViralReadsShort"
 include { EXTRACT_VIRAL_READS_ONT } from "../subworkflows/local/extractViralReadsONT"
 include { SUBSET_TRIM } from "../subworkflows/local/subsetTrim"
@@ -69,7 +69,7 @@ workflow RUN {
     single_end_ch = LOAD_SAMPLESHEET.out.single_end
 
     // Count reads in files
-    COUNT_TOTAL_READS(samplesheet_ch, single_end_ch)
+    COUNT_READS(samplesheet_ch, single_end_ch)
 
     // Extract and count human-viral reads
     if ( params.platform == "ont" ) {
@@ -127,6 +127,6 @@ workflow RUN {
         reads_raw_viral = bbduk_match
         reads_trimmed_viral = bbduk_trimmed
         // Lots of results; split across 2 channels (QC, and other)
-        qc_results_run = COUNT_TOTAL_READS.out.read_counts.mix(RUN_QC.out.qc_basic, RUN_QC.out.qc_adapt, RUN_QC.out.qc_qbase, RUN_QC.out.qc_qseqs, RUN_QC.out.qc_lengths)
+        qc_results_run = COUNT_READS.out.output.mix(RUN_QC.out.qc_basic, RUN_QC.out.qc_adapt, RUN_QC.out.qc_qbase, RUN_QC.out.qc_qseqs, RUN_QC.out.qc_lengths)
         other_results_run = hits_final.mix(PROFILE.out.bracken, PROFILE.out.kraken)
 }

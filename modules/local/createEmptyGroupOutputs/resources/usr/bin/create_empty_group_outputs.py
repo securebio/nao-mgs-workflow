@@ -3,7 +3,8 @@
 Create empty output files for groups with no virus hits.
 
 Reads empty group names from a TSV file and creates empty gzipped files
-for each expected per-group output defined in pyproject.toml.
+for each expected per-group output defined in pyproject.toml. When a
+table-schema exists for an output, the file includes a header row.
 """
 
 #=============================================================================
@@ -15,6 +16,7 @@ import argparse
 import csv
 import gzip
 import io
+import json
 import logging
 import time
 import tomllib
@@ -102,22 +104,77 @@ def get_group_output_patterns(pyproject_path: str, platform: str) -> list[str]:
             patterns.append(filename)
     return patterns
 
+
+def get_schema_name_from_pattern(pattern: str) -> str:
+    """
+    Extract the schema name from an output filename pattern.
+
+    For a pattern like '{GROUP}_duplicate_stats.tsv.gz', returns 'duplicate_stats'.
+    Args:
+        pattern (str): Filename pattern with {GROUP} placeholder.
+    Returns:
+        str: The base name to use for schema lookup.
+    """
+    # Remove {GROUP}_ prefix
+    name = pattern.replace("{GROUP}_", "")
+    # Use Path to strip all extensions (e.g., .tsv.gz -> base name)
+    p = Path(name)
+    while p.suffix:
+        p = p.with_suffix("")
+    return p.name
+
+
+def load_schema_headers(schema_dir: Path, schema_name: str) -> list[str] | None:
+    """
+    Load column headers from a table-schema file if it exists.
+    Args:
+        schema_dir (Path): Directory containing schema files.
+        schema_name (str): Base name of the schema (e.g., 'duplicate_stats').
+    Returns:
+        list[str] | None: List of column names, or None if no schema found.
+    """
+    schema_path = schema_dir / f"{schema_name}.schema.json"
+    if not schema_path.exists():
+        return None
+    with open(schema_path) as f:
+        schema = json.load(f)
+    fields = schema.get("fields", [])
+    if not fields:
+        return None
+    return [field["name"] for field in fields]
+
 def create_empty_outputs(
     groups: set[str],
     patterns: list[str],
     output_dir: str,
+    schema_dir: Path | None = None,
 ) -> list[str]:
     """
     Create empty gzipped files for each group and pattern combination.
+
+    When a table-schema exists for an output pattern, the file includes
+    a header row with column names from the schema.
     Args:
         groups (set[str]): Set of group names to create outputs for.
         patterns (list[str]): List of filename patterns with {GROUP} placeholder.
         output_dir (str): Directory to write output files.
+        schema_dir (Path | None): Directory containing table-schema files.
     Returns:
         list[str]: List of paths to created files.
     """
     output_path = Path(output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
+    # Pre-load headers for each pattern
+    pattern_headers: dict[str, list[str] | None] = {}
+    for pattern in patterns:
+        if schema_dir:
+            schema_name = get_schema_name_from_pattern(pattern)
+            headers = load_schema_headers(schema_dir, schema_name)
+            if headers:
+                logger.info(f"Found schema for {pattern}: {schema_name}.schema.json")
+            pattern_headers[pattern] = headers
+        else:
+            pattern_headers[pattern] = None
     created_files: list[str] = []
     for group in sorted(groups):
         if ".." in group or "/" in group:
@@ -125,10 +182,12 @@ def create_empty_outputs(
         for pattern in patterns:
             filename = pattern.replace("{GROUP}", group)
             filepath = output_path / filename
+            headers = pattern_headers[pattern]
             with open_by_suffix(filepath, "w") as f:
-                pass # Empty file
+                if headers:
+                    f.write("\t".join(headers) + "\n")
             created_files.append(str(filepath))
-            logger.info(f"Created: {filepath}")
+            logger.info(f"Created: {filepath}" + (" (with headers)" if headers else ""))
     return created_files
 
 #=============================================================================
@@ -160,6 +219,12 @@ def parse_args() -> argparse.Namespace:
         default="illumina",
         help="Platform to determine which expected outputs to use (default: illumina)",
     )
+    parser.add_argument(
+        "--schema-dir",
+        type=Path,
+        default=None,
+        help="Directory containing table-schema files for generating headers",
+    )
     return parser.parse_args()
 
 #=============================================================================
@@ -183,7 +248,7 @@ def main() -> None:
         logger.warning("No per-group output patterns found in pyproject.toml")
         return
     logger.info(f"Found {len(patterns)} per-group output patterns: {patterns}")
-    created = create_empty_outputs(groups, patterns, args.output_dir)
+    created = create_empty_outputs(groups, patterns, args.output_dir, args.schema_dir)
     logger.info(f"Created {len(created)} empty output files")
     end_time = time.time()
     logger.info(f"Total time elapsed: {end_time - start_time} seconds")
