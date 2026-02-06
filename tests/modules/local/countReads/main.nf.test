@@ -35,7 +35,7 @@ nextflow_process {
             // Should run without failures
             assert process.success
             // Should have expected structure
-            def file_out = path(process.out.output[0]).csv(sep: "\t") 
+            def file_out = path(process.out.output[0][1]).csv(sep: "\t")
             assert file_out.rowCount == 1
             assert file_out.columnNames == ["sample", "n_reads_single", "n_read_pairs"]
             // Read count should be correct
@@ -75,7 +75,7 @@ nextflow_process {
             // Should run without failures
             assert process.success
             // Should have expected structure
-            def file_out = path(process.out.output[0]).csv(sep: "\t") 
+            def file_out = path(process.out.output[0][1]).csv(sep: "\t")
             assert file_out.rowCount == 1
             assert file_out.columnNames == ["sample", "n_reads_single", "n_read_pairs"]
             // Read count should be correct
@@ -101,7 +101,7 @@ nextflow_process {
         }
         then {
             assert process.success
-            def file_out = path(process.out.output[0]).csv(sep: "\t") 
+            def file_out = path(process.out.output[0][1]).csv(sep: "\t")
             assert file_out.rowCount == 1
             assert file_out.columnNames == ["sample", "n_reads_single", "n_read_pairs"]
             assert file_out.rows[0] == ["sample": "test", "n_reads_single": 0, "n_read_pairs": ""]
