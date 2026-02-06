@@ -1,0 +1,47 @@
+name: Validate Test Data Sync
+
+on:
+  pull_request:
+    branches:
+      - main
+      - dev
+      - stable
+      - ci-test
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check for relevant changes
+        uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            test_data:
+              - 'test-data/results/**'
+              - 'tests/workflows/*.snap'
+              - 'bin/validate_test_data_sync.py'
+              - '.github/workflows/validate-test-data.yml'
+
+      - name: Setup Python environment
+        if: steps.filter.outputs.test_data == 'true'
+        uses: ./.github/actions/setup-python
+
+      - name: Validate RUN test data
+        if: steps.filter.outputs.test_data == 'true'
+        run: |
+          python bin/validate_test_data_sync.py \
+            --snapshot tests/workflows/run.nf.test.snap \
+            --results-dir test-data/results
+
+      - name: Validate DOWNSTREAM test data
+        if: steps.filter.outputs.test_data == 'true'
+        run: |
+          python bin/validate_test_data_sync.py \
+            --snapshot tests/workflows/downstream.nf.test.snap \
+            --results-dir test-data/results
