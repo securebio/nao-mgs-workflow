@@ -98,7 +98,7 @@ expected-outputs-run = [
     "results/subset_qc_length_stats.tsv.gz",
     "results/subset_qc_quality_base_stats.tsv.gz",
     "results/subset_qc_quality_sequence_stats.tsv.gz",
-    "results/virus_hits_final.tsv.gz",
+    "results/{SAMPLE}_virus_hits.tsv.gz",
 ]
 
 expected-outputs-downstream = [
