@@ -23,10 +23,13 @@ process PROCESS_VIRAL_MINIMAP2_SAM {
         # Decompress once, then split: headers (@-lines) go first,
         # followed by alignment lines sorted by read ID (first tab field).
         # -S 1G caps sort's memory usage; it spills to disk if needed.
+        # LC_ALL=C: sort by raw byte value so the order matches Python's
+        # string comparison in the downstream merge join. Without this,
+        # a UTF-8 locale can reorder punctuation (e.g. hyphens in ONT UUIDs).
         zcat ${virus_sam} > raw.sam
         grep '^@' raw.sam > sorted.sam
         # || true: grep returns exit code 1 when no lines match (e.g. empty SAM)
-        { grep -v '^@' raw.sam || true; } | sort -t$'\t' -k1,1 -S 1G >> sorted.sam
+        { grep -v '^@' raw.sam || true; } | LC_ALL=C sort -t$'\t' -k1,1 -S 1G >> sorted.sam
         rm raw.sam
 
         # Sort FASTQ file by read ID for streaming merge join with SAM.
@@ -36,7 +39,7 @@ process PROCESS_VIRAL_MINIMAP2_SAM {
         # -S 1G caps sort's memory usage; it spills to disk if needed.
         zcat ${clean_reads} \
             | paste - - - - \
-            | sort -k1,1 -S 1G \
+            | LC_ALL=C sort -k1,1 -S 1G \
             | tr '\t' '\n' \
             > sorted.fastq
 
