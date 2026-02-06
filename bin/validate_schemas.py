@@ -168,7 +168,16 @@ def validate_file(data_file: Path, schema_path: Path) -> tuple[bool, list[str]]:
     errors = []
     for task in report.tasks:
         for error in task.errors:
-            errors.append(error.message)
+            # Include row/field context when available for easier debugging
+            parts = []
+            if hasattr(error, "row_number") and error.row_number:
+                parts.append(f"row {error.row_number}")
+            if hasattr(error, "field_name") and error.field_name:
+                parts.append(f"field '{error.field_name}'")
+            if parts:
+                errors.append(f"[{', '.join(parts)}] {error.message}")
+            else:
+                errors.append(error.message)
     return False, errors
 
 ##############
