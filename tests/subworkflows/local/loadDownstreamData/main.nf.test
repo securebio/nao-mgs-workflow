@@ -15,6 +15,7 @@ nextflow_workflow {
             workflow {
                 """
                 input[0] = file("${projectDir}/test-data/downstream/input_file.csv")
+                input[1] = projectDir
                 """
             }
         }
@@ -24,11 +25,11 @@ nextflow_workflow {
             // Should produce correctly-structured output
             def tab_in = path(workflow.out.test_input[0]).csv
             assert workflow.out.input.size() == tab_in.rowCount
-            def currentDir = new File(".").getAbsolutePath()
             for (int i=0; i < tab_in.rowCount; i++){
                 assert workflow.out.input[i][0] == tab_in.columns["label"][i]
-                assert tab_in.columns["hits_tsv"][i].contains(workflow.out.input[i][1])
-                assert tab_in.columns["groups_tsv"][i].contains(workflow.out.input[i][2])
+                // Resolved paths should end with the relative paths from CSV
+                assert workflow.out.input[i][1].toString().endsWith(tab_in.columns["hits_tsv"][i])
+                assert workflow.out.input[i][2].toString().endsWith(tab_in.columns["groups_tsv"][i])
             }
         }
     }
@@ -40,6 +41,7 @@ nextflow_workflow {
             workflow {
                 """
                 input[0] = file("${projectDir}/test-data/downstream/input_file_invalid.csv")
+                input[1] = projectDir
                 """
             }
         }

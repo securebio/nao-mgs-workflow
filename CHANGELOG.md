@@ -1,5 +1,14 @@
 # v3.1.0.0-dev
 
+- Add CI validation to ensure test-data/results files stay in sync with workflow snapshot MD5 sums:
+    - Created `bin/validate_test_data_sync.py` script to validate local test data against nf-test snapshot MD5 sums.
+    - Added `.github/workflows/validate-test-data.yml` CI workflow to run validation on PRs.
+    - Renamed `test-data/results/` directories to match snapshot names (`run_output_shortread`, `run_output_ont`, `downstream_output_shortread`, `downstream_output_ont`).
+- Add support for relative paths in DOWNSTREAM input CSV files:
+    - Relative paths (not starting with `/` or `s3://`) are resolved against `params.input_base_dir` (defaults to `projectDir`).
+    - Users can set `params.input_base_dir = launchDir` in their config to resolve paths relative to the launch directory.
+    - S3 URIs and absolute paths continue to work as before.
+    - Switched DOWNSTREAM tests to use local relative paths instead of S3 URIs.
 - Add datapackage table-schema support for workflow outputs (proof-of-concept with `duplicate_stats`):
     - Created `schemas/` directory with `duplicate_stats.schema.json` table-schema definition.
     - Added `bin/validate_schemas.py` script to validate output files against schemas using frictionless library.
