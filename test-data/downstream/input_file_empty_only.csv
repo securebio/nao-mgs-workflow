@@ -1,2 +1,2 @@
 label,results_dir,groups_tsv
-empty_test,s3://nao-testing/tiny-test/empty/,s3://nao-testing/tiny-test/empty/sample_groups_empty.tsv
+empty_test,test-data/downstream/empty/,test-data/downstream/empty/sample_groups_empty.tsv

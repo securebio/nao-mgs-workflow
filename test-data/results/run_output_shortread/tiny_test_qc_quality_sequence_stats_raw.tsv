@@ -1,0 +1,3 @@
+mean_phred_score	n_sequences	file	stage	sample
+35	15	tiny_test_interleaved	raw	tiny_test
+36	35	tiny_test_interleaved	raw	tiny_test

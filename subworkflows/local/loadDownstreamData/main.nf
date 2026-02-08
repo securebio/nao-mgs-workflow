@@ -11,6 +11,7 @@ include { CONCATENATE_TSVS_LABELED } from "../../../modules/local/concatenateTsv
 workflow LOAD_DOWNSTREAM_DATA {
     take:
         input_file
+        input_base_dir  // Base directory for resolving relative paths in input CSV (use projectDir or launchDir)
     main:
         // Start time
         start_time = new Date()
@@ -26,15 +27,21 @@ workflow LOAD_DOWNSTREAM_DATA {
                 Please ensure the input file has the correct columns in the specified order.""".stripIndent())
         }
 
+        // Helper to resolve paths: absolute and S3 paths used as-is, relative paths resolved against input_base_dir
+        def resolvePath = { path ->
+            (path.startsWith('s3://') || path.startsWith('/')) ? file(path) : file(input_base_dir).resolve(path)
+        }
+
         // Parse input CSV rows
         rows_ch = Channel.fromPath(input_file).splitCsv(header: true)
 
         // Discover per-sample virus_hits files from results_dir and collect them per label
         files_ch = rows_ch.map { row ->
-            def results_dir = row.results_dir.endsWith('/') ? row.results_dir : "${row.results_dir}/"
-            def hits_files = file("${results_dir}*_virus_hits.tsv.gz")
+            def results_dir = resolvePath(row.results_dir).toString()
+            if (!results_dir.endsWith('/')) results_dir += '/'
+            def hits_files = file("${results_dir}*_virus_hits.tsv{,.gz}")
             def files_list = (hits_files instanceof List) ? hits_files : (hits_files ? [hits_files] : [])
-            tuple(row.label, files_list, file(row.groups_tsv))
+            tuple(row.label, files_list, resolvePath(row.groups_tsv))
         }
 
         // Concatenate per-sample files into single hits file per label

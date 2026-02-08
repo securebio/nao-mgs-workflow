@@ -126,7 +126,6 @@ workflow RUN {
         intermediates_run = inter_lca.mix(inter_aligner)
         reads_raw_viral = bbduk_match
         reads_trimmed_viral = bbduk_trimmed
-        // Lots of results; split across 2 channels (QC, and other)
-        qc_results_run = COUNT_READS.out.output.mix(RUN_QC.out.qc_basic, RUN_QC.out.qc_adapt, RUN_QC.out.qc_qbase, RUN_QC.out.qc_qseqs, RUN_QC.out.qc_lengths)
+        qc_results_run = COUNT_READS.out.output.mix(RUN_QC.out.pre_qc, RUN_QC.out.post_qc)
         other_results_run = hits_final.mix(PROFILE.out.bracken, PROFILE.out.kraken)
 }
