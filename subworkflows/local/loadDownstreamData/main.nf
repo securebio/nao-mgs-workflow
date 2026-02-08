@@ -37,6 +37,12 @@ workflow LOAD_DOWNSTREAM_DATA {
 
         // Discover per-sample virus_hits files from results_dir and collect them per label
         files_ch = rows_ch.map { row ->
+            if (!row.results_dir?.trim()) {
+                throw new Exception("Missing or empty 'results_dir' for label '${row.label}' in input file.")
+            }
+            if (!row.groups_tsv?.trim()) {
+                throw new Exception("Missing or empty 'groups_tsv' for label '${row.label}' in input file.")
+            }
             def results_dir = resolvePath(row.results_dir).toString()
             if (!results_dir.endsWith('/')) results_dir += '/'
             def hits_files = file("${results_dir}*_virus_hits.tsv{,.gz}")
