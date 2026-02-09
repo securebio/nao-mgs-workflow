@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 
-import sys
 import argparse
-import pandas as pd
-import time
 import datetime
-import pysam
 import gzip
-import bz2
 import math
+import sys
+import time
+
+import pandas as pd
+import pysam
 from Bio.Seq import Seq
 
 HEADER_FIELDS = [
@@ -23,15 +23,6 @@ def print_log(message):
     print("[", datetime.datetime.now(), "]\t", message, sep="", file=sys.stderr)
 
 
-def open_by_suffix(filename, mode="r"):
-    if filename.endswith(".gz"):
-        return gzip.open(filename, mode + "t")
-    elif filename.endswith(".bz2"):
-        return bz2.BZ2file(filename, mode)
-    else:
-        return open(filename, mode)
-
-
 def read_fastq_record(fh):
     """Read one FASTQ record (4 lines). Returns (read_id, seq, qual) or None at EOF."""
     header = fh.readline().strip()
@@ -40,12 +31,13 @@ def read_fastq_record(fh):
     seq = fh.readline().strip()
     fh.readline()  # + line
     qual = fh.readline().strip()
-    read_id = header[1:].split()[0]  # Strip @ prefix, take first field
+    # strip @ and take first whitespace-delimited token to match SAM QNAME
+    read_id = header[1:].split()[0]
     return (read_id, seq, qual)
 
 
 def extract_viral_taxid(genome_id, genbank_metadata, viral_taxids):
-    """Extract taxid from the appropriate field of Genbank metadata."""
+    """Return taxid for a genome, preferring whichever of taxid/species_taxid is viral."""
     try:
         taxid, species_taxid = genbank_metadata[genome_id]
         if taxid in viral_taxids:
@@ -81,9 +73,12 @@ def parse_sam_alignment(read, genbank_metadata, viral_taxids, clean_seq, clean_q
     out["edit_distance"] = read.get_tag("NM")
     out["best_alignment_score"] = read.get_tag("AS")
     out["next_alignment_score"] = "NA"
-    out["length_normalized_score"] = out["best_alignment_score"] / math.log(
-        len(clean_seq)
-    )
+    if len(clean_seq) > 1:
+        out["length_normalized_score"] = out["best_alignment_score"] / math.log(
+            len(clean_seq)
+        )
+    else:
+        out["length_normalized_score"] = 0
     out["query_seq"] = query_seq_clean
     out["query_rc"] = read.is_reverse
     out["query_qual"] = query_qual_clean
@@ -104,7 +99,7 @@ def process_sam(sam_file, out_file, genbank_metadata, viral_taxids, fastq_file):
     Both sam_file and fastq_file must be sorted by read ID.
     """
     header = "\t".join(HEADER_FIELDS) + "\n"
-    with open_by_suffix(out_file, "w") as out_fh:
+    with gzip.open(out_file, "wt") as out_fh:
         out_fh.write(header)
         with pysam.AlignmentFile(sam_file, "r") as sam_fh, open(
             fastq_file
@@ -117,6 +112,7 @@ def process_sam(sam_file, out_file, genbank_metadata, viral_taxids, fastq_file):
                 if read.is_unmapped:
                     continue
                 read_id = read.query_name
+                assert read_id is not None
 
                 # Advance FASTQ pointer until we find or pass this read ID
                 while fastq_record is not None and fastq_record[0] < read_id:
@@ -134,7 +130,7 @@ def process_sam(sam_file, out_file, genbank_metadata, viral_taxids, fastq_file):
                     read, genbank_metadata, viral_taxids,
                     fastq_record[1], fastq_record[2],
                 )
-                out_fh.write("\t".join(map(str, line.values())) + "\n")
+                out_fh.write("\t".join(str(line[field]) for field in HEADER_FIELDS) + "\n")
             if num_reads == 0:
                 print_log(
                     "Warning: Input SAM file is empty. "
@@ -147,9 +143,9 @@ def parse_arguments():
         description="Process Minimap2 SAM output into a TSV with viral alignment information."
     )
     parser.add_argument("-a", "--sam", required=True,
-                        help="Path to Minimap2 SAM alignment file.")
+                        help="Path to Minimap2 SAM alignment file (must be sorted by read ID).")
     parser.add_argument("-r", "--reads", required=True,
-                        help="Path to sorted FASTQ file with non-masked viral reads.")
+                        help="Path to ID-sorted FASTQ file with non-masked viral reads.")
     parser.add_argument("-m", "--metadata", required=True,
                         help="Path to Genbank metadata file.")
     parser.add_argument("-v", "--viral_db", required=True,

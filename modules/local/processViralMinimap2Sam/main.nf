@@ -20,23 +20,19 @@ process PROCESS_VIRAL_MINIMAP2_SAM {
         clean_reads=!{clean_reads}
 
         # Sort SAM by read ID, preserving headers for pysam compatibility.
-        # Decompress once, then split: headers (@-lines) go first,
-        # followed by alignment lines sorted by read ID (first tab field).
-        # -S 1G caps sort's memory usage; it spills to disk if needed.
-        # LC_ALL=C: sort by raw byte value so the order matches Python's
-        # string comparison in the downstream merge join. Without this,
-        # a UTF-8 locale can reorder punctuation (e.g. hyphens in ONT UUIDs).
+        # Decompress once, then split: headers (@-lines) then sorted alignments lines.
+        # Argument notes:
+        #   || true: grep returns exit code 1 when no lines match (e.g. empty SAM)
+        #   LC_ALL=C: sort by raw byte value so the order matches Python's string comparison
+        #   -S 1G caps sort's memory usage; it spills to disk if needed.
         zcat ${virus_sam} > raw.sam
         grep '^@' raw.sam > sorted.sam
-        # || true: grep returns exit code 1 when no lines match (e.g. empty SAM)
         { grep -v '^@' raw.sam || true; } | LC_ALL=C sort -t$'\t' -k1,1 -S 1G >> sorted.sam
         rm raw.sam
 
-        # Sort FASTQ file by read ID for streaming merge join with SAM.
-        # FASTQ records are 4 lines each, so we join each group of 4 lines
-        # into one tab-delimited line (paste), sort by the first field (the
-        # @read_id header line), then restore the 4-line-per-record format (tr).
-        # -S 1G caps sort's memory usage; it spills to disk if needed.
+        # Sort FASTQ by read id.
+        # 4-line records are combined into one tap-separated line, sorted with C locale,
+        # and then split back into 4-line records.
         zcat ${clean_reads} \
             | paste - - - - \
             | LC_ALL=C sort -k1,1 -S 1G \
