@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 DESC = """
 Validate that md5 sums are in sync between test data files and workflow snapshots. Each
-snapshot in a snapshot is matched to a subdirectory with the same name, and all files in
+entry in a snapshot is matched to a subdirectory with the same name, and all files in
 that subdirectory are validated against the expected MD5 sums in the snapshot. This helps
 catch drift between workflow test outputs and committed test data.
 """
@@ -57,12 +57,13 @@ def parse_snapshot(snapshot_path: Path) -> dict[str, dict[str, str]]:
         md5_map: dict[str, str] = {}
         for entry in content:
             # Format: "filename.ext:md5,hash_value"
+            # nf-test snapshots record gzipped filenames (e.g. foo.tsv.gz) but
+            # committed test-data files are uncompressed (foo.tsv), so strip .gz
             if ":md5," in entry:
                 filename, md5_part = entry.rsplit(":md5,", 1)
-                path = Path(filename)
-                while path.suffix:
-                    path = Path(path.stem)
-                md5_map[str(path)] = md5_part
+                if filename.endswith(".gz"):
+                    filename = filename[:-3]
+                md5_map[filename] = md5_part
         results[snapshot_name] = md5_map
     return results
 
@@ -83,7 +84,7 @@ def compute_md5(file_path: Path) -> str:
 def validate_snapshot(
     snapshot_path: Path,
     results_dir: Path,
-) -> list[str]:
+) -> None:
     """
     Validate results files against a snapshot file. For each snapshot in the file,
     looks for a subdirectory in results_dir with the same name and validates that
@@ -91,8 +92,6 @@ def validate_snapshot(
     Args:
         snapshot_path (Path): Path to the workflow snapshot file
         results_dir (Path): Path to test-data/results directory
-    Returns:
-        list[str]: List of error messages (empty if all validations pass)
     """
     logger.info(f"Parsing snapshot: {snapshot_path}")
     snapshot_data = parse_snapshot(snapshot_path)
@@ -104,20 +103,14 @@ def validate_snapshot(
             logger.error(msg)
             raise FileNotFoundError(msg)
         errors: list[str] = []
-        for snapshot_stem, expected_md5 in md5_map.items():
-            # Find file matching the stem (any extension)
-            matches = list(snapshot_results_dir.glob(f"{snapshot_stem}.*"))
-            if not matches:
-                msg = f"No file found matching stem: {snapshot_results_dir / snapshot_stem}"
-                errors.append(msg)
-            elif len(matches) > 1:
-                msg = f"Multiple files found matching stem: {snapshot_results_dir / snapshot_stem}"
-                errors.append(msg)
+        for filename, expected_md5 in md5_map.items():
+            file_path = snapshot_results_dir / filename
+            if not file_path.exists():
+                errors.append(f"File not found: {file_path}")
             else:
-                actual_md5 = compute_md5(matches[0])
+                actual_md5 = compute_md5(file_path)
                 if actual_md5 != expected_md5:
-                    msg = f"MD5 mismatch for {matches[0]}: {actual_md5} (actual) != {expected_md5} (expected)"
-                    errors.append(msg)
+                    errors.append(f"MD5 mismatch for {file_path}: {actual_md5} (actual) != {expected_md5} (expected)")
         if errors:
             logger.error(f"Errors found for {snapshot_name}:")
             for error in errors:
