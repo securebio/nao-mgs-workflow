@@ -233,13 +233,13 @@ It outputs a TSV for each sample group (`<group>_clade_counts.tsv.gz`) with six 
 
 To run the `DOWNSTREAM` workflow, you need:
 
-1. One or more accessible **results directories** produced by the `RUN` workflow, containing per-sample viral hits files (e.g. `*_virus_hits.tsv.gz`). These are [typically saved](./output.md#viral-identification) in the `RUN` workflow's output directory under `results/`.
-2. For each results directory, an accessible **grouping TSV**, containing the following columns in the specified order:
+1. One or more accessible **RUN results directories** produced by the `RUN` workflow, containing per-sample viral hits files (e.g. `*_virus_hits.tsv.gz`). These are [typically saved](./output.md#viral-identification) in the `RUN` workflow's output directory under `results/`.
+2. For each RUN results directory, an accessible **grouping TSV**, containing the following columns in the specified order:
     - `sample`: Sample ID (must include one row for every value of this column in the viral hits table)
-    - `group`: Group IDs to use for duplicate annotatation
-3. An accessible **input file CSV** mapping results directories to grouping TSVs, containing the following columns in the specified order:
-    - `label`: Arbitrary string label to use for each results directory
-    - `results_dir`: Path to the results directory containing per-sample viral hits files
+    - `group`: Group IDs to use for grouping samples in downstream analysis
+3. An accessible **input file CSV** mapping RUN results directories to grouping TSVs, containing the following columns in the specified order:
+    - `label`: Arbitrary string label to use for each RUN results directory
+    - `run_results_dir`: Path to the RUN results directory containing per-sample viral hits files
     - `groups_tsv`: Path to the corresponding grouping TSV
 
 > [!NOTE]

@@ -1,4 +1,4 @@
-label,results_dir,groups_tsv
+label,run_results_dir,groups_tsv
 tt1,test-data/results/run_output_shortread/,test-data/downstream/sample_groups_1.tsv
 tt2,test-data/results/run_output_shortread/,test-data/downstream/sample_groups_1.tsv
 tt3,test-data/results/run_output_shortread/,test-data/downstream/sample_groups_2.tsv

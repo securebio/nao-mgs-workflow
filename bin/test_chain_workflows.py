@@ -106,7 +106,7 @@ class TestGenerateDownstreamInput:
         # input.csv: headers must match loadDownstreamData/main.nf required_headers
         with open(result_path) as f:
             reader = csv.reader(f)
-            assert next(reader) == ["label", "results_dir", "groups_tsv"]
+            assert next(reader) == ["label", "run_results_dir", "groups_tsv"]
             assert next(reader) == [
                 "test_run",
                 run_results_dir,

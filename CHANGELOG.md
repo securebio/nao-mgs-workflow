@@ -40,7 +40,7 @@
     - Dramatically simplified `prepareGroupTsvs` (now only needs to concatenate hits tables, never split them)
     - Added empty-group handling to `validateViralAssignments` (now creates empty validation-hits files for groups with no hits)
     - Deleted obsolete `validateGrouping` module
-    - DOWNSTREAM workflow updated to auto-discover per-sample files from `results_dir` and parse groups from `groups_tsv`.
+    - DOWNSTREAM workflow updated to auto-discover per-sample files from `run_results_dir` and parse groups from `groups_tsv`.
     - Deleted obsolete `validatePerSampleGrouping` module.
 
 # v3.0.1.9
