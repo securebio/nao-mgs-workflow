@@ -42,6 +42,7 @@
     - Deleted obsolete `validateGrouping` module
     - DOWNSTREAM workflow updated to auto-discover per-sample files from `run_results_dir` and parse groups from `groups_tsv`.
     - Deleted obsolete `validatePerSampleGrouping` module.
+- Updated required Nextflow version to 25.10.4.
 
 # v3.0.1.9
 
