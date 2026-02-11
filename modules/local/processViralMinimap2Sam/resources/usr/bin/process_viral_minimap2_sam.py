@@ -5,11 +5,15 @@ import datetime
 import gzip
 import math
 import sys
+import tempfile
 import time
 
 import pandas as pd
 import pysam
 from Bio.Seq import Seq
+
+from sort_fastq import sort_fastq
+from sort_sam import sort_sam
 
 HEADER_FIELDS = [
     "seq_id", "genome_id", "genome_id_all", "taxid", "taxid_all",
@@ -24,7 +28,11 @@ def print_log(message):
 
 
 def read_fastq_record(fh):
-    """Read one FASTQ record (4 lines). Returns (read_id, seq, qual) or None at EOF."""
+    """Read one FASTQ record (4 lines). Returns (read_id, seq, qual) or None at EOF.
+
+    Uses manual line parsing instead of BioPython SeqIO to avoid ~20KB per-record
+    memory overhead from SeqRecord objects (see issue #306).
+    """
     header = fh.readline().strip()
     if not header:
         return None
@@ -143,9 +151,9 @@ def parse_arguments():
         description="Process Minimap2 SAM output into a TSV with viral alignment information."
     )
     parser.add_argument("-a", "--sam", required=True,
-                        help="Path to Minimap2 SAM alignment file (must be sorted by read ID).")
+                        help="Path to gzipped Minimap2 SAM alignment file.")
     parser.add_argument("-r", "--reads", required=True,
-                        help="Path to ID-sorted FASTQ file with non-masked viral reads.")
+                        help="Path to gzipped FASTQ file with non-masked viral reads.")
     parser.add_argument("-m", "--metadata", required=True,
                         help="Path to Genbank metadata file.")
     parser.add_argument("-v", "--viral_db", required=True,
@@ -163,8 +171,8 @@ def main():
 
         meta_db = pd.read_csv(args.metadata, sep="\t", dtype=str)
         genbank_metadata = {
-            gid: [tid, stid]
-            for gid, tid, stid in zip(
+            genome_id: [taxid, species_taxid]
+            for genome_id, taxid, species_taxid in zip(
                 meta_db["genome_id"], meta_db["taxid"], meta_db["species_taxid"]
             )
         }
@@ -172,8 +180,18 @@ def main():
         viral_taxids = set(virus_db["taxid"].values)
         print_log(f"Imported {len(genbank_metadata)} genomes, {len(viral_taxids)} virus taxa.")
 
-        print_log("Processing SAM file...")
-        process_sam(args.sam, args.output, genbank_metadata, viral_taxids, args.reads)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            sorted_sam = f"{tmp_dir}/sorted.sam"
+            sorted_fastq = f"{tmp_dir}/sorted.fastq"
+
+            print_log("Sorting SAM by read ID...")
+            sort_sam(args.sam, sorted_sam)
+
+            print_log("Sorting FASTQ by read ID...")
+            sort_fastq(args.reads, sorted_fastq)
+
+            print_log("Processing SAM file...")
+            process_sam(sorted_sam, args.output, genbank_metadata, viral_taxids, sorted_fastq)
 
         print_log(f"Done. Total time: {time.time() - start_time:.2f}s")
     except Exception as e:
