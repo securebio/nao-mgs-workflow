@@ -1,9 +1,9 @@
 {
     "downstream_output_shortread": {
         "content": [
+            "tt1_clade_counts.tsv.gz:md5,c08ec913ad5dab545a701ed4ac851fc9",
             "tt1_duplicate_reads.tsv.gz:md5,ae1190c0955d0e7a106dbb7bebc707f5",
             "tt1_duplicate_stats.tsv.gz:md5,dea20f8f6c3f9753f8b225fc0f8c7e52",
-            "tt1_clade_counts.tsv.gz:md5,c08ec913ad5dab545a701ed4ac851fc9",
             "tt1_validation_hits.tsv.gz:md5,b87355953f53421c9fdd6e8c3f13b181"
         ],
         "meta": {
