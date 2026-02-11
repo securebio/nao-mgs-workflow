@@ -15,6 +15,7 @@ nextflow_workflow {
             workflow {
                 """
                 input[0] = file("${projectDir}/test-data/downstream/input_file.csv")
+                input[1] = projectDir
                 """
             }
         }
@@ -53,6 +54,7 @@ nextflow_workflow {
             workflow {
                 """
                 input[0] = file("${projectDir}/test-data/downstream/input_file_missing_groups.csv")
+                input[1] = projectDir
                 """
             }
         }
@@ -72,6 +74,7 @@ nextflow_workflow {
             workflow {
                 """
                 input[0] = file("${projectDir}/test-data/downstream/input_file_invalid.csv")
+                input[1] = projectDir
                 """
             }
         }

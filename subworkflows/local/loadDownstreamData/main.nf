@@ -5,6 +5,7 @@
 workflow LOAD_DOWNSTREAM_DATA {
     take:
         input_file
+        input_base_dir  // Base directory for resolving relative paths in input CSV (use projectDir or launchDir)
     main:
         start_time = new Date()
         start_time_str = start_time.format("YYYY-MM-dd HH:mm:ss z (Z)")
@@ -17,11 +18,15 @@ workflow LOAD_DOWNSTREAM_DATA {
                 Found: ${headers.join(', ')}
                 Please ensure the input file has the correct columns in the specified order.""".stripIndent())
         }
+        // Helper to resolve paths: absolute and S3 paths used as-is, relative paths resolved against input_base_dir
+        def resolvePath = { path ->
+            (path.startsWith('s3://') || path.startsWith('/')) ? file(path) : file(input_base_dir).resolve(path)
+        }
         // Parse input CSV rows
         rows_ch = Channel.fromPath(input_file).splitCsv(header: true)
         // Parse groups files to get (label, sample, group) tuples
         groups_ch = rows_ch
-            .map { row -> tuple(row.label, file(row.groups_tsv)) }
+            .map { row -> tuple(row.label, resolvePath(row.groups_tsv)) }
             .flatMap { label, groups_file ->
                 groups_file.splitCsv(sep: '\t', header: true).collect { gRow ->
                     tuple(label, gRow.sample, gRow.group)
@@ -29,8 +34,15 @@ workflow LOAD_DOWNSTREAM_DATA {
             }
         // Discover per-sample virus_hits files: (label, sample, hits_file)
         hits_ch = rows_ch.flatMap { row ->
-            def results_dir = row.results_dir.endsWith('/') ? row.results_dir : "${row.results_dir}/"
-            def hits_files = file("${results_dir}*_virus_hits.tsv.gz")
+            if (!row.results_dir?.trim()) {
+                throw new Exception("Missing or empty 'results_dir' for label '${row.label}' in input file.")
+            }
+            if (!row.groups_tsv?.trim()) {
+                throw new Exception("Missing or empty 'groups_tsv' for label '${row.label}' in input file.")
+            }
+            def results_dir = resolvePath(row.results_dir).toString()
+            if (!results_dir.endsWith('/')) results_dir += '/'
+            def hits_files = file("${results_dir}*_virus_hits.tsv{,.gz}")
             if (hits_files instanceof List) {
                 hits_files.collect { f ->
                     def sample = f.name.replace("_virus_hits.tsv.gz", "")

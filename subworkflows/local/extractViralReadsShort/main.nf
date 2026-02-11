@@ -87,7 +87,7 @@ workflow EXTRACT_VIRAL_READS_SHORT {
             prefix: "aligner"
         ]
         lca_ch = LCA_TSV(bowtie2_tsv_ch.output, nodes_db, names_db, lca_params)
-        // 9. Process LCA and Bowtie2 columns (emits per-sample outputs)
+        // 9. Process LCA and Bowtie2 columns
         processed_ch = PROCESS_LCA_ALIGNER_OUTPUT(
             lca_ch.output,
             bowtie2_tsv_ch.output,
@@ -100,9 +100,9 @@ workflow EXTRACT_VIRAL_READS_SHORT {
     emit:
         bbduk_match = bbduk_ch.fail
         bbduk_trimmed = fastp_ch.reads
-        hits_final = renamed_hits_ch                    // tuple(sample, file) per sample
-        inter_lca = processed_ch.lca_tsv                // tuple(sample, file) per sample
-        inter_bowtie = processed_ch.aligner_tsv         // tuple(sample, file) per sample
+        hits_final = renamed_hits_ch
+        inter_lca = processed_ch.lca_tsv
+        inter_bowtie = processed_ch.aligner_tsv
         hits_prelca = bowtie2_tsv_ch.output
         test_reads = other_bt2_ch.reads_unmapped
         test_filt_bowtie = bowtie2_filtered_ch.sam

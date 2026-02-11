@@ -24,7 +24,7 @@ include { SORT_TSV as SORT_ONT_HITS } from "../modules/local/sortTsv"
 workflow DOWNSTREAM {
     main:
         // Prepare channels from input CSV file
-        LOAD_DOWNSTREAM_DATA(params.input_file)
+        LOAD_DOWNSTREAM_DATA(params.input_file, params.input_base_dir ?: projectDir)
         start_time_str = LOAD_DOWNSTREAM_DATA.out.start_time_str
 
         // Concatenate per-sample hits into per-group TSVs, adding group column

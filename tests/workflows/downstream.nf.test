@@ -53,7 +53,7 @@ nextflow_pipeline {
             assert observed == expected : "Expected ${expected} but got ${observed}"
             // Verify result file contents match snapshot
             def resultPaths = getResultPaths("${launchDir}/output", expected)
-            assert snapshot(*resultPaths).match("downstream_output")
+            assert snapshot(*resultPaths).match("downstream_output_shortread")
         }
     }
 
@@ -70,7 +70,7 @@ nextflow_pipeline {
             assert observed == expected : "Expected ${expected} but got ${observed}"
             // Verify result file contents match snapshot
             def resultPaths = getResultPaths("${launchDir}/output", expected)
-            assert snapshot(*resultPaths).match("downstream_ont_output")
+            assert snapshot(*resultPaths).match("downstream_output_ont")
         }
     }
 

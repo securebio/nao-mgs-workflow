@@ -27,7 +27,6 @@ nextflow_workflow {
             def sam_ids = samlines
                 .collect { line -> line.split('\t')[0] }  // Get read IDs
                 .toSet()
-            // hits_final is now tuple(sample, file), so access [1] for the file
             def hits_final = path(workflow.out.hits_final[0][1]).csv(sep: "\t", decompress: true)
             def hits_final_read_ids_list = hits_final.columns["seq_id"]  // Keep as list to check for duplicates
             def hits_final_read_ids_set = hits_final_read_ids_list.toSet()
@@ -36,7 +35,7 @@ nextflow_workflow {
             assert sam_ids.size() > 0
             assert hits_final_read_ids_set.every { it in sam_ids },
                 "All read IDs in final output should exist in SAM file"
-            // Check the the human and contam filtering work and produce FASTQ files that are subsets of the prior FASTQ file.
+            // Check that human and contam filtering work and produce FASTQ files that are subsets of the prior FASTQ file
             def fastq_filtered_human = path(workflow.out.test_fastq_filtered_human[0][1]).fastq
             def fastq_filtered_contam = path(workflow.out.test_fastq_filtered_contam[0][1]).fastq
             def human_filter_num = fastq_filtered_human.readNames.size()
@@ -75,7 +74,6 @@ nextflow_workflow {
             def samlines = sam(workflow.out.test_minimap2_virus[0][1]).getSamLines()
 	    assert samlines.size() == 0
             // Tabular output files should have only header lines
-            // hits_final is now tuple(sample, file), so access [1] for the file
             def tabular_files = [
                 path(workflow.out.hits_final[0][1]),
             ]

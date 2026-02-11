@@ -1,5 +1,18 @@
 {
-    "downstream_ont_output": {
+    "downstream_output_shortread": {
+        "content": [
+            "tt1_duplicate_reads.tsv.gz:md5,ae1190c0955d0e7a106dbb7bebc707f5",
+            "tt1_duplicate_stats.tsv.gz:md5,dea20f8f6c3f9753f8b225fc0f8c7e52",
+            "tt1_clade_counts.tsv.gz:md5,c08ec913ad5dab545a701ed4ac851fc9",
+            "tt1_validation_hits.tsv.gz:md5,b87355953f53421c9fdd6e8c3f13b181"
+        ],
+        "meta": {
+            "nf-test": "0.9.3",
+            "nextflow": "25.10.3"
+        },
+        "timestamp": "2026-02-06T18:38:17.074106366"
+    },
+    "downstream_output_ont": {
         "content": [
             "tt1_validation_hits.tsv.gz:md5,1154bc601c7bf582f9c56469a837ad0f"
         ],
@@ -7,19 +20,6 @@
             "nf-test": "0.9.3",
             "nextflow": "25.10.3"
         },
-        "timestamp": "2026-02-02T12:18:32.039387291"
-    },
-    "downstream_output": {
-        "content": [
-            "tt1_clade_counts.tsv.gz:md5,c08ec913ad5dab545a701ed4ac851fc9",
-            "tt1_duplicate_reads.tsv.gz:md5,ae1190c0955d0e7a106dbb7bebc707f5",
-            "tt1_duplicate_stats.tsv.gz:md5,dea20f8f6c3f9753f8b225fc0f8c7e52",
-            "tt1_validation_hits.tsv.gz:md5,b87355953f53421c9fdd6e8c3f13b181"
-        ],
-        "meta": {
-            "nf-test": "0.9.3",
-            "nextflow": "25.10.3"
-        },
-        "timestamp": "2026-02-02T12:17:37.095920529"
+        "timestamp": "2026-02-06T18:39:15.026599468"
     }
 }

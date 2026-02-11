@@ -91,8 +91,6 @@ nextflow_workflow {
         then {
             assert workflow.success
 
-            // Outputs are now tuple(sample, file), so access [1] for the file
-            // Note: lca_tsv and aligner_tsv are plain TSV, viral_hits_tsv is gzipped
             def lcaData = path(workflow.out.lca_tsv[0][1]).csv(sep: "\t")
             def alignerData = path(workflow.out.aligner_tsv[0][1]).csv(sep: "\t")
             def outputData = path(workflow.out.viral_hits_tsv[0][1]).csv(sep: "\t", decompress: true)
@@ -138,8 +136,6 @@ nextflow_workflow {
         then {
             assert workflow.success
 
-            // Outputs are now tuple(sample, file), so access [1] for the file
-            // Note: lca_tsv and aligner_tsv are plain TSV, viral_hits_tsv is gzipped
             def lcaData = path(workflow.out.lca_tsv[0][1]).csv(sep: "\t")
             def alignerData = path(workflow.out.aligner_tsv[0][1]).csv(sep: "\t")
             def outputData = path(workflow.out.viral_hits_tsv[0][1]).csv(sep: "\t", decompress: true)
@@ -187,7 +183,6 @@ nextflow_workflow {
         then {
             assert workflow.success
 
-            // Output is now tuple(sample, file), so access [1] for the file
             def outputFile = path(workflow.out.viral_hits_tsv[0][1])
             assert outputFile.exists()
 
@@ -231,7 +226,6 @@ nextflow_workflow {
         then {
             assert workflow.success
 
-            // Output is now tuple(sample, file), so access [1] for the file
             def outputFile = path(workflow.out.viral_hits_tsv[0][1])
             assert outputFile.exists()
 

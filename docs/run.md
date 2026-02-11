@@ -211,7 +211,6 @@ H --> I[LCA]
 H --> J
 I --> J[PROCESS_LCA_ALIGNER_OUTPUT]
 J --> K(Viral hits table)
-J --> L(Interleaved viral FASTQ)
 
 subgraph "Filter for viral reads"
 B
@@ -226,7 +225,6 @@ G
 end
 style A fill:#fff,stroke:#000
 style K fill:#000,color:#fff,stroke:#000
-style L fill:#000,color:#fff,stroke:#000
 ```
 1. To begin with, the raw reads are screened against a database of vertebrate-infecting viral genomes generated from Genbank by the index workflow. This initial screen is performed using [BBDuk](https://jgi.doe.gov/data-and-tools/software-tools/bbtools/bb-tools-user-guide/bbduk-guide/), which flags any read that contains at least one 24-mer matching any vertebrate-infecting viral genome. The purpose of this initial screen is to rapidly and sensitively identify putative vertebrate-infecting viral reads while discarding the vast majority of non-viral reads, reducing the cost associated with the rest of this phase.
 2. Surviving reads undergo adapter and quality trimming with [FASTP](https://github.com/OpenGene/fastp) to remove adapter contamination and low-quality/low-complexity reads.
@@ -257,7 +255,6 @@ F --> G[LCA]
 F --> H
 G --> H[PROCESS_LCA_ALIGNER_OUTPUT]
 H --> I(Viral hits table)
-H --> J(Interleaved viral FASTQ)
 
 subgraph "Filter and mask"
 B
@@ -272,7 +269,6 @@ F
 end
 style A fill:#fff,stroke:#000
 style I fill:#000,color:#fff,stroke:#000
-style J fill:#000,color:#fff,stroke:#000
 ```
 
 1. First, reads are filtered for length and quality with [Filtlong](https://github.com/rrwick/Filtlong), and low-complexity regions are masked with [BBMask](https://archive.jgi.doe.gov/data-and-tools/software-tools/bbtools/bb-tools-user-guide/bbmask-guide/) (entropy masking).

@@ -63,7 +63,6 @@ The pipeline can be run in multiple ways by modifying various configuration vari
 - `ec2_local`: **Requires the least setup, but is bottlenecked by your instance's compute, memory and storage.**
   - This profile attempts to run the whole pipeline locally on your EC2 instance, storing all files on instance-linked block storage.
   - This is simple and can be relatively fast, but requires large CPU, memory and storage allocations: at least 128GB RAM, 64 CPU cores, and 256GB local storage are recommended, though the latter in particular is highly dependent on the size of your dataset.
-  - If running optional BLAST validation, at least 256GB RAM is needed to store the BLAST DB.
 - `ec2_s3`: **Avoids storage issues on your EC2 instance, but is still constrained by local compute and memory.**
   - This profile runs the pipeline on your EC2 instance, but attempts to read and write files to a specified S3 directory. This avoids problems arising from insufficient local storage, but (a) is significantly slower and (b) is still constrained by local compute and memory allocations.
 

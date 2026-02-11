@@ -1,5 +1,14 @@
 # v3.1.0.0-dev
 
+- Add CI validation to ensure test-data/results files stay in sync with workflow snapshot MD5 sums:
+    - Created `bin/validate_test_data_sync.py` script to validate local test data against nf-test snapshot MD5 sums.
+    - Added `.github/workflows/validate-test-data.yml` CI workflow to run validation on PRs.
+    - Renamed `test-data/results/` directories to match snapshot names (`run_output_shortread`, `run_output_ont`, `downstream_output_shortread`, `downstream_output_ont`).
+- Add support for relative paths in DOWNSTREAM input CSV files:
+    - Relative paths (not starting with `/` or `s3://`) are resolved against `params.input_base_dir` (defaults to `projectDir`).
+    - Users can set `params.input_base_dir = launchDir` in their config to resolve paths relative to the launch directory.
+    - S3 URIs and absolute paths continue to work as before.
+    - Switched DOWNSTREAM tests to use local relative paths instead of S3 URIs.
 - Add datapackage table-schema support for workflow outputs (proof-of-concept with `duplicate_stats`):
     - Created `schemas/` directory with `duplicate_stats.schema.json` table-schema definition.
     - Added `bin/validate_schemas.py` script to validate output files against schemas using frictionless library.
@@ -11,6 +20,8 @@
     - Removed `blast_viral_fraction` and related BLAST parameters from RUN workflow configs.
     - Removed unused `EXTRACT_VIRAL_HITS_TO_FASTQ_NOREF_LABELED` process (non-LIST version).
     - Removed `EXTRACT_VIRAL_HITS_TO_FASTQ` process and `hits_fastq` output from RUN workflow (output was published but never consumed by downstream processes).
+    - Removed `hits_fastq` output from `EXTRACT_VIRAL_READS_SHORT` and `EXTRACT_VIRAL_READS_ONT` subworkflows (this concatenated interleaved FASTQ was used for BLAST validation).
+    - Removed unused FASTQ extraction includes (`CONCATENATE_FILES`, `EXTRACT_VIRAL_HITS_TO_FASTQ`, `EXTRACT_SHARED_FASTQ_READS`).
 - RUN workflow now outputs per-sample `{sample}_virus_hits.tsv.gz` files instead of concatenating all samples.
     - Updated modules to use `tuple(sample, file)` channel structure.
     - DOWNSTREAM workflow updated to auto-discover per-sample files from `results_dir` and parse groups from `groups_tsv`.
@@ -22,8 +33,12 @@
 - Convert `setup-rust-container` from reusable workflow to composite action, simplifying CI check reporting.
 - Remove confusing `workflow_run` triggers from integration tests (benchmark and test-chained workflows).
 - Refactored processVsearchClusterOutput module to use streaming Rust implementation rather than memory-intensive Python/Pandas.
-- Changed read counts output from concatenated `read_counts.tsv.gz` to per-sample `{sample}_read_counts.tsv` files.
+- Changed RUN outputs to per-sample format:
+    - Read counts: `read_counts.tsv.gz` → `{sample}_read_counts.tsv`
+    - QC stats: `subset_qc_*_stats.tsv.gz` → `{sample}_qc_*_stats_raw.tsv.gz` and `{sample}_qc_*_stats_cleaned.tsv.gz`
+    - Taxonomy: `bracken_reports_merged.tsv.gz` → `{sample}_bracken.tsv.gz`, `kraken_reports_merged.tsv.gz` → `{sample}_kraken.tsv.gz`
     - Removed `COUNT_TOTAL_READS` subworkflow; `COUNT_READS` module is now called directly from RUN workflow.
+    - Viral hits: `virus_hits_final.tsv.gz` → `{sample}_virus_hits.tsv.gz`
 
 # v3.0.1.9
 

@@ -94,30 +94,25 @@ def generate_downstream_input(
     run_id: str,
 ) -> Path:
     """
-    Generate input files for DOWNSTREAM workflow, with each sample as its own group.
-
-    The DOWNSTREAM workflow expects:
-    - results_dir: Directory containing per-sample {sample}_virus_hits.tsv.gz files
-    - groups_tsv: TSV mapping samples to groups
-
+    Generate input files for DOWNSTREAM workflow, with each sample as its own group
     Args:
         downstream_launch_dir: Launch directory for downstream workflow
         samplesheet_path: Path to samplesheet CSV
-        run_results_dir: S3 path to RUN workflow results directory (contains per-sample files)
+        run_results_dir: S3 path to RUN workflow output directory
         run_id: Run ID to use for the DOWNSTREAM workflow input file
     Returns:
         Path to generated input.csv file
     """
     input_csv_path = downstream_launch_dir / "input.csv"
     groups_tsv_path = downstream_launch_dir / "groups.tsv"
-    # Ensure results_dir ends with / for consistent path handling
-    results_dir = run_results_dir.rstrip("/") + "/"
     with open(samplesheet_path) as inf, open(groups_tsv_path, "w") as outf:
         writer = csv.writer(outf, delimiter="\t")
         writer.writerow(["sample", "group"])
         reader = csv.DictReader(inf)
         for row in reader:
             writer.writerow([row["sample"], row["sample"]])
+    # Ensure results_dir ends with / for consistent path handling
+    results_dir = run_results_dir.rstrip("/") + "/"
     with open(input_csv_path, "w") as inf:
         writer = csv.writer(inf)
         writer.writerow(["label", "results_dir", "groups_tsv"])

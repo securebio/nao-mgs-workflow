@@ -43,12 +43,12 @@ nextflow_workflow {
             // Kraken output lines should match input reads
             def kraken_output_lines = countGzipLines(workflow.out.kraken_output[0][1])
             assert kraken_output_lines == single_read_lines / 4
-            // Kraken reports should have expected fields (output is now tuple(sample, file))
+            // Kraken reports should have expected fields
             def kraken_report_tab = path(workflow.out.kraken_reports[0][1]).csv(sep: "\t", decompress: true)
             def kraken_headers_exp = ["pc_reads_total", "n_reads_clade", "n_reads_direct", "n_minimizers_total", "n_minimizers_distinct", "rank","taxid", "name", "sample"]
             assert kraken_report_tab.columnCount == 9
             assert kraken_report_tab.columnNames == kraken_headers_exp
-            // Bracken output should have expected fields (output is now tuple(sample, file))
+            // Bracken output should have expected fields
             def bracken_tab = path(workflow.out.bracken[0][1]).csv(sep: "\t", decompress: true)
             def bracken_headers_exp = ["name", "taxid", "rank", "kraken2_assigned_reads", "added_reads", "new_est_reads", "fraction_total_reads", "sample"]
             assert bracken_tab.columnCount == 8
@@ -98,12 +98,12 @@ nextflow_workflow {
             // Kraken output lines should match input reads
             def kraken_output_lines = path(workflow.out.kraken_output[0][1]).linesGzip.size()
             assert kraken_output_lines == single_read_lines / 4
-            // Kraken reports should have expected fields (output is now tuple(sample, file))
+            // Kraken reports should have expected fields
             def kraken_report_tab = path(workflow.out.kraken_reports[0][1]).csv(sep: "\t", decompress: true)
             def kraken_headers_exp = ["pc_reads_total", "n_reads_clade", "n_reads_direct", "n_minimizers_total", "n_minimizers_distinct", "rank","taxid", "name", "sample"]
             assert kraken_report_tab.columnCount == 9
             assert kraken_report_tab.columnNames == kraken_headers_exp
-            // Bracken output should have expected fields (output is now tuple(sample, file))
+            // Bracken output should have expected fields
             def bracken_tab = path(workflow.out.bracken[0][1]).csv(sep: "\t", decompress: true)
             def bracken_headers_exp = ["name", "taxid", "rank", "kraken2_assigned_reads", "added_reads", "new_est_reads", "fraction_total_reads", "sample"]
             assert bracken_tab.columnCount == 8
@@ -147,7 +147,7 @@ nextflow_workflow {
             def kraken_output_lines = countGzipLines(workflow.out.kraken_output[0][1])
             assert kraken_output_lines == 0
 
-            // Kraken reports should have header row only (output is now tuple(sample, file))
+            // Kraken reports should have header row only
             def kraken_report_file = path(workflow.out.kraken_reports[0][1])
             def kraken_lines = kraken_report_file.linesGzip.toList()
             assert kraken_lines.size() == 1  // Just header
@@ -157,7 +157,7 @@ nextflow_workflow {
             def kraken_headers_exp = ["pc_reads_total", "n_reads_clade", "n_reads_direct", "n_minimizers_total", "n_minimizers_distinct", "rank","taxid", "name", "sample"]
             assert kraken_headers.size() == kraken_headers_exp.size()
 
-            // Bracken output should be completely empty (output is now tuple(sample, file))
+            // Bracken output should be completely empty
             def bracken_file = path(workflow.out.bracken[0][1])
             assert bracken_file.linesGzip.size() == 0
         }
