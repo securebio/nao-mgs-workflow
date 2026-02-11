@@ -56,7 +56,8 @@ workflow DOWNSTREAM {
             LOAD_DOWNSTREAM_DATA.out.missing_groups,
             file("${projectDir}/pyproject.toml"),
             file("${projectDir}/schemas"),
-            params.platform
+            params.platform,
+            ""
         )
         // Prepare publishing channels
         params_str = groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(params))
