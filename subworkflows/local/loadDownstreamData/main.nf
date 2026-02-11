@@ -40,7 +40,11 @@ workflow LOAD_DOWNSTREAM_DATA {
             if (!row.groups_tsv?.trim()) {
                 throw new Exception("Missing or empty 'groups_tsv' for label '${row.label}' in input file.")
             }
-            def results_dir = resolvePath(row.results_dir).toString()
+            // Resolve results_dir as a string to preserve S3 URIs (file().toString() strips the s3:// scheme)
+            def results_dir = row.results_dir
+            if (!results_dir.startsWith('s3://') && !results_dir.startsWith('/')) {
+                results_dir = file(input_base_dir).resolve(results_dir).toString()
+            }
             if (!results_dir.endsWith('/')) results_dir += '/'
             def hits_files = file("${results_dir}*_virus_hits.tsv{,.gz}")
             if (hits_files instanceof List) {
