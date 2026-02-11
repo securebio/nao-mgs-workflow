@@ -33,6 +33,7 @@
     - QC stats: `subset_qc_*_stats.tsv.gz` → `{sample}_qc_*_stats_raw.tsv.gz` and `{sample}_qc_*_stats_cleaned.tsv.gz`
     - Taxonomy: `bracken_reports_merged.tsv.gz` → `{sample}_bracken.tsv.gz`, `kraken_reports_merged.tsv.gz` → `{sample}_kraken.tsv.gz`
     - Removed `COUNT_TOTAL_READS` subworkflow; `COUNT_READS` module is now called directly from RUN workflow.
+- Updated required Nextflow version to 25.10.4.
 
 # v3.0.1.9
 
