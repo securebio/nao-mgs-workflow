@@ -111,12 +111,10 @@ def generate_downstream_input(
         reader = csv.DictReader(inf)
         for row in reader:
             writer.writerow([row["sample"], row["sample"]])
-    # Ensure results_dir ends with / for consistent path handling
-    results_dir = run_results_dir.rstrip("/") + "/"
     with open(input_csv_path, "w") as inf:
         writer = csv.writer(inf)
         writer.writerow(["label", "results_dir", "groups_tsv"])
-        writer.writerow([run_id, results_dir, str(groups_tsv_path.resolve())])
+        writer.writerow([run_id, run_results_dir, str(groups_tsv_path.resolve())])
     logger.info(f"Generated DOWNSTREAM input file: {input_csv_path}")
     return input_csv_path
 

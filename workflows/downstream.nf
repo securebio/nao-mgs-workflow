@@ -26,15 +26,12 @@ workflow DOWNSTREAM {
         // Prepare channels from input CSV file
         LOAD_DOWNSTREAM_DATA(params.input_file, params.input_base_dir ?: projectDir)
         start_time_str = LOAD_DOWNSTREAM_DATA.out.start_time_str
-
         // Concatenate per-sample hits into per-group TSVs, adding group column
         PREPARE_GROUP_TSVS(LOAD_DOWNSTREAM_DATA.out.hits)
         group_ch = PREPARE_GROUP_TSVS.out.groups
-
         // Prepare inputs for clade counting and validating taxonomic assignments
         viral_db_path = "${params.ref_dir}/results/total-virus-db-annotated.tsv.gz"
         viral_db = channel.value(viral_db_path)
-
         // Conditionally mark duplicates and generate clade counts based on platform
         if (params.platform == "ont") {
             // ONT: Skip duplicate marking and clade counting, but still sort by seq_id
@@ -50,12 +47,10 @@ workflow DOWNSTREAM {
             // Generate clade counts
             clade_counts_ch = COUNT_READS_PER_CLADE(viral_hits_ch, viral_db).output
         }
-
         // Validate taxonomic assignments
         def validation_params = params.collectEntries { k, v -> [k, v] }
         validation_params["cluster_min_len"] = 15
         VALIDATE_VIRAL_ASSIGNMENTS(viral_hits_ch, viral_db, params.ref_dir, validation_params)
-
         // Create empty output files for groups with no virus hits
         CREATE_EMPTY_GROUP_OUTPUTS(
             LOAD_DOWNSTREAM_DATA.out.missing_groups,
@@ -63,15 +58,12 @@ workflow DOWNSTREAM {
             file("${projectDir}/schemas"),
             params.platform
         )
-
         // Prepare publishing channels
         params_str = groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(params))
         params_ch = Channel.of(params_str).collectFile(name: "params-downstream.json")
         pipeline_pyproject_path = file("${projectDir}/pyproject.toml")
         pyproject_ch = COPY_PYPROJECT(Channel.fromPath(pipeline_pyproject_path), "pyproject.toml")
         input_file_ch = COPY_INPUT(Channel.fromPath(params.input_file), "input_file.csv")
-        // Note: time_ch passes through COPY_TIME because Nextflow 25.04 only publishes files
-        // that have passed through the working directory
         time_file = start_time_str.map { it + "\n" }.collectFile(name: "time.txt")
         time_ch = COPY_TIME(time_file, "time.txt")
 
