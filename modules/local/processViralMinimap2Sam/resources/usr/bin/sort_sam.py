@@ -6,7 +6,7 @@ import os
 import subprocess
 
 
-def sort_sam(input_sam_gz: str, output_sam: str, sort_memory: str = "1G") -> None:
+def sort_sam(input_sam_gz: str, output_sam: str, sort_memory: str = "2G") -> None:
     """Sort a gzipped SAM file by QNAME using GNU sort.
 
     Header lines (@-prefixed) are written first, then alignment lines are
@@ -15,23 +15,25 @@ def sort_sam(input_sam_gz: str, output_sam: str, sort_memory: str = "1G") -> Non
     """
     with gzip.open(input_sam_gz, "rt") as fh, open(output_sam, "w") as out:
         sort_proc = subprocess.Popen(
-            ["sort", "-t\t", "-k1,1", f"-S{sort_memory}"],
+            ["sort", "-t\t", "-k1,1", f"-S{sort_memory}", "-T."],
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             env={**os.environ, "LC_ALL": "C"},
             text=True,
         )
+        # Asserts placate the type checker; stdin/stdout are set because we passed PIPE above
+        assert sort_proc.stdin is not None and sort_proc.stdout is not None
 
         for line in fh:
             if line.startswith("@"):
                 out.write(line)
             else:
-                sort_proc.stdin.write(line)  # type: ignore[union-attr]
+                sort_proc.stdin.write(line)
 
-        sort_proc.stdin.close()  # type: ignore[union-attr]
+        sort_proc.stdin.close()
 
         # Append sorted alignment lines after headers
-        for line in sort_proc.stdout:  # type: ignore[union-attr]
+        for line in sort_proc.stdout:
             out.write(line)
 
         rc = sort_proc.wait()

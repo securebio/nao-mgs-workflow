@@ -35,8 +35,10 @@ class TestReadFastqRecord:
         [
             ("@readA extra info\n", "readA"),
             ("@read_X\trunid=abc\n", "read_X"),
-            ("@f47ac10b-58cc-4372-a567-0e02b2c3d479 runid=xyz\n",
-             "f47ac10b-58cc-4372-a567-0e02b2c3d479"),
+            (
+                "@f47ac10b-58cc-4372-a567-0e02b2c3d479 runid=xyz\n",
+                "f47ac10b-58cc-4372-a567-0e02b2c3d479",
+            ),
         ],
         ids=["space_delimited", "tab_delimited", "ont_uuid"],
     )
@@ -57,19 +59,24 @@ class TestExtractViralTaxid:
     @pytest.mark.parametrize(
         "viral,expected",
         [
-            ({"111"}, "111"),          # taxid is viral → use it
-            ({"222"}, "222"),          # species_taxid is viral → use it
-            ({"111", "222"}, "111"),   # both viral → prefer taxid
-            ({"999"}, "111"),          # neither viral → fall back to taxid
+            ({"111"}, "111"),  # taxid is viral → use it
+            ({"222"}, "222"),  # species_taxid is viral → use it
+            ({"111", "222"}, "111"),  # both viral → prefer taxid
+            ({"999"}, "111"),  # neither viral → fall back to taxid
         ],
         ids=["taxid_viral", "species_viral", "both_prefers_taxid", "neither_fallback"],
     )
     def test_taxid_selection(self, viral, expected):
-        assert process_viral_minimap2_sam.extract_viral_taxid("g1", self.METADATA, viral) == expected
+        assert (
+            process_viral_minimap2_sam.extract_viral_taxid("g1", self.METADATA, viral)
+            == expected
+        )
 
     def test_missing_genome_raises(self):
         with pytest.raises(ValueError, match="No matching genome ID found: missing"):
-            process_viral_minimap2_sam.extract_viral_taxid("missing", self.METADATA, {"111"})
+            process_viral_minimap2_sam.extract_viral_taxid(
+                "missing", self.METADATA, {"111"}
+            )
 
 
 # ── parse_sam_alignment ────────────────────────────────────────────────────
@@ -85,8 +92,7 @@ class TestParseSamAlignment:
         sam_path.write_text(
             "@HD\tVN:1.6\n"
             "@SQ\tSN:genome1\tLN:10000\n"
-            "@SQ\tSN:genome2\tLN:10000\n"
-            + sam_line + "\n"
+            "@SQ\tSN:genome2\tLN:10000\n" + sam_line + "\n"
         )
         with pysam.AlignmentFile(str(sam_path), "r") as f:
             return next(iter(f))
@@ -167,9 +173,7 @@ class TestProcessSam:
         genbank_metadata, viral_taxids = ref_data
 
         sam_path = tmp_path / "empty.sam"
-        sam_path.write_text(
-            "@HD\tVN:1.6\tSO:queryname\n" "@SQ\tSN:genome1\tLN:10000\n"
-        )
+        sam_path.write_text("@HD\tVN:1.6\tSO:queryname\n" "@SQ\tSN:genome1\tLN:10000\n")
 
         fastq_path = tmp_path / "empty.fastq"
         fastq_path.write_text("")
@@ -267,9 +271,7 @@ class TestProcessSam:
         )
 
         fastq_path = tmp_path / "test.fastq"
-        fastq_path.write_text(
-            "@read_A\n" "ACGTACGTAC\n" "+\n" "FFFFFFFFFF\n"
-        )
+        fastq_path.write_text("@read_A\n" "ACGTACGTAC\n" "+\n" "FFFFFFFFFF\n")
 
         out_path = str(tmp_path / "output.tsv.gz")
         with pytest.raises(ValueError, match="read_X"):
@@ -301,10 +303,7 @@ class TestProcessSam:
         # Unsorted gzipped FASTQ
         fastq_gz = tmp_path / "unsorted.fastq.gz"
         with gzip.open(str(fastq_gz), "wt") as f:
-            f.write(
-                "@read_C\nCCCCC\n+\nHHHHH\n"
-                "@read_A\nAAAAA\n+\nFFFFF\n"
-            )
+            f.write("@read_C\nCCCCC\n+\nHHHHH\n" "@read_A\nAAAAA\n+\nFFFFF\n")
 
         # Sort
         sorted_sam = str(tmp_path / "sorted.sam")

@@ -5,7 +5,6 @@ import gzip
 import pytest
 import sort_sam
 
-
 MINIMAL_HEADER = "@HD\tVN:1.6\tSO:queryname\n@SQ\tSN:ref1\tLN:10000\n"
 
 
@@ -46,8 +45,7 @@ class TestSortSam:
         inp = tmp_path / "input.sam.gz"
         out = tmp_path / "sorted.sam"
         alignment_lines = "".join(
-            f"{name}\t0\tref1\t100\t60\t10M\t*\t0\t0\tACGT\tIIII\n"
-            for name in order
+            f"{name}\t0\tref1\t100\t60\t10M\t*\t0\t0\tACGT\tIIII\n" for name in order
         )
         _write_sam_gz(inp, MINIMAL_HEADER + alignment_lines)
 
