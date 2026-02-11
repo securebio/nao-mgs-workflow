@@ -113,7 +113,7 @@ def generate_downstream_input(
             writer.writerow([row["sample"], row["sample"]])
     with open(input_csv_path, "w") as inf:
         writer = csv.writer(inf)
-        writer.writerow(["label", "results_dir", "groups_tsv"])
+        writer.writerow(["label", "run_results_dir", "groups_tsv"])
         writer.writerow([run_id, run_results_dir, str(groups_tsv_path.resolve())])
     logger.info(f"Generated DOWNSTREAM input file: {input_csv_path}")
     return input_csv_path

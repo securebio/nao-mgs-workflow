@@ -35,6 +35,24 @@ nextflow_workflow {
         }
     }
 
+    test("Should fail on empty run_results_dir") {
+        tag "expect_failed"
+        when {
+            params {}
+            workflow {
+                """
+                input[0] = file("${projectDir}/test-data/downstream/input_file_empty_results_dir.csv")
+                input[1] = projectDir
+                """
+            }
+        }
+
+        then {
+            assert workflow.failed
+            assert workflow.stdout.any { it.contains("Missing or empty 'run_results_dir'") }
+        }
+    }
+
     test("Should fail on invalid input file") {
         tag "expect_failed"
         when {

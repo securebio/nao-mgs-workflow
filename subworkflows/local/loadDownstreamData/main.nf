@@ -11,14 +11,14 @@ include { CONCATENATE_TSVS_LABELED } from "../../../modules/local/concatenateTsv
 workflow LOAD_DOWNSTREAM_DATA {
     take:
         input_file
-        input_base_dir  // Base directory for resolving relative paths in input CSV (use projectDir or launchDir)
+        input_base_dir  // Base directory for resolving relative paths in input CSV
     main:
         // Start time
         start_time = new Date()
         start_time_str = start_time.format("YYYY-MM-dd HH:mm:ss z (Z)")
 
         // Validate headers
-        def required_headers = ['label', 'results_dir', 'groups_tsv']
+        def required_headers = ['label', 'run_results_dir', 'groups_tsv']
         def headers = file(input_file).readLines().first().tokenize(',')*.trim()
         if (headers != required_headers) {
             throw new Exception("""Invalid input header.
@@ -35,21 +35,21 @@ workflow LOAD_DOWNSTREAM_DATA {
         // Parse input CSV rows
         rows_ch = Channel.fromPath(input_file).splitCsv(header: true)
 
-        // Discover per-sample virus_hits files from results_dir and collect them per label
+        // Discover per-sample virus_hits files from run_results_dir and collect them per label
         files_ch = rows_ch.map { row ->
-            if (!row.results_dir?.trim()) {
-                throw new Exception("Missing or empty 'results_dir' for label '${row.label}' in input file.")
+            if (!row.run_results_dir?.trim()) {
+                throw new Exception("Missing or empty 'run_results_dir' for label '${row.label}' in input file.")
             }
             if (!row.groups_tsv?.trim()) {
                 throw new Exception("Missing or empty 'groups_tsv' for label '${row.label}' in input file.")
             }
-            // Resolve results_dir as a string to preserve S3 URIs (file().toString() strips the s3:// scheme)
-            def results_dir = row.results_dir
-            if (!results_dir.startsWith('s3://') && !results_dir.startsWith('/')) {
-                results_dir = file(input_base_dir).resolve(results_dir).toString()
+            // Resolve run_results_dir as a string to preserve S3 URIs (file().toString() strips the s3:// scheme)
+            def run_results_dir = row.run_results_dir
+            if (!run_results_dir.startsWith('s3://') && !run_results_dir.startsWith('/')) {
+                run_results_dir = file(input_base_dir).resolve(run_results_dir).toString()
             }
-            if (!results_dir.endsWith('/')) results_dir += '/'
-            def hits_files = file("${results_dir}*_virus_hits.tsv{,.gz}")
+            if (!run_results_dir.endsWith('/')) run_results_dir += '/'
+            def hits_files = file("${run_results_dir}*_virus_hits.tsv{,.gz}")
             def files_list = (hits_files instanceof List) ? hits_files : (hits_files ? [hits_files] : [])
             tuple(row.label, files_list, resolvePath(row.groups_tsv))
         }
