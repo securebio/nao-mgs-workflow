@@ -15,7 +15,7 @@ process CREATE_EMPTY_GROUP_OUTPUTS {
     script:
         def groups_arg = missing_groups.join(',')
         def opts = ["--platform ${platform == 'ont' ? 'ont' : 'illumina'}"]
-        if (pattern_filter) opts << "--pattern-filter ${pattern_filter}"
+        if (pattern_filter) opts << "--pattern-filter '${pattern_filter}'"
         def opts_str = opts.join(' ')
         """
         create_empty_group_outputs.py "${groups_arg}" ${pyproject_toml} ${opts_str} --schema-dir ${schema_dir}

@@ -49,11 +49,11 @@ workflow LOAD_DOWNSTREAM_DATA {
             def hits_files = file("${results_dir}*_virus_hits.tsv{,.gz}")
             if (hits_files instanceof List) {
                 hits_files.collect { f ->
-                    def sample = f.name.replace("_virus_hits.tsv.gz", "")
+                    def sample = f.name.replaceFirst(/_virus_hits\.tsv(\.gz)?$/, '')
                     tuple(row.label, sample, f)
                 }
             } else if (hits_files) {
-                def sample = hits_files.name.replace("_virus_hits.tsv.gz", "")
+                def sample = hits_files.name.replaceFirst(/_virus_hits\.tsv(\.gz)?$/, '')
                 [tuple(row.label, sample, hits_files)]
             } else {
                 []

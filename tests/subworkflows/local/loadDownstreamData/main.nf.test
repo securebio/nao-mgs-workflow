@@ -36,8 +36,8 @@ nextflow_workflow {
                 def group = hit[3]
                 assert expectedLabels.contains(label)
                 def filename = hits_file.toString().split('/').last()
-                assert filename.endsWith("_virus_hits.tsv.gz")
-                assert sample == filename.replace("_virus_hits.tsv.gz", "")
+                assert filename.matches(".*_virus_hits\\.tsv(\\.gz)?")
+                assert sample == filename.replaceFirst(/_virus_hits\.tsv(\.gz)?$/, '')
                 assert group != null && group.length() > 0, "Group should not be empty"
             }
             // Verify missing_groups is empty when all samples have hits
