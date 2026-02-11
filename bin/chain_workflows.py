@@ -105,7 +105,6 @@ def generate_downstream_input(
     """
     input_csv_path = downstream_launch_dir / "input.csv"
     groups_tsv_path = downstream_launch_dir / "groups.tsv"
-    hits_tsv_path = f"{run_results_dir}/virus_hits_final.tsv.gz"
     with open(samplesheet_path) as inf, open(groups_tsv_path, "w") as outf:
         writer = csv.writer(outf, delimiter="\t")
         writer.writerow(["sample", "group"])
@@ -114,8 +113,8 @@ def generate_downstream_input(
             writer.writerow([row["sample"], row["sample"]])
     with open(input_csv_path, "w") as inf:
         writer = csv.writer(inf)
-        writer.writerow(["label", "hits_tsv", "groups_tsv"])
-        writer.writerow([run_id, hits_tsv_path, str(groups_tsv_path.resolve())])
+        writer.writerow(["label", "run_results_dir", "groups_tsv"])
+        writer.writerow([run_id, run_results_dir, str(groups_tsv_path.resolve())])
     logger.info(f"Generated DOWNSTREAM input file: {input_csv_path}")
     return input_csv_path
 

@@ -1,2 +1,2 @@
-label,hits_tsv,groups_tsv
-empty_test,test-data/downstream/empty/virus_hits_empty.tsv,test-data/downstream/empty/sample_groups_empty.tsv
+label,run_results_dir,groups_tsv
+empty_test,test-data/downstream/empty/,test-data/downstream/empty/sample_groups_empty.tsv

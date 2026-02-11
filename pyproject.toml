@@ -8,6 +8,7 @@ version = "3.1.0.0-dev"
 requires-python = ">=3.12"
 dependencies = [
     "biopython>=1.85",
+    "boto3",
     "frictionless>=5.18.0",
     "mypy>=1.18.1",
     # Needed until https://github.com/securebio/nao-dedup/pull/12 has been
@@ -103,7 +104,7 @@ expected-outputs-run = [
     "results/{SAMPLE}_qc_quality_sequence_stats_cleaned.tsv.gz",
     "results/{SAMPLE}_qc_quality_sequence_stats_raw.tsv.gz",
     "results/{SAMPLE}_read_counts.tsv",
-    "results/virus_hits_final.tsv.gz",
+    "results/{SAMPLE}_virus_hits.tsv.gz",
 ]
 
 expected-outputs-downstream = [
