@@ -5,7 +5,7 @@
 workflow LOAD_DOWNSTREAM_DATA {
     take:
         input_file
-        input_base_dir  // Base directory for resolving relative paths in input CSV (use projectDir or launchDir)
+        input_base_dir  // Base directory for resolving relative paths in input CSV
     main:
         // Start time
         start_time = new Date()

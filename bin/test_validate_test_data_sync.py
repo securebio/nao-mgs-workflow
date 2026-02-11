@@ -26,26 +26,26 @@ class TestParseSnapshot:
     @pytest.mark.parametrize(
         "content_entries,expected_md5_map",
         [
-            # Single file
-            (["file1.tsv.gz:md5,abc123"], {"file1": "abc123"}),
+            # Single file (.gz stripped)
+            (["file1.tsv.gz:md5,abc123"], {"file1.tsv": "abc123"}),
             # Multiple files
             (
                 ["file1.tsv.gz:md5,abc123", "file2.tsv.gz:md5,def456"],
-                {"file1": "abc123", "file2": "def456"},
+                {"file1.tsv": "abc123", "file2.tsv": "def456"},
             ),
-            # Various extensions stripped
+            # Only .gz is stripped, other extensions preserved
             (
                 [
                     "file.tsv.gz:md5,abc123",
                     "another.csv.gz:md5,def456",
                     "simple.txt:md5,ghi789",
                 ],
-                {"file": "abc123", "another": "def456", "simple": "ghi789"},
+                {"file.tsv": "abc123", "another.csv": "def456", "simple.txt": "ghi789"},
             ),
             # Entries without :md5, are ignored
             (
                 ["file1.tsv.gz:md5,abc123", "not_an_md5_entry", "another:entry:without:md5"],
-                {"file1": "abc123"},
+                {"file1.tsv": "abc123"},
             ),
             # Empty content
             ([], {}),
@@ -61,7 +61,8 @@ class TestParseSnapshot:
         result = parse_snapshot(snapshot_path)
         assert result == {"test_output": expected_md5_map}
 
-    def test_parses_multiple_snapshots(self, tmp_path: Path) -> None:
+    def test_parses_multiple_snapshot_names(self, tmp_path: Path) -> None:
+        """Parametrized cases above use a single snapshot name; verify multiple names in one file."""
         snapshot = make_snapshot({
             "snapshot_one": ["file1.tsv.gz:md5,aaa111"],
             "snapshot_two": ["file2.tsv.gz:md5,bbb222"],
@@ -70,8 +71,8 @@ class TestParseSnapshot:
         snapshot_path.write_text(json.dumps(snapshot))
         result = parse_snapshot(snapshot_path)
         assert result == {
-            "snapshot_one": {"file1": "aaa111"},
-            "snapshot_two": {"file2": "bbb222"},
+            "snapshot_one": {"file1.tsv": "aaa111"},
+            "snapshot_two": {"file2.tsv": "bbb222"},
         }
 
     def test_handles_missing_content_key(self, tmp_path: Path) -> None:
@@ -153,17 +154,15 @@ class TestValidateSnapshot:
             (["missing.tsv.gz:md5,abc123"], True, False, ValueError, "Errors found"),
             # MD5 mismatch
             (["file1.tsv.gz:md5,wrong"], True, True, ValueError, "Errors found"),
-            # Multiple files match stem
-            (["file1.tsv.gz:md5,abc123"], True, "both", ValueError, "Errors found"),
         ],
-        ids=["dir_missing", "file_missing", "md5_mismatch", "multiple_matches"],
+        ids=["dir_missing", "file_missing", "md5_mismatch"],
     )
     def test_raises_on_errors(
         self,
         tmp_path: Path,
         snapshot_entries: list[str],
         create_subdir: bool,
-        create_file: bool | str,
+        create_file: bool,
         error_type: type,
         error_match: str,
     ) -> None:
@@ -172,11 +171,8 @@ class TestValidateSnapshot:
         if create_subdir:
             snapshot_dir = results_dir / "test_output"
             snapshot_dir.mkdir()
-            if create_file == True:
+            if create_file:
                 (snapshot_dir / "file1.tsv").write_bytes(b"actual content")
-            elif create_file == "both":
-                (snapshot_dir / "file1.tsv").write_text("content1")
-                (snapshot_dir / "file1.csv").write_text("content2")
         snapshot = make_snapshot({"test_output": snapshot_entries})
         snapshot_path = tmp_path / "test.snap"
         snapshot_path.write_text(json.dumps(snapshot))
