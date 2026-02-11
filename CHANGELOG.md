@@ -19,13 +19,8 @@
     - Deleted `BLAST_VIRAL` subworkflow, `SUBSET_FASTN` module, and `RUN_VALIDATION` workflow.
     - Removed `blast_viral_fraction` and related BLAST parameters from RUN workflow configs.
     - Removed unused `EXTRACT_VIRAL_HITS_TO_FASTQ_NOREF_LABELED` process (non-LIST version).
-    - Removed `EXTRACT_VIRAL_HITS_TO_FASTQ` process and `hits_fastq` output from RUN workflow (output was published but never consumed by downstream processes).
     - Removed `hits_fastq` output from `EXTRACT_VIRAL_READS_SHORT` and `EXTRACT_VIRAL_READS_ONT` subworkflows (this concatenated interleaved FASTQ was used for BLAST validation).
     - Removed unused FASTQ extraction includes (`CONCATENATE_FILES`, `EXTRACT_VIRAL_HITS_TO_FASTQ`, `EXTRACT_SHARED_FASTQ_READS`).
-- RUN workflow now outputs per-sample `{sample}_virus_hits.tsv.gz` files instead of concatenating all samples.
-    - Updated modules to use `tuple(sample, file)` channel structure.
-    - DOWNSTREAM workflow updated to auto-discover per-sample files from `results_dir` and parse groups from `groups_tsv`.
-    - Deleted obsolete `validatePerSampleGrouping` module.
 - Removed Cutadapt from RUN workflow to reduce runtime and complexity. FASTP alone now handles adapter trimming for the short-read viral identification pipeline.
 - Update documentation on Seqera ECR credentials.
 - Add Rust build system to CI and rust-tools container to ECR.
@@ -39,6 +34,14 @@
     - Taxonomy: `bracken_reports_merged.tsv.gz` → `{sample}_bracken.tsv.gz`, `kraken_reports_merged.tsv.gz` → `{sample}_kraken.tsv.gz`
     - Removed `COUNT_TOTAL_READS` subworkflow; `COUNT_READS` module is now called directly from RUN workflow.
     - Viral hits: `virus_hits_final.tsv.gz` → `{sample}_virus_hits.tsv.gz`
+- Updated DOWNSTREAM to handle per-sample RUN outputs:
+    - Modified `loadDownstreamData` to return (1) tuples connecting hits tables to group annotations, and (2) list of groups with no associated hits.
+    - Modified `createEmptyGroupOutputs` to handle a comma-separated list of empty group IDs
+    - Dramatically simplified `prepareGroupTsvs` (now only needs to concatenate hits tables, never split them)
+    - Added empty-group handling to `validateViralAssignments` (now creates empty validation-hits files for groups with no hits)
+    - Deleted obsolete `validateGrouping` module
+    - DOWNSTREAM workflow updated to auto-discover per-sample files from `results_dir` and parse groups from `groups_tsv`.
+    - Deleted obsolete `validatePerSampleGrouping` module.
 
 # v3.0.1.9
 
