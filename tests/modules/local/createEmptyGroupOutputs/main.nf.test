@@ -14,14 +14,58 @@ nextflow_process {
             process {
                 '''
                 input[0] = ["group1", "group2"]
-                input[1] = "${projectDir}/pyproject.toml"
-                input[2] = "illumina"
-                input[3] = ""
+                input[1] = file("${projectDir}/pyproject.toml")
+                input[2] = file("${projectDir}/schemas")
+                input[3] = "illumina"
+                input[4] = ""
                 '''
             }
         }
         then {
             assert process.success
+            // Illumina platform has 4 per-group output patterns, so 2 groups × 4 = 8 files
+            def files = process.out.outputs.flatten()
+            assert files.size() == 8
+            def filenames = files.collect { it.toString().split('/').last() }.sort()
+            // Verify each group has the expected output files
+            assert filenames.contains("group1_clade_counts.tsv.gz")
+            assert filenames.contains("group1_duplicate_reads.tsv.gz")
+            assert filenames.contains("group1_duplicate_stats.tsv.gz")
+            assert filenames.contains("group1_validation_hits.tsv.gz")
+            assert filenames.contains("group2_clade_counts.tsv.gz")
+            assert filenames.contains("group2_duplicate_reads.tsv.gz")
+            assert filenames.contains("group2_duplicate_stats.tsv.gz")
+            assert filenames.contains("group2_validation_hits.tsv.gz")
+            // Files with schemas should have a header row; duplicate_stats has a schema
+            def dupStats1 = files.find { it.toString().split('/').last() == "group1_duplicate_stats.tsv.gz" }
+            def header = path(dupStats1).linesGzip[0]
+            assert header == "prim_align_genome_id_all\tprim_align_dup_exemplar\tprim_align_dup_count\tprim_align_dup_pairwise_match_frac"
+            // Files without schemas should be empty
+            def cladeCount1 = files.find { it.toString().split('/').last() == "group1_clade_counts.tsv.gz" }
+            assert path(cladeCount1).linesGzip.size() == 0
+        }
+    }
+
+    test("Should create ONT output files for missing groups") {
+        tag "expect_success"
+        when {
+            params {}
+            process {
+                '''
+                input[0] = ["group1"]
+                input[1] = file("${projectDir}/pyproject.toml")
+                input[2] = file("${projectDir}/schemas")
+                input[3] = "ont"
+                input[4] = ""
+                '''
+            }
+        }
+        then {
+            assert process.success
+            // ONT platform has 1 per-group output pattern, so 1 group × 1 = 1 file
+            def files = process.out.outputs.flatten()
+            assert files.size() == 1
+            assert files[0].toString().split('/').last() == "group1_validation_hits.tsv.gz"
         }
     }
 
