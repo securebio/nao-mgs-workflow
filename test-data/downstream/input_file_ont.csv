@@ -1,2 +1,2 @@
-label,hits_tsv,groups_tsv
-ont1,test-data/results/run_output_ont/virus_hits_final.tsv,test-data/downstream/sample_groups_ont.tsv
+label,run_results_dir,groups_tsv
+ont1,test-data/results/run_output_ont/,test-data/downstream/sample_groups_ont.tsv

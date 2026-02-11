@@ -27,10 +27,29 @@ nextflow_workflow {
             assert workflow.out.input.size() == tab_in.rowCount
             for (int i=0; i < tab_in.rowCount; i++){
                 assert workflow.out.input[i][0] == tab_in.columns["label"][i]
+                // Hits file is a concatenated result from directory discovery
+                assert workflow.out.input[i][1].toString().endsWith("_virus_hits_combined.tsv.gz")
                 // Resolved paths should end with the relative paths from CSV
-                assert workflow.out.input[i][1].toString().endsWith(tab_in.columns["hits_tsv"][i])
                 assert workflow.out.input[i][2].toString().endsWith(tab_in.columns["groups_tsv"][i])
             }
+        }
+    }
+
+    test("Should fail on empty run_results_dir") {
+        tag "expect_failed"
+        when {
+            params {}
+            workflow {
+                """
+                input[0] = file("${projectDir}/test-data/downstream/input_file_empty_results_dir.csv")
+                input[1] = projectDir
+                """
+            }
+        }
+
+        then {
+            assert workflow.failed
+            assert workflow.stdout.any { it.contains("Missing or empty 'run_results_dir'") }
         }
     }
 
