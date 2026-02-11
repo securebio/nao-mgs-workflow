@@ -91,6 +91,7 @@ workflow VALIDATE_VIRAL_ASSIGNMENTS {
         CREATE_EMPTY_GROUP_OUTPUTS(
             groups_without_output,
             file("${projectDir}/pyproject.toml"),
+            file("${projectDir}/schemas"),
             platform,
             "validation_hits"
         )
