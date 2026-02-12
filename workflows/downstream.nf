@@ -11,7 +11,6 @@ include { PREPARE_GROUP_TSVS } from "../subworkflows/local/prepareGroupTsvs"
 include { MARK_VIRAL_DUPLICATES } from "../subworkflows/local/markViralDuplicates"
 include { VALIDATE_VIRAL_ASSIGNMENTS } from "../subworkflows/local/validateViralAssignments"
 include { COUNT_READS_PER_CLADE } from "../modules/local/countReadsPerClade"
-include { CREATE_EMPTY_GROUP_OUTPUTS } from "../modules/local/createEmptyGroupOutputs"
 include { COPY_FILE_BARE as COPY_PYPROJECT } from "../modules/local/copyFile"
 include { COPY_FILE_BARE as COPY_INPUT } from "../modules/local/copyFile"
 include { COPY_FILE_BARE as COPY_TIME } from "../modules/local/copyFile"
@@ -51,14 +50,6 @@ workflow DOWNSTREAM {
         def validation_params = params.collectEntries { k, v -> [k, v] }
         validation_params["cluster_min_len"] = 15
         VALIDATE_VIRAL_ASSIGNMENTS(viral_hits_ch, viral_db, params.ref_dir, validation_params)
-        // Create empty output files for groups with no virus hits
-        CREATE_EMPTY_GROUP_OUTPUTS(
-            LOAD_DOWNSTREAM_DATA.out.missing_groups,
-            file("${projectDir}/pyproject.toml"),
-            file("${projectDir}/schemas"),
-            params.platform,
-            ""
-        )
         // Prepare publishing channels
         params_str = groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(params))
         params_ch = Channel.of(params_str).collectFile(name: "params-downstream.json")
@@ -74,7 +65,6 @@ workflow DOWNSTREAM {
        intermediates_downstream = VALIDATE_VIRAL_ASSIGNMENTS.out.blast_results
         results_downstream = dup_output_ch.mix(
                                 clade_counts_ch,
-                                VALIDATE_VIRAL_ASSIGNMENTS.out.annotated_hits,
-                                CREATE_EMPTY_GROUP_OUTPUTS.out.outputs.flatten()
+                                VALIDATE_VIRAL_ASSIGNMENTS.out.annotated_hits
         )
 }

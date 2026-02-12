@@ -91,20 +91,4 @@ nextflow_pipeline {
         }
     }
 
-    test("Should create placeholder files for missing groups") {
-        tag "downstream_missing_groups"
-        tag "missing_groups"
-        when {
-            params {
-                input_file = "${projectDir}/test-data/downstream/input_file_missing_groups.csv"
-            }
-        }
-        then {
-            assert workflow.success
-            // Verify expected outputs match pyproject.toml
-            def expected = getExpectedOutputs(path("${projectDir}/pyproject.toml"), "downstream", "missing_group")
-            def observed = getObservedOutputs(path("${launchDir}/output"))
-            assert observed == expected : "Expected ${expected} but got ${observed}"
-        }
-    }
 }
