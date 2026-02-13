@@ -212,7 +212,9 @@ nextflow_workflow {
             def output = workflow.out.annotated_hits[0]
             assert output[0] == "empty_group"
             assert output[1].toString().contains("validation_hits")
-            // The file should be empty
+            // The file should be empty (no schema exists for validation_hits,
+            // so the empty file has no header row; if a schema is added, this
+            // assertion will need to change to == 1)
             assert path(output[1]).linesGzip.size() == 0
         }
     }

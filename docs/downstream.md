@@ -83,11 +83,11 @@ style H fill:#000,color:#fff,stroke:#000
 
 ### Load data into channels (`LOAD_DOWNSTREAM_DATA`)
 
-This subworkflow takes in an input file specifying (1) paths to one or more viral hits tables produced by the `RUN`workflow, and (2) paths to corresponding TSV files specifying the sample groupings to be used for duplicate annotation (see [below](#usage) for more information on this input file). The subworkflow validates that this input file has the required structure, then extracts the filepaths into a channel with the structure expected by the rest of the workflow. (No diagram is provided for this subworkflow.)
+This subworkflow takes in an input file specifying (1) paths to one or more RUN results directories, and (2) paths to corresponding TSV files specifying the sample groupings to be used for duplicate annotation (see [below](#usage) for more information on this input file). The subworkflow validates that this input file has the required structure, auto-discovers per-sample viral hits files (`*_virus_hits.tsv{,.gz}`) from each results directory, joins them with group annotations from the grouping TSVs, and emits the results as a channel of tuples with the structure expected by the rest of the workflow. (No diagram is provided for this subworkflow.)
 
-### Partition into sample-based groups for duplicate annotation (`PREPARE_GROUP_TSVS`)
+### Concatenate per-sample hits into per-group TSVs (`PREPARE_GROUP_TSVS`)
 
-This subworkflow takes in the channel output by `LOAD_DOWNSTREAM_DATA`, adds sample grouping information to the viral hits tables, then partitions each viral hits table into a separate TSV per sample group. Partitions from different hits tables with matching group annotations are then concatenated together, enabling duplicate annotation across different pipeline runs (e.g. from different data deliveries) as specified by the user.
+This subworkflow takes in the per-sample hits tuples output by `LOAD_DOWNSTREAM_DATA` (which already include group annotations), groups them by sample group, concatenates the hits tables within each group, and adds a group column to each concatenated TSV. This enables duplicate annotation across different samples and pipeline runs as specified by the user.
 
 ```mermaid
 ---
@@ -96,24 +96,11 @@ config:
   layout: horizontal
 ---
 flowchart LR
-A(Viral hits tables) --> B[SORT_TSV]
-C(Grouping information) --> D[SORT_TSV]
-B & D --> E[JOIN_TSVS]
-E --> F[PARTITION_TSVS]
-F --> G[CONCATENATE_TSVS_LABELED]
-G --> H(Partitioned sample group TSVs)
-subgraph X [Add grouping information to hits tables]
-B
-D
-E
-end
-subgraph Y [Partition and concatenate TSVs by sample group]
-F
-G
-end
+A("Per-sample hits with group annotations <br> (LOAD_DOWNSTREAM_DATA)") --> B[CONCATENATE_TSVS_LABELED]
+B --> C[ADD_GROUP_COLUMN]
+C --> D(Per-group hits TSVs)
 style A fill:#fff,stroke:#000
-style C fill:#fff,stroke:#000
-style H fill:#000,color:#fff,stroke:#000
+style D fill:#000,color:#fff,stroke:#000
 ```
 
 ### Annotate alignment duplicates (`MARK_VIRAL_DUPLICATES`)
