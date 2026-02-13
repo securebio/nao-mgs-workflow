@@ -6,10 +6,23 @@ on:
       - main
 
 jobs:
-  bump-version:
+  check:
     runs-on: ubuntu-latest
-    # Skip if this is a version bump commit (avoid infinite loop)
-    if: "!contains(github.event.head_commit.message, '[release]')"
+    outputs:
+      is_bot: ${{ steps.release-bot.outputs.is_bot }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check release bot actor
+        id: release-bot
+        uses: ./.github/actions/check-release-bot
+        with:
+          app-id: ${{ vars.RELEASE_BOT_APP_ID }}
+          private-key: ${{ secrets.RELEASE_BOT_PRIVATE_KEY }}
+
+  bump-version:
+    needs: check
+    if: needs.check.outputs.is_bot != 'true'
+    runs-on: ubuntu-latest
 
     steps:
       - name: Generate token from GitHub App
@@ -60,5 +73,5 @@ jobs:
         run: |
           version=$(bump-my-version show current_version)
           git add pyproject.toml CHANGELOG.md
-          git commit -m "[release] Bump version to $version"
+          git commit -m "Bump version to $version"
           git push

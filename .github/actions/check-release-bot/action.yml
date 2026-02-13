@@ -1,0 +1,38 @@
+name: 'Check Release Bot Actor'
+description: 'Check if the push was made by the release bot GitHub App'
+
+inputs:
+  app-id:
+    description: 'GitHub App ID for the release bot'
+    required: true
+  private-key:
+    description: 'GitHub App private key for the release bot'
+    required: true
+
+outputs:
+  is_bot:
+    description: 'Whether the push was from the release bot (true/false)'
+    value: ${{ steps.actor-check.outputs.is_bot }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Generate token from GitHub App
+      id: generate-token
+      uses: actions/create-github-app-token@v1
+      with:
+        app-id: ${{ inputs.app-id }}
+        private-key: ${{ inputs.private-key }}
+
+    - name: Check if push was from release bot
+      id: actor-check
+      shell: bash
+      run: |
+        BOT_ACTOR="${{ steps.generate-token.outputs.app-slug }}[bot]"
+        if [ "${{ github.actor }}" = "$BOT_ACTOR" ]; then
+          echo "is_bot=true" >> $GITHUB_OUTPUT
+          echo "Push was from $BOT_ACTOR"
+        else
+          echo "is_bot=false" >> $GITHUB_OUTPUT
+          echo "Push was from ${{ github.actor }}"
+        fi

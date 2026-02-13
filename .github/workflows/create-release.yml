@@ -5,10 +5,23 @@ on:
     branches: [main]
 
 jobs:
-  create-release:
+  check:
     runs-on: ubuntu-latest
-    # Only run on release commits created by bump-version workflow
-    if: contains(github.event.head_commit.message, '[release]')
+    outputs:
+      is_bot: ${{ steps.release-bot.outputs.is_bot }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check release bot actor
+        id: release-bot
+        uses: ./.github/actions/check-release-bot
+        with:
+          app-id: ${{ vars.RELEASE_BOT_APP_ID }}
+          private-key: ${{ secrets.RELEASE_BOT_PRIVATE_KEY }}
+
+  create-release:
+    needs: check
+    if: needs.check.outputs.is_bot == 'true'
+    runs-on: ubuntu-latest
     permissions:
       contents: write  # Required to create releases and tags
 

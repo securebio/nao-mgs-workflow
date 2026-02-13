@@ -7,9 +7,6 @@ on:
 jobs:
   check-version-bump:
     runs-on: ubuntu-latest
-    # Skip release commits and PRs from dev to main (already validated on dev)
-    if: "!contains(github.event.pull_request.title, '[release]') && github.head_ref != 'dev'"
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
