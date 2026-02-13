@@ -49,6 +49,8 @@ jobs:
       - name: Setup nf-test environment
         if: steps.filter.outputs.subworkflows == 'true'
         uses: ./.github/actions/setup-nf-test
+        with:
+          role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
       - name: Setup Rust container
         if: steps.filter.outputs.subworkflows == 'true'
         id: rust

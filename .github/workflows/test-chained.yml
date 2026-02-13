@@ -44,6 +44,8 @@ jobs:
       - name: Setup nf-test environment
         if: steps.filter.outputs.chained == 'true'
         uses: ./.github/actions/setup-nf-test
+        with:
+          role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
 
       - name: Install Python dependencies
         if: steps.filter.outputs.chained == 'true'
