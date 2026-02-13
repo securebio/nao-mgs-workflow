@@ -2,14 +2,12 @@ name: 'Setup nf-test Environment'
 description: 'Common setup steps for nf-test workflows'
 
 inputs:
-  role-to-assume:
-    description: 'AWS IAM role ARN for OIDC authentication'
-    required: false
-    default: 'arn:aws:iam::058264081542:role/GitHubActionsOrchestratorAndWorkflow'
-  aws-region:
-    description: 'AWS region'
-    required: false
-    default: 'us-east-1'
+  aws_access_key_id:
+    description: 'AWS Access Key ID'
+    required: true
+  aws_secret_access_key:
+    description: 'AWS Secret Access Key'
+    required: true
 
 runs:
   using: 'composite'
@@ -28,11 +26,12 @@ runs:
         sudo apt-get clean
         df -h
 
-    - name: Configure AWS credentials
-      uses: aws-actions/configure-aws-credentials@v4
-      with:
-        role-to-assume: ${{ inputs.role-to-assume }}
-        aws-region: ${{ inputs.aws-region }}
+    - name: Configure AWS CLI
+      shell: bash
+      run: |
+        aws configure set aws_access_key_id ${{ inputs.aws_access_key_id }}
+        aws configure set aws_secret_access_key ${{ inputs.aws_secret_access_key }}
+        aws configure set default.region us-east-1
 
     - name: Login to ECR Public
       shell: bash
