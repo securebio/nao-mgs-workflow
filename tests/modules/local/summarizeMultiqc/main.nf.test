@@ -29,7 +29,7 @@ nextflow_process {
     process "SUMMARIZE_MULTIQC"
     tag "module"
     tag "summarize_multiqc"
-    
+
     test("Should handle empty input files properly") {
         tag "empty_input"
         tag "expect_success"
@@ -73,8 +73,10 @@ nextflow_process {
         then {
             // Should run without failures
             assert process.success
+            // Output should preserve sample ID in tuple (sample is at index 0, files start at index 1)
+            assert process.out[0][0][0] == "empty_sample"
             // Basic stats TSV should have expected structure and content
-            def tsv_basic  = path(process.out[0][0][0]).csv(sep: "\t", decompress: true)
+            def tsv_basic  = path(process.out[0][0][1]).csv(sep: "\t", decompress: true)
             with (tsv_basic) {
                 assert rowCount == 1
                 assert columnCount == 18
@@ -91,8 +93,8 @@ nextflow_process {
             }
             def stage = tsv_basic.columns["stage"][0]
             def sample = tsv_basic.columns["sample"][0]
-            // Length TSV should have expected structure and content
-            def tsv_lengths = path(process.out[0][0][4]).csv(sep: "\t", decompress: true)
+            // Length TSV should have expected structure and content (index 5)
+            def tsv_lengths = path(process.out[0][0][5]).csv(sep: "\t", decompress: true)
             with (tsv_lengths) {
                 assert columnCount == 5
                 assert columns["stage"][0] == stage
@@ -101,15 +103,15 @@ nextflow_process {
                 assert columns["length"][0] == 0
             }
             // Other TSVs should have headers but no content
-            def tsv_adapt = path(process.out[0][0][1]).linesGzip
+            def tsv_adapt = path(process.out[0][0][2]).linesGzip
             def tsv_adapt_headers = tsv_adapt[0].split("\t")
             assert tsv_adapt.size() == 1
             assert tsv_adapt_headers.size() == 6
-            def tsv_qbase = path(process.out[0][0][2]).linesGzip
+            def tsv_qbase = path(process.out[0][0][3]).linesGzip
             def tsv_qbase_headers = tsv_qbase[0].split("\t")
             assert tsv_qbase.size() == 1
             assert tsv_qbase_headers.size() == 5
-            def tsv_qseqs = path(process.out[0][0][3]).linesGzip
+            def tsv_qseqs = path(process.out[0][0][4]).linesGzip
             def tsv_qseqs_headers = tsv_qseqs[0].split("\t")
             assert tsv_qseqs.size() == 1
             assert tsv_qseqs_headers.size() == 5
@@ -161,8 +163,10 @@ nextflow_process {
         then {
             // Should run without failures
             assert process.success
-            // Basic stats TSV should have expected structure and content
-            def tsv_basic  = path(process.out[0][0][0]).csv(sep: "\t", decompress: true)
+            // Output should preserve sample ID in tuple
+            assert process.out[0][0][0] == "tiny_test"
+            // Basic stats TSV should have expected structure and content (index 1)
+            def tsv_basic  = path(process.out[0][0][1]).csv(sep: "\t", decompress: true)
             with (tsv_basic) {
                 assert rowCount == 1
                 assert columnCount == 18
@@ -172,13 +176,13 @@ nextflow_process {
             def stage = tsv_basic.columns["stage"][0]
             def sample = tsv_basic.columns["sample"][0]
             // Other TSVs should have expected structure and content
-            def tsv_adapt = process.out[0][0][1]
+            def tsv_adapt = process.out[0][0][2]
             validateTsvStructure(tsv_adapt, 6, stage, sample)
-            def tsv_qbase = process.out[0][0][2]
+            def tsv_qbase = process.out[0][0][3]
             validateTsvStructure(tsv_qbase, 5, stage, sample)
-            def tsv_qseqs = process.out[0][0][3]
+            def tsv_qseqs = process.out[0][0][4]
             validateTsvStructure(tsv_qseqs, 5, stage, sample)
-            def tsv_lengths = process.out[0][0][4]
+            def tsv_lengths = process.out[0][0][5]
             validateTsvStructure(tsv_lengths, 5, stage, sample)
         }
     }
@@ -236,8 +240,10 @@ nextflow_process {
         then {
             // Should run without failures
             assert process.success
-            // Basic stats TSV should have expected structure and content
-            def tsv_basic  = path(process.out[0][0][0]).csv(sep: "\t", decompress: true)
+            // Output should preserve sample ID in tuple
+            assert process.out[0][0][0] == "tiny_test"
+            // Basic stats TSV should have expected structure and content (index 1)
+            def tsv_basic  = path(process.out[0][0][1]).csv(sep: "\t", decompress: true)
             with (tsv_basic) {
                 assert rowCount == 1
                 assert columnCount == 18
@@ -249,13 +255,13 @@ nextflow_process {
             def stage = tsv_basic.columns["stage"][0]
             def sample = tsv_basic.columns["sample"][0]
             // Other TSVs should have expected structure and content
-            def tsv_adapt = process.out[0][0][1]
+            def tsv_adapt = process.out[0][0][2]
             validateTsvStructure(tsv_adapt, 6, stage, sample)
-            def tsv_qbase = process.out[0][0][2]
+            def tsv_qbase = process.out[0][0][3]
             validateTsvStructure(tsv_qbase, 5, stage, sample)
-            def tsv_qseqs = process.out[0][0][3]
+            def tsv_qseqs = process.out[0][0][4]
             validateTsvStructure(tsv_qseqs, 5, stage, sample)
-            def tsv_lengths = process.out[0][0][4]
+            def tsv_lengths = process.out[0][0][5]
             validateTsvStructure(tsv_lengths, 5, stage, sample)
         }
     }
@@ -305,8 +311,10 @@ nextflow_process {
         then {
             // Should run without failures
             assert process.success
-            // Basic stats TSV should have expected structure and content
-            def tsv_basic  = path(process.out[0][0][0]).csv(sep: "\t", decompress: true)
+            // Output should preserve sample ID in tuple
+            assert process.out[0][0][0] == "tiny_test"
+            // Basic stats TSV should have expected structure and content (index 1)
+            def tsv_basic  = path(process.out[0][0][1]).csv(sep: "\t", decompress: true)
             with (tsv_basic) {
                 assert rowCount == 1
                 assert columnCount == 18
@@ -318,7 +326,7 @@ nextflow_process {
             def stage = tsv_basic.columns["stage"][0]
             def sample = tsv_basic.columns["sample"][0]
             // Other TSVs should have expected structure and content
-            def tsv_adapt = path(process.out[0][0][1]).csv(sep: "\t", decompress: true)
+            def tsv_adapt = path(process.out[0][0][2]).csv(sep: "\t", decompress: true)
             with (tsv_adapt) {
                 assert columnCount == 6 | columnCount == 0 // No columns if no adaptor contamination
 
@@ -327,19 +335,19 @@ nextflow_process {
                     assert columns["sample"][0] == sample
                 }
             }
-            def tsv_qbase = path(process.out[0][0][2]).csv(sep: "\t", decompress: true)
+            def tsv_qbase = path(process.out[0][0][3]).csv(sep: "\t", decompress: true)
             with (tsv_qbase) {
                 assert columnCount == 5
                 assert columns["stage"][0] == stage
                 assert columns["sample"][0] == sample
             }
-            def tsv_qseqs = path(process.out[0][0][3]).csv(sep: "\t", decompress: true)
+            def tsv_qseqs = path(process.out[0][0][4]).csv(sep: "\t", decompress: true)
             with (tsv_qseqs) {
                 assert columnCount == 5
                 assert columns["stage"][0] == stage
                 assert columns["sample"][0] == sample
             }
-            def tsv_lengths = path(process.out[0][0][4]).csv(sep: "\t", decompress: true)
+            def tsv_lengths = path(process.out[0][0][5]).csv(sep: "\t", decompress: true)
             with (tsv_lengths) {
                 assert columnCount == 5
                 assert columns["stage"][0] == stage
@@ -386,17 +394,19 @@ nextflow_process {
         then {
             // Should run without failures
             assert process.success
-            // Basic stats TSV should match input reads
+            // Output should preserve sample ID in tuple
+            assert process.out[0][0][0] == "test"
+            // Basic stats TSV should match input reads (index 1)
             def fastq_in = path(params.data_path).fastq
-            def tsv_basic  = path(process.out[0][0][0]).csv(sep: "\t", decompress: true)
+            def tsv_basic  = path(process.out[0][0][1]).csv(sep: "\t", decompress: true)
             with (tsv_basic) {
                 assert columns["n_reads_single"][0] == fastq_in.readNames.size()
                 assert columns["n_read_pairs"][0] == columns["n_reads_single"][0] / 2
                 assert columns["mean_seq_len"][0] == fastq_in.sequences[0].length()
                 assert columns["n_bases_approx"][0] == columns["n_reads_single"][0] * columns["mean_seq_len"][0]
             }
-            // Length stats should match expected output for uniform reads
-            def tsv_lengths = path(process.out[0][0][4]).csv(sep: "\t", decompress: true)
+            // Length stats should match expected output for uniform reads (index 5)
+            def tsv_lengths = path(process.out[0][0][5]).csv(sep: "\t", decompress: true)
             def stage = tsv_basic.columns["stage"][0]
             def sample = tsv_basic.columns["sample"][0]
             with (tsv_lengths) {

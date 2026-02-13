@@ -7,15 +7,15 @@ include { MINIMAP2 as MINIMAP2_HUMAN } from "../../../modules/local/minimap2"
 include { MINIMAP2_NON_STREAMED as MINIMAP2_CONTAM } from "../../../modules/local/minimap2"
 include { FILTLONG } from "../../../modules/local/filtlong"
 include { MASK_FASTQ_READS } from "../../../modules/local/maskRead"
+include { EXTRACT_SHARED_FASTQ_READS as EXTRACT_VIRAL_FILTERED_READS } from "../../../modules/local/extractSharedFastq"
 include { PROCESS_VIRAL_MINIMAP2_SAM } from "../../../modules/local/processViralMinimap2Sam"
-include { EXTRACT_SHARED_FASTQ_READS } from "../../../modules/local/extractSharedFastq"
-include { CONCATENATE_FILES } from "../../../modules/local/concatenateFiles"
 include { LCA_TSV } from "../../../modules/local/lcaTsv"
 include { SORT_TSV as SORT_MINIMAP2_VIRAL } from "../../../modules/local/sortTsv"
 include { SORT_TSV as SORT_LCA } from "../../../modules/local/sortTsv"
 include { JOIN_TSVS } from "../../../modules/local/joinTsvs"
 include { FILTER_TSV_COLUMN_BY_VALUE } from "../../../modules/local/filterTsvColumnByValue"
 include { PROCESS_LCA_ALIGNER_OUTPUT } from "../../../subworkflows/local/processLcaAlignerOutput/"
+include { COPY_FILE as RENAME_VIRUS_HITS } from "../../../modules/local/copyFile"
 
 /***********
 | WORKFLOW |
@@ -62,8 +62,12 @@ workflow EXTRACT_VIRAL_READS_ONT {
         virus_minimap2_params = minimap2_base_params + [suffix: "virus", alignment_params: "-N 10"]
         virus_minimap2_ch = MINIMAP2_VIRUS(no_contam_ch, minimap2_virus_index, virus_minimap2_params)
         virus_sam_ch = virus_minimap2_ch.sam
+        // Pre-filter unmasked reads to only virus-mapped reads before SAM processing
+        viral_filtered_reads_ch = EXTRACT_VIRAL_FILTERED_READS(
+            virus_minimap2_ch.reads_mapped.join(filtered_ch.reads)
+        )
         // Group cleaned reads and sam files by sample
-        sam_fastq_ch = virus_sam_ch.join(filtered_ch)
+        sam_fastq_ch = virus_sam_ch.join(viral_filtered_reads_ch.output)
         // Generate TSV of viral hits, and sort
         processed_minimap2_ch = PROCESS_VIRAL_MINIMAP2_SAM(sam_fastq_ch, genome_meta_path, virus_db_path)
         processed_minimap2_sorted_ch = SORT_MINIMAP2_VIRAL(processed_minimap2_ch.output, "seq_id")
@@ -84,15 +88,12 @@ workflow EXTRACT_VIRAL_READS_ONT {
             col_keep_add_prefix,
             "prim_align_"
         )
-        // Pull out clean reads from mapped reads to feed into BLAST
-        virus_fastq_ch = virus_minimap2_ch.reads_mapped
-        clean_virus_fastq_ch = EXTRACT_SHARED_FASTQ_READS(virus_fastq_ch.join(filtered_ch.reads))
-        fastq_ch = CONCATENATE_FILES(clean_virus_fastq_ch.output.map{ it[1] }.collect(), "virus_hits_final", "fastq.gz")
+        // Rename virus hits to clean file name
+        renamed_hits_ch = RENAME_VIRUS_HITS(processed_ch.viral_hits_tsv, "virus_hits.tsv.gz")
     emit:
-        hits_final = processed_ch.viral_hits_tsv
+        hits_final = renamed_hits_ch
         inter_lca = processed_ch.lca_tsv
         inter_minimap2 = processed_ch.aligner_tsv
-        hits_fastq = fastq_ch.output
         test_minimap2_virus = virus_sam_ch
         test_fastq_filtered_human = human_minimap2_ch.reads_unmapped
         test_fastq_filtered_contam = contam_minimap2_ch.reads_unmapped

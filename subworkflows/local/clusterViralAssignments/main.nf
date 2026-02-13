@@ -16,7 +16,7 @@ include { MERGE_JOIN_READS_LIST as MERGE_JOIN_READS } from "../../../subworkflow
 include { VSEARCH_CLUSTER_LIST as VSEARCH_CLUSTER } from "../../../modules/local/vsearch"
 include { PROCESS_VSEARCH_CLUSTER_OUTPUT_LIST as PROCESS_VSEARCH_CLUSTER_OUTPUT } from "../../../modules/local/processVsearchClusterOutput"
 include { DOWNSAMPLE_FASTN_BY_ID_LIST as DOWNSAMPLE_FASTN_BY_ID } from "../../../modules/local/downsampleFastnById"
-include { CONVERT_FASTQ_FASTA_LIST as CONVERT_FASTQ_FASTA } from "../../../modules/local/convertFastqFasta"
+include { CONVERT_FASTQ_FASTA } from "../../../modules/local/convertFastqFasta"
 include { ADD_SAMPLE_COLUMN_LIST as LABEL_GROUP_SPECIES } from "../../../modules/local/addSampleColumn"
 
 /***********

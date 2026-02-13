@@ -1,70 +1,43 @@
 nextflow_process {
 
-    name "Test process EXTRACT_VIRAL_HITS_TO_FASTQ_NOREF_LABELED"
+    name "Test process EXTRACT_VIRAL_HITS_TO_FASTQ_NOREF_LABELED_LIST"
     script "modules/local/extractViralHitsToFastqNoref/main.nf"
-    process "EXTRACT_VIRAL_HITS_TO_FASTQ_NOREF_LABELED"
+    process "EXTRACT_VIRAL_HITS_TO_FASTQ_NOREF_LABELED_LIST"
+    config "tests/configs/run.config"
     tag "module"
-    tag "extract_viral_hits_to_fastq_noref_labeled"
+    tag "extract_viral_hits_to_fastq_noref_labeled_list"
 
-    test("Should run correctly on interleaved data and preserve entries") {
-        tag "interleaved"
-        tag "expect_success"
-        config "tests/configs/run.config"
-        when {
+    setup {
+        run("COPY_FILE") {
+            script "modules/local/copyFile/main.nf"
             process {
                 '''
                 input[0] = Channel.of("test")
                     | combine(Channel.of("${projectDir}/test-data/toy-data/extract-viral-hits/interleaved.tsv"))
-                input[1] = false
+                input[1] = "partition_1_hits.tsv"
                 '''
             }
         }
-        then {
-            // Should run without failures
-            assert process.success
-            // Output should preserve read count
-            def tab_in = path(process.out.input[0][1]).csv(sep: "\t")
-            def fastq_out = path(process.out.output[0][1]).fastq
-            def reads_in = tab_in.rowCount
-            def reads_out = fastq_out.readNames.size()
-            assert reads_in * 2 == reads_out
-            // Read IDs and sequences should match
-            def quals_out = fastq_out.qualityScores
-            def seqs_out = fastq_out.sequences
-            def seq_fwd
-            def seq_rev
-            for (int i = 0; i < reads_in; i++) {
-                assert tab_in.columns["seq_id"][i]+" 1" == fastq_out.readNames[2*i]
-                assert tab_in.columns["seq_id"][i]+" 2" == fastq_out.readNames[2*i+1]
-                seq_fwd = tab_in.columns["query_seq"][i]
-                seq_rev = tab_in.columns["query_seq_rev"][i]
-                if (seq_fwd == "") {
-                    assert seqs_out[2*i] == "N"
-                    assert quals_out[2*i] == "!"
-                } else {
-                    assert seqs_out[2*i] == seq_fwd
-                    assert quals_out[2*i] == tab_in.columns["query_qual"][i]
-                }
-                if (seq_rev == "") {
-                    assert seqs_out[2*i+1] == "N"
-                    assert quals_out[2*i+1] == "!"
-                } else {
-                    assert seqs_out[2*i+1] == seq_rev
-                    assert quals_out[2*i+1] == tab_in.columns["query_qual_rev"][i]
-                }
+        run("COPY_FILE", alias: "COPY_FILE_2") {
+            script "modules/local/copyFile/main.nf"
+            process {
+                '''
+                input[0] = Channel.of("test")
+                    | combine(Channel.of("${projectDir}/test-data/toy-data/extract-viral-hits/interleaved.tsv"))
+                input[1] = "partition_2_hits.tsv"
+                '''
             }
         }
     }
 
-    test("Should run correctly on single-end data and preserve entries") {
-        tag "single_end"
+    test("Should process multiple TSV files in list format") {
+        tag "list_processing"
         tag "expect_success"
-        config "tests/configs/run.config"
         when {
+            params {}
             process {
                 '''
-                input[0] = Channel.of("test")
-                    | combine(Channel.of("${projectDir}/test-data/toy-data/extract-viral-hits/ont.tsv"))
+                input[0] = COPY_FILE.output.mix(COPY_FILE_2.output).groupTuple()
                 input[1] = false
                 '''
             }
@@ -72,22 +45,57 @@ nextflow_process {
         then {
             // Should run without failures
             assert process.success
-            // Output should preserve read count
-            def tab_in = path(process.out.input[0][1]).csv(sep: "\t")
-            def fastq_out = path(process.out.output[0][1]).fastq
-            def reads_in = tab_in.rowCount
-            def reads_out = fastq_out.readNames.size()
-            assert reads_in == reads_out
-            // Read IDs and sequences should match
-            def quals_out = fastq_out.qualityScores
-            def seqs_out = fastq_out.sequences
-            def seq_fwd
-            def seq_rev
-            for (int i = 0; i < reads_in; i++) {
-                assert tab_in.columns["seq_id"][i]+" 1" == fastq_out.readNames[i]
-                assert seqs_out[i] == tab_in.columns["query_seq"][i]
-                assert quals_out[i] == tab_in.columns["query_qual"][i]
+            def output_fastqs = process.out.output[0][1]
+            def input_tsvs = process.out.input[0][1]
+            assert output_fastqs.size() == 2
+            assert input_tsvs.size() == 2
+            // Extract species IDs from input filenames and verify they're in output filenames
+            def species_ids = input_tsvs.collect { tsv ->
+                def matcher = tsv.toString() =~ /_(\d+)_hits/
+                matcher ? matcher[0][1] : null
             }
+            assert species_ids.every { it != null }
+            assert output_fastqs.every { fastq ->
+                species_ids.any { species -> fastq.toString().contains(species) }
+            }
+            def total_reads_in = 0
+            def total_reads_out = 0
+            for (int i = 0; i < 2; i++) {
+                def tab_in = path(input_tsvs[i]).csv(sep: "\t")
+                def fastq_out = path(output_fastqs[i]).fastq
+                // Output should preserve read count
+                def reads_in = tab_in.rowCount
+                def reads_out = fastq_out.readNames.size()
+                assert reads_in * 2 == reads_out
+                // Read IDs and sequences should match
+                def quals_out = fastq_out.qualityScores
+                def seqs_out = fastq_out.sequences
+                def seq_fwd
+                def seq_rev
+                for (int j = 0; j < reads_in; j++) {
+                    assert tab_in.columns["seq_id"][j]+" 1" == fastq_out.readNames[2*j]
+                    assert tab_in.columns["seq_id"][j]+" 2" == fastq_out.readNames[2*j+1]
+                    seq_fwd = tab_in.columns["query_seq"][j]
+                    seq_rev = tab_in.columns["query_seq_rev"][j]
+                    if (seq_fwd == "") {
+                        assert seqs_out[2*j] == "N"
+                        assert quals_out[2*j] == "!"
+                    } else {
+                        assert seqs_out[2*j] == seq_fwd
+                        assert quals_out[2*j] == tab_in.columns["query_qual"][j]
+                    }
+                    if (seq_rev == "") {
+                        assert seqs_out[2*j+1] == "N"
+                        assert quals_out[2*j+1] == "!"
+                    } else {
+                        assert seqs_out[2*j+1] == seq_rev
+                        assert quals_out[2*j+1] == tab_in.columns["query_qual_rev"][j]
+                    }
+                }
+                total_reads_in += reads_in
+                total_reads_out += reads_out
+            }
+            assert total_reads_in * 2 == total_reads_out
         }
     }
 }

@@ -37,10 +37,10 @@ nextflow_workflow {
         then {
             // Should run without failures
             assert workflow.success
-            
+
             // Output files should have expected structure and line count
-            def kraken_file = path(workflow.out.kraken[0]).linesGzip
-            def bracken_file = path(workflow.out.bracken[0]).linesGzip
+            def kraken_file = path(workflow.out.kraken[0][1]).linesGzip
+            def bracken_file = path(workflow.out.bracken[0][1]).linesGzip
             assert kraken_file.size() == 1 // Just header
             assert bracken_file.size() == 0 // Completely empty
 
@@ -81,11 +81,11 @@ nextflow_workflow {
             // Should run without failures
             assert workflow.success
             // Kraken reports should have expected fields
-            def kraken_report_tab = path(workflow.out.kraken[0]).csv(sep: "\t", decompress: true)
+            def kraken_report_tab = path(workflow.out.kraken[0][1]).csv(sep: "\t", decompress: true)
             assert kraken_report_tab.columnCount == 10
             assert kraken_report_tab.columnNames == kraken_headers_exp
             // Bracken output should have expected fields
-            def bracken_tab = path(workflow.out.bracken[0]).csv(sep: "\t", decompress: true)
+            def bracken_tab = path(workflow.out.bracken[0][1]).csv(sep: "\t", decompress: true)
             assert bracken_tab.columnCount == 9
             assert bracken_tab.columnNames == bracken_headers_exp
         }
@@ -104,7 +104,7 @@ nextflow_workflow {
                     k: "27",
                     ribo_suffix: "ribo",
                     bracken_threshold: "1",
-                    platform: "ont", 
+                    platform: "ont",
                     db_download_timeout: params.db_download_timeout
                 ]
                 input[0] = Channel.of("test")
@@ -120,11 +120,11 @@ nextflow_workflow {
             // Should run without failures
             assert workflow.success
             // Kraken reports should have expected fields
-            def kraken_report_tab = path(workflow.out.kraken[0]).csv(sep: "\t", decompress: true)
+            def kraken_report_tab = path(workflow.out.kraken[0][1]).csv(sep: "\t", decompress: true)
             assert kraken_report_tab.columnCount == 10
             assert kraken_report_tab.columnNames == kraken_headers_exp
             // Bracken output should have expected fields
-            def bracken_tab = path(workflow.out.bracken[0]).csv(sep: "\t", decompress: true)
+            def bracken_tab = path(workflow.out.bracken[0][1]).csv(sep: "\t", decompress: true)
             assert bracken_tab.columnCount == 9
             assert bracken_tab.columnNames == bracken_headers_exp
         }

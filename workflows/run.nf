@@ -7,13 +7,12 @@
 ***************************/
 
 include { LOAD_SAMPLESHEET } from "../subworkflows/local/loadSampleSheet"
-include { COUNT_TOTAL_READS } from "../subworkflows/local/countTotalReads"
+include { COUNT_READS } from "../modules/local/countReads"
 include { EXTRACT_VIRAL_READS_SHORT } from "../subworkflows/local/extractViralReadsShort"
 include { EXTRACT_VIRAL_READS_ONT } from "../subworkflows/local/extractViralReadsONT"
 include { SUBSET_TRIM } from "../subworkflows/local/subsetTrim"
 include { RUN_QC } from "../subworkflows/local/runQc"
 include { PROFILE} from "../subworkflows/local/profile"
-include { BLAST_VIRAL } from "../subworkflows/local/blastViral"
 include { CHECK_VERSION_COMPATIBILITY } from "../subworkflows/local/checkVersionCompatibility"
 include { COPY_FILE_BARE as COPY_INDEX_PARAMS } from "../modules/local/copyFile"
 include { COPY_FILE_BARE as COPY_INDEX_PYPROJECT } from "../modules/local/copyFile"
@@ -70,15 +69,12 @@ workflow RUN {
     single_end_ch = LOAD_SAMPLESHEET.out.single_end
 
     // Count reads in files
-    COUNT_TOTAL_READS(samplesheet_ch, single_end_ch)
+    COUNT_READS(samplesheet_ch, single_end_ch)
 
     // Extract and count human-viral reads
     if ( params.platform == "ont" ) {
         EXTRACT_VIRAL_READS_ONT(samplesheet_ch, params.ref_dir, params.taxid_artificial, params.db_download_timeout)
-        hits_fastq = EXTRACT_VIRAL_READS_ONT.out.hits_fastq
         hits_final = EXTRACT_VIRAL_READS_ONT.out.hits_final
-        inter_lca = EXTRACT_VIRAL_READS_ONT.out.inter_lca
-        inter_aligner = EXTRACT_VIRAL_READS_ONT.out.inter_minimap2
         inter_lca = EXTRACT_VIRAL_READS_ONT.out.inter_lca
         inter_aligner = EXTRACT_VIRAL_READS_ONT.out.inter_minimap2
         bbduk_match = Channel.empty()
@@ -90,25 +86,11 @@ workflow RUN {
         short_params["bbduk_suffix"] = "viral"
         short_params["k"] = "24" 
         EXTRACT_VIRAL_READS_SHORT(samplesheet_ch, params.ref_dir, short_params)
-        hits_fastq = EXTRACT_VIRAL_READS_SHORT.out.hits_fastq
         hits_final = EXTRACT_VIRAL_READS_SHORT.out.hits_final
-        inter_lca = EXTRACT_VIRAL_READS_SHORT.out.inter_lca
-        inter_aligner = EXTRACT_VIRAL_READS_SHORT.out.inter_bowtie
         inter_lca = EXTRACT_VIRAL_READS_SHORT.out.inter_lca
         inter_aligner = EXTRACT_VIRAL_READS_SHORT.out.inter_bowtie
         bbduk_match = EXTRACT_VIRAL_READS_SHORT.out.bbduk_match
         bbduk_trimmed = EXTRACT_VIRAL_READS_SHORT.out.bbduk_trimmed
-    }
-    // BLAST validation on host-viral reads (optional)
-    if ( params.blast_viral_fraction > 0 ) {
-        def blast_viral_params = params.collectEntries { k, v -> [k, v] }
-        blast_viral_params["read_fraction"] = params.blast_viral_fraction // rename to match subworkflow input
-        BLAST_VIRAL(hits_fastq, params.ref_dir, blast_viral_params)
-        blast_subset_ch = BLAST_VIRAL.out.blast_subset
-        blast_reads_ch = BLAST_VIRAL.out.subset_reads
-    } else {
-        blast_subset_ch = Channel.empty()
-        blast_reads_ch = Channel.empty()
     }
 
     // Subset reads to target number, and trim adapters
@@ -141,10 +123,9 @@ workflow RUN {
     emit:
         input_run = index_params_ch.mix(samplesheet_ch, adapters_ch, params_ch)
         logging_run = index_pyproject_ch.mix(time_ch, pyproject_ch)
-        intermediates_run = hits_fastq.mix(inter_lca, inter_aligner)
+        intermediates_run = inter_lca.mix(inter_aligner)
         reads_raw_viral = bbduk_match
         reads_trimmed_viral = bbduk_trimmed
-        // Lots of results; split across 2 channels (QC, and other)
-        qc_results_run = COUNT_TOTAL_READS.out.read_counts.mix(RUN_QC.out.qc_basic, RUN_QC.out.qc_adapt, RUN_QC.out.qc_qbase, RUN_QC.out.qc_qseqs, RUN_QC.out.qc_lengths)
-        other_results_run = hits_final.mix(PROFILE.out.bracken, PROFILE.out.kraken, blast_subset_ch, blast_reads_ch)
+        qc_results_run = COUNT_READS.out.output.mix(RUN_QC.out.pre_qc, RUN_QC.out.post_qc)
+        other_results_run = hits_final.mix(PROFILE.out.bracken, PROFILE.out.kraken)
 }

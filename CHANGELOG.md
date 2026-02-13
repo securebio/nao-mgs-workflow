@@ -1,3 +1,53 @@
+# v3.1.0.0
+
+## Changes to output file schema
+
+- Changed RUN outputs to per-sample format:
+    - Read counts: `read_counts.tsv.gz` → `{sample}_read_counts.tsv`
+    - QC stats: `subset_qc_*_stats.tsv.gz` → `{sample}_qc_*_stats_raw.tsv.gz` and `{sample}_qc_*_stats_cleaned.tsv.gz`
+    - Taxonomy: `bracken_reports_merged.tsv.gz` → `{sample}_bracken.tsv.gz`, `kraken_reports_merged.tsv.gz` → `{sample}_kraken.tsv.gz`
+    - Viral hits: `virus_hits_final.tsv.gz` → `{sample}_virus_hits.tsv.gz`
+- Updated DOWNSTREAM to handle per-sample RUN outputs:
+    - DOWNSTREAM workflow updated to auto-discover per-sample files from `run_results_dir` and parse groups from `groups_tsv`.
+    - Dramatically simplified `prepareGroupTsvs` (now only needs to concatenate hits tables, never split them)
+    - Added empty-group handling to `validateViralAssignments` (now creates empty validation-hits files for groups with no hits)
+
+## Changes to data analysis
+
+- Remove BLAST validation from RUN workflow (now only available in DOWNSTREAM workflow):
+    - Deleted `BLAST_VIRAL` subworkflow, `SUBSET_FASTN` module, and `RUN_VALIDATION` workflow.
+    - Removed `blast_viral_fraction` and related BLAST parameters from RUN workflow configs.
+    - Removed unused `EXTRACT_VIRAL_HITS_TO_FASTQ_NOREF_LABELED` process (non-LIST version).
+    - Removed `hits_fastq` output from `EXTRACT_VIRAL_READS_SHORT` and `EXTRACT_VIRAL_READS_ONT` subworkflows (this concatenated interleaved FASTQ was used for BLAST validation).
+    - Removed unused FASTQ extraction includes (`CONCATENATE_FILES`, `EXTRACT_VIRAL_HITS_TO_FASTQ`, `EXTRACT_SHARED_FASTQ_READS`).
+- Removed Cutadapt from RUN workflow to reduce runtime and complexity. FASTP alone now handles adapter trimming for the short-read viral identification pipeline.
+- Refactored `processVsearchClusterOutput` module to use streaming Rust implementation rather than memory-intensive Python/Pandas.
+- Refactored extractViralReadsONT and process_viral_minimap2_sam.py so that processViralMinimap2Sam requires O(1) instead of O(num reads) memory.
+
+## Testing & validation
+
+- Added support for relative paths in DOWNSTREAM input CSV files, removing dependency on S3 inputs for testing:
+    - Relative paths (not starting with `/` or `s3://`) are resolved against `params.input_base_dir` (defaults to `projectDir`).
+    - Users can set `params.input_base_dir = launchDir` in their config to resolve paths relative to the launch directory.
+    - S3 URIs and absolute paths continue to work as before.
+    - Switched DOWNSTREAM tests to use local relative paths instead of S3 URIs.
+- Added CI validation to ensure `test-data/results` files stay in sync with workflow snapshot MD5 sums:
+    - Created `bin/validate_test_data_sync.py` script to validate local test data against nf-test snapshot MD5 sums.
+    - Added `.github/workflows/validate-test-data.yml` CI workflow to run validation on PRs.
+    - Renamed `test-data/results/` directories to match snapshot names (`run_output_shortread`, `run_output_ont`, `downstream_output_shortread`, `downstream_output_ont`).
+- Added checking & enforcement of file structure for DOWNSTREAM `duplicate_stats` outputs using datapackage `table-schema` (proof-of-concept for later expansion):
+    - Created `schemas/` directory with `duplicate_stats.schema.json` `table-schema` definition.
+    - Added `bin/validate_schemas.py` script to validate output files against schemas using frictionless library.
+    - Updated `CREATE_EMPTY_GROUP_OUTPUTS` to generate headers from schemas for empty output files where available.
+    - Added schema validation step to DOWNSTREAM workflow CI after nf-test.
+- Assorted changes to Github Actions CI:
+    - Created reusable `.github/actions/setup-python` composite action for Python environment setup.
+    - Added Rust build system to CI and rust-tools container to ECR.
+    - Converted `setup-rust-container` from reusable workflow to composite action, simplifying CI check reporting.
+    - Fixed CI bug where `--rust_tools_version dev` was passed to test runner instead of via environment variable.
+    - Removed confusing `workflow_run` triggers from integration tests (benchmark and test-chained workflows).
+- Migrate GitHub Actions AWS auth from static keys to OIDC role assumption (#657)
+
 # v3.0.1.9
 
 - Fix UP secondary alignment deduplication in filterViralSam (#621)
@@ -8,6 +58,7 @@
     - Added missing memory specifications to BBTools processes
     - Broadened tolerable results ranges for probabilistic tests
     - Fixed bug in `download-db.sh` that was causing inter-run contamination of reference files
+- Moved DB download functionality to `download_db.py` and implemented unit tests
 
 # v3.0.1.8
 

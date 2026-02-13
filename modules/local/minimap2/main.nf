@@ -42,16 +42,14 @@ process MINIMAP2 {
         """
         set -eou pipefail
         # Download Minimap2 index if not already present
-        download-db.sh "${index_dir}" "${params_map.db_download_timeout}"
-        # Prepare inputs
-        idx_dir_name=\$(basename "${index_dir}")
+        idx_local_path=\$(download_db.py "${index_dir}" "${params_map.db_download_timeout}")
         # Run pipeline
         # Outputs a SAM file for all reads, which is then partitioned based on alignment status
         #   - First branch (samtools view -u -f 4 -) filters SAM to unaligned reads and saves FASTQ
         #   - Second branch (samtools view -u -F 4 -) filters SAM to aligned reads and saves FASTQ
         #   - Third branch (samtools view -h -F 4 -) also filters SAM to aligned reads and saves SAM
         ${extractCmd} ${reads} \
-            | minimap2 -a ${params_map.alignment_params} /scratch/\${idx_dir_name}/mm2_index.mmi /dev/fd/0 \
+            | minimap2 -a ${params_map.alignment_params} \${idx_local_path}/mm2_index.mmi /dev/fd/0 \
             | tee \
                 >(samtools view -u -f 4 - \
                     | samtools fastq - | gzip -c > ${un}) \

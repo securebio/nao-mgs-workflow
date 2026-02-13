@@ -14,13 +14,12 @@ process KRAKEN {
         def extractCmd = reads.toString().endsWith(".gz") ? "zcat" : "cat"
         def out = "${sample}.output"
         def report = "${sample}.report"
-        def par = "--db /scratch/\${db_name} --use-names --report-minimizer-data --threads ${task.cpus} --report ${report} --memory-mapping"
+        def par = "--use-names --report-minimizer-data --threads ${task.cpus} --report ${report} --memory-mapping"
         """
         # Download Kraken2 database if not already present
-        download-db.sh ${db_path} ${db_download_timeout}
+        db_local_path=\$(download_db.py "${db_path}" ${db_download_timeout})
         # Run Kraken
-        db_name=\$(basename "${db_path}")
-        ${extractCmd} ${reads} | kraken2 ${par} /dev/fd/0 > ${out}
+        ${extractCmd} ${reads} | kraken2 --db \${db_local_path} ${par} /dev/fd/0 > ${out}
         # Make empty output files if needed
         touch ${out}
         touch ${report}

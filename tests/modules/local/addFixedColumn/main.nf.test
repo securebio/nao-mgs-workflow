@@ -16,7 +16,7 @@ nextflow_process {
             }
             process {
                 '''
-                input[0] = "${projectDir}/test-data/toy-data/test_tab_sorted.tsv"
+                input[0] = ["test_sample", "${projectDir}/test-data/toy-data/test_tab_sorted.tsv"]
                 input[1] = params.test_column
                 input[2] = params.test_value
                 input[3] = "test"
@@ -26,9 +26,12 @@ nextflow_process {
         then {
             // Should run without failures
             assert process.success
+            // Output should preserve sample ID in tuple
+            assert process.out.output[0][0] == "test_sample"
+            assert process.out.input[0][0] == "test_sample"
             // Output should have correct dimensions
-            def tab_in = path(process.out.input[0]).csv(sep: "\t")
-            def tab_out = path(process.out.output[0]).csv(sep: "\t")
+            def tab_in = path(process.out.input[0][1]).csv(sep: "\t")
+            def tab_out = path(process.out.output[0][1]).csv(sep: "\t")
             assert tab_out.columnCount == tab_in.columnCount + 1
             assert tab_out.rowCount == tab_in.rowCount
             // Output should have sample column with appropriate values

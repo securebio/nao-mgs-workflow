@@ -11,14 +11,22 @@ from pathlib import Path
 
 
 def extract_containers(config_file: Path) -> set[str]:
-    """Extract unique container addresses from Nextflow config file."""
+    """Extract unique container addresses from Nextflow config file.
+
+    Skips containers with Nextflow interpolation (${...}) since those
+    are dynamically versioned and may not exist in ECR at scan time.
+    """
     pattern = re.compile(r'container\s*=\s*"([^"]+)"')
     containers = set()
     with open(config_file) as f:
         for line in f:
             match = pattern.search(line)
             if match:
-                containers.add(match.group(1))
+                container = match.group(1)
+                if "${" in container:
+                    print(f"Skipping container with dynamic tag: {container}")
+                    continue
+                containers.add(container)
     return containers
 
 

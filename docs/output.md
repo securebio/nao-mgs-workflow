@@ -29,7 +29,6 @@ Main heading represents the folder name, and subheadings represent a description
 
 ### `intermediates/`
 
-- `virus_hits_final.fastq.gz`: Filtered viral hits in FASTQ format.
 - `aligner_hits_all.tsv.gz`: List of all putative viral alignments (primary, secondary and supplementary) from the aligner used in the `RUN` workflow (bowtie2 for EXTRACT_VIRAL_READS_SHORT or minimap2 for EXTRACT_VIRAL_READS_ONT) with modified columns from the [SAM specification](https://samtools.github.io/hts-specs/SAMv1.pdf).
 - `lca_hits_all.tsv.gz`: List of putative viral reads after having applied LCA to `aligner_hits_all.tsv.gz`, along with columns representing summary statistics.
 - `reads/raw_viral/*`: Directory containing raw reads corresponding to those reads that survive initial viral screening with BBDuk. (Note: this is not currently produced for ONT data.)
@@ -37,29 +36,25 @@ Main heading represents the folder name, and subheadings represent a description
 ### `results/`
 
 #### QC
-- `read_counts.tsv.gz`: Total number of raw reads in each sample.
-- `subset_qc_adapter_stats.tsv.gz`: Adapter statistics calculated by FASTQC for subset sample before and after adapter trimming, given as a percentage of reads containing adapter content (`pc_adapters`) at each position along the read (`position`) for each adapter detected (`adapter`) for each read in the read pair (`read_pair`).
-- `subset_qc_basic_stats.tsv.gz`: Summary statistics for each subset sample before and after adapter trimming, including:
+- `{sample}_read_counts.tsv`: Total number of raw reads for a given sample.
+- `{sample}_qc_adapter_stats_raw.tsv.gz` and `{sample}_qc_adapter_stats_cleaned.tsv.gz`: Adapter statistics calculated by FASTQC for subset sample before (`raw`) and after (`cleaned`) adapter trimming, given as a percentage of reads containing adapter content (`pc_adapters`) at each position along the read (`position`) for each adapter detected (`adapter`) for each read in the read pair (`read_pair`).
+- `{sample}_qc_basic_stats_raw.tsv.gz` and `{sample}_qc_basic_stats_cleaned.tsv.gz`: Summary statistics for each subset sample before (`raw`) and after (`cleaned`) adapter trimming, including:
     - GC content (`percent GC`);
     - Average read length (`mean_seq_len`);
     - Number of read pairs (`n_read pairs`);
     - Approximate number of base pairs in reads (`n_bases_approx`);
     - Percent duplicates as measured by FASTQC (`percent_duplicates`);
     - Pass/fail scores for each test conducted by FASTQC.
-- `subset_qc_length_stats.tsv.gz`: Per-read length statistics calculated by FASTQC for subset sample before and after adapter trimming, given as the number of reads (`n_sequences`) with a given read length (`read_length`) for each read in the read pair (`read_pair`).
-- `subset_qc_quality_base_stats.tsv.gz`: Per-base read-quality statistics calculated by FASTQC for subset sample before and after adapter trimming, given as the mean Phred score (`mean_phred_score`) at each position along the read (`position`) for each read in the read pair (`read_pair`).
-- `subset_qc_quality_sequence_stats.tsv.gz`: Per-sequence read-quality statistics calculated by FASTQC for subset sample before and after adapter trimming, given as the number of reads (`n_sequences`) with a given mean Phred score (`mean_phred_score`) for each read in the read pair (`read_pair`).
+- `{sample}_qc_length_stats_raw.tsv.gz` and `{sample}_qc_length_stats_cleaned.tsv.gz`: Per-read length statistics calculated by FASTQC for subset sample before (`raw`) and after (`cleaned`) adapter trimming, given as the number of reads (`n_sequences`) with a given read length (`read_length`) for each read in the read pair (`read_pair`).
+- `{sample}_qc_quality_base_stats_raw.tsv.gz` and `{sample}_qc_quality_base_stats_cleaned.tsv.gz`: Per-base read-quality statistics calculated by FASTQC for subset sample before (`raw`) and after (`cleaned`) adapter trimming, given as the mean Phred score (`mean_phred_score`) at each position along the read (`position`) for each read in the read pair (`read_pair`).
+- `{sample}_qc_quality_sequence_stats_raw.tsv.gz` and `{sample}_qc_quality_sequence_stats_cleaned.tsv.gz`: Per-sequence read-quality statistics calculated by FASTQC for subset sample before (`raw`) and after (`cleaned`) adapter trimming, given as the number of reads (`n_sequences`) with a given mean Phred score (`mean_phred_score`) for each read in the read pair (`read_pair`).
 
 #### Viral identification
 - `virus_hits_final.tsv.gz`: TSV output from EXTRACT_VIRAL_READS, giving information about each read pair assigned to a host-infecting virus, using the LCA taxid assignment as the source of truth. Contains both LCA-based taxonomic assignments (columns with `aligner_` prefix) that utilize multiple alignments per read, and read sequence information plus primary alignment details (columns with `prim_align_` prefix) for the DOWNSTREAM workflow. See [virus_hits_final.md](./virus_hits_final.md) for documentation of column names.
 
 #### Taxonomic identification
-- `bracken_reports_merged.tsv.gz`: Bracken output reports in TSV format, labeled by sample and ribosomal status, for subset samples produced by SUBSET_TRIM.
-- `kraken_reports_merged.tsv.gz`: Kraken output reports in TSV format, labeled by sample and ribosomal status, for subset samples produced by SUBSET_TRIM.
-
-#### BLAST
-- `merged_blast_filtered.tsv.gz`: Filtered tabular BLASTN output for putative vertebrate viral reads.
-- `merged_blast_input_subset.fasta.gz`: Subset interleaved FASTA used as input to BLASTN (useful for identifying which reads were included in the subset for downstream analysis).
+- `{sample}_bracken.tsv.gz`: Bracken output reports in TSV format for a given sample, labeled by ribosomal status, for subset samples produced by SUBSET_TRIM.
+- `{sample}_kraken.tsv.gz`: Kraken output reports in TSV format for a given sample, labeled by ribosomal status, for subset samples produced by SUBSET_TRIM.
 
 ## Index workflow
 

@@ -8,6 +8,10 @@ on:
       - stable
       - ci-test
 
+permissions:
+  id-token: write
+  contents: read
+
 concurrency:
   group: ci-nf-test-workflows-index-pr-${{ github.event.pull_request.number }}
   cancel-in-progress: true
@@ -17,11 +21,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
-      AWS_ACCESS_KEY_ID: ${{secrets.NAO_TESTING_ACCESS_KEY }}
-      AWS_SECRET_ACCESS_KEY: ${{ secrets.NAO_TESTING_SECRET_ACCESS_KEY }}
+      RUST_TOOLS_VERSION: ${{ needs.setup-rust.outputs.rust-version }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Full history needed for git diff in setup-rust-container
       - name: Check for relevant changes
         uses: dorny/paths-filter@v3
         id: filter
@@ -38,15 +43,23 @@ jobs:
               - 'tests/configs/**'
               - '.github/workflows/nf-test-workflows-index.yml'
               - '.github/actions/setup-nf-test/**'
+              - '.github/actions/setup-rust-container/**'
+              - 'rust-tools/**'
+              - 'docker/nao-rust-tools.Dockerfile'
       - name: Setup nf-test environment
         if: steps.filter.outputs.index == 'true'
         uses: ./.github/actions/setup-nf-test
         with:
-          aws_access_key_id: ${{ secrets.NAO_TESTING_ACCESS_KEY }}
-          aws_secret_access_key: ${{ secrets.NAO_TESTING_SECRET_ACCESS_KEY }}
+          role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
+      - name: Setup Rust container
+        if: steps.filter.outputs.index == 'true'
+        id: rust
+        uses: ./.github/actions/setup-rust-container
       - name: Run workflow tests
         if: steps.filter.outputs.index == 'true'
-        run: bin/run-nf-test.sh --num-workers 4 tests/workflows/index.nf.test --output-log test-logs-workflows-index.txt
+        env:
+          RUST_TOOLS_VERSION: ${{ steps.rust.outputs.rust-version }}
+        run: bin/run-nf-test.sh --num-workers 4 tests/workflows/index.nf.test --output-log test-logs-workflows-index.txt ${{ steps.rust.outputs.nextflow-args }}
       - name: Upload test results
         if: failure() && steps.filter.outputs.index == 'true'
         uses: actions/upload-artifact@v4

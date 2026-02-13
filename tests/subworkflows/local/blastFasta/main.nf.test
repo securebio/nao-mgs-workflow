@@ -18,7 +18,7 @@ nextflow_workflow {
     test("Should run without failures on interleaved Illumina data") {
         tag "expect_success"
         tag "interleaved"
-        config "tests/configs/run.config"
+        config "tests/configs/downstream.config"
         when {
             params {
                 max_rank = 5
@@ -91,7 +91,7 @@ nextflow_workflow {
     test("Should run without failures on ONT data") {
         tag "expect_success"
         tag "ont"
-        config "tests/configs/run_ont.config"
+        config "tests/configs/downstream_ont.config"
         when {
             params {
                 max_rank = 5
@@ -165,7 +165,7 @@ nextflow_workflow {
     test("Should handle empty input files properly") {
         tag "expect_success"
         tag "empty_input"
-        config "tests/configs/run.config"
+        config "tests/configs/downstream.config"
         when {
             params {
                 max_rank = 5

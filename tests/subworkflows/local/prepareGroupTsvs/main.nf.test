@@ -15,81 +15,58 @@ nextflow_workflow {
             }
             workflow {
                 '''
-                input[0] = Channel.of(["tt1", "${projectDir}/test-data/prepareGroupTsvs/tt1_hits.tsv", "${projectDir}/test-data/prepareGroupTsvs/tt1_groups.tsv"])
-                    | mix(Channel.of(["tt2", "${projectDir}/test-data/prepareGroupTsvs/tt2_hits.tsv", "${projectDir}/test-data/prepareGroupTsvs/tt2_groups.tsv"]))
+                // Input: tuple(label, sample, hits_file, group)
+                // Note: In real workflow, each sample has unique filename like {SAMPLE}_virus_hits.tsv.gz
+                input[0] = Channel.of(
+                    ["tt1", "tiny_test", file("${projectDir}/test-data/prepareGroupTsvs/tt1_hits.tsv"), "group_a"],
+                    ["tt2", "tiny_test_2", file("${projectDir}/test-data/prepareGroupTsvs/tt2_hits.tsv"), "group_b"]
+                )
                 '''
             }
         }
         then {
-            // Should run without failures
             assert workflow.success
-            // Output of join should have expected dimensions
-            def input_tabs = workflow.out.test_in.collect{path(it[1]).csv(sep: "\t")}
-            def group_tabs = workflow.out.test_in.collect{path(it[2]).csv(sep: "\t")}
-            def join_tabs = workflow.out.test_join.collect{path(it[1]).csv(sep: "\t", decompress: true)}
-            assert input_tabs.size() == group_tabs.size()
-            assert input_tabs.size() == join_tabs.size()
-            for (int i=0; i < input_tabs.size(); i++){
-                assert input_tabs[i].rowCount == join_tabs[i].rowCount
-                assert input_tabs[i].columnCount + group_tabs[i].columnCount - 1 == join_tabs[i].columnCount
-            }
-            // Partitioning should split rows but not columns
-            def part_tabs = workflow.out.test_part.collect{ outer_element ->
-                outer_element[1].collect{path(it).csv(sep: "\t", decompress: true)}
-            }
-            for (int i=0; i < input_tabs.size(); i++){
-                def part_row_counts = part_tabs[i].collect{it.rowCount}
-                def part_column_counts = part_tabs[i].collect{it.columnCount}
-                assert join_tabs[i].rowCount == part_row_counts.sum()
-                for (count in part_column_counts) {
-                    assert count == join_tabs[i].columnCount
+
+            // Count input rows for verification
+            def input_tsv = path("${projectDir}/test-data/prepareGroupTsvs/tt1_hits.tsv").csv(sep: "\t")
+            def input_row_count = input_tsv.rowCount
+            def input_col_count = input_tsv.columnCount
+
+            // Should produce one output per unique group
+            assert workflow.out.groups.size() == 2
+
+            // Each output should be a tuple of (group, file)
+            def output_groups = workflow.out.groups.collect { it[0] } as Set
+            assert output_groups == ["group_a", "group_b"] as Set
+
+            // Verify output structure and content for each group
+            workflow.out.groups.each { output ->
+                def group = output[0]
+                def tsv = path(output[1]).csv(sep: "\t", decompress: true)
+
+                // Should have original columns plus "group" column
+                assert tsv.columnCount == input_col_count + 1
+                assert "group" in tsv.columnNames
+
+                // All rows should have the correct group value
+                tsv.columns["group"].each { val ->
+                    assert val == group
                 }
             }
-            // Restructured data should preserve paths
-            def paths_pre = []
-            for (int i=0; i < input_tabs.size(); i++){
-                paths_pre += workflow.out.test_part[i][1]
-            }
-            def paths_post = []
-            for (int i=0; i < workflow.out.test_grps.size(); i++){
-                paths_post += workflow.out.test_grps[i][1]
-            }
-            assert paths_pre.sort() == paths_post.sort()
-            // Restructured data should have expected structure
-            def groups = []
-            for (int i=0; i < group_tabs.size(); i++){
-                groups += group_tabs[i].columns["group"]
-            }
-            groups = groups.unique().sort()
-            assert groups.size() == workflow.out.test_grps.size()
-            // Each restructured group should have expected size
-            def group_sizes = groups.collect{0}
-            for (int i=0; i < groups.size(); i++){
-                for (t in group_tabs) {
-                    if (groups[i] in t.columns["group"]){
-                        group_sizes[i] += 1
-                    }
-                }
-                assert group_sizes[i] == workflow.out.test_grps[i][1].size()
-            }
-            // Final output should correctly concatenate restructured groups while preserving row count
-            def output_tabs = workflow.out.groups.collect{path(it[1]).csv(sep: "\t", decompress: true)}
-            assert output_tabs.size() == workflow.out.test_grps.size()
-            assert output_tabs.collect{it.rowCount}.sum() == input_tabs.collect{it.rowCount}.sum()
-            for (int i=0; i < output_tabs.size(); i++) {
-                def part_grp_tabs = workflow.out.test_grps[i][1].collect{ path(it).csv(sep: "\t", decompress: true) }
-                def part_grp_rows = part_grp_tabs.collect{it.rowCount}
-                assert output_tabs[i].rowCount == part_grp_rows.sum()
-                for (tab in part_grp_tabs) {
-                    assert output_tabs[i].columnNames == tab.columnNames
-                }
-            }
-            // Partial group logs should have sample and group columns
-            def partial_log_cols = path(workflow.out.partial_group_logs[0][1]).linesGzip[0].split("\t") as List
-            assert partial_log_cols == ["sample", "group"]
-            // Empty group logs should have sample and group columns
-            def empty_log_cols = path(workflow.out.empty_group_logs[0][1]).linesGzip[0].split("\t") as List
-            assert empty_log_cols == ["sample", "group"]
+
+            // Verify row counts are preserved after concatenation
+            def group_a_output = workflow.out.groups.find { it[0] == "group_a" }
+            def group_b_output = workflow.out.groups.find { it[0] == "group_b" }
+            def group_a_tsv = path(group_a_output[1]).csv(sep: "\t", decompress: true)
+            def group_b_tsv = path(group_b_output[1]).csv(sep: "\t", decompress: true)
+
+            // Each group has 1 input file
+            assert group_a_tsv.rowCount == input_row_count
+            assert group_b_tsv.rowCount == input_row_count
+
+            // Total row count should equal sum of input rows
+            def total_output_rows = group_a_tsv.rowCount + group_b_tsv.rowCount
+            assert total_output_rows == 2 * input_row_count
         }
     }
 }

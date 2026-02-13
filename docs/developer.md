@@ -47,9 +47,7 @@ These guidelines represent best practices to implement in new code, though some 
 - New scripts should be in Rust (preferred) or Python (acceptable if performance is not critical).  We have a few legacy scripts in R but discourage adding new R scripts.
 - Organization:
     - Python and R scripts for a module go in `resources/usr/bin/`
-    - Rust source code for a module goes in `src` and the binary (compiled with `cargo build --release`) goes in `resources/usr/bin`
-        - Note that additional files created by Cargo (`Cargo.lock`, `Cargo.toml`) are not stored in the repo.
-        - Note that in the future we will remove binaries from the repo and implement a build process instead; see Issue [#164](https://github.com/naobservatory/mgs-workflow/issues/164). Feel free to recompile existing binaries as source code is updated, but please check with a maintainer before adding new binaries to the repo.
+    - Rust source code lives in the centralized `rust-tools/` directory at the repository root, organized as a Cargo workspace. Compiled binaries are NOT stored in the repository; they are built into the `nao-rust-tools` container via CI.
 - Rely on the standard library as much as possible. 
     - Widely used 3rd-party libraries (e.g. `pandas` or `boto3`) are OK on a case-by-case basis if they allow for much cleaner or more performant code. Please flag use of these libraries in PR comments so the reviewer can assess.
     - Avoid third-party libraries that are not widely used, or that bring in a ton of dependencies of their own.
@@ -62,8 +60,43 @@ These guidelines represent best practices to implement in new code, though some 
     - Type hints are encouraged but not currently required.
     - Linting and type checking are encouraged (our go-to tools are `ruff` for linting and `mypy` for type checking), but not currently required.
     - Formatting applied (including in nested directories) will follow the configuration in `pyproject.toml`.
-    - After making any formatting changes, carefully review the diff to ensure no unintended modifications were introduced that could affect functionality. 
-    
+    - After making any formatting changes, carefully review the diff to ensure no unintended modifications were introduced that could affect functionality.
+
+### Rust
+
+All Rust tools live in the centralized `rust-tools/` directory, organized as a Cargo workspace. Compiled binaries are NOT stored in the repository; instead, they are built into the `nao-rust-tools` container via GitHub Actions CI.
+
+**Adding a new Rust tool:**
+1. Create your Rust project in `rust-tools/{tool_name}/` with `Cargo.toml` and `src/main.rs`
+2. Add it as a workspace member in `rust-tools/Cargo.toml`
+3. Update `docker/nao-rust-tools.Dockerfile`:
+   - The builder stage already builds the entire workspace, so you shouldn't have to change anything here.
+   - In the runtime stage: add `COPY --from=builder <path to binary in builder> /usr/local/bin/` to include the new binary.
+4. Use `label "rust_tools"` in your Nextflow process
+5. Add a comment above the process noting: `// Tool source: rust-tools/{tool_name}/`
+
+**Local development:**
+```bash
+# After making changes to Rust source:
+./bin/build-rust-local.sh
+
+# Run workflow with local container:
+nextflow run main.nf -profile rust_dev ...
+```
+
+**Testing on AWS Batch:**
+```bash
+# Build, tag with your username, and push to ECR:
+./bin/build-rust-local.sh
+docker tag nao-rust-tools:local public.ecr.aws/q0n1c7g8/nao-mgs-workflow/rust-tools:dev-$(whoami)
+docker push public.ecr.aws/q0n1c7g8/nao-mgs-workflow/rust-tools:dev-$(whoami)
+
+# Run on Batch with your container:
+nextflow run main.nf --rust_tools_version dev-$(whoami) -profile batch ...
+```
+
+**Note:** The container is automatically rebuilt by GitHub Actions when Rust source files change on `dev` or `main`. Use `--rust_tools_version dev` to test against the dev branch build.
+
 ## Containers
 
 Where possible, we use [Seqera Wave containers](https://docs.seqera.io/wave), managed programmatically via YAML files in the `containers` directory. To build a new Wave container:
@@ -363,3 +396,30 @@ Only pipeline maintainers should author a new release. The process for going thr
 
 [^refs]: For reference genomes, check for updated releases for human, cow, pig, and mouse; do not update carp; update *E. coli* if there is a new release for the same strain. Check [SILVA](https://www.arb-silva.de/download/archive/) for rRNA databases and [here](https://benlangmead.github.io/aws-indexes/k2) for Kraken2 databases.
 [^approval]: Note that, to streamline the release process, we no longer require an approving review for PRs into `main`. (We still require an approving review for `release` PRs into `dev`.)
+
+## Schemas
+
+We are currently in the process of defining and enforcing [schemas](../schemas/) for our output files, using the [table schema standard](https://datapackage.org/standard/table-schema/) and [frictionless Python framework](https://framework.frictionlessdata.io/). Not all output files yet have schemas; those that have been added are used to validate test outputs in Github Actions to ensure that the output produced matches the schema.
+
+### Policy
+
+All new tabular output files should have a complete schema, and all existing schemas should be maintained. To add a new schema, create a corresponding JSON file in `schemas`. All schemas should have:
+
+- A `fields` entry with subentries for each column in the associated output file (no missing columns). Each column subentry should at minimum have `name`, `type`, `title`, & `description` fields. Most should also have a `constraints` fields delimiting permitted values.
+- A `primaryKey` entry describing a set of fields that are collectively guaranteed to uniquely identify each row (can often be a single field).
+- A `missingValues` entry listing permitted null values (typically `""` and `"NA"`).
+
+### Versioning and guarantees
+
+Under our [versioning policy](./versioning.md), changes to schema `title` and `description` fields can be made in point (4th-number) releases. Any other schema change must be a schema (2nd-number) or major (1st-number) release, accompanied by explicit alerts to owners of dependent codebases.
+
+**What the schema guarantees:** Consumers can rely on the schema to define the complete structure and validation rules for an output file. Any behavior encoded in the schema (column names, types, constraints) is guaranteed to be stable within a schema version.
+
+**What the schema does not guarantee:** Formatting or semantics not explicitly encoded in schema constraints are not guaranteed. For example, if a string field contains a formatted value (like `taxid:name`) but no `pattern` constraint enforces this format, the format may change in a point release. If you need to parse a field's contents programmatically, request that appropriate constraints be added to the schema.
+
+### Working with schemas
+
+- If you are working on a change that affects pipeline outputs, review the schema files for affected outputs where available, to know what's expected for each column.
+- If an input to DOWNSTREAM has no data, the `createEmptyGroupOutputs` module will generate header-only outputs based on schemas where available. Output files with no corresponding schema will be empty.
+- To validate output files locally, run `bin/validate_schemas.py`.
+- If you are developing code external to this repository that depends on its outputs, you should review the corresponding schemas to understand what guarantees you can expect.

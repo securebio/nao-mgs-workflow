@@ -3,13 +3,12 @@ process EXTRACT_VIRAL_HITS_TO_FASTQ {
     label "seqtk"
     label "single_cpu_16GB_memory"
     input:
-        path(hits_tsv)
-        path(fastq)
+        tuple val(sample), path(hits_tsv), path(fastq)
     output:
-        path("virus_hits_final.fastq.gz"), emit: fastq
-        path("virus_hits_ids.txt.gz"), emit: ids
-        path("virus_hits_in.tsv.gz"), emit: input_tsv
-        path("virus_reads_in.fastq.gz"), emit: input_fastq
+        tuple val(sample), path("${sample}_virus_hits_final.fastq.gz"), emit: fastq
+        tuple val(sample), path("${sample}_virus_hits_ids.txt.gz"), emit: ids
+        tuple val(sample), path("${sample}_virus_hits_in.tsv.gz"), emit: input_tsv
+        tuple val(sample), path("${sample}_virus_reads_in.fastq.gz"), emit: input_fastq
     shell:
         '''
         set -euo pipefail
@@ -18,8 +17,8 @@ process EXTRACT_VIRAL_HITS_TO_FASTQ {
         if [ $(zcat !{hits_tsv} | wc -l) -eq 0 ]; then
             echo "Warning: Input TSV file is empty. Creating empty output files."
             touch empty.txt
-            gzip -c empty.txt > virus_hits_ids.txt.gz
-            gzip -c empty.txt > virus_hits_final.fastq.gz
+            gzip -c empty.txt > !{sample}_virus_hits_ids.txt.gz
+            gzip -c empty.txt > !{sample}_virus_hits_final.fastq.gz
             rm empty.txt
         else
             zcat !{hits_tsv} \\
@@ -37,12 +36,12 @@ process EXTRACT_VIRAL_HITS_TO_FASTQ {
                     }
                     { print $colIndex } # Print the seq_id column only from subsequent lines
                 ' \\
-                | tee >(gzip -c > virus_hits_ids.txt.gz) \\
+                | tee >(gzip -c > !{sample}_virus_hits_ids.txt.gz) \\
                 | seqtk subseq !{fastq} - \\
-                | gzip -c > virus_hits_final.fastq.gz
+                | gzip -c > !{sample}_virus_hits_final.fastq.gz
         fi
         # Link input to output for testing
-        ln -s !{hits_tsv} virus_hits_in.tsv.gz
-        ln -s !{fastq} virus_reads_in.fastq.gz
+        ln -s !{hits_tsv} !{sample}_virus_hits_in.tsv.gz
+        ln -s !{fastq} !{sample}_virus_reads_in.fastq.gz
         '''
 }

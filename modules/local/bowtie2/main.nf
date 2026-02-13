@@ -17,13 +17,12 @@ process BOWTIE2 {
         set -euo pipefail
         suffix="!{params_map.suffix}"
         # Download Bowtie2 index if not already present
-        download-db.sh !{index_dir} !{params_map.db_download_timeout}
+        idx_local_path=\$(download_db.py "!{index_dir}" !{params_map.db_download_timeout})
         # Prepare inputs
-        idx_dir_name=\$(basename "!{index_dir}")
         sam="!{sample}_${suffix}_bowtie2_mapped.sam.gz"
         al="!{sample}_${suffix}_bowtie2_mapped.fastq.gz"
         un="!{sample}_${suffix}_bowtie2_unmapped.fastq.gz"
-        io="-x /scratch/${idx_dir_name}/bt2_index !{params_map.interleaved ? "--interleaved" : ""} -"
+        io="-x ${idx_local_path}/bt2_index !{params_map.interleaved ? "--interleaved" : ""} -"
         par="--threads !{task.cpus} --mm !{params_map.par_string}"
         # Set SAM flags based on whether data is paired-end or single-end
         # For paired-end: flag 12 = read unmapped (4) + mate unmapped (8)

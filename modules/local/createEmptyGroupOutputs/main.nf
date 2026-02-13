@@ -3,14 +3,23 @@ process CREATE_EMPTY_GROUP_OUTPUTS {
     label "python"
     label "single"
     input:
-        path(empty_groups_tsv)
+        val(missing_groups)
         path(pyproject_toml)
+        path(schema_dir)
         val(platform)
+        val(pattern_filter)
     output:
         path("*_*.tsv.gz"), emit: outputs, optional: true
+        path("input_${pyproject_toml}"), emit: pyproject
+        path("input_schemas"), emit: schemas
     script:
-        def platform_arg = platform == "ont" ? "--platform ont" : "--platform illumina"
+        def groups_arg = missing_groups.join(',')
+        def opts = ["--platform ${platform == 'ont' ? 'ont' : 'illumina'}"]
+        if (pattern_filter) opts << "--pattern-filter '${pattern_filter}'"
+        def opts_str = opts.join(' ')
         """
-        create_empty_group_outputs.py ${empty_groups_tsv} ${pyproject_toml} ./ ${platform_arg}
+        create_empty_group_outputs.py "${groups_arg}" ${pyproject_toml} ${opts_str} --schema-dir ${schema_dir}
+        ln -s ${pyproject_toml} input_${pyproject_toml}
+        ln -s ${schema_dir} input_schemas
         """
 }

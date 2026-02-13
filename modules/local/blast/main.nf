@@ -14,10 +14,9 @@ process BLASTN {
         def inputCmd = fasta.toString().endsWith(".gz") ? "ln -s ${fasta} ${sample}_in.fasta.gz" : "gzip -c ${fasta} > ${sample}_in.fasta.gz"
         """
         # Download BLAST database if not already present
-        download-db.sh "${blast_db_dir}" "${params_map.db_download_timeout}"
+        db_local_path=\$(download_db.py "${blast_db_dir}" "${params_map.db_download_timeout}")
         # Set up command
-        db_name=\$(basename "${blast_db_dir}")
-        io="-db /scratch/\${db_name}/${params_map.blast_db_prefix}"
+        io="-db \${db_local_path}/${params_map.blast_db_prefix}"
         par="-perc_identity ${params_map.blast_perc_id} -max_hsps 5 -num_alignments 250 -qcov_hsp_perc ${params_map.blast_qcov_hsp_perc} -num_threads ${task.cpus}"
         fmt="6 qseqid sseqid sgi staxid qlen evalue bitscore qcovs length pident mismatch gapopen sstrand qstart qend sstart send"
         # Run BLAST

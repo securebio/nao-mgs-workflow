@@ -1,17 +1,16 @@
 name: Benchmark test (Illumina 100M)
 
+# Release test - only runs on PRs to main/stable
 on:
-  push:
-    branches:
-      - dev
   pull_request:
-    branches:
-      - main
-      - stable
-      - ci-test
+    branches: [main, stable, ci-test]
+
+permissions:
+  id-token: write
+  contents: read
 
 concurrency:
-  group: benchmark-illumina-100M-pr-${{ github.event.pull_request.number }}
+  group: benchmark-illumina-100M-${{ github.event.pull_request.number }}
   cancel-in-progress: true
 
 jobs:
@@ -19,8 +18,6 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 120
     env:
-      AWS_ACCESS_KEY_ID: ${{secrets.NAO_TESTING_ACCESS_KEY }}
-      AWS_SECRET_ACCESS_KEY: ${{ secrets.NAO_TESTING_SECRET_ACCESS_KEY }}
       TOWER_ACCESS_TOKEN: ${{ secrets.TOWER_ACCESS_TOKEN }}
     steps:
       - name: Checkout
@@ -48,19 +45,20 @@ jobs:
         if: steps.filter.outputs.relevant == 'true'
         uses: ./.github/actions/setup-nf-test
         with:
-          aws_access_key_id: ${{ secrets.NAO_TESTING_ACCESS_KEY }}
-          aws_secret_access_key: ${{ secrets.NAO_TESTING_SECRET_ACCESS_KEY }}
+          role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
 
       - name: Install Python dependencies
         if: steps.filter.outputs.relevant == 'true'
-        run: |
-          pip install boto3
+        run: pip install boto3
 
       - name: Run benchmark workflow
         if: steps.filter.outputs.relevant == 'true'
         run: |
+          # Use ECR container - see docs/ci.md for Rust container strategy.
+          RUST_VERSION="${{ github.base_ref == 'stable' && 'main' || 'dev' }}"
           bin/chain_workflows.py \
             --ref-dir s3://nao-testing/mgs-workflow-test/index-latest/output/ \
             --samplesheet s3://nao-testing/benchmarks/Illumina_100M/samplesheet.csv \
             --launch-dir test_run_benchmark_100M \
-            --base-dir s3://nao-testing-scratch/mgs-workflow-test/benchmark-illumina-100M/
+            --base-dir s3://nao-testing-scratch/mgs-workflow-test/benchmark-illumina-100M/ \
+            --nextflow-args "--rust_tools_version $RUST_VERSION"

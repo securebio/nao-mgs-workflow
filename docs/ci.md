@@ -9,7 +9,7 @@ We use continuous integration (CI) via GitHub Actions to perform a number of aut
 Our CI workflows fall into three broad categories:
 
 1. **Development tests:** Quick tests that must pass before code can be merged into `dev` or `main`.
-2. **Release tests:** Slow or expensive tests that must pass for a PR to be merged into `main`. To enable rapid development, these tests are not required on PRs into `dev`; however, they still run automatically after code has been merged into `dev` to help surface issues before a release.
+2. **Release tests:** Slow or expensive tests that must pass for a PR to be merged into `main`. To enable rapid development, these tests are not required on PRs into `dev`.
 3. **Non-test automation:** Workflows that perform actions like creating releases, managing branches, or tagging issues.
 
 ### Runners and billing
@@ -65,6 +65,10 @@ We have five nf-test workflows that test different parts of the pipeline:
 
 Runs our entire pytest suite across `bin`, `modules`, and `post-processing/tests/`.
 
+### Rust tools (`rust-tools.yml`)
+
+Runs Rust unit tests and builds the `nao-rust-tools` container when Rust source files change. This workflow runs on all PRs but uses `dorny/paths-filter` to trivially succeed (~10 seconds) when no Rust files have changed. When Rust files are modified, it runs `cargo test` and builds the container. On push to `dev` or `main`, it also pushes the container to ECR.
+
 ### Trivy container scan (`trivy-scan.yml`)
 
 Scans all containers defined in `configs/containers.config` for security vulnerabilities using [Trivy](https://trivy.dev/).
@@ -84,7 +88,20 @@ These checks run unconditionally (no path filtering) to ensure version consisten
 
 ## Release tests
 
-These tests run on PRs to `main`, `stable`, and `ci-test`, and also run automatically on push to `dev`. They are slower or more expensive than development tests and are not required for merging to `dev`, but must pass before merging to `main`.
+These tests run on PRs to `main`, `stable`, and `ci-test`. They are slower or more expensive than development tests and are not required for merging to `dev`, but must pass before merging to `main`.
+
+### Rust container handling
+
+Release tests use Wave/Fusion for container orchestration. The `setup-rust-container` composite action (`.github/actions/setup-rust-container/`) handles Rust container setup:
+
+- If Rust code matches `origin/main` → use ECR `:main` container
+- If Rust code matches `origin/dev` → use ECR `:dev` container
+- Otherwise → build the container locally (with GitHub Actions caching by content hash)
+
+This approach avoids complex sequencing between workflows while ensuring tests always run against the correct Rust code.
+
+> [!NOTE]
+> There is a rare edge case: if you merge Rust changes to `dev` and immediately open a PR to `main` before `rust-tools.yml` finishes pushing to ECR, the PR could use a stale `:dev` container. To avoid this, check the [Actions tab](https://github.com/securebio/nao-mgs-workflow/actions/workflows/rust-tools.yml) and wait for the "Rust Tools CI" workflow triggered by your merge to complete before opening release PRs with Rust changes.
 
 ### Integration test (`test-chained.yml`)
 

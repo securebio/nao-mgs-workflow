@@ -1,13 +1,16 @@
 import static groovy.io.FileType.FILES
 
 // Get expected output files from pyproject.toml
-def getExpectedOutputs = { pyprojectPath, workflowKey, groupName ->
+// Replaces {SAMPLE} and {GROUP} wildcards with the provided name
+def getExpectedOutputs = { pyprojectPath, workflowKey, sampleOrGroupName ->
     def pyprojectText = pyprojectPath.text
     def key = "expected-outputs-${workflowKey}"
     def sectionMatch = (pyprojectText =~ /${key} = \[([\s\S]*?)\]/)
     def expectedFiles = (sectionMatch[0][1] =~ /"([^"]+)"/).collect { it[1] }
-    if (groupName != null) {
-        expectedFiles = expectedFiles.collect { it.replace("{GROUP}", groupName) }
+    if (sampleOrGroupName != null) {
+        expectedFiles = expectedFiles.collect {
+            it.replace("{GROUP}", sampleOrGroupName).replace("{SAMPLE}", sampleOrGroupName)
+        }
     }
     return expectedFiles.sort()
 }
@@ -22,6 +25,13 @@ def getObservedOutputs = { outputDir ->
         if (!excluded) observedFiles << relPath
     }
     return observedFiles.sort()
+}
+
+// Get result file paths for snapshot from expected outputs
+def getResultPaths = { outputDir, expectedFiles ->
+    return expectedFiles
+        .findAll { it.startsWith("results_downstream/") }
+        .collect { path(outputDir + "/" + it) }
 }
 
 nextflow_pipeline {
@@ -41,13 +51,9 @@ nextflow_pipeline {
             def expected = getExpectedOutputs(path("${projectDir}/pyproject.toml"), "downstream", "tt1")
             def observed = getObservedOutputs(path("${launchDir}/output"))
             assert observed == expected : "Expected ${expected} but got ${observed}"
-            // Verify file contents match snapshot
-            assert snapshot(
-                path("${launchDir}/output/results_downstream/tt1_duplicate_reads.tsv.gz"),
-                path("${launchDir}/output/results_downstream/tt1_duplicate_stats.tsv.gz"),
-                path("${launchDir}/output/results_downstream/tt1_clade_counts.tsv.gz"),
-                path("${launchDir}/output/results_downstream/tt1_validation_hits.tsv.gz"),
-            ).match("downstream_output")
+            // Verify result file contents match snapshot
+            def resultPaths = getResultPaths("${launchDir}/output", expected)
+            assert snapshot(*resultPaths).match("downstream_output_shortread")
         }
     }
 
@@ -62,15 +68,14 @@ nextflow_pipeline {
             def expected = getExpectedOutputs(path("${projectDir}/pyproject.toml"), "downstream-ont", "tt1")
             def observed = getObservedOutputs(path("${launchDir}/output"))
             assert observed == expected : "Expected ${expected} but got ${observed}"
-            // Verify file contents match snapshot
-            assert snapshot(
-                path("${launchDir}/output/results_downstream/tt1_validation_hits.tsv.gz"),
-            ).match("downstream_ont_output")
+            // Verify result file contents match snapshot
+            def resultPaths = getResultPaths("${launchDir}/output", expected)
+            assert snapshot(*resultPaths).match("downstream_output_ont")
         }
     }
 
-    test("Should create empty output files for groups with no hits") {
-        tag "downstream_empty_groups"
+    test("Should handle header-only input files") {
+        tag "downstream_empty_input"
         tag "empty_input"
         when {
             params {
@@ -85,4 +90,5 @@ nextflow_pipeline {
             assert observed == expected : "Expected ${expected} but got ${observed}"
         }
     }
+
 }

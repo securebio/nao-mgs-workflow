@@ -1,0 +1,9 @@
+S	0	100	*	*	*	*	*	rep_alpha	*
+H	0	100	99.0	+	0	0	100M	hit_alpha_1	rep_alpha
+H	0	100	98.5	+	0	0	100M	hit_alpha_2	rep_alpha
+S	1	150	*	*	*	*	*	rep_beta	*
+H	1	150	100.0	+	0	0	=	hit_beta_1	rep_beta
+S	2	200	*	*	*	*	*	rep_gamma	*
+C	0	3	*	*	*	*	*	rep_alpha	*
+C	1	2	*	*	*	*	*	rep_beta	*
+C	2	1	*	*	*	*	*	rep_gamma	*

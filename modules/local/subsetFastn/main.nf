@@ -2,6 +2,7 @@
 process SUBSET_FASTN {
     label "seqkit"
     label "single"
+    label "testing_only" // Process is currently only used for testing
     input:
         tuple val(sample), path(fastn)
         val readFraction // NB: will round to 2 decimal places
