@@ -16,7 +16,7 @@ from pathlib import Path
 
 DEFAULT_CHANGELOG_PATH = Path("CHANGELOG.md")
 
-# Pattern to match version headers: "# vX.Y.Z.W"
+# Pattern to match version headers: "# vX.Y.Z.W" or "# vX.Y.Z.W-dev"
 # Also tolerates no space after # (e.g., "#v1.2.3.4")
 VERSION_HEADER_PATTERN = re.compile(r"^#\s*v?(\d+\.\d+\.\d+\.\d+(?:-dev)?)$")
 
