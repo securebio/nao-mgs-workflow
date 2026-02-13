@@ -46,6 +46,7 @@
     - Converted `setup-rust-container` from reusable workflow to composite action, simplifying CI check reporting.
     - Fixed CI bug where `--rust_tools_version dev` was passed to test runner instead of via environment variable.
     - Removed confusing `workflow_run` triggers from integration tests (benchmark and test-chained workflows).
+- Migrate GitHub Actions AWS auth from static keys to OIDC role assumption (#657)
 
 # v3.0.1.9
 
