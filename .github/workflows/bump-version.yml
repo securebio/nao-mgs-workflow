@@ -6,23 +6,10 @@ on:
       - main
 
 jobs:
-  check:
-    runs-on: ubuntu-latest
-    outputs:
-      is_bot: ${{ steps.release-bot.outputs.is_bot }}
-    steps:
-      - uses: actions/checkout@v4
-      - name: Check release bot actor
-        id: release-bot
-        uses: ./.github/actions/check-release-bot
-        with:
-          app-id: ${{ vars.RELEASE_BOT_APP_ID }}
-          private-key: ${{ secrets.RELEASE_BOT_PRIVATE_KEY }}
-
   bump-version:
-    needs: check
-    if: needs.check.outputs.is_bot != 'true'
     runs-on: ubuntu-latest
+    # Skip if this push was made by the release bot (avoid infinite loop)
+    if: github.actor != format('{0}[bot]', vars.RELEASE_BOT_APP_SLUG)
 
     steps:
       - name: Generate token from GitHub App
