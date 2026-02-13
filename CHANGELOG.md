@@ -44,6 +44,7 @@
     - Deleted obsolete `validatePerSampleGrouping` module.
     - Removed empty placeholder file creation for groups with no hits files in DOWNSTREAM (groups with no input data simply produce no output).
 - Updated required Nextflow version to 25.10.4.
+- Refactored extractViralReadsONT and process_viral_minimap2_sam.py so that processViralMinimap2Sam requires O(1) instead of O(num reads) memory.
 
 # v3.0.1.9
 
