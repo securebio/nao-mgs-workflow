@@ -40,3 +40,14 @@ jobs:
           echo ""
           echo "Please add an entry to CHANGELOG.md describing your changes."
           exit 1
+
+      - name: Check for content in current version section
+        run: |
+          # Extract lines from line 2 until next version header, excluding blank lines and sub-headers
+          content=$(awk 'NR>=2 && /^# v/{exit} NR>=2' CHANGELOG.md | grep -v '^[[:space:]]*$' | grep -v '^##' || true)
+          if [ -z "$content" ]; then
+            echo "::error::CHANGELOG.md version section has no content"
+            echo ""
+            echo "Add changelog entries describing your changes before merging."
+            exit 1
+          fi

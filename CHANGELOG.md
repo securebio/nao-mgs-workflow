@@ -1,3 +1,7 @@
+# v3.1.0.1-dev
+
+- Automated version bump on merge to main
+
 # v3.1.0.0
 
 ## Changes to output file schema

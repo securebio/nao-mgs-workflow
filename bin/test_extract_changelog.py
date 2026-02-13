@@ -1,14 +1,15 @@
 #!/usr/bin/env python3
 """Unit tests for extract_changelog.py"""
 
-import pytest
+import sys
 from pathlib import Path
 
-import sys
+import pytest
+
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from extract_changelog import (
-    parse_version_header,
     extract_changelog,
+    parse_version_header,
 )
 
 

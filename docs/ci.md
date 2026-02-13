@@ -119,14 +119,18 @@ These tests run the pipeline on larger benchmark datasets to verify performance 
 ### Release readiness check (`check-release.yml`)
 
 Runs only on PRs to `main`. Verifies that:
-1. The version in `pyproject.toml` has a corresponding changelog section
-2. The version has not already been released on GitHub
+1. The version has a `-dev` suffix and a corresponding changelog section
+2. The release version (after stripping `-dev`) has not already been released on GitHub
 
 This check runs unconditionally (no path filtering).
 
 ## Non-test automation
 
 These workflows perform automated actions rather than running tests.
+
+### Bump version (`bump-version.yml`)
+
+Triggered on push to `main`. Strips the `-dev` suffix from the version in `pyproject.toml` and `CHANGELOG.md` using `bump-my-version`, then commits and pushes the result. This push triggers `create-release.yml` and `reset-branches.yml`.
 
 ### Create release (`create-release.yml`)
 

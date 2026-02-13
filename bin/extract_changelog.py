@@ -72,7 +72,7 @@ def extract_changelog(version: str, changelog_path: Path = DEFAULT_CHANGELOG_PAT
                     found_version = True
                     in_section = True
                     continue  # Skip the header line itself
-                elif in_section:
+                if in_section:
                     # Found the next version header, we're done
                     break
 
@@ -84,7 +84,7 @@ def extract_changelog(version: str, changelog_path: Path = DEFAULT_CHANGELOG_PAT
     if not found_version:
         raise ValueError(
             f"Version {version} not found in {changelog_path}. "
-            f"Expected header format: '# v{version}' or '# {version}'"
+            f"Expected header format: '# v{version}' or '# {version}'",
         )
     
     # Raise an error if the content is empty / contains only whitespace

@@ -15,34 +15,39 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Extract version from pyproject.toml
+      - name: Install bump-my-version
+        run: pip install bump-my-version
+
+      - name: Calculate release version
         id: version
         run: |
-          VERSION=$(python -c "import tomllib; print(tomllib.load(open('pyproject.toml', 'rb'))['project']['version'])")
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "Version: $VERSION"
+          current=$(bump-my-version show current_version)
+          echo "current=$current" >> $GITHUB_OUTPUT
+          echo "Current version: $current"
 
-      - name: Check changelog section is extractable
+          if [[ "$current" != *-dev ]]; then
+            echo "ERROR: Version $current does not have -dev suffix"
+            exit 1
+          fi
+
+          release=$(bump-my-version show new_version --increment dev)
+          echo "release=$release" >> $GITHUB_OUTPUT
+          echo "Release version (after stripping -dev): $release"
+
+      - name: Validate changelog is extractable
         run: |
-          VERSION="${{ steps.version.outputs.version }}"
-          echo "Verifying changelog section for version $VERSION is extractable..."
-
-          # Try to extract the changelog (will fail if section doesn't exist or is malformed)
-          python bin/extract_changelog.py "$VERSION" > /dev/null
-
-          echo "OK: Changelog section exists and is extractable"
+          python bin/extract_changelog.py "${{ steps.version.outputs.current }}"
 
       - name: Check release does not already exist
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          VERSION="${{ steps.version.outputs.version }}"
+          VERSION="${{ steps.version.outputs.release }}"
           echo "Checking if release $VERSION already exists on GitHub..."
 
           # Check if release exists (gh release view returns exit code 1 if not found)
           if gh release view "$VERSION" &>/dev/null; then
             echo "ERROR: Release $VERSION already exists on GitHub"
-            echo "Please increment the version number before merging to main"
             exit 1
           fi
 

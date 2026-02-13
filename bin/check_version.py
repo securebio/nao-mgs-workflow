@@ -3,9 +3,9 @@
 
 Enforces:
 1. Versions in pyproject.toml and CHANGELOG.md must match
-2. PRs to main/stable must not have -dev suffix
-3. Release PRs to dev must not have -dev suffix
-4. Non-release PRs to dev must have -dev suffix
+2. PRs to main must have -dev suffix (workflow strips it)
+3. PRs to stable must not have -dev suffix
+4. All PRs to dev must have -dev suffix
 """
 
 import argparse
@@ -24,7 +24,7 @@ def validate_version(version: str, source: str) -> str:
     if not VERSION_PATTERN.match(version):
         raise ValueError(
             f"Invalid version format in {source}: {version!r}. "
-            "Expected format: X.Y.Z.W or X.Y.Z.W-dev"
+            "Expected format: X.Y.Z.W or X.Y.Z.W-dev",
         )
     return version
 
@@ -44,7 +44,7 @@ def get_changelog_version(path: str = "CHANGELOG.md") -> str:
     prefix = "# v"
     if not first_line.startswith(prefix):
         raise ValueError(
-            f"{path} first line must start with '{prefix}', got: {first_line!r}"
+            f"{path} first line must start with '{prefix}', got: {first_line!r}",
         )
     version = first_line.removeprefix(prefix)
     return validate_version(version, path)
@@ -74,42 +74,40 @@ def main() -> int:
     # If branch info provided, check dev suffix rules
     if args.base_branch:
         is_dev_version = pyproject_version.endswith("-dev")
-        is_release_branch = (
-            args.head_branch and args.head_branch.startswith("release/")
-        )
 
         print(f"Base branch: {args.base_branch}")
         print(f"Head branch: {args.head_branch}")
 
-        # Rule 1: PRs to main or stable must NOT have -dev suffix
-        if args.base_branch in ("main", "stable"):
-            if is_dev_version:
-                print(
-                    f"ERROR: PRs to {args.base_branch} must not have -dev version suffix",
-                    file=sys.stderr,
-                )
-                return 1
-            print(f"OK: Non-dev version correct for PR to {args.base_branch}")
-
-        # Rule 2: Release branch PRs to dev must NOT have -dev suffix
-        if args.base_branch == "dev" and is_release_branch:
-            if is_dev_version:
-                print(
-                    "ERROR: Release PRs to dev must not have -dev version suffix",
-                    file=sys.stderr,
-                )
-                return 1
-            print("OK: Non-dev version correct for release PR")
-
-        # Rule 3: Non-release PRs to dev MUST have -dev suffix
-        if args.base_branch == "dev" and not is_release_branch:
+        # Rule 1: PRs to main MUST have -dev suffix (workflow strips it)
+        if args.base_branch == "main":
             if not is_dev_version:
                 print(
-                    "ERROR: Non-release PRs to dev must have -dev version suffix",
+                    "ERROR: PRs to main must have -dev version suffix "
+                    "(the bump-version workflow strips it on merge)",
                     file=sys.stderr,
                 )
                 return 1
-            print("OK: Dev version suffix correct for feature PR")
+            print("OK: Dev version suffix correct for PR to main")
+
+        # Rule 2: PRs to stable must NOT have -dev suffix
+        if args.base_branch == "stable":
+            if is_dev_version:
+                print(
+                    "ERROR: PRs to stable must not have -dev version suffix",
+                    file=sys.stderr,
+                )
+                return 1
+            print("OK: Non-dev version correct for PR to stable")
+
+        # Rule 3: All PRs to dev MUST have -dev suffix
+        if args.base_branch == "dev":
+            if not is_dev_version:
+                print(
+                    "ERROR: PRs to dev must have -dev version suffix",
+                    file=sys.stderr,
+                )
+                return 1
+            print("OK: Dev version suffix correct for PR to dev")
 
     return 0
 
