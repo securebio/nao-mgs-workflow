@@ -1,4 +1,4 @@
-# v3.1.0.0-dev
+# v3.1.0.0
 
 ## Changes to output file schema
 
