@@ -1,14 +1,15 @@
 #!/usr/bin/env python3
 """Unit tests for extract_changelog.py"""
 
-import pytest
+import sys
 from pathlib import Path
 
-import sys
+import pytest
+
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from extract_changelog import (
-    parse_version_header,
     extract_changelog,
+    parse_version_header,
 )
 
 
@@ -20,6 +21,8 @@ class TestParseVersionHeader:
         ("# v10.20.30.40", "10.20.30.40"),
         ("#v1.2.3.4", "1.2.3.4"),  # No space after #
         ("#  v1.2.3.4", "1.2.3.4"),  # Multiple spaces
+        ("# v1.2.3.4-dev", "1.2.3.4-dev"),  # Dev suffix
+        ("# 1.2.3.4-dev", "1.2.3.4-dev"),  # Dev suffix without v
     ])
     def test_valid_headers(self, line, expected):
         """Test parsing of valid version headers."""
@@ -32,7 +35,6 @@ class TestParseVersionHeader:
         "## v1.2.3.4",  # Wrong markdown level
         "v1.2.3.4",  # No #
         "# Version 1.2.3.4",  # Wrong prefix
-        "# v1.2.3.4-dev",  # Wrong suffix
         "# v1.2.3.4-beta",  # Wrong suffix
         "# va.b.c.d",  # Non-numeric
         "",  # Empty
@@ -86,6 +88,12 @@ class TestExtractChangelog:
             "# v0.0.0.0\n- Feature\n\n# v1.0.0.0\n- Newer\n",
             "0.0.0.0",
             "- Feature\n",
+        ),
+        # Dev version extraction
+        (
+            "# v3.1.0.1-dev\n- New feature\n- Bug fix\n\n# v3.1.0.0\n- Old\n",
+            "3.1.0.1-dev",
+            "- New feature\n- Bug fix\n",
         ),
     ])
     def test_extraction_scenarios(self, tmp_path, content, version, expected):
@@ -159,23 +167,16 @@ class TestExtractChangelog:
         """Test with a realistic changelog format similar to the actual project."""
         changelog = tmp_path / "CHANGELOG.md"
         changelog.write_text(
-            "# v3.0.1.8\n"
-            "- Added similarity-based duplicate marking tool in `post-processing/`:\n"
-            "    - New Rust tool (`rust_dedup/`) for similarity-based duplicate detection\n"
-            "    - Uses nao-dedup library (added as git submodule)\n"
-            "- Pruning and streamlining testing for easier releases:\n"
-            "    - Separated downloading part of JOIN_RIBO_REF\n"
-            "    - Moved ADD_CONDITIONAL_TSV_COLUMN to Python\n"
+            "# v3.1.0.2-dev\n"
+            "- New in-progress feature\n"
             "\n"
-            "# v3.0.1.7\n"
-            "- Clarified testing documentation in `docs/developer.md`.\n"
-            "- Added bin/clean-nf-test.sh for test cleanup.\n"
+            "# v3.1.0.1\n"
+            "- Automated version bump on merge to main\n"
             "\n"
-            "# v3.0.1.6\n"
-            "- Modified filterTsvColumnByValue to handle quotation characters.\n"
+            "# v3.1.0.0\n"
+            "- Major release changes\n",
         )
-        result = extract_changelog("3.0.1.7", changelog)
+        result = extract_changelog("3.1.0.1", changelog)
         assert result == (
-            "- Clarified testing documentation in `docs/developer.md`.\n"
-            "- Added bin/clean-nf-test.sh for test cleanup.\n"
+            "- Automated version bump on merge to main\n"
         )

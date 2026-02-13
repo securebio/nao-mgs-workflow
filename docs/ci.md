@@ -82,8 +82,9 @@ These checks run unconditionally (no path filtering) to ensure version consisten
 
 | Workflow | Description | Branches |
 |----------|-------------|----------|
+| `check-version.yml` | Runs `bin/check_version.py` to verify version numbers are consistent | all |
 | `check-nextflow-version.yml` | Runs `bin/check_nextflow_version.py` to ensure Nextflow version is current | all |
-| `check-changelog.yml` | Validates `CHANGELOG.md` has `# Unreleased` section with valid `bump_type:` and content | `dev`, `ci-test` only |
+| `check-changelog.yml` | Requires `CHANGELOG.md` update if non-documentation files changed | `dev`, `ci-test` only |
 
 ## Release tests
 
@@ -118,14 +119,18 @@ These tests run the pipeline on larger benchmark datasets to verify performance 
 ### Release readiness check (`check-release.yml`)
 
 Runs only on PRs to `main`. Verifies that:
-1. `CHANGELOG.md` starts with `# Unreleased` followed by a valid `bump_type:` on line 2
-2. The calculated new version has not already been released on GitHub
+1. The version has a `-dev` suffix and a corresponding changelog section
+2. The release version (after stripping `-dev`) has not already been released on GitHub
 
 This check runs unconditionally (no path filtering).
 
 ## Non-test automation
 
 These workflows perform automated actions rather than running tests.
+
+### Bump version (`bump-version.yml`)
+
+Triggered on push to `main`. Strips the `-dev` suffix from the version in `pyproject.toml` and `CHANGELOG.md` using `bump-my-version`, then commits and pushes the result. This push triggers `create-release.yml` and `reset-branches.yml`.
 
 ### Create release (`create-release.yml`)
 

@@ -41,29 +41,12 @@ jobs:
           echo "Please add an entry to CHANGELOG.md describing your changes."
           exit 1
 
-      - name: Check for Unreleased section with bump_type
+      - name: Check for content in current version section
         run: |
-          if ! head -n 2 CHANGELOG.md | grep -Pzo "^# Unreleased\nbump_type: (major|schema|results|point)" > /dev/null; then
-            echo "::error::CHANGELOG.md must start with '# Unreleased' followed by valid 'bump_type:'"
-            echo ""
-            echo "The first two lines of CHANGELOG.md should be:"
-            echo "  # Unreleased"
-            echo "  bump_type: <type>"
-            echo ""
-            echo "Valid bump_type values:"
-            echo "  major   - Breaking changes (X.0.0.0)"
-            echo "  schema  - Schema changes (X.Y.0.0)"
-            echo "  results - Results changes (X.Y.Z.0)"
-            echo "  point   - Minor changes (X.Y.Z.W)"
-            exit 1
-          fi
-
-      - name: Check for content in Unreleased section
-        run: |
-          # Extract lines 3+ until next version header, excluding blank lines and sub-headers
-          content=$(awk 'NR>=3 && /^# v/{exit} NR>=3' CHANGELOG.md | grep -v '^[[:space:]]*$' | grep -v '^##' || true)
+          # Extract lines from line 2 until next version header, excluding blank lines and sub-headers
+          content=$(awk 'NR>=2 && /^# v/{exit} NR>=2' CHANGELOG.md | grep -v '^[[:space:]]*$' | grep -v '^##' || true)
           if [ -z "$content" ]; then
-            echo "::error::CHANGELOG.md '# Unreleased' section has no content after bump_type"
+            echo "::error::CHANGELOG.md version section has no content"
             echo ""
             echo "Add changelog entries describing your changes before merging."
             exit 1

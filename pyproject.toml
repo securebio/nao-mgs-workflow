@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "mgs-workflow"
-version = "3.1.0.0"
+version = "3.1.0.1-dev"
 requires-python = ">=3.12"
 dependencies = [
     "biopython>=1.85",
@@ -129,11 +129,18 @@ expected-outputs-downstream-ont = [
 ]
 
 [tool.bumpversion]
-current_version = "3.1.0.0"
-parse = "(?P<major>\\d+)\\.(?P<schema>\\d+)\\.(?P<results>\\d+)\\.(?P<point>\\d+)"
-serialize = ["{major}.{schema}.{results}.{point}"]
+current_version = "3.1.0.1-dev"
+parse = "(?P<major>\\d+)\\.(?P<schema>\\d+)\\.(?P<results>\\d+)\\.(?P<point>\\d+)(-(?P<dev>dev))?"
+serialize = [
+    "{major}.{schema}.{results}.{point}-{dev}",
+    "{major}.{schema}.{results}.{point}",
+]
 commit = false
 tag = false
+
+[tool.bumpversion.parts.dev]
+values = ["dev", "release"]
+optional_value = "release"
 
 [[tool.bumpversion.files]]
 filename = "pyproject.toml"
@@ -143,6 +150,5 @@ replace = "name = \"mgs-workflow\"\\nversion = \"{new_version}\""
 
 [[tool.bumpversion.files]]
 filename = "CHANGELOG.md"
-regex = true
-search = "^# Unreleased\\nbump_type: \\w+\\n"
-replace = "# v{new_version}\\n"
+search = "# v{current_version}"
+replace = "# v{new_version}"

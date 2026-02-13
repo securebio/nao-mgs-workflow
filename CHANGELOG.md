@@ -1,5 +1,4 @@
-# Unreleased
-bump_type: point
+# v3.1.0.1-dev
 
 - Automated version bump on merge to main
 

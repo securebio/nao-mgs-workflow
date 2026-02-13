@@ -18,40 +18,36 @@ jobs:
       - name: Install bump-my-version
         run: pip install bump-my-version
 
-      - name: Validate CHANGELOG and extract bump_type
-        id: bump_type
-        run: |
-          # Validate CHANGELOG starts with "# Unreleased" followed by valid bump_type on line 2
-          if ! head -n 2 CHANGELOG.md | grep -Pzo "^# Unreleased\nbump_type: (major|schema|results|point)" > /dev/null; then
-            echo "ERROR: CHANGELOG.md must start with '# Unreleased' followed by valid 'bump_type:'"
-            echo "Valid bump_type values: major, schema, results, point"
-            exit 1
-          fi
-          bump_type=$(sed -n '2s/^bump_type: *//p' CHANGELOG.md)
-          echo "type=$bump_type" >> $GITHUB_OUTPUT
-
-      - name: Calculate new version
+      - name: Calculate release version
         id: version
         run: |
-          # Use bump-my-version to calculate what the new version would be
           current=$(bump-my-version show current_version)
-          new=$(bump-my-version show new_version --increment ${{ steps.bump_type.outputs.type }})
           echo "current=$current" >> $GITHUB_OUTPUT
-          echo "new=$new" >> $GITHUB_OUTPUT
           echo "Current version: $current"
-          echo "New version after bump: $new"
+
+          if [[ "$current" != *-dev ]]; then
+            echo "ERROR: Version $current does not have -dev suffix"
+            exit 1
+          fi
+
+          release=$(bump-my-version show new_version --increment dev)
+          echo "release=$release" >> $GITHUB_OUTPUT
+          echo "Release version (after stripping -dev): $release"
+
+      - name: Validate changelog is extractable
+        run: |
+          python bin/extract_changelog.py "${{ steps.version.outputs.current }}"
 
       - name: Check release does not already exist
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          VERSION="${{ steps.version.outputs.new }}"
+          VERSION="${{ steps.version.outputs.release }}"
           echo "Checking if release $VERSION already exists on GitHub..."
 
           # Check if release exists (gh release view returns exit code 1 if not found)
           if gh release view "$VERSION" &>/dev/null; then
             echo "ERROR: Release $VERSION already exists on GitHub"
-            echo "This version would be created by the current bump_type"
             exit 1
           fi
 
