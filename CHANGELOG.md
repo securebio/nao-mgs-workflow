@@ -1,10 +1,11 @@
 # v3.1.1.0-dev
 
-- Added group-level read count outputs to DOWNSTREAM workflow (`{GROUP}_read_counts.tsv.gz`), produced for both short-read and ONT platforms.
+- Added group-level read count, Kraken, and Bracken outputs to DOWNSTREAM workflow (`{GROUP}_read_counts.tsv.gz`, `{GROUP}_kraken.tsv.gz`, `{GROUP}_bracken.tsv.gz`), produced for both short-read and ONT platforms.
     - Created general-purpose `CONCAT_BY_GROUP` subworkflow for concatenating sample-level outputs by group with clean output naming, replacing `PREPARE_GROUP_TSVS`.
+    - Created `CONCAT_RUN_OUTPUTS_BY_GROUP` subworkflow that wraps all `CONCAT_BY_GROUP` calls, emitting `hits` separately and mixing other outputs into a single channel.
     - Created reusable `DISCOVER_RUN_OUTPUT` subworkflow for discovering all per-sample files from RUN output directories and matching them to sample groups.
     - Simplified `LOAD_DOWNSTREAM_DATA` to emit `run_dirs` and `groups` channels (removed virus hits discovery, now handled by `DISCOVER_RUN_OUTPUT`).
-    - Added `read_counts.schema.json` for schema validation of group-level read count outputs.
+    - Added `read_counts.schema.json`, `kraken.schema.json`, and `bracken.schema.json` for schema validation of group-level outputs.
 
 # v3.1.0.0
 

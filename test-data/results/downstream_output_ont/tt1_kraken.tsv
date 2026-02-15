@@ -1,0 +1,9 @@
+pc_reads_total	n_reads_clade	n_reads_direct	n_minimizers_total	n_minimizers_distinct	rank	taxid	name	sample	ribosomal	group
+100.00	25	0	2526	747	R	1	root	tiny_test	FALSE	tt1
+60.00	15	0	1372	373	D	10239	  Viruses	tiny_test	FALSE	tt1
+40.00	10	10	967	232	S	12475	    Hepatitis delta virus	tiny_test	FALSE	tt1
+20.00	5	5	405	141	S	10665	    Enterobacteria phage T4	tiny_test	FALSE	tt1
+20.00	5	0	763	239	D	2	  Bacteria	tiny_test	FALSE	tt1
+20.00	5	5	763	239	S	1423	    Bacillus subtilis	tiny_test	FALSE	tt1
+20.00	5	0	391	135	D	2759	  Eukaryota	tiny_test	FALSE	tt1
+20.00	5	5	391	135	S	9606	    Homo sapiens	tiny_test	FALSE	tt1

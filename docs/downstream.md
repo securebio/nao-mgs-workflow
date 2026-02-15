@@ -21,10 +21,11 @@ config:
 flowchart LR
 A(RUN output directories) & B(Grouping information) --> C[LOAD_DOWNSTREAM_DATA]
 C --> N[DISCOVER_RUN_OUTPUT]
-N --> D[CONCAT_BY_GROUP<br>virus hits]
-N --> R[CONCAT_BY_GROUP<br>read counts]
-R --> S(Read count TSVs)
-D --> E[MARK_VIRAL_DUPLICATES]
+N --> O[CONCAT_RUN_OUTPUTS_BY_GROUP]
+O --> S(Read count TSVs)
+O --> KR(Kraken TSVs)
+O --> BR(Bracken TSVs)
+O --> E[MARK_VIRAL_DUPLICATES]
 E --> J(Annotated hits TSVs)
 E --> K(Summary TSVs)
 E --> F[VALIDATE_VIRAL_ASSIGNMENTS]
@@ -36,8 +37,7 @@ L --> M(Clade count TSVs)
 subgraph "Data preparation"
 C
 N
-D
-R
+O
 end
 subgraph "Duplicate annotation"
 E
@@ -56,6 +56,8 @@ style J fill:#000,color:#fff,stroke:#000
 style K fill:#000,color:#fff,stroke:#000
 style M fill:#000,color:#fff,stroke:#000
 style S fill:#000,color:#fff,stroke:#000
+style KR fill:#000,color:#fff,stroke:#000
+style BR fill:#000,color:#fff,stroke:#000
 ```
 
 ### Long-read (ONT)
@@ -69,17 +71,17 @@ config:
 flowchart LR
 A(RUN output directories) & B(Grouping information) --> C[LOAD_DOWNSTREAM_DATA]
 C --> N[DISCOVER_RUN_OUTPUT]
-N --> D[CONCAT_BY_GROUP<br>virus hits]
-N --> R[CONCAT_BY_GROUP<br>read counts]
-R --> S(Read count TSVs)
-D --> F[VALIDATE_VIRAL_ASSIGNMENTS]
+N --> O[CONCAT_RUN_OUTPUTS_BY_GROUP]
+O --> S(Read count TSVs)
+O --> KR(Kraken TSVs)
+O --> BR(Bracken TSVs)
+O --> F[VALIDATE_VIRAL_ASSIGNMENTS]
 G(Viral taxonomy DB) --> F
 F --> H(Validation hits TSV)
 subgraph "Data preparation"
 C
 N
-D
-R
+O
 end
 subgraph "Post-hoc validation"
 F
@@ -89,6 +91,8 @@ style B fill:#fff,stroke:#000
 style G fill:#fff,stroke:#000
 style H fill:#000,color:#fff,stroke:#000
 style S fill:#000,color:#fff,stroke:#000
+style KR fill:#000,color:#fff,stroke:#000
+style BR fill:#000,color:#fff,stroke:#000
 ```
 
 ## Subworkflows
@@ -101,9 +105,13 @@ This subworkflow takes in an input file specifying (1) paths to one or more RUN 
 
 This is a reusable subworkflow that discovers all per-sample TSV files from the RUN output directories and matches them to sample groups. It takes `run_dirs` and `groups` from `LOAD_DOWNSTREAM_DATA`, globs all TSV files from each directory, and matches them to samples using filename prefixes from the groups channel. The output is a channel of tuples `(label, sample, file, group)` containing all discovered files. (No diagram is provided for this subworkflow.)
 
+### Concatenate all per-sample RUN outputs by group (`CONCAT_RUN_OUTPUTS_BY_GROUP`)
+
+This subworkflow wraps multiple calls to `CONCAT_BY_GROUP` (see below) to concatenate all per-sample RUN output types (viral hits, read counts, Kraken reports, and Bracken abundance estimates) into per-group TSVs. It emits `hits` separately (used by downstream duplicate marking, validation, and clade counting) and mixes all other outputs into a single `other` channel that flows directly to the published results.
+
 ### Concatenate per-sample outputs into per-group TSVs (`CONCAT_BY_GROUP`)
 
-This is a general-purpose subworkflow that takes per-sample file tuples (with group annotations), filters for files matching a specified suffix, groups them by sample group, concatenates the files within each group, adds a group column, and renames the output to a clean filename. It is called multiple times in the `DOWNSTREAM` workflow for different file types (e.g. viral hits, read counts).
+This is a general-purpose subworkflow that takes per-sample file tuples (with group annotations), filters for files matching a specified suffix, groups them by sample group, concatenates the files within each group, adds a group column, and renames the output to a clean filename. It is called by `CONCAT_RUN_OUTPUTS_BY_GROUP` for each RUN output type (viral hits, read counts, Kraken reports, Bracken abundance estimates).
 
 ```mermaid
 ---

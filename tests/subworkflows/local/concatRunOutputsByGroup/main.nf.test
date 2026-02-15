@@ -1,0 +1,77 @@
+nextflow_workflow {
+
+    name "Test workflow CONCAT_RUN_OUTPUTS_BY_GROUP"
+    script "subworkflows/local/concatRunOutputsByGroup/main.nf"
+    workflow "CONCAT_RUN_OUTPUTS_BY_GROUP"
+    config "tests/configs/run.config"
+    tag "subworkflow"
+    tag "downstream"
+    tag "concat_run_outputs_by_group"
+
+    test("Should concatenate all RUN output types by group") {
+        tag "expect_success"
+        when {
+            params {
+            }
+            workflow {
+                '''
+                // Input: tuple(label, sample, file, group) with two groups
+                def run_dir = "${projectDir}/test-data/results/run_output_shortread"
+                def ont_dir = "${projectDir}/test-data/results/run_output_ont"
+                input[0] = Channel.of(
+                    ["tt1", "tiny_test", file("${run_dir}/tiny_test_virus_hits.tsv"), "group_a"],
+                    ["tt1", "tiny_test", file("${run_dir}/tiny_test_read_counts.tsv"), "group_a"],
+                    ["tt1", "tiny_test", file("${run_dir}/tiny_test_kraken.tsv"), "group_a"],
+                    ["tt1", "tiny_test", file("${run_dir}/tiny_test_bracken.tsv"), "group_a"],
+                    ["tt2", "tiny_test", file("${ont_dir}/tiny_test_virus_hits.tsv"), "group_b"],
+                    ["tt2", "tiny_test", file("${ont_dir}/tiny_test_read_counts.tsv"), "group_b"],
+                    ["tt2", "tiny_test", file("${ont_dir}/tiny_test_kraken.tsv"), "group_b"],
+                    ["tt2", "tiny_test", file("${ont_dir}/tiny_test_bracken.tsv"), "group_b"]
+                )
+                '''
+            }
+        }
+        then {
+            assert workflow.success
+
+            // Should produce 2 groups for hits
+            assert workflow.out.hits.size() == 2
+            def hits_groups = workflow.out.hits.collect { it[0] } as Set
+            assert hits_groups == ["group_a", "group_b"] as Set
+
+            // Verify hits filename and content for group_a
+            def hits_a = workflow.out.hits.find { it[0] == "group_a" }
+            assert path(hits_a[1]).getFileName().toString() == "group_a_grouped_hits.tsv.gz"
+            def hits_tsv = path(hits_a[1]).csv(sep: "\t", decompress: true)
+            assert "group" in hits_tsv.columnNames
+            hits_tsv.columns["group"].each { val ->
+                assert val == "group_a"
+            }
+
+            // Should produce 6 items in other (3 per group)
+            assert workflow.out.other.size() == 6
+            def other_groups = workflow.out.other.collect { it[0] } as Set
+            assert other_groups == ["group_a", "group_b"] as Set
+
+            // Verify other output filenames for group_a
+            def other_a = workflow.out.other.findAll { it[0] == "group_a" }
+            def other_a_filenames = other_a.collect {
+                path(it[1]).getFileName().toString()
+            } as Set
+            assert other_a_filenames == [
+                "group_a_read_counts.tsv.gz",
+                "group_a_kraken.tsv.gz",
+                "group_a_bracken.tsv.gz",
+            ] as Set
+
+            // Verify each other output has a group column with correct value
+            workflow.out.other.each { output ->
+                def tsv = path(output[1]).csv(sep: "\t", decompress: true)
+                assert "group" in tsv.columnNames
+                tsv.columns["group"].each { val ->
+                    assert val == output[0]
+                }
+            }
+        }
+    }
+}
