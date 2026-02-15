@@ -1,6 +1,8 @@
 # v3.1.0.1-dev
 
 - Add `CLAUDE.md` with guidelines for Claude Code: GitHub interaction policies, PR workflows, testing, versioning, and changelog updates.
+- Extract testing documentation from `docs/developer.md` into standalone `docs/testing.md`; add snapshot safety warning.
+- Add CHANGELOG formatting guidelines to `docs/versioning.md`.
 
 # v3.1.0.0
 
