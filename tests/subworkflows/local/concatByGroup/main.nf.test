@@ -43,7 +43,7 @@ nextflow_workflow {
             // Verify output file naming matches expected pattern
             workflow.out.groups.each { output ->
                 def group = output[0]
-                def filename = path(output[1]).name
+                def filename = path(output[1]).getFileName().toString()
                 assert filename == "${group}_test_output.tsv.gz"
             }
 

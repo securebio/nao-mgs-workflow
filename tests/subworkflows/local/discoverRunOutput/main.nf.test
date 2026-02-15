@@ -38,12 +38,12 @@ nextflow_workflow {
                 assert output[1] == "tiny_test" // sample
                 assert output[3] == "group_a"   // group
                 // All filenames should start with the sample name
-                def filename = path(output[2]).name
+                def filename = path(output[2]).getFileName().toString()
                 assert filename.startsWith("tiny_test_")
             }
 
             // Verify specific expected files are present
-            def filenames = workflow.out.output.collect { path(it[2]).name } as Set
+            def filenames = workflow.out.output.collect { path(it[2]).getFileName().toString() } as Set
             assert "tiny_test_virus_hits.tsv" in filenames
             assert "tiny_test_read_counts.tsv" in filenames
         }
