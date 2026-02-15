@@ -15,21 +15,50 @@ nextflow_workflow {
             workflow {
                 """
                 input[0] = file("${projectDir}/test-data/downstream/input_file.csv")
+                input[1] = projectDir
                 """
             }
         }
         then {
-            // Should run without errors
             assert workflow.success
-            // Should produce correctly-structured output
-            def tab_in = path(workflow.out.test_input[0]).csv
-            assert workflow.out.input.size() == tab_in.rowCount
-            def currentDir = new File(".").getAbsolutePath()
-            for (int i=0; i < tab_in.rowCount; i++){
-                assert workflow.out.input[i][0] == tab_in.columns["label"][i]
-                assert tab_in.columns["hits_tsv"][i].contains(workflow.out.input[i][1])
-                assert tab_in.columns["groups_tsv"][i].contains(workflow.out.input[i][2])
+            // Parse input CSV from workflow output
+            def inputCsv = path(workflow.out.test_input[0]).csv
+            def expectedLabels = inputCsv.columns["label"] as Set
+            // Verify hits output: tuple(label, sample, hits_file, group)
+            assert workflow.out.hits.size() > 0
+            def hitLabels = workflow.out.hits.collect { it[0] } as Set
+            assert hitLabels == expectedLabels, "Should have hits for all labels in input"
+            workflow.out.hits.each { hit ->
+                assert hit.size() == 4, "hits tuple should have 4 elements"
+                def label = hit[0]
+                def sample = hit[1]
+                def hits_file = hit[2]
+                def group = hit[3]
+                assert expectedLabels.contains(label)
+                def filename = hits_file.toString().split('/').last()
+                assert filename.matches(".*_virus_hits\\.tsv(\\.gz)?")
+                assert sample == filename.replaceFirst(/_virus_hits\.tsv(\.gz)?$/, '')
+                assert group != null && group.length() > 0, "Group should not be empty"
             }
+            assert workflow.out.start_time_str != null
+        }
+    }
+
+    test("Should fail on empty run_results_dir") {
+        tag "expect_failed"
+        when {
+            params {}
+            workflow {
+                """
+                input[0] = file("${projectDir}/test-data/downstream/input_file_empty_results_dir.csv")
+                input[1] = projectDir
+                """
+            }
+        }
+
+        then {
+            assert workflow.failed
+            assert workflow.stdout.any { it.contains("Missing or empty 'run_results_dir'") }
         }
     }
 
@@ -40,6 +69,7 @@ nextflow_workflow {
             workflow {
                 """
                 input[0] = file("${projectDir}/test-data/downstream/input_file_invalid.csv")
+                input[1] = projectDir
                 """
             }
         }

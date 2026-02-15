@@ -16,7 +16,9 @@ option_list = list(
   make_option(c("-r", "--single_end"), type="character", default=FALSE,
               help="Single-end flag."),
   make_option(c("-o", "--output_dir"), type="character", default=NULL,
-              help="Path to output directory.")
+              help="Path to output directory."),
+  make_option(c("-p", "--prefix"), type="character", default=NULL,
+              help="Output file prefix (if NULL, uses sample name).")
 )
 opt_parser = OptionParser(option_list=option_list);
 opt = parse_args(opt_parser);
@@ -35,12 +37,17 @@ multiqc_json_path <- file.path(opt$input_dir, "multiqc_data.json")
 fastqc_tsv_path <- file.path(opt$input_dir, "multiqc_fastqc.txt")
 
 # Set output paths
-id_out <- paste0(opt$stage, "_", opt$sample)
-out_path_basic <- file.path(opt$output_dir, paste0(id_out, "_qc_basic_stats.tsv.gz"))
-out_path_adapters <- file.path(opt$output_dir, paste0(id_out, "_qc_adapter_stats.tsv.gz"))
-out_path_quality_base <- file.path(opt$output_dir, paste0(id_out, "_qc_quality_base_stats.tsv.gz"))
-out_path_quality_sequence <- file.path(opt$output_dir, paste0(id_out, "_qc_quality_sequence_stats.tsv.gz"))
-out_path_lengths <- file.path(opt$output_dir, paste0(id_out, "_qc_length_stats.tsv.gz"))
+# Format: {prefix}_qc_{type}_stats_{stage}.tsv.gz (e.g. sample1_qc_basic_stats_raw.tsv.gz)
+if (is.null(opt$prefix)) {
+  prefix <- opt$sample
+} else {
+  prefix <- opt$prefix
+}
+out_path_basic <- file.path(opt$output_dir, paste0(prefix, "_qc_basic_stats_", opt$stage, ".tsv.gz"))
+out_path_adapters <- file.path(opt$output_dir, paste0(prefix, "_qc_adapter_stats_", opt$stage, ".tsv.gz"))
+out_path_quality_base <- file.path(opt$output_dir, paste0(prefix, "_qc_quality_base_stats_", opt$stage, ".tsv.gz"))
+out_path_quality_sequence <- file.path(opt$output_dir, paste0(prefix, "_qc_quality_sequence_stats_", opt$stage, ".tsv.gz"))
+out_path_lengths <- file.path(opt$output_dir, paste0(prefix, "_qc_length_stats_", opt$stage, ".tsv.gz"))
 
 #=====================#
 # AUXILIARY FUNCTIONS #

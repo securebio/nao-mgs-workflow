@@ -83,11 +83,11 @@ style H fill:#000,color:#fff,stroke:#000
 
 ### Load data into channels (`LOAD_DOWNSTREAM_DATA`)
 
-This subworkflow takes in an input file specifying (1) paths to one or more viral hits tables produced by the `RUN`workflow, and (2) paths to corresponding TSV files specifying the sample groupings to be used for duplicate annotation (see [below](#usage) for more information on this input file). The subworkflow validates that this input file has the required structure, then extracts the filepaths into a channel with the structure expected by the rest of the workflow. (No diagram is provided for this subworkflow.)
+This subworkflow takes in an input file specifying (1) paths to one or more RUN results directories, and (2) paths to corresponding TSV files specifying the sample groupings to be used for duplicate annotation (see [below](#usage) for more information on this input file). The subworkflow validates that this input file has the required structure, auto-discovers per-sample viral hits files (`*_virus_hits.tsv{,.gz}`) from each results directory, joins them with group annotations from the grouping TSVs, and emits the results as a channel of tuples with the structure expected by the rest of the workflow. (No diagram is provided for this subworkflow.)
 
-### Partition into sample-based groups for duplicate annotation (`PREPARE_GROUP_TSVS`)
+### Concatenate per-sample hits into per-group TSVs (`PREPARE_GROUP_TSVS`)
 
-This subworkflow takes in the channel output by `LOAD_DOWNSTREAM_DATA`, adds sample grouping information to the viral hits tables, then partitions each viral hits table into a separate TSV per sample group. Partitions from different hits tables with matching group annotations are then concatenated together, enabling duplicate annotation across different pipeline runs (e.g. from different data deliveries) as specified by the user.
+This subworkflow takes in the per-sample hits tuples output by `LOAD_DOWNSTREAM_DATA` (which already include group annotations), groups them by sample group, concatenates the hits tables within each group, and adds a group column to each concatenated TSV. This enables duplicate annotation across different samples and pipeline runs as specified by the user.
 
 ```mermaid
 ---
@@ -96,24 +96,11 @@ config:
   layout: horizontal
 ---
 flowchart LR
-A(Viral hits tables) --> B[SORT_TSV]
-C(Grouping information) --> D[SORT_TSV]
-B & D --> E[JOIN_TSVS]
-E --> F[PARTITION_TSVS]
-F --> G[CONCATENATE_TSVS_LABELED]
-G --> H(Partitioned sample group TSVs)
-subgraph X [Add grouping information to hits tables]
-B
-D
-E
-end
-subgraph Y [Partition and concatenate TSVs by sample group]
-F
-G
-end
+A("Per-sample hits with group annotations <br> (LOAD_DOWNSTREAM_DATA)") --> B[CONCATENATE_TSVS_LABELED]
+B --> C[ADD_GROUP_COLUMN]
+C --> D(Per-group hits TSVs)
 style A fill:#fff,stroke:#000
-style C fill:#fff,stroke:#000
-style H fill:#000,color:#fff,stroke:#000
+style D fill:#000,color:#fff,stroke:#000
 ```
 
 ### Annotate alignment duplicates (`MARK_VIRAL_DUPLICATES`)
@@ -233,14 +220,18 @@ It outputs a TSV for each sample group (`<group>_clade_counts.tsv.gz`) with six 
 
 To run the `DOWNSTREAM` workflow, you need:
 
-1. One or more accessible **viral hits tables** produced by the `RUN` workflow. These are [typically saved](./output.md#viral-identification)  in the `RUN` workflow's output directory under `results/virus_hits_final.tsv.gz`.
-2. For each hit table, an accessible **grouping TSV**, containing the following columns in the specified order:
+1. One or more accessible **RUN results directories** produced by the `RUN` workflow, containing per-sample viral hits files (e.g. `*_virus_hits.tsv.gz`). These are [typically saved](./output.md#viral-identification) in the `RUN` workflow's output directory under `results/`.
+2. For each RUN results directory, an accessible **grouping TSV**, containing the following columns in the specified order:
     - `sample`: Sample ID (must include one row for every value of this column in the viral hits table)
-    - `group`: Group IDs to use for duplicate annotatation
-3. An accessible **input file CSV** mapping viral hits tables to grouping TSVs, containing the following columns in the specified order:
-    - `label`: Arbitrary string label to use for each viral hits table
-    - `hits_tsv`: Path to the viral hits table
+    - `group`: Group IDs to use for grouping samples in downstream analysis
+3. An accessible **input file CSV** mapping RUN results directories to grouping TSVs, containing the following columns in the specified order:
+    - `label`: Arbitrary string label to use for each RUN results directory
+    - `run_results_dir`: Path to the RUN results directory containing per-sample viral hits files
     - `groups_tsv`: Path to the corresponding grouping TSV
+
+> [!NOTE]
+> Paths in the input file can be absolute paths, S3 URIs (e.g., `s3://bucket/path/to/file.tsv`), or **relative paths**. Relative paths are resolved against `params.input_base_dir`, which defaults to the pipeline directory (`projectDir`). To resolve relative paths against your launch directory instead, set `params.input_base_dir = launchDir` in your config file.
+
 4. A **reference directory** containing the databases and indices generated by the [`INDEX` workflow](./index.md), including[^ref_dir]:
     - The viral taxonomy database (`total-virus-db-annotated.tsv.gz`)
     - The BLAST database for validation (e.g., `core_nt/`)

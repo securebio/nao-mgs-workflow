@@ -43,25 +43,8 @@ nextflow_workflow {
             def total_pre_lca_rows = pre_lca_files.sum { file ->
                   path(file).linesGzip.size() - 1  // minus header for each file
             }
-            def hits_final_tab = path(workflow.out.hits_final[0]).csv(sep: "\t", decompress: true)
+            def hits_final_tab = path(workflow.out.hits_final[0][1]).csv(sep: "\t", decompress: true)
             assert hits_final_tab.rowCount <= total_pre_lca_rows
-            // Filtered FASTQ should be a subset of test FASTQ
-            def hits_fastq = path(workflow.out.hits_fastq[0]).fastq
-            assert hits_fastq.getNumberOfRecords() <= test_reads_count
-            for (r in hits_fastq.readNames) {
-                assert r in test_reads_fastq.readNames
-            }
-            // Elements from test FASTQ should be in filtered FASTQ iff they're in filtered TSV
-            def ids_filtered = hits_final_tab.columns["seq_id"]
-            def ids_fastq_in = test_reads_fastq.readNames.collect{ it.tokenize(" ")[0] }
-            def ids_fastq_out = hits_fastq.readNames.collect{ it.tokenize(" ")[0] }
-            for (id in ids_fastq_in) {
-                if (id in ids_filtered) {
-                    assert id in ids_fastq_out
-                } else {
-                    assert !(id in ids_fastq_out)
-                }
-            }
         }
     }
     
@@ -95,7 +78,6 @@ nextflow_workflow {
             def fastq_files = [
                 path(workflow.out.bbduk_match[0][1]),
                 path(workflow.out.bbduk_trimmed[0][1]),
-                path(workflow.out.hits_fastq[0]),
                 path(workflow.out.test_reads[0][1])
             ]
             def fastqs = fastq_files.collect{ it.fastq }
@@ -103,7 +85,7 @@ nextflow_workflow {
             assert read_counts.every{ it == 0 }
             // Tabular output files should have only header lines
             def tabular_files = [
-                path(workflow.out.hits_final[0]),
+                path(workflow.out.hits_final[0][1]),
                 path(workflow.out.hits_prelca[0][1])
             ]
             def tabular_lines = tabular_files.collect{ it.linesGzip.toList() }
