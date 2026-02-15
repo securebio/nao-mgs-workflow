@@ -17,8 +17,9 @@ workflow CONCAT_BY_GROUP {
         output_name  // string, e.g. "grouped_hits"
     main:
         // Filter for files matching the suffix
+        def escaped_suffix = suffix.replace('.', '\\.')
         filtered = files
-            .filter { _label, _sample, f, _group -> f.name ==~ /.*_${suffix}(\.gz)?$/ }
+            .filter { _label, _sample, f, _group -> f.name ==~ /.*_${escaped_suffix}(\.gz)?$/ }
         // Group files by group and concatenate
         files_by_group = filtered
             .map { _label, _sample, file, group -> [group, file] }

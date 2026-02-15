@@ -65,10 +65,10 @@ workflow DOWNSTREAM {
         time_ch = COPY_TIME(time_file, "time.txt")
 
     emit:
-       input_downstream = params_ch.mix(input_file_ch)
-       logging_downstream = time_ch.mix(pyproject_ch)
-       intermediates_downstream = VALIDATE_VIRAL_ASSIGNMENTS.out.blast_results
-       results_downstream = dup_output_ch.mix(
+        input_downstream = params_ch.mix(input_file_ch)
+        logging_downstream = time_ch.mix(pyproject_ch)
+        intermediates_downstream = validate_ch.blast_results
+        results_downstream = dup_output_ch.mix(
                                 clade_counts_ch,
                                 validate_ch.annotated_hits,
                                 read_counts_ch)
