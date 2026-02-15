@@ -2,7 +2,11 @@
 
 This file contains guidelines for Claude Code when working on this repository.
 
+**Repository:** `securebio/nao-mgs-workflow` on GitHub.
+
 ## GitHub Interaction Policies
+
+When interacting with GitHub, prefer `gh` CLI subcommands (e.g., `gh pr view`, `gh issue view`) over raw `gh api` calls where possible — they're simpler and don't require individual user approval.
 
 ### Branching and PR Targets
 
@@ -96,6 +100,9 @@ Refer to `docs/developer.md` for comprehensive coding style guidelines. Key poin
 - `pipeline-min-index-version`: Minimum index version required by this pipeline version
 
 **When to update these:** Only when changes create incompatibilities between the index and RUN/DOWNSTREAM workflows. Most PRs do NOT need to update these. When in doubt, ask the user.
+
+### Schemas
+If your changes affect pipeline output files, review the corresponding schema files in `schemas/`. Changes to schema fields beyond `title` and `description` require a schema (2nd-number) version bump. See the Schemas section of `docs/developer.md` for details.
 
 ## Maintaining This File
 
