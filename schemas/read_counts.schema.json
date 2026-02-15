@@ -6,17 +6,6 @@
   "primaryKey": ["group", "sample"],
   "fields": [
     {
-      "name": "group",
-      "title": "Group",
-      "description": "Group identifier assigned to this sample in the grouping TSV.",
-      "type": "string",
-      "constraints": {
-        "required": true,
-        "minLength": 1
-      },
-      "example": "group_1"
-    },
-    {
       "name": "sample",
       "title": "Sample",
       "description": "Sample identifier from the RUN workflow.",
@@ -47,6 +36,17 @@
         "minimum": 0
       },
       "example": 25
+    },
+    {
+      "name": "group",
+      "title": "Group",
+      "description": "Group identifier assigned to this sample in the grouping TSV.",
+      "type": "string",
+      "constraints": {
+        "required": true,
+        "minLength": 1
+      },
+      "example": "group_1"
     }
   ]
 }

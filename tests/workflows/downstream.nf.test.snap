@@ -4,7 +4,7 @@
             "tt1_clade_counts.tsv.gz:md5,c08ec913ad5dab545a701ed4ac851fc9",
             "tt1_duplicate_reads.tsv.gz:md5,ae1190c0955d0e7a106dbb7bebc707f5",
             "tt1_duplicate_stats.tsv.gz:md5,dea20f8f6c3f9753f8b225fc0f8c7e52",
-            "tt1_read_counts.tsv.gz:md5,f39f9108b02cb4055a1f127778fe204a",
+            "tt1_read_counts.tsv.gz:md5,c9ee6bf4ad94ce7fbc24bd4a2d8bee00",
             "tt1_validation_hits.tsv.gz:md5,b87355953f53421c9fdd6e8c3f13b181"
         ],
         "meta": {
@@ -15,7 +15,7 @@
     },
     "downstream_output_ont": {
         "content": [
-            "tt1_read_counts.tsv.gz:md5,a243dd17080b5dd1f3a0783d1b1db58a",
+            "tt1_read_counts.tsv.gz:md5,25cc87260d146c93c9ee15a319d98c4a",
             "tt1_validation_hits.tsv.gz:md5,1154bc601c7bf582f9c56469a837ad0f"
         ],
         "meta": {

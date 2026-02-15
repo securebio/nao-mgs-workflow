@@ -1,2 +1,2 @@
-group	sample	n_reads_single	n_read_pairs
-tt1	tiny_test	25	NA
+sample	n_reads_single	n_read_pairs	group
+tiny_test	25	NA	tt1
