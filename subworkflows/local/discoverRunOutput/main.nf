@@ -17,7 +17,7 @@ workflow DISCOVER_RUN_OUTPUT {
         // Match files to samples using groups channel (by filename prefix)
         output_ch = all_files_ch
             .combine(groups, by: 0)  // [label, file, sample, group]
-            .filter { _label, f, sample, _group -> f.name.startsWith("${sample}_") }
+            .filter { _label, f, sample, _group -> f.getFileName().toString().startsWith("${sample}_") }
             .map { label, f, sample, group -> tuple(label, sample, f, group) }
 
     emit:
