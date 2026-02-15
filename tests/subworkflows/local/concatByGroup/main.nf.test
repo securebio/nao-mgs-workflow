@@ -1,12 +1,12 @@
 nextflow_workflow {
 
-    name "Test workflow PREPARE_GROUP_TSVS"
-    script "subworkflows/local/prepareGroupTsvs/main.nf"
-    workflow "PREPARE_GROUP_TSVS"
+    name "Test workflow CONCAT_BY_GROUP"
+    script "subworkflows/local/concatByGroup/main.nf"
+    workflow "CONCAT_BY_GROUP"
     config "tests/configs/run.config"
     tag "subworkflow"
     tag "downstream"
-    tag "prepare_group_tsvs"
+    tag "concat_by_group"
 
     test("Should run without failures") {
         tag "expect_success"
@@ -15,12 +15,13 @@ nextflow_workflow {
             }
             workflow {
                 '''
-                // Input: tuple(label, sample, hits_file, group)
-                // Note: In real workflow, each sample has unique filename like {SAMPLE}_virus_hits.tsv.gz
+                // Input: tuple(label, sample, file, group)
                 input[0] = Channel.of(
                     ["tt1", "tiny_test", file("${projectDir}/test-data/prepareGroupTsvs/tt1_hits.tsv"), "group_a"],
                     ["tt2", "tiny_test_2", file("${projectDir}/test-data/prepareGroupTsvs/tt2_hits.tsv"), "group_b"]
                 )
+                input[1] = "hits.tsv"
+                input[2] = "test_output"
                 '''
             }
         }
@@ -38,6 +39,13 @@ nextflow_workflow {
             // Each output should be a tuple of (group, file)
             def output_groups = workflow.out.groups.collect { it[0] } as Set
             assert output_groups == ["group_a", "group_b"] as Set
+
+            // Verify output file naming matches expected pattern
+            workflow.out.groups.each { output ->
+                def group = output[0]
+                def filename = path(output[1]).name
+                assert filename == "${group}_test_output.tsv.gz"
+            }
 
             // Verify output structure and content for each group
             workflow.out.groups.each { output ->
