@@ -24,23 +24,24 @@ nextflow_workflow {
             // Parse input CSV from workflow output
             def inputCsv = path(workflow.out.test_input[0]).csv
             def expectedLabels = inputCsv.columns["label"] as Set
-            // Verify hits output: tuple(label, sample, hits_file, group)
-            assert workflow.out.hits.size() > 0
-            def hitLabels = workflow.out.hits.collect { it[0] } as Set
-            assert hitLabels == expectedLabels, "Should have hits for all labels in input"
-            workflow.out.hits.each { hit ->
-                assert hit.size() == 4, "hits tuple should have 4 elements"
-                def label = hit[0]
-                def sample = hit[1]
-                def hits_file = hit[2]
-                def group = hit[3]
-                assert expectedLabels.contains(label)
-                def filename = hits_file.toString().split('/').last()
-                assert filename.matches(".*_virus_hits\\.tsv(\\.gz)?")
-                assert sample == filename.replaceFirst(/_virus_hits\.tsv(\.gz)?$/, '')
-                assert group != null && group.length() > 0, "Group should not be empty"
-            }
             assert workflow.out.start_time_str != null
+            // Verify run_dirs output: tuple(label, resolved_run_results_dir), unique
+            assert workflow.out.run_dirs.size() > 0
+            def runDirLabels = workflow.out.run_dirs.collect { it[0] } as Set
+            assert runDirLabels == expectedLabels, "Should have run_dirs for all labels in input"
+            workflow.out.run_dirs.each { rd ->
+                assert rd.size() == 2, "run_dirs tuple should have 2 elements"
+                assert rd[0] != null && rd[0].length() > 0, "label should not be empty"
+                assert rd[1] != null && rd[1].length() > 0, "run_results_dir should not be empty"
+            }
+            // Verify groups output: tuple(label, sample, group)
+            assert workflow.out.groups.size() > 0
+            workflow.out.groups.each { g ->
+                assert g.size() == 3, "groups tuple should have 3 elements"
+                assert g[0] != null && g[0].length() > 0, "label should not be empty"
+                assert g[1] != null && g[1].length() > 0, "sample should not be empty"
+                assert g[2] != null && g[2].length() > 0, "group should not be empty"
+            }
         }
     }
 
