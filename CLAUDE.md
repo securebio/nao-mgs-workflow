@@ -48,88 +48,13 @@ When decomposing large feature branches into smaller PRs:
 
 ### Responding to Reviewers
 
-When the user asks you to handle PR review comments, follow this workflow:
+When the user asks you to handle PR review comments:
 
-**1. Review all comments and suggest responses:**
-Fetch and analyze all review comments, then present the user with a summary and your suggested response for each:
-- Is it a valid concern that should be addressed?
-- Is it a minor stylistic suggestion?
-- Is it a reasonable, substantive suggestion that's out of scope? If so, propose creating a GitHub issue to track it.
-
-**2. Get user approval:**
-Wait for the user to approve your suggested responses before taking any action. The user may modify suggestions or provide different guidance. If you proposed creating issues for out-of-scope suggestions, confirm which ones the user wants created.
-
-**3. Make any required fixes:**
-If comments require code changes, implement them first and push the changes.
-
-**4. Respond to comment threads:**
-**CRITICAL: Always prefix comments with `[Claude Code]`** to make it clear the response is from Claude Code, not the user. The user's GitHub account is used for these interactions, so clarity is essential.
-
-Response patterns (always include the prefix):
-- For implemented fixes: `[Claude Code] Done`
-- For out-of-scope suggestions: `[Claude Code] Reasonable suggestion but out of scope`
-- For out-of-scope suggestions with issue created: `[Claude Code] Reasonable suggestion but out of scope for this PR. Opened #<issue_number> to track.`
-- For declined minor suggestions: `[Claude Code] Minor stylistic nit, not done`
-
-**5. Create issues for substantive out-of-scope suggestions:**
-If the user approved creating issues, use `gh issue create` before responding to the thread. Issues must be self-contained (they sync to external project management tools), so quote the suggestion and explain it fully rather than just linking to the PR:
-```bash
-gh issue create --title "Brief description" --body "$(cat <<'EOF'
-<Full explanation of the suggested improvement>
-
-**Original suggestion from PR #<number> review:**
-> <quoted suggestion text>
-
-EOF
-)"
-```
-
-**6. Resolve concluded threads:**
-After responding, resolve each thread using the GraphQL API:
-
-```bash
-# Get thread IDs
-gh api graphql -f query='
-{
-  repository(owner: "naobservatory", name: "mgs-workflow") {
-    pullRequest(number: <PR_NUMBER>) {
-      reviewThreads(first: 100) {
-        nodes {
-          id
-          isResolved
-          comments(first: 100) {
-            nodes {
-              id
-              body
-            }
-          }
-        }
-      }
-    }
-  }
-}'
-
-# Reply to a thread
-gh api graphql -f query='
-mutation {
-  addPullRequestReviewThreadReply(input: {
-    pullRequestReviewThreadId: "<THREAD_ID>",
-    body: "[Claude Code] Done"
-  }) {
-    comment { id }
-  }
-}'
-
-# Resolve the thread
-gh api graphql -f query='
-mutation {
-  resolveReviewThread(input: {
-    threadId: "<THREAD_ID>"
-  }) {
-    thread { isResolved }
-  }
-}'
-```
+1. **Summarize and suggest responses** for each comment — categorize as actionable fix, minor nit, or out-of-scope (propose creating a GitHub issue for substantive out-of-scope suggestions).
+2. **Wait for user approval** before taking any action.
+3. **Implement fixes** and push changes.
+4. **Respond to threads.** Always prefix with `[Claude Code]` (e.g., `[Claude Code] Done`) — the user's GitHub account is used, so attribution is essential.
+5. **Create issues** for approved out-of-scope suggestions. Issues must be self-contained (they sync to external tools), so quote the original suggestion and explain it fully.
 
 ### Committing Changes
 
