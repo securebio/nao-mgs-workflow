@@ -89,7 +89,8 @@
       "description": "Name of the taxon.",
       "type": "string",
       "constraints": {
-        "required": true
+        "required": true,
+        "minLength": 1
       },
       "example": "root"
     },
