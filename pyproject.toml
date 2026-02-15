@@ -117,6 +117,7 @@ expected-outputs-downstream = [
     "results_downstream/{GROUP}_clade_counts.tsv.gz",
     "results_downstream/{GROUP}_duplicate_reads.tsv.gz",
     "results_downstream/{GROUP}_duplicate_stats.tsv.gz",
+    "results_downstream/{GROUP}_read_counts.tsv.gz",
     "results_downstream/{GROUP}_validation_hits.tsv.gz",
 ]
 
@@ -125,5 +126,6 @@ expected-outputs-downstream-ont = [
     "input_downstream/params-downstream.json",
     "logging_downstream/pyproject.toml",
     "logging_downstream/time.txt",
+    "results_downstream/{GROUP}_read_counts.tsv.gz",
     "results_downstream/{GROUP}_validation_hits.tsv.gz",
 ]
