@@ -3,7 +3,7 @@
   "title": "Bracken Abundance Estimates Per Sample",
   "description": "Bracken abundance estimates for each sample within a group, as produced by the RUN workflow and concatenated by the DOWNSTREAM workflow. Each row represents one taxon's abundance estimate for a sample, split by ribosomal/non-ribosomal classification.",
   "missingValues": ["", "NA"],
-  "primaryKey": ["group", "sample", "name", "ribosomal"],
+  "primaryKey": ["group", "sample", "taxid", "ribosomal"],
   "fields": [
     {
       "name": "name",
@@ -100,7 +100,8 @@
       "description": "Whether this row is from ribosomal (TRUE) or non-ribosomal (FALSE) read classification.",
       "type": "string",
       "constraints": {
-        "required": true
+        "required": true,
+        "enum": ["TRUE", "FALSE"]
       },
       "example": "FALSE"
     },

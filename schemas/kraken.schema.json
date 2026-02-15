@@ -110,7 +110,8 @@
       "description": "Whether this row is from ribosomal (TRUE) or non-ribosomal (FALSE) read classification.",
       "type": "string",
       "constraints": {
-        "required": true
+        "required": true,
+        "enum": ["TRUE", "FALSE"]
       },
       "example": "FALSE"
     },
