@@ -91,7 +91,7 @@ The last step you need to complete on AWS itself is to set up a job queue that N
 
 ## Spot instance fallback
 
-When using Spot instances, AWS can reclaim your instances mid-job. By default, Nextflow's retry logic (`process.errorStrategy = "retry"`, `process.maxRetries = 2`) will resubmit failed jobs to the same queue. If the queue uses Spot instances, retries may also be reclaimed during a capacity shortage.
+When using Spot instances, AWS can reclaim your instances mid-job. By default, Nextflow's retry logic (`process.errorStrategy = "retry"`, `process.maxRetries = 1`) will resubmit failed jobs to the same queue. If the queue uses Spot instances, retries may also be reclaimed during a capacity shortage.
 
 To mitigate this, you can configure a **fallback queue** that uses On-Demand instances. On the first attempt, jobs run on the Spot queue; if that attempt fails (for any reason), retries are routed to the On-Demand queue.
 

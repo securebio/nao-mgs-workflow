@@ -1,6 +1,7 @@
 # v3.1.0.1
 
-- Reduced `maxRetries` from 3 to 2 in `standard` and `batch` profiles for spot-to-on-demand fallback (#662)
+- Reduced `maxRetries` from 3 to 1 in `standard` and `batch` profiles for spot-to-on-demand fallback (#662)
+- Added docs on using a Groovy closure for spot-to-on-demand queue fallback (#662)
 - Add `CLAUDE.md` with guidelines for Claude Code: GitHub interaction policies, PR workflows, testing, versioning, and changelog updates.
 - Extract testing documentation from `docs/developer.md` into standalone `docs/testing.md`; add snapshot safety warning.
 - Add CHANGELOG formatting guidelines to `docs/versioning.md`.
