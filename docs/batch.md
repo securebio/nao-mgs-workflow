@@ -104,13 +104,7 @@ To mitigate this, you can configure a **fallback queue** that uses On-Demand ins
 process.queue = { task.attempt > 1 ? "my-on-demand-queue" : "my-spot-queue" }
 ```
 
-If using the [orchestrator](https://github.com/securebio/nao-mgs-orchestrator), set both `batch_queue` (primary/spot) and `batch_queue_fallback` (on-demand) in your TOML config. The orchestrator generates the closure syntax automatically.
-
-### How it works
-
-- `process.maxRetries = 2` allows up to 2 retries (3 total attempts): 1 on Spot + up to 2 on On-Demand.
-- The closure checks `task.attempt`: attempt 1 uses the primary queue, attempts 2+ use the fallback.
-- Nextflow cannot distinguish Spot reclamation from other failures (both surface as exit code 1). All retries are routed to the fallback queue regardless of failure cause.
+Note: Nextflow cannot distinguish Spot reclamation from other failures (both surface as exit code 1), so all retries are routed to the fallback queue regardless of failure cause.
 
 ## 4. Run Nextflow with Batch
 
