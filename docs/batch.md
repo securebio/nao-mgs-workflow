@@ -89,6 +89,29 @@ The last step you need to complete on AWS itself is to set up a job queue that N
 5.  Click the orange "Create job queue" button.
 6.  Success!
 
+## Spot instance fallback
+
+When using Spot instances, AWS can reclaim your instances mid-job. By default, Nextflow's retry logic (`process.errorStrategy = "retry"`, `process.maxRetries = 2`) will resubmit failed jobs to the same queue. If the queue uses Spot instances, retries may also be reclaimed during a capacity shortage.
+
+To mitigate this, you can configure a **fallback queue** that uses On-Demand instances. On the first attempt, jobs run on the Spot queue; if that attempt fails (for any reason), retries are routed to the On-Demand queue.
+
+### Setup
+
+1. Create two Batch job queues (see Step 3 above): one backed by a Spot compute environment, and one backed by an On-Demand compute environment.
+2. In your `nextflow.config`, use a Groovy closure for `process.queue`:
+
+```groovy
+process.queue = { task.attempt > 1 ? "my-on-demand-queue" : "my-spot-queue" }
+```
+
+If using the [orchestrator](https://github.com/securebio/nao-mgs-orchestrator), set both `batch_queue` (primary/spot) and `batch_queue_fallback` (on-demand) in your TOML config. The orchestrator generates the closure syntax automatically.
+
+### How it works
+
+- `process.maxRetries = 2` allows up to 2 retries (3 total attempts): 1 on Spot + up to 2 on On-Demand.
+- The closure checks `task.attempt`: attempt 1 uses the primary queue, attempts 2+ use the fallback.
+- Nextflow cannot distinguish Spot reclamation from other failures (both surface as exit code 1). All retries are routed to the fallback queue regardless of failure cause.
+
 ## 4. Run Nextflow with Batch
 
 Finally, you need to use all the infrastructure you've just set up to actually run a Nextflow workflow! We recommend using our [test dataset](https://github.com/naobservatory/mgs-workflow/blob/will-merge-master/docs/installation.md#6-run-the-pipeline-on-test-data) to get started.
