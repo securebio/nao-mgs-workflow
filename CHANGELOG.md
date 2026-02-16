@@ -1,4 +1,4 @@
-# v3.1.0.1
+# v3.1.0.1-dev
 
 - Reduced `maxRetries` from 3 to 1 in `standard` and `batch` profiles for spot-to-on-demand fallback (#662)
 - Added docs on using a Groovy closure for spot-to-on-demand queue fallback (#662)
