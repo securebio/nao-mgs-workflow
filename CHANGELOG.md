@@ -1,5 +1,8 @@
 # v3.1.1.0-dev
 
+- Add `CLAUDE.md` with guidelines for Claude Code: GitHub interaction policies, PR workflows, testing, versioning, and changelog updates.
+- Extract testing documentation from `docs/developer.md` into standalone `docs/testing.md`; add snapshot safety warning.
+- Add CHANGELOG formatting guidelines to `docs/versioning.md`.
 - Added group-level read count outputs to DOWNSTREAM workflow (`{GROUP}_read_counts.tsv.gz`), produced for both short-read and ONT platforms.
     - Created general-purpose `CONCAT_BY_GROUP` subworkflow for concatenating sample-level outputs by group with clean output naming, replacing `PREPARE_GROUP_TSVS`.
     - Created reusable `DISCOVER_RUN_OUTPUT` subworkflow for discovering all per-sample files from RUN output directories and matching them to sample groups.
