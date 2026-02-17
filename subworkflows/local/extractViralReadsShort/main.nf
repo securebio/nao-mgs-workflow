@@ -4,20 +4,18 @@
 ***************************/
 
 include { BBDUK_HITS_INTERLEAVE as BBDUK_HITS } from "../../../modules/local/bbduk"
-include { CUTADAPT } from "../../../modules/local/cutadapt"
 include { FASTP } from "../../../modules/local/fastp"
 include { BOWTIE2 as BOWTIE2_VIRUS } from "../../../modules/local/bowtie2"
 include { BOWTIE2 as BOWTIE2_HUMAN } from "../../../modules/local/bowtie2"
 include { BOWTIE2 as BOWTIE2_OTHER } from "../../../modules/local/bowtie2"
 include { PROCESS_VIRAL_BOWTIE2_SAM } from "../../../modules/local/processViralBowtie2Sam"
 include { SORT_TSV as SORT_BOWTIE_VIRAL } from "../../../modules/local/sortTsv"
-include { CONCATENATE_FILES } from "../../../modules/local/concatenateFiles"
-include { EXTRACT_VIRAL_HITS_TO_FASTQ } from "../../../modules/local/extractViralHitsToFastq"
 include { LCA_TSV } from "../../../modules/local/lcaTsv"
 include { SORT_FASTQ } from "../../../modules/local/sortFastq"
 include { SORT_FILE } from "../../../modules/local/sortFile"
 include { FILTER_VIRAL_SAM } from "../../../modules/local/filterViralSam"
 include { PROCESS_LCA_ALIGNER_OUTPUT } from "../../../subworkflows/local/processLcaAlignerOutput/"
+include { COPY_FILE as RENAME_VIRUS_HITS } from "../../../modules/local/copyFile"
 
 /***********
 | WORKFLOW |
@@ -27,7 +25,7 @@ workflow EXTRACT_VIRAL_READS_SHORT {
     take:
         reads_ch
         ref_dir
-        params_map // aln_score_threshold, adapters, cutadapt_error_rate, min_kmer_hits, k, bbduk_suffix, taxid_artificial
+        params_map // aln_score_threshold, adapters, min_kmer_hits, k, bbduk_suffix, taxid_artificial
     main:
         // Get reference paths
         viral_genome_path = "${ref_dir}/results/virus-genomes-masked.fasta.gz"
@@ -52,9 +50,8 @@ workflow EXTRACT_VIRAL_READS_SHORT {
          // 1. Run initial screen against viral genomes with BBDuk
         bbduk_params = params_map
         bbduk_ch = BBDUK_HITS(reads_ch, viral_genome_path, bbduk_params)
-        // 2. Carry out stringent adapter removal with FASTP and Cutadapt
+        // 2. Carry out adapter removal with FASTP
         fastp_ch = FASTP(bbduk_ch.fail, params_map.adapters, true)
-        adapt_ch = CUTADAPT(fastp_ch.reads, params_map.adapters, params_map.cutadapt_error_rate)
         // 3. Run Bowtie2 against a viral database and process output
         def bowtie_base_params = [
             remove_sq: true,
@@ -64,7 +61,7 @@ workflow EXTRACT_VIRAL_READS_SHORT {
         ]
         par_virus = "--local --very-sensitive-local --score-min G,0.1,19 -k 10"
         bowtie2_virus_params = bowtie_base_params + [par_string: par_virus, suffix: "virus"]
-        bowtie2_ch = BOWTIE2_VIRUS(adapt_ch.reads, bt2_virus_index_path, bowtie2_virus_params)
+        bowtie2_ch = BOWTIE2_VIRUS(fastp_ch.reads, bt2_virus_index_path, bowtie2_virus_params)
 
         // 4. Filter contaminants
         par_contaminants = "--local --very-sensitive-local"
@@ -98,18 +95,15 @@ workflow EXTRACT_VIRAL_READS_SHORT {
             col_keep_add_prefix,
             "prim_align_"
         )
-        // 10. Extract filtered virus hits in FASTQ format
-        fastq_unfiltered_collect = other_bt2_ch.reads_unmapped.map{ _sample, file -> file }.collect().ifEmpty([])
-        fastq_unfiltered_concat = CONCATENATE_FILES(fastq_unfiltered_collect, "reads_unfiltered", "fastq.gz")
-        fastq_ch = EXTRACT_VIRAL_HITS_TO_FASTQ(processed_ch.viral_hits_tsv, fastq_unfiltered_concat.output)
+        // 10. Rename virus hits to clean file name
+        renamed_hits_ch = RENAME_VIRUS_HITS(processed_ch.viral_hits_tsv, "virus_hits.tsv.gz")
     emit:
         bbduk_match = bbduk_ch.fail
-        bbduk_trimmed = adapt_ch.reads
-        hits_final = processed_ch.viral_hits_tsv
+        bbduk_trimmed = fastp_ch.reads
+        hits_final = renamed_hits_ch
         inter_lca = processed_ch.lca_tsv
         inter_bowtie = processed_ch.aligner_tsv
         hits_prelca = bowtie2_tsv_ch.output
-        hits_fastq = fastq_ch.fastq
         test_reads = other_bt2_ch.reads_unmapped
         test_filt_bowtie = bowtie2_filtered_ch.sam
         test_unfilt_bowtie = bowtie2_ch.sam

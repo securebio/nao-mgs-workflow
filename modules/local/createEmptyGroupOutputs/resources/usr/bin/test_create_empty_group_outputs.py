@@ -2,7 +2,6 @@ import gzip
 import pytest
 from create_empty_group_outputs import (
     open_by_suffix,
-    get_unique_groups,
     get_group_output_patterns,
     create_empty_outputs,
     parse_args,
@@ -12,14 +11,6 @@ from create_empty_group_outputs import (
 #=============================================================================
 # Test helpers
 #=============================================================================
-
-def write_tsv_by_suffix(path, header, rows):
-    """Write a TSV file using appropriate compression based on suffix."""
-    with open_by_suffix(path, "w") as f:
-        f.write("\t".join(header) + "\n")
-        for row in rows:
-            f.write("\t".join(row) + "\n")
-
 
 def write_pyproject(path, illumina_outputs, ont_outputs):
     """Write a minimal pyproject.toml with expected outputs."""
@@ -47,34 +38,6 @@ class TestOpenBySuffix:
 
         with open_by_suffix(filepath, "r") as f:
             assert f.read() == test_content
-
-
-#=============================================================================
-# Tests for get_unique_groups
-#=============================================================================
-
-class TestGetUniqueGroups:
-    """Tests for get_unique_groups function."""
-
-    @pytest.mark.parametrize("rows,expected", [
-        # Multiple samples, multiple groups
-        ([["S1", "g1"], ["S2", "g1"], ["S3", "g2"]], {"g1", "g2"}),
-        # Single group
-        ([["S1", "g1"], ["S2", "g1"]], {"g1"}),
-        # Header only (empty)
-        ([], set()),
-    ])
-    def test_extracts_groups(self, tmp_path, rows, expected):
-        """Test extraction of unique groups from TSV."""
-        tsv_path = tmp_path / "empty_groups.tsv.gz"
-        write_tsv_by_suffix(tsv_path, ["sample", "group"], rows)
-        assert get_unique_groups(str(tsv_path)) == expected
-
-    def test_missing_group_column_returns_empty(self, tmp_path):
-        """Test that missing 'group' column returns empty set."""
-        tsv_path = tmp_path / "empty_groups.tsv.gz"
-        write_tsv_by_suffix(tsv_path, ["sample", "other"], [["S1", "x"]])
-        assert get_unique_groups(str(tsv_path)) == set()
 
 
 #=============================================================================
@@ -166,23 +129,51 @@ class TestParseArgs:
         """Test parsing of required arguments."""
         monkeypatch.setattr(
             "sys.argv",
-            ["prog", "empty.tsv.gz", "pyproject.toml", "output/"],
+            ["prog", "g1,g2,g3", "pyproject.toml"],
         )
         args = parse_args()
-        assert args.empty_groups_tsv == "empty.tsv.gz"
+        assert args.missing_groups == "g1,g2,g3"
         assert args.pyproject_toml == "pyproject.toml"
-        assert args.output_dir == "output/"
+        assert args.output_dir == "./"  # default
         assert args.platform == "illumina"  # default
+        assert args.pattern_filter is None  # default
+
+    def test_parses_empty_groups(self, monkeypatch):
+        """Test parsing of empty groups string."""
+        monkeypatch.setattr(
+            "sys.argv",
+            ["prog", "", "pyproject.toml"],
+        )
+        args = parse_args()
+        assert args.missing_groups == ""
 
     @pytest.mark.parametrize("platform", ["illumina", "ont"])
     def test_parses_platform_option(self, monkeypatch, platform):
         """Test parsing of --platform option."""
         monkeypatch.setattr(
             "sys.argv",
-            ["prog", "empty.tsv.gz", "pyproject.toml", "output/", "--platform", platform],
+            ["prog", "g1,g2", "pyproject.toml", "--platform", platform],
         )
         args = parse_args()
         assert args.platform == platform
+
+    def test_parses_output_dir_option(self, monkeypatch):
+        """Test parsing of --output-dir option."""
+        monkeypatch.setattr(
+            "sys.argv",
+            ["prog", "g1,g2", "pyproject.toml", "--output-dir", "output/"],
+        )
+        args = parse_args()
+        assert args.output_dir == "output/"
+
+    def test_parses_pattern_filter_option(self, monkeypatch):
+        """Test parsing of --pattern-filter option."""
+        monkeypatch.setattr(
+            "sys.argv",
+            ["prog", "g1,g2", "pyproject.toml", "--pattern-filter", "validation_hits"],
+        )
+        args = parse_args()
+        assert args.pattern_filter == "validation_hits"
 
 
 #=============================================================================
@@ -197,13 +188,10 @@ class TestIntegration:
         ("ont", ["{GROUP}_val.tsv.gz"]),
     ])
     def test_full_workflow(self, tmp_path, platform, expected_patterns):
-        """Test the complete workflow from TSV to output files."""
-        # Create empty groups TSV
-        tsv_path = tmp_path / "empty_groups.tsv.gz"
-        write_tsv_by_suffix(tsv_path, ["sample", "group"], [
-            ["S1", "empty_g1"],
-            ["S2", "empty_g2"],
-        ])
+        """Test the complete workflow from comma-separated groups to output files."""
+        # Groups as comma-separated string (simulating Nextflow input)
+        groups_str = "empty_g1,empty_g2"
+        groups = set(g.strip() for g in groups_str.split(",") if g.strip())
 
         # Create pyproject.toml
         pyproject_path = tmp_path / "pyproject.toml"
@@ -214,7 +202,6 @@ class TestIntegration:
         )
 
         # Run the workflow
-        groups = get_unique_groups(str(tsv_path))
         patterns = get_group_output_patterns(str(pyproject_path), platform)
         output_dir = tmp_path / "output"
         created = create_empty_outputs(groups, patterns, str(output_dir))
@@ -223,3 +210,31 @@ class TestIntegration:
         assert groups == {"empty_g1", "empty_g2"}
         assert patterns == expected_patterns
         assert len(created) == len(groups) * len(patterns)
+
+    def test_pattern_filter(self, tmp_path):
+        """Test that pattern_filter correctly filters output patterns."""
+        groups = {"g1"}
+
+        # Create pyproject.toml with multiple patterns
+        pyproject_path = tmp_path / "pyproject.toml"
+        write_pyproject(
+            pyproject_path,
+            illumina_outputs=[
+                "results/{GROUP}_clade.tsv.gz",
+                "results/{GROUP}_dup.tsv.gz",
+                "results/{GROUP}_validation_hits.tsv.gz",
+            ],
+            ont_outputs=[],
+        )
+
+        # Get patterns and filter
+        patterns = get_group_output_patterns(str(pyproject_path), "illumina")
+        filtered_patterns = [p for p in patterns if "validation_hits" in p]
+
+        # Run the workflow with filtered patterns
+        output_dir = tmp_path / "output"
+        created = create_empty_outputs(groups, filtered_patterns, str(output_dir))
+
+        # Verify only validation_hits file was created
+        assert len(created) == 1
+        assert "g1_validation_hits.tsv.gz" in created[0]

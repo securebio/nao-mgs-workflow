@@ -12,8 +12,8 @@ process FASTP {
         tuple val(sample), path("${sample}_fastp.{json,html}"), emit: log
         tuple val(sample), path("${sample}_fastp_in.fastq.gz"), emit: input
     script:
-        /* Cleaning not done in CUTADAPT:
-        * Higher quality threshold for sliding window trimming;
+        /* FASTP cleaning operations:
+        * Sliding window trimming with quality threshold;
         * Removing poly-X tails;
         * Automatic adapter detection;
         * Base correction in overlapping paired-end reads;

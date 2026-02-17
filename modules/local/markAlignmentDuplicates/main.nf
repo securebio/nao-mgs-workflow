@@ -1,6 +1,7 @@
+// Tool source: rust-tools/mark_duplicates/
 process MARK_ALIGNMENT_DUPLICATES {
     label "large"
-    label "coreutils"
+    label "rust_tools"
     input:
         tuple val(sample), path(tsv)
         val(fuzzy_match)

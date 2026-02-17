@@ -1,0 +1,126 @@
+import groovy.json.JsonSlurper
+
+// Extract per-group output filename patterns from pyproject.toml for a given platform
+def getGroupPatterns = { pyprojectPath, platform ->
+    def text = pyprojectPath.toFile().text
+    def key = (platform == "ont") ? "expected-outputs-downstream-ont" : "expected-outputs-downstream"
+    def sectionMatch = (text =~ /${key} = \[([\s\S]*?)\]/)
+    def allOutputs = (sectionMatch[0][1] =~ /"([^"]+)"/).collect { it[1] }
+    return allOutputs.findAll { it.contains("{GROUP}") }.collect { it.split('/').last() }
+}
+
+// Load column names from a table-schema file, or null if no schema exists
+def getSchemaHeaders = { schemasDir, pattern ->
+    def name = pattern.replace("{GROUP}_", "").replaceAll(/\..*/, "")
+    def schemaFile = new File(schemasDir.toString(), "${name}.schema.json")
+    if (!schemaFile.exists()) return null
+    return new JsonSlurper().parse(schemaFile).fields?.collect { it.name }
+}
+
+nextflow_process {
+
+    name "Test process CREATE_EMPTY_GROUP_OUTPUTS"
+    script "modules/local/createEmptyGroupOutputs/main.nf"
+    process "CREATE_EMPTY_GROUP_OUTPUTS"
+    config "tests/configs/run.config"
+    tag "module"
+    tag "create_empty_group_outputs"
+
+    test("Should create empty output files for missing groups") {
+        tag "expect_success"
+        when {
+            params {}
+            process {
+                '''
+                input[0] = ["group1", "group2"]
+                input[1] = file("${projectDir}/pyproject.toml")
+                input[2] = file("${projectDir}/schemas")
+                input[3] = "illumina"
+                input[4] = ""
+                '''
+            }
+        }
+        then {
+            assert process.success
+            def groups = ["group1", "group2"]
+            def pyproject = path(process.out.pyproject[0])
+            def schemasDir = process.out.schemas[0]
+            def patterns = getGroupPatterns(pyproject, "illumina")
+            def files = process.out.outputs.flatten()
+            // Verify correct number of files: one per group per pattern
+            assert files.size() == groups.size() * patterns.size()
+            def filenames = files.collect { it.toString().split('/').last() }.sort()
+            // Verify each group × pattern combination is present
+            groups.each { group ->
+                patterns.each { pattern ->
+                    def expected = pattern.replace("{GROUP}", group)
+                    assert filenames.contains(expected) : "Missing expected file: ${expected}"
+                }
+            }
+            // Verify schema-header behaviour for each pattern
+            patterns.each { pattern ->
+                def expectedHeaders = getSchemaHeaders(schemasDir, pattern)
+                def filename = pattern.replace("{GROUP}", groups[0])
+                def f = files.find { it.toString().split('/').last() == filename }
+                def lines = path(f).linesGzip
+                if (expectedHeaders) {
+                    assert lines.size() == 1 : "${filename} should have exactly a header row"
+                    assert lines[0] == expectedHeaders.join("\t")
+                } else {
+                    assert lines.size() == 0 : "${filename} should be empty (no schema)"
+                }
+            }
+        }
+    }
+
+    test("Should filter outputs by pattern") {
+        tag "expect_success"
+        when {
+            params {}
+            process {
+                '''
+                input[0] = ["group1", "group2"]
+                input[1] = file("${projectDir}/pyproject.toml")
+                input[2] = file("${projectDir}/schemas")
+                input[3] = "illumina"
+                input[4] = "validation_hits"
+                '''
+            }
+        }
+        then {
+            assert process.success
+            def files = process.out.outputs.flatten()
+            // Only validation_hits patterns should be created
+            assert files.size() == 2
+            def filenames = files.collect { it.toString().split('/').last() }.sort()
+            assert filenames == ["group1_validation_hits.tsv.gz", "group2_validation_hits.tsv.gz"]
+        }
+    }
+
+    test("Should create ONT output files for missing groups") {
+        tag "expect_success"
+        when {
+            params {}
+            process {
+                '''
+                input[0] = ["group1"]
+                input[1] = file("${projectDir}/pyproject.toml")
+                input[2] = file("${projectDir}/schemas")
+                input[3] = "ont"
+                input[4] = ""
+                '''
+            }
+        }
+        then {
+            assert process.success
+            def pyproject = path(process.out.pyproject[0])
+            def patterns = getGroupPatterns(pyproject, "ont")
+            def files = process.out.outputs.flatten()
+            assert files.size() == patterns.size()
+            def filenames = files.collect { it.toString().split('/').last() }.sort()
+            def expectedFilenames = patterns.collect { it.replace("{GROUP}", "group1") }.sort()
+            assert filenames == expectedFilenames
+        }
+    }
+
+}

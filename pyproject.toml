@@ -4,16 +4,19 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "mgs-workflow"
-version = "3.0.1.9"
+version = "3.1.0.0"
 requires-python = ">=3.12"
 dependencies = [
     "biopython>=1.85",
+    "boto3",
+    "frictionless>=5.18.0",
     "mypy>=1.18.1",
     # Needed until https://github.com/securebio/nao-dedup/pull/12 has been
     # merged and we've updated post-processing/nao-dedup/ to depend on the
     # no-python version.
     "networkx",
     "pandas>=2.3.2",
+    "pysam>=0.23.3",
     "pytest>=8.4.2",
     "ruff>=0.13.0",
 ]
@@ -81,6 +84,7 @@ index-min-pipeline-version = "2.8.1.2"
 pipeline-min-index-version = "2.8.1.2"
 
 # Expected output files for each workflow (used by external validation tools)
+# Note: {SAMPLE} is a wildcard that matches sample names from the samplesheet
 expected-outputs-run = [
     "input/adapters.fasta",
     "input/params-index.json",
@@ -89,15 +93,20 @@ expected-outputs-run = [
     "logging/pyproject.toml",
     "logging/pyproject-index.toml",
     "logging/time.txt",
-    "results/bracken_reports_merged.tsv.gz",
-    "results/kraken_reports_merged.tsv.gz",
-    "results/read_counts.tsv.gz",
-    "results/subset_qc_adapter_stats.tsv.gz",
-    "results/subset_qc_basic_stats.tsv.gz",
-    "results/subset_qc_length_stats.tsv.gz",
-    "results/subset_qc_quality_base_stats.tsv.gz",
-    "results/subset_qc_quality_sequence_stats.tsv.gz",
-    "results/virus_hits_final.tsv.gz",
+    "results/{SAMPLE}_bracken.tsv.gz",
+    "results/{SAMPLE}_kraken.tsv.gz",
+    "results/{SAMPLE}_qc_adapter_stats_cleaned.tsv.gz",
+    "results/{SAMPLE}_qc_adapter_stats_raw.tsv.gz",
+    "results/{SAMPLE}_qc_basic_stats_cleaned.tsv.gz",
+    "results/{SAMPLE}_qc_basic_stats_raw.tsv.gz",
+    "results/{SAMPLE}_qc_length_stats_cleaned.tsv.gz",
+    "results/{SAMPLE}_qc_length_stats_raw.tsv.gz",
+    "results/{SAMPLE}_qc_quality_base_stats_cleaned.tsv.gz",
+    "results/{SAMPLE}_qc_quality_base_stats_raw.tsv.gz",
+    "results/{SAMPLE}_qc_quality_sequence_stats_cleaned.tsv.gz",
+    "results/{SAMPLE}_qc_quality_sequence_stats_raw.tsv.gz",
+    "results/{SAMPLE}_read_counts.tsv",
+    "results/{SAMPLE}_virus_hits.tsv.gz",
 ]
 
 expected-outputs-downstream = [

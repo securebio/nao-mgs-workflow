@@ -48,8 +48,9 @@ nextflow_workflow {
         then {
             // Should run without failures
             assert workflow.success
-            // Basic stats TSV should have expected structure and content
-            def tsv_basic = path(workflow.out.qc[0][0]).csv(sep: "\t", decompress: true)
+            // Output is tuple(sample, basic, adapt, qbase, qseqs, lengths)
+            def qc_tuple = workflow.out.qc[0]
+            def tsv_basic = path(qc_tuple[1]).csv(sep: "\t", decompress: true)
             def fastq_in = path(workflow.out.test_input[0][1]).fastq
             def seqs_in = fastq_in.sequences
             def n_bases = seqs_in.collect{ it.length() }.sum()
@@ -66,14 +67,10 @@ nextflow_workflow {
             def stage = tsv_basic.columns["stage"][0]
             def sample = tsv_basic.columns["sample"][0]
             // Other TSVs should have expected structure and content
-            def tsv_adapt = workflow.out.qc[0][1]
-            validateTsvStructure(tsv_adapt, 6, stage, sample)
-            def tsv_qbase = workflow.out.qc[0][2]
-            validateTsvStructure(tsv_qbase, 5, stage, sample)
-            def tsv_qseqs = workflow.out.qc[0][3]
-            validateTsvStructure(tsv_qseqs, 5, stage, sample)
-            def tsv_lengths = workflow.out.qc[0][4]
-            validateTsvStructure(tsv_lengths, 5, stage, sample)
+            validateTsvStructure(qc_tuple[2], 6, stage, sample)
+            validateTsvStructure(qc_tuple[3], 5, stage, sample)
+            validateTsvStructure(qc_tuple[4], 5, stage, sample)
+            validateTsvStructure(qc_tuple[5], 5, stage, sample)
         }
     }
 
@@ -95,8 +92,9 @@ nextflow_workflow {
         then {
             // Should run without failures
             assert workflow.success
-            // Basic stats TSV should have expected structure and content
-            def tsv_basic  = path(workflow.out.qc[0][0]).csv(sep: "\t", decompress: true)
+            // Output is tuple(sample, basic, adapt, qbase, qseqs, lengths)
+            def qc_tuple = workflow.out.qc[0]
+            def tsv_basic = path(qc_tuple[1]).csv(sep: "\t", decompress: true)
             def fastq_in = path(workflow.out.test_input[0][1]).fastq
             def seqs_in = fastq_in.sequences
             def n_bases = seqs_in.collect{ it.length() }.sum()
@@ -113,14 +111,10 @@ nextflow_workflow {
             def stage = tsv_basic.columns["stage"][0]
             def sample = tsv_basic.columns["sample"][0]
             // Other TSVs should have expected structure and content
-            def tsv_adapt = workflow.out.qc[0][1]
-            validateTsvStructure(tsv_adapt, 6, stage, sample)
-            def tsv_qbase = workflow.out.qc[0][2]
-            validateTsvStructure(tsv_qbase, 5, stage, sample)
-            def tsv_qseqs = workflow.out.qc[0][3]
-            validateTsvStructure(tsv_qseqs, 5, stage, sample)
-            def tsv_lengths = workflow.out.qc[0][4]
-            validateTsvStructure(tsv_lengths, 5, stage, sample)
+            validateTsvStructure(qc_tuple[2], 6, stage, sample)
+            validateTsvStructure(qc_tuple[3], 5, stage, sample)
+            validateTsvStructure(qc_tuple[4], 5, stage, sample)
+            validateTsvStructure(qc_tuple[5], 5, stage, sample)
         }
     }
 

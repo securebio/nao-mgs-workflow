@@ -14,7 +14,9 @@ pipeline_report.txt
 
 .nf-test/
 .nf-test*
+# Ignore Cargo.lock everywhere except rust-tools/ (track workspace lock for reproducible builds)
 **/Cargo.lock
+!rust-tools/Cargo.lock
 **/target
 
 .vscode/*
@@ -31,3 +33,4 @@ post-processing/bin/
 post-processing/obj/
 
 .DS_Store
+*.egg-info/*

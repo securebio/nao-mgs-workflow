@@ -21,12 +21,6 @@ This configuration file controls the pipeline's main RUN workflow. Its options a
 - `params.bracken_threshold` [int]: Minimum number of reads that must be assigned to a taxon for Bracken to include it. (default 1)
 - `params.host_taxon` [str]: Host taxon to use for host-infecting virus identification with Kraken2. (default "vertebrate")
 - `random_seed` [str]: Seed for non-deterministic processes. If left blank; a random seed will be chosen; we generally recommend setting a value for reproducibility.
-- `params.blast_db_prefix` [str]: The prefix for the BLAST database to use for host-infecting virus identification (should match the index workflow's `params.blast_db_name`).
-- `params.blast_viral_fraction` [float]: The fraction of putative host-infecting virus reads to validate with BLASTN (0 = don't run BLAST).
-- `params.blast_min_frac` [float]: Keep BLAST hits whose bitscore is at least this fraction of the best bitscore for that query. (default 0.9)
-- `params.blast_max_rank` [int]: Keep BLAST hits whose dense bitscore rank for that query is at most this value. (Recommended settings 10 for short-read and 5 for ONT.)
-- `params.blast_perc_id` [int]: Percentage identity threshold for BLAST validation. (Recommended settings 60 for short-read and 0 for ONT.)
-- `params.blast_qcov_hsp_perc` [int]: Query coverage threshold for BLAST validation. (Recommended settings 30 for short-read and 0 for ONT.)
 - `process.queue` [str]: The [AWS Batch job queue](./batch.md) to use for this pipeline run.
 
 ## Index workflow (`configs/index.config`)

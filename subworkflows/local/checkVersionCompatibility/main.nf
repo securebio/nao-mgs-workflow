@@ -5,8 +5,8 @@
 /* Takes in pipeline and index pyproject.toml paths and raises an error
 if their versions are incompatible. */
 
-include { EXTRACT_VERSIONS } from "../../../modules/local/extractVersions/main.nf"
-include { CHECK_VERSIONS } from "../../../modules/local/checkVersions/main.nf"
+include { EXTRACT_VERSIONS } from "../../../modules/local/extractVersions"
+include { CHECK_VERSIONS } from "../../../modules/local/checkVersions"
 
 /***********
 | WORKFLOW |
