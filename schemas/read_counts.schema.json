@@ -2,7 +2,7 @@
   "$schema": "https://datapackage.org/profiles/2.0/tableschema.json",
   "title": "Read Counts Per Sample",
   "description": "Total read counts for each sample within a group, as produced by the RUN workflow and concatenated by the DOWNSTREAM workflow. Each row represents one sample's read counts within its assigned group.",
-  "missingValues": ["", "NA"],
+  "missingValues": ["NA"],
   "primaryKey": ["group", "sample"],
   "fields": [
     {
