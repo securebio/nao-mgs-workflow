@@ -10,8 +10,8 @@ When interacting with GitHub, prefer `gh` CLI subcommands (e.g., `gh pr view`, `
 
 ### Branching and PR Targets
 
-- **Always create new branches from `dev`** (not `main`)
-- **PRs should target `dev` by default** (not `main`)
+- **Create new branches from `dev`** (not `main`), unless the user specifically instructs otherwise (e.g. for stacked PRs)
+- **PRs should target `dev`** (not `main`), unless the user specifically instructs otherwise
 - Only maintainers merge `dev` to `main` for releases
 
 ### Creating Pull Requests
@@ -50,6 +50,8 @@ When decomposing large feature branches into smaller PRs:
 2. Document the dependency chain in PR descriptions
 3. To bring specific files from a source branch, use `git checkout feature/source-branch -- path/to/file.nf path/to/other/file.py`
 
+When analyzing a PR's scope (e.g. for splitting), always check the actual base branch with `gh pr view` rather than assuming `dev` — stacked PRs target other feature branches.
+
 ### Responding to Reviewers
 
 When the user asks you to handle PR review comments:
@@ -64,7 +66,7 @@ When the user asks you to handle PR review comments:
 
 Follow the repository's standard commit practices from `docs/developer.md`:
 - Use descriptive commit messages
-- Include `Co-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>` for commits authored with Claude Code
+- Include `Co-Authored-By: Claude <model> <noreply@anthropic.com>` (with the actual model name, e.g. `Claude Opus 4.6`) for commits authored with Claude Code
 - Stage specific files rather than using `git add -A`
 
 ## Testing
@@ -129,6 +131,8 @@ All Python scripts should have corresponding Pytest scripts in the same director
 
 ### Schemas
 If your changes affect pipeline output files, review the corresponding schema files in `schemas/`. Changes to schema fields beyond `title` and `description` require a schema (2nd-number) version bump. See the Schemas section of `docs/developer.md` for details.
+
+When creating new schemas, always include `primaryKey` and `example` fields on every schema and field respectively, matching the conventions in existing schemas (e.g. `read_counts.schema.json`).
 
 ## Maintaining This File
 
