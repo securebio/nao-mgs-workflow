@@ -76,7 +76,7 @@ When asked to resolve merge conflicts:
 
 1. **Summarize the conflicts** — for each conflicted file, describe the differences between the two sides and recommend a resolution.
 2. **Wait for user approval** before resolving.
-3. When the chosen resolution is to take one side of a conflict entirely (for a given file or the whole merge), prefer git-native resolution commands over manually rewriting affected files.
+3. When the chosen resolution is to take one side of a conflict entirely (for a given file or the whole merge), prefer git-native resolution commands (e.g., `git checkout --ours <file>` or `git checkout --theirs <file>`) over manually rewriting affected files.
 
 ## Testing
 
