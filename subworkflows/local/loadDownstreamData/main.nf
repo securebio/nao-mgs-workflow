@@ -18,12 +18,28 @@ workflow LOAD_DOWNSTREAM_DATA {
                 Found: ${headers.join(', ')}
                 Please ensure the input file has the correct columns in the specified order.""".stripIndent())
         }
-        // Helper to resolve paths: absolute and S3 paths used as-is, relative paths resolved against input_base_dir
+        // Helpers to resolve paths: absolute and S3 paths used as-is, relative paths resolved against input_base_dir
         def resolvePath = { path ->
             (path.startsWith('s3://') || path.startsWith('/')) ? file(path) : file(input_base_dir).resolve(path)
         }
-        // Parse input CSV rows
+        def resolveDir = { dir ->
+            (dir.startsWith('s3://') || dir.startsWith('/')) ? dir : file(input_base_dir).resolve(dir).toString()
+        }
+        // Parse and validate input CSV rows
         rows_ch = Channel.fromPath(input_file).splitCsv(header: true)
+            .map { row ->
+                if (!row.run_results_dir?.trim()) {
+                    throw new Exception("Missing or empty 'run_results_dir' for label '${row.label}' in input file.")
+                }
+                if (!row.groups_tsv?.trim()) {
+                    throw new Exception("Missing or empty 'groups_tsv' for label '${row.label}' in input file.")
+                }
+                return row
+            }
+        // Unique resolved run_results_dir per label
+        run_dirs_ch = rows_ch
+            .map { row -> tuple(row.label, resolveDir(row.run_results_dir)) }
+            .unique()
         // Parse groups files to get (label, sample, group) tuples
         groups_ch = rows_ch
             .map { row -> tuple(row.label, resolvePath(row.groups_tsv)) }
@@ -32,41 +48,9 @@ workflow LOAD_DOWNSTREAM_DATA {
                     tuple(label, gRow.sample, gRow.group)
                 }
             }
-        // Discover per-sample virus_hits files: (label, sample, hits_file)
-        hits_ch = rows_ch.flatMap { row ->
-            if (!row.run_results_dir?.trim()) {
-                throw new Exception("Missing or empty 'run_results_dir' for label '${row.label}' in input file.")
-            }
-            if (!row.groups_tsv?.trim()) {
-                throw new Exception("Missing or empty 'groups_tsv' for label '${row.label}' in input file.")
-            }
-            // Resolve run_results_dir as a string to preserve S3 URIs (file().toString() strips the s3:// scheme)
-            def run_results_dir = row.run_results_dir
-            if (!run_results_dir.startsWith('s3://') && !run_results_dir.startsWith('/')) {
-                run_results_dir = file(input_base_dir).resolve(run_results_dir).toString()
-            }
-            if (!run_results_dir.endsWith('/')) run_results_dir += '/'
-            def hits_files = file("${run_results_dir}*_virus_hits.tsv{,.gz}")
-            if (hits_files instanceof List) {
-                hits_files.collect { f ->
-                    def sample = f.name.replaceFirst(/_virus_hits\.tsv(\.gz)?$/, '')
-                    tuple(row.label, sample, f)
-                }
-            } else if (hits_files) {
-                def sample = hits_files.name.replaceFirst(/_virus_hits\.tsv(\.gz)?$/, '')
-                [tuple(row.label, sample, hits_files)]
-            } else {
-                []
-            }
-        }
-        // Join hits with groups to get: (label, sample, hits_file, group)
-        hits_with_groups = hits_ch
-            .map { label, sample, hits_file -> tuple([label, sample], hits_file) }
-            .join(groups_ch.map { label, sample, group -> tuple([label, sample], group) })
-            .map { key, hits_file, group -> tuple(key[0], key[1], hits_file, group) }
-
     emit:
-        hits = hits_with_groups  // tuple(label, sample, hits_file, group)
+        run_dirs = run_dirs_ch   // tuple(label, resolved_run_results_dir)
+        groups = groups_ch       // tuple(label, sample, group)
         start_time_str = start_time_str
         test_input = input_file
 }
