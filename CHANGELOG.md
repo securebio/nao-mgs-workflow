@@ -1,5 +1,10 @@
 # v3.1.1.0-dev
 
+- Reduced `maxRetries` from 3 to 1 in `standard` and `batch` profiles for spot-to-on-demand fallback (#662)
+- Added docs on using a Groovy closure for spot-to-on-demand queue fallback (#662)
+- Add `CLAUDE.md` with guidelines for Claude Code: GitHub interaction policies, PR workflows, testing, versioning, and changelog updates.
+- Extract testing documentation from `docs/developer.md` into standalone `docs/testing.md`; add snapshot safety warning.
+- Add CHANGELOG formatting guidelines to `docs/versioning.md`.
 - Added group-level read count, Kraken, and Bracken outputs to DOWNSTREAM workflow (`{GROUP}_read_counts.tsv.gz`, `{GROUP}_kraken.tsv.gz`, `{GROUP}_bracken.tsv.gz`), produced for both short-read and ONT platforms.
     - Created general-purpose `CONCAT_BY_GROUP` subworkflow for concatenating sample-level outputs by group with clean output naming, replacing `PREPARE_GROUP_TSVS`.
     - Created `CONCAT_RUN_OUTPUTS_BY_GROUP` subworkflow that wraps all `CONCAT_BY_GROUP` calls, emitting `hits` separately and mixing other outputs into a single channel.

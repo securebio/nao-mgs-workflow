@@ -15,5 +15,6 @@
 - **Other:**
     - [Versioning](./versioning.md)
     - [Developer docs](./developer.md)
+    - [Testing](./testing.md)
     - [Viral infection status annotation](./annotation.md)
     - [Reproducibility](./reproducibility.md)
