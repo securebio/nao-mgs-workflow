@@ -6,7 +6,7 @@ This file contains guidelines for Claude Code when working on this repository.
 
 ## GitHub Interaction Policies
 
-When interacting with GitHub, prefer `gh` CLI subcommands (e.g., `gh pr view`, `gh issue view`) over raw `gh api` calls where possible — they're simpler and don't require individual user approval.
+Keep shell commands simple and direct so they can be auto-approved. Avoid complex piped commands, `gh api` calls, or multi-step one-liners when a simpler alternative exists. For GitHub operations, prefer `gh` CLI subcommands (e.g., `gh pr view`, `gh issue view`) over raw `gh api` calls. For the same reason, run git commands directly (e.g. `git add ...`), not with `-C` paths — unless otherwise specified by the user, assume the working directory is already the repo root.
 
 ### Branching and PR Targets
 
@@ -68,6 +68,7 @@ Follow the repository's standard commit practices from `docs/developer.md`:
 - Use descriptive commit messages
 - Include `Co-Authored-By: Claude <model> <noreply@anthropic.com>` (with the actual model name, e.g. `Claude Opus 4.6`) for commits authored with Claude Code
 - Stage specific files rather than using `git add -A`
+- Before committing, verify you're on the expected branch with `git branch --show-current` to avoid committing code to the wrong branch.
 
 ## Testing
 
