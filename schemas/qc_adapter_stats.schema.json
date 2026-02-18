@@ -8,7 +8,7 @@
     {
       "name": "file",
       "title": "File",
-      "description": "Read pair identifier (e.g. R1 or R2 filename).",
+      "description": "Filename of the read pair file (e.g. sample_R1.fastq.gz).",
       "type": "string",
       "constraints": { "required": true },
       "example": "sample_R1.fastq.gz"
@@ -16,7 +16,7 @@
     {
       "name": "position",
       "title": "Position",
-      "description": "Position along the read.",
+      "description": "Position along the read (1-indexed) at which adapter content is measured.",
       "type": "integer",
       "constraints": { "required": true, "minimum": 1 },
       "example": 1
@@ -32,10 +32,10 @@
     {
       "name": "pc_adapters",
       "title": "Percent Adapters",
-      "description": "Percentage of reads containing adapter content at this position.",
+      "description": "Percentage of reads containing adapter content at this position (0-100 scale).",
       "type": "number",
       "constraints": { "required": true, "minimum": 0, "maximum": 100 },
-      "example": 0.05
+      "example": 23.5
     },
     {
       "name": "stage",

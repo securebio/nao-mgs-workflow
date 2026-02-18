@@ -40,7 +40,7 @@
     {
       "name": "percent_duplicates",
       "title": "Percent Duplicates",
-      "description": "Percent duplicates as measured by FASTQC.",
+      "description": "Mean percentage of duplicate sequences across read files, as estimated by FASTQC's duplication analysis.",
       "type": "number",
       "constraints": { "required": true, "minimum": 0, "maximum": 100 },
       "example": 8
@@ -48,7 +48,7 @@
     {
       "name": "n_bases_approx",
       "title": "Approximate Base Count",
-      "description": "Approximate number of base pairs in reads.",
+      "description": "Approximate total number of sequenced bases across all reads in the sample, as reported by FASTQC (roughly n_reads_single × mean_seq_len).",
       "type": "integer",
       "constraints": { "required": true, "minimum": 0 },
       "example": 7200
