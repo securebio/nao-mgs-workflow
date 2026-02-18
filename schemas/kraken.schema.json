@@ -1,7 +1,7 @@
 {
   "$schema": "https://datapackage.org/profiles/2.0/tableschema.json",
   "title": "Kraken2 Classification Reports Per Sample",
-  "description": "Kraken2 classification reports for each sample within a group, as produced by the RUN workflow and concatenated by the DOWNSTREAM workflow. Each row represents one taxon's classification statistics for a sample, split by ribosomal/non-ribosomal classification.",
+  "description": "Kraken2 classification reports for each sample within a group, as produced by the RUN workflow and concatenated by the DOWNSTREAM workflow. Classification is performed on a configurable number of subsampled reads per sample (default 1 million; controlled by params.n_reads_profile in the RUN configuration, recorded in input/params-run.json in the output directory). Reads are split into putative ribosomal and non-ribosomal sets before classification; the ribosomal column indicates which set each row's results come from.",
   "missingValues": ["NA"],
   "primaryKey": ["group", "sample", "taxid", "ribosomal"],
   "fields": [
@@ -108,7 +108,7 @@
     {
       "name": "ribosomal",
       "title": "Ribosomal",
-      "description": "Whether this row is from ribosomal (TRUE) or non-ribosomal (FALSE) read classification.",
+      "description": "Indicates which read set this row's classification comes from. Reads are split into putative ribosomal (TRUE) and non-ribosomal (FALSE) sets before taxonomic profiling, and classified independently.",
       "type": "string",
       "constraints": {
         "required": true,
