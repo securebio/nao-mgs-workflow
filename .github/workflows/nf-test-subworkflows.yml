@@ -1,12 +1,7 @@
 name: nf-test subworkflows test
 
 on:
-  pull_request:
-    branches:
-      - main
-      - dev
-      - stable
-      - ci-test
+  pull_request: # Runs on all PRs
 
 permissions:
   id-token: write

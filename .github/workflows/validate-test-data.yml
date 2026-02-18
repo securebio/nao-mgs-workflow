@@ -1,12 +1,7 @@
 name: Validate Test Data Sync
 
 on:
-  pull_request:
-    branches:
-      - main
-      - dev
-      - stable
-      - ci-test
+  pull_request: # Runs on all PRs
 
 jobs:
   validate-test-data-sync:
