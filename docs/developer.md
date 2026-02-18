@@ -57,7 +57,7 @@ These guidelines represent best practices to implement in new code, though some 
     - Support compressed file formats (.gz, .bz2, .zst). 
 - Python style: 
     - Loosely follow PEP 8 conventions.
-    - Type hints are encouraged but not currently required.
+    - Type hints are encouraged. When used, prefer Python 3.12+ native syntax (e.g. `list[str]`, `str | None`) over imports from the `typing` module.
     - Linting and type checking are encouraged (our go-to tools are `ruff` for linting and `mypy` for type checking), but not currently required.
     - Formatting applied (including in nested directories) will follow the configuration in `pyproject.toml`.
     - After making any formatting changes, carefully review the diff to ensure no unintended modifications were introduced that could affect functionality.
