@@ -1,8 +1,7 @@
 name: Check Nextflow version is latest
 
 on:
-  pull_request:
-    branches: [main, dev, stable, ci-test]
+  pull_request: # Runs on all PRs
 
 jobs:
   check-nextflow-version:

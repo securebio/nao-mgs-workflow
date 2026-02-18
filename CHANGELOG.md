@@ -1,5 +1,6 @@
 # v3.1.1.0-dev
 
+- Removed branch restrictions from most CI workflows so they run on all PRs, not just PRs to specific branches. Benchmark and release-only workflows are unchanged.
 - Reduced `maxRetries` from 3 to 1 in `standard` and `batch` profiles for spot-to-on-demand fallback (#662)
 - Added docs on using a Groovy closure for spot-to-on-demand queue fallback (#662)
 - Add `CLAUDE.md` with guidelines for Claude Code: GitHub interaction policies, PR workflows, testing, versioning, and changelog updates.
