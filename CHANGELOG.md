@@ -1,17 +1,67 @@
-# v3.1.0.0-dev
+# v3.1.1.0-dev
 
+- Removed branch restrictions from most CI workflows so they run on all PRs, not just PRs to specific branches. Long-running integration tests are unchanged, as are tests that only run on releases.
+- Reduced `maxRetries` from 3 to 1 in `standard` and `batch` profiles for spot-to-on-demand fallback (#662)
+- Added docs on using a Groovy closure for spot-to-on-demand queue fallback (#662)
 - Add `CLAUDE.md` with guidelines for Claude Code: GitHub interaction policies, PR workflows, testing, versioning, and changelog updates.
-- Remove BLAST validation from RUN workflow. BLAST validation is now only available in the DOWNSTREAM workflow via VALIDATE_VIRAL_ASSIGNMENTS.
+- Extract testing documentation from `docs/developer.md` into standalone `docs/testing.md`; add snapshot safety warning.
+- Add CHANGELOG formatting guidelines to `docs/versioning.md`.
+- Added group-level read count, Kraken, Bracken, and QC outputs to DOWNSTREAM workflow (`{GROUP}_read_counts.tsv.gz`, `{GROUP}_kraken.tsv.gz`, `{GROUP}_bracken.tsv.gz`, `{GROUP}_qc_*.tsv.gz`), produced for both short-read and ONT platforms.
+    - Created general-purpose `CONCAT_BY_GROUP` subworkflow for concatenating sample-level outputs by group with clean output naming, replacing `PREPARE_GROUP_TSVS`.
+    - Created `CONCAT_RUN_OUTPUTS_BY_GROUP` subworkflow that wraps all `CONCAT_BY_GROUP` calls, emitting `hits` separately and mixing other outputs into a single channel.
+    - Created reusable `DISCOVER_RUN_OUTPUT` subworkflow for discovering all per-sample files from RUN output directories and matching them to sample groups.
+    - Simplified `LOAD_DOWNSTREAM_DATA` to emit `run_dirs` and `groups` channels (removed virus hits discovery, now handled by `DISCOVER_RUN_OUTPUT`).
+    - Added `read_counts.schema.json`, `kraken.schema.json`, `bracken.schema.json`, and `qc_*.schema.json` for schema validation of group-level outputs.
+
+# v3.1.0.0
+
+## Changes to output file schema
+
+- Changed RUN outputs to per-sample format:
+    - Read counts: `read_counts.tsv.gz` → `{sample}_read_counts.tsv`
+    - QC stats: `subset_qc_*_stats.tsv.gz` → `{sample}_qc_*_stats_raw.tsv.gz` and `{sample}_qc_*_stats_cleaned.tsv.gz`
+    - Taxonomy: `bracken_reports_merged.tsv.gz` → `{sample}_bracken.tsv.gz`, `kraken_reports_merged.tsv.gz` → `{sample}_kraken.tsv.gz`
+    - Viral hits: `virus_hits_final.tsv.gz` → `{sample}_virus_hits.tsv.gz`
+- Updated DOWNSTREAM to handle per-sample RUN outputs:
+    - DOWNSTREAM workflow updated to auto-discover per-sample files from `run_results_dir` and parse groups from `groups_tsv`.
+    - Dramatically simplified `prepareGroupTsvs` (now only needs to concatenate hits tables, never split them)
+    - Added empty-group handling to `validateViralAssignments` (now creates empty validation-hits files for groups with no hits)
+
+## Changes to data analysis
+
+- Remove BLAST validation from RUN workflow (now only available in DOWNSTREAM workflow):
     - Deleted `BLAST_VIRAL` subworkflow, `SUBSET_FASTN` module, and `RUN_VALIDATION` workflow.
     - Removed `blast_viral_fraction` and related BLAST parameters from RUN workflow configs.
     - Removed unused `EXTRACT_VIRAL_HITS_TO_FASTQ_NOREF_LABELED` process (non-LIST version).
+    - Removed `hits_fastq` output from `EXTRACT_VIRAL_READS_SHORT` and `EXTRACT_VIRAL_READS_ONT` subworkflows (this concatenated interleaved FASTQ was used for BLAST validation).
+    - Removed unused FASTQ extraction includes (`CONCATENATE_FILES`, `EXTRACT_VIRAL_HITS_TO_FASTQ`, `EXTRACT_SHARED_FASTQ_READS`).
 - Removed Cutadapt from RUN workflow to reduce runtime and complexity. FASTP alone now handles adapter trimming for the short-read viral identification pipeline.
-- Update documentation on Seqera ECR credentials.
-- Add Rust build system to CI and rust-tools container to ECR.
-- Fix CI bug where `--rust_tools_version dev` was passed to test runner instead of via environment variable.
-- Convert `setup-rust-container` from reusable workflow to composite action, simplifying CI check reporting.
-- Remove confusing `workflow_run` triggers from integration tests (benchmark and test-chained workflows).
-- Refactored processVsearchClusterOutput module to use streaming Rust implementation rather than memory-intensive Python/Pandas.
+- Refactored `processVsearchClusterOutput` module to use streaming Rust implementation rather than memory-intensive Python/Pandas.
+- Refactored extractViralReadsONT and process_viral_minimap2_sam.py so that processViralMinimap2Sam requires O(1) instead of O(num reads) memory.
+
+## Testing & validation
+
+- Added support for relative paths in DOWNSTREAM input CSV files, removing dependency on S3 inputs for testing:
+    - Relative paths (not starting with `/` or `s3://`) are resolved against `params.input_base_dir` (defaults to `projectDir`).
+    - Users can set `params.input_base_dir = launchDir` in their config to resolve paths relative to the launch directory.
+    - S3 URIs and absolute paths continue to work as before.
+    - Switched DOWNSTREAM tests to use local relative paths instead of S3 URIs.
+- Added CI validation to ensure `test-data/results` files stay in sync with workflow snapshot MD5 sums:
+    - Created `bin/validate_test_data_sync.py` script to validate local test data against nf-test snapshot MD5 sums.
+    - Added `.github/workflows/validate-test-data.yml` CI workflow to run validation on PRs.
+    - Renamed `test-data/results/` directories to match snapshot names (`run_output_shortread`, `run_output_ont`, `downstream_output_shortread`, `downstream_output_ont`).
+- Added checking & enforcement of file structure for DOWNSTREAM `duplicate_stats` outputs using datapackage `table-schema` (proof-of-concept for later expansion):
+    - Created `schemas/` directory with `duplicate_stats.schema.json` `table-schema` definition.
+    - Added `bin/validate_schemas.py` script to validate output files against schemas using frictionless library.
+    - Updated `CREATE_EMPTY_GROUP_OUTPUTS` to generate headers from schemas for empty output files where available.
+    - Added schema validation step to DOWNSTREAM workflow CI after nf-test.
+- Assorted changes to Github Actions CI:
+    - Created reusable `.github/actions/setup-python` composite action for Python environment setup.
+    - Added Rust build system to CI and rust-tools container to ECR.
+    - Converted `setup-rust-container` from reusable workflow to composite action, simplifying CI check reporting.
+    - Fixed CI bug where `--rust_tools_version dev` was passed to test runner instead of via environment variable.
+    - Removed confusing `workflow_run` triggers from integration tests (benchmark and test-chained workflows).
+- Migrate GitHub Actions AWS auth from static keys to OIDC role assumption (#657)
 
 # v3.0.1.9
 

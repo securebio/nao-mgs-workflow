@@ -10,13 +10,12 @@ include { BOWTIE2 as BOWTIE2_HUMAN } from "../../../modules/local/bowtie2"
 include { BOWTIE2 as BOWTIE2_OTHER } from "../../../modules/local/bowtie2"
 include { PROCESS_VIRAL_BOWTIE2_SAM } from "../../../modules/local/processViralBowtie2Sam"
 include { SORT_TSV as SORT_BOWTIE_VIRAL } from "../../../modules/local/sortTsv"
-include { CONCATENATE_FILES } from "../../../modules/local/concatenateFiles"
-include { EXTRACT_VIRAL_HITS_TO_FASTQ } from "../../../modules/local/extractViralHitsToFastq"
 include { LCA_TSV } from "../../../modules/local/lcaTsv"
 include { SORT_FASTQ } from "../../../modules/local/sortFastq"
 include { SORT_FILE } from "../../../modules/local/sortFile"
 include { FILTER_VIRAL_SAM } from "../../../modules/local/filterViralSam"
 include { PROCESS_LCA_ALIGNER_OUTPUT } from "../../../subworkflows/local/processLcaAlignerOutput/"
+include { COPY_FILE as RENAME_VIRUS_HITS } from "../../../modules/local/copyFile"
 
 /***********
 | WORKFLOW |
@@ -96,18 +95,15 @@ workflow EXTRACT_VIRAL_READS_SHORT {
             col_keep_add_prefix,
             "prim_align_"
         )
-        // 10. Extract filtered virus hits in FASTQ format
-        fastq_unfiltered_collect = other_bt2_ch.reads_unmapped.map{ _sample, file -> file }.collect().ifEmpty([])
-        fastq_unfiltered_concat = CONCATENATE_FILES(fastq_unfiltered_collect, "reads_unfiltered", "fastq.gz")
-        fastq_ch = EXTRACT_VIRAL_HITS_TO_FASTQ(processed_ch.viral_hits_tsv, fastq_unfiltered_concat.output)
+        // 10. Rename virus hits to clean file name
+        renamed_hits_ch = RENAME_VIRUS_HITS(processed_ch.viral_hits_tsv, "virus_hits.tsv.gz")
     emit:
         bbduk_match = bbduk_ch.fail
         bbduk_trimmed = fastp_ch.reads
-        hits_final = processed_ch.viral_hits_tsv
+        hits_final = renamed_hits_ch
         inter_lca = processed_ch.lca_tsv
         inter_bowtie = processed_ch.aligner_tsv
         hits_prelca = bowtie2_tsv_ch.output
-        hits_fastq = fastq_ch.fastq
         test_reads = other_bt2_ch.reads_unmapped
         test_filt_bowtie = bowtie2_filtered_ch.sam
         test_unfilt_bowtie = bowtie2_ch.sam

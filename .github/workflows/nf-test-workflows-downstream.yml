@@ -1,12 +1,11 @@
 name: nf-test DOWNSTREAM workflow test
 
 on:
-  pull_request:
-    branches:
-      - main
-      - dev
-      - stable
-      - ci-test
+  pull_request: # Runs on all PRs
+
+permissions:
+  id-token: write
+  contents: read
 
 concurrency:
   group: ci-nf-test-workflows-downstream-pr-${{ github.event.pull_request.number }}
@@ -17,8 +16,6 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
-      AWS_ACCESS_KEY_ID: ${{secrets.NAO_TESTING_ACCESS_KEY }}
-      AWS_SECRET_ACCESS_KEY: ${{ secrets.NAO_TESTING_SECRET_ACCESS_KEY }}
       RUST_TOOLS_VERSION: ${{ needs.setup-rust.outputs.rust-version }}
     steps:
       - name: Checkout
@@ -48,8 +45,7 @@ jobs:
         if: steps.filter.outputs.downstream == 'true'
         uses: ./.github/actions/setup-nf-test
         with:
-          aws_access_key_id: ${{ secrets.NAO_TESTING_ACCESS_KEY }}
-          aws_secret_access_key: ${{ secrets.NAO_TESTING_SECRET_ACCESS_KEY }}
+          role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
       - name: Setup Rust container
         if: steps.filter.outputs.downstream == 'true'
         id: rust
@@ -59,6 +55,16 @@ jobs:
         env:
           RUST_TOOLS_VERSION: ${{ steps.rust.outputs.rust-version }}
         run: bin/run-nf-test.sh --num-workers 4 tests/workflows/downstream.nf.test --output-log test-logs-workflows-downstream.txt --ci ${{ steps.rust.outputs.nextflow-args }}
+      - name: Setup Python environment
+        if: steps.filter.outputs.downstream == 'true'
+        uses: ./.github/actions/setup-python
+      - name: Validate output schemas
+        if: steps.filter.outputs.downstream == 'true'
+        run: |
+          for output_dir in .nf-test/tests/*/output/; do
+            echo "Validating schemas in $output_dir"
+            bin/validate_schemas.py --output-dir "$output_dir"
+          done
       - name: Upload test results
         if: failure() && steps.filter.outputs.downstream == 'true'
         uses: actions/upload-artifact@v4

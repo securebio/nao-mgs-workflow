@@ -15,21 +15,51 @@ nextflow_workflow {
             workflow {
                 """
                 input[0] = file("${projectDir}/test-data/downstream/input_file.csv")
+                input[1] = projectDir
                 """
             }
         }
         then {
-            // Should run without errors
             assert workflow.success
-            // Should produce correctly-structured output
-            def tab_in = path(workflow.out.test_input[0]).csv
-            assert workflow.out.input.size() == tab_in.rowCount
-            def currentDir = new File(".").getAbsolutePath()
-            for (int i=0; i < tab_in.rowCount; i++){
-                assert workflow.out.input[i][0] == tab_in.columns["label"][i]
-                assert tab_in.columns["hits_tsv"][i].contains(workflow.out.input[i][1])
-                assert tab_in.columns["groups_tsv"][i].contains(workflow.out.input[i][2])
+            // Parse input CSV from workflow output
+            def inputCsv = path(workflow.out.test_input[0]).csv
+            def expectedLabels = inputCsv.columns["label"] as Set
+            assert workflow.out.start_time_str != null
+            // Verify run_dirs output: tuple(label, resolved_run_results_dir), unique
+            assert workflow.out.run_dirs.size() > 0
+            def runDirLabels = workflow.out.run_dirs.collect { it[0] } as Set
+            assert runDirLabels == expectedLabels, "Should have run_dirs for all labels in input"
+            workflow.out.run_dirs.each { rd ->
+                assert rd.size() == 2, "run_dirs tuple should have 2 elements"
+                assert rd[0] != null && rd[0].length() > 0, "label should not be empty"
+                assert rd[1] != null && rd[1].length() > 0, "run_results_dir should not be empty"
             }
+            // Verify groups output: tuple(label, sample, group)
+            assert workflow.out.groups.size() > 0
+            workflow.out.groups.each { g ->
+                assert g.size() == 3, "groups tuple should have 3 elements"
+                assert g[0] != null && g[0].length() > 0, "label should not be empty"
+                assert g[1] != null && g[1].length() > 0, "sample should not be empty"
+                assert g[2] != null && g[2].length() > 0, "group should not be empty"
+            }
+        }
+    }
+
+    test("Should fail on empty run_results_dir") {
+        tag "expect_failed"
+        when {
+            params {}
+            workflow {
+                """
+                input[0] = file("${projectDir}/test-data/downstream/input_file_empty_results_dir.csv")
+                input[1] = projectDir
+                """
+            }
+        }
+
+        then {
+            assert workflow.failed
+            assert workflow.stdout.any { it.contains("Missing or empty 'run_results_dir'") }
         }
     }
 
@@ -40,6 +70,7 @@ nextflow_workflow {
             workflow {
                 """
                 input[0] = file("${projectDir}/test-data/downstream/input_file_invalid.csv")
+                input[1] = projectDir
                 """
             }
         }

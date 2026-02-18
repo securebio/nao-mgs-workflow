@@ -1,13 +1,16 @@
 import static groovy.io.FileType.FILES
 
 // Get expected output files from pyproject.toml
-def getExpectedOutputs = { pyprojectPath, workflowKey, groupName ->
+// Replaces {SAMPLE} and {GROUP} wildcards with the provided name
+def getExpectedOutputs = { pyprojectPath, workflowKey, sampleOrGroupName ->
     def pyprojectText = pyprojectPath.text
     def key = "expected-outputs-${workflowKey}"
     def sectionMatch = (pyprojectText =~ /${key} = \[([\s\S]*?)\]/)
     def expectedFiles = (sectionMatch[0][1] =~ /"([^"]+)"/).collect { it[1] }
-    if (groupName != null) {
-        expectedFiles = expectedFiles.collect { it.replace("{GROUP}", groupName) }
+    if (sampleOrGroupName != null) {
+        expectedFiles = expectedFiles.collect {
+            it.replace("{GROUP}", sampleOrGroupName).replace("{SAMPLE}", sampleOrGroupName)
+        }
     }
     return expectedFiles.sort()
 }
@@ -24,12 +27,19 @@ def getObservedOutputs = { outputDir ->
     return observedFiles.sort()
 }
 
+// Get result file paths for snapshot from expected outputs
+def getResultPaths = { outputDir, expectedFiles ->
+    return expectedFiles
+        .findAll { it.startsWith("results/") }
+        .collect { path(outputDir + "/" + it) }
+}
+
 nextflow_pipeline {
 
     name "Test workflow RUN"
     script "main.nf" // Running from main so we have access to published files
     tag "workflow"
-    
+
     test("Should handle empty input files") {
         config "tests/configs/run.config"
         tag "empty_input"
@@ -52,22 +62,13 @@ nextflow_pipeline {
         tag "main_run_output_shortread"
         then {
             assert workflow.success
-            // Verify expected outputs match pyproject.toml
-            def expected = getExpectedOutputs(path("${projectDir}/pyproject.toml"), "run", null)
+            // Verify expected outputs match pyproject.toml (sample name: tiny_test)
+            def expected = getExpectedOutputs(path("${projectDir}/pyproject.toml"), "run", "tiny_test")
             def observed = getObservedOutputs(path("${launchDir}/output"))
             assert observed == expected : "Expected ${expected} but got ${observed}"
-            // Verify file contents match snapshot
-            assert snapshot(
-                path("${launchDir}/output/results/bracken_reports_merged.tsv.gz"),
-                path("${launchDir}/output/results/kraken_reports_merged.tsv.gz"),
-                path("${launchDir}/output/results/read_counts.tsv.gz"),
-                path("${launchDir}/output/results/subset_qc_adapter_stats.tsv.gz"),
-                path("${launchDir}/output/results/subset_qc_basic_stats.tsv.gz"),
-                path("${launchDir}/output/results/subset_qc_length_stats.tsv.gz"),
-                path("${launchDir}/output/results/subset_qc_quality_base_stats.tsv.gz"),
-                path("${launchDir}/output/results/subset_qc_quality_sequence_stats.tsv.gz"),
-                path("${launchDir}/output/results/virus_hits_final.tsv.gz"),
-            ).match("run_output_shortread")
+            // Verify result file contents match snapshot
+            def resultPaths = getResultPaths("${launchDir}/output", expected)
+            assert snapshot(*resultPaths).match("run_output_shortread")
         }
     }
 
@@ -77,22 +78,13 @@ nextflow_pipeline {
         tag "main_run_output_ont"
         then {
             assert workflow.success
-            // Verify expected outputs match pyproject.toml
-            def expected = getExpectedOutputs(path("${projectDir}/pyproject.toml"), "run", null)
+            // Verify expected outputs match pyproject.toml (sample name: tiny_test)
+            def expected = getExpectedOutputs(path("${projectDir}/pyproject.toml"), "run", "tiny_test")
             def observed = getObservedOutputs(path("${launchDir}/output"))
             assert observed == expected : "Expected ${expected} but got ${observed}"
-            // Verify file contents match snapshot
-            assert snapshot(
-                path("${launchDir}/output/results/bracken_reports_merged.tsv.gz"),
-                path("${launchDir}/output/results/kraken_reports_merged.tsv.gz"),
-                path("${launchDir}/output/results/read_counts.tsv.gz"),
-                path("${launchDir}/output/results/subset_qc_adapter_stats.tsv.gz"),
-                path("${launchDir}/output/results/subset_qc_basic_stats.tsv.gz"),
-                path("${launchDir}/output/results/subset_qc_length_stats.tsv.gz"),
-                path("${launchDir}/output/results/subset_qc_quality_base_stats.tsv.gz"),
-                path("${launchDir}/output/results/subset_qc_quality_sequence_stats.tsv.gz"),
-                path("${launchDir}/output/results/virus_hits_final.tsv.gz"),
-            ).match("run_output_ont")
+            // Verify result file contents match snapshot
+            def resultPaths = getResultPaths("${launchDir}/output", expected)
+            assert snapshot(*resultPaths).match("run_output_ont")
         }
-    }   
+    }
 }

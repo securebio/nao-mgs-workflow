@@ -2,7 +2,11 @@
 
 This file contains guidelines for Claude Code when working on this repository.
 
+**Repository:** `securebio/nao-mgs-workflow` on GitHub.
+
 ## GitHub Interaction Policies
+
+When interacting with GitHub, prefer `gh` CLI subcommands (e.g., `gh pr view`, `gh issue view`) over raw `gh api` calls where possible — they're simpler and don't require individual user approval.
 
 ### Branching and PR Targets
 
@@ -15,7 +19,7 @@ This file contains guidelines for Claude Code when working on this repository.
 Use `gh pr create` with a HEREDOC for the body to ensure proper formatting:
 
 ```bash
-gh pr create --base dev --title "Brief descriptive title" --body "$(cat <<'EOF'
+gh pr create --base dev --draft --assignee @me --title "Brief descriptive title" --body "$(cat <<'EOF'
 Short prose summary explaining what this PR does and why.
 
 **Changes:**
@@ -35,6 +39,7 @@ EOF
 
 **Important options:**
 - Always use `--base dev` (PRs target `dev`, not `main`)
+- Always use `--draft` (PRs start as drafts for self-review before requesting human review)
 - Use `--assignee @me` to assign the PR to its creator for tracking
 - Keep titles under 70 characters
 
@@ -43,92 +48,17 @@ EOF
 When decomposing large feature branches into smaller PRs:
 1. Create PRs that build on each other: PR2 targets PR1's branch, PR3 targets PR2's branch, etc.
 2. Document the dependency chain in PR descriptions
-3. Update snapshot files by checking hashes from the full feature branch when needed
+3. To bring specific files from a source branch, use `git checkout feature/source-branch -- path/to/file.nf path/to/other/file.py`
 
 ### Responding to Reviewers
 
-When the user asks you to handle PR review comments, follow this workflow:
+When the user asks you to handle PR review comments:
 
-**1. Review all comments and suggest responses:**
-Fetch and analyze all review comments, then present the user with a summary and your suggested response for each:
-- Is it a valid concern that should be addressed?
-- Is it a minor stylistic suggestion?
-- Is it a reasonable, substantive suggestion that's out of scope? If so, propose creating a GitHub issue to track it.
-
-**2. Get user approval:**
-Wait for the user to approve your suggested responses before taking any action. The user may modify suggestions or provide different guidance. If you proposed creating issues for out-of-scope suggestions, confirm which ones the user wants created.
-
-**3. Make any required fixes:**
-If comments require code changes, implement them first and push the changes.
-
-**4. Respond to comment threads:**
-**CRITICAL: Always prefix comments with `[Claude Code]`** to make it clear the response is from Claude Code, not the user. The user's GitHub account is used for these interactions, so clarity is essential.
-
-Response patterns (always include the prefix):
-- For implemented fixes: `[Claude Code] Done`
-- For out-of-scope suggestions: `[Claude Code] Reasonable suggestion but out of scope`
-- For out-of-scope suggestions with issue created: `[Claude Code] Reasonable suggestion but out of scope for this PR. Opened #<issue_number> to track.`
-- For declined minor suggestions: `[Claude Code] Minor stylistic nit, not done`
-
-**5. Create issues for substantive out-of-scope suggestions:**
-If the user approved creating issues, use `gh issue create` before responding to the thread. Issues must be self-contained (they sync to external project management tools), so quote the suggestion and explain it fully rather than just linking to the PR:
-```bash
-gh issue create --title "Brief description" --body "$(cat <<'EOF'
-<Full explanation of the suggested improvement>
-
-**Original suggestion from PR #<number> review:**
-> <quoted suggestion text>
-
-EOF
-)"
-```
-
-**6. Resolve concluded threads:**
-After responding, resolve each thread using the GraphQL API:
-
-```bash
-# Get thread IDs
-gh api graphql -f query='
-{
-  repository(owner: "naobservatory", name: "mgs-workflow") {
-    pullRequest(number: <PR_NUMBER>) {
-      reviewThreads(first: 10) {
-        nodes {
-          id
-          isResolved
-          comments(first: 5) {
-            nodes {
-              id
-              body
-            }
-          }
-        }
-      }
-    }
-  }
-}'
-
-# Reply to a thread
-gh api graphql -f query='
-mutation {
-  addPullRequestReviewThreadReply(input: {
-    pullRequestReviewThreadId: "<THREAD_ID>",
-    body: "[Claude Code] Done"
-  }) {
-    comment { id }
-  }
-}'
-
-# Resolve the thread
-gh api graphql -f query='
-mutation {
-  resolveReviewThread(input: {
-    threadId: "<THREAD_ID>"
-  }) {
-    thread { isResolved }
-  }
-}'
-```
+1. **Summarize and suggest responses** for each comment — categorize as actionable fix, minor nit, or out-of-scope (propose creating a GitHub issue for substantive out-of-scope suggestions).
+2. **Wait for user approval** before taking any action.
+3. **Implement fixes** and push changes.
+4. **Respond to threads.** Always prefix with `[Claude Code]` (e.g., `[Claude Code] Done`) — the user's GitHub account is used, so attribution is essential.
+5. **Create issues** for approved out-of-scope suggestions. Issues must be self-contained (they sync to external tools), so quote the original suggestion and explain it fully.
 
 ### Committing Changes
 
@@ -137,60 +67,17 @@ Follow the repository's standard commit practices from `docs/developer.md`:
 - Include `Co-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>` for commits authored with Claude Code
 - Stage specific files rather than using `git add -A`
 
-### Checking Out Files from Other Branches
-
-When decomposing branches, use `git checkout` to bring specific files from the source branch:
-
-```bash
-git checkout feature/source-branch -- path/to/file.nf path/to/other/file.py
-```
-
-This is more efficient than manually recreating changes and ensures consistency.
-
 ## Testing
 
-### Running Tests
+See `docs/testing.md` for comprehensive testing guidelines. Key commands:
 
-Use the wrapper script for nf-test. It accepts specific test files or path prefixes:
 ```bash
-# Run a specific test file
-bin/run-nf-test.sh tests/modules/local/kraken/main.nf.test
-
-# Run all tests in a directory
-bin/run-nf-test.sh tests/subworkflows/local/qc/
-
-# Run all tests
-bin/run-nf-test.sh tests/
+bin/run-nf-test.sh tests/modules/local/kraken/main.nf.test  # Run a specific test
+bin/run-nf-test.sh tests/subworkflows/local/qc/              # Run all tests in a directory
+bin/run-nf-test.sh tests/                                     # Run all tests
 ```
 
-### Updating Snapshots When Output Changes
-
-When workflow output changes (new files, renamed files, or changed content), three things must be updated:
-
-**1. Update expected outputs in `pyproject.toml`:**
-The `[tool.mgs-workflow]` section lists expected output files for RUN and DOWNSTREAM workflows. Update these lists when files are added, removed, or renamed.
-
-**2. Update snapshot files in `tests/`:**
-```bash
-bin/run-nf-test.sh tests/workflows/run.nf.test --update-snapshot
-```
-This updates the `.snap` files (e.g., `tests/workflows/run.nf.test.snap`) with new MD5 hashes.
-
-**3. Update result files in `test-data/results/`:**
-Copy the new output files from the nf-test working directory and decompress them:
-```bash
-# Find the test output directory (hash shown in test output)
-ls .nf-test/tests/<hash>/output/
-
-# Copy changed files to test-data/results/
-cp .nf-test/tests/<hash>/output/results/<file>.tsv.gz test-data/results/run-short/
-
-# Decompress for version control (we store uncompressed in repo)
-cd test-data/results/run-short/
-gunzip <file>.tsv.gz
-```
-
-**For stacked PRs:** When decomposing a feature branch, you can reference MD5 hashes from the full feature branch's snapshots to update dependent PR snapshots without re-running all tests.
+When snapshot tests fail, **always verify the output changes are intentional** before updating snapshots. See the "Updating snapshots" section in `docs/testing.md` for the full procedure.
 
 ## Code Style
 
@@ -210,7 +97,7 @@ For all Python scripts, follow the patterns established in `bin/build_tiny_test_
 - `main()` entry point with timing and logging
 - `DESC` docstring at the top describing the script's purpose
 - Use context managers (`with` statements) instead of try/finally where appropriate
-- Section headers with `###` dividers, e.g.: 
+- Section headers with `###` dividers, e.g.:
 
 ```
 ###########
@@ -227,34 +114,24 @@ All Python scripts should have corresponding Pytest scripts in the same director
 
 ## Versioning and Changelog
 
-**Both of these are required for PRs and CI will fail if they're missing.**
+**Both of these are required for PRs to `dev` — CI will fail if they're missing.**
 
-### Version bumping
-- Every released change to the pipeline must be accompanied by a version bump in `pyproject.toml`. See `docs/versioning.md` for the versioning scheme and guidance on which version component to increment.
-- If the current version in `pyproject.toml` is a non-development version (e.g. `A.B.C.D`), you should update it to a new development version (`X.Y.Z.W-dev`) before merging to `dev`. The numerical part of the new version should reflect what the version *will be* once a release is made.
-  - For example, if the current version is `3.0.1.2` and the changes you want to merge amount to a point release, you should change the version number to `3.0.1.3-dev`. If they amount to a schema release, you should change it to `3.1.0.0-dev`. In both cases, the `-dev` suffix will be removed during the release process.
-- If the current version is already a development version, you should only change it if the changes you want to merge would justify a larger version bump than the one currently planned.
-  - For example, if the current version is `3.0.1.3-dev`, and the changes you want to merge amount to a point release, then the version should stay as-is. If instead they amount to a results release, you should change it to `3.0.2.0-dev`.
-- At the time a release is made, the only change needed to the version number should be the removal of the `-dev` suffix. As such, the new version number should always reflect the largest changes made since the last release.
-
-### CHANGELOG.md
-- For a PR into `dev` to pass CI, it must include updates to `CHANGELOG.md`, and the topmost heading in that file must match the version in `pyproject.toml`.
-- If the topmost heading in the changelog is for a non-development version, create a new entry for the development version in which to put updates. Do not change any entry for a non-development version.
-- If the topmost heading is for a development version, you should (1) update it according to the same procedure outlined for the `pyproject.toml` version, then (2) add new suggested changes to that entry.
-- The CHANGELOG should never contain entries for multiple development versions at once.
+- Every PR must include a version bump in `pyproject.toml` and a corresponding update to `CHANGELOG.md`. The topmost CHANGELOG heading must match the version in `pyproject.toml`.
+- See `docs/versioning.md` for the versioning scheme and guidance on which version component to increment. See `docs/developer.md` for CHANGELOG formatting conventions.
+- Development versions use the `-dev` suffix (e.g. `3.0.1.3-dev`). If the current version is already a `-dev` version, only change it if the new changes justify a larger bump.
 
 ### Backwards Compatibility Trackers
 `pyproject.toml` contains two compatibility version fields:
 - `index-min-pipeline-version`: Minimum pipeline version needed to use indexes built with this version
 - `pipeline-min-index-version`: Minimum index version required by this pipeline version
 
-**When to update these:** Only when changes create incompatibilities between the index and RUN/DOWNSTREAM workflows. Most PRs do NOT need to update these. Examples requiring updates:
-- Changes to index file structure or naming
-- Changes to how RUN/DOWNSTREAM consume index files
-- New required index components
+**When to update these:** Only when changes create incompatibilities between the index and RUN/DOWNSTREAM workflows. Most PRs do NOT need to update these. When in doubt, ask the user.
 
-When in doubt, ask the user.
+### Schemas
+If your changes affect pipeline output files, review the corresponding schema files in `schemas/`. Changes to schema fields beyond `title` and `description` require a schema (2nd-number) version bump. See the Schemas section of `docs/developer.md` for details.
 
 ## Maintaining This File
+
+This file should be kept in sync with the repository's code and documentation. When making changes that affect workflows, conventions, or tooling described here, update this file as part of the same PR.
 
 **Before context compaction:** Review the current conversation for user suggestions, workflow patterns, or lessons learned that should be documented here. If the user has provided guidance on preferred workflows or corrections to your approach, consider adding them to CLAUDE.md so future sessions benefit from this context.

@@ -1,0 +1,65 @@
+{
+  "$schema": "https://datapackage.org/profiles/2.0/tableschema.json",
+  "title": "QC Adapter Statistics",
+  "description": "Adapter statistics calculated by FASTQC for subset samples, concatenated across samples within a group by the DOWNSTREAM workflow. Each row represents one adapter at one position for one read pair file.",
+  "missingValues": ["NA"],
+  "primaryKey": ["group", "sample", "stage", "file", "position", "adapter"],
+  "fields": [
+    {
+      "name": "file",
+      "title": "File",
+      "description": "Filename of the read pair file (e.g. sample_R1.fastq.gz).",
+      "type": "string",
+      "constraints": { "required": true },
+      "example": "sample_R1.fastq.gz"
+    },
+    {
+      "name": "position",
+      "title": "Position",
+      "description": "Position along the read (1-indexed) at which adapter content is measured.",
+      "type": "integer",
+      "constraints": { "required": true, "minimum": 1 },
+      "example": 1
+    },
+    {
+      "name": "adapter",
+      "title": "Adapter",
+      "description": "Adapter sequence detected by FASTQC.",
+      "type": "string",
+      "constraints": { "required": true },
+      "example": "Illumina Universal Adapter"
+    },
+    {
+      "name": "pc_adapters",
+      "title": "Percent Adapters",
+      "description": "Percentage of reads containing adapter content at this position (0-100 scale).",
+      "type": "number",
+      "constraints": { "required": true, "minimum": 0, "maximum": 100 },
+      "example": 23.5
+    },
+    {
+      "name": "stage",
+      "title": "Stage",
+      "description": "Processing stage: 'raw' (before trimming) or 'cleaned' (after trimming).",
+      "type": "string",
+      "constraints": { "required": true, "enum": ["raw", "cleaned"] },
+      "example": "raw"
+    },
+    {
+      "name": "sample",
+      "title": "Sample",
+      "description": "Sample identifier from the RUN workflow.",
+      "type": "string",
+      "constraints": { "required": true, "minLength": 1 },
+      "example": "sample_1"
+    },
+    {
+      "name": "group",
+      "title": "Group",
+      "description": "Group identifier assigned to this sample in the grouping TSV.",
+      "type": "string",
+      "constraints": { "required": true, "minLength": 1 },
+      "example": "group_1"
+    }
+  ]
+}

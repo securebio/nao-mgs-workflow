@@ -1,0 +1,3 @@
+mean_phred_score	n_sequences	file	stage	sample
+35	13	tiny_test_fastp	cleaned	tiny_test
+36	37	tiny_test_fastp	cleaned	tiny_test

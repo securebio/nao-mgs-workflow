@@ -7,7 +7,7 @@
 ***************************/
 
 include { LOAD_SAMPLESHEET } from "../subworkflows/local/loadSampleSheet"
-include { COUNT_TOTAL_READS } from "../subworkflows/local/countTotalReads"
+include { COUNT_READS } from "../modules/local/countReads"
 include { EXTRACT_VIRAL_READS_SHORT } from "../subworkflows/local/extractViralReadsShort"
 include { EXTRACT_VIRAL_READS_ONT } from "../subworkflows/local/extractViralReadsONT"
 include { SUBSET_TRIM } from "../subworkflows/local/subsetTrim"
@@ -69,15 +69,12 @@ workflow RUN {
     single_end_ch = LOAD_SAMPLESHEET.out.single_end
 
     // Count reads in files
-    COUNT_TOTAL_READS(samplesheet_ch, single_end_ch)
+    COUNT_READS(samplesheet_ch, single_end_ch)
 
     // Extract and count human-viral reads
     if ( params.platform == "ont" ) {
         EXTRACT_VIRAL_READS_ONT(samplesheet_ch, params.ref_dir, params.taxid_artificial, params.db_download_timeout)
-        hits_fastq = EXTRACT_VIRAL_READS_ONT.out.hits_fastq
         hits_final = EXTRACT_VIRAL_READS_ONT.out.hits_final
-        inter_lca = EXTRACT_VIRAL_READS_ONT.out.inter_lca
-        inter_aligner = EXTRACT_VIRAL_READS_ONT.out.inter_minimap2
         inter_lca = EXTRACT_VIRAL_READS_ONT.out.inter_lca
         inter_aligner = EXTRACT_VIRAL_READS_ONT.out.inter_minimap2
         bbduk_match = Channel.empty()
@@ -89,10 +86,7 @@ workflow RUN {
         short_params["bbduk_suffix"] = "viral"
         short_params["k"] = "24" 
         EXTRACT_VIRAL_READS_SHORT(samplesheet_ch, params.ref_dir, short_params)
-        hits_fastq = EXTRACT_VIRAL_READS_SHORT.out.hits_fastq
         hits_final = EXTRACT_VIRAL_READS_SHORT.out.hits_final
-        inter_lca = EXTRACT_VIRAL_READS_SHORT.out.inter_lca
-        inter_aligner = EXTRACT_VIRAL_READS_SHORT.out.inter_bowtie
         inter_lca = EXTRACT_VIRAL_READS_SHORT.out.inter_lca
         inter_aligner = EXTRACT_VIRAL_READS_SHORT.out.inter_bowtie
         bbduk_match = EXTRACT_VIRAL_READS_SHORT.out.bbduk_match
@@ -129,10 +123,9 @@ workflow RUN {
     emit:
         input_run = index_params_ch.mix(samplesheet_ch, adapters_ch, params_ch)
         logging_run = index_pyproject_ch.mix(time_ch, pyproject_ch)
-        intermediates_run = hits_fastq.mix(inter_lca, inter_aligner)
+        intermediates_run = inter_lca.mix(inter_aligner)
         reads_raw_viral = bbduk_match
         reads_trimmed_viral = bbduk_trimmed
-        // Lots of results; split across 2 channels (QC, and other)
-        qc_results_run = COUNT_TOTAL_READS.out.read_counts.mix(RUN_QC.out.qc_basic, RUN_QC.out.qc_adapt, RUN_QC.out.qc_qbase, RUN_QC.out.qc_qseqs, RUN_QC.out.qc_lengths)
+        qc_results_run = COUNT_READS.out.output.mix(RUN_QC.out.pre_qc, RUN_QC.out.post_qc)
         other_results_run = hits_final.mix(PROFILE.out.bracken, PROFILE.out.kraken)
 }
