@@ -70,6 +70,14 @@ Follow the repository's standard commit practices from `docs/developer.md`:
 - Stage specific files rather than using `git add -A`
 - Before committing, verify you're on the expected branch with `git branch --show-current` to avoid committing code to the wrong branch.
 
+### Resolving Merge Conflicts
+
+When asked to resolve merge conflicts:
+
+1. **Summarize the conflicts** — for each conflicted file, describe the differences between the two sides and recommend a resolution.
+2. **Wait for user approval** before resolving.
+3. When the chosen resolution is to take one side of a conflict entirely (for a given file or the whole merge), prefer git-native resolution commands over manually rewriting affected files.
+
 ## Testing
 
 See `docs/testing.md` for comprehensive testing guidelines. Key commands:
