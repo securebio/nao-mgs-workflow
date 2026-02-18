@@ -95,6 +95,8 @@ nextflow_workflow {
             ] as Set
 
             // Verify each other output has a group column with correct value
+            // NB: Using linesGzip instead of .csv() because the nf-test CSV plugin
+            // doesn't correctly parse header-only gzipped TSVs (returns empty columnNames)
             workflow.out.other.each { output ->
                 def lines = path(output[1]).linesGzip
                 def columns = lines[0].split("\t") as List

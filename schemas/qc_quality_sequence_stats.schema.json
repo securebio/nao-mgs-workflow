@@ -3,48 +3,55 @@
   "title": "QC Per-Sequence Quality Statistics",
   "description": "Per-sequence read-quality statistics calculated by FASTQC for subset samples, concatenated across samples within a group by the DOWNSTREAM workflow. Each row represents the count of reads with a given mean Phred score for one read pair file.",
   "missingValues": ["NA"],
+  "primaryKey": ["group", "sample", "stage", "file", "mean_phred_score"],
   "fields": [
     {
       "name": "mean_phred_score",
       "title": "Mean Phred Score",
       "description": "Mean Phred quality score for the sequence.",
       "type": "number",
-      "constraints": { "required": true, "minimum": 0 }
+      "constraints": { "required": true, "minimum": 0 },
+      "example": 35
     },
     {
       "name": "n_sequences",
       "title": "Number of Sequences",
       "description": "Number of reads with this mean Phred score.",
       "type": "integer",
-      "constraints": { "required": true, "minimum": 0 }
+      "constraints": { "required": true, "minimum": 0 },
+      "example": 13
     },
     {
       "name": "file",
       "title": "File",
       "description": "Read pair identifier (e.g. R1 or R2 filename).",
       "type": "string",
-      "constraints": { "required": true }
+      "constraints": { "required": true },
+      "example": "sample_R1.fastq.gz"
     },
     {
       "name": "stage",
       "title": "Stage",
       "description": "Processing stage: 'raw' (before trimming) or 'cleaned' (after trimming).",
       "type": "string",
-      "constraints": { "required": true, "enum": ["raw", "cleaned"] }
+      "constraints": { "required": true, "enum": ["raw", "cleaned"] },
+      "example": "cleaned"
     },
     {
       "name": "sample",
       "title": "Sample",
       "description": "Sample identifier from the RUN workflow.",
       "type": "string",
-      "constraints": { "required": true, "minLength": 1 }
+      "constraints": { "required": true, "minLength": 1 },
+      "example": "sample_1"
     },
     {
       "name": "group",
       "title": "Group",
       "description": "Group identifier assigned to this sample in the grouping TSV.",
       "type": "string",
-      "constraints": { "required": true, "minLength": 1 }
+      "constraints": { "required": true, "minLength": 1 },
+      "example": "group_1"
     }
   ]
 }
