@@ -1,0 +1,65 @@
+name: Manually reset stable branch to main
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: >
+          Type "reset stable" to confirm. This will hard-reset
+          the stable branch to match main.
+        required: true
+        type: string
+
+jobs:
+  reset-stable:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Validate confirmation
+        run: |
+          if [ "${{ inputs.confirm }}" != "reset stable" ]; then
+            echo "::error::Confirmation failed. You must type 'reset stable' to proceed."
+            exit 1
+          fi
+
+      - name: Generate token from GitHub App
+        id: generate-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ vars.RELEASE_BOT_APP_ID }}
+          private-key: ${{ secrets.RELEASE_BOT_PRIVATE_KEY }}
+
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ steps.generate-token.outputs.token }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Show version info
+        run: |
+          MAIN_VERSION=$(git checkout main -- pyproject.toml && python -c "import tomllib; print(tomllib.load(open('pyproject.toml', 'rb'))['project']['version'])")
+          git checkout -- .
+          STABLE_VERSION=$(git checkout stable -- pyproject.toml && python -c "import tomllib; print(tomllib.load(open('pyproject.toml', 'rb'))['project']['version'])")
+          git checkout -- .
+
+          echo "Main version: $MAIN_VERSION"
+          echo "Stable version: $STABLE_VERSION"
+          echo ""
+          echo "Stable will be updated from $STABLE_VERSION to $MAIN_VERSION"
+
+          echo "### Stable branch reset" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Previous stable version:** $STABLE_VERSION" >> $GITHUB_STEP_SUMMARY
+          echo "- **New stable version:** $MAIN_VERSION" >> $GITHUB_STEP_SUMMARY
+
+      - name: Reset stable branch to main
+        run: |
+          git checkout stable
+          git reset --hard main
+          git push --force origin stable
+
+          echo "Successfully reset stable to main"
