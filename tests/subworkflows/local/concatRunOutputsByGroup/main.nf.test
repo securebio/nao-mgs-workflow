@@ -23,10 +23,30 @@ nextflow_workflow {
                     ["tt1", "tiny_test", file("${run_dir}/tiny_test_read_counts.tsv"), "group_a"],
                     ["tt1", "tiny_test", file("${run_dir}/tiny_test_kraken.tsv"), "group_a"],
                     ["tt1", "tiny_test", file("${run_dir}/tiny_test_bracken.tsv"), "group_a"],
+                    ["tt1", "tiny_test", file("${run_dir}/tiny_test_qc_adapter_stats_cleaned.tsv"), "group_a"],
+                    ["tt1", "tiny_test", file("${run_dir}/tiny_test_qc_adapter_stats_raw.tsv"), "group_a"],
+                    ["tt1", "tiny_test", file("${run_dir}/tiny_test_qc_basic_stats_cleaned.tsv"), "group_a"],
+                    ["tt1", "tiny_test", file("${run_dir}/tiny_test_qc_basic_stats_raw.tsv"), "group_a"],
+                    ["tt1", "tiny_test", file("${run_dir}/tiny_test_qc_length_stats_cleaned.tsv"), "group_a"],
+                    ["tt1", "tiny_test", file("${run_dir}/tiny_test_qc_length_stats_raw.tsv"), "group_a"],
+                    ["tt1", "tiny_test", file("${run_dir}/tiny_test_qc_quality_base_stats_cleaned.tsv"), "group_a"],
+                    ["tt1", "tiny_test", file("${run_dir}/tiny_test_qc_quality_base_stats_raw.tsv"), "group_a"],
+                    ["tt1", "tiny_test", file("${run_dir}/tiny_test_qc_quality_sequence_stats_cleaned.tsv"), "group_a"],
+                    ["tt1", "tiny_test", file("${run_dir}/tiny_test_qc_quality_sequence_stats_raw.tsv"), "group_a"],
                     ["tt2", "tiny_test", file("${ont_dir}/tiny_test_virus_hits.tsv"), "group_b"],
                     ["tt2", "tiny_test", file("${ont_dir}/tiny_test_read_counts.tsv"), "group_b"],
                     ["tt2", "tiny_test", file("${ont_dir}/tiny_test_kraken.tsv"), "group_b"],
-                    ["tt2", "tiny_test", file("${ont_dir}/tiny_test_bracken.tsv"), "group_b"]
+                    ["tt2", "tiny_test", file("${ont_dir}/tiny_test_bracken.tsv"), "group_b"],
+                    ["tt2", "tiny_test", file("${ont_dir}/tiny_test_qc_adapter_stats_cleaned.tsv"), "group_b"],
+                    ["tt2", "tiny_test", file("${ont_dir}/tiny_test_qc_adapter_stats_raw.tsv"), "group_b"],
+                    ["tt2", "tiny_test", file("${ont_dir}/tiny_test_qc_basic_stats_cleaned.tsv"), "group_b"],
+                    ["tt2", "tiny_test", file("${ont_dir}/tiny_test_qc_basic_stats_raw.tsv"), "group_b"],
+                    ["tt2", "tiny_test", file("${ont_dir}/tiny_test_qc_length_stats_cleaned.tsv"), "group_b"],
+                    ["tt2", "tiny_test", file("${ont_dir}/tiny_test_qc_length_stats_raw.tsv"), "group_b"],
+                    ["tt2", "tiny_test", file("${ont_dir}/tiny_test_qc_quality_base_stats_cleaned.tsv"), "group_b"],
+                    ["tt2", "tiny_test", file("${ont_dir}/tiny_test_qc_quality_base_stats_raw.tsv"), "group_b"],
+                    ["tt2", "tiny_test", file("${ont_dir}/tiny_test_qc_quality_sequence_stats_cleaned.tsv"), "group_b"],
+                    ["tt2", "tiny_test", file("${ont_dir}/tiny_test_qc_quality_sequence_stats_raw.tsv"), "group_b"]
                 )
                 '''
             }
@@ -48,8 +68,8 @@ nextflow_workflow {
                 assert val == "group_a"
             }
 
-            // Should produce 6 items in other (3 per group)
-            assert workflow.out.other.size() == 6
+            // Should produce 26 items in other (13 per group)
+            assert workflow.out.other.size() == 26
             def other_groups = workflow.out.other.collect { it[0] } as Set
             assert other_groups == ["group_a", "group_b"] as Set
 
@@ -62,14 +82,28 @@ nextflow_workflow {
                 "group_a_read_counts.tsv.gz",
                 "group_a_kraken.tsv.gz",
                 "group_a_bracken.tsv.gz",
+                "group_a_qc_adapter_stats_cleaned.tsv.gz",
+                "group_a_qc_adapter_stats_raw.tsv.gz",
+                "group_a_qc_basic_stats_cleaned.tsv.gz",
+                "group_a_qc_basic_stats_raw.tsv.gz",
+                "group_a_qc_length_stats_cleaned.tsv.gz",
+                "group_a_qc_length_stats_raw.tsv.gz",
+                "group_a_qc_quality_base_stats_cleaned.tsv.gz",
+                "group_a_qc_quality_base_stats_raw.tsv.gz",
+                "group_a_qc_quality_sequence_stats_cleaned.tsv.gz",
+                "group_a_qc_quality_sequence_stats_raw.tsv.gz",
             ] as Set
 
             // Verify each other output has a group column with correct value
+            // NB: Using linesGzip instead of .csv() because the nf-test CSV plugin
+            // doesn't correctly parse header-only gzipped TSVs (returns empty columnNames)
             workflow.out.other.each { output ->
-                def tsv = path(output[1]).csv(sep: "\t", decompress: true)
-                assert "group" in tsv.columnNames
-                tsv.columns["group"].each { val ->
-                    assert val == output[0]
+                def lines = path(output[1]).linesGzip
+                def columns = lines[0].split("\t") as List
+                def groupIdx = columns.indexOf("group")
+                assert groupIdx >= 0
+                for (int i = 1; i < lines.size(); i++) {
+                    assert lines[i].split("\t")[groupIdx] == output[0]
                 }
             }
         }
