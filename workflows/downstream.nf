@@ -28,7 +28,8 @@ workflow DOWNSTREAM {
         load_ch = LOAD_DOWNSTREAM_DATA(params.input_file, params.input_base_dir ?: projectDir)
         start_time_str = load_ch.start_time_str
         // Discover all per-sample output files and match to groups
-        discover_ch = DISCOVER_RUN_OUTPUT(load_ch.run_dirs, load_ch.groups).output
+        pipeline_pyproject_path = file("${projectDir}/pyproject.toml")
+        discover_ch = DISCOVER_RUN_OUTPUT(load_ch.run_dirs, load_ch.groups, pipeline_pyproject_path).output
         // Concatenate per-sample hits into per-group TSVs
         hits_ch = CONCAT_HITS_BY_GROUP(discover_ch, "virus_hits.tsv", "grouped_hits").groups
         // Prepare inputs for clade counting and validating taxonomic assignments
@@ -58,7 +59,6 @@ workflow DOWNSTREAM {
         // Prepare publishing channels
         params_str = groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(params))
         params_ch = Channel.of(params_str).collectFile(name: "params-downstream.json")
-        pipeline_pyproject_path = file("${projectDir}/pyproject.toml")
         pyproject_ch = COPY_PYPROJECT(Channel.fromPath(pipeline_pyproject_path), "pyproject.toml")
         input_file_ch = COPY_INPUT(Channel.fromPath(params.input_file), "input_file.csv")
         time_file = start_time_str.map { it + "\n" }.collectFile(name: "time.txt")
