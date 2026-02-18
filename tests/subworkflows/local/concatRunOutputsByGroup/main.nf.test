@@ -96,10 +96,12 @@ nextflow_workflow {
 
             // Verify each other output has a group column with correct value
             workflow.out.other.each { output ->
-                def tsv = path(output[1]).csv(sep: "\t", decompress: true)
-                assert "group" in tsv.columnNames
-                tsv.columns["group"].each { val ->
-                    assert val == output[0]
+                def lines = path(output[1]).linesGzip
+                def columns = lines[0].split("\t") as List
+                def groupIdx = columns.indexOf("group")
+                assert groupIdx >= 0
+                for (int i = 1; i < lines.size(); i++) {
+                    assert lines[i].split("\t")[groupIdx] == output[0]
                 }
             }
         }
