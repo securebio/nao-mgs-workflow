@@ -1,0 +1,50 @@
+{
+  "$schema": "https://datapackage.org/profiles/2.0/tableschema.json",
+  "title": "QC Per-Base Quality Statistics",
+  "description": "Per-base read-quality statistics calculated by FASTQC for subset samples, concatenated across samples within a group by the DOWNSTREAM workflow. Each row represents the mean Phred score at one position for one read pair file.",
+  "missingValues": ["NA"],
+  "fields": [
+    {
+      "name": "position",
+      "title": "Position",
+      "description": "Position along the read.",
+      "type": "integer",
+      "constraints": { "required": true, "minimum": 1 }
+    },
+    {
+      "name": "mean_phred_score",
+      "title": "Mean Phred Score",
+      "description": "Mean Phred quality score at this position.",
+      "type": "number",
+      "constraints": { "required": true, "minimum": 0 }
+    },
+    {
+      "name": "file",
+      "title": "File",
+      "description": "Read pair identifier (e.g. R1 or R2 filename).",
+      "type": "string",
+      "constraints": { "required": true }
+    },
+    {
+      "name": "stage",
+      "title": "Stage",
+      "description": "Processing stage: 'raw' (before trimming) or 'cleaned' (after trimming).",
+      "type": "string",
+      "constraints": { "required": true, "enum": ["raw", "cleaned"] }
+    },
+    {
+      "name": "sample",
+      "title": "Sample",
+      "description": "Sample identifier from the RUN workflow.",
+      "type": "string",
+      "constraints": { "required": true, "minLength": 1 }
+    },
+    {
+      "name": "group",
+      "title": "Group",
+      "description": "Group identifier assigned to this sample in the grouping TSV.",
+      "type": "string",
+      "constraints": { "required": true, "minLength": 1 }
+    }
+  ]
+}

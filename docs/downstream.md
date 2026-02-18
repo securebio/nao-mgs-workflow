@@ -25,6 +25,7 @@ N --> O[CONCAT_RUN_OUTPUTS_BY_GROUP]
 O --> S(Read count TSVs)
 O --> KR(Kraken TSVs)
 O --> BR(Bracken TSVs)
+O --> QC(QC stats TSVs)
 O --> E[MARK_VIRAL_DUPLICATES]
 E --> J(Annotated hits TSVs)
 E --> K(Summary TSVs)
@@ -58,6 +59,7 @@ style M fill:#000,color:#fff,stroke:#000
 style S fill:#000,color:#fff,stroke:#000
 style KR fill:#000,color:#fff,stroke:#000
 style BR fill:#000,color:#fff,stroke:#000
+style QC fill:#000,color:#fff,stroke:#000
 ```
 
 ### Long-read (ONT)
@@ -75,6 +77,7 @@ N --> O[CONCAT_RUN_OUTPUTS_BY_GROUP]
 O --> S(Read count TSVs)
 O --> KR(Kraken TSVs)
 O --> BR(Bracken TSVs)
+O --> QC(QC stats TSVs)
 O --> F[VALIDATE_VIRAL_ASSIGNMENTS]
 G(Viral taxonomy DB) --> F
 F --> H(Validation hits TSV)
@@ -93,6 +96,7 @@ style H fill:#000,color:#fff,stroke:#000
 style S fill:#000,color:#fff,stroke:#000
 style KR fill:#000,color:#fff,stroke:#000
 style BR fill:#000,color:#fff,stroke:#000
+style QC fill:#000,color:#fff,stroke:#000
 ```
 
 ## Subworkflows
@@ -107,11 +111,11 @@ This is a reusable subworkflow that discovers all per-sample TSV files from the 
 
 ### Concatenate all per-sample RUN outputs by group (`CONCAT_RUN_OUTPUTS_BY_GROUP`)
 
-This subworkflow wraps multiple calls to `CONCAT_BY_GROUP` (see below) to concatenate all per-sample RUN output types (viral hits, read counts, Kraken reports, and Bracken abundance estimates) into per-group TSVs. It emits `hits` separately (used by downstream duplicate marking, validation, and clade counting) and mixes all other outputs into a single `other` channel that flows directly to the published results.
+This subworkflow wraps multiple calls to `CONCAT_BY_GROUP` (see below) to concatenate all per-sample RUN output types (viral hits, read counts, Kraken reports, Bracken abundance estimates, and QC statistics) into per-group TSVs. It emits `hits` separately (used by downstream duplicate marking, validation, and clade counting) and mixes all other outputs into a single `other` channel that flows directly to the published results.
 
 ### Concatenate per-sample outputs into per-group TSVs (`CONCAT_BY_GROUP`)
 
-This is a general-purpose subworkflow that takes per-sample file tuples (with group annotations), filters for files matching a specified suffix, groups them by sample group, concatenates the files within each group, adds a group column, and renames the output to a clean filename. It is called by `CONCAT_RUN_OUTPUTS_BY_GROUP` for each RUN output type (viral hits, read counts, Kraken reports, Bracken abundance estimates).
+This is a general-purpose subworkflow that takes per-sample file tuples (with group annotations), filters for files matching a specified suffix, groups them by sample group, concatenates the files within each group, adds a group column, and renames the output to a clean filename. It is called by `CONCAT_RUN_OUTPUTS_BY_GROUP` for each RUN output type (viral hits, read counts, Kraken reports, Bracken abundance estimates, and QC statistics).
 
 ```mermaid
 ---

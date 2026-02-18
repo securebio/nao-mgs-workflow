@@ -1,0 +1,50 @@
+{
+  "$schema": "https://datapackage.org/profiles/2.0/tableschema.json",
+  "title": "QC Length Statistics",
+  "description": "Per-read length statistics calculated by FASTQC for subset samples, concatenated across samples within a group by the DOWNSTREAM workflow. Each row represents the count of reads with a given length for one read pair file.",
+  "missingValues": ["NA"],
+  "fields": [
+    {
+      "name": "length",
+      "title": "Read Length",
+      "description": "Read length in base pairs.",
+      "type": "integer",
+      "constraints": { "required": true, "minimum": 1 }
+    },
+    {
+      "name": "n_sequences",
+      "title": "Number of Sequences",
+      "description": "Number of reads with this length.",
+      "type": "integer",
+      "constraints": { "required": true, "minimum": 0 }
+    },
+    {
+      "name": "file",
+      "title": "File",
+      "description": "Read pair identifier (e.g. R1 or R2 filename).",
+      "type": "string",
+      "constraints": { "required": true }
+    },
+    {
+      "name": "stage",
+      "title": "Stage",
+      "description": "Processing stage: 'raw' (before trimming) or 'cleaned' (after trimming).",
+      "type": "string",
+      "constraints": { "required": true, "enum": ["raw", "cleaned"] }
+    },
+    {
+      "name": "sample",
+      "title": "Sample",
+      "description": "Sample identifier from the RUN workflow.",
+      "type": "string",
+      "constraints": { "required": true, "minLength": 1 }
+    },
+    {
+      "name": "group",
+      "title": "Group",
+      "description": "Group identifier assigned to this sample in the grouping TSV.",
+      "type": "string",
+      "constraints": { "required": true, "minLength": 1 }
+    }
+  ]
+}
