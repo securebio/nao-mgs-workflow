@@ -2,7 +2,7 @@
   "$schema": "https://datapackage.org/profiles/2.0/tableschema.json",
   "title": "Kraken2 Classification Reports Per Sample",
   "description": "Kraken2 classification reports for each sample within a group, as produced by the RUN workflow and concatenated by the DOWNSTREAM workflow. Each row represents one taxon's classification statistics for a sample, split by ribosomal/non-ribosomal classification.",
-  "missingValues": ["", "NA"],
+  "missingValues": ["NA"],
   "primaryKey": ["group", "sample", "taxid", "ribosomal"],
   "fields": [
     {
