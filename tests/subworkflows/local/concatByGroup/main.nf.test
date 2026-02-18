@@ -16,9 +16,11 @@ nextflow_workflow {
             workflow {
                 '''
                 // Input: tuple(label, sample, file, group)
+                // Includes a non-matching suffix file to verify filtering excludes it
                 input[0] = Channel.of(
                     ["tt1", "tiny_test", file("${projectDir}/test-data/prepareGroupTsvs/tt1_hits.tsv"), "group_a"],
-                    ["tt2", "tiny_test_2", file("${projectDir}/test-data/prepareGroupTsvs/tt2_hits.tsv"), "group_b"]
+                    ["tt2", "tiny_test_2", file("${projectDir}/test-data/prepareGroupTsvs/tt2_hits.tsv"), "group_b"],
+                    ["tt1", "tiny_test", file("${projectDir}/test-data/results/run_output_shortread/tiny_test_read_counts.tsv"), "group_a"]
                 )
                 input[1] = "hits.tsv"
                 input[2] = "test_output"
