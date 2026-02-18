@@ -18,8 +18,8 @@ nextflow_workflow {
                 // Input: tuple(label, sample, file, group)
                 // Includes a non-matching suffix file to verify filtering excludes it
                 input[0] = Channel.of(
-                    ["tt1", "tiny_test", file("${projectDir}/test-data/prepareGroupTsvs/tt1_hits.tsv"), "group_a"],
-                    ["tt2", "tiny_test_2", file("${projectDir}/test-data/prepareGroupTsvs/tt2_hits.tsv"), "group_b"],
+                    ["tt1", "tiny_test", file("${projectDir}/test-data/concatByGroup/tiny_test_hits.tsv"), "group_a"],
+                    ["tt2", "tiny_test_2", file("${projectDir}/test-data/concatByGroup/tiny_test_2_hits.tsv"), "group_b"],
                     ["tt1", "tiny_test", file("${projectDir}/test-data/results/run_output_shortread/tiny_test_read_counts.tsv"), "group_a"]
                 )
                 input[1] = "hits.tsv"
@@ -31,7 +31,7 @@ nextflow_workflow {
             assert workflow.success
 
             // Count input rows for verification
-            def input_tsv = path("${projectDir}/test-data/prepareGroupTsvs/tt1_hits.tsv").csv(sep: "\t")
+            def input_tsv = path("${projectDir}/test-data/concatByGroup/tiny_test_hits.tsv").csv(sep: "\t")
             def input_row_count = input_tsv.rowCount
             def input_col_count = input_tsv.columnCount
 
