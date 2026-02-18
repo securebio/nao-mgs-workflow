@@ -7,9 +7,8 @@
 ***************************/
 
 include { LOAD_DOWNSTREAM_DATA } from "../subworkflows/local/loadDownstreamData"
-include { CONCAT_BY_GROUP as CONCAT_HITS_BY_GROUP } from "../subworkflows/local/concatByGroup"
-include { CONCAT_BY_GROUP as CONCAT_READ_COUNTS_BY_GROUP } from "../subworkflows/local/concatByGroup"
 include { DISCOVER_RUN_OUTPUT } from "../subworkflows/local/discoverRunOutput"
+include { CONCAT_RUN_OUTPUTS_BY_GROUP } from "../subworkflows/local/concatRunOutputsByGroup"
 include { MARK_VIRAL_DUPLICATES } from "../subworkflows/local/markViralDuplicates"
 include { VALIDATE_VIRAL_ASSIGNMENTS } from "../subworkflows/local/validateViralAssignments"
 include { COUNT_READS_PER_CLADE } from "../modules/local/countReadsPerClade"
@@ -30,21 +29,21 @@ workflow DOWNSTREAM {
         // Discover all per-sample output files and match to groups
         pipeline_pyproject_path = file("${projectDir}/pyproject.toml")
         discover_ch = DISCOVER_RUN_OUTPUT(load_ch.run_dirs, load_ch.groups, pipeline_pyproject_path).output
-        // Concatenate per-sample hits into per-group TSVs
-        hits_ch = CONCAT_HITS_BY_GROUP(discover_ch, "virus_hits.tsv", "grouped_hits").groups
+        // Concatenate per-sample outputs into per-group TSVs
+        concat_ch = CONCAT_RUN_OUTPUTS_BY_GROUP(discover_ch)
         // Prepare inputs for clade counting and validating taxonomic assignments
         viral_db_path = "${params.ref_dir}/results/total-virus-db-annotated.tsv.gz"
         viral_db = channel.value(viral_db_path)
         // Conditionally mark duplicates and generate clade counts based on platform
         if (params.platform == "ont") {
             // ONT: Skip duplicate marking and clade counting, but still sort by seq_id
-            viral_hits_ch = SORT_ONT_HITS(hits_ch, "seq_id").sorted
+            viral_hits_ch = SORT_ONT_HITS(concat_ch.hits, "seq_id").sorted
             dup_output_ch = Channel.empty()
             clade_counts_ch = Channel.empty()
         }
         else {
             // Short-read: Mark duplicates based on alignment coordinates
-            MARK_VIRAL_DUPLICATES(hits_ch, params.aln_dup_deviation)
+            MARK_VIRAL_DUPLICATES(concat_ch.hits, params.aln_dup_deviation)
             viral_hits_ch = MARK_VIRAL_DUPLICATES.out.dup.map { label, tab, _stats -> [label, tab] }
             dup_output_ch = MARK_VIRAL_DUPLICATES.out.dup
             // Generate clade counts
@@ -54,8 +53,6 @@ workflow DOWNSTREAM {
         def validation_params = params.collectEntries { k, v -> [k, v] }
         validation_params["cluster_min_len"] = 15
         validate_ch = VALIDATE_VIRAL_ASSIGNMENTS(viral_hits_ch, viral_db, params.ref_dir, validation_params)
-        // Concatenate per-sample read counts into per-group TSVs
-        read_counts_ch = CONCAT_READ_COUNTS_BY_GROUP(discover_ch, "read_counts.tsv", "read_counts").groups
         // Prepare publishing channels
         params_str = groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(params))
         params_ch = Channel.of(params_str).collectFile(name: "params-downstream.json")
@@ -71,5 +68,5 @@ workflow DOWNSTREAM {
         results_downstream = dup_output_ch.mix(
                                 clade_counts_ch,
                                 validate_ch.annotated_hits,
-                                read_counts_ch)
+                                concat_ch.other)
 }
