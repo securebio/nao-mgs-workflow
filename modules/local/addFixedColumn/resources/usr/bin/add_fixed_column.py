@@ -32,7 +32,7 @@ def add_column(input_path, column_name, column_value, out_path):
     column_names = [c.strip() for c in column_name.split(",")]
     with open_by_suffix(input_path) as inf, open_by_suffix(out_path, "w") as outf:
         # Read and handle header line
-        header_line = inf.readline().strip()
+        header_line = inf.readline().rstrip("\r\n")
         # Handle empty file
         if not header_line:
             return
@@ -46,9 +46,9 @@ def add_column(input_path, column_name, column_value, out_path):
         # Add columns to each subsequent line and write to output
         suffix = "\t" + "\t".join([column_value] * len(column_names))
         for line in inf:
-            line = line.strip()
-            if line:  # Skip empty lines
-                outf.write(line + suffix + "\n")
+            if not line.strip():
+                continue
+            outf.write(line.rstrip("\r\n") + suffix + "\n")
 
 def main():
     # Parse arguments

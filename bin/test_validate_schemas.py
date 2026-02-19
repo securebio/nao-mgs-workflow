@@ -218,6 +218,14 @@ class TestReorderedToSchema:
             assert path != data_file
             assert path.read_text() == expected
 
+    def test_raises_on_duplicate_data_columns(self, tmp_path: Path) -> None:
+        schema_path = self._make_schema(tmp_path, ["a", "b", "c"], "equal")
+        data_file = tmp_path / "test.tsv"
+        data_file.write_text("a\tb\ta\n1\t2\t3\n")
+        with pytest.raises(ValueError, match="Duplicate columns"):
+            with reordered_to_schema(data_file, schema_path) as path:
+                pass
+
 #################
 # validate_file #
 #################

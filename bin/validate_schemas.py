@@ -166,9 +166,12 @@ def reordered_to_schema(
     needs_reorder = False
     if schema.get("fieldsMatch") == "equal" and schema_fields:
         with open(data_path) as f:
-            header_line = f.readline().rstrip("\n")
+            header_line = f.readline().rstrip("\r\n")
         if header_line:
             data_fields = header_line.split("\t")
+            if len(data_fields) != len(set(data_fields)):
+                dupes = [f for f in data_fields if data_fields.count(f) > 1]
+                raise ValueError(f"Duplicate columns in data file: {sorted(set(dupes))}")
             needs_reorder = (
                 data_fields != schema_fields
                 and set(data_fields) == set(schema_fields)
