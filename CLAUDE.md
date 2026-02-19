@@ -6,12 +6,12 @@ This file contains guidelines for Claude Code when working on this repository.
 
 ## GitHub Interaction Policies
 
-When interacting with GitHub, prefer `gh` CLI subcommands (e.g., `gh pr view`, `gh issue view`) over raw `gh api` calls where possible — they're simpler and don't require individual user approval.
+Keep shell commands simple and direct so they can be auto-approved. Avoid complex piped commands, `gh api` calls, or multi-step one-liners when a simpler alternative exists. For GitHub operations, prefer `gh` CLI subcommands (e.g., `gh pr view`, `gh issue view`) over raw `gh api` calls. For the same reason, run git commands directly (e.g. `git add ...`), not with `-C` paths — unless otherwise specified by the user, assume the working directory is already the repo root.
 
 ### Branching and PR Targets
 
-- **Always create new branches from `dev`** (not `main`)
-- **PRs should target `dev` by default** (not `main`)
+- **Create new branches from `dev`** (not `main`), unless the user specifically instructs otherwise (e.g. for stacked PRs)
+- **PRs should target `dev`** (not `main`), unless the user specifically instructs otherwise
 - Only maintainers merge `dev` to `main` for releases
 
 ### Creating Pull Requests
@@ -50,6 +50,8 @@ When decomposing large feature branches into smaller PRs:
 2. Document the dependency chain in PR descriptions
 3. To bring specific files from a source branch, use `git checkout feature/source-branch -- path/to/file.nf path/to/other/file.py`
 
+When analyzing a PR's scope (e.g. for splitting), always check the actual base branch with `gh pr view` rather than assuming `dev` — stacked PRs target other feature branches.
+
 ### Responding to Reviewers
 
 When the user asks you to handle PR review comments:
@@ -64,8 +66,17 @@ When the user asks you to handle PR review comments:
 
 Follow the repository's standard commit practices from `docs/developer.md`:
 - Use descriptive commit messages
-- Include `Co-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>` for commits authored with Claude Code
+- Include `Co-Authored-By: Claude <model> <noreply@anthropic.com>` (with the actual model name, e.g. `Claude Opus 4.6`) for commits authored with Claude Code
 - Stage specific files rather than using `git add -A`
+- Before committing, verify you're on the expected branch with `git branch --show-current` to avoid committing code to the wrong branch.
+
+### Resolving Merge Conflicts
+
+When asked to resolve merge conflicts:
+
+1. **Summarize the conflicts** — for each conflicted file, describe the differences between the two sides and recommend a resolution.
+2. **Wait for user approval** before resolving.
+3. When the chosen resolution is to take one side of a conflict entirely (for a given file or the whole merge), prefer git-native resolution commands (e.g., `git checkout --ours <file>` or `git checkout --theirs <file>`) over manually rewriting affected files.
 
 ## Testing
 
@@ -86,6 +97,31 @@ Refer to `docs/developer.md` for comprehensive coding style guidelines. Key poin
 - Keep PRs small and focused
 - Avoid over-engineering; only make requested changes
 
+### Python Style
+
+For all Python scripts, follow the patterns established in `bin/build_tiny_test_databases.py`:
+
+- Flexible `open_by_suffix()` pattern for handling files that may or may not be compressed
+- Use Python 3.12+ native type hints, not the `typing` module (e.g. `list[str]` instead of `List[str]`, etc)
+- Logging with the `logging` standard library and `UTCFormatter` class
+- `parse_arguments()` function for argparse
+- `main()` entry point with timing and logging
+- `DESC` docstring at the top describing the script's purpose
+- Use context managers (`with` statements) instead of try/finally where appropriate
+- Section headers with `###` dividers, e.g.:
+
+```
+###########
+# IMPORTS #
+###########
+```
+
+All Python scripts should have corresponding Pytest scripts in the same directory (`**/script.py` -> `**/test_script.py`). See `docs/testing.md` for general pytest conventions. Additional guidance for Claude Code:
+
+- The order of tests should match the order of functions/methods in the source script.
+- After writing tests, always review them again to identify and remove unnecessary redundancy.
+- Distinguish clearly between unit tests of high-level functions (which can be useful even if heavily mocked) and integration tests of the whole code stack (which should keep mocks to a minimum).
+
 ## Versioning and Changelog
 
 **Both of these are required for PRs to `dev` — CI will fail if they're missing.**
@@ -103,6 +139,8 @@ Refer to `docs/developer.md` for comprehensive coding style guidelines. Key poin
 
 ### Schemas
 If your changes affect pipeline output files, review the corresponding schema files in `schemas/`. Changes to schema fields beyond `title` and `description` require a schema (2nd-number) version bump. See the Schemas section of `docs/developer.md` for details.
+
+When creating new schemas, always include `primaryKey` and `example` fields on every schema and field respectively, matching the conventions in existing schemas (e.g. `read_counts.schema.json`).
 
 ## Maintaining This File
 

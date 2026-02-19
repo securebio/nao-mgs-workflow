@@ -3,7 +3,7 @@
 - Removed branch restrictions from most CI workflows so they run on all PRs, not just PRs to specific branches. Long-running integration tests are unchanged, as are tests that only run on releases.
 - Reduced `maxRetries` from 3 to 1 in `standard` and `batch` profiles for spot-to-on-demand fallback (#662)
 - Added docs on using a Groovy closure for spot-to-on-demand queue fallback (#662)
-- Add `CLAUDE.md` with guidelines for Claude Code: GitHub interaction policies, PR workflows, testing, versioning, and changelog updates.
+- Add `CLAUDE.md` with guidelines for Claude Code: GitHub interaction policies, PR workflows, testing, Python code style, etc.
 - Extract testing documentation from `docs/developer.md` into standalone `docs/testing.md`; add snapshot safety warning.
 - Add CHANGELOG formatting guidelines to `docs/versioning.md`.
 - Added group-level read count, Kraken, Bracken, and QC outputs to DOWNSTREAM workflow (`{GROUP}_read_counts.tsv.gz`, `{GROUP}_kraken.tsv.gz`, `{GROUP}_bracken.tsv.gz`, `{GROUP}_qc_*.tsv.gz`), produced for both short-read and ONT platforms.
