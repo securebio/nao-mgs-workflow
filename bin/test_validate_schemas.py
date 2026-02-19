@@ -12,6 +12,7 @@ from validate_schemas import (
     find_data_files,
     find_schema_for_file,
     get_output_schema_names,
+    reordered_to_schema,
     validate_file,
     validate_outputs,
 )
@@ -151,6 +152,72 @@ class TestDecompressedPath:
             assert path != data_file
             assert path.read_text() == content
 
+########################
+# reordered_to_schema  #
+########################
+
+class TestReorderedToSchema:
+    def _make_schema(
+        self, tmp_path: Path, fields: list[str], fields_match: str | None = None
+    ) -> Path:
+        schema: dict = {
+            "$schema": "https://datapackage.org/profiles/2.0/tableschema.json",
+            "fields": [{"name": f, "type": "string"} for f in fields],
+        }
+        if fields_match is not None:
+            schema["fieldsMatch"] = fields_match
+        schema_path = tmp_path / "test.schema.json"
+        schema_path.write_text(json.dumps(schema))
+        return schema_path
+
+    @pytest.mark.parametrize(
+        "fields,fields_match,data",
+        [
+            (["a", "b", "c"], "equal", "a\tb\tc\n1\t2\t3\n"),
+            (["a", "b", "c"], "equal", "a\tb\td\n1\t2\t3\n"),
+            (["a", "b", "c"], None, "c\ta\tb\n3\t1\t2\n"),
+            (["a", "b"], "equal", ""),
+            ([], "equal", "a\tb\n1\t2\n"),
+        ],
+        ids=[
+            "columns_already_match",
+            "column_sets_differ",
+            "fields_match_not_set",
+            "empty_file",
+            "no_schema_fields",
+        ],
+    )
+    def test_no_reorder(
+        self, tmp_path: Path, fields: list[str], fields_match: str | None, data: str,
+    ) -> None:
+        schema_path = self._make_schema(tmp_path, fields, fields_match)
+        data_file = tmp_path / "test.tsv"
+        data_file.write_text(data)
+        with reordered_to_schema(data_file, schema_path) as path:
+            assert path == data_file
+
+    @pytest.mark.parametrize(
+        "fields,data,expected",
+        [
+            (
+                ["a", "b", "c"],
+                "c\ta\tb\n3\t1\t2\n6\t4\t5\n",
+                "a\tb\tc\n1\t2\t3\n4\t5\t6\n",
+            ),
+            (["a", "b"], 'b\ta\nabc"123\tval\n', 'a\tb\nval\tabc"123\n'),
+        ],
+        ids=["basic", "quote_characters"],
+    )
+    def test_reorders(
+        self, tmp_path: Path, fields: list[str], data: str, expected: str,
+    ) -> None:
+        schema_path = self._make_schema(tmp_path, fields, "equal")
+        data_file = tmp_path / "test.tsv"
+        data_file.write_text(data)
+        with reordered_to_schema(data_file, schema_path) as path:
+            assert path != data_file
+            assert path.read_text() == expected
+
 #################
 # validate_file #
 #################
@@ -274,6 +341,24 @@ class TestValidateFile:
         data_file.write_text("col1\tcol2\n42\tNA\nNA\t99\n100\t\n")
         is_valid, errors = validate_file(data_file, schema_path)
         assert is_valid
+
+    def test_valid_with_reordered_columns(self, tmp_path: Path) -> None:
+        """Columns in different order should validate when fieldsMatch is equal."""
+        schema = {
+            "$schema": "https://datapackage.org/profiles/2.0/tableschema.json",
+            "fieldsMatch": "equal",
+            "fields": [
+                {"name": "col1", "type": "string"},
+                {"name": "col2", "type": "integer"},
+            ],
+        }
+        schema_path = tmp_path / "reorder.schema.json"
+        schema_path.write_text(json.dumps(schema))
+        data_file = tmp_path / "test.tsv"
+        data_file.write_text("col2\tcol1\n42\tfoo\n99\tbar\n")
+        is_valid, errors = validate_file(data_file, schema_path)
+        assert is_valid
+        assert errors == []
 
     def test_multiple_errors_all_reported(self, tmp_path: Path, simple_schema: Path) -> None:
         """Multiple validation errors should all be reported."""
