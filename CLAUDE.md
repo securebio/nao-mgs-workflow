@@ -33,7 +33,7 @@ EOF
 ```
 
 **PR description structure:**
-1. **Prose summary**: A brief paragraph explaining the purpose and context
+1. **Prose summary**: One or two sentences explaining the core problem or motivation, oriented toward a reviewer who hasn't seen the code yet. Focus on *why* the change is needed and the key design decision, not just *what* changed
 2. **Changes list**: Bulleted list of specific changes with their justifications
 3. **Footer**: Always include the "Generated with Claude Code" attribution
 
@@ -74,6 +74,7 @@ Follow the repository's standard commit practices from `docs/developer.md`:
 - Use descriptive commit messages
 - Include `Co-Authored-By: Claude <model> <noreply@anthropic.com>` (with the actual model name, e.g. `Claude Opus 4.6`) for commits authored with Claude Code
 - Stage specific files rather than using `git add -A`
+- Run git commands directly (e.g. `git add file`, not `git -C /path git add file`) — the working directory is already the repo root.
 - Before committing, verify you're on the expected branch with `git branch --show-current` to avoid committing code to the wrong branch.
 
 ### Resolving Merge Conflicts
