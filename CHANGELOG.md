@@ -15,10 +15,7 @@
     - Simplified `LOAD_DOWNSTREAM_DATA` to emit `run_dirs` and `groups` channels (removed virus hits discovery, now handled by `DISCOVER_RUN_OUTPUT`).
     - Added `read_counts.schema.json`, `kraken.schema.json`, `bracken.schema.json`, and `qc_*.schema.json` for schema validation of group-level outputs.
 - Added `validation_hits.schema.json` and `clade_counts.schema.json` schemas for DOWNSTREAM validation hits and clade count outputs.
-    - Extended `ADD_FIXED_COLUMN` to accept comma-separated column names for adding multiple columns in one pass.
-    - In DOWNSTREAM, ONT validation hits are now padded with the 10 paired-end-specific columns (NA values) so both platforms share a single schema. The schema uses `fieldsMatch: "equal"` to tolerate column order differences.
-    - Added `reordered_to_schema` support in `validate_schemas.py` to implement `fieldsMatch: "equal"` (not natively supported by frictionless 5.18.1).
-    - Note: the `aligner_*` columns kept in the RUN output are asymmetric across the natural/combined/artificial subsets (see #669).
+    - ONT and short-read validation hits now share the same schema and column set; ONT outputs are padded with NA values for the 10 paired-end-specific columns. The schema uses `fieldsMatch: "equal"` to tolerate column order differences.
 
 # v3.1.0.0
 
