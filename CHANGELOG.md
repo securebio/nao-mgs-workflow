@@ -21,7 +21,6 @@
 - Modified `docs/downstream.md` to point to `schemas/` for information on DOWNSTREAM output content.
 - Extracted testing documentation from `docs/developer.md` into standalone `docs/testing.md` to keep documents at a readable length.
 - Added CHANGELOG formatting guidelines to `docs/versioning.md`.
-    - ONT and short-read validation hits now share the same schema and column set; 
 - Added `CLAUDE.md` with guidelines for Claude Code: GitHub interaction policies, PR workflows, testing, Python code style, etc.
 
 ## Other
