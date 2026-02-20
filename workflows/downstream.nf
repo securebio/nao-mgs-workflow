@@ -56,7 +56,7 @@ workflow DOWNSTREAM {
             // Short-read: Mark duplicates based on alignment coordinates
             MARK_VIRAL_DUPLICATES(concat_ch.hits, params.aln_dup_deviation)
             viral_hits_ch = MARK_VIRAL_DUPLICATES.out.dup.map { label, tab, _stats -> [label, tab] }
-            dup_output_ch = MARK_VIRAL_DUPLICATES.out.dup
+            dup_output_ch = MARK_VIRAL_DUPLICATES.out.dup.map { label, _reads, stats -> [label, stats] }
             // Generate clade counts
             clade_counts_ch = COUNT_READS_PER_CLADE(viral_hits_ch, viral_db).output
         }

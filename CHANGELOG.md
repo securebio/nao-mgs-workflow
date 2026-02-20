@@ -1,5 +1,6 @@
-# v3.1.1.0-dev
+# v3.2.0.0-dev
 
+- Removed `{GROUP}_duplicate_reads.tsv.gz` from DOWNSTREAM outputs; its contents are a strict subset of `{GROUP}_validation_hits.tsv.gz`.
 - Added manually-triggered GitHub Actions workflow (`manual-reset.yml`) for resetting the `stable` branch to `main` on non-point releases.
 - Removed branch restrictions from most CI workflows so they run on all PRs, not just PRs to specific branches. Long-running integration tests are unchanged, as are tests that only run on releases.
 - Reduced `maxRetries` from 3 to 1 in `standard` and `batch` profiles for spot-to-on-demand fallback (#662)
@@ -13,7 +14,8 @@
     - Created reusable `DISCOVER_RUN_OUTPUT` subworkflow for discovering all per-sample files from RUN output directories and matching them to sample groups.
     - Simplified `LOAD_DOWNSTREAM_DATA` to emit `run_dirs` and `groups` channels (removed virus hits discovery, now handled by `DISCOVER_RUN_OUTPUT`).
     - Added `read_counts.schema.json`, `kraken.schema.json`, `bracken.schema.json`, and `qc_*.schema.json` for schema validation of group-level outputs.
-- Added `validation_hits.schema.json` and `clade_counts.schema.json` schemas for DOWNSTREAM validation hits and clade count outputs. ONT and short-read validation hits now share the same schema and column set; ONT outputs are padded with NA values for the 10 paired-end-specific columns.
+- Added `validation_hits.schema.json` and `clade_counts.schema.json` schemas for DOWNSTREAM validation hits and clade count outputs.
+    - ONT and short-read validation hits now share the same schema and column set; ONT outputs are padded with NA values for the 10 paired-end-specific columns. The schema uses `fieldsMatch: "equal"` to tolerate column order differences.
 
 # v3.1.0.0
 
