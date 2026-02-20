@@ -10,14 +10,19 @@ on:
         required: true
         type: string
 
+permissions:
+  contents: write
+
 jobs:
   reset-stable:
     runs-on: ubuntu-latest
 
     steps:
       - name: Validate confirmation
+        env:
+          CONFIRM: ${{ inputs.confirm }}
         run: |
-          if [ "${{ inputs.confirm }}" != "reset stable" ]; then
+          if [ "$CONFIRM" != "reset stable" ]; then
             echo "::error::Confirmation failed. You must type 'reset stable' to proceed."
             exit 1
           fi
