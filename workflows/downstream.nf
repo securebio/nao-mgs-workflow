@@ -16,6 +16,7 @@ include { COPY_FILE_BARE as COPY_PYPROJECT } from "../modules/local/copyFile"
 include { COPY_FILE_BARE as COPY_INPUT } from "../modules/local/copyFile"
 include { COPY_FILE_BARE as COPY_TIME } from "../modules/local/copyFile"
 include { SORT_TSV as SORT_ONT_HITS } from "../modules/local/sortTsv"
+include { ADD_FIXED_COLUMN as PAD_ONT_COLUMNS } from "../modules/local/addFixedColumn"
 
 /*****************
 | MAIN WORKFLOWS |
@@ -38,6 +39,16 @@ workflow DOWNSTREAM {
         if (params.platform == "ont") {
             // ONT: Skip duplicate marking and clade counting, but still sort by seq_id
             viral_hits_ch = SORT_ONT_HITS(concat_ch.hits, "seq_id").sorted
+            // Pad with paired-end columns (NA) so ONT and short-read share the same column set
+            def pad_cols = [
+                "query_len_rev", "query_seq_rev", "query_qual_rev",
+                "prim_align_fragment_length",
+                "prim_align_best_alignment_score_rev",
+                "prim_align_edit_distance_rev",
+                "prim_align_ref_start_rev", "prim_align_query_rc_rev",
+                "prim_align_pair_status", "prim_align_dup_exemplar"
+            ].join(",")
+            viral_hits_ch = PAD_ONT_COLUMNS(viral_hits_ch, pad_cols, "NA", "padded").output
             dup_output_ch = Channel.empty()
             clade_counts_ch = Channel.empty()
         }

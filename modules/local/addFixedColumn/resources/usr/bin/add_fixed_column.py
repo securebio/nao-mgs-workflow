@@ -24,30 +24,37 @@ def open_by_suffix(filename, mode="r", debug=False):
         return open(filename, mode)
 
 def add_column(input_path, column_name, column_value, out_path):
-    """Add column to TSV file with specified name and value."""
+    """Add one or more columns to a TSV file with a fixed value.
+
+    The column_name argument can be a single name or a comma-separated list
+    of names. Each new column is appended and filled with column_value.
+    """
+    column_names = [c.strip() for c in column_name.split(",")]
     with open_by_suffix(input_path) as inf, open_by_suffix(out_path, "w") as outf:
         # Read and handle header line
-        header_line = inf.readline().strip()
+        header_line = inf.readline().rstrip("\r\n")
         # Handle empty file
         if not header_line:
             return
         headers_in = header_line.split("\t")
-        if column_name in headers_in:
-            raise ValueError(f"Column already exists: {column_name}")
-        headers_out = headers_in + [column_name]
+        for name in column_names:
+            if name in headers_in:
+                raise ValueError(f"Column already exists: {name}")
+        headers_out = headers_in + column_names
         header_line = "\t".join(headers_out)
         outf.write(header_line + "\n")
-        # Add column to each subsequent line and write to output
+        # Add columns to each subsequent line and write to output
+        suffix = "\t" + "\t".join([column_value] * len(column_names))
         for line in inf:
-            line = line.strip()
-            if line:  # Skip empty lines
-                outf.write(line + "\t" + column_value + "\n")
+            if not line.strip():
+                continue
+            outf.write(line.rstrip("\r\n") + suffix + "\n")
 
 def main():
     # Parse arguments
     parser = argparse.ArgumentParser(description="Add column to TSV file with specified name and value.")
     parser.add_argument("input_path", help="Path to input TSV file.")
-    parser.add_argument("column_name", help="Name of the column to add.")
+    parser.add_argument("column_name", help="Name of the column to add (comma-separated for multiple).")
     parser.add_argument("column_value", help="Value for the new column.")
     parser.add_argument("output_file", help="Path to output TSV.")
     args = parser.parse_args()
