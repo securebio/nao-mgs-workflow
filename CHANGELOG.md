@@ -1,5 +1,6 @@
-# v3.1.1.0-dev
+# v3.2.0.0-dev
 
+- Removed `{GROUP}_duplicate_reads.tsv.gz` from DOWNSTREAM outputs; its contents are a strict subset of `{GROUP}_validation_hits.tsv.gz`.
 - Removed branch restrictions from most CI workflows so they run on all PRs, not just PRs to specific branches. Long-running integration tests are unchanged, as are tests that only run on releases.
 - Reduced `maxRetries` from 3 to 1 in `standard` and `batch` profiles for spot-to-on-demand fallback (#662)
 - Added docs on using a Groovy closure for spot-to-on-demand queue fallback (#662)

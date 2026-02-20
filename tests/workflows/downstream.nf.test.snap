@@ -3,7 +3,6 @@
         "content": [
             "tt1_bracken.tsv.gz:md5,dcfdd1e797ae4d1dbc4e6c32cc669f99",
             "tt1_clade_counts.tsv.gz:md5,c08ec913ad5dab545a701ed4ac851fc9",
-            "tt1_duplicate_reads.tsv.gz:md5,ae1190c0955d0e7a106dbb7bebc707f5",
             "tt1_duplicate_stats.tsv.gz:md5,dea20f8f6c3f9753f8b225fc0f8c7e52",
             "tt1_kraken.tsv.gz:md5,a932839292f8edc76f74f1cb4ce67189",
             "tt1_qc_adapter_stats_cleaned.tsv.gz:md5,70d8f2e6594f9133273459ec89c025a5",
