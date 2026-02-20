@@ -62,6 +62,12 @@ When the user asks you to handle PR review comments:
 4. **Respond to threads.** Always prefix with `[Claude Code]` (e.g., `[Claude Code] Done`) — the user's GitHub account is used, so attribution is essential.
 5. **Create issues** for approved out-of-scope suggestions. Issues must be self-contained (they sync to external tools), so quote the original suggestion and explain it fully.
 
+### GitHub Actions Workflows
+
+When writing or modifying GitHub Actions workflows:
+- **Never interpolate `${{ }}` expressions directly in `run:` scripts** — this is a script injection vector. Always pass them through `env:` variables instead (e.g., `env: CONFIRM: ${{ inputs.confirm }}` then use `$CONFIRM` in the script).
+- Add explicit `permissions` blocks to workflows to document intent and follow least privilege (e.g., `permissions: contents: write`).
+
 ### Committing Changes
 
 Follow the repository's standard commit practices from `docs/developer.md`:
