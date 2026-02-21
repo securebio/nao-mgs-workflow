@@ -35,8 +35,8 @@ class UTCFormatter(logging.Formatter):
         dt = datetime.fromtimestamp(record.created, UTC)
         return dt.strftime("%Y-%m-%d %H:%M:%S UTC")
 
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger()
+logger.setLevel(logging.INFO)
 handler = logging.StreamHandler()
 formatter = UTCFormatter("[%(asctime)s] %(message)s")
 handler.setFormatter(formatter)

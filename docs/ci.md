@@ -156,10 +156,10 @@ Manually triggered (`workflow_dispatch`) workflow that rebuilds the benchmark in
 The workflow:
 1. Runs INDEX nf-tests as a preflight gate
 2. Builds the full index to `s3://nao-testing/mgs-workflow-test/index-latest/`
-3. Cleans up the Nextflow work directory
+3. Cleans up the Nextflow work directory and removes stale files from the previous index
 4. Verifies the new index passes the age check
 
-The workflow accepts optional inputs for the source branch (default: `dev`) and AWS Batch job queue. After a successful rebuild, the job summary includes instructions for archiving the index to the production bucket (`s3://nao-mgs-index/`), which is a separate manual step.
+The workflow always uses the branch it is dispatched from (ensuring preflight tests and the build use the same code) and accepts an optional AWS Batch job queue input. After a successful rebuild, the job summary includes instructions for archiving the index to the production bucket (`s3://nao-mgs-index/`), which is a separate manual step.
 
 ### Label issues (`label-issues.yml`)
 

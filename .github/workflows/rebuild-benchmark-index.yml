@@ -10,13 +10,6 @@ on:
           index at s3://nao-testing/mgs-workflow-test/index-latest/.
         required: true
         type: string
-      branch:
-        description: >
-          Branch to build the index from (default: dev).
-          The index config and pipeline code will come from this branch.
-        required: false
-        default: dev
-        type: string
       job_queue:
         description: >
           AWS Batch job queue to use for the INDEX workflow.
@@ -51,8 +44,6 @@ jobs:
 
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          ref: ${{ inputs.branch }}
 
       - name: Setup nf-test environment
         uses: ./.github/actions/setup-nf-test
@@ -62,11 +53,9 @@ jobs:
       - name: Install Python dependencies
         run: pip install boto3
 
-      - name: Clear old benchmark index
-        run: |
-          echo "Removing old index at s3://nao-testing/mgs-workflow-test/index-latest/..."
-          aws s3 rm s3://nao-testing/mgs-workflow-test/index-latest/ --recursive
-          echo "Old index cleared"
+      - name: Record build start time
+        id: start-time
+        run: echo "timestamp=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
 
       - name: Run INDEX workflow
         env:
@@ -87,14 +76,27 @@ jobs:
           aws s3 rm s3://nao-testing/mgs-workflow-test/index-latest/work/ --recursive
           echo "Work directory cleaned up"
 
+      - name: Remove stale files from previous index
+        env:
+          BUILD_START: ${{ steps.start-time.outputs.timestamp }}
+        run: |
+          echo "Removing files older than build start time (${BUILD_START})..."
+          aws s3api list-objects-v2 \
+            --bucket nao-testing \
+            --prefix mgs-workflow-test/index-latest/ \
+            --query "Contents[?LastModified<'${BUILD_START}'].Key" \
+            --output text | tr '\t' '\n' | while read -r key; do
+              [ -z "$key" ] || aws s3api delete-object --bucket nao-testing --key "$key"
+            done
+          echo "Stale file cleanup complete"
+
       - name: Write summary
         env:
-          BRANCH: ${{ inputs.branch }}
           JOB_QUEUE: ${{ inputs.job_queue }}
         run: |
           echo "### Benchmark index rebuilt" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "- **Source branch:** ${BRANCH}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Source branch:** ${GITHUB_REF_NAME}" >> $GITHUB_STEP_SUMMARY
           echo "- **Job queue:** ${JOB_QUEUE}" >> $GITHUB_STEP_SUMMARY
           echo "- **Benchmark location:** s3://nao-testing/mgs-workflow-test/index-latest/output/" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY

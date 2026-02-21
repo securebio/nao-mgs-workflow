@@ -237,7 +237,7 @@ Only pipeline maintainers should author a new release. The process for going thr
 
         1. Check for new releases of reference databases and update `configs/index.config`[^refs].
         2. Update `index-min-pipeline-version` and `pipeline-min-index-version` in the `[tool.mgs-workflow]` section of `pyproject.toml` to reflect any changes to compatibility restrictions.
-        3. Delete `s3://nao-testing/mgs-workflow-test/index-latest`, then run the `INDEX` workflow to generate a new index at that location. (This will update the index used by relevant Github Actions checks.)
+        3. Run the "Rebuild benchmark index" workflow in GitHub Actions to generate a new index at `s3://nao-testing/mgs-workflow-test/index-latest/`. See [CI documentation](./ci.md#benchmark-index-management) for details.
 
 3. Open a PR to merge the release branch into `dev`, wait for CI tests to complete, and resolve any failing tests. Then:
 
