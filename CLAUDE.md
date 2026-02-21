@@ -129,8 +129,9 @@ For all Python scripts, follow the patterns established in `bin/build_tiny_test_
 All Python scripts should have corresponding Pytest scripts in the same directory (`**/script.py` -> `**/test_script.py`). See `docs/testing.md` for general pytest conventions. Additional guidance for Claude Code:
 
 - The order of tests should match the order of functions/methods in the source script.
-- After writing tests, always review them again to identify and remove unnecessary redundancy.
+- Use `pytest.mark.parametrize` for tests that share the same structure but differ in inputs/expected outputs. After writing tests, always review them again to identify and remove unnecessary redundancy.
 - Distinguish clearly between unit tests of high-level functions (which can be useful even if heavily mocked) and integration tests of the whole code stack (which should keep mocks to a minimum).
+- Use `@patch` decorators (including class-level decorators for shared mocks) rather than `with patch(...)` context managers.
 
 ## Versioning and Changelog
 
