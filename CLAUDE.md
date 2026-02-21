@@ -37,6 +37,8 @@ EOF
 2. **Changes list**: Bulleted list of specific changes with their justifications
 3. **Footer**: Always include the "Generated with Claude Code" attribution
 
+**Before creating the PR**, check whether your changes require documentation updates. If you modified behavior, added features, or changed workflows, update the relevant docs (e.g. `docs/`, `CLAUDE.md`) in the same PR — don't leave documentation for a follow-up.
+
 **Important options:**
 - Always use `--base dev` (PRs target `dev`, not `main`)
 - Always use `--draft` (PRs start as drafts for self-review before requesting human review)
