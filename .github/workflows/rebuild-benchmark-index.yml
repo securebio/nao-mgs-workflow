@@ -86,7 +86,8 @@ jobs:
             --prefix mgs-workflow-test/index-latest/ \
             --query "Contents[?LastModified<'${BUILD_START}'].Key" \
             --output text | tr '\t' '\n' | while read -r key; do
-              [ -z "$key" ] || aws s3api delete-object --bucket nao-testing --key "$key"
+              [ -z "$key" ] || [ "$key" = "None" ] && continue
+              aws s3api delete-object --bucket nao-testing --key "$key"
             done
           echo "Stale file cleanup complete"
 
