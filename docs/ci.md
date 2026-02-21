@@ -116,6 +116,10 @@ These tests run the pipeline on larger benchmark datasets to verify performance 
 | `benchmark-illumina-100M.yml` | Illumina 100M reads |
 | `benchmark-ont-100k.yml` | ONT 100k reads |
 
+### Benchmark index age check (`check-index-age.yml`)
+
+Runs on PRs to `main` and `stable`. Checks the age of the benchmark index at `s3://nao-testing/mgs-workflow-test/index-latest/` against the `max-stable-index-age-days` setting in `pyproject.toml` (default: 90 days). If the index is too old, the check fails and the "Rebuild benchmark index" workflow should be run to update it.
+
 ### Release readiness check (`check-release.yml`)
 
 Runs only on PRs to `main`. Verifies that:
@@ -142,6 +146,20 @@ Triggered on push to `main`. After a release is merged, this workflow:
 3. Conditionally resets `stable` to match `main` only for point releases (where the first three version numbers X.Y.Z match)
 
 This uses a GitHub App token for authentication to allow force pushes to protected branches.
+
+### Benchmark index management
+
+#### Rebuild benchmark index (`rebuild-benchmark-index.yml`)
+
+Manually triggered (`workflow_dispatch`) workflow that rebuilds the benchmark index used by integration and benchmark tests. Only users with repo write access can trigger it, and it requires typing "rebuild index" as a confirmation string.
+
+The workflow:
+1. Runs INDEX nf-tests as a preflight gate
+2. Builds the full index to `s3://nao-testing/mgs-workflow-test/index-latest/`
+3. Cleans up the Nextflow work directory
+4. Verifies the new index passes the age check
+
+The workflow accepts optional inputs for the source branch (default: `dev`) and AWS Batch job queue. After a successful rebuild, the job summary includes instructions for archiving the index to the production bucket (`s3://nao-mgs-index/`), which is a separate manual step.
 
 ### Label issues (`label-issues.yml`)
 
