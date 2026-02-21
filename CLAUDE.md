@@ -65,6 +65,7 @@ When the user asks you to handle PR review comments:
 ### GitHub Actions Workflows
 
 When writing or modifying GitHub Actions workflows:
+- **Use local composite actions** from `.github/actions/` instead of standard actions where available. For example, use `./.github/actions/setup-python` (which handles pip caching and project dependency installation) rather than `actions/setup-python@v5` directly. Check `.github/actions/` for existing reusable actions before writing setup steps inline.
 - **Never interpolate `${{ }}` expressions directly in `run:` scripts** — this is a script injection vector. Always pass them through `env:` variables instead (e.g., `env: CONFIRM: ${{ inputs.confirm }}` then use `$CONFIRM` in the script).
 - Add explicit `permissions` blocks to workflows to document intent and follow least privilege (e.g., `permissions: contents: write`).
 
@@ -103,6 +104,7 @@ Refer to `docs/developer.md` for comprehensive coding style guidelines. Key poin
 - Nextflow: `lower_snake_case` for variables, `UPPER_SNAKE_CASE` for processes
 - Keep PRs small and focused
 - Avoid over-engineering; only make requested changes
+- When the user or a linter modifies a file between your edits, preserve those changes — never revert formatting the user has applied
 
 ### Python Style
 
@@ -112,8 +114,9 @@ For all Python scripts, follow the patterns established in `bin/build_tiny_test_
 - Use Python 3.12+ native type hints, not the `typing` module (e.g. `list[str]` instead of `List[str]`, etc)
 - Logging with the `logging` standard library and `UTCFormatter` class
 - `parse_arguments()` function for argparse
-- `main()` entry point with timing and logging
+- `main()` entry point with timing and logging. `main()` should raise exceptions on failure (not return exit codes). Use a bare `main()` call under `if __name__ == "__main__"`, not `sys.exit(main())`
 - `DESC` docstring at the top describing the script's purpose
+- Google-style docstrings with `Args:` and `Returns:` sections for functions
 - Use context managers (`with` statements) instead of try/finally where appropriate
 - Section headers with `###` dividers, e.g.:
 
