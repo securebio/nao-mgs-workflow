@@ -1,12 +1,14 @@
-# v3.2.0.0
-
-## DOWNSTREAM output cleanup
-
+# v3.2.0.1-dev
 - INDEX update infrastructure:
     - Add benchmark index age tracking: `max-stable-index-age-days` setting in `pyproject.toml`, CI age check on PRs to `main`/`stable` (`check-index-age.yml`)
     - Add manually-triggered rebuild workflow (`rebuild-benchmark-index.yml`) that runs INDEX nf-tests as a preflight gate, builds the index to `s3://nao-testing/mgs-workflow-test/index-latest`, cleans up the Nextflow work directory, and verifies the new index passes the age check.
     - Add `workflow_call` trigger to `nf-test-workflows-index.yml` and `check-index-age.yml` so they can be reused by the rebuild workflow.
     - Fix Groovy date format in INDEX, RUN, and DOWNSTREAM workflows: `YYYY` (week-year) → `yyyy` (calendar year) in `time.txt` timestamps.
+
+# v3.2.0.0
+
+## DOWNSTREAM output cleanup
+
 - Removed `{GROUP}_duplicate_reads.tsv.gz` from DOWNSTREAM outputs; its contents are a strict subset of `{GROUP}_validation_hits.tsv.gz`.
 - Added group-level read count, Kraken, Bracken, and QC outputs to DOWNSTREAM workflow (`{GROUP}_read_counts.tsv.gz`, `{GROUP}_kraken.tsv.gz`, `{GROUP}_bracken.tsv.gz`, `{GROUP}_qc_*.tsv.gz`), produced for both short-read and ONT platforms.
     - At present, these new outputs simply concatenate RUN outputs across samples within a group to produce a single output table per group (with `sample` and `group` labels).
