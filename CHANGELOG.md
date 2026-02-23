@@ -1,4 +1,5 @@
 # v3.2.0.1-dev
+
 - INDEX update infrastructure:
     - Add benchmark index age tracking: `max-stable-index-age-days` setting in `pyproject.toml`, CI age check on PRs to `main`/`stable` (`check-index-age.yml`)
     - Add manually-triggered rebuild workflow (`rebuild-benchmark-index.yml`) that runs INDEX nf-tests as a preflight gate, builds the index to `s3://nao-testing/mgs-workflow-test/index-latest`, cleans up the Nextflow work directory, and verifies the new index passes the age check.
