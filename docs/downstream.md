@@ -109,7 +109,7 @@ This subworkflow takes in an input file specifying (1) paths to one or more RUN 
 
 ### Discover per-sample output files (`DISCOVER_RUN_OUTPUT`)
 
-This is a reusable subworkflow that discovers all per-sample TSV files from the RUN output directories and matches them to sample groups. It takes `run_dirs` and `groups` from `LOAD_DOWNSTREAM_DATA`, globs all TSV files from each directory, and matches them to samples using filename prefixes from the groups channel. The output is a channel of tuples `(label, sample, file, group)` containing all discovered files. (No diagram is provided for this subworkflow.)
+This is a reusable subworkflow that discovers all per-sample TSV files from the RUN output directories and matches them to sample groups. It takes `run_dirs` and `groups` from `LOAD_DOWNSTREAM_DATA`, globs all TSV files from each directory, and matches them to samples using exact suffix matching against expected outputs from `pyproject.toml`. It then validates that all expected per-sample output files are present, failing with an informative error if any are missing (e.g. due to incomplete S3 copies). The output is a channel of tuples `(label, sample, file, group)` containing all discovered files. (No diagram is provided for this subworkflow.)
 
 ### Concatenate all per-sample RUN outputs by group (`CONCAT_RUN_OUTPUTS_BY_GROUP`)
 
