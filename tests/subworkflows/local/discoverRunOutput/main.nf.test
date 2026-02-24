@@ -47,7 +47,7 @@ nextflow_workflow {
     }
 
     test("Should fail when a single output file is missing from run_results_dir") {
-        tag "expect_fail"
+        tag "expect_failed"
         when {
             params {
             }
@@ -71,7 +71,7 @@ nextflow_workflow {
     }
 
     test("Should fail when sample has no files in run_results_dir") {
-        tag "expect_fail"
+        tag "expect_failed"
         when {
             params {
             }
@@ -95,7 +95,7 @@ nextflow_workflow {
     }
 
     test("Should fail when sample name is a prefix of another sample (no exact match)") {
-        tag "expect_fail"
+        tag "expect_failed"
         when {
             params {
             }
