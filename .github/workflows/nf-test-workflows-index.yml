@@ -2,19 +2,20 @@ name: nf-test INDEX workflow test
 
 on:
   pull_request: # Runs on all PRs
+  workflow_call: # Called by rebuild-benchmark-index
 
 permissions:
   id-token: write
   contents: read
 
 concurrency:
-  group: ci-nf-test-workflows-index-pr-${{ github.event.pull_request.number }}
+  group: ci-nf-test-workflows-index-${{ github.event.pull_request.number || github.run_id }}
   cancel-in-progress: true
 
 jobs:
   test-workflows-index:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     env:
       RUST_TOOLS_VERSION: ${{ needs.setup-rust.outputs.rust-version }}
     steps:
@@ -23,6 +24,7 @@ jobs:
         with:
           fetch-depth: 0  # Full history needed for git diff in setup-rust-container
       - name: Check for relevant changes
+        if: github.event_name == 'pull_request'
         uses: dorny/paths-filter@v3
         id: filter
         with:
@@ -42,21 +44,21 @@ jobs:
               - 'rust-tools/**'
               - 'docker/nao-rust-tools.Dockerfile'
       - name: Setup nf-test environment
-        if: steps.filter.outputs.index == 'true'
+        if: github.event_name != 'pull_request' || steps.filter.outputs.index == 'true'
         uses: ./.github/actions/setup-nf-test
         with:
           role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
       - name: Setup Rust container
-        if: steps.filter.outputs.index == 'true'
+        if: github.event_name != 'pull_request' || steps.filter.outputs.index == 'true'
         id: rust
         uses: ./.github/actions/setup-rust-container
       - name: Run workflow tests
-        if: steps.filter.outputs.index == 'true'
+        if: github.event_name != 'pull_request' || steps.filter.outputs.index == 'true'
         env:
           RUST_TOOLS_VERSION: ${{ steps.rust.outputs.rust-version }}
         run: bin/run-nf-test.sh --num-workers 4 tests/workflows/index.nf.test --output-log test-logs-workflows-index.txt ${{ steps.rust.outputs.nextflow-args }}
       - name: Upload test results
-        if: failure() && steps.filter.outputs.index == 'true'
+        if: failure() && (github.event_name != 'pull_request' || steps.filter.outputs.index == 'true')
         uses: actions/upload-artifact@v4
         with:
           name: test-logs-workflows-index

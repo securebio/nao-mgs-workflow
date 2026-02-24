@@ -100,6 +100,9 @@ nf-test test
 > [!TIP]
 > If someone else in your organization already uses this pipeline, it's likely they've already run the index workflow and generated an output directory. If this is the case, you can reduce costs and increase reproducibility by using theirs instead of generating your own. If you want to do this, skip this step, and edit `configs/run.config` (or `configs/run_ont.config`) such that `params.ref_dir` points to `INDEX_DIR/output`.
 
+> [!NOTE]
+> **For repository maintainers:** The recommended way to rebuild the benchmark index is via the "Rebuild benchmark index" workflow in GitHub Actions (`rebuild-benchmark-index.yml`). This runs INDEX nf-tests as a preflight check, builds the index to the test bucket, and verifies freshness automatically. See the [CI documentation](./ci.md#benchmark-index-management) for details.
+
 Create a new directory outside the repo directory and copy over the index workflow config file as `nextflow.config` in that directory:
 
 ```

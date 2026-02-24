@@ -1,0 +1,101 @@
+name: Rebuild benchmark index
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: >
+          Type "rebuild index" to confirm. This will run the full INDEX
+          workflow with production databases and update the benchmark
+          index at s3://nao-testing/mgs-workflow-test/index-latest/.
+        required: true
+        type: string
+      job_queue:
+        description: >
+          AWS Batch job queue to use for the INDEX workflow.
+        required: false
+        default: workflow-test-batch-jq
+        type: string
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  preflight-index-tests:
+    uses: ./.github/workflows/nf-test-workflows-index.yml
+    secrets: inherit
+
+  rebuild-benchmark-index:
+    needs: preflight-index-tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    env:
+      TOWER_ACCESS_TOKEN: ${{ secrets.TOWER_ACCESS_TOKEN }}
+    steps:
+      - name: Validate confirmation
+        env:
+          CONFIRM: ${{ inputs.confirm }}
+        run: |
+          if [ "$CONFIRM" != "rebuild index" ]; then
+            echo "::error::Confirmation failed. You must type 'rebuild index' to proceed."
+            exit 1
+          fi
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup nf-test environment
+        uses: ./.github/actions/setup-nf-test
+        with:
+          role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
+
+      - name: Install Python dependencies
+        run: pip install boto3
+
+      - name: Delete old index
+        run: |
+          echo "Deleting old index (recoverable via S3 versioning)..."
+          aws s3 rm s3://nao-testing/mgs-workflow-test/index-latest/ --recursive
+          echo "Old index deleted"
+
+      - name: Run INDEX workflow
+        env:
+          JOB_QUEUE: ${{ inputs.job_queue }}
+        run: |
+          mkdir -p launch_dir
+          echo "process.queue = \"${JOB_QUEUE}\"" > launch_dir/queue.config
+          nextflow run . \
+            -c configs/index.config \
+            -c launch_dir/queue.config \
+            -profile batch \
+            --base_dir "s3://nao-testing/mgs-workflow-test/index-latest"
+
+      - name: Clean up Nextflow work directory
+        if: always()
+        run: |
+          echo "Removing Nextflow work directory..."
+          aws s3 rm s3://nao-testing/mgs-workflow-test/index-latest/work/ --recursive
+          echo "Work directory cleaned up"
+
+      - name: Write summary
+        env:
+          JOB_QUEUE: ${{ inputs.job_queue }}
+        run: |
+          echo "### Benchmark index rebuilt" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Source branch:** ${GITHUB_REF_NAME}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Job queue:** ${JOB_QUEUE}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Benchmark location:** s3://nao-testing/mgs-workflow-test/index-latest/output/" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "> [!IMPORTANT]" >> $GITHUB_STEP_SUMMARY
+          echo "> To archive this index to \`s3://nao-mgs-index/\`, manually run:" >> $GITHUB_STEP_SUMMARY
+          echo "> \`\`\`" >> $GITHUB_STEP_SUMMARY
+          echo "> aws s3 sync s3://nao-testing/mgs-workflow-test/index-latest/output/ s3://nao-mgs-index/$(date -u +%Y%m%d)/output/" >> $GITHUB_STEP_SUMMARY
+          echo "> \`\`\`" >> $GITHUB_STEP_SUMMARY
+          echo "::warning::Remember to archive the rebuilt index to s3://nao-mgs-index/ (see job summary for the command)"
+
+  verify-index-age:
+    needs: rebuild-benchmark-index
+    uses: ./.github/workflows/check-index-age.yml
+    secrets: inherit
