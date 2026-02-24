@@ -52,7 +52,7 @@ workflow DISCOVER_RUN_OUTPUT {
                 }
             }
             .collect().ifEmpty([]).map { ["key", it as Set] }
-        found_set_ch.join(expected_set_ch).subscribe { _key, found, expected ->
+        validation_ch = found_set_ch.join(expected_set_ch).map { _key, found, expected ->
             def missing = expected - found
             if (missing) {
                 def formatted = missing.sort().collect { it.replace('\t', ' / ') }.join('\n  ')
@@ -62,8 +62,17 @@ workflow DISCOVER_RUN_OUTPUT {
                     "Ensure the RUN workflow has completed and all files are available."
                 )
             }
+            return ["validation_key", true]
         }
+        // Gate output behind validation: collect all items, wait for validation
+        // to pass, then re-emit. This prevents downstream processes from starting
+        // on incomplete data. Uses .join() (not .combine()) to preserve list structure.
+        validated_output_ch = output_ch
+            .toList()
+            .map { items -> ["validation_key", items] }
+            .join(validation_ch)
+            .flatMap { _key, items, _valid -> items }
 
     emit:
-        output = output_ch  // tuple(label, sample, file, group)
+        output = validated_output_ch  // tuple(label, sample, file, group)
 }
