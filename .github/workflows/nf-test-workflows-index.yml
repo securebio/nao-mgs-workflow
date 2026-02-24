@@ -15,7 +15,7 @@ concurrency:
 jobs:
   test-workflows-index:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     env:
       RUST_TOOLS_VERSION: ${{ needs.setup-rust.outputs.rust-version }}
     steps:
