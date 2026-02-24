@@ -53,9 +53,11 @@ jobs:
       - name: Install Python dependencies
         run: pip install boto3
 
-      - name: Record build start time
-        id: start-time
-        run: echo "timestamp=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+      - name: Delete old index
+        run: |
+          echo "Deleting old index (recoverable via S3 versioning)..."
+          aws s3 rm s3://nao-testing/mgs-workflow-test/index-latest/ --recursive
+          echo "Old index deleted"
 
       - name: Run INDEX workflow
         env:
@@ -75,21 +77,6 @@ jobs:
           echo "Removing Nextflow work directory..."
           aws s3 rm s3://nao-testing/mgs-workflow-test/index-latest/work/ --recursive
           echo "Work directory cleaned up"
-
-      - name: Remove stale files from previous index
-        env:
-          BUILD_START: ${{ steps.start-time.outputs.timestamp }}
-        run: |
-          echo "Removing files older than build start time (${BUILD_START})..."
-          aws s3api list-objects-v2 \
-            --bucket nao-testing \
-            --prefix mgs-workflow-test/index-latest/ \
-            --query "Contents[?LastModified<'${BUILD_START}'].Key" \
-            --output text | tr '\t' '\n' | while read -r key; do
-              [ -z "$key" ] || [ "$key" = "None" ] && continue
-              aws s3api delete-object --bucket nao-testing --key "$key"
-            done
-          echo "Stale file cleanup complete"
 
       - name: Write summary
         env:
