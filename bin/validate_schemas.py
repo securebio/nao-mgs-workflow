@@ -16,7 +16,9 @@ Exit codes:
 ###########
 
 import argparse
+import csv
 import gzip
+import json
 import logging
 import shutil
 import sys
@@ -145,6 +147,49 @@ def decompressed_path(data_file: Path) -> Generator[Path, None, None]:
         tmp.flush()
         yield Path(tmp.name)
 
+@contextmanager
+def reordered_to_schema(
+    data_path: Path, schema_path: Path
+) -> Generator[Path, None, None]:
+    """
+    Context manager that yields a path to a version of the data file with
+    columns reordered to match the schema field order.
+
+    Only activates when the schema specifies fieldsMatch: "equal" (not natively
+    supported by frictionless). If columns are already in the correct order or
+    the column sets don't match (a real validation error), yields the original
+    path unchanged.
+    """
+    with open(schema_path) as f:
+        schema = json.load(f)
+    schema_fields = [field["name"] for field in schema.get("fields", [])]
+    needs_reorder = False
+    if schema.get("fieldsMatch") == "equal" and schema_fields:
+        with open(data_path) as f:
+            header_line = f.readline().rstrip("\r\n")
+        if header_line:
+            data_fields = header_line.split("\t")
+            if len(data_fields) != len(set(data_fields)):
+                dupes = [f for f in data_fields if data_fields.count(f) > 1]
+                raise ValueError(f"Duplicate columns in data file: {sorted(set(dupes))}")
+            needs_reorder = (
+                data_fields != schema_fields
+                and set(data_fields) == set(schema_fields)
+            )
+    if not needs_reorder:
+        yield data_path
+        return
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".tsv", delete=True) as tmp:
+        with open(data_path) as f:
+            reader = csv.DictReader(
+                f, delimiter="\t", quoting=csv.QUOTE_NONE, quotechar=None,
+            )
+            tmp.write("\t".join(schema_fields) + "\n")
+            for row in reader:
+                tmp.write("\t".join(row[col] for col in schema_fields) + "\n")
+        tmp.flush()
+        yield Path(tmp.name)
+
 def validate_file(data_file: Path, schema_path: Path) -> tuple[bool, list[str]]:
     """
     Validate a data file against a schema.
@@ -154,15 +199,16 @@ def validate_file(data_file: Path, schema_path: Path) -> tuple[bool, list[str]]:
     Returns:
         Tuple of (is_valid, list of error messages).
     """
-    with decompressed_path(data_file) as file_to_validate:
-        dialect = Dialect(controls=[formats.CsvControl(delimiter="\t")])
-        resource = Resource(
-            path=str(file_to_validate),
-            schema=str(schema_path),
-            dialect=dialect,
-        )
-        with system.use_context(trusted=True):
-            report = validate(resource)
+    with decompressed_path(data_file) as uncompressed:
+        with reordered_to_schema(uncompressed, schema_path) as file_to_validate:
+            dialect = Dialect(controls=[formats.CsvControl(delimiter="\t")])
+            resource = Resource(
+                path=str(file_to_validate),
+                schema=str(schema_path),
+                dialect=dialect,
+            )
+            with system.use_context(trusted=True):
+                report = validate(resource)
     if report.valid:
         return True, []
     errors = []

@@ -1,0 +1,687 @@
+{
+  "$schema": "https://datapackage.org/profiles/2.0/tableschema.json",
+  "title": "Validated Viral Hits",
+  "description": "Per-read viral hit assignments with post-hoc BLAST validation results, as produced by the DOWNSTREAM workflow. Each row represents a single putative viral read. The `aligner_*` columns are inherited from the RUN workflow, where reads are aligned by Bowtie2 (short-read) or Minimap2 (ONT) and then processed into per-read summary statistics; LCA and score statistics are calculated post-hoc across all alignments for each read. Reference sequences are partitioned into three subsets: natural (non-artificial NCBI sequences, unsuffixed columns), artificial (descendants of NCBI taxid 81077, i.e. synthetic constructs and vectors, `_artificial` suffix), and combined (both natural and artificial, `_combined` suffix). The `prim_align_*` columns contain data extracted from the primary alignment record (not secondary or supplementary) in the aligner SAM output. Reads are clustered by species using VSEARCH, cluster representatives are BLASTed against the NCBI core_nt database, and validation results are propagated back to all reads in each cluster. Produced for both short-read and ONT platforms; paired-end-specific columns (not marked `required`) contain NA values for ONT and appear at the end of the ONT output rather than in schema order.",
+  "fieldsMatch": "equal",
+  "missingValues": ["NA"],
+  "primaryKey": ["group", "seq_id"],
+  "fields": [
+    {
+      "name": "seq_id",
+      "title": "Sequence ID",
+      "description": "Unique read identifier (query name from the sequencing instrument).",
+      "type": "string",
+      "constraints": {
+        "required": true,
+        "minLength": 1
+      },
+      "example": "NC_059681.1_0_0"
+    },
+    {
+      "name": "sample",
+      "title": "Sample",
+      "description": "Sample identifier from the RUN workflow.",
+      "type": "string",
+      "constraints": {
+        "required": true,
+        "minLength": 1
+      },
+      "example": "sample_1"
+    },
+    {
+      "name": "aligner_taxid_lca",
+      "title": "Aligner LCA Taxon ID",
+      "description": "Lowest common ancestor taxon ID across all alignments for this read, calculated post-hoc from Bowtie2 (short-read) or Minimap2 (ONT) outputs, considering only natural (non-artificial) reference sequences.",
+      "type": "integer",
+      "constraints": {
+        "required": true,
+        "minimum": 1
+      },
+      "example": 2847173
+    },
+    {
+      "name": "aligner_taxid_top",
+      "title": "Aligner Top Taxon ID",
+      "description": "Taxon ID of the highest-scoring alignment for this read from Bowtie2 (short-read) or Minimap2 (ONT), considering only natural (non-artificial) reference sequences.",
+      "type": "integer",
+      "constraints": {
+        "required": true,
+        "minimum": 1
+      },
+      "example": 2847173
+    },
+    {
+      "name": "aligner_length_normalized_score_mean",
+      "title": "Aligner Length-Normalized Score (Mean)",
+      "description": "Mean length-normalized alignment score (alignment_score / ln(read_length)) across all alignments for this read, considering only natural (non-artificial) reference sequences.",
+      "type": "number",
+      "constraints": {
+        "required": true,
+        "minimum": 0
+      },
+      "example": 59.39
+    },
+    {
+      "name": "aligner_taxid_lca_combined",
+      "title": "Aligner LCA Taxon ID (Combined)",
+      "description": "Lowest common ancestor taxon ID across all alignments for this read, calculated post-hoc from aligner outputs, considering all reference sequences (both natural and artificial).",
+      "type": "integer",
+      "constraints": {
+        "required": true,
+        "minimum": 1
+      },
+      "example": 2847173
+    },
+    {
+      "name": "aligner_n_assignments_combined",
+      "title": "Aligner Assignment Count (Combined)",
+      "description": "Number of reference sequences that the read aligned to, considering all reference sequences (both natural and artificial).",
+      "type": "integer",
+      "constraints": {
+        "required": true,
+        "minimum": 1
+      },
+      "example": 1
+    },
+    {
+      "name": "aligner_length_normalized_score_mean_combined",
+      "title": "Aligner Length-Normalized Score (Combined)",
+      "description": "Mean length-normalized alignment score (alignment_score / ln(read_length)) across all alignments for this read, considering all reference sequences (both natural and artificial).",
+      "type": "number",
+      "constraints": {
+        "required": true,
+        "minimum": 0
+      },
+      "example": 59.39
+    },
+    {
+      "name": "aligner_taxid_lca_artificial",
+      "title": "Aligner LCA Taxon ID (Artificial)",
+      "description": "Lowest common ancestor taxon ID across all alignments for this read, calculated post-hoc from aligner outputs, considering only artificial reference sequences (descendants of NCBI taxid 81077). NA when no artificial references were matched.",
+      "type": "integer",
+      "constraints": {
+        "minimum": 1
+      },
+      "example": 81077
+    },
+    {
+      "name": "aligner_n_assignments_artificial",
+      "title": "Aligner Assignment Count (Artificial)",
+      "description": "Number of artificial reference sequences (descendants of NCBI taxid 81077) that the read aligned to. 0 when no artificial references were matched.",
+      "type": "integer",
+      "constraints": {
+        "required": true,
+        "minimum": 0
+      },
+      "example": 0
+    },
+    {
+      "name": "aligner_length_normalized_score_mean_artificial",
+      "title": "Aligner Length-Normalized Score (Artificial)",
+      "description": "Mean length-normalized alignment score (alignment_score / ln(read_length)) across all alignments for this read, considering only artificial reference sequences (descendants of NCBI taxid 81077). NA when no artificial references were matched.",
+      "type": "number",
+      "constraints": {
+        "minimum": 0
+      },
+      "example": 42.5
+    },
+    {
+      "name": "query_len",
+      "title": "Query Length",
+      "description": "Read length in bases. For paired-end data, this is the forward read length.",
+      "type": "integer",
+      "constraints": {
+        "required": true,
+        "minimum": 1
+      },
+      "example": 151
+    },
+    {
+      "name": "query_len_rev",
+      "title": "Query Length (Reverse)",
+      "description": "Reverse read length in bases. Only present for paired-end (short-read) data; NA for ONT.",
+      "type": "integer",
+      "constraints": {
+        "minimum": 1
+      },
+      "example": 145
+    },
+    {
+      "name": "query_seq",
+      "title": "Query Sequence",
+      "description": "Read nucleotide sequence. For paired-end data, this is the forward read sequence.",
+      "type": "string",
+      "constraints": {
+        "required": true,
+        "minLength": 1
+      },
+      "example": "AGACATCCTGGAAGGGG"
+    },
+    {
+      "name": "query_seq_rev",
+      "title": "Query Sequence (Reverse)",
+      "description": "Reverse read nucleotide sequence. Only present for paired-end (short-read) data; NA for ONT.",
+      "type": "string",
+      "constraints": {
+        "minLength": 1
+      },
+      "example": "CCCCCTTCTCCAGGACC"
+    },
+    {
+      "name": "query_qual",
+      "title": "Query Quality",
+      "description": "Base quality scores in Phred+33 ASCII encoding. For paired-end data, this is the forward read quality.",
+      "type": "string",
+      "constraints": {
+        "required": true,
+        "minLength": 1
+      },
+      "example": "FFFFFFFFFFFFFFF"
+    },
+    {
+      "name": "query_qual_rev",
+      "title": "Query Quality (Reverse)",
+      "description": "Reverse read base quality scores in Phred+33 ASCII encoding. Only present for paired-end (short-read) data; NA for ONT.",
+      "type": "string",
+      "constraints": {
+        "minLength": 1
+      },
+      "example": "FFFFFFFFFFFFFFF"
+    },
+    {
+      "name": "prim_align_genome_id_all",
+      "title": "Primary Alignment Genome ID",
+      "description": "NCBI accession ID(s) of the genome(s) the read aligned to in its primary alignment. For discordant paired-end alignments where forward and reverse reads map to different genomes, IDs are joined with '/' in forward/reverse order.",
+      "type": "string",
+      "constraints": {
+        "required": true,
+        "minLength": 1,
+        "pattern": "^[^/]+(/[^/]+)?$"
+      },
+      "example": "NC_059681.1"
+    },
+    {
+      "name": "prim_align_taxid_all",
+      "title": "Primary Alignment Taxon ID",
+      "description": "NCBI taxon ID(s) corresponding to the genome(s) the read aligned to in its primary alignment. For discordant paired-end alignments where forward and reverse reads map to different genomes, IDs are joined with '/' in forward/reverse order.",
+      "type": "string",
+      "constraints": {
+        "required": true,
+        "minLength": 1,
+        "pattern": "^[^/]+(/[^/]+)?$"
+      },
+      "example": "2847173"
+    },
+    {
+      "name": "prim_align_fragment_length",
+      "title": "Fragment Length",
+      "description": "Inferred fragment length from the primary alignment (distance between outer edges of the read pair alignment). Only present for paired-end (short-read) data; NA for ONT.",
+      "type": "integer",
+      "constraints": {
+        "minimum": 0
+      },
+      "example": 917
+    },
+    {
+      "name": "prim_align_best_alignment_score",
+      "title": "Best Alignment Score",
+      "description": "Best alignment score from the primary alignment. For paired-end data, this is the forward read score.",
+      "type": "integer",
+      "constraints": {
+        "required": true,
+        "minimum": 0
+      },
+      "example": 298
+    },
+    {
+      "name": "prim_align_best_alignment_score_rev",
+      "title": "Best Alignment Score (Reverse)",
+      "description": "Best alignment score for the reverse read. Only present for paired-end (short-read) data; NA for ONT.",
+      "type": "integer",
+      "constraints": {
+        "minimum": 0
+      },
+      "example": 290
+    },
+    {
+      "name": "prim_align_edit_distance",
+      "title": "Edit Distance",
+      "description": "Edit distance between the read and the aligned reference sequence in the primary alignment (SAM NM tag: mismatches plus inserted and deleted bases). For paired-end data, this is the forward read edit distance.",
+      "type": "integer",
+      "constraints": {
+        "required": true,
+        "minimum": 0
+      },
+      "example": 0
+    },
+    {
+      "name": "prim_align_edit_distance_rev",
+      "title": "Edit Distance (Reverse)",
+      "description": "Edit distance between the reverse read and the aligned reference sequence in the primary alignment (SAM NM tag). Only present for paired-end (short-read) data; NA for ONT.",
+      "type": "integer",
+      "constraints": {
+        "minimum": 0
+      },
+      "example": 0
+    },
+    {
+      "name": "prim_align_ref_start",
+      "title": "Reference Start Position",
+      "description": "0-based start position of the alignment on the reference genome. For paired-end data, this is the forward read position.",
+      "type": "integer",
+      "constraints": {
+        "required": true,
+        "minimum": 0
+      },
+      "example": 149
+    },
+    {
+      "name": "prim_align_ref_start_rev",
+      "title": "Reference Start Position (Reverse)",
+      "description": "0-based start position of the reverse read alignment on the reference genome. Only present for paired-end (short-read) data; NA for ONT.",
+      "type": "integer",
+      "constraints": {
+        "minimum": 0
+      },
+      "example": 921
+    },
+    {
+      "name": "prim_align_query_rc",
+      "title": "Query Reverse Complement",
+      "description": "Whether the read was reverse-complemented in the primary alignment. For paired-end data, this is the forward read flag.",
+      "type": "boolean",
+      "constraints": {
+        "required": true
+      },
+      "example": false
+    },
+    {
+      "name": "prim_align_query_rc_rev",
+      "title": "Query Reverse Complement (Reverse)",
+      "description": "Whether the reverse read was reverse-complemented in the primary alignment. Only present for paired-end (short-read) data; NA for ONT.",
+      "type": "boolean",
+      "example": true
+    },
+    {
+      "name": "prim_align_pair_status",
+      "title": "Pair Status",
+      "description": "Bowtie2 pair alignment status code. CP = concordant pair, DP = discordant pair, UP = unpaired. Only present for paired-end (short-read) data; NA for ONT.",
+      "type": "string",
+      "constraints": {
+        "enum": ["CP", "DP", "UP"]
+      },
+      "example": "DP"
+    },
+    {
+      "name": "group",
+      "title": "Group",
+      "description": "Group identifier assigned to this set of samples.",
+      "type": "string",
+      "constraints": {
+        "required": true,
+        "minLength": 1
+      },
+      "example": "group_1"
+    },
+    {
+      "name": "prim_align_dup_exemplar",
+      "title": "Duplicate Exemplar Read ID",
+      "description": "Read ID of the exemplar selected to represent this read's alignment-based duplicate group (based on alignment coordinates, not sequence similarity). A read that is its own exemplar (seq_id == prim_align_dup_exemplar) is either unique or the chosen representative of its duplicate group. Only present for short-read data; NA for ONT.",
+      "type": "string",
+      "constraints": {
+        "minLength": 1
+      },
+      "example": "NC_059681.1_0_0"
+    },
+    {
+      "name": "vsearch_cluster_id",
+      "title": "VSEARCH Cluster ID",
+      "description": "Numeric identifier for the VSEARCH cluster this read was assigned to during validation clustering.",
+      "type": "integer",
+      "constraints": {
+        "required": true,
+        "minimum": 0
+      },
+      "example": 4
+    },
+    {
+      "name": "vsearch_cluster_rep_id",
+      "title": "VSEARCH Cluster Representative ID",
+      "description": "Read ID of the cluster representative for this read's cluster. Validation results from this representative are propagated to all reads in the cluster.",
+      "type": "string",
+      "constraints": {
+        "required": true,
+        "minLength": 1
+      },
+      "example": "NC_059681.1_0_0"
+    },
+    {
+      "name": "vsearch_seq_length",
+      "title": "VSEARCH Sequence Length",
+      "description": "Length of the sequence used for VSEARCH clustering. May differ from query_len if the sequence was trimmed.",
+      "type": "integer",
+      "constraints": {
+        "required": true,
+        "minimum": 0
+      },
+      "example": 297
+    },
+    {
+      "name": "vsearch_is_cluster_rep",
+      "title": "Is Cluster Representative",
+      "description": "Whether this read is the representative of its VSEARCH cluster.",
+      "type": "boolean",
+      "constraints": {
+        "required": true
+      },
+      "example": true
+    },
+    {
+      "name": "vsearch_percent_identity",
+      "title": "VSEARCH Percent Identity",
+      "description": "Percent identity between this read's sequence and the cluster representative's sequence. 100.0 for the cluster representative itself.",
+      "type": "number",
+      "constraints": {
+        "required": true,
+        "minimum": 0,
+        "maximum": 100
+      },
+      "example": 100.0
+    },
+    {
+      "name": "vsearch_orientation",
+      "title": "VSEARCH Alignment Orientation",
+      "description": "Orientation of the alignment to the cluster representative. '+' for same strand, '-' for reverse complement.",
+      "type": "string",
+      "constraints": {
+        "required": true,
+        "enum": ["+", "-"]
+      },
+      "example": "+"
+    },
+    {
+      "name": "vsearch_cigar",
+      "title": "VSEARCH CIGAR String",
+      "description": "CIGAR string describing the alignment of this read to the cluster representative.",
+      "type": "string",
+      "constraints": {
+        "required": true,
+        "minLength": 1
+      },
+      "example": "297M"
+    },
+    {
+      "name": "vsearch_cluster_size",
+      "title": "VSEARCH Cluster Size",
+      "description": "Number of sequences in this VSEARCH cluster.",
+      "type": "integer",
+      "constraints": {
+        "required": true,
+        "minimum": 1
+      },
+      "example": 1
+    },
+    {
+      "name": "group_species",
+      "title": "Group-Species Identifier",
+      "description": "Composite identifier combining group and species-level taxon ID, used internally for partitioning sequences during validation (format: group_taxid).",
+      "type": "string",
+      "constraints": {
+        "required": true,
+        "minLength": 1
+      },
+      "example": "group_1_12475"
+    },
+    {
+      "name": "validation_staxid_lca_combined",
+      "title": "Validation LCA Taxon ID (Combined)",
+      "description": "LCA taxon ID from BLAST validation of the cluster representative against core_nt, considering all reference sequences (both natural and artificial). NA when the cluster representative was not selected for BLAST validation, or when no hits were retained after filtering.",
+      "type": "integer",
+      "constraints": {
+        "minimum": 1
+      },
+      "example": 12475
+    },
+    {
+      "name": "validation_n_assignments_combined",
+      "title": "Validation Assignment Count (Combined)",
+      "description": "Number of BLAST assignments retained after filtering, considering all reference sequences (both natural and artificial). NA when the cluster representative was not selected for BLAST validation; 0 when it was BLASTed but no hits were retained.",
+      "type": "integer",
+      "constraints": {
+        "minimum": 0
+      },
+      "example": 1
+    },
+    {
+      "name": "validation_n_assignments_classified_combined",
+      "title": "Validation Classified Assignment Count (Combined)",
+      "description": "Number of classified BLAST assignments (with known taxonomic classification), considering all reference sequences (both natural and artificial). NA when the cluster representative was not selected for BLAST validation; 0 when it was BLASTed but no classified hits were retained.",
+      "type": "integer",
+      "constraints": {
+        "minimum": 0
+      },
+      "example": 1
+    },
+    {
+      "name": "validation_staxid_top_combined",
+      "title": "Validation Top Taxon ID (Combined)",
+      "description": "Taxon ID of the top-scoring BLAST hit, considering all reference sequences (both natural and artificial). NA when the cluster representative was not selected for BLAST validation, or when no hits were retained after filtering.",
+      "type": "integer",
+      "constraints": {
+        "minimum": 1
+      },
+      "example": 12475
+    },
+    {
+      "name": "validation_staxid_top_classified_combined",
+      "title": "Validation Top Hit Classified (Combined)",
+      "description": "Whether the top-scoring BLAST hit has a known taxonomic classification, considering all reference sequences (both natural and artificial). NA when the cluster representative was not selected for BLAST validation, or when no hits were retained after filtering.",
+      "type": "boolean",
+      "example": true
+    },
+    {
+      "name": "validation_bitscore_min_combined",
+      "title": "Validation Min Bitscore (Combined)",
+      "description": "Minimum bitscore among retained BLAST hits, considering all reference sequences (both natural and artificial). NA when the cluster representative was not selected for BLAST validation, or when no hits were retained after filtering.",
+      "type": "number",
+      "constraints": {
+        "minimum": 0
+      },
+      "example": 276.0
+    },
+    {
+      "name": "validation_bitscore_max_combined",
+      "title": "Validation Max Bitscore (Combined)",
+      "description": "Maximum bitscore among retained BLAST hits, considering all reference sequences (both natural and artificial). NA when the cluster representative was not selected for BLAST validation, or when no hits were retained after filtering.",
+      "type": "number",
+      "constraints": {
+        "minimum": 0
+      },
+      "example": 276.0
+    },
+    {
+      "name": "validation_bitscore_mean_combined",
+      "title": "Validation Mean Bitscore (Combined)",
+      "description": "Mean bitscore among retained BLAST hits, considering all reference sequences (both natural and artificial). NA when the cluster representative was not selected for BLAST validation, or when no hits were retained after filtering.",
+      "type": "number",
+      "constraints": {
+        "minimum": 0
+      },
+      "example": 276.0
+    },
+    {
+      "name": "validation_staxid_lca",
+      "title": "Validation LCA Taxon ID",
+      "description": "LCA taxon ID from BLAST validation, considering only natural (non-artificial) reference sequences. NA when the cluster representative was not selected for BLAST validation, or when no natural hits were retained after filtering.",
+      "type": "integer",
+      "constraints": {
+        "minimum": 1
+      },
+      "example": 12475
+    },
+    {
+      "name": "validation_n_assignments",
+      "title": "Validation Assignment Count",
+      "description": "Number of BLAST assignments retained after filtering, considering only natural (non-artificial) reference sequences. NA when the cluster representative was not selected for BLAST validation; 0 when it was BLASTed but no natural hits were retained.",
+      "type": "integer",
+      "constraints": {
+        "minimum": 0
+      },
+      "example": 1
+    },
+    {
+      "name": "validation_n_assignments_classified",
+      "title": "Validation Classified Assignment Count",
+      "description": "Number of classified BLAST assignments (with known taxonomic classification), considering only natural (non-artificial) reference sequences. NA when the cluster representative was not selected for BLAST validation; 0 when it was BLASTed but no classified natural hits were retained.",
+      "type": "integer",
+      "constraints": {
+        "minimum": 0
+      },
+      "example": 1
+    },
+    {
+      "name": "validation_staxid_top",
+      "title": "Validation Top Taxon ID",
+      "description": "Taxon ID of the top-scoring BLAST hit, considering only natural (non-artificial) reference sequences. NA when the cluster representative was not selected for BLAST validation, or when no natural hits were retained after filtering.",
+      "type": "integer",
+      "constraints": {
+        "minimum": 1
+      },
+      "example": 12475
+    },
+    {
+      "name": "validation_staxid_top_classified",
+      "title": "Validation Top Hit Classified",
+      "description": "Whether the top-scoring BLAST hit has a known taxonomic classification, considering only natural (non-artificial) reference sequences. NA when the cluster representative was not selected for BLAST validation, or when no natural hits were retained after filtering.",
+      "type": "boolean",
+      "example": true
+    },
+    {
+      "name": "validation_bitscore_min",
+      "title": "Validation Min Bitscore",
+      "description": "Minimum bitscore among retained BLAST hits, considering only natural (non-artificial) reference sequences. NA when the cluster representative was not selected for BLAST validation, or when no natural hits were retained after filtering.",
+      "type": "number",
+      "constraints": {
+        "minimum": 0
+      },
+      "example": 276.0
+    },
+    {
+      "name": "validation_bitscore_max",
+      "title": "Validation Max Bitscore",
+      "description": "Maximum bitscore among retained BLAST hits, considering only natural (non-artificial) reference sequences. NA when the cluster representative was not selected for BLAST validation, or when no natural hits were retained after filtering.",
+      "type": "number",
+      "constraints": {
+        "minimum": 0
+      },
+      "example": 276.0
+    },
+    {
+      "name": "validation_bitscore_mean",
+      "title": "Validation Mean Bitscore",
+      "description": "Mean bitscore among retained BLAST hits, considering only natural (non-artificial) reference sequences. NA when the cluster representative was not selected for BLAST validation, or when no natural hits were retained after filtering.",
+      "type": "number",
+      "constraints": {
+        "minimum": 0
+      },
+      "example": 276.0
+    },
+    {
+      "name": "validation_staxid_lca_artificial",
+      "title": "Validation LCA Taxon ID (Artificial)",
+      "description": "LCA taxon ID from BLAST validation, considering only artificial reference sequences (descendants of NCBI taxid 81077). NA when the cluster representative was not selected for BLAST validation, or when no artificial hits were retained after filtering.",
+      "type": "integer",
+      "constraints": {
+        "minimum": 1
+      },
+      "example": 81077
+    },
+    {
+      "name": "validation_n_assignments_artificial",
+      "title": "Validation Assignment Count (Artificial)",
+      "description": "Number of BLAST assignments retained after filtering, considering only artificial reference sequences (descendants of NCBI taxid 81077). NA when the cluster representative was not selected for BLAST validation; 0 when it was BLASTed but no artificial hits were retained.",
+      "type": "integer",
+      "constraints": {
+        "minimum": 0
+      },
+      "example": 0
+    },
+    {
+      "name": "validation_n_assignments_classified_artificial",
+      "title": "Validation Classified Assignment Count (Artificial)",
+      "description": "Number of classified BLAST assignments (with known taxonomic classification), considering only artificial reference sequences (descendants of NCBI taxid 81077). NA when the cluster representative was not selected for BLAST validation; 0 when it was BLASTed but no classified artificial hits were retained.",
+      "type": "integer",
+      "constraints": {
+        "minimum": 0
+      },
+      "example": 0
+    },
+    {
+      "name": "validation_staxid_top_artificial",
+      "title": "Validation Top Taxon ID (Artificial)",
+      "description": "Taxon ID of the top-scoring BLAST hit, considering only artificial reference sequences (descendants of NCBI taxid 81077). NA when the cluster representative was not selected for BLAST validation, or when no artificial hits were retained after filtering.",
+      "type": "integer",
+      "constraints": {
+        "minimum": 1
+      },
+      "example": 81077
+    },
+    {
+      "name": "validation_staxid_top_classified_artificial",
+      "title": "Validation Top Hit Classified (Artificial)",
+      "description": "Whether the top-scoring BLAST hit has a known taxonomic classification, considering only artificial reference sequences (descendants of NCBI taxid 81077). NA when the cluster representative was not selected for BLAST validation, or when no artificial hits were retained after filtering.",
+      "type": "boolean",
+      "example": true
+    },
+    {
+      "name": "validation_bitscore_min_artificial",
+      "title": "Validation Min Bitscore (Artificial)",
+      "description": "Minimum bitscore among retained BLAST hits, considering only artificial reference sequences (descendants of NCBI taxid 81077). NA when the cluster representative was not selected for BLAST validation, or when no artificial hits were retained after filtering.",
+      "type": "number",
+      "constraints": {
+        "minimum": 0
+      },
+      "example": 150.0
+    },
+    {
+      "name": "validation_bitscore_max_artificial",
+      "title": "Validation Max Bitscore (Artificial)",
+      "description": "Maximum bitscore among retained BLAST hits, considering only artificial reference sequences (descendants of NCBI taxid 81077). NA when the cluster representative was not selected for BLAST validation, or when no artificial hits were retained after filtering.",
+      "type": "number",
+      "constraints": {
+        "minimum": 0
+      },
+      "example": 200.0
+    },
+    {
+      "name": "validation_bitscore_mean_artificial",
+      "title": "Validation Mean Bitscore (Artificial)",
+      "description": "Mean bitscore among retained BLAST hits, considering only artificial reference sequences (descendants of NCBI taxid 81077). NA when the cluster representative was not selected for BLAST validation, or when no artificial hits were retained after filtering.",
+      "type": "number",
+      "constraints": {
+        "minimum": 0
+      },
+      "example": 175.0
+    },
+    {
+      "name": "validation_distance_aligner",
+      "title": "Validation Distance (Aligner)",
+      "description": "Taxonomic distance (number of parent-child steps) from the original aligner LCA taxon ID to the LCA of both the aligner and validation assignments. NA when the cluster representative was not selected for BLAST validation, or when no natural hits were retained after filtering.",
+      "type": "integer",
+      "constraints": {
+        "minimum": 0
+      },
+      "example": 1
+    },
+    {
+      "name": "validation_distance_validation",
+      "title": "Validation Distance (Validation)",
+      "description": "Taxonomic distance (number of parent-child steps) from the validation LCA taxon ID to the LCA of both the aligner and validation assignments. NA when the cluster representative was not selected for BLAST validation, or when no natural hits were retained after filtering.",
+      "type": "integer",
+      "constraints": {
+        "minimum": 0
+      },
+      "example": 0
+    }
+  ]
+}

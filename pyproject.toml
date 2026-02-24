@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "mgs-workflow"
-version = "3.1.1.0-dev"
+version = "3.2.0.0"
 requires-python = ">=3.12"
 dependencies = [
     "biopython>=1.85",
@@ -116,7 +116,6 @@ expected-outputs-downstream = [
     "logging_downstream/time.txt",
     "results_downstream/{GROUP}_bracken.tsv.gz",
     "results_downstream/{GROUP}_clade_counts.tsv.gz",
-    "results_downstream/{GROUP}_duplicate_reads.tsv.gz",
     "results_downstream/{GROUP}_duplicate_stats.tsv.gz",
     "results_downstream/{GROUP}_kraken.tsv.gz",
     "results_downstream/{GROUP}_qc_adapter_stats_cleaned.tsv.gz",

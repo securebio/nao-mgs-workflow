@@ -6,6 +6,8 @@ For short-read data, this workflow performs three main analyses: (1) identificat
 
 For ONT data, the workflow only performs (1) validation of viral taxonomic assignments using BLAST against the NCBI core_nt database.
 
+For detailed column-level documentation of DOWNSTREAM output files, see the [schema files](../schemas/) — each schema includes field names, types, descriptions, and examples.
+
 [^comp]: These are kept to a minimum in the `RUN` workflow to minimize memory demands and maximize parallelization.
 
 ## Workflow structure

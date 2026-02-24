@@ -1,18 +1,31 @@
-# v3.1.1.0-dev
+# v3.2.0.0
 
-- Added manually-triggered GitHub Actions workflow (`manual-reset.yml`) for resetting the `stable` branch to `main` on non-point releases.
-- Removed branch restrictions from most CI workflows so they run on all PRs, not just PRs to specific branches. Long-running integration tests are unchanged, as are tests that only run on releases.
-- Reduced `maxRetries` from 3 to 1 in `standard` and `batch` profiles for spot-to-on-demand fallback (#662)
-- Added docs on using a Groovy closure for spot-to-on-demand queue fallback (#662)
-- Add `CLAUDE.md` with guidelines for Claude Code: GitHub interaction policies, PR workflows, testing, Python code style, etc.
-- Extract testing documentation from `docs/developer.md` into standalone `docs/testing.md`; add snapshot safety warning.
-- Add CHANGELOG formatting guidelines to `docs/versioning.md`.
+## DOWNSTREAM output cleanup
+
+- Removed `{GROUP}_duplicate_reads.tsv.gz` from DOWNSTREAM outputs; its contents are a strict subset of `{GROUP}_validation_hits.tsv.gz`.
 - Added group-level read count, Kraken, Bracken, and QC outputs to DOWNSTREAM workflow (`{GROUP}_read_counts.tsv.gz`, `{GROUP}_kraken.tsv.gz`, `{GROUP}_bracken.tsv.gz`, `{GROUP}_qc_*.tsv.gz`), produced for both short-read and ONT platforms.
-    - Created general-purpose `CONCAT_BY_GROUP` subworkflow for concatenating sample-level outputs by group with clean output naming, replacing `PREPARE_GROUP_TSVS`.
-    - Created `CONCAT_RUN_OUTPUTS_BY_GROUP` subworkflow that wraps all `CONCAT_BY_GROUP` calls, emitting `hits` separately and mixing other outputs into a single channel.
-    - Created reusable `DISCOVER_RUN_OUTPUT` subworkflow for discovering all per-sample files from RUN output directories and matching them to sample groups.
-    - Simplified `LOAD_DOWNSTREAM_DATA` to emit `run_dirs` and `groups` channels (removed virus hits discovery, now handled by `DISCOVER_RUN_OUTPUT`).
-    - Added `read_counts.schema.json`, `kraken.schema.json`, `bracken.schema.json`, and `qc_*.schema.json` for schema validation of group-level outputs.
+    - At present, these new outputs simply concatenate RUN outputs across samples within a group to produce a single output table per group (with `sample` and `group` labels).
+    - Future work may summarize outputs across groups (e.g. by summing read counts) but this is beyond the scope of this release.
+- Added table schemas for all DOWNSTREAM outputs in `schemas/` directory; these are now enforced in CI for all outputs.
+    - To enable a consistent schema, `{GROUP}_validation_hits.tsv.gz` files now have the same columns across Illumina and ONT samples; columns that only have meaning for paired-end data are always `NA` for single-end ONT samples and located at the end of each row.
+    - The schema uses `fieldsMatch: "equal"` to tolerate column order differences.
+- All RUN outputs are now reflected in at least one DOWNSTREAM output; using RUN outputs directly is deprecated.
+
+## CI
+
+- Removed branch restrictions from most CI workflows so they run on all PRs, not just PRs to specific branches. Long-running integration tests are unchanged, as are tests that only run on releases.
+- Added manually-triggered GitHub Actions workflow (`manual-reset.yml`) for resetting the `stable` branch to `main` on non-point releases.
+
+## Documentation
+
+- Modified `docs/downstream.md` to point to `schemas/` for information on DOWNSTREAM output content.
+- Extracted testing documentation from `docs/developer.md` into standalone `docs/testing.md` to keep documents at a readable length.
+- Added CHANGELOG formatting guidelines to `docs/versioning.md`.
+- Added `CLAUDE.md` with guidelines for Claude Code: GitHub interaction policies, PR workflows, testing, Python code style, etc.
+
+## Other
+
+- Reduced `maxRetries` from 3 to 1 in `standard` and `batch` profiles, and added guidance on falling back from spot to on-demand instances.
 
 # v3.1.0.0
 

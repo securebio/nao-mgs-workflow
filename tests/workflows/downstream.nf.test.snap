@@ -3,7 +3,6 @@
         "content": [
             "tt1_bracken.tsv.gz:md5,dcfdd1e797ae4d1dbc4e6c32cc669f99",
             "tt1_clade_counts.tsv.gz:md5,c08ec913ad5dab545a701ed4ac851fc9",
-            "tt1_duplicate_reads.tsv.gz:md5,ae1190c0955d0e7a106dbb7bebc707f5",
             "tt1_duplicate_stats.tsv.gz:md5,dea20f8f6c3f9753f8b225fc0f8c7e52",
             "tt1_kraken.tsv.gz:md5,a932839292f8edc76f74f1cb4ce67189",
             "tt1_qc_adapter_stats_cleaned.tsv.gz:md5,70d8f2e6594f9133273459ec89c025a5",
@@ -40,12 +39,12 @@
             "tt1_qc_quality_sequence_stats_cleaned.tsv.gz:md5,7eb64b88f3fa5984c2c16ccb58b16183",
             "tt1_qc_quality_sequence_stats_raw.tsv.gz:md5,65972ae057612526b5911d3080d9136a",
             "tt1_read_counts.tsv.gz:md5,25cc87260d146c93c9ee15a319d98c4a",
-            "tt1_validation_hits.tsv.gz:md5,1154bc601c7bf582f9c56469a837ad0f"
+            "tt1_validation_hits.tsv.gz:md5,a4cc080f0503bb04a51412b598493a01"
         ],
         "meta": {
             "nf-test": "0.9.3",
             "nextflow": "25.10.4"
         },
-        "timestamp": "2026-02-18T14:15:29.695774753"
+        "timestamp": "2026-02-19T18:31:35.845525"
     }
 }

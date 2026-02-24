@@ -1,4 +1,5 @@
-// Add a column to a TSV with a specified name and value
+// Add one or more columns to a TSV with a fixed value
+// The column input can be a single name or comma-separated list of names
 // Input is a tuple of (sample, tsv_file) to preserve sample ID through the workflow
 process ADD_FIXED_COLUMN {
     label "python"

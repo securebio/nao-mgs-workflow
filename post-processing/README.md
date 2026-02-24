@@ -79,8 +79,8 @@ The input must be a gzipped TSV file with at least these columns:
   read's own `seq_id` if not a duplicate).
 
 Additional columns are preserved in the output.  This means the tool is
-agnostic to whether it is run on a `_validation_hits.tsv.gz`,
-`_duplicate_reads.tsv.gz`, or anything else with the same structure.
+agnostic to whether it is run on a `_validation_hits.tsv.gz`
+or anything else with the same structure.
 
 #### Output Format
 
