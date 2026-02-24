@@ -2,6 +2,7 @@
 
 - Added CI for tracking the age of the index used for benchmarking (`check-index-age.yml`) and regenerating it once stale (`rebuild-benchmark-index.yml`). The latter runs INDEX nf-tests as a preflight gate, deletes the old index, builds a fresh index to `s3://nao-testing/mgs-workflow-test/index-latest`, cleans up the Nextflow work directory, and verifies the new index passes the age check. The old index is recoverable via S3 bucket versioning.
 - Updated `CLAUDE.md` with refinements from recent PRs.
+- Added validation in DOWNSTREAM file discovery (`DISCOVER_RUN_OUTPUT`) that checks all expected per-sample RUN output files are present in `run_results_dir` before proceeding. Previously, missing files (e.g. due to incomplete S3 copies) caused the viral analysis pipeline to silently produce no output.
 
 # v3.2.0.0
 

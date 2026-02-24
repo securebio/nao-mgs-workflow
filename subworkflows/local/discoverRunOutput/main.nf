@@ -33,6 +33,36 @@ workflow DISCOVER_RUN_OUTPUT {
                 suffixes_str.split(',').any { suffix -> filename == "${sample}_${suffix}" || filename == "${sample}_${suffix}.gz" }
             }
             .map { label, f, sample, group, _suffixes_str -> tuple(label, sample, f, group) }
+        // Validate that all expected files were found: for each (label, sample),
+        // every expected suffix from pyproject.toml should have a matching file.
+        // This catches incomplete run_results_dir (e.g. files not yet copied to S3).
+        found_set_ch = output_ch
+            .map { label, sample, f, _group ->
+                def filename = f.getFileName().toString()
+                def suffix = filename.substring(sample.length() + 1)
+                if (suffix.endsWith(".gz")) suffix = suffix[0..-4]
+                "${label}\t${sample}\t${suffix}"
+            }
+            .collect().ifEmpty([]).map { ["key", it as Set] }
+        expected_set_ch = groups
+            .combine(suffixes_ch)
+            .flatMap { label, sample, _group, suffixes_str ->
+                suffixes_str.split(',').collect { suffix ->
+                    "${label}\t${sample}\t${suffix}"
+                }
+            }
+            .collect().ifEmpty([]).map { ["key", it as Set] }
+        found_set_ch.join(expected_set_ch).subscribe { _key, found, expected ->
+            def missing = expected - found
+            if (missing) {
+                def formatted = missing.sort().collect { it.replace('\t', ' / ') }.join('\n  ')
+                throw new RuntimeException(
+                    "Missing ${missing.size()} expected RUN output file(s) in run_results_dir:\n  " +
+                    "${formatted}\n" +
+                    "Ensure the RUN workflow has completed and all files are available."
+                )
+            }
+        }
 
     emit:
         output = output_ch  // tuple(label, sample, file, group)
