@@ -10,7 +10,7 @@ workflow LOAD_SAMPLESHEET {
     main:
         // Start time
         start_time = new Date()
-        start_time_str = start_time.format("YYYY-MM-dd HH:mm:ss z (Z)")
+        start_time_str = start_time.format("yyyy-MM-dd HH:mm:ss z (Z)")
 
         // Check pairing and validate headers
         def headers = file(sample_sheet).readLines().first().tokenize(',')*.trim()

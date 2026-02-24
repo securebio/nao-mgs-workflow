@@ -190,7 +190,7 @@ Feel free to use AI tools (Cursor, GitHub Copilot, Claude Code, etc.) to generat
     - If you make any changes that affect the output of the pipeline, list/describe the changes that occurred in the pull request.
 2. **Update the `CHANGELOG.md` file** with the changes that you are making, and update the `pipeline-version.txt` and `pyproject.toml` file with the new version number.
     - More information on how to update version numbers can be found in [versioning.md](./versioning.md). Note that, before merging to `main`, version numbers should have the `-dev` suffix. This suffix should be used to denote development versions in `CHANGELOG.md`, `pipeline-version.txt`, and `pyproject.toml`, and should only be removed when preparing to merge to `main`.
-    - CHANGELOG entries should be concise and action-oriented, starting with a verb (e.g., "Add ...", "Fix ...", "Remove ...", "Update ..."). Reference PR numbers with `(#NNN)` when relevant. Use `##` subheaders to group related changes when a release has many entries. The topmost heading must match the version in `pyproject.toml` (enforced by CI).
+    - CHANGELOG entries should be concise and action-oriented, starting with a verb (e.g., "Add ...", "Fix ...", "Remove ...", "Update ..."). Top-level entries should describe user-facing outcomes, not implementation details — for example, prefer "ONT and short-read validation hits now share the same schema and column set" over "Extended `ADD_FIXED_COLUMN` to accept comma-separated column names." Implementation details can be included as sub-bullets if helpful. Reference PR numbers with `(#NNN)` when relevant. Use `##` subheaders to group related changes when a release has many entries. The topmost heading must match the version in `pyproject.toml` (enforced by CI).
 3. **Update the expected-output-{run,downstream}.txt files** with any changes to the output of the RUN or DOWNSTREAM workflows.
 4. **Pass automated tests on GitHub Actions**. These run automatically when you open a pull request.
 5. **Write a meaningful description** of your changes in the PR description and give it a meaningful title.
@@ -237,7 +237,7 @@ Only pipeline maintainers should author a new release. The process for going thr
 
         1. Check for new releases of reference databases and update `configs/index.config`[^refs].
         2. Update `index-min-pipeline-version` and `pipeline-min-index-version` in the `[tool.mgs-workflow]` section of `pyproject.toml` to reflect any changes to compatibility restrictions.
-        3. Delete `s3://nao-testing/mgs-workflow-test/index-latest`, then run the `INDEX` workflow to generate a new index at that location. (This will update the index used by relevant Github Actions checks.)
+        3. Run the "Rebuild benchmark index" workflow in GitHub Actions to generate a new index at `s3://nao-testing/mgs-workflow-test/index-latest/`. See [CI documentation](./ci.md#benchmark-index-management) for details.
 
 3. Open a PR to merge the release branch into `dev`, wait for CI tests to complete, and resolve any failing tests. Then:
 

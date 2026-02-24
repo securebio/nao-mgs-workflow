@@ -46,8 +46,32 @@ nextflow_workflow {
         }
     }
 
-    test("Should return empty channel when sample has no files") {
-        tag "expect_success"
+    test("Should fail when a single output file is missing from run_results_dir") {
+        tag "expect_failed"
+        when {
+            params {
+            }
+            workflow {
+                '''
+                input[0] = Channel.of(
+                    ["tt1", "${projectDir}/test-data/results/run_output_shortread/"]
+                )
+                input[1] = Channel.of(
+                    ["tt1", "tiny_test", "group_a"]
+                )
+                // Uses a pyproject.toml with an extra expected output that doesn't exist
+                input[2] = file("${projectDir}/test-data/discoverRunOutput/pyproject_extra_suffix.toml")
+                '''
+            }
+        }
+        then {
+            assert !workflow.success
+            assert "  tt1 / tiny_test / nonexistent_output.tsv" in workflow.stdout
+        }
+    }
+
+    test("Should fail when sample has no files in run_results_dir") {
+        tag "expect_failed"
         when {
             params {
             }
@@ -64,13 +88,14 @@ nextflow_workflow {
             }
         }
         then {
-            assert workflow.success
-            assert workflow.out.output.size() == 0
+            assert !workflow.success
+            assert "  tt1 / nonexistent_sample / virus_hits.tsv" in workflow.stdout
+            assert "  tt1 / nonexistent_sample / bracken.tsv" in workflow.stdout
         }
     }
 
-    test("Should not match when sample name is a prefix of another sample") {
-        tag "expect_success"
+    test("Should fail when sample name is a prefix of another sample (no exact match)") {
+        tag "expect_failed"
         when {
             params {
             }
@@ -79,8 +104,9 @@ nextflow_workflow {
                 input[0] = Channel.of(
                     ["tt1", "${projectDir}/test-data/results/run_output_shortread/"]
                 )
-                // "tiny" is a prefix of "tiny_test", so "tiny_test_virus_hits.tsv"
-                // should NOT match "tiny" (it would with the old startsWith approach)
+                // "tiny" is a prefix of "tiny_test", so exact suffix matching
+                // prevents "tiny_test_virus_hits.tsv" from matching sample "tiny".
+                // Validation fails because "tiny" has no files in the directory.
                 input[1] = Channel.of(
                     ["tt1", "tiny_test", "group_a"],
                     ["tt1", "tiny", "group_b"]
@@ -90,13 +116,8 @@ nextflow_workflow {
             }
         }
         then {
-            assert workflow.success
-            // All files should match "tiny_test", none should match "tiny"
-            assert workflow.out.output.size() > 0
-            workflow.out.output.each { output ->
-                assert output[1] == "tiny_test"
-                assert output[3] == "group_a"
-            }
+            assert !workflow.success
+            assert "  tt1 / tiny / bracken.tsv" in workflow.stdout
         }
     }
 }

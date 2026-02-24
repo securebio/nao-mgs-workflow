@@ -28,7 +28,7 @@ workflow INDEX {
     main:
         // Start time
         start_time = new Date()
-        start_time_str = start_time.format("YYYY-MM-dd HH:mm:ss z (Z)")
+        start_time_str = start_time.format("yyyy-MM-dd HH:mm:ss z (Z)")
         // Build viral taxonomy and infection DB
         MAKE_VIRUS_TAXONOMY_DB(params.taxonomy_url, params.virus_host_db_url,
             params.host_taxon_db, params.virus_taxid,
