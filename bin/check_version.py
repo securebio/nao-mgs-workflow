@@ -81,35 +81,23 @@ def main() -> int:
         print(f"Base branch: {args.base_branch}")
         print(f"Head branch: {args.head_branch}")
 
-        # Rule 1: PRs to main or stable must NOT have -dev suffix
-        if args.base_branch in ("main", "stable"):
+        # Rule 1: PRs to main/stable, or release PRs to dev, must NOT have -dev suffix
+        if args.base_branch in ("main", "stable") or is_release_branch:
+            msg_base = "release PRs" if is_release_branch else f"PRs to {args.base_branch}"
             if is_dev_version:
-                print(
-                    f"ERROR: PRs to {args.base_branch} must not have -dev version suffix",
-                    file=sys.stderr,
-                )
+                msg = f"ERROR: {msg_base} must not have -dev version suffix"
+                print(msg, file=sys.stderr)
                 return 1
-            print(f"OK: Non-dev version correct for PR to {args.base_branch}")
+            print(f"OK: Non-dev version correct for {msg_base}")
 
-        # Rule 2: Release branch PRs to dev must NOT have -dev suffix
-        if args.base_branch == "dev" and is_release_branch:
-            if is_dev_version:
-                print(
-                    "ERROR: Release PRs to dev must not have -dev version suffix",
-                    file=sys.stderr,
-                )
-                return 1
-            print("OK: Non-dev version correct for release PR")
-
-        # Rule 3: Non-release PRs to dev MUST have -dev suffix
-        if args.base_branch == "dev" and not is_release_branch:
+        # Rule 2: All other PRs MUST have -dev suffix
+        else:
+            msg_base = f"non-release PRs to {args.base_branch}"
             if not is_dev_version:
-                print(
-                    "ERROR: Non-release PRs to dev must have -dev version suffix",
-                    file=sys.stderr,
-                )
+                msg = f"ERROR: {msg_base} must have -dev version suffix"
+                print(msg, file=sys.stderr)
                 return 1
-            print("OK: Dev version suffix correct for feature PR")
+            print(f"OK: Dev version suffix correct for {msg_base}")
 
     return 0
 

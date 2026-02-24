@@ -1,0 +1,161 @@
+{
+  "$schema": "https://datapackage.org/profiles/2.0/tableschema.json",
+  "title": "QC Basic Statistics",
+  "description": "Summary statistics calculated by FASTQC for subset samples, concatenated across samples within a group by the DOWNSTREAM workflow. Each row represents one sample's summary statistics.",
+  "missingValues": ["NA"],
+  "primaryKey": ["group", "sample", "stage"],
+  "fields": [
+    {
+      "name": "percent_gc",
+      "title": "Percent GC",
+      "description": "GC content as a percentage.",
+      "type": "number",
+      "constraints": { "required": true, "minimum": 0, "maximum": 100 },
+      "example": 48
+    },
+    {
+      "name": "mean_seq_len",
+      "title": "Mean Sequence Length",
+      "description": "Average read length.",
+      "type": "number",
+      "constraints": { "required": true, "minimum": 0 },
+      "example": 143.96
+    },
+    {
+      "name": "n_reads_single",
+      "title": "Single-End Read Count",
+      "description": "Number of single-end reads. For paired-end data, this equals the number of read pairs multiplied by 2.",
+      "type": "integer",
+      "constraints": { "required": true, "minimum": 0 },
+      "example": 50
+    },
+    {
+      "name": "n_read_pairs",
+      "title": "Read Pair Count",
+      "description": "Number of read pairs. For single-end data (e.g. ONT), this is NA.",
+      "type": "integer",
+      "constraints": { "minimum": 0 },
+      "example": 25
+    },
+    {
+      "name": "percent_duplicates",
+      "title": "Percent Duplicates",
+      "description": "Mean percentage of duplicate sequences across read files, as estimated by FASTQC's duplication analysis.",
+      "type": "number",
+      "constraints": { "required": true, "minimum": 0, "maximum": 100 },
+      "example": 8
+    },
+    {
+      "name": "n_bases_approx",
+      "title": "Approximate Base Count",
+      "description": "Approximate total number of sequenced bases across all reads in the sample, as reported by FASTQC (roughly n_reads_single × mean_seq_len).",
+      "type": "integer",
+      "constraints": { "required": true, "minimum": 0 },
+      "example": 7200
+    },
+    {
+      "name": "per_base_sequence_quality",
+      "title": "Per Base Sequence Quality",
+      "description": "FASTQC pass/warn/fail result for per-base sequence quality.",
+      "type": "string",
+      "constraints": { "required": true, "enum": ["pass", "warn", "fail"] },
+      "example": "pass"
+    },
+    {
+      "name": "per_sequence_quality_scores",
+      "title": "Per Sequence Quality Scores",
+      "description": "FASTQC pass/warn/fail result for per-sequence quality scores.",
+      "type": "string",
+      "constraints": { "required": true, "enum": ["pass", "warn", "fail"] },
+      "example": "pass"
+    },
+    {
+      "name": "per_base_sequence_content",
+      "title": "Per Base Sequence Content",
+      "description": "FASTQC pass/warn/fail result for per-base sequence content.",
+      "type": "string",
+      "constraints": { "required": true, "enum": ["pass", "warn", "fail"] },
+      "example": "warn"
+    },
+    {
+      "name": "per_sequence_gc_content",
+      "title": "Per Sequence GC Content",
+      "description": "FASTQC pass/warn/fail result for per-sequence GC content.",
+      "type": "string",
+      "constraints": { "required": true, "enum": ["pass", "warn", "fail"] },
+      "example": "fail"
+    },
+    {
+      "name": "per_base_n_content",
+      "title": "Per Base N Content",
+      "description": "FASTQC pass/warn/fail result for per-base N content.",
+      "type": "string",
+      "constraints": { "required": true, "enum": ["pass", "warn", "fail"] },
+      "example": "pass"
+    },
+    {
+      "name": "sequence_length_distribution",
+      "title": "Sequence Length Distribution",
+      "description": "FASTQC pass/warn/fail result for sequence length distribution.",
+      "type": "string",
+      "constraints": { "required": true, "enum": ["pass", "warn", "fail"] },
+      "example": "warn"
+    },
+    {
+      "name": "sequence_duplication_levels",
+      "title": "Sequence Duplication Levels",
+      "description": "FASTQC pass/warn/fail result for sequence duplication levels.",
+      "type": "string",
+      "constraints": { "required": true, "enum": ["pass", "warn", "fail"] },
+      "example": "pass"
+    },
+    {
+      "name": "overrepresented_sequences",
+      "title": "Overrepresented Sequences",
+      "description": "FASTQC pass/warn/fail result for overrepresented sequences.",
+      "type": "string",
+      "constraints": { "required": true, "enum": ["pass", "warn", "fail"] },
+      "example": "fail"
+    },
+    {
+      "name": "adapter_content",
+      "title": "Adapter Content",
+      "description": "FASTQC pass/warn/fail result for adapter content.",
+      "type": "string",
+      "constraints": { "required": true, "enum": ["pass", "warn", "fail"] },
+      "example": "pass"
+    },
+    {
+      "name": "per_tile_sequence_quality",
+      "title": "Per Tile Sequence Quality",
+      "description": "FASTQC pass/warn/fail result for per-tile sequence quality. NA if not available.",
+      "type": "string",
+      "constraints": { "enum": ["pass", "warn", "fail"] },
+      "example": "pass"
+    },
+    {
+      "name": "stage",
+      "title": "Stage",
+      "description": "Processing stage: 'raw' (before trimming) or 'cleaned' (after trimming).",
+      "type": "string",
+      "constraints": { "required": true, "enum": ["raw", "cleaned"] },
+      "example": "cleaned"
+    },
+    {
+      "name": "sample",
+      "title": "Sample",
+      "description": "Sample identifier from the RUN workflow.",
+      "type": "string",
+      "constraints": { "required": true, "minLength": 1 },
+      "example": "sample_1"
+    },
+    {
+      "name": "group",
+      "title": "Group",
+      "description": "Group identifier assigned to this sample in the grouping TSV.",
+      "type": "string",
+      "constraints": { "required": true, "minLength": 1 },
+      "example": "group_1"
+    }
+  ]
+}

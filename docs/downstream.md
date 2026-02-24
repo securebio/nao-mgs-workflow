@@ -6,6 +6,8 @@ For short-read data, this workflow performs three main analyses: (1) identificat
 
 For ONT data, the workflow only performs (1) validation of viral taxonomic assignments using BLAST against the NCBI core_nt database.
 
+For detailed column-level documentation of DOWNSTREAM output files, see the [schema files](../schemas/) — each schema includes field names, types, descriptions, and examples.
+
 [^comp]: These are kept to a minimum in the `RUN` workflow to minimize memory demands and maximize parallelization.
 
 ## Workflow structure
@@ -19,9 +21,14 @@ config:
   layout: horizontal
 ---
 flowchart LR
-A(Viral hits tables) & B(Grouping information) --> C[LOAD_DOWNSTREAM_DATA]
-C --> D[PREPARE_GROUP_TSVS]
-D --> E[MARK_VIRAL_DUPLICATES]
+A(RUN output directories) & B(Grouping information) --> C[LOAD_DOWNSTREAM_DATA]
+C --> N[DISCOVER_RUN_OUTPUT]
+N --> O[CONCAT_RUN_OUTPUTS_BY_GROUP]
+O --> S(Read count TSVs)
+O --> KR(Kraken TSVs)
+O --> BR(Bracken TSVs)
+O --> QC(QC stats TSVs)
+O --> E[MARK_VIRAL_DUPLICATES]
 E --> J(Annotated hits TSVs)
 E --> K(Summary TSVs)
 E --> F[VALIDATE_VIRAL_ASSIGNMENTS]
@@ -32,7 +39,8 @@ E --> L
 L --> M(Clade count TSVs)
 subgraph "Data preparation"
 C
-D
+N
+O
 end
 subgraph "Duplicate annotation"
 E
@@ -50,6 +58,10 @@ style H fill:#000,color:#fff,stroke:#000
 style J fill:#000,color:#fff,stroke:#000
 style K fill:#000,color:#fff,stroke:#000
 style M fill:#000,color:#fff,stroke:#000
+style S fill:#000,color:#fff,stroke:#000
+style KR fill:#000,color:#fff,stroke:#000
+style BR fill:#000,color:#fff,stroke:#000
+style QC fill:#000,color:#fff,stroke:#000
 ```
 
 ### Long-read (ONT)
@@ -61,14 +73,20 @@ config:
   layout: horizontal
 ---
 flowchart LR
-A(Viral hits tables) & B(Grouping information) --> C[LOAD_DOWNSTREAM_DATA]
-C --> D[PREPARE_GROUP_TSVS]
-D --> F[VALIDATE_VIRAL_ASSIGNMENTS]
+A(RUN output directories) & B(Grouping information) --> C[LOAD_DOWNSTREAM_DATA]
+C --> N[DISCOVER_RUN_OUTPUT]
+N --> O[CONCAT_RUN_OUTPUTS_BY_GROUP]
+O --> S(Read count TSVs)
+O --> KR(Kraken TSVs)
+O --> BR(Bracken TSVs)
+O --> QC(QC stats TSVs)
+O --> F[VALIDATE_VIRAL_ASSIGNMENTS]
 G(Viral taxonomy DB) --> F
 F --> H(Validation hits TSV)
 subgraph "Data preparation"
 C
-D
+N
+O
 end
 subgraph "Post-hoc validation"
 F
@@ -77,30 +95,44 @@ style A fill:#fff,stroke:#000
 style B fill:#fff,stroke:#000
 style G fill:#fff,stroke:#000
 style H fill:#000,color:#fff,stroke:#000
+style S fill:#000,color:#fff,stroke:#000
+style KR fill:#000,color:#fff,stroke:#000
+style BR fill:#000,color:#fff,stroke:#000
+style QC fill:#000,color:#fff,stroke:#000
 ```
 
 ## Subworkflows
 
 ### Load data into channels (`LOAD_DOWNSTREAM_DATA`)
 
-This subworkflow takes in an input file specifying (1) paths to one or more RUN results directories, and (2) paths to corresponding TSV files specifying the sample groupings to be used for duplicate annotation (see [below](#usage) for more information on this input file). The subworkflow validates that this input file has the required structure, auto-discovers per-sample viral hits files (`*_virus_hits.tsv{,.gz}`) from each results directory, joins them with group annotations from the grouping TSVs, and emits the results as a channel of tuples with the structure expected by the rest of the workflow. (No diagram is provided for this subworkflow.)
+This subworkflow takes in an input file specifying (1) paths to one or more RUN results directories, and (2) paths to corresponding TSV files specifying the sample groupings to be used for duplicate annotation (see [below](#usage) for more information on this input file). The subworkflow validates that this input file has the required structure, resolves run results directory paths, and parses grouping TSVs into sample-group tuples. It emits `run_dirs` (unique resolved directory paths per label) and `groups` (label, sample, group tuples) for use by `DISCOVER_RUN_OUTPUT`. (No diagram is provided for this subworkflow.)
 
-### Concatenate per-sample hits into per-group TSVs (`PREPARE_GROUP_TSVS`)
+### Discover per-sample output files (`DISCOVER_RUN_OUTPUT`)
 
-This subworkflow takes in the per-sample hits tuples output by `LOAD_DOWNSTREAM_DATA` (which already include group annotations), groups them by sample group, concatenates the hits tables within each group, and adds a group column to each concatenated TSV. This enables duplicate annotation across different samples and pipeline runs as specified by the user.
+This is a reusable subworkflow that discovers all per-sample TSV files from the RUN output directories and matches them to sample groups. It takes `run_dirs` and `groups` from `LOAD_DOWNSTREAM_DATA`, globs all TSV files from each directory, and matches them to samples using filename prefixes from the groups channel. The output is a channel of tuples `(label, sample, file, group)` containing all discovered files. (No diagram is provided for this subworkflow.)
+
+### Concatenate all per-sample RUN outputs by group (`CONCAT_RUN_OUTPUTS_BY_GROUP`)
+
+This subworkflow wraps multiple calls to `CONCAT_BY_GROUP` (see below) to concatenate all per-sample RUN output types (viral hits, read counts, Kraken reports, Bracken abundance estimates, and QC statistics) into per-group TSVs. It emits `hits` separately (used by downstream duplicate marking, validation, and clade counting) and mixes all other outputs into a single `other` channel that flows directly to the published results.
+
+
+### Concatenate per-sample outputs into per-group TSVs (`CONCAT_BY_GROUP`)
+
+This is a general-purpose subworkflow that takes per-sample file tuples (with group annotations), filters for files matching a specified suffix, groups them by sample group, concatenates the files within each group, adds a group column, and renames the output to a clean filename. It is called by `CONCAT_RUN_OUTPUTS_BY_GROUP` for each RUN output type (viral hits, read counts, Kraken reports, Bracken abundance estimates, and QC statistics).
 
 ```mermaid
 ---
-title: PREPARE_GROUP_TSVS
+title: CONCAT_BY_GROUP
 config:
   layout: horizontal
 ---
 flowchart LR
-A("Per-sample hits with group annotations <br> (LOAD_DOWNSTREAM_DATA)") --> B[CONCATENATE_TSVS_LABELED]
+A("Per-sample files with group annotations") --> B[CONCATENATE_TSVS_LABELED]
 B --> C[ADD_GROUP_COLUMN]
-C --> D(Per-group hits TSVs)
+C --> D[COPY_FILE]
+D --> E("Per-group TSVs")
 style A fill:#fff,stroke:#000
-style D fill:#000,color:#fff,stroke:#000
+style E fill:#000,color:#fff,stroke:#000
 ```
 
 ### Annotate alignment duplicates (`MARK_VIRAL_DUPLICATES`)
@@ -108,7 +140,7 @@ style D fill:#000,color:#fff,stroke:#000
 > [!NOTE]
 > This subworkflow is only executed for short-read platforms. ONT processing skips this step.
 
-This subworkflow takes in partitioned hits tables from `PREPARE_GROUP_TSVS`, then identifies duplicate reads on the basis of their assigned genome ID and alignment coordinates, as determined by Bowtie2 in the `RUN` workflow. In order to be considered duplicates, two read pairs must be mapped to the same genome ID by Bowtie2, with terminal alignment coordinates that are within a user-specified distance of each other (default 1 nt) at both ends. This fuzzy matching allows for the identification of duplicate reads in the presence of small read errors, alignment errors or overzealous adapter trimming.
+This subworkflow takes in partitioned hits tables from `CONCAT_BY_GROUP`, then identifies duplicate reads on the basis of their assigned genome ID and alignment coordinates, as determined by Bowtie2 in the `RUN` workflow. In order to be considered duplicates, two read pairs must be mapped to the same genome ID by Bowtie2, with terminal alignment coordinates that are within a user-specified distance of each other (default 1 nt) at both ends. This fuzzy matching allows for the identification of duplicate reads in the presence of small read errors, alignment errors or overzealous adapter trimming.
 
 For each group of reads identified as duplicates, the algorithm selects the read pair with the highest average quality score to act as the "exemplar" of the group. Each read in the group is annotated with this examplar to identify its duplicate group[^exemplar], enabling downstream deduplication or other duplicate analyses if needed. In addition to an annotated hits TSV containing an additional column for exemplar IDs, the subworkflow also returns a summary TSV giving the number of reads mapped to a given exemplar ID, as well as the fraction of read pairs in the group that are pairwise duplicates[^pairwise].
 
@@ -122,7 +154,7 @@ config:
   layout: horizontal
 ---
 flowchart LR
-A("Partitioned sample group TSVs <br> (PREPARE_GROUP_TSVS)") --> B[MARK ALIGNMENT DUPLICATES]
+A("Partitioned sample group TSVs <br> (CONCAT_BY_GROUP)") --> B[MARK ALIGNMENT DUPLICATES]
 B --> C[SORT_TSV]
 B --> D[SORT_TSV]
 C --> E(Annotated hits TSVs)
@@ -286,7 +318,7 @@ Once the pipeline has finished, output and logging files will be available in th
 
 #### Split hits TSVs by taxid group (`SPLIT_VIRAL_TSV_BY_SELECTED_TAXID`)
 
-This subworkflow takes in viral hits TSVs from `MARK_VIRAL_DUPLICATES`, each of which is annotated by its sample group as assigned by `PREPARE_GROUP_TSVS`. Each hits TSV is joined with the viral taxonomy DB generated by the INDEX workflow, then partitioned into taxid groups using the following rule: if a read's LCA assignment is at the species level or lower, group it by the species level taxid; otherwise, group the read by the raw LCA taxid. The result is a longer series of hits TSVs, each annotated with a combination of sample group and taxid group.
+This subworkflow takes in viral hits TSVs from `MARK_VIRAL_DUPLICATES`, each of which is annotated by its sample group as assigned by `CONCAT_BY_GROUP`. Each hits TSV is joined with the viral taxonomy DB generated by the INDEX workflow, then partitioned into taxid groups using the following rule: if a read's LCA assignment is at the species level or lower, group it by the species level taxid; otherwise, group the read by the raw LCA taxid. The result is a longer series of hits TSVs, each annotated with a combination of sample group and taxid group.
 
 ```mermaid
 ---

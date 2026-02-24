@@ -1,3 +1,32 @@
+# v3.2.0.0
+
+## DOWNSTREAM output cleanup
+
+- Removed `{GROUP}_duplicate_reads.tsv.gz` from DOWNSTREAM outputs; its contents are a strict subset of `{GROUP}_validation_hits.tsv.gz`.
+- Added group-level read count, Kraken, Bracken, and QC outputs to DOWNSTREAM workflow (`{GROUP}_read_counts.tsv.gz`, `{GROUP}_kraken.tsv.gz`, `{GROUP}_bracken.tsv.gz`, `{GROUP}_qc_*.tsv.gz`), produced for both short-read and ONT platforms.
+    - At present, these new outputs simply concatenate RUN outputs across samples within a group to produce a single output table per group (with `sample` and `group` labels).
+    - Future work may summarize outputs across groups (e.g. by summing read counts) but this is beyond the scope of this release.
+- Added table schemas for all DOWNSTREAM outputs in `schemas/` directory; these are now enforced in CI for all outputs.
+    - To enable a consistent schema, `{GROUP}_validation_hits.tsv.gz` files now have the same columns across Illumina and ONT samples; columns that only have meaning for paired-end data are always `NA` for single-end ONT samples and located at the end of each row.
+    - The schema uses `fieldsMatch: "equal"` to tolerate column order differences.
+- All RUN outputs are now reflected in at least one DOWNSTREAM output; using RUN outputs directly is deprecated.
+
+## CI
+
+- Removed branch restrictions from most CI workflows so they run on all PRs, not just PRs to specific branches. Long-running integration tests are unchanged, as are tests that only run on releases.
+- Added manually-triggered GitHub Actions workflow (`manual-reset.yml`) for resetting the `stable` branch to `main` on non-point releases.
+
+## Documentation
+
+- Modified `docs/downstream.md` to point to `schemas/` for information on DOWNSTREAM output content.
+- Extracted testing documentation from `docs/developer.md` into standalone `docs/testing.md` to keep documents at a readable length.
+- Added CHANGELOG formatting guidelines to `docs/versioning.md`.
+- Added `CLAUDE.md` with guidelines for Claude Code: GitHub interaction policies, PR workflows, testing, Python code style, etc.
+
+## Other
+
+- Reduced `maxRetries` from 3 to 1 in `standard` and `batch` profiles, and added guidance on falling back from spot to on-demand instances.
+
 # v3.1.0.0
 
 ## Changes to output file schema

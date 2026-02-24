@@ -1,0 +1,131 @@
+{
+  "$schema": "https://datapackage.org/profiles/2.0/tableschema.json",
+  "title": "Kraken2 Classification Reports Per Sample",
+  "description": "Kraken2 classification reports for each sample within a group, as produced by the RUN workflow and concatenated by the DOWNSTREAM workflow. Classification is performed on a configurable number of subsampled reads per sample (default 1 million; controlled by params.n_reads_profile in the RUN configuration, recorded in input/params-run.json in the output directory). Reads are split into putative ribosomal and non-ribosomal sets before classification; the ribosomal column indicates which set each row's results come from.",
+  "missingValues": ["NA"],
+  "primaryKey": ["group", "sample", "taxid", "ribosomal"],
+  "fields": [
+    {
+      "name": "pc_reads_total",
+      "title": "Percentage of Total Reads",
+      "description": "Percentage of total reads rooted at this taxon.",
+      "type": "number",
+      "constraints": {
+        "required": true,
+        "minimum": 0,
+        "maximum": 100
+      },
+      "example": 100.0
+    },
+    {
+      "name": "n_reads_clade",
+      "title": "Clade Read Count",
+      "description": "Number of reads assigned to the clade rooted at this taxon.",
+      "type": "integer",
+      "constraints": {
+        "required": true,
+        "minimum": 0
+      },
+      "example": 25
+    },
+    {
+      "name": "n_reads_direct",
+      "title": "Direct Read Count",
+      "description": "Number of reads assigned directly to this taxon.",
+      "type": "integer",
+      "constraints": {
+        "required": true,
+        "minimum": 0
+      },
+      "example": 0
+    },
+    {
+      "name": "n_minimizers_total",
+      "title": "Total Minimizers",
+      "description": "Total number of minimizers associated with this taxon.",
+      "type": "integer",
+      "constraints": {
+        "required": true,
+        "minimum": 0
+      },
+      "example": 915
+    },
+    {
+      "name": "n_minimizers_distinct",
+      "title": "Distinct Minimizers",
+      "description": "Number of distinct minimizers associated with this taxon.",
+      "type": "integer",
+      "constraints": {
+        "required": true,
+        "minimum": 0
+      },
+      "example": 552
+    },
+    {
+      "name": "rank",
+      "title": "Taxonomic Rank",
+      "description": "Taxonomic rank code (e.g. R for root, D for domain, S for species).",
+      "type": "string",
+      "constraints": {
+        "required": true,
+        "minLength": 1
+      },
+      "example": "R"
+    },
+    {
+      "name": "taxid",
+      "title": "Taxonomy ID",
+      "description": "NCBI taxonomy ID for the taxon.",
+      "type": "integer",
+      "constraints": {
+        "required": true,
+        "minimum": 0
+      },
+      "example": 1
+    },
+    {
+      "name": "name",
+      "title": "Taxon Name",
+      "description": "Name of the taxon.",
+      "type": "string",
+      "constraints": {
+        "required": true,
+        "minLength": 1
+      },
+      "example": "root"
+    },
+    {
+      "name": "sample",
+      "title": "Sample",
+      "description": "Sample identifier from the RUN workflow.",
+      "type": "string",
+      "constraints": {
+        "required": true,
+        "minLength": 1
+      },
+      "example": "sample_1"
+    },
+    {
+      "name": "ribosomal",
+      "title": "Ribosomal",
+      "description": "Indicates which read set this row's classification comes from. Reads are split into putative ribosomal (TRUE) and non-ribosomal (FALSE) sets before taxonomic profiling, and classified independently.",
+      "type": "string",
+      "constraints": {
+        "required": true,
+        "enum": ["TRUE", "FALSE"]
+      },
+      "example": "FALSE"
+    },
+    {
+      "name": "group",
+      "title": "Group",
+      "description": "Group identifier assigned to this sample in the grouping TSV.",
+      "type": "string",
+      "constraints": {
+        "required": true,
+        "minLength": 1
+      },
+      "example": "group_1"
+    }
+  ]
+}

@@ -1,0 +1,32 @@
+nextflow_process {
+
+    name "Test process GET_RUN_OUTPUT_SUFFIXES"
+    script "modules/local/getRunOutputSuffixes/main.nf"
+    process "GET_RUN_OUTPUT_SUFFIXES"
+    config "tests/configs/run.config"
+    tag "module"
+    tag "get_run_output_suffixes"
+
+    test("Should extract suffixes from pyproject.toml") {
+        tag "expect_success"
+        when {
+            params {}
+            process {
+                '''
+                input[0] = file("${projectDir}/pyproject.toml")
+                '''
+            }
+        }
+        then {
+            assert process.success
+            // Output should be a comma-separated string of suffixes
+            def suffixes = process.out.suffixes[0].split(',') as Set
+            assert "virus_hits.tsv" in suffixes
+            assert "read_counts.tsv" in suffixes
+            assert "bracken.tsv" in suffixes
+            assert "kraken.tsv" in suffixes
+            // No suffix should end with .gz
+            suffixes.each { assert !it.endsWith(".gz") }
+        }
+    }
+}

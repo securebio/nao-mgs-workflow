@@ -1,0 +1,86 @@
+{
+  "$schema": "https://datapackage.org/profiles/2.0/tableschema.json",
+  "title": "Clade Read Counts",
+  "description": "Read counts per taxonomic clade within a group, as produced by the DOWNSTREAM workflow. Each row represents a taxon with at least one read assigned to its clade (the taxon itself plus all descendants). Counts are provided both with and without deduplication. Only produced for short-read (Illumina/Aviti) platforms.",
+  "missingValues": ["NA"],
+  "primaryKey": ["group", "taxid"],
+  "fields": [
+    {
+      "name": "group",
+      "title": "Group",
+      "description": "Group identifier assigned to this set of samples.",
+      "type": "string",
+      "constraints": {
+        "required": true,
+        "minLength": 1
+      },
+      "example": "group_1"
+    },
+    {
+      "name": "taxid",
+      "title": "Taxon ID",
+      "description": "NCBI taxonomic ID for this row.",
+      "type": "integer",
+      "constraints": {
+        "required": true,
+        "minimum": 1
+      },
+      "example": 2847173
+    },
+    {
+      "name": "parent_taxid",
+      "title": "Parent Taxon ID",
+      "description": "NCBI taxonomic ID of this taxon's parent in the taxonomy tree. Nodes without a parent in the taxonomy database default to 1 (root).",
+      "type": "integer",
+      "constraints": {
+        "required": true,
+        "minimum": 1
+      },
+      "example": 12475
+    },
+    {
+      "name": "reads_direct_total",
+      "title": "Direct Reads (Total)",
+      "description": "Number of reads directly assigned to this taxon by LCA, without deduplication. Counts only reads whose aligner_taxid_lca matches this taxon exactly, not descendants.",
+      "type": "integer",
+      "constraints": {
+        "required": true,
+        "minimum": 0
+      },
+      "example": 10
+    },
+    {
+      "name": "reads_direct_dedup",
+      "title": "Direct Reads (Deduplicated)",
+      "description": "Number of reads directly assigned to this taxon by LCA (not descendants), after deduplication. Only counts reads that are their own duplicate exemplar (seq_id == prim_align_dup_exemplar).",
+      "type": "integer",
+      "constraints": {
+        "required": true,
+        "minimum": 0
+      },
+      "example": 5
+    },
+    {
+      "name": "reads_clade_total",
+      "title": "Clade Reads (Total)",
+      "description": "Number of reads assigned to this taxon's clade (this taxon plus all its descendants in the taxonomy tree), without deduplication. Rows are only included when this value is greater than 0.",
+      "type": "integer",
+      "constraints": {
+        "required": true,
+        "minimum": 1
+      },
+      "example": 50
+    },
+    {
+      "name": "reads_clade_dedup",
+      "title": "Clade Reads (Deduplicated)",
+      "description": "Number of reads assigned to this taxon's clade (this taxon plus all its descendants), after deduplication. Only counts reads that are their own duplicate exemplar.",
+      "type": "integer",
+      "constraints": {
+        "required": true,
+        "minimum": 0
+      },
+      "example": 25
+    }
+  ]
+}

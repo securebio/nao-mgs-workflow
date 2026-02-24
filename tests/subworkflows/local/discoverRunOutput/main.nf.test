@@ -1,0 +1,102 @@
+nextflow_workflow {
+
+    name "Test workflow DISCOVER_RUN_OUTPUT"
+    script "subworkflows/local/discoverRunOutput/main.nf"
+    workflow "DISCOVER_RUN_OUTPUT"
+    config "tests/configs/downstream.config"
+    tag "subworkflow"
+    tag "downstream"
+    tag "discover_run_output"
+
+    test("Should discover all files and match to samples") {
+        tag "expect_success"
+        when {
+            params {
+            }
+            workflow {
+                '''
+                input[0] = Channel.of(
+                    ["tt1", "${projectDir}/test-data/results/run_output_shortread/"]
+                )
+                input[1] = Channel.of(
+                    ["tt1", "tiny_test", "group_a"]
+                )
+                input[2] = file("${projectDir}/pyproject.toml")
+                '''
+            }
+        }
+        then {
+            assert workflow.success
+            assert workflow.out.output.size() > 0
+
+            // Verify tuple structure: (label, sample, file, group)
+            workflow.out.output.each { output ->
+                assert output.size() == 4
+                assert output[0] == "tt1"       // label
+                assert output[1] == "tiny_test" // sample
+                assert output[3] == "group_a"   // group
+                def filename = path(output[2]).getFileName().toString()
+                assert filename.startsWith("tiny_test_")
+            }
+
+            // Verify specific expected files are present
+            def filenames = workflow.out.output.collect { path(it[2]).getFileName().toString() } as Set
+            assert "tiny_test_virus_hits.tsv" in filenames
+            assert "tiny_test_read_counts.tsv" in filenames
+        }
+    }
+
+    test("Should return empty channel when sample has no files") {
+        tag "expect_success"
+        when {
+            params {
+            }
+            workflow {
+                '''
+                input[0] = Channel.of(
+                    ["tt1", "${projectDir}/test-data/results/run_output_shortread/"]
+                )
+                input[1] = Channel.of(
+                    ["tt1", "nonexistent_sample", "group_a"]
+                )
+                input[2] = file("${projectDir}/pyproject.toml")
+                '''
+            }
+        }
+        then {
+            assert workflow.success
+            assert workflow.out.output.size() == 0
+        }
+    }
+
+    test("Should not match when sample name is a prefix of another sample") {
+        tag "expect_success"
+        when {
+            params {
+            }
+            workflow {
+                '''
+                input[0] = Channel.of(
+                    ["tt1", "${projectDir}/test-data/results/run_output_shortread/"]
+                )
+                // "tiny" is a prefix of "tiny_test", so "tiny_test_virus_hits.tsv"
+                // should NOT match "tiny" (it would with the old startsWith approach)
+                input[1] = Channel.of(
+                    ["tt1", "tiny_test", "group_a"],
+                    ["tt1", "tiny", "group_b"]
+                )
+                input[2] = file("${projectDir}/pyproject.toml")
+                '''
+            }
+        }
+        then {
+            assert workflow.success
+            // All files should match "tiny_test", none should match "tiny"
+            assert workflow.out.output.size() > 0
+            workflow.out.output.each { output ->
+                assert output[1] == "tiny_test"
+                assert output[3] == "group_a"
+            }
+        }
+    }
+}
