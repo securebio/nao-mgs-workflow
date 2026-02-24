@@ -64,6 +64,10 @@ When the user asks you to handle PR review comments:
 4. **Respond to threads.** Always prefix with `[Claude Code]` (e.g., `[Claude Code] Done`) — the user's GitHub account is used, so attribution is essential.
 5. **Create issues** for approved out-of-scope suggestions. Issues must be self-contained (they sync to external tools), so quote the original suggestion and explain it fully.
 
+### Checking CI Status
+
+When working on changes to an existing PR branch, proactively check CI status with `gh pr checks` to identify test failures, timeouts, or version-check errors. Don't wait for the user to point out failures — catch and address them as part of your workflow.
+
 ### GitHub Actions Workflows
 
 When writing or modifying GitHub Actions workflows:
