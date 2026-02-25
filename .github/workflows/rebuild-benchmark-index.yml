@@ -72,11 +72,14 @@ jobs:
             -profile batch \
             --base_dir "s3://nao-testing/mgs-workflow-test/index-latest"
 
+      # Uses the action directly (not setup-nf-test) since we only need
+      # fresh credentials, not the full nf-test environment.
       - name: Refresh AWS credentials for cleanup
         if: always()
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
+          aws-region: us-east-1
           role-duration-seconds: '3600'
 
       - name: Clean up Nextflow work directory
