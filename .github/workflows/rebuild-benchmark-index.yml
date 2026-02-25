@@ -49,6 +49,7 @@ jobs:
         uses: ./.github/actions/setup-nf-test
         with:
           role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
+          role-duration-seconds: '21600'
 
       - name: Install Python dependencies
         run: pip install boto3
@@ -70,6 +71,13 @@ jobs:
             -c launch_dir/queue.config \
             -profile batch \
             --base_dir "s3://nao-testing/mgs-workflow-test/index-latest"
+
+      - name: Refresh AWS credentials for cleanup
+        if: always()
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
+          role-duration-seconds: '3600'
 
       - name: Clean up Nextflow work directory
         if: always()

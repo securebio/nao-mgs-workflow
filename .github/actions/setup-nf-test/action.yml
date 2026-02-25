@@ -9,6 +9,10 @@ inputs:
     description: 'AWS region'
     required: false
     default: 'us-east-1'
+  role-duration-seconds:
+    description: 'STS session duration in seconds'
+    required: false
+    default: '3600'
 
 runs:
   using: 'composite'
@@ -32,6 +36,7 @@ runs:
       with:
         role-to-assume: ${{ inputs.role-to-assume }}
         aws-region: ${{ inputs.aws-region }}
+        role-duration-seconds: ${{ inputs.role-duration-seconds }}
 
     - name: Login to ECR Public
       shell: bash
