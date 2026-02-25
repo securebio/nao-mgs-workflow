@@ -1,4 +1,4 @@
-# v3.2.0.2-dev
+# v3.2.0.2
 
 - Fixed AWS OIDC credential expiry in long-running CI workflows. Added `role-duration-seconds` input to the `setup-nf-test` composite action and increased session durations for `rebuild-benchmark-index` (6h), `benchmark-illumina-100M` (2h), `benchmark-ont-100k` (2h), and `test-chained` (2h). Also added a credential refresh step before the benchmark index cleanup to ensure it succeeds even if the main credentials expire.
 
