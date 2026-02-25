@@ -46,6 +46,7 @@ jobs:
         uses: ./.github/actions/setup-nf-test
         with:
           role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
+          role-duration-seconds: '7200'
 
       - name: Install Python dependencies
         if: steps.filter.outputs.chained == 'true'

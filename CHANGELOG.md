@@ -1,3 +1,7 @@
+# v3.2.0.2
+
+- Fixed AWS OIDC credential expiry in long-running CI workflows. Added `role-duration-seconds` input to the `setup-nf-test` composite action and increased session durations for `rebuild-benchmark-index` (6h), `benchmark-illumina-100M` (2h), `benchmark-ont-100k` (2h), and `test-chained` (2h). Also added a credential refresh step before the benchmark index cleanup to ensure it succeeds even if the main credentials expire.
+
 # v3.2.0.1
 
 - Added CI for tracking the age of the index used for benchmarking (`check-index-age.yml`) and regenerating it once stale (`rebuild-benchmark-index.yml`). The latter runs INDEX nf-tests as a preflight gate, deletes the old index, builds a fresh index to `s3://nao-testing/mgs-workflow-test/index-latest`, cleans up the Nextflow work directory, and verifies the new index passes the age check. The old index is recoverable via S3 bucket versioning.
