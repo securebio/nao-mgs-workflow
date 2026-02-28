@@ -28,8 +28,8 @@ jobs:
 
   rebuild-benchmark-index:
     needs: preflight-index-tests
-    runs-on: ubuntu-latest
-    timeout-minutes: 360
+    runs-on: [self-hosted, nextflow]
+    timeout-minutes: 1440
     env:
       TOWER_ACCESS_TOKEN: ${{ secrets.TOWER_ACCESS_TOKEN }}
     steps:
