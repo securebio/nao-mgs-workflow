@@ -22,16 +22,8 @@ permissions:
   contents: read
 
 jobs:
-  preflight-index-tests:
-    uses: ./.github/workflows/nf-test-workflows-index.yml
-    secrets: inherit
-
-  rebuild-benchmark-index:
-    needs: preflight-index-tests
-    runs-on: [self-hosted, nextflow]
-    timeout-minutes: 1440
-    env:
-      TOWER_ACCESS_TOKEN: ${{ secrets.TOWER_ACCESS_TOKEN }}
+  validate-confirmation:
+    runs-on: ubuntu-latest
     steps:
       - name: Validate confirmation
         env:
@@ -42,6 +34,18 @@ jobs:
             exit 1
           fi
 
+  preflight-index-tests:
+    needs: validate-confirmation
+    uses: ./.github/workflows/nf-test-workflows-index.yml
+    secrets: inherit
+
+  rebuild-benchmark-index:
+    needs: preflight-index-tests
+    runs-on: [self-hosted, nextflow]
+    timeout-minutes: 1440
+    env:
+      TOWER_ACCESS_TOKEN: ${{ secrets.TOWER_ACCESS_TOKEN }}
+    steps:
       - name: Checkout
         uses: actions/checkout@v4
 
