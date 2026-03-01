@@ -1,0 +1,41 @@
+name: 'Configure AWS credentials'
+description: >
+  Configure AWS credentials and log in to ECR Public. Supports both
+  OIDC authentication (GitHub-hosted runners) and instance profile
+  authentication (self-hosted runners). When role-to-assume is provided,
+  uses OIDC; otherwise falls back to the instance profile.
+
+inputs:
+  role-to-assume:
+    description: 'AWS IAM role ARN for OIDC authentication. Omit to use instance profile.'
+    required: false
+    default: ''
+  aws-region:
+    description: 'AWS region'
+    required: false
+    default: 'us-east-1'
+  role-duration-seconds:
+    description: 'STS session duration in seconds (only used with OIDC)'
+    required: false
+    default: '3600'
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Configure AWS credentials (OIDC)
+      if: inputs.role-to-assume != ''
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        role-to-assume: ${{ inputs.role-to-assume }}
+        aws-region: ${{ inputs.aws-region }}
+        role-duration-seconds: ${{ inputs.role-duration-seconds }}
+
+    - name: Configure AWS credentials (instance profile)
+      if: inputs.role-to-assume == ''
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-region: ${{ inputs.aws-region }}
+
+    - name: Login to ECR Public
+      shell: bash
+      run: aws ecr-public get-login-password --region us-east-1 | docker login --username AWS --password-stdin public.ecr.aws

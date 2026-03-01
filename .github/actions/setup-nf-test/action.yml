@@ -33,17 +33,12 @@ runs:
         fi
         df -h
 
-    - name: Configure AWS credentials
-      uses: aws-actions/configure-aws-credentials@v4
+    - name: Configure AWS credentials and login to ECR Public
+      uses: ./.github/actions/configure-aws
       with:
         role-to-assume: ${{ inputs.role-to-assume }}
         aws-region: ${{ inputs.aws-region }}
         role-duration-seconds: ${{ inputs.role-duration-seconds }}
-
-    - name: Login to ECR Public
-      shell: bash
-      run: |
-        aws ecr-public get-login-password --region us-east-1 | docker login --username AWS --password-stdin public.ecr.aws
 
     - name: Set up JDK 21
       uses: actions/setup-java@v4
