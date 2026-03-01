@@ -1,6 +1,6 @@
 process DOWNLOAD_BLAST_DB {
     label "BLAST"
-    label "xsmall"
+    label "small"
     errorStrategy "terminate"
     input:
         val(db)

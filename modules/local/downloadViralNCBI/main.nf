@@ -1,7 +1,7 @@
 // Download entire viral Genbank DB
 process DOWNLOAD_VIRAL_NCBI {
     label "ncbi_genome_download"
-    label "xsmall"
+    label "small"
     input:
         val(ncbi_viral_params)
     output:
