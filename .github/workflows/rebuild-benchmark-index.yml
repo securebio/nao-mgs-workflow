@@ -71,7 +71,7 @@ jobs:
             --base_dir "s3://nao-testing/mgs-workflow-test/index-latest"
 
       - name: Clean up Nextflow work directory
-        if: always()
+        if: success()
         run: |
           echo "Removing Nextflow work directory..."
           aws s3 rm s3://nao-testing/mgs-workflow-test/index-latest/work/ --recursive
