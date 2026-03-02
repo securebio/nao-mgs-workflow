@@ -1,6 +1,6 @@
 # v3.2.0.3-dev
 
-- Updated benchmark CI workflow samplesheet paths to use `metadata/` subdirectory, matching the new `nao-benchmark-public` output structure.
+- Updated benchmark CI workflow samplesheet paths to use `metadata/` and `raw/` subdirectories, matching internal standards.
 
 # v3.2.0.2
 
