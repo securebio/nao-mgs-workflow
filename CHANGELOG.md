@@ -1,6 +1,6 @@
 # v3.2.0.3-dev
 
-- Added FASTP JSON output to published RUN outputs for QC (paired short-read data only).
+- Added FASTP JSON output to published RUN outputs for QC (short-read data only; ONT uses FILTLONG).
 
 # v3.2.0.2
 
