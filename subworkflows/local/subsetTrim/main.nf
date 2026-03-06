@@ -45,5 +45,6 @@ workflow SUBSET_TRIM {
     emit:
         subset_reads
         trimmed_subset_reads = cleaned_ch.reads
+        fastp_json = params_map.platform == "ont" ? Channel.empty() : cleaned_ch.json
         test_failed = params_map.platform == "ont" ? Channel.empty() : cleaned_ch.failed // TODO: Capture rejected ONT reads somehow
 }

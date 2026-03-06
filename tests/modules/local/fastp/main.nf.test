@@ -1,3 +1,5 @@
+import groovy.json.JsonSlurper
+
 nextflow_process {
 
     name "Test process FASTP"
@@ -57,6 +59,30 @@ nextflow_process {
             // Should conserve reads between input and output
             assert reads_pass > 0
             assert reads_pass + reads_fail == reads_in
+            // JSON and HTML outputs should exist and be non-empty
+            assert process.out.json[0][1] != null
+            assert process.out.html[0][1] != null
+            def json_path = path(process.out.json[0][1])
+            assert json_path.exists()
+            assert json_path.size() > 0
+            // Parse JSON and validate structure
+            def json = new JsonSlurper().parse(json_path.toFile())
+            assert json.containsKey("summary")
+            assert json.containsKey("filtering_result")
+            assert json.containsKey("read1_before_filtering")
+            assert json.containsKey("read1_after_filtering")
+            assert json.containsKey("read2_before_filtering")
+            assert json.containsKey("read2_after_filtering")
+            assert json.containsKey("command")
+            // Cross-validate read counts between JSON and FASTQ outputs
+            assert json.filtering_result.passed_filter_reads == reads_pass
+            assert json.summary.before_filtering.total_reads == reads_in
+            assert json.summary.after_filtering.total_reads == reads_pass
+            // Sanity-check summary statistics
+            assert json.summary.before_filtering.q20_rate >= 0
+            assert json.summary.before_filtering.q20_rate <= 1
+            assert json.summary.before_filtering.q30_rate >= 0
+            assert json.summary.before_filtering.q30_rate <= 1
         }
     }
 
@@ -108,6 +134,30 @@ nextflow_process {
             def reads_fail = fastq_fail.getNumberOfRecords()
             assert reads_pass > 0
             assert reads_pass + reads_fail == reads_in
+            // JSON and HTML outputs should exist and be non-empty
+            assert process.out.json[0][1] != null
+            assert process.out.html[0][1] != null
+            def json_path = path(process.out.json[0][1])
+            assert json_path.exists()
+            assert json_path.size() > 0
+            // Parse JSON and validate structure
+            def json = new JsonSlurper().parse(json_path.toFile())
+            assert json.containsKey("summary")
+            assert json.containsKey("filtering_result")
+            assert json.containsKey("read1_before_filtering")
+            assert json.containsKey("read1_after_filtering")
+            assert json.containsKey("command")
+            // Single-end: no read2 or insert_size sections
+            assert !json.containsKey("read2_before_filtering")
+            assert !json.containsKey("read2_after_filtering")
+            assert !json.containsKey("insert_size")
+            // Cross-validate read counts between JSON and FASTQ outputs
+            assert json.filtering_result.passed_filter_reads == reads_pass
+            assert json.summary.before_filtering.total_reads == reads_in
+            assert json.summary.after_filtering.total_reads == reads_pass
+            // Sanity-check summary statistics
+            assert json.summary.before_filtering.q20_rate >= 0
+            assert json.summary.before_filtering.q20_rate <= 1
         }
     }
 
