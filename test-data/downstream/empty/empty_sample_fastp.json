@@ -1,1 +1,37 @@
-{}
+{
+  "summary": {
+    "before_filtering": {
+      "total_reads": 0,
+      "total_bases": 0,
+      "q20_bases": 0,
+      "q30_bases": 0,
+      "q20_rate": 0,
+      "q30_rate": 0,
+      "gc_content": 0
+    },
+    "after_filtering": {
+      "total_reads": 0,
+      "total_bases": 0,
+      "q20_bases": 0,
+      "q30_bases": 0,
+      "q20_rate": 0,
+      "q30_rate": 0,
+      "gc_content": 0
+    }
+  },
+  "filtering_result": {
+    "passed_filter_reads": 0,
+    "low_quality_reads": 0,
+    "too_many_N_reads": 0,
+    "too_short_reads": 0,
+    "too_long_reads": 0
+  },
+  "read1_before_filtering": {
+    "total_reads": 0,
+    "total_bases": 0
+  },
+  "read1_after_filtering": {
+    "total_reads": 0,
+    "total_bases": 0
+  }
+}

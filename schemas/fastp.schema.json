@@ -9,15 +9,12 @@
   "$defs": {
     "sample_entry": {
       "type": "object",
-      "description": "FASTP output for a single sample, with pipeline-injected metadata.",
+      "description": "FASTP output for a single sample, with pipeline-injected metadata. The 'sample', 'group', 'summary', and 'filtering_result' fields are always present; the remaining fields depend on sequencing mode (single-end vs paired-end) and FASTP flags.",
       "required": [
         "sample",
         "group",
         "summary",
-        "filtering_result",
-        "read1_before_filtering",
-        "read1_after_filtering",
-        "command"
+        "filtering_result"
       ],
       "properties": {
         "sample": {
