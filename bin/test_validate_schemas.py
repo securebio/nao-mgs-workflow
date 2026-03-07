@@ -12,8 +12,10 @@ from validate_schemas import (
     find_data_files,
     find_schema_for_file,
     get_output_schema_names,
+    is_json_schema,
     reordered_to_schema,
     validate_file,
+    validate_json_file,
     validate_outputs,
 )
 
@@ -225,6 +227,92 @@ class TestReorderedToSchema:
         with pytest.raises(ValueError, match="Duplicate columns"):
             with reordered_to_schema(data_file, schema_path) as path:
                 pass
+
+###################
+# is_json_schema  #
+###################
+
+class TestIsJsonSchema:
+    def test_returns_true_for_json_schema(self, tmp_path: Path) -> None:
+        schema_path = tmp_path / "test.schema.json"
+        schema_path.write_text(json.dumps({
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+        }))
+        assert is_json_schema(schema_path) is True
+
+    def test_returns_false_for_table_schema(self, tmp_path: Path) -> None:
+        schema_path = tmp_path / "test.schema.json"
+        schema_path.write_text(json.dumps({
+            "$schema": "https://datapackage.org/profiles/2.0/tableschema.json",
+            "fields": [{"name": "col1", "type": "string"}],
+        }))
+        assert is_json_schema(schema_path) is False
+
+    def test_returns_false_when_no_schema_field(self, tmp_path: Path) -> None:
+        schema_path = tmp_path / "test.schema.json"
+        schema_path.write_text(json.dumps({
+            "fields": [{"name": "col1", "type": "string"}],
+        }))
+        assert is_json_schema(schema_path) is False
+
+#######################
+# validate_json_file  #
+#######################
+
+class TestValidateJsonFile:
+    def test_valid_json_passes(self, tmp_path: Path) -> None:
+        schema_path = tmp_path / "test.schema.json"
+        schema_path.write_text(json.dumps({
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {"name": {"type": "string"}},
+            "required": ["name"],
+        }))
+        data_file = tmp_path / "test.json"
+        data_file.write_text(json.dumps({"name": "hello"}))
+        is_valid, errors = validate_json_file(data_file, schema_path)
+        assert is_valid
+        assert errors == []
+
+    def test_missing_required_field_fails(self, tmp_path: Path) -> None:
+        schema_path = tmp_path / "test.schema.json"
+        schema_path.write_text(json.dumps({
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {"name": {"type": "string"}},
+            "required": ["name"],
+        }))
+        data_file = tmp_path / "test.json"
+        data_file.write_text(json.dumps({}))
+        is_valid, errors = validate_json_file(data_file, schema_path)
+        assert not is_valid
+        assert any("name" in e for e in errors)
+
+    def test_wrong_type_fails(self, tmp_path: Path) -> None:
+        schema_path = tmp_path / "test.schema.json"
+        schema_path.write_text(json.dumps({
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {"count": {"type": "integer"}},
+        }))
+        data_file = tmp_path / "test.json"
+        data_file.write_text(json.dumps({"count": "not_an_int"}))
+        is_valid, errors = validate_json_file(data_file, schema_path)
+        assert not is_valid
+        assert len(errors) > 0
+
+    def test_empty_object_passes_permissive_schema(self, tmp_path: Path) -> None:
+        schema_path = tmp_path / "test.schema.json"
+        schema_path.write_text(json.dumps({
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+        }))
+        data_file = tmp_path / "test.json"
+        data_file.write_text("{}")
+        is_valid, errors = validate_json_file(data_file, schema_path)
+        assert is_valid
+        assert errors == []
 
 #################
 # validate_file #
@@ -457,3 +545,63 @@ expected-outputs-downstream = [
         pyproject = tmp_path / "nonexistent.toml"
         exit_code = validate_outputs(output_dir, schema_dir, pyproject)
         assert exit_code == 1
+
+    def test_json_validation_success(self, tmp_path: Path) -> None:
+        """JSON files are validated against JSON Schemas."""
+        pyproject = tmp_path / "pyproject.toml"
+        pyproject.write_text("""
+[tool.mgs-workflow]
+expected-outputs-downstream = [
+    "results_downstream/{GROUP}_fastp.json",
+]
+""")
+        schema_dir = tmp_path / "schemas"
+        schema_dir.mkdir()
+        schema = {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+        }
+        (schema_dir / "fastp.schema.json").write_text(json.dumps(schema))
+        output_dir = tmp_path / "output"
+        output_dir.mkdir()
+        results = output_dir / "results"
+        results.mkdir()
+        (results / "group1_fastp.json").write_text("{}")
+        exit_code = validate_outputs(output_dir, schema_dir, pyproject)
+        assert exit_code == 0
+
+    def test_json_validation_failure(self, tmp_path: Path) -> None:
+        """Invalid JSON files should cause validation failure."""
+        pyproject = tmp_path / "pyproject.toml"
+        pyproject.write_text("""
+[tool.mgs-workflow]
+expected-outputs-downstream = [
+    "results_downstream/{GROUP}_fastp.json",
+]
+""")
+        schema_dir = tmp_path / "schemas"
+        schema_dir.mkdir()
+        schema = {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {"name": {"type": "string"}},
+            "required": ["name"],
+        }
+        (schema_dir / "fastp.schema.json").write_text(json.dumps(schema))
+        output_dir = tmp_path / "output"
+        output_dir.mkdir()
+        results = output_dir / "results"
+        results.mkdir()
+        (results / "group1_fastp.json").write_text("{}")
+        exit_code = validate_outputs(output_dir, schema_dir, pyproject)
+        assert exit_code == 1
+
+    def test_real_fastp_schema_integration(self) -> None:
+        """Integration test: validate real test data against the fastp schema."""
+        repo_root = Path(__file__).resolve().parent.parent
+        schema_path = repo_root / "schemas" / "fastp.schema.json"
+        data_path = repo_root / "test-data" / "results" / "downstream_output_shortread" / "tt1_fastp.json"
+        if not schema_path.exists() or not data_path.exists():
+            pytest.skip("Real test data or schema not available")
+        is_valid, errors = validate_json_file(data_path, schema_path)
+        assert is_valid, f"Validation errors: {errors}"

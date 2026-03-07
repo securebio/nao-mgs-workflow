@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 DESC = """
-Validate workflow output files against table-schema definitions.
+Validate workflow output files against schema definitions.
 
 This script finds output files in results*/ subdirectories that have
-corresponding table-schemas in the schemas/ directory and validates them
-using the frictionless library. Files without schemas are skipped.
+corresponding schemas in the schemas/ directory and validates them.
+TSV files are validated against table-schemas using the frictionless library;
+JSON files are validated against JSON Schemas using the jsonschema library.
+Files without schemas are skipped.
 
 Exit codes:
   0 - All validations passed (or no files to validate)
@@ -29,6 +31,7 @@ from collections.abc import Generator
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
+import jsonschema
 from frictionless import Dialect, Resource, formats, system, validate
 
 ###########
@@ -190,15 +193,55 @@ def reordered_to_schema(
         tmp.flush()
         yield Path(tmp.name)
 
+def is_json_schema(schema_path: Path) -> bool:
+    """
+    Check whether a schema file is a JSON Schema (vs a table-schema).
+    Args:
+        schema_path: Path to the schema file.
+    Returns:
+        True if the schema is a JSON Schema, False otherwise.
+    """
+    with open(schema_path) as f:
+        schema = json.load(f)
+    return "json-schema.org" in schema.get("$schema", "")
+
+def validate_json_file(data_file: Path, schema_path: Path) -> tuple[bool, list[str]]:
+    """
+    Validate a JSON data file against a JSON Schema.
+    Args:
+        data_file: Path to the JSON data file.
+        schema_path: Path to the JSON Schema file.
+    Returns:
+        Tuple of (is_valid, list of error messages).
+    """
+    with open(data_file) as f:
+        data = json.load(f)
+    with open(schema_path) as f:
+        schema = json.load(f)
+    validator = jsonschema.Draft202012Validator(schema)
+    errors = sorted(validator.iter_errors(data), key=lambda e: list(e.absolute_path))
+    if not errors:
+        return True, []
+    messages = []
+    for error in errors:
+        path = ".".join(str(p) for p in error.absolute_path) if error.absolute_path else "(root)"
+        messages.append(f"[{path}] {error.message}")
+    return False, messages
+
 def validate_file(data_file: Path, schema_path: Path) -> tuple[bool, list[str]]:
     """
     Validate a data file against a schema.
+
+    Dispatches to JSON Schema validation for JSON Schemas, or frictionless
+    table-schema validation for table-schemas.
     Args:
         data_file: Path to the data file.
         schema_path: Path to the schema file.
     Returns:
         Tuple of (is_valid, list of error messages).
     """
+    if is_json_schema(schema_path):
+        return validate_json_file(data_file, schema_path)
     with decompressed_path(data_file) as uncompressed:
         with reordered_to_schema(uncompressed, schema_path) as file_to_validate:
             dialect = Dialect(controls=[formats.CsvControl(delimiter="\t")])

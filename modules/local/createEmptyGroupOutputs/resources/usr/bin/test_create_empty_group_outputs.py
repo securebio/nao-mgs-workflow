@@ -5,6 +5,7 @@ from create_empty_group_outputs import (
     open_by_suffix,
     get_group_output_patterns,
     get_schema_name_from_pattern,
+    load_empty_json,
     load_schema_headers,
     create_empty_outputs,
     parse_args,
@@ -106,6 +107,45 @@ class TestGetSchemaNameFromPattern:
 
 
 #=============================================================================
+# Tests for load_empty_json
+#=============================================================================
+
+class TestLoadEmptyJson:
+    """Tests for load_empty_json function."""
+
+    def test_returns_empty_object_for_object_schema(self, tmp_path):
+        """Test that '{}' is returned for JSON Schema with type: object."""
+        schema = {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+        }
+        (tmp_path / "fastp.schema.json").write_text(json.dumps(schema))
+        assert load_empty_json(tmp_path, "fastp") == "{}"
+
+    def test_returns_empty_array_for_array_schema(self, tmp_path):
+        """Test that '[]' is returned for JSON Schema with type: array."""
+        schema = {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "array",
+        }
+        (tmp_path / "items.schema.json").write_text(json.dumps(schema))
+        assert load_empty_json(tmp_path, "items") == "[]"
+
+    def test_returns_none_when_no_schema(self, tmp_path):
+        """Test that None is returned when no schema file exists."""
+        assert load_empty_json(tmp_path, "nonexistent") is None
+
+    def test_returns_none_for_table_schema(self, tmp_path):
+        """Test that None is returned for table-schema files (not JSON Schema)."""
+        schema = {
+            "$schema": "https://specs.frictionlessdata.io/schemas/table-schema.json",
+            "fields": [{"name": "col1", "type": "string"}],
+        }
+        (tmp_path / "data.schema.json").write_text(json.dumps(schema))
+        assert load_empty_json(tmp_path, "data") is None
+
+
+#=============================================================================
 # Tests for load_schema_headers
 #=============================================================================
 
@@ -187,8 +227,13 @@ class TestCreateEmptyOutputs:
         if use_schema_dir:
             schema_dir = tmp_path / "schemas"
             schema_dir.mkdir()
-            schema = {"fields": [{"name": "col1"}, {"name": "col2"}]}
-            (schema_dir / "data.schema.json").write_text(json.dumps(schema))
+            table_schema = {"fields": [{"name": "col1"}, {"name": "col2"}]}
+            (schema_dir / "data.schema.json").write_text(json.dumps(table_schema))
+            json_schema = {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+            }
+            (schema_dir / "fastp.schema.json").write_text(json.dumps(json_schema))
         create_empty_outputs({"g1"}, patterns, str(output_dir), schema_dir)
 
         tsv_path = output_dir / "g1_data.tsv.gz"
@@ -202,7 +247,7 @@ class TestCreateEmptyOutputs:
             assert content == "col1\tcol2\n"
         else:
             assert content == ""
-        # JSON should be plain-text (not gzipped) empty object regardless of schema_dir
+        # JSON should be plain-text (not gzipped) empty object
         assert json_path.read_text() == "{}"
 
 

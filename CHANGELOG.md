@@ -3,6 +3,7 @@
 - Updated benchmark CI workflow samplesheet paths to use `metadata/` and `raw/` subdirectories, matching internal standards.
 - Added FASTP JSON output to published RUN and DOWNSTREAM outputs for QC (short-read data only; ONT uses FILTLONG).
 - Added `COMBINE_SAMPLE_JSONS` module and `CONCAT_JSON_BY_GROUP` subworkflow for combining per-sample JSON files into per-group outputs.
+- Added `schemas/fastp.schema.json` (JSON Schema) for per-group FASTP output, extended `bin/validate_schemas.py` to validate JSON files against JSON Schema definitions, and updated `createEmptyGroupOutputs` to generate schema-compatible empty JSON.
 
 # v3.2.0.2
 

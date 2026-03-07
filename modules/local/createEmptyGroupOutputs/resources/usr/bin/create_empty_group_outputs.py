@@ -105,6 +105,35 @@ def get_schema_name_from_pattern(pattern: str) -> str:
     return p.name
 
 
+def load_empty_json(schema_dir: Path, schema_name: str) -> str | None:
+    """
+    Load a JSON Schema and return the appropriate empty JSON string.
+
+    Analogous to load_schema_headers for table-schemas: reads a JSON Schema
+    to determine the minimal valid empty structure for the output file.
+    Args:
+        schema_dir (Path): Directory containing schema files.
+        schema_name (str): Base name of the schema (e.g., 'fastp').
+    Returns:
+        str | None: Empty JSON string (e.g. '{}' or '[]'), or None if no
+            JSON Schema found.
+    """
+    schema_path = schema_dir / f"{schema_name}.schema.json"
+    if not schema_path.exists():
+        return None
+    with open(schema_path) as f:
+        schema = json.load(f)
+    # Only handle JSON Schemas, not table-schemas
+    if "json-schema.org" not in schema.get("$schema", ""):
+        return None
+    schema_type = schema.get("type")
+    if schema_type == "object":
+        return "{}"
+    elif schema_type == "array":
+        return "[]"
+    return None
+
+
 def load_schema_headers(schema_dir: Path, schema_name: str) -> list[str] | None:
     """
     Load column headers from a table-schema file if it exists.
@@ -132,33 +161,41 @@ def create_empty_outputs(
     schema_dir: Path | None = None,
 ) -> list[str]:
     """
-    Create empty gzipped files for each group and pattern combination.
+    Create empty output files for each group and pattern combination.
 
-    When a table-schema exists for an output pattern, the file includes
-    a header row with column names from the schema.
+    For TSV outputs, uses table-schema headers when available. For JSON
+    outputs, uses JSON Schema to determine the empty structure.
     Args:
         groups (set[str]): Set of group names to create outputs for.
         patterns (list[str]): List of filename patterns with {GROUP} placeholder.
         output_dir (str): Directory to write output files.
-        schema_dir (Path | None): Directory containing table-schema files.
+        schema_dir (Path | None): Directory containing schema files.
     Returns:
         list[str]: List of paths to created files.
     """
     output_path = Path(output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
-    # Pre-load headers for each TSV pattern
+    # Pre-load schema info for each pattern
     pattern_headers: dict[str, list[str] | None] = {}
+    pattern_json: dict[str, str | None] = {}
     for pattern in patterns:
+        schema_name = get_schema_name_from_pattern(pattern)
         if pattern.endswith(".json"):
-            continue
-        if schema_dir:
-            schema_name = get_schema_name_from_pattern(pattern)
-            headers = load_schema_headers(schema_dir, schema_name)
-            if headers:
-                logger.info(f"Found schema for {pattern}: {schema_name}.schema.json")
-            pattern_headers[pattern] = headers
+            if schema_dir:
+                empty_json = load_empty_json(schema_dir, schema_name)
+                if empty_json:
+                    logger.info(f"Found JSON schema for {pattern}: {schema_name}.schema.json")
+                pattern_json[pattern] = empty_json
+            else:
+                pattern_json[pattern] = None
         else:
-            pattern_headers[pattern] = None
+            if schema_dir:
+                headers = load_schema_headers(schema_dir, schema_name)
+                if headers:
+                    logger.info(f"Found schema for {pattern}: {schema_name}.schema.json")
+                pattern_headers[pattern] = headers
+            else:
+                pattern_headers[pattern] = None
     created_files: list[str] = []
     for group in sorted(groups):
         if ".." in group or "/" in group:
@@ -167,9 +204,10 @@ def create_empty_outputs(
             filename = pattern.replace("{GROUP}", group)
             filepath = output_path / filename
             if pattern.endswith(".json"):
-                # JSON output: write empty JSON object
+                # JSON output: use schema-derived content or default to {}
+                content = pattern_json.get(pattern) or "{}"
                 with open(filepath, "w") as f:
-                    f.write("{}")
+                    f.write(content)
                 created_files.append(str(filepath))
                 logger.info(f"Created: {filepath} (JSON)")
             else:
@@ -221,7 +259,7 @@ def parse_args() -> argparse.Namespace:
         "--schema-dir",
         type=Path,
         default=None,
-        help="Directory containing table-schema files for generating headers",
+        help="Directory containing schema files for generating empty outputs",
     )
     return parser.parse_args()
 

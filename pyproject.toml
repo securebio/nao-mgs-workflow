@@ -10,6 +10,7 @@ dependencies = [
     "biopython>=1.85",
     "boto3",
     "frictionless>=5.18.0",
+    "jsonschema>=4.20.0",
     "mypy>=1.18.1",
     # Needed until https://github.com/securebio/nao-dedup/pull/12 has been
     # merged and we've updated post-processing/nao-dedup/ to depend on the
