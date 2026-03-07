@@ -4,10 +4,11 @@ process GET_RUN_OUTPUT_SUFFIXES {
     label "single"
     input:
         path(pyproject)
+        val(platform)
     output:
         env(SUFFIXES), emit: suffixes
     shell:
         '''
-        SUFFIXES=$(get_run_output_suffixes.py !{pyproject} | tr '\\n' ',' | sed 's/,$//')
+        SUFFIXES=$(get_run_output_suffixes.py --platform !{platform} !{pyproject} | tr '\\n' ',' | sed 's/,$//')
         '''
 }
