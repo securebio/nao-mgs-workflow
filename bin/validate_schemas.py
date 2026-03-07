@@ -193,31 +193,20 @@ def reordered_to_schema(
         tmp.flush()
         yield Path(tmp.name)
 
-def is_json_schema(schema_path: Path) -> bool:
-    """
-    Check whether a schema file is a JSON Schema (vs a table-schema).
-    Args:
-        schema_path: Path to the schema file.
-    Returns:
-        True if the schema is a JSON Schema, False otherwise.
-    """
-    with open(schema_path) as f:
-        schema = json.load(f)
-    return "json-schema.org" in schema.get("$schema", "")
-
-def validate_json_file(data_file: Path, schema_path: Path) -> tuple[bool, list[str]]:
+def validate_json_file(data_file: Path, schema: dict) -> tuple[bool, list[str]]:
     """
     Validate a JSON data file against a JSON Schema.
     Args:
         data_file: Path to the JSON data file.
-        schema_path: Path to the JSON Schema file.
+        schema: The loaded JSON Schema dictionary.
     Returns:
         Tuple of (is_valid, list of error messages).
     """
-    with open(data_file) as f:
-        data = json.load(f)
-    with open(schema_path) as f:
-        schema = json.load(f)
+    try:
+        with open(data_file) as f:
+            data = json.load(f)
+    except json.JSONDecodeError as e:
+        return False, [f"Invalid JSON: {e}"]
     validator_cls = validator_for(schema)
     validator = validator_cls(schema)
     errors = sorted(validator.iter_errors(data), key=lambda e: list(e.absolute_path))
@@ -241,8 +230,10 @@ def validate_file(data_file: Path, schema_path: Path) -> tuple[bool, list[str]]:
     Returns:
         Tuple of (is_valid, list of error messages).
     """
-    if is_json_schema(schema_path):
-        return validate_json_file(data_file, schema_path)
+    with open(schema_path) as f:
+        schema = json.load(f)
+    if "json-schema.org" in schema.get("$schema", ""):
+        return validate_json_file(data_file, schema)
     with decompressed_path(data_file) as uncompressed:
         with reordered_to_schema(uncompressed, schema_path) as file_to_validate:
             dialect = Dialect(controls=[formats.CsvControl(delimiter="\t")])
