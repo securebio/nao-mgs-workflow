@@ -17,9 +17,12 @@ nextflow_workflow {
             workflow {
                 '''
                 // Input: tuple(label, sample, file, group)
+                // group_x has two samples to test multi-sample combining
+                // group_y has one sample to test multi-group separation
                 // Includes a non-matching suffix file to verify filtering excludes it
                 input[0] = Channel.of(
                     ["sa", "sample_a", file("${projectDir}/test-data/combineSampleJsons/sample_a_fastp.json"), "group_x"],
+                    ["sb", "sample_b", file("${projectDir}/test-data/combineSampleJsons/sample_b_fastp.json"), "group_x"],
                     ["sb", "sample_b", file("${projectDir}/test-data/combineSampleJsons/sample_b_fastp.json"), "group_y"],
                     ["sa", "sample_a", file("${projectDir}/test-data/results/run_output_shortread/tiny_test_read_counts.tsv"), "group_x"]
                 )
@@ -36,14 +39,14 @@ nextflow_workflow {
             def input_a = slurper.parse(file("${projectDir}/test-data/combineSampleJsons/sample_a_fastp.json"))
             def input_b = slurper.parse(file("${projectDir}/test-data/combineSampleJsons/sample_b_fastp.json"))
 
-            // Should produce one output per unique group
+            // Should produce two groups
             assert workflow.out.groups.size() == 2
             def output_groups = workflow.out.groups.collect { it[0] } as Set
             assert output_groups == ["group_x", "group_y"] as Set
 
             // Verify output file naming and content for each group
             def expected = [
-                group_x: [sample_a: input_a],
+                group_x: [sample_a: input_a, sample_b: input_b],
                 group_y: [sample_b: input_b],
             ]
             workflow.out.groups.each { output ->

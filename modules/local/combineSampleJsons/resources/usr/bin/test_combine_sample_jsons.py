@@ -59,26 +59,33 @@ class TestCombineSampleJsons:
         result = combine_sample_jsons.combine_sample_jsons([], "g", "fastp.json")
         assert result == {}
 
+    def test_raises_on_duplicate_sample_name(self, tmp_path):
+        for subdir in ["a", "b"]:
+            d = tmp_path / subdir
+            d.mkdir()
+            (d / "s1_fastp.json").write_text(json.dumps({"x": subdir}))
+        files = sorted(tmp_path.rglob("*_fastp.json"))
+        with pytest.raises(ValueError, match="Duplicate sample name"):
+            combine_sample_jsons.combine_sample_jsons(files, "g", "fastp.json")
+
 
 class TestMain:
     """Test the main() CLI entrypoint."""
 
-    def test_writes_combined_json(self, tmp_path):
+    @patch("sys.argv", new_callable=list)
+    def test_writes_combined_json(self, mock_argv, tmp_path):
         input_file = tmp_path / "s1_fastp.json"
         input_file.write_text(json.dumps({"total": 42}))
         output_file = tmp_path / "output.json"
 
-        with patch(
-            "sys.argv",
-            [
-                "combine_sample_jsons.py",
-                "--group", "g1",
-                "--suffix", "fastp.json",
-                "--output", str(output_file),
-                str(input_file),
-            ],
-        ):
-            combine_sample_jsons.main()
+        mock_argv.extend([
+            "combine_sample_jsons.py",
+            "--group", "g1",
+            "--suffix", "fastp.json",
+            "--output", str(output_file),
+            str(input_file),
+        ])
+        combine_sample_jsons.main()
 
         result = json.loads(output_file.read_text())
         assert "s1" in result
