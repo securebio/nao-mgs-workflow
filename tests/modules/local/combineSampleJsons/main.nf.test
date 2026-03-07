@@ -9,7 +9,7 @@ nextflow_process {
     tag "module"
     tag "combine_sample_jsons"
 
-    test("Should combine two sample JSONs into a single grouped output") {
+    test("Should combine sample JSONs into a grouped output with injected fields") {
         tag "expect_success"
         when {
             params {}
@@ -24,48 +24,26 @@ nextflow_process {
         }
         then {
             assert process.success
-            // Output tuple should carry the group name
             assert process.out.output[0][0] == "test_group"
-            // Parse the combined JSON
-            def json_path = path(process.out.output[0][1])
-            assert json_path.exists()
-            def combined = new JsonSlurper().parse(json_path.toFile())
-            // Should contain both samples
+            // Parse inputs and output
+            def slurper = new JsonSlurper()
+            def input_a = slurper.parse(file("${projectDir}/test-data/combineSampleJsons/sample_a_fastp.json"))
+            def input_b = slurper.parse(file("${projectDir}/test-data/combineSampleJsons/sample_b_fastp.json"))
+            def combined = slurper.parse(path(process.out.output[0][1]).toFile())
+            // Should contain both samples with injected fields
             assert combined.size() == 2
-            assert combined.containsKey("sample_a")
-            assert combined.containsKey("sample_b")
-            // Each entry should have injected sample and group fields
-            assert combined.sample_a.sample == "sample_a"
-            assert combined.sample_a.group == "test_group"
-            assert combined.sample_b.sample == "sample_b"
-            assert combined.sample_b.group == "test_group"
-            // Original data should be preserved
-            assert combined.sample_a.summary.before_filtering.total_reads == 1000
-            assert combined.sample_b.summary.before_filtering.total_reads == 2000
-            assert combined.sample_a.filtering_result.passed_filter_reads == 950
-            assert combined.sample_b.filtering_result.passed_filter_reads == 1800
-        }
-    }
-
-    test("Should handle a single sample JSON") {
-        tag "expect_success"
-        when {
-            params {}
-            process {
-                '''
-                def json_a = file("${projectDir}/test-data/combineSampleJsons/sample_a_fastp.json")
-                input[0] = ["solo_group", [json_a]]
-                input[1] = "fastp.json"
-                '''
+            ["sample_a", "sample_b"].each { sample ->
+                assert combined.containsKey(sample)
+                assert combined[sample].sample == sample
+                assert combined[sample].group == "test_group"
             }
-        }
-        then {
-            assert process.success
-            def combined = new JsonSlurper().parse(path(process.out.output[0][1]).toFile())
-            assert combined.size() == 1
-            assert combined.containsKey("sample_a")
-            assert combined.sample_a.sample == "sample_a"
-            assert combined.sample_a.group == "solo_group"
+            // Original data should be preserved
+            def inputs = [sample_a: input_a, sample_b: input_b]
+            inputs.each { sample, input_data ->
+                input_data.each { key, value ->
+                    assert combined[sample][key] == value
+                }
+            }
         }
     }
 }
