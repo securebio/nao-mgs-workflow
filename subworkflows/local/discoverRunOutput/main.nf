@@ -13,15 +13,18 @@ workflow DISCOVER_RUN_OUTPUT {
         run_dirs        // Channel of tuple(label, resolved_run_results_dir), unique
         groups          // Channel of tuple(label, sample, group)
         pyproject_path  // Path to pyproject.toml
+        platform        // Platform string (e.g. "illumina", "ont")
     main:
         // Extract valid per-sample output suffixes from pyproject.toml
-        suffixes_ch = GET_RUN_OUTPUT_SUFFIXES(pyproject_path).suffixes  // comma-separated string
-        // Discover all TSV files from each run_results_dir
+        suffixes_ch = GET_RUN_OUTPUT_SUFFIXES(pyproject_path, platform).suffixes  // comma-separated string
+        // Discover all TSV and JSON files from each run_results_dir
         all_files_ch = run_dirs.flatMap { label, dir ->
             def resolved = dir.endsWith('/') ? dir : "${dir}/"
-            def files = file("${resolved}*.tsv{,.gz}")
-            def file_list = files instanceof List ? files : (files ? [files] : [])
-            file_list.collect { f -> tuple(label, f) }
+            def tsv_files = file("${resolved}*.tsv{,.gz}")
+            def json_files = file("${resolved}*.json")
+            def tsv_list = tsv_files instanceof List ? tsv_files : (tsv_files ? [tsv_files] : [])
+            def json_list = json_files instanceof List ? json_files : (json_files ? [json_files] : [])
+            (tsv_list + json_list).collect { f -> tuple(label, f) }
         }
         // Match files to samples using exact suffix matching to avoid ambiguity
         // when one sample name is a prefix of another (e.g. "s1" vs "s1_extra")
