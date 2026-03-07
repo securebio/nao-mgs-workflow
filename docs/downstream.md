@@ -28,6 +28,7 @@ O --> S(Read count TSVs)
 O --> KR(Kraken TSVs)
 O --> BR(Bracken TSVs)
 O --> QC(QC stats TSVs)
+O --> FJ(FASTP JSON)
 O --> E[MARK_VIRAL_DUPLICATES]
 E --> J(Annotated hits TSVs)
 E --> K(Summary TSVs)
@@ -62,6 +63,7 @@ style S fill:#000,color:#fff,stroke:#000
 style KR fill:#000,color:#fff,stroke:#000
 style BR fill:#000,color:#fff,stroke:#000
 style QC fill:#000,color:#fff,stroke:#000
+style FJ fill:#000,color:#fff,stroke:#000
 ```
 
 ### Long-read (ONT)
@@ -109,11 +111,11 @@ This subworkflow takes in an input file specifying (1) paths to one or more RUN 
 
 ### Discover per-sample output files (`DISCOVER_RUN_OUTPUT`)
 
-This is a reusable subworkflow that discovers all per-sample TSV files from the RUN output directories and matches them to sample groups. It takes `run_dirs` and `groups` from `LOAD_DOWNSTREAM_DATA`, globs all TSV files from each directory, and matches them to samples using exact suffix matching against expected outputs from `pyproject.toml`. It then validates that all expected per-sample output files are present, failing with an informative error if any are missing (e.g. due to incomplete S3 copies). The output is a channel of tuples `(label, sample, file, group)` containing all discovered files. (No diagram is provided for this subworkflow.)
+This is a reusable subworkflow that discovers all per-sample TSV and JSON files from the RUN output directories and matches them to sample groups. It takes `run_dirs` and `groups` from `LOAD_DOWNSTREAM_DATA`, globs all TSV and JSON files from each directory, and matches them to samples using exact suffix matching against expected outputs from `pyproject.toml`. It then validates that all expected per-sample output files are present, failing with an informative error if any are missing (e.g. due to incomplete S3 copies). The output is a channel of tuples `(label, sample, file, group)` containing all discovered files. (No diagram is provided for this subworkflow.)
 
 ### Concatenate all per-sample RUN outputs by group (`CONCAT_RUN_OUTPUTS_BY_GROUP`)
 
-This subworkflow wraps multiple calls to `CONCAT_BY_GROUP` (see below) to concatenate all per-sample RUN output types (viral hits, read counts, Kraken reports, Bracken abundance estimates, and QC statistics) into per-group TSVs. It emits `hits` separately (used by downstream duplicate marking, validation, and clade counting) and mixes all other outputs into a single `other` channel that flows directly to the published results.
+This subworkflow wraps multiple calls to `CONCAT_BY_GROUP` (see below) to concatenate all per-sample RUN output types (viral hits, read counts, Kraken reports, Bracken abundance estimates, and QC statistics) into per-group TSVs, and calls `CONCAT_JSON_BY_GROUP` to merge per-sample FASTP JSON files into per-group JSON outputs. It emits `hits` separately (used by downstream duplicate marking, validation, and clade counting), `fastp_json` (per-group combined FASTP QC data, short-read only), and mixes all other TSV outputs into a single `other` channel that flows directly to the published results.
 
 
 ### Concatenate per-sample outputs into per-group TSVs (`CONCAT_BY_GROUP`)

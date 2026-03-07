@@ -178,21 +178,31 @@ class TestCreateEmptyOutputs:
         create_empty_outputs({"g1"}, ["{GROUP}_test.tsv.gz"], str(output_dir))
         assert output_dir.exists()
 
-    def test_mixed_tsv_and_json_patterns(self, tmp_path):
+    @pytest.mark.parametrize("use_schema_dir", [False, True], ids=["no_schema", "with_schema"])
+    def test_mixed_tsv_and_json_patterns(self, tmp_path, use_schema_dir):
         """Test creating both TSV and JSON outputs together."""
         output_dir = tmp_path / "output"
         patterns = ["{GROUP}_data.tsv.gz", "{GROUP}_fastp.json"]
-        create_empty_outputs({"g1"}, patterns, str(output_dir))
+        schema_dir = None
+        if use_schema_dir:
+            schema_dir = tmp_path / "schemas"
+            schema_dir.mkdir()
+            schema = {"fields": [{"name": "col1"}, {"name": "col2"}]}
+            (schema_dir / "data.schema.json").write_text(json.dumps(schema))
+        create_empty_outputs({"g1"}, patterns, str(output_dir), schema_dir)
 
         tsv_path = output_dir / "g1_data.tsv.gz"
         json_path = output_dir / "g1_fastp.json"
         assert tsv_path.exists()
         assert json_path.exists()
 
-        # TSV should be valid empty gzip
         with gzip.open(tsv_path, "rt") as f:
-            assert f.read() == ""
-        # JSON should be plain-text (not gzipped) empty object
+            content = f.read()
+        if use_schema_dir:
+            assert content == "col1\tcol2\n"
+        else:
+            assert content == ""
+        # JSON should be plain-text (not gzipped) empty object regardless of schema_dir
         assert json_path.read_text() == "{}"
 
 
