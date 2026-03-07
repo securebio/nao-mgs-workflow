@@ -114,13 +114,29 @@ class TestLoadEmptyJson:
     """Tests for load_empty_json function."""
 
     def test_returns_empty_object_for_object_schema(self, tmp_path):
-        """Test that '{}' is returned for JSON Schema with type: object."""
+        """Test that '{}' is returned for JSON Schema with type: object and no required props."""
         schema = {
             "$schema": "https://json-schema.org/draft/2020-12/schema",
             "type": "object",
         }
         (tmp_path / "fastp.schema.json").write_text(json.dumps(schema))
         assert load_empty_json(tmp_path, "fastp") == "{}"
+
+    def test_includes_required_properties(self, tmp_path):
+        """Test that required top-level properties are populated with empty values."""
+        schema = {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "required": ["name", "count", "tags"],
+            "properties": {
+                "name": {"type": "string"},
+                "count": {"type": "integer"},
+                "tags": {"type": "array"},
+            },
+        }
+        (tmp_path / "test.schema.json").write_text(json.dumps(schema))
+        result = json.loads(load_empty_json(tmp_path, "test"))
+        assert result == {"name": "", "count": 0, "tags": []}
 
     def test_returns_empty_array_for_array_schema(self, tmp_path):
         """Test that '[]' is returned for JSON Schema with type: array."""

@@ -33,35 +33,44 @@
           "examples": ["group_1"]
         },
         "summary": {
+          "description": "High-level aggregate statistics (total reads, bases, quality rates) before and after filtering.",
           "$ref": "#/$defs/summary"
         },
         "filtering_result": {
+          "description": "Breakdown of how many reads were removed by each filter category.",
           "$ref": "#/$defs/filtering_result"
         },
         "adapter_cutting": {
+          "description": "Adapter trimming statistics. Present when adapter trimming is enabled.",
           "$ref": "#/$defs/adapter_cutting"
         },
         "duplication": {
+          "description": "PCR duplication rate estimate. May contain minimal data when --dont_eval_duplication is used.",
           "$ref": "#/$defs/duplication"
         },
         "insert_size": {
+          "description": "Fragment length distribution. Only present for paired-end data.",
           "$ref": "#/$defs/insert_size"
         },
         "read1_before_filtering": {
+          "description": "Per-base and per-read quality statistics for read 1 before QC filtering.",
           "$ref": "#/$defs/read_quality_stats"
         },
         "read1_after_filtering": {
+          "description": "Per-base and per-read quality statistics for read 1 after QC filtering.",
           "$ref": "#/$defs/read_quality_stats"
         },
         "read2_before_filtering": {
+          "description": "Per-base and per-read quality statistics for read 2 before QC filtering. Only present for paired-end data.",
           "$ref": "#/$defs/read_quality_stats"
         },
         "read2_after_filtering": {
+          "description": "Per-base and per-read quality statistics for read 2 after QC filtering. Only present for paired-end data.",
           "$ref": "#/$defs/read_quality_stats"
         },
         "command": {
           "type": "string",
-          "description": "The FASTP command that was executed.",
+          "description": "The full FASTP command line that was executed, including all flags and arguments.",
           "examples": ["fastp --in1 read1.fq.gz --in2 read2.fq.gz --json out.json"]
         }
       },
@@ -73,9 +82,11 @@
       "required": ["before_filtering", "after_filtering"],
       "properties": {
         "before_filtering": {
+          "description": "Aggregate read and quality statistics before any QC filtering.",
           "$ref": "#/$defs/summary_stats"
         },
         "after_filtering": {
+          "description": "Aggregate read and quality statistics after QC filtering.",
           "$ref": "#/$defs/summary_stats"
         }
       },
@@ -329,9 +340,11 @@
           "examples": [3250]
         },
         "quality_curves": {
+          "description": "Per-cycle quality score curves (e.g. 'mean' quality at each sequencing cycle).",
           "$ref": "#/$defs/per_cycle_curves"
         },
         "content_curves": {
+          "description": "Per-cycle base composition curves (e.g. fraction of A, T, C, G, N at each cycle).",
           "$ref": "#/$defs/per_cycle_curves"
         },
         "kmer_count": {

@@ -105,18 +105,40 @@ def get_schema_name_from_pattern(pattern: str) -> str:
     return p.name
 
 
+def _empty_value_for_type(type_str: str) -> object:
+    """
+    Return a type-appropriate empty/zero value for a JSON Schema type.
+    Args:
+        type_str (str): JSON Schema type string.
+    Returns:
+        object: Empty value suitable for the type.
+    """
+    defaults: dict[str, object] = {
+        "object": {},
+        "array": [],
+        "string": "",
+        "integer": 0,
+        "number": 0,
+        "boolean": False,
+        "null": None,
+    }
+    return defaults.get(type_str, None)
+
+
 def load_empty_json(schema_dir: Path, schema_name: str) -> str | None:
     """
     Load a JSON Schema and return the appropriate empty JSON string.
 
     Analogous to load_schema_headers for table-schemas: reads a JSON Schema
     to determine the minimal valid empty structure for the output file.
+    For object schemas with required properties, includes those keys with
+    type-appropriate empty values (parallel to how table-schema headers
+    populate column names in empty TSVs).
     Args:
         schema_dir (Path): Directory containing schema files.
         schema_name (str): Base name of the schema (e.g., 'fastp').
     Returns:
-        str | None: Empty JSON string (e.g. '{}' or '[]'), or None if no
-            JSON Schema found.
+        str | None: Empty JSON string, or None if no JSON Schema found.
     """
     schema_path = schema_dir / f"{schema_name}.schema.json"
     if not schema_path.exists():
@@ -128,6 +150,14 @@ def load_empty_json(schema_dir: Path, schema_name: str) -> str | None:
         return None
     schema_type = schema.get("type")
     if schema_type == "object":
+        required = schema.get("required", [])
+        properties = schema.get("properties", {})
+        if required and properties:
+            obj = {}
+            for key in required:
+                prop_schema = properties.get(key, {})
+                obj[key] = _empty_value_for_type(prop_schema.get("type", "null"))
+            return json.dumps(obj)
         return "{}"
     elif schema_type == "array":
         return "[]"

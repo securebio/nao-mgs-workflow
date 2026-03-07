@@ -31,7 +31,7 @@ from collections.abc import Generator
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
-import jsonschema
+from jsonschema.validators import validator_for
 from frictionless import Dialect, Resource, formats, system, validate
 
 ###########
@@ -218,7 +218,8 @@ def validate_json_file(data_file: Path, schema_path: Path) -> tuple[bool, list[s
         data = json.load(f)
     with open(schema_path) as f:
         schema = json.load(f)
-    validator = jsonschema.Draft202012Validator(schema)
+    validator_cls = validator_for(schema)
+    validator = validator_cls(schema)
     errors = sorted(validator.iter_errors(data), key=lambda e: list(e.absolute_path))
     if not errors:
         return True, []
