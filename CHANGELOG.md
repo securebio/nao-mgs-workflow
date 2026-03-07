@@ -1,7 +1,6 @@
 # v3.2.0.3-dev
 
-- Added FASTP JSON output to published RUN outputs for QC (short-read data only; ONT uses FILTLONG).
-- Added `COMBINE_SAMPLE_JSONS` module and `CONCAT_JSON_BY_GROUP` subworkflow for combining per-sample JSON files into per-group outputs.
+- Added FASTP JSON output to published short-read outputs for RUN and DOWNSTREAM.
 
 # v3.2.0.2
 
