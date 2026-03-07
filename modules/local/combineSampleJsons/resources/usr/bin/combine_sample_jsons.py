@@ -88,6 +88,10 @@ def combine_sample_jsons(
     combined: dict = {}
     for filepath in sorted(input_files):
         sample = extract_sample_name(filepath, suffix)
+        if sample in combined:
+            raise ValueError(
+                f"Duplicate sample name '{sample}' from {filepath.name}"
+            )
         with open(filepath) as f:
             data = json.load(f)
         data["sample"] = sample
