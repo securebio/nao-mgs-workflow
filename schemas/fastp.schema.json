@@ -1,0 +1,359 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "FASTP Quality Control Metrics Per Group",
+  "description": "Per-group quality control metrics from FASTP, as produced by the DOWNSTREAM workflow. The top-level object is keyed by sample name; each entry contains the raw FASTP JSON output with injected 'sample' and 'group' fields. Produced for Illumina/short-read platforms only (ONT uses FILTLONG instead).",
+  "type": "object",
+  "additionalProperties": {
+    "$ref": "#/$defs/sample_entry"
+  },
+  "$defs": {
+    "sample_entry": {
+      "type": "object",
+      "description": "FASTP output for a single sample, with pipeline-injected metadata.",
+      "required": [
+        "sample",
+        "group",
+        "summary",
+        "filtering_result",
+        "read1_before_filtering",
+        "read1_after_filtering",
+        "command"
+      ],
+      "properties": {
+        "sample": {
+          "type": "string",
+          "description": "Sample identifier, injected by the pipeline.",
+          "minLength": 1,
+          "examples": ["sample_1"]
+        },
+        "group": {
+          "type": "string",
+          "description": "Group identifier, injected by the pipeline.",
+          "minLength": 1,
+          "examples": ["group_1"]
+        },
+        "summary": {
+          "$ref": "#/$defs/summary"
+        },
+        "filtering_result": {
+          "$ref": "#/$defs/filtering_result"
+        },
+        "adapter_cutting": {
+          "$ref": "#/$defs/adapter_cutting"
+        },
+        "duplication": {
+          "$ref": "#/$defs/duplication"
+        },
+        "insert_size": {
+          "$ref": "#/$defs/insert_size"
+        },
+        "read1_before_filtering": {
+          "$ref": "#/$defs/read_quality_stats"
+        },
+        "read1_after_filtering": {
+          "$ref": "#/$defs/read_quality_stats"
+        },
+        "read2_before_filtering": {
+          "$ref": "#/$defs/read_quality_stats"
+        },
+        "read2_after_filtering": {
+          "$ref": "#/$defs/read_quality_stats"
+        },
+        "command": {
+          "type": "string",
+          "description": "The FASTP command that was executed.",
+          "examples": ["fastp --in1 read1.fq.gz --in2 read2.fq.gz --json out.json"]
+        }
+      },
+      "additionalProperties": true
+    },
+    "summary": {
+      "type": "object",
+      "description": "Overall statistics before and after filtering.",
+      "required": ["before_filtering", "after_filtering"],
+      "properties": {
+        "before_filtering": {
+          "$ref": "#/$defs/summary_stats"
+        },
+        "after_filtering": {
+          "$ref": "#/$defs/summary_stats"
+        }
+      },
+      "additionalProperties": true
+    },
+    "summary_stats": {
+      "type": "object",
+      "description": "Aggregate read statistics for a filtering stage.",
+      "required": [
+        "total_reads",
+        "total_bases",
+        "q20_bases",
+        "q30_bases",
+        "q20_rate",
+        "q30_rate",
+        "gc_content"
+      ],
+      "properties": {
+        "total_reads": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Total number of reads.",
+          "examples": [50]
+        },
+        "total_bases": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Total number of bases.",
+          "examples": [7500]
+        },
+        "q20_bases": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Number of bases with quality >= Q20.",
+          "examples": [7000]
+        },
+        "q30_bases": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Number of bases with quality >= Q30.",
+          "examples": [6500]
+        },
+        "q20_rate": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Fraction of bases with quality >= Q20.",
+          "examples": [0.9333]
+        },
+        "q30_rate": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Fraction of bases with quality >= Q30.",
+          "examples": [0.8667]
+        },
+        "read1_mean_length": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Mean length of read 1.",
+          "examples": [150]
+        },
+        "read2_mean_length": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Mean length of read 2. Only present for paired-end data.",
+          "examples": [150]
+        },
+        "gc_content": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "GC content as a fraction.",
+          "examples": [0.45]
+        }
+      },
+      "additionalProperties": true
+    },
+    "filtering_result": {
+      "type": "object",
+      "description": "Breakdown of reads removed during QC filtering.",
+      "required": [
+        "passed_filter_reads",
+        "low_quality_reads",
+        "too_many_N_reads",
+        "too_short_reads",
+        "too_long_reads"
+      ],
+      "properties": {
+        "passed_filter_reads": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Number of reads that passed all filters.",
+          "examples": [48]
+        },
+        "low_quality_reads": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Number of reads removed due to low quality.",
+          "examples": [1]
+        },
+        "too_many_N_reads": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Number of reads removed due to excessive N bases.",
+          "examples": [0]
+        },
+        "too_short_reads": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Number of reads removed due to being too short.",
+          "examples": [1]
+        },
+        "too_long_reads": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Number of reads removed due to being too long.",
+          "examples": [0]
+        },
+        "low_complexity_reads": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Number of reads removed due to low complexity. Only present when --low_complexity_filter is used.",
+          "examples": [0]
+        }
+      },
+      "additionalProperties": true
+    },
+    "adapter_cutting": {
+      "type": "object",
+      "description": "Adapter trimming statistics.",
+      "required": ["adapter_trimmed_reads", "adapter_trimmed_bases"],
+      "properties": {
+        "adapter_trimmed_reads": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Number of reads with adapters trimmed.",
+          "examples": [2]
+        },
+        "adapter_trimmed_bases": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Total number of adapter bases trimmed.",
+          "examples": [15]
+        },
+        "read1_adapter_sequence": {
+          "type": "string",
+          "description": "Detected adapter sequence for read 1.",
+          "examples": ["AGATCGGAAGAGCACACGTCTGAACTCCAGTCA"]
+        },
+        "read2_adapter_sequence": {
+          "type": "string",
+          "description": "Detected adapter sequence for read 2.",
+          "examples": ["AGATCGGAAGAGCGTCGTGTAGGGAAAGAGTGT"]
+        },
+        "read1_adapter_counts": {
+          "type": "object",
+          "description": "Adapter match frequency by overlap length for read 1.",
+          "additionalProperties": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "read2_adapter_counts": {
+          "type": "object",
+          "description": "Adapter match frequency by overlap length for read 2.",
+          "additionalProperties": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      },
+      "additionalProperties": true
+    },
+    "duplication": {
+      "type": "object",
+      "description": "PCR duplication analysis results. May contain minimal data when --dont_eval_duplication is used.",
+      "properties": {
+        "rate": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Estimated duplication rate.",
+          "examples": [0.0]
+        },
+        "histogram": {
+          "type": "array",
+          "description": "Frequency histogram of duplication levels.",
+          "items": {
+            "type": "number",
+            "minimum": 0
+          }
+        }
+      },
+      "additionalProperties": true
+    },
+    "insert_size": {
+      "type": "object",
+      "description": "Fragment length distribution for paired-end data. Not present for single-end data.",
+      "properties": {
+        "peak": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Modal insert size.",
+          "examples": [200]
+        },
+        "unknown": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Number of read pairs with unknown insert size.",
+          "examples": [0]
+        },
+        "histogram": {
+          "type": "array",
+          "description": "Frequency distribution of insert sizes.",
+          "items": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      },
+      "additionalProperties": true
+    },
+    "read_quality_stats": {
+      "type": "object",
+      "description": "Per-read quality and base composition statistics.",
+      "required": ["total_reads", "total_bases"],
+      "properties": {
+        "total_reads": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Total number of reads.",
+          "examples": [25]
+        },
+        "total_bases": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Total number of bases.",
+          "examples": [3750]
+        },
+        "q20_bases": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Number of bases with quality >= Q20.",
+          "examples": [3500]
+        },
+        "q30_bases": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Number of bases with quality >= Q30.",
+          "examples": [3250]
+        },
+        "quality_curves": {
+          "$ref": "#/$defs/per_cycle_curves"
+        },
+        "content_curves": {
+          "$ref": "#/$defs/per_cycle_curves"
+        },
+        "kmer_count": {
+          "type": "object",
+          "description": "K-mer frequency counts, keyed by k-mer sequence string.",
+          "additionalProperties": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      },
+      "additionalProperties": true
+    },
+    "per_cycle_curves": {
+      "type": "object",
+      "description": "Per-cycle quality or base composition curves, keyed by metric name (e.g. 'A', 'T', 'C', 'G', 'mean', 'N', 'GC').",
+      "additionalProperties": {
+        "type": "array",
+        "items": {
+          "type": "number"
+        }
+      }
+    }
+  }
+}
