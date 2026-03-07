@@ -105,6 +105,11 @@ def get_schema_name_from_pattern(pattern: str) -> str:
     return p.name
 
 
+def _is_json_schema(schema: dict) -> bool:
+    """Check whether a loaded schema dict is a JSON Schema (vs a table-schema)."""
+    return "json-schema.org" in schema.get("$schema", "")
+
+
 def _empty_value_for_type(type_str: str) -> object:
     """
     Return a type-appropriate empty/zero value for a JSON Schema type.
@@ -146,7 +151,7 @@ def load_empty_json(schema_dir: Path, schema_name: str) -> str | None:
     with open(schema_path) as f:
         schema = json.load(f)
     # Only handle JSON Schemas, not table-schemas
-    if "json-schema.org" not in schema.get("$schema", ""):
+    if not _is_json_schema(schema):
         return None
     schema_type = schema.get("type")
     if schema_type == "object":

@@ -193,6 +193,10 @@ def reordered_to_schema(
         tmp.flush()
         yield Path(tmp.name)
 
+def _is_json_schema(schema: dict) -> bool:
+    """Check whether a loaded schema dict is a JSON Schema (vs a table-schema)."""
+    return "json-schema.org" in schema.get("$schema", "")
+
 def validate_json_file(data_file: Path, schema: dict) -> tuple[bool, list[str]]:
     """
     Validate a JSON data file against a JSON Schema.
@@ -232,8 +236,10 @@ def validate_file(data_file: Path, schema_path: Path) -> tuple[bool, list[str]]:
     """
     with open(schema_path) as f:
         schema = json.load(f)
-    if "json-schema.org" in schema.get("$schema", ""):
+    if _is_json_schema(schema):
         return validate_json_file(data_file, schema)
+    # Table-schema path: reordered_to_schema and frictionless expect a file path,
+    # so the schema is re-read from disk by those functions (intentional).
     with decompressed_path(data_file) as uncompressed:
         with reordered_to_schema(uncompressed, schema_path) as file_to_validate:
             dialect = Dialect(controls=[formats.CsvControl(delimiter="\t")])

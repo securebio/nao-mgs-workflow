@@ -245,9 +245,15 @@ class TestCreateEmptyOutputs:
             schema_dir.mkdir()
             table_schema = {"fields": [{"name": "col1"}, {"name": "col2"}]}
             (schema_dir / "data.schema.json").write_text(json.dumps(table_schema))
+            # Use required properties so output differs from no-schema default
             json_schema = {
                 "$schema": "https://json-schema.org/draft/2020-12/schema",
                 "type": "object",
+                "required": ["name", "count"],
+                "properties": {
+                    "name": {"type": "string"},
+                    "count": {"type": "integer"},
+                },
             }
             (schema_dir / "fastp.schema.json").write_text(json.dumps(json_schema))
         create_empty_outputs({"g1"}, patterns, str(output_dir), schema_dir)
@@ -261,10 +267,12 @@ class TestCreateEmptyOutputs:
             content = f.read()
         if use_schema_dir:
             assert content == "col1\tcol2\n"
+            # Schema-derived JSON includes required keys with empty values
+            result = json.loads(json_path.read_text())
+            assert result == {"name": "", "count": 0}
         else:
             assert content == ""
-        # JSON should be plain-text (not gzipped) empty object
-        assert json_path.read_text() == "{}"
+            assert json_path.read_text() == "{}"
 
 
 #=============================================================================

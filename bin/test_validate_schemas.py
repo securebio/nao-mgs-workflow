@@ -553,3 +553,30 @@ expected-outputs-downstream = [
             pytest.skip("Real test data or schema not available")
         is_valid, errors = validate_file(data_path, schema_path)
         assert is_valid, f"Validation errors: {errors}"
+
+    def test_empty_sample_fixture_matches_sample_entry_schema(self) -> None:
+        """Validate empty_sample_fastp.json against the sample_entry sub-schema.
+
+        Catches schema tightenings that would break the empty fixture before
+        they surface in the full DOWNSTREAM workflow test.
+        """
+        from jsonschema.validators import validator_for
+
+        repo_root = Path(__file__).resolve().parent.parent
+        schema_path = repo_root / "schemas" / "fastp.schema.json"
+        fixture_path = repo_root / "test-data" / "downstream" / "empty" / "empty_sample_fastp.json"
+        if not schema_path.exists() or not fixture_path.exists():
+            pytest.skip("Real test data or schema not available")
+        with open(schema_path) as f:
+            full_schema = json.load(f)
+        # Extract sample_entry and inject $defs so $ref resolution works
+        sample_entry_schema = {**full_schema["$defs"]["sample_entry"], "$defs": full_schema["$defs"]}
+        with open(fixture_path) as f:
+            fixture_data = json.load(f)
+        # The fixture is a per-sample file; add pipeline-injected fields
+        fixture_data["sample"] = "empty_sample"
+        fixture_data["group"] = "empty_group"
+        validator_cls = validator_for(full_schema)
+        validator = validator_cls(sample_entry_schema)
+        errors = sorted(validator.iter_errors(fixture_data), key=lambda e: list(e.absolute_path))
+        assert not errors, f"Fixture fails sample_entry validation: {[e.message for e in errors]}"
