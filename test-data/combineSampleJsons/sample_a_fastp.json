@@ -1,0 +1,8 @@
+{
+  "summary": {
+    "before_filtering": {"total_reads": 1000, "q20_rate": 0.95, "q30_rate": 0.90},
+    "after_filtering": {"total_reads": 950, "q20_rate": 0.97, "q30_rate": 0.93}
+  },
+  "filtering_result": {"passed_filter_reads": 950, "low_quality_reads": 50},
+  "command": "fastp --stdin"
+}
