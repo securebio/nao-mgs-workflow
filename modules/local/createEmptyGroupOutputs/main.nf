@@ -10,6 +10,7 @@ process CREATE_EMPTY_GROUP_OUTPUTS {
         val(pattern_filter)
     output:
         path("*_*.tsv.gz"), emit: outputs, optional: true
+        path("*_*.json"), emit: json_outputs, optional: true
         path("input_${pyproject_toml}"), emit: pyproject
         path("input_schemas"), emit: schemas
     script:
