@@ -1,6 +1,7 @@
 # v3.2.0.3-dev
 
 - Updated benchmark CI workflow samplesheet paths to use `metadata/` and `raw/` subdirectories, matching internal standards.
+- Updated INDEX workflow modules to reduce download errors.
 
 # v3.2.0.2
 
