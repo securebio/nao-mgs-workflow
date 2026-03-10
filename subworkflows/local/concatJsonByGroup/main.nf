@@ -15,7 +15,9 @@ workflow CONCAT_JSON_BY_GROUP {
         suffix       // string file suffix to filter on, e.g. "fastp.json"
         output_name  // string, e.g. "fastp"
     main:
-        // Filter for files matching the suffix using exact matching
+        // Filter for files matching the suffix using exact matching.
+        // Unlike CONCAT_BY_GROUP, .gz variants are not matched here because
+        // JSON outputs (e.g. fastp) are never gzipped.
         filtered = files
             .filter { _label, sample, f, _group ->
                 def name = f.getFileName().toString()
