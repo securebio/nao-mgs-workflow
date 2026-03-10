@@ -27,19 +27,16 @@ def get_run_output_suffixes(pyproject_path: Path) -> list[str]:
         data = tomllib.load(f)
     mgs_config = data.get("tool", {}).get("mgs-workflow", {})
     suffixes: set[str] = set()
-    for key in mgs_config:
-        if not key.startswith("expected-outputs"):
+    for pattern in mgs_config.get("expected-outputs-run", []):
+        if "{SAMPLE}" not in pattern:
             continue
-        for pattern in mgs_config[key]:
-            if "{SAMPLE}" not in pattern:
-                continue
-            parts = pattern.split("{SAMPLE}_", 1)
-            if len(parts) != 2:
-                continue
-            suffix = parts[1]
-            if suffix.endswith(".gz"):
-                suffix = suffix[:-3]
-            suffixes.add(suffix)
+        parts = pattern.split("{SAMPLE}_", 1)
+        if len(parts) != 2:
+            continue
+        suffix = parts[1]
+        if suffix.endswith(".gz"):
+            suffix = suffix[:-3]
+        suffixes.add(suffix)
     return sorted(suffixes)
 
 

@@ -1,6 +1,7 @@
 # v3.2.0.3-dev
 
 - Updated benchmark CI workflow samplesheet paths to use `metadata/` and `raw/` subdirectories, matching internal standards.
+- Added FASTP JSON output to published RUN outputs for QC (short-read data only; ONT uses FILTLONG).
 
 # v3.2.0.2
 

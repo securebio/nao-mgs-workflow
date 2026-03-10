@@ -9,7 +9,8 @@ process FASTP {
     output:
         tuple val(sample), path("${sample}_fastp.fastq.gz"), emit: reads
         tuple val(sample), path("${sample}_fastp_failed.fastq.gz"), emit: failed
-        tuple val(sample), path("${sample}_fastp.{json,html}"), emit: log
+        tuple val(sample), path("${sample}_fastp.json"), emit: json
+        tuple val(sample), path("${sample}_fastp.html"), emit: html
         tuple val(sample), path("${sample}_fastp_in.fastq.gz"), emit: input
     script:
         /* FASTP cleaning operations:
