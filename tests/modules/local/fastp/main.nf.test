@@ -1,5 +1,31 @@
 import groovy.json.JsonSlurper
 
+// Helper: validate FASTP JSON structure and cross-validate read counts
+def checkFastpJson = { json, reads_in, reads_pass, is_pe ->
+    assert json.containsKey("summary")
+    assert json.containsKey("filtering_result")
+    assert json.containsKey("read1_before_filtering")
+    assert json.containsKey("read1_after_filtering")
+    assert json.containsKey("command")
+    // Cross-validate read counts between JSON and FASTQ outputs
+    assert json.filtering_result.passed_filter_reads == reads_pass
+    assert json.summary.before_filtering.total_reads == reads_in
+    assert json.summary.after_filtering.total_reads == reads_pass
+    // Sanity-check summary statistics
+    assert json.summary.before_filtering.q20_rate >= 0
+    assert json.summary.before_filtering.q20_rate <= 1
+    assert json.summary.before_filtering.q30_rate >= 0
+    assert json.summary.before_filtering.q30_rate <= 1
+    if (is_pe) {
+        assert json.containsKey("read2_before_filtering")
+        assert json.containsKey("read2_after_filtering")
+    } else {
+        assert !json.containsKey("read2_before_filtering")
+        assert !json.containsKey("read2_after_filtering")
+        assert !json.containsKey("insert_size")
+    }
+}
+
 nextflow_process {
 
     name "Test process FASTP"
@@ -65,24 +91,9 @@ nextflow_process {
             def json_path = path(process.out.json[0][1])
             assert json_path.exists()
             assert json_path.size() > 0
-            // Parse JSON and validate structure
+            // Parse and validate FASTP JSON
             def json = new JsonSlurper().parse(json_path.toFile())
-            assert json.containsKey("summary")
-            assert json.containsKey("filtering_result")
-            assert json.containsKey("read1_before_filtering")
-            assert json.containsKey("read1_after_filtering")
-            assert json.containsKey("read2_before_filtering")
-            assert json.containsKey("read2_after_filtering")
-            assert json.containsKey("command")
-            // Cross-validate read counts between JSON and FASTQ outputs
-            assert json.filtering_result.passed_filter_reads == reads_pass
-            assert json.summary.before_filtering.total_reads == reads_in
-            assert json.summary.after_filtering.total_reads == reads_pass
-            // Sanity-check summary statistics
-            assert json.summary.before_filtering.q20_rate >= 0
-            assert json.summary.before_filtering.q20_rate <= 1
-            assert json.summary.before_filtering.q30_rate >= 0
-            assert json.summary.before_filtering.q30_rate <= 1
+            checkFastpJson(json, reads_in, reads_pass, true)
         }
     }
 
@@ -140,24 +151,9 @@ nextflow_process {
             def json_path = path(process.out.json[0][1])
             assert json_path.exists()
             assert json_path.size() > 0
-            // Parse JSON and validate structure
+            // Parse and validate FASTP JSON
             def json = new JsonSlurper().parse(json_path.toFile())
-            assert json.containsKey("summary")
-            assert json.containsKey("filtering_result")
-            assert json.containsKey("read1_before_filtering")
-            assert json.containsKey("read1_after_filtering")
-            assert json.containsKey("command")
-            // Single-end: no read2 or insert_size sections
-            assert !json.containsKey("read2_before_filtering")
-            assert !json.containsKey("read2_after_filtering")
-            assert !json.containsKey("insert_size")
-            // Cross-validate read counts between JSON and FASTQ outputs
-            assert json.filtering_result.passed_filter_reads == reads_pass
-            assert json.summary.before_filtering.total_reads == reads_in
-            assert json.summary.after_filtering.total_reads == reads_pass
-            // Sanity-check summary statistics
-            assert json.summary.before_filtering.q20_rate >= 0
-            assert json.summary.before_filtering.q20_rate <= 1
+            checkFastpJson(json, reads_in, reads_pass, false)
         }
     }
 
