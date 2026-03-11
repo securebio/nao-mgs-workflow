@@ -14,7 +14,6 @@ import time
 from datetime import UTC, datetime
 from pathlib import Path
 
-
 class UTCFormatter(logging.Formatter):
     def formatTime(self, record: logging.LogRecord, datefmt: str | None = None) -> str:
         return datetime.fromtimestamp(record.created, UTC).strftime("%Y-%m-%d %H:%M:%S UTC")
@@ -26,22 +25,30 @@ handler.setFormatter(UTCFormatter("[%(asctime)s] %(message)s"))
 logger.handlers.clear()
 logger.addHandler(handler)
 
-
 def open_by_suffix(path: str, mode: str = "r"):
     """Open a file, transparently handling .gz compression."""
     return gzip.open(path, mode + "t") if path.endswith(".gz") else open(path, mode)
 
-
 def build_species_taxid_map(virus_db_path: str) -> dict[str, str]:
-    """Build taxid -> species_taxid mapping from virus taxonomy DB TSV."""
+    """Build taxid -> species_taxid mapping from virus taxonomy DB.
+    Args:
+        virus_db_path: Path to TSV with 'taxid' and 'taxid_species' columns.
+    Returns:
+        Dictionary mapping taxid to species-level taxid.
+    """
     with open(virus_db_path) as f:
         result = {row["taxid"]: row["taxid_species"] for row in csv.DictReader(f, delimiter="\t")}
     logger.info("Read %d entries from virus DB", len(result))
     return result
 
-
 def match_genomes_to_accessions(genome_dir: Path, accessions: list[str]) -> dict[str, str]:
-    """Match genome .fna.gz files to assembly accessions by filename prefix."""
+    """Match genome .fna.gz files to assembly accessions by filename prefix.
+    Args:
+        genome_dir: Directory containing genome .fna.gz files.
+        accessions: List of assembly accessions to match.
+    Returns:
+        Dictionary mapping assembly accession to genome filename.
+    """
     genome_files = sorted(genome_dir.glob("*.fna.gz"))
     result = {}
     for acc in accessions:
@@ -50,12 +57,18 @@ def match_genomes_to_accessions(genome_dir: Path, accessions: list[str]) -> dict
             result[acc] = matches[0].name
     return result
 
-
 def prepare_metadata(
     merged_metadata_path: str, virus_db_path: str, genomes_dir: str,
     output_metadata_path: str, output_genomes_dir: str,
 ) -> None:
-    """Read metadata + virus DB, add species_taxid and local_filename, symlink genomes."""
+    """Read metadata + virus DB, add species_taxid and local_filename, symlink genomes.
+    Args:
+        merged_metadata_path: Path to merged metadata TSV (may be gzipped).
+        virus_db_path: Path to virus taxonomy DB TSV.
+        genomes_dir: Directory containing downloaded genome .fna.gz files.
+        output_metadata_path: Output path for prepared metadata TSV.
+        output_genomes_dir: Output directory for symlinked genome files.
+    """
     taxid_to_species = build_species_taxid_map(virus_db_path)
     with open_by_suffix(merged_metadata_path) as f:
         rows = list(csv.DictReader(f, delimiter="\t"))
@@ -83,7 +96,6 @@ def prepare_metadata(
             n_written += 1
     logger.info("Wrote %d rows (dropped %d unmatched)", n_written, len(rows) - n_written)
 
-
 def parse_arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("merged_metadata", help="Path to merged metadata TSV.")
@@ -93,7 +105,6 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument("output_genomes_dir", help="Output directory for genome files.")
     return parser.parse_args()
 
-
 def main() -> None:
     start_time = time.time()
     logger.info("Starting prepare_viral_metadata.")
@@ -101,7 +112,6 @@ def main() -> None:
     prepare_metadata(args.merged_metadata, args.virus_db, args.genomes_dir,
                      args.output_metadata, args.output_genomes_dir)
     logger.info("Total time elapsed: %.2f seconds", time.time() - start_time)
-
 
 if __name__ == "__main__":
     main()

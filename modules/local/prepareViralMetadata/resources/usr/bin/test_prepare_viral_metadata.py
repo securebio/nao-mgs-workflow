@@ -17,14 +17,12 @@ META_ROWS = [
 DB_HEADER = ["taxid", "taxid_species", "name"]
 DB_ROWS = [["12345", "12345", "Virus A"], ["67890", "67000", "Virus B"], ["99999", "99000", "Virus C"]]
 
-
 def _write_tsv(path: Path, header: list[str], rows: list[list[str]]) -> Path:
     with open(path, "w", newline="") as f:
         w = csv.writer(f, delimiter="\t")
         w.writerow(header)
         w.writerows(rows)
     return path
-
 
 def _make_genome_dir(tmp_path: Path, accessions: list[str]) -> Path:
     gdir = tmp_path / "genomes"
@@ -33,11 +31,9 @@ def _make_genome_dir(tmp_path: Path, accessions: list[str]) -> Path:
         (gdir / f"{acc}_genomic.fna.gz").write_bytes(b"dummy")
     return gdir
 
-
 def _read_tsv(path: Path) -> list[dict[str, str]]:
     with open(path) as f:
         return list(csv.DictReader(f, delimiter="\t"))
-
 
 def _run_prepare(tmp_path, meta_path, db_path, gdir) -> list[dict[str, str]]:
     """Run prepare_metadata and return output rows."""
@@ -45,13 +41,11 @@ def _run_prepare(tmp_path, meta_path, db_path, gdir) -> list[dict[str, str]]:
     prepare_metadata(str(meta_path), str(db_path), str(gdir), out_meta, out_genomes)
     return _read_tsv(Path(out_meta))
 
-
 @pytest.fixture()
 def standard_inputs(tmp_path: Path) -> tuple[Path, Path, Path]:
     meta = _write_tsv(tmp_path / "meta.tsv", META_HEADER, META_ROWS)
     db = _write_tsv(tmp_path / "db.tsv", DB_HEADER, DB_ROWS)
     return meta, db, _make_genome_dir(tmp_path, ACCS)
-
 
 class TestBuildSpeciesTaxidMap:
     @pytest.mark.parametrize(("db_rows", "expected"), [
@@ -61,7 +55,6 @@ class TestBuildSpeciesTaxidMap:
     def test_builds_map(self, tmp_path: Path, db_rows: list, expected: dict) -> None:
         db = _write_tsv(tmp_path / "db.tsv", DB_HEADER, db_rows)
         assert build_species_taxid_map(str(db)) == expected
-
 
 class TestMatchGenomesToAccessions:
     @pytest.mark.parametrize(("accessions", "dir_contents", "expected"), [
@@ -75,7 +68,6 @@ class TestMatchGenomesToAccessions:
     def test_match(self, tmp_path: Path, accessions: list[str],
                    dir_contents: list[str], expected: dict[str, str]) -> None:
         assert match_genomes_to_accessions(_make_genome_dir(tmp_path, dir_contents), accessions) == expected
-
 
 class TestPrepareMetadata:
     def test_standard_output(self, tmp_path: Path, standard_inputs: tuple[Path, Path, Path]) -> None:
