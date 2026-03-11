@@ -46,7 +46,7 @@ disallow_incomplete_defs = true
 check_untyped_defs = true
 
 [[tool.mypy.overrides]]
-module = ["pysam", "pysam.*", "Bio", "Bio.*", "tomli"]
+module = ["pysam", "pysam.*", "Bio", "Bio.*", "tomli", "boto3", "boto3.*", "botocore", "botocore.*"]
 ignore_missing_imports = true
 
 [tool.ruff]
