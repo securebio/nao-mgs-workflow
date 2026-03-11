@@ -5,6 +5,7 @@
 - Added `ENUMERATE_CHILD_TAXA` module: reads `nodes.dmp` to split downloads by child taxid for parallel genome downloads.
 - Added `DOWNLOAD_VIRAL_GENOMES` module: uses NCBI `datasets` CLI per child taxon. Inherits `NCBI_API_KEY` from the launch environment if set.
 - Added `ncbi_datasets` container (`ncbi-datasets-cli=18.20.0`, `unzip=6.0`).
+- Added `PREPARE_VIRAL_METADATA` module: merges per-taxon metadata, adds `species_taxid` from virus taxonomy DB, and maps genome files to `local_filename` for downstream compatibility.
 
 # v3.2.0.2
 
