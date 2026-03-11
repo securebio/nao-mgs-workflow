@@ -9,6 +9,7 @@
 - Replaced `ncbi-genome-download` with NCBI `datasets` CLI for downloading viral genomes in the INDEX workflow. Downloads are now parallelized across child taxa of the target virus taxid, improving fault tolerance against network errors and spot instance reclamation.
 - Removed `params.ncbi_viral_params` config parameter. Replaced with `params.assembly_source` (`"genbank"` or `"refseq"`), optional `params.ncbi_api_key` for NCBI rate limits, and optional `params.download_virus_taxid` to override which taxid tree is downloaded (defaults to `params.virus_taxid`).
 
+
 # v3.2.0.2
 
 - Fixed AWS OIDC credential expiry in long-running CI workflows. Added `role-duration-seconds` input to the `setup-nf-test` composite action and increased session durations for `rebuild-benchmark-index` (6h), `benchmark-illumina-100M` (2h), `benchmark-ont-100k` (2h), and `test-chained` (2h). Also added a credential refresh step before the benchmark index cleanup to ensure it succeeds even if the main credentials expire.
