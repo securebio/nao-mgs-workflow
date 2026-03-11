@@ -141,11 +141,7 @@ All Python scripts should have corresponding Pytest scripts in the same director
 
 ### Mypy / Type Checking
 
-Mypy is enforced in CI via `.github/workflows/mypy.yml` — all Python in `bin/` and `modules/local/` must pass `python -m mypy bin/ modules/local/`.
-
-- **`open_by_suffix()` return type:** Use `IO[str]` (from `typing`) as the return type annotation, not `io.TextIOWrapper`. This correctly covers both plain and gzip-opened file handles.
-- **Untyped third-party libraries:** Add per-package `[[tool.mypy.overrides]]` entries in `pyproject.toml` with `ignore_missing_imports = true`, rather than scattering inline `# type: ignore[import-untyped]` comments.
-- **CI vs local environment differences:** The CI environment may have different packages installed than your local setup (e.g., `boto3` is installed in CI but may not be locally), which can produce different mypy results. Always check CI after pushing type-related changes.
+Mypy is enforced in CI via `.github/workflows/mypy.yml` — all Python in `bin/` and `modules/local/` must pass `python -m mypy bin/ modules/local/`. Add per-package `[[tool.mypy.overrides]]` in `pyproject.toml` for untyped third-party libraries rather than inline `# type: ignore` comments.
 
 ## Versioning and Changelog
 

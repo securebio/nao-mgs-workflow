@@ -2,10 +2,7 @@
 
 - Updated benchmark CI workflow samplesheet paths to use `metadata/` and `raw/` subdirectories, matching internal standards.
 - Added FASTP JSON output to published RUN outputs for QC (short-read data only; ONT uses FILTLONG).
-- Added mypy type checking CI workflow (`.github/workflows/mypy.yml`) that runs on PRs when Python files or `pyproject.toml` change.
-- Added type annotations to all Python scripts in `bin/` and `modules/local/` to satisfy mypy strict mode (`disallow_untyped_defs`, `disallow_incomplete_defs`).
-- Added `pandas-stubs` and `types-PyYAML` type stub dependencies; configured mypy overrides to ignore missing stubs for `pysam`, `Bio`, and `tomli`.
-- Removed unused BZ2 support from `open_by_suffix()` in module scripts (only `build_tiny_test_databases.py` retains it); fixed `bz2.BZ2File` casing in that file.
+- Added mypy type-checking CI and type annotations to all Python scripts in `bin/` and `modules/local/`, with `pandas-stubs` and `types-PyYAML` stub dependencies.
 
 # v3.2.0.2
 

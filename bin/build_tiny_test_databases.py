@@ -9,7 +9,6 @@ Build tiny reference databases for testing: taxonomy, Kraken2, Bracken, and BLAS
 
 import argparse
 import gzip
-import bz2
 import logging
 import re
 import subprocess
@@ -115,7 +114,7 @@ def download_sequence(url: str) -> str:
 def open_by_suffix(filename: str | Path, mode: str = "r") -> IO[str]:
     """
     Parse the suffix of a filename to determine the right open method
-    to use, then open the file. Can handle .gz, .bz2, and uncompressed files.
+    to use, then open the file. Can handle .gz and uncompressed files.
     Args:
         filename (str | Path): Path to file to open
         mode (str): File open mode (default "r")
@@ -125,8 +124,6 @@ def open_by_suffix(filename: str | Path, mode: str = "r") -> IO[str]:
     filename_str = str(filename)
     if filename_str.endswith(".gz"):
         return gzip.open(filename_str, mode + "t")  # type: ignore[return-value]
-    elif filename_str.endswith(".bz2"):
-        return bz2.open(filename_str, mode + "t")  # type: ignore[return-value]
     else:
         return open(filename_str, mode)
 
