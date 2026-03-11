@@ -6,6 +6,8 @@
 - Added `DOWNLOAD_VIRAL_GENOMES` module: uses NCBI `datasets` CLI per child taxon. Inherits `NCBI_API_KEY` from the launch environment if set.
 - Added `ncbi_datasets` container (`ncbi-datasets-cli=18.20.0`, `unzip=6.0`).
 - Added `PREPARE_VIRAL_METADATA` module: merges per-taxon metadata, adds `species_taxid` from virus taxonomy DB, and maps genome files to `local_filename` for downstream compatibility.
+- Wired new modules into `makeVirusGenomeDB` subworkflow, replacing `ncbi-genome-download` with NCBI `datasets` CLI for the INDEX workflow. Downloads are now parallelized across child taxa for better fault tolerance.
+- Removed `params.ncbi_viral_params` config parameter. Replaced with `params.assembly_source` (`"genbank"` or `"refseq"`), `params.datasets_extra_args`, and optional `params.download_virus_taxid`. NCBI API keys are now read from the `NCBI_API_KEY` environment variable (used automatically by the `datasets` CLI).
 
 # v3.2.0.2
 
