@@ -7,6 +7,7 @@ Run with: pytest bin/test_download_db.py
 
 import fcntl
 import subprocess
+from collections.abc import Generator
 
 import pytest
 from pathlib import Path
@@ -38,7 +39,7 @@ class TestParseSourcePath:
         ("/path//to///db", "/path/to/db", False),
         ("relative/path/db", "relative/path/db", False),
     ])
-    def test_parse_source_path(self, input_path, expected_path, expected_is_s3):
+    def test_parse_source_path(self, input_path: str, expected_path: str, expected_is_s3: bool) -> None:
         """Test path normalization with various inputs."""
         normalized, is_s3 = parse_source_path(input_path)
         assert normalized == expected_path
@@ -52,7 +53,7 @@ class TestGetCacheName:
         ("s3://bucket/path/db", "db_56898535"),
         ("/local/path/bowtie2_idx", "bowtie2_idx_46a0d77f"),
     ])
-    def test_cache_name(self, source_path, expected_name):
+    def test_cache_name(self, source_path: str, expected_name: str) -> None:
         """Test that cache name is basename + first 8 chars of sha256 hash."""
         assert get_cache_name(source_path) == expected_name
 
@@ -60,19 +61,19 @@ class TestFileLock:
     """Test file locking context manager."""
 
     @pytest.mark.parametrize("lock_path", ["test.lock", "subdir/nested/test.lock"])
-    def test_lock_creates_file_and_parents(self, tmp_path, lock_path):
+    def test_lock_creates_file_and_parents(self, tmp_path: Path, lock_path: str) -> None:
         """Test that lock creates the lock file and any parent directories."""
         lock_file = tmp_path / lock_path
         with file_lock(lock_file):
             assert lock_file.exists()
 
-    def test_lock_timeout(self, tmp_path):
+    def test_lock_timeout(self, tmp_path: Path) -> None:
         """Test that timeout raises TimeoutError when lock is held by another."""
         lock_file = tmp_path / "test.lock"
         with open(lock_file, "w") as f:
             fcntl.flock(f, fcntl.LOCK_EX)
             with pytest.raises(TimeoutError, match="Timed out waiting for lock"):
-                with file_lock(lock_file, timeout_seconds=0.2):
+                with file_lock(lock_file, timeout_seconds=int(0.2)):
                     pass
             # Lock is released when file is closed
 
@@ -80,7 +81,7 @@ class TestConfigureAwsS3Transfer:
     """Test AWS S3 transfer configuration."""
 
     @patch('download_db.subprocess.run')
-    def test_configure_aws_s3_transfer(self, mock_run):
+    def test_configure_aws_s3_transfer(self, mock_run: MagicMock) -> None:
         """Test that AWS CLI settings are configured correctly."""
         mock_run.return_value = MagicMock(returncode=0)
         configure_aws_s3_transfer()
@@ -91,7 +92,7 @@ class TestConfigureAwsS3Transfer:
         assert ["aws", "configure", "set", "default.s3.multipart_chunksize", "16MB"] in calls
 
     @patch('download_db.subprocess.run')
-    def test_configure_aws_s3_transfer_failure(self, mock_run):
+    def test_configure_aws_s3_transfer_failure(self, mock_run: MagicMock) -> None:
         """Test that configuration failure raises exception."""
         mock_run.side_effect = subprocess.CalledProcessError(1, "aws")
         with pytest.raises(subprocess.CalledProcessError):
@@ -102,7 +103,7 @@ class TestSyncFromS3:
 
     @patch('download_db.configure_aws_s3_transfer')
     @patch('download_db.subprocess.run')
-    def test_sync_from_s3_success(self, mock_run, mock_configure):
+    def test_sync_from_s3_success(self, mock_run: MagicMock, mock_configure: MagicMock) -> None:
         """Test successful S3 sync."""
         sync_from_s3("s3://bucket/db", Path("/scratch/db"))
         mock_configure.assert_called_once()
@@ -115,7 +116,7 @@ class TestSyncFromS3:
 
     @patch('download_db.configure_aws_s3_transfer')
     @patch('download_db.subprocess.run')
-    def test_sync_from_s3_failure(self, mock_run, mock_configure):
+    def test_sync_from_s3_failure(self, mock_run: MagicMock, mock_configure: MagicMock) -> None:
         """Test S3 sync failure raises CalledProcessError."""
         mock_run.side_effect = subprocess.CalledProcessError(1, "aws s3 sync")
         with pytest.raises(subprocess.CalledProcessError):
@@ -125,7 +126,7 @@ class TestSyncFromLocal:
     """Test local rsync function."""
 
     @patch('download_db.subprocess.run')
-    def test_sync_from_local_success(self, mock_run):
+    def test_sync_from_local_success(self, mock_run: MagicMock) -> None:
         """Test successful local sync."""
         sync_from_local("/source/db", Path("/scratch/db"))
         mock_run.assert_called_once_with(
@@ -136,7 +137,7 @@ class TestSyncFromLocal:
         )
 
     @patch('download_db.subprocess.run')
-    def test_sync_from_local_failure(self, mock_run):
+    def test_sync_from_local_failure(self, mock_run: MagicMock) -> None:
         """Test local sync failure raises CalledProcessError."""
         mock_run.side_effect = subprocess.CalledProcessError(1, "rsync")
         with pytest.raises(subprocess.CalledProcessError):
@@ -146,7 +147,7 @@ class TestDownloadDatabase:
     """Test main download_database function."""
 
     @pytest.fixture
-    def mock_file_lock(self):
+    def mock_file_lock(self) -> Generator[MagicMock, None, None]:
         with patch('download_db.file_lock') as mock:
             mock.return_value.__enter__ = MagicMock()
             mock.return_value.__exit__ = MagicMock(return_value=False)
@@ -157,7 +158,7 @@ class TestDownloadDatabase:
         ("/source/bowtie2_db", "bowtie2_db_", "download_db.sync_from_local"),
         ("s3:///bucket//path///db", "db_", "download_db.sync_from_s3"),  # tests normalization
     ])
-    def test_download_database(self, mock_file_lock, tmp_path, source_path, expected_basename, sync_func):
+    def test_download_database(self, mock_file_lock: MagicMock, tmp_path: Path, source_path: str, expected_basename: str, sync_func: str) -> None:
         """Test downloading from S3 and local paths."""
         with patch(sync_func) as mock_sync:
             result = download_database(source_path, scratch_dir=tmp_path)
@@ -165,7 +166,7 @@ class TestDownloadDatabase:
             assert result.name.startswith(expected_basename)
             mock_sync.assert_called_once()
 
-    def test_download_database_creates_scratch_dir(self, mock_file_lock, tmp_path):
+    def test_download_database_creates_scratch_dir(self, mock_file_lock: MagicMock, tmp_path: Path) -> None:
         """Test that scratch directory is created if it doesn't exist."""
         _ = mock_file_lock  # fixture needed for side effect
         with patch('download_db.sync_from_s3'):
@@ -174,7 +175,7 @@ class TestDownloadDatabase:
             download_database("s3://bucket/db", scratch_dir=scratch)
             assert scratch.exists()
 
-    def test_download_database_passes_timeout(self, tmp_path):
+    def test_download_database_passes_timeout(self, tmp_path: Path) -> None:
         """Test that timeout is passed to file_lock."""
         with patch('download_db.file_lock') as mock_lock, patch('download_db.sync_from_s3'):
             mock_lock.return_value.__enter__ = MagicMock()
@@ -190,7 +191,7 @@ class TestMain:
         (['download_db.py', '/local/path/db'], ('/local/path/db', None)),
     ])
     @patch('download_db.download_database')
-    def test_main(self, mock_download, argv, expected_args):
+    def test_main(self, mock_download: MagicMock, argv: list[str], expected_args: tuple[str, int | None]) -> None:
         """Test that main parses args and calls download_database."""
         mock_download.return_value = Path("/scratch/db_abc123")
         with patch('sys.argv', argv):
@@ -198,7 +199,7 @@ class TestMain:
             mock_download.assert_called_once_with(*expected_args)
 
     @patch('download_db.download_database')
-    def test_main_prints_path(self, mock_download, capsys):
+    def test_main_prints_path(self, mock_download: MagicMock, capsys: pytest.CaptureFixture[str]) -> None:
         """Test that main prints the local path to stdout."""
         mock_download.return_value = Path("/scratch/kraken_db_abc12345")
         with patch('sys.argv', ['download_db.py', 's3://bucket/db']):

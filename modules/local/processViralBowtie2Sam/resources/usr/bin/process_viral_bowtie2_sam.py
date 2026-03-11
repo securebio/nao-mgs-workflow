@@ -21,6 +21,11 @@ import bz2
 import math
 from Bio import Seq
 import io
+from typing import IO, Sequence, cast
+
+# Type alias for SAM field dictionaries that contain mixed value types
+type FieldValue = str | int | bool | float | None
+type FieldDict = dict[str, FieldValue]
 
 #=======================================================================
 # Configure constants
@@ -67,7 +72,7 @@ SAM_HEADERS_UNPAIRED = [
 #=======================================================================
 
 class UTCFormatter(logging.Formatter):
-    def formatTime(self, record, datefmt=None):
+    def formatTime(self, record: logging.LogRecord, datefmt: str | None = None) -> str:
         dt = datetime.fromtimestamp(record.created, timezone.utc)
         return dt.strftime('%Y-%m-%d %H:%M:%S UTC')
 logging.basicConfig(level=logging.DEBUG)
@@ -82,23 +87,23 @@ logger.addHandler(handler)
 # I/O functions
 #=======================================================================
 
-def open_by_suffix(filename: str, mode: str = "r") -> io.TextIOWrapper:
+def open_by_suffix(filename: str, mode: str = "r") -> IO[str]:
     """
     Open a file with the appropriate compression, as inferred from the filename suffix.
     Args:
         filename (str): Path to file.
         mode (str): Mode to open file in.
     Returns:
-        TextIOWrapper: File object.
+        IO[str]: File object.
     """
     logger.debug(f"\tOpening file object: {filename}")
     logger.debug(f"\tOpening mode: {mode}")
     logger.debug(f"\tGZIP mode: {filename.endswith('.gz')}")
     logger.debug(f"\tBZ2 mode: {filename.endswith('.bz2')}")
     if filename.endswith('.gz'):
-        return gzip.open(filename, mode + 't')
+        return cast(IO[str], gzip.open(filename, mode + 't'))
     elif filename.endswith('.bz2'):
-        return bz2.BZ2file(filename, mode)
+        return cast(IO[str], bz2.BZ2File(filename, mode))  # type: ignore[call-overload]
     else:
         return open(filename, mode)
 
@@ -144,21 +149,21 @@ def get_viral_taxids(path: str) -> set[str]:
     virus_db = pd.read_csv(path, sep="\t", dtype=str)
     return set(virus_db["taxid"].values)
 
-def join_line(fields: list[str]) -> str:
+def join_line(fields: Sequence[FieldValue]) -> str:
     """
     Convert a list of arguments into a TSV string for output.
     Args:
-        fields (list[str]): List of fields to join.
+        fields (list): List of fields to join.
     Returns:
         str: Joined fields.
     """
     return("\t".join(map(str, fields)) + "\n")
 
-def write_sam_headers(out_file: io.TextIOWrapper, paired: bool) -> None:
+def write_sam_headers(out_file: IO[str], paired: bool) -> None:
     """
     Write header line to new TSV.
     Args:
-        out_file (io.TextIOWrapper): Output file to write to.
+        out_file (IO[str]): Output file to write to.
         paired (bool): Whether the SAM file is paired.
     """
     headers = SAM_HEADERS_PAIRED if paired else SAM_HEADERS_UNPAIRED
@@ -168,7 +173,7 @@ def write_sam_headers(out_file: io.TextIOWrapper, paired: bool) -> None:
     out_file.write(header_line)
     return None
 
-def get_next_alignment(sam_file: io.TextIOWrapper) -> str | None:
+def get_next_alignment(sam_file: IO[str]) -> str | None:
     """Iterate through SAM file lines until gets an alignment line, then returns."""
     while True:
         l = next(sam_file, "EOF") # Get next line
@@ -211,7 +216,7 @@ def process_sam_flags(flag_sum: int|str) -> dict[str, bool]:
     Returns:
         dict[str, bool]: Dictionary of flag results.
     """
-    flag_dict = {}
+    flag_dict: dict[str, bool] = {}
     flag_sum, flag_dict = check_flag(flag_sum, flag_dict, "is_supplementary", 2048)
     flag_sum, flag_dict = check_flag(flag_sum, flag_dict, "is_secondary", 256)
     flag_sum, flag_dict = check_flag(flag_sum, flag_dict, "is_mate_2", 128)
@@ -241,16 +246,16 @@ def extract_option(opt_list: list[str],
     assert len(fields) == 1, f"Multiple fields found for {query_value}: {fields}"
     field = fields[0]
     pattern = "{}:.:(.*)".format(query_value)
-    out_value = re.findall(pattern, field)[0]
+    out_value: str = re.findall(pattern, field)[0]
     return(out_value)
 
-def extract_optional_fields(opt_list: list[str]) -> dict[str, str]:
+def extract_optional_fields(opt_list: list[str]) -> dict[str, str | None]:
     """
     Extract relevant optional fields from Bowtie2 SAM alignment.
     Args:
         opt_list (list[str]): List of optional fields.
     Returns:
-        dict[str, str]: Dictionary of extracted values.
+        dict[str, str | None]: Dictionary of extracted values.
     """
     out = {}
     out["alignment_score"] = extract_option(opt_list, "AS")
@@ -287,7 +292,7 @@ def extract_viral_taxid(genome_id: str,
 def process_sam_alignment(sam_line: str,
                           genbank_metadata: dict[str, tuple[str, str]],
                           viral_taxids: set[str],
-                          paired: bool) -> dict[str, str|int|bool]:
+                          paired: bool) -> FieldDict:
     """
     Process a SAM alignment line into a dictionary of fields.
     Args:
@@ -296,12 +301,12 @@ def process_sam_alignment(sam_line: str,
         viral_taxids (set[str]): Set of viral taxids.
         paired (bool): Whether the SAM file is paired.
     Returns:
-        dict[str, str|int|bool]: Dictionary of fields.
+        FieldDict: Dictionary of fields.
     """
     # Parse SAM line into fields
     fields_in = sam_line.strip().split("\t")
     # Parse fields into output dictionary in order
-    out = {}
+    out: FieldDict = {}
     out["seq_id"] = fields_in[0]
     out.update(process_sam_flags(fields_in[1]))
     out["genome_id"] = fields_in[2]
@@ -319,22 +324,22 @@ def process_sam_alignment(sam_line: str,
     # Check if alignment is in reverse orientation, and reverse-complement if so
     out["query_rc"] = False
     if out["aligned_reverse"]:
-        out["query_seq"] = str(Seq.Seq(out["query_seq"]).reverse_complement())
-        out["query_qual"] = out["query_qual"][::-1]
+        out["query_seq"] = str(Seq.Seq(str(out["query_seq"])).reverse_complement())
+        out["query_qual"] = str(out["query_qual"])[::-1]
         out["query_rc"] = True
-    out["query_len"] = len(out["query_seq"])
+    out["query_len"] = len(str(out["query_seq"]))
     return(out)
 
 #=======================================================================
 # Line processing functions
 #=======================================================================
 
-def get_line(fields_dict: dict[str, str|int|bool],
+def get_line(fields_dict: FieldDict,
              paired: bool) -> str:
     """
     Convert a dictionary of fields into an output line.
     Args:
-        fields_dict (dict[str, str|int|bool]): Dictionary of fields.
+        fields_dict (FieldDict): Dictionary of fields.
         paired (bool): Whether the SAM file is paired.
     Returns:
         str: Output line.
@@ -350,20 +355,20 @@ def get_line(fields_dict: dict[str, str|int|bool],
     line = join_line(fields)
     return(line)
 
-def get_line_from_single(read_dict: dict[str, str|int|bool],
+def get_line_from_single(read_dict: FieldDict,
                          paired: bool) -> str:
     """
     Generate an output line from a single SAM alignment dictionary.
     Args:
-        read_dict (dict[str, str|int|bool]): Dictionary of fields.
+        read_dict (FieldDict): Dictionary of fields.
         paired (bool): Whether the SAM file is paired.
     Returns:
         str: Output line.
     """
     # Calculate length-adjusted alignment score
-    adj_score = float(read_dict["alignment_score"]) / math.log(float(read_dict["query_len"]))
+    adj_score = float(str(read_dict["alignment_score"])) / math.log(float(str(read_dict["query_len"])))
     # Prepare dictionary for output
-    out_dict = {
+    out_dict: FieldDict = {
     "seq_id": read_dict["seq_id"],
     "genome_id": read_dict["genome_id"],
     "taxid": read_dict["taxid"],
@@ -422,13 +427,13 @@ def get_line_from_single(read_dict: dict[str, str|int|bool],
         out_dict["query_qual"] = read_dict["query_qual"]
     return get_line(out_dict, paired)
 
-def get_line_from_pair(dict_1: dict[str, str|int|bool],
-                       dict_2: dict[str, str|int|bool]) -> str:
+def get_line_from_pair(dict_1: FieldDict,
+                       dict_2: FieldDict) -> str:
     """
     Generate an output line from two SAM alignment dictionaries.
     Args:
-        dict_1 (dict[str, str|int|bool]): First SAM alignment dictionary.
-        dict_2 (dict[str, str|int|bool]): Second SAM alignment dictionary.
+        dict_1 (FieldDict): First SAM alignment dictionary.
+        dict_2 (FieldDict): Second SAM alignment dictionary.
     Returns:
         str: Output line.
     """
@@ -445,8 +450,8 @@ def get_line_from_pair(dict_1: dict[str, str|int|bool],
     rev_dict = dict_1 if not dict_1["is_mate_1"] else dict_2
     # Calculate length-adjusted alignment scores
     try:
-        adj_score_fwd = float(fwd_dict["alignment_score"]) / math.log(float(fwd_dict["query_len"]))
-        adj_score_rev = float(rev_dict["alignment_score"]) / math.log(float(rev_dict["query_len"]))
+        adj_score_fwd = float(str(fwd_dict["alignment_score"])) / math.log(float(str(fwd_dict["query_len"])))
+        adj_score_rev = float(str(rev_dict["alignment_score"])) / math.log(float(str(rev_dict["query_len"])))
         adj_score_max = max(adj_score_fwd, adj_score_rev)
         score_fwd_max = adj_score_fwd >= adj_score_rev
     except Exception as e:
@@ -463,7 +468,7 @@ def get_line_from_pair(dict_1: dict[str, str|int|bool],
         fragment_length = fwd_dict["fragment_length"]
     else:
         genome_id_best = fwd_dict["genome_id"] if score_fwd_max else rev_dict["genome_id"]
-        genome_id_list = [fwd_dict["genome_id"], rev_dict["genome_id"]]
+        genome_id_list = [str(fwd_dict["genome_id"]), str(rev_dict["genome_id"])]
         genome_id_all = "/".join(genome_id_list)
         fragment_length = "NA"
         if fwd_dict["taxid"] == rev_dict["taxid"]:
@@ -474,7 +479,7 @@ def get_line_from_pair(dict_1: dict[str, str|int|bool],
             taxid_list = [str(fwd_dict["taxid"]), str(rev_dict["taxid"])]
             taxid_all = "/".join(taxid_list)
     # Prepare dictionary for output
-    out_dict = {
+    out_dict: FieldDict = {
         "seq_id": fwd_dict["seq_id"],
         "genome_id": genome_id_best,
         "genome_id_all": genome_id_all,
@@ -517,12 +522,12 @@ def get_line_from_pair(dict_1: dict[str, str|int|bool],
 # File processing functions
 #=======================================================================
 
-def check_pair_status(line_dict: dict[str, str|int|bool],
+def check_pair_status(line_dict: FieldDict,
                       paired: bool) -> None:
     """
     Check if pair status is valid for SAM entry line.
     Args:
-        line_dict (dict[str, str|int|bool]): SAM alignment dictionary.
+        line_dict (FieldDict): SAM alignment dictionary.
         paired (bool): Whether the SAM file is paired.
     """
     pair_status = line_dict["pair_status"]
@@ -533,15 +538,15 @@ def check_pair_status(line_dict: dict[str, str|int|bool],
     elif not paired and pair_status != "UU":
         raise ValueError(f"Paired read in unpaired SAM file: {line_dict['seq_id']}")
 
-def process_paired_sam(inf: io.TextIOWrapper,
-                       outf: io.TextIOWrapper,
+def process_paired_sam(inf: IO[str],
+                       outf: IO[str],
                        genbank_metadata: dict[str, tuple[str, str]],
                        viral_taxids: set[str]) -> None:
     """
     Process paired SAM file into a TSV.
     Args:
-        inf (io.TextIOWrapper): Input SAM file.
-        outf (io.TextIOWrapper): Output TSV file.
+        inf (IO[str]): Input SAM file.
+        outf (IO[str]): Output TSV file.
         genbank_metadata (dict[str, tuple[str, str]]): Genbank metadata mapping genome IDs to taxids.
         viral_taxids (set[str]): Set of viral taxids.
     """
@@ -583,7 +588,7 @@ def process_paired_sam(inf: io.TextIOWrapper,
         rev_dict = process_sam_alignment(rev_line, genbank_metadata, viral_taxids, True)
         check_pair_status(rev_dict, True)
         # Check for sorting
-        if fwd_dict["seq_id"] > rev_dict["seq_id"]:
+        if str(fwd_dict["seq_id"]) > str(rev_dict["seq_id"]):
             msg = f"Reads are not sorted: encountered {fwd_dict['seq_id']} before {rev_dict['seq_id']}"
             logger.error(msg)
             raise ValueError(msg)
@@ -615,15 +620,15 @@ def process_paired_sam(inf: io.TextIOWrapper,
         rev_line = get_next_alignment(inf)
         continue
 
-def process_unpaired_sam(inf: io.TextIOWrapper,
-                         outf: io.TextIOWrapper,
+def process_unpaired_sam(inf: IO[str],
+                         outf: IO[str],
                          genbank_metadata: dict[str, tuple[str, str]],
                          viral_taxids: set[str]) -> None:
     """
     Process unpaired SAM file into a TSV.
     Args:
-        inf (io.TextIOWrapper): Input SAM file.
-        outf (io.TextIOWrapper): Output TSV file.
+        inf (IO[str]): Input SAM file.
+        outf (IO[str]): Output TSV file.
         genbank_metadata (dict[str, tuple[str, str]]): Genbank metadata mapping genome IDs to taxids.
         viral_taxids (set[str]): Set of viral taxids.
     """
@@ -649,7 +654,7 @@ def process_unpaired_sam(inf: io.TextIOWrapper,
         logger.debug(f"Read dict: {read_dict}")
         if next_line is not None: # Check sorting
             next_dict = process_sam_alignment(next_line, genbank_metadata, viral_taxids, False)
-            if read_dict["seq_id"] > next_dict["seq_id"]:
+            if str(read_dict["seq_id"]) > str(next_dict["seq_id"]):
                 msg = f"Reads are not sorted: encountered {read_dict['seq_id']} before {next_dict['seq_id']}"
                 logger.error(msg)
                 raise ValueError(msg)
@@ -668,7 +673,7 @@ def process_unpaired_sam(inf: io.TextIOWrapper,
 # Main function
 #=======================================================================
 
-def main():
+def main() -> None:
     logger.info("Initializing script.")
     start_time = time.time()
     # Parse arguments

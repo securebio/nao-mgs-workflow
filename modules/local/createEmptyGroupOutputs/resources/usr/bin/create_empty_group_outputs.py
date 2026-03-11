@@ -16,6 +16,7 @@ import argparse
 import gzip
 import io
 import json
+from typing import IO
 import logging
 import time
 import tomllib
@@ -46,18 +47,18 @@ logger.addHandler(handler)
 # File I/O helpers
 #=============================================================================
 
-def open_by_suffix(filename: str | Path, mode: str = "r") -> io.TextIOWrapper:
+def open_by_suffix(filename: str | Path, mode: str = "r") -> IO[str]:
     """
     Open a file using the appropriate method based on its suffix.
     Args:
         filename (str | Path): Path to file to open.
         mode (str): File open mode (default "r").
     Returns:
-        io.TextIOWrapper: File handle appropriate for the file compression type.
+        IO[str]: File handle appropriate for the file compression type.
     """
     filename_str = str(filename)
     if filename_str.endswith(".gz"):
-        return gzip.open(filename_str, mode + "t")
+        return gzip.open(filename_str, mode + "t")  # type: ignore[return-value]
     else:
         return open(filename_str, mode)
 

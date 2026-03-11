@@ -7,40 +7,41 @@ import datetime
 import gzip
 import bz2
 import os
+from typing import IO
 
-def print_log(message):
+def print_log(message: str) -> None:
     print("[", datetime.datetime.now(), "]  ", message, sep="")
 
-def open_by_suffix(filename, mode="r", debug=False):
+def open_by_suffix(filename: str, mode: str = "r", debug: bool = False) -> IO[str]:
     if debug:
         print_log(f"\tOpening file object: {filename}")
         print_log(f"\tOpening mode: {mode}")
         print_log(f"\tGZIP mode: {filename.endswith('.gz')}")
         print_log(f"\tBZ2 mode: {filename.endswith('.bz2')}")
     if filename.endswith('.gz'):
-        return gzip.open(filename, mode + 't')
+        return gzip.open(filename, mode + 't')  # type: ignore[return-value]
     elif filename.endswith('.bz2'):
-        return bz2.BZ2file(filename, mode)
+        return bz2.BZ2File(filename, mode)  # type: ignore[call-overload,return-value,no-any-return]
     else:
         return open(filename, mode)
 
-def read_line(file):
+def read_line(file: IO[str]) -> list[str] | None:
     """Read and process a line from a file."""
     line = file.readline()
     return None if not line else line.rstrip("\n").split("\t")
 
-def write_line(file, fields):
+def write_line(file: IO[str], fields: list[str]) -> None:
     """Write a line to a file."""
     file.write("\t".join(fields) + "\n")
 
-def initialize_output_file(input_path, file_index, headers):
+def initialize_output_file(input_path: str, file_index: str, headers: list[str]) -> IO[str]:
     """Initialize an output file for partitioned data."""
     outf_path = f"partition_{file_index}_{input_path}"
     outf = open_by_suffix(outf_path, "w")
     write_line(outf, headers)
     return outf
 
-def partition(input_path, column):
+def partition(input_path: str, column: str) -> None:
     """Partition a TSV file based on a specified column header."""
     with open_by_suffix(input_path) as inf:
         # Handle header line
@@ -74,7 +75,7 @@ def partition(input_path, column):
         finally:
             outf.close()
 
-def main():
+def main() -> None:
     # Parse arguments
     parser = argparse.ArgumentParser(description="Partition a TSV based on a specified column header.")
     parser.add_argument("--input_path", "-i", help="Path to input TSV file.")

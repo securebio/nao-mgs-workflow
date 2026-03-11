@@ -14,19 +14,19 @@ side.
 # Import modules
 import argparse
 import time
-import datetime
 import gzip
 import bz2
 import os
 import logging
 from datetime import datetime, timezone
+from typing import IO, cast
 
 #=======================================================================
 # Configure logging
 #=======================================================================
 
 class UTCFormatter(logging.Formatter):
-    def formatTime(self, record, datefmt=None):
+    def formatTime(self, record: logging.LogRecord, datefmt: str | None = None) -> str:
         dt = datetime.fromtimestamp(record.created, timezone.utc)
         return dt.strftime('%Y-%m-%d %H:%M:%S UTC')
 logging.basicConfig(level=logging.INFO)
@@ -41,7 +41,7 @@ logger.addHandler(handler)
 # I/O functions
 #=======================================================================
 
-def parse_args():
+def parse_args() -> argparse.Namespace:
     """Parse command-line arguments."""
     # Create parser
     desc = "Given two sorted TSV files, join them linewise on a shared column."
@@ -58,7 +58,7 @@ def parse_args():
     # Return parsed arguments
     return parser.parse_args()
 
-def open_by_suffix(filename, mode="r"):
+def open_by_suffix(filename: str, mode: str = "r") -> IO[str]:
     """Parse the suffix of a filename to determine the right open method
     to use, then open the file. Can handle .gz, .bz2, and uncompressed files."""
     logger.debug(f"Opening file object: {filename}")
@@ -66,9 +66,9 @@ def open_by_suffix(filename, mode="r"):
     logger.debug(f"GZIP mode: {filename.endswith('.gz')}")
     logger.debug(f"BZ2 mode: {filename.endswith('.bz2')}")
     if filename.endswith('.gz'):
-        return gzip.open(filename, mode + 't')
+        return cast(IO[str], gzip.open(filename, mode + 't'))
     elif filename.endswith('.bz2'):
-        return bz2.BZ2file(filename, mode)
+        return cast(IO[str], bz2.BZ2File(filename, mode))  # type: ignore[call-overload]
     else:
         return open(filename, mode)
 
@@ -76,19 +76,19 @@ def open_by_suffix(filename, mode="r"):
 # Auxiliary functions
 #=======================================================================
 
-def write_line(line_list, output_file):
+def write_line(line_list: list[str], output_file: IO[str]) -> None:
     """Write a line to the output file."""
     line_joined = "\t".join(line_list)
     logger.debug(f"Writing line to output: {line_joined}")
     output_file.write(line_joined + "\n")
 
-def fill_right(row_1, placeholder_2):
+def fill_right(row_1: list[str], placeholder_2: list[str]) -> list[str]:
     """Fill in fields from file 2 with placeholder values."""
     new_row = row_1 + placeholder_2
     logger.debug(f"Filling right: {new_row}")
     return new_row
 
-def fill_left(placeholder_1, row_2, id_2, field_index_1, field_index_2):
+def fill_left(placeholder_1: list[str], row_2: list[str], id_2: str, field_index_1: int, field_index_2: int) -> list[str]:
     """Fill in fields from file 1 with placeholder values."""
     # Put join field in appropriate position in columns from file 1
     if field_index_1 == 0:
@@ -100,7 +100,7 @@ def fill_left(placeholder_1, row_2, id_2, field_index_1, field_index_2):
     logger.debug(f"Filling left: {merged_row}")
     return merged_row
 
-def process_headers(header_1, header_2, field):
+def process_headers(header_1: list[str], header_2: list[str], field: str) -> tuple[list[str], int, int]:
     """Read, join and check headers from both files."""
     # Log header fields
     logger.debug(f"Header 1: {header_1}")
@@ -136,28 +136,28 @@ def process_headers(header_1, header_2, field):
     logger.debug(f"Merged header: {merged_header}")
     return merged_header, field_index_1, field_index_2
 
-def get_line_id(file, field_index):
+def get_line_id(file: IO[str], field_index: int) -> tuple[str, list[str] | None, str | None]:
     """Get the next line ID from a file."""
     line = file.readline()
     row = line.rstrip("\n").split("\t") if line else None
     id = row[field_index] if row else None
     return line, row, id
 
-def check_sorting(id_curr, id_next, file_str, input_path):
+def check_sorting(id_curr: str | None, id_next: str | None, file_str: str, input_path: str) -> None:
     """Check that the file is sorted and raise an error if not."""
     logger.debug(f"Checking sorting for file {file_str}: {id_curr}, {id_next}")
-    if id_next is not None and id_curr > id_next:
+    if id_next is not None and id_curr is not None and id_curr > id_next:
         msg = f"File {file_str} is not sorted: encountered ID {id_curr} after {id_next} ({input_path})."
         logger.error(msg)
         raise ValueError(msg)
 
-def copy_file(file, header, output):
+def copy_file(file: IO[str], header: list[str], output: IO[str]) -> None:
     """Copy a file to the output file, starting with header."""
     write_line(header, output)
     for line in file:
         output.write(line)
 
-def handle_empty_files(file_1, file_2, is_empty_1, is_empty_2, join_type, header_1, header_2, output_file):
+def handle_empty_files(file_1: IO[str], file_2: IO[str], is_empty_1: bool, is_empty_2: bool, join_type: str, header_1: str, header_2: str, output_file: IO[str]) -> None:
     """Handle joining when one or both files are empty."""
     if not is_empty_1 and not is_empty_2:
         msg = "Error: called handle_empty_files with non-empty files"
@@ -191,7 +191,7 @@ def handle_empty_files(file_1, file_2, is_empty_1, is_empty_2, join_type, header
 # Join function
 #=======================================================================
 
-def join_tsvs(input_path_1, input_path_2, field, join_type, output_path):
+def join_tsvs(input_path_1: str, input_path_2: str, field: str, join_type: str, output_path: str) -> None:
     """Join two sorted TSV files linewise on a shared column."""
     # Open files for normal processing
     with open_by_suffix(input_path_1, "r") as file_1, \
@@ -225,6 +225,8 @@ def join_tsvs(input_path_1, input_path_2, field, join_type, output_path):
         logger.debug(f"Reading next line from file 2: {row_2_next}, {id_2_next}")
         # Iterate until we exhaust either file
         while line_1_curr and line_2_curr:
+            assert row_1_curr is not None and id_1_curr is not None
+            assert row_2_curr is not None and id_2_curr is not None
             # Verify that files are sorted
             check_sorting(id_1_curr, id_1_next, "1", input_path_1)
             check_sorting(id_2_curr, id_2_next, "2", input_path_2)
@@ -298,6 +300,7 @@ def join_tsvs(input_path_1, input_path_2, field, join_type, output_path):
                 logger.debug(f"Updated next line from file 2: {row_2_next}, {id_2_next}")
         # Read out file 1
         while line_1_curr:
+            assert row_1_curr is not None and id_1_curr is not None
             logger.debug(f"Reading current line from file 1 only: {id_1_curr}")
             check_sorting(id_1_curr, id_1_next, "1", input_path_1)
             if join_type == "strict":
@@ -316,6 +319,7 @@ def join_tsvs(input_path_1, input_path_2, field, join_type, output_path):
             logger.debug(f"Updated next line from file 1: {row_1_next}, {id_1_next}")
         # Read out file 2
         while line_2_curr:
+            assert row_2_curr is not None and id_2_curr is not None
             logger.debug(f"Reading current line from file 2 only: {id_2_curr}")
             check_sorting(id_2_curr, id_2_next, "2", input_path_2)
             if join_type == "strict":
@@ -337,7 +341,7 @@ def join_tsvs(input_path_1, input_path_2, field, join_type, output_path):
 # Main function
 #=======================================================================
 
-def main():
+def main() -> None:
     logger.info("Initializing script.")
     start_time = time.time()
     # Parse arguments

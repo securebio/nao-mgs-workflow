@@ -30,6 +30,7 @@ import os
 import re
 import subprocess
 import time
+from collections.abc import Generator
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
@@ -83,7 +84,7 @@ def get_cache_name(source_path: str) -> str:
     return f"{basename}_{path_hash}"
 
 @contextmanager
-def file_lock(lock_file: Path, timeout_seconds: int | None = None):
+def file_lock(lock_file: Path, timeout_seconds: int | None = None) -> Generator[None, None, None]:
     """
     Context manager for exclusive file locking.
     Args:

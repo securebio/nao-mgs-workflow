@@ -15,7 +15,7 @@ import csv
 import sys
 import gzip
 import bz2
-from typing import TextIO, Any, Union
+from typing import IO, TextIO, Any, Union
 from datetime import datetime, timezone
 
 
@@ -28,7 +28,7 @@ class UTCFormatter(logging.Formatter):
         Formatted log timestamps in UTC timezone
     """
 
-    def formatTime(self, record, datefmt=None):
+    def formatTime(self, record: logging.LogRecord, datefmt: str | None = None) -> str:
         """
         Format log timestamps in UTC timezone.
 
@@ -56,7 +56,7 @@ logger.addHandler(handler)
 # =======================================================================
 
 
-def open_by_suffix(filename: str, mode: str = "r"):
+def open_by_suffix(filename: str, mode: str = "r") -> IO[str]:
     """
     Parse the suffix of a filename to determine the right open method
     to use, then open the file. Can handle .gz, .bz2, and uncompressed files.
@@ -66,12 +66,12 @@ def open_by_suffix(filename: str, mode: str = "r"):
         mode (str): File open mode (default "r")
 
     Returns:
-        File handle appropriate for the file compression type
+        IO[str]: File handle appropriate for the file compression type
     """
     if filename.endswith(".gz"):
-        return gzip.open(filename, mode + "t")
+        return gzip.open(filename, mode + "t")  # type: ignore[return-value]
     elif filename.endswith(".bz2"):
-        return bz2.BZ2File(filename, mode)
+        return bz2.BZ2File(filename, mode)  # type: ignore[call-overload,return-value,no-any-return]
     else:
         return open(filename, mode)
 

@@ -6,24 +6,25 @@ import time
 import datetime
 import gzip
 import bz2
+from typing import IO
 
-def print_log(message):
+def print_log(message: str) -> None:
     print("[", datetime.datetime.now(), "]  ", message, sep="")
 
-def open_by_suffix(filename, mode="r", debug=False):
+def open_by_suffix(filename: str, mode: str = "r", debug: bool = False) -> IO[str]:
     if debug:
         print_log(f"\tOpening file object: {filename}")
         print_log(f"\tOpening mode: {mode}")
         print_log(f"\tGZIP mode: {filename.endswith('.gz')}")
         print_log(f"\tBZ2 mode: {filename.endswith('.bz2')}")
     if filename.endswith('.gz'):
-        return gzip.open(filename, mode + 't')
+        return gzip.open(filename, mode + 't')  # type: ignore[return-value]
     elif filename.endswith('.bz2'):
-        return bz2.BZ2file(filename, mode)
+        return bz2.BZ2File(filename, mode)  # type: ignore[call-overload,return-value,no-any-return]
     else:
         return open(filename, mode)
 
-def extract_viral_hit(fields, indices, single, drop_unpaired):
+def extract_viral_hit(fields: list[str], indices: dict[str, int], single: bool, drop_unpaired: bool) -> str | None:
     """Convert a single TSV line to a FASTQ entry, handling missing mates (if not single-end)."""
     # Extract fields
     seq_id = fields[indices["seq_id"]]
@@ -52,7 +53,7 @@ def extract_viral_hit(fields, indices, single, drop_unpaired):
         return fastq_entry_fwd + fastq_entry_rev
         
 
-def extract_viral_hits(input_path, out_path, drop_unpaired):
+def extract_viral_hits(input_path: str, out_path: str, drop_unpaired: bool) -> None:
     """Extract viral sequences from TSV file and write to FASTQ file."""
     with open_by_suffix(input_path) as inf, open_by_suffix(out_path, "w") as outf:
         # Read and handle header line
@@ -80,7 +81,7 @@ def extract_viral_hits(input_path, out_path, drop_unpaired):
             if fastq_entry:
                 outf.write(fastq_entry)
 
-def main():
+def main() -> None:
     # Parse arguments
     parser = argparse.ArgumentParser(description="Extract viral hits from a TSV to FASTQ file.")
     parser.add_argument("--input", "-i", required=True, help="Path to input TSV file.")

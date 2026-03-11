@@ -28,17 +28,17 @@ from run_nf_test_parallel import (
 class TestStripAnsiCodes:
     """Test ANSI escape code removal."""
 
-    def test_strip_complex_codes(self):
+    def test_strip_complex_codes(self) -> None:
         """Test removal of complex ANSI sequences."""
         text = "\x1B[1;32;40mBold green on black\x1B[0m"
         assert strip_ansi_codes(text) == "Bold green on black"
 
-    def test_no_ansi_codes(self):
+    def test_no_ansi_codes(self) -> None:
         """Test text without ANSI codes remains unchanged."""
         text = "Plain text"
         assert strip_ansi_codes(text) == "Plain text"
 
-    def test_multiple_codes(self):
+    def test_multiple_codes(self) -> None:
         """Test text with multiple ANSI codes."""
         text = "\x1B[31mRed\x1B[0m and \x1B[32mGreen\x1B[0m"
         assert strip_ansi_codes(text) == "Red and Green"
@@ -46,7 +46,7 @@ class TestStripAnsiCodes:
 class TestFindTestFiles:
     """Test finding *.nf.test files."""
 
-    def test_find_single_file(self, tmp_path):
+    def test_find_single_file(self, tmp_path: Path) -> None:
         """Test finding a single .nf.test file."""
         test_file = tmp_path / "test.nf.test"
         test_file.touch()
@@ -54,7 +54,7 @@ class TestFindTestFiles:
         assert len(result) == 1
         assert result[0] == test_file
 
-    def test_find_files_in_directory(self, tmp_path):
+    def test_find_files_in_directory(self, tmp_path: Path) -> None:
         """Test finding multiple .nf.test files in a directory."""
         (tmp_path / "test1.nf.test").touch()
         (tmp_path / "test2.nf.test").touch()
@@ -63,7 +63,7 @@ class TestFindTestFiles:
         assert len(result) == 2
         assert all(f.name.endswith('.nf.test') for f in result)
 
-    def test_find_files_recursively(self, tmp_path):
+    def test_find_files_recursively(self, tmp_path: Path) -> None:
         """Test recursive search in nested directories."""
         subdir = tmp_path / "subdir"
         subdir.mkdir()
@@ -72,12 +72,12 @@ class TestFindTestFiles:
         result = find_test_files([str(tmp_path)])
         assert len(result) == 2
 
-    def test_nonexistent_path(self, tmp_path):
+    def test_nonexistent_path(self, tmp_path: Path) -> None:
         """Test handling of nonexistent paths."""
         result = find_test_files([str(tmp_path / "nonexistent")])
         assert len(result) == 0
 
-    def test_mixed_files_and_directories(self, tmp_path):
+    def test_mixed_files_and_directories(self, tmp_path: Path) -> None:
         """Test finding files from mixed file and directory paths."""
         test_file = tmp_path / "direct.nf.test"
         test_file.touch()
@@ -89,7 +89,7 @@ class TestFindTestFiles:
         assert len(result) == 2
         assert sorted(result) == sorted([test_file, indirect_file])
 
-    def test_sorted_output(self, tmp_path):
+    def test_sorted_output(self, tmp_path: Path) -> None:
         """Test that output is sorted."""
         (tmp_path / "c.nf.test").touch()
         (tmp_path / "a.nf.test").touch()
@@ -107,7 +107,7 @@ class TestDivideTestFiles:
         (2, 5), (1, 3), (3, 10),  # More workers than files
         (0, 3), (5, 1), (1, 1), (100, 7),  # Edge cases
     ])
-    def test_divide_distribution(self, n_files, n_workers):
+    def test_divide_distribution(self, n_files: int, n_workers: int) -> None:
         """Test file distribution with various combinations."""
         files = [Path(f"test{i}.nf.test") for i in range(n_files)]
         result = divide_test_files(files, n_workers)
@@ -126,7 +126,7 @@ class TestExecuteSubprocess:
     """Test subprocess execution wrapper."""
 
     @patch('run_nf_test_parallel.subprocess.run')
-    def test_execute_subprocess(self, mock_run):
+    def test_execute_subprocess(self, mock_run: MagicMock) -> None:
         """Test that execute_subprocess correctly wraps subprocess.run."""
         mock_result = MagicMock()
         mock_result.returncode = 42
@@ -142,7 +142,7 @@ class TestExecuteSubprocess:
 class TestRunNfTestWorker:
     """Test nf-test worker function."""
 
-    def test_worker_with_no_files(self):
+    def test_worker_with_no_files(self) -> None:
         """Test worker with no assigned test files."""
         worker_id, exit_code, stdout, stderr, cmd_str = run_nf_test_worker(
             worker_id=1,
@@ -163,7 +163,7 @@ class TestRunNfTestWorker:
         ([Path("failing_test.nf.test")], 1, "FAILED (1.0s)\n", "Error message"),
     ])
     @patch('run_nf_test_parallel.execute_subprocess')
-    def test_worker_with_files(self, mock_execute, test_files, expected_exit, mock_stdout, mock_stderr):
+    def test_worker_with_files(self, mock_execute: MagicMock, test_files: list[Path], expected_exit: int, mock_stdout: str, mock_stderr: str) -> None:
         """Test worker with various file configurations and outcomes."""
         mock_execute.return_value = (expected_exit, mock_stdout, mock_stderr)
         worker_id, exit_code, stdout, stderr, cmd_str = run_nf_test_worker(
@@ -188,7 +188,7 @@ class TestRunNfTestWorker:
         (True, True, ["--debug", "--verbose", "--ci"]),
     ])
     @patch('run_nf_test_parallel.execute_subprocess')
-    def test_worker_with_flags(self, mock_execute, debug, ci, expected_flags):
+    def test_worker_with_flags(self, mock_execute: MagicMock, debug: bool, ci: bool, expected_flags: list[str]) -> None:
         """Test worker with debug and CI mode flags."""
         mock_execute.return_value = (0, "test1", "test2")
         test_files = [Path("test1.nf.test"), Path("test2.nf.test")]
@@ -211,7 +211,7 @@ class TestRunNfTestWorker:
 class TestExtractFailuresFromOutput:
     """Test extracting FAILED test names from output."""
 
-    def test_extract_failures(self):
+    def test_extract_failures(self) -> None:
         """Test extracting failures from output."""
         lines = ["Test 1", "FAILED (1.0s)", "Test 2", "PASSED (0.5s)", "Test 3", "FAILED (2.0s)"]
         input = "\n".join(lines)
@@ -223,7 +223,7 @@ class TestUpdatePlugins:
     """Test nf-test plugin update function."""
 
     @patch('run_nf_test_parallel.subprocess.run')
-    def test_update_plugins_success(self, mock_run):
+    def test_update_plugins_success(self, mock_run: MagicMock) -> None:
         """Test successful plugin update."""
         mock_result = MagicMock()
         mock_result.returncode = 0
@@ -238,7 +238,7 @@ class TestUpdatePlugins:
         )
 
     @patch('run_nf_test_parallel.subprocess.run')
-    def test_update_plugins_failure(self, mock_run):
+    def test_update_plugins_failure(self, mock_run: MagicMock) -> None:
         """Test plugin update with non-zero exit code."""
         mock_result = MagicMock()
         mock_result.returncode = 1
@@ -248,7 +248,7 @@ class TestUpdatePlugins:
             update_plugins()
 
     @patch('run_nf_test_parallel.subprocess.run')
-    def test_update_plugins_timeout(self, mock_run):
+    def test_update_plugins_timeout(self, mock_run: MagicMock) -> None:
         """Test plugin update timeout."""
         mock_run.side_effect = subprocess.TimeoutExpired(cmd="nf-test", timeout=120)
         with pytest.raises(RuntimeError, match="Plugin update timed out after 120 seconds"):
@@ -262,7 +262,7 @@ class TestRunParallelTests:
     @patch('run_nf_test_parallel.divide_test_files')
     @patch('run_nf_test_parallel.update_plugins')
     @patch('run_nf_test_parallel.find_test_files')
-    def test_run_parallel_tests_no_files(self, mock_find, mock_update, mock_divide, mock_pool, mock_write):
+    def test_run_parallel_tests_no_files(self, mock_find: MagicMock, mock_update: MagicMock, mock_divide: MagicMock, mock_pool: MagicMock, mock_write: MagicMock) -> None:
         """Test when no test files are found."""
         mock_find.return_value = []
         with pytest.raises(RuntimeError, match="No test files found"):
@@ -275,7 +275,7 @@ class TestRunParallelTests:
     @patch('run_nf_test_parallel.divide_test_files')
     @patch('run_nf_test_parallel.update_plugins')
     @patch('run_nf_test_parallel.find_test_files')
-    def test_run_parallel_tests_success(self, mock_find, mock_update, mock_divide, mock_pool, mock_write):
+    def test_run_parallel_tests_success(self, mock_find: MagicMock, mock_update: MagicMock, mock_divide: MagicMock, mock_pool: MagicMock, mock_write: MagicMock) -> None:
         """Test successful parallel execution."""
         test_files = [Path("test1.nf.test"), Path("test2.nf.test")]
         mock_find.return_value = test_files
@@ -298,7 +298,7 @@ class TestRunParallelTests:
     @patch('run_nf_test_parallel.divide_test_files')
     @patch('run_nf_test_parallel.update_plugins')
     @patch('run_nf_test_parallel.find_test_files')
-    def test_run_parallel_tests_with_failures(self, mock_find, mock_update, mock_divide, mock_pool, mock_write):
+    def test_run_parallel_tests_with_failures(self, mock_find: MagicMock, mock_update: MagicMock, mock_divide: MagicMock, mock_pool: MagicMock, mock_write: MagicMock) -> None:
         """Test parallel execution with some worker failures."""
         test_files = [Path("test1.nf.test"), Path("test2.nf.test")]
         mock_find.return_value = test_files
@@ -318,7 +318,7 @@ class TestRunParallelTests:
     @patch('run_nf_test_parallel.divide_test_files')
     @patch('run_nf_test_parallel.update_plugins')
     @patch('run_nf_test_parallel.find_test_files')
-    def test_run_parallel_tests_adjusts_workers(self, mock_find, mock_update, mock_divide, mock_pool, mock_write):
+    def test_run_parallel_tests_adjusts_workers(self, mock_find: MagicMock, mock_update: MagicMock, mock_divide: MagicMock, mock_pool: MagicMock, mock_write: MagicMock) -> None:
         """Test that number of workers is reduced when it exceeds number of test files."""
         test_files = [Path("test1.nf.test"), Path("test2.nf.test")]
         mock_find.return_value = test_files
@@ -338,7 +338,7 @@ class TestRunParallelTests:
     @patch('run_nf_test_parallel.divide_test_files')
     @patch('run_nf_test_parallel.update_plugins')
     @patch('run_nf_test_parallel.find_test_files')
-    def test_run_parallel_tests_passes_ci_flag(self, mock_find, mock_update, mock_divide, mock_pool, mock_write):
+    def test_run_parallel_tests_passes_ci_flag(self, mock_find: MagicMock, mock_update: MagicMock, mock_divide: MagicMock, mock_pool: MagicMock, mock_write: MagicMock) -> None:
         """Test that CI flag is passed through to workers."""
         test_files = [Path("test1.nf.test"), Path("test2.nf.test")]
         mock_find.return_value = test_files

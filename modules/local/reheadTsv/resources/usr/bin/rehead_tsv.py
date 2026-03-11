@@ -7,24 +7,25 @@ import datetime
 import gzip
 import bz2
 import os
+from typing import IO
 
-def print_log(message):
+def print_log(message: str) -> None:
     print("[", datetime.datetime.now(), "]  ", message, sep="")
 
-def open_by_suffix(filename, mode="r", debug=False):
+def open_by_suffix(filename: str, mode: str = "r", debug: bool = False) -> IO[str]:
     if debug:
         print_log(f"\tOpening file object: {filename}")
         print_log(f"\tOpening mode: {mode}")
         print_log(f"\tGZIP mode: {filename.endswith('.gz')}")
         print_log(f"\tBZ2 mode: {filename.endswith('.bz2')}")
     if filename.endswith('.gz'):
-        return gzip.open(filename, mode + 't')
+        return gzip.open(filename, mode + 't')  # type: ignore[return-value]
     elif filename.endswith('.bz2'):
-        return bz2.BZ2file(filename, mode)
+        return bz2.BZ2File(filename, mode)  # type: ignore[call-overload,return-value,no-any-return]
     else:
         return open(filename, mode)
 
-def rename_columns(input_path, input_fields, output_fields, out_path):
+def rename_columns(input_path: str, input_fields: list[str], output_fields: list[str], out_path: str) -> None:
     """Rename columns in TSV file."""
     if len(input_fields) != len(output_fields):
         raise ValueError("Input and output field lists must be the same length.")
@@ -60,7 +61,7 @@ def rename_columns(input_path, input_fields, output_fields, out_path):
         for line in inf:
             outf.write(line)
 
-def main():
+def main() -> None:
     # Parse arguments
     parser = argparse.ArgumentParser(description="Rename one or more columns in a TSV file.")
     parser.add_argument("input_path", help="Path to input TSV file.")

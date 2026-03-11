@@ -1,4 +1,5 @@
 from collections import Counter
+from typing import Any
 
 import pytest
 from count_reads_per_clade import (
@@ -14,7 +15,7 @@ from count_reads_per_clade import (
 )
 
 
-def test_is_duplicate():
+def test_is_duplicate() -> None:
     # Test case where read is not a duplicate (seq_id matches exemplar)
     read_not_duplicate = {"seq_id": "read123", "prim_align_dup_exemplar": "read123"}
     assert not is_duplicate(read_not_duplicate)
@@ -36,7 +37,7 @@ def test_is_duplicate():
         is_duplicate({})
 
 
-def test_parents():
+def test_parents() -> None:
     # Test with a simple tree: 1->2, 1->3, 2->4
     # Parents should be: {1, 2} (nodes that have children)
     tax_data = [
@@ -67,7 +68,7 @@ def test_parents():
     assert isinstance(result, set)
 
 
-def test_children():
+def test_children() -> None:
     # Test with a simple tree: 1->2, 1->3, 2->4
     # Children should be: {2, 3, 4} (nodes that are children of other nodes)
     tax_data = [
@@ -98,7 +99,7 @@ def test_children():
     assert isinstance(result, set)
 
 
-def test_roots():
+def test_roots() -> None:
     # Test with a simple tree: 1->2, 1->3, 2->4
     # Root should be: {1} (parent that is never a child)
     tax_data = [
@@ -139,7 +140,7 @@ def test_roots():
     assert isinstance(result, set)
 
 
-def test_build_tree():
+def test_build_tree() -> None:
     # Test basic tree building
     tax_data = [
         {"taxid": "2", "parent_taxid": "1"},
@@ -173,7 +174,7 @@ def test_build_tree():
     assert 100 in result[50]
 
 
-def test_build_tree_duplicate_child_error():
+def test_build_tree_duplicate_child_error() -> None:
     """Test that build_tree raises an error when a child has multiple parents."""
     # Child taxid 2 appears with two different parents
     tax_data = [
@@ -218,7 +219,7 @@ def test_build_tree_duplicate_child_error():
         build_tree(iter(tax_data))
 
 
-def test_build_tree_cycle_error():
+def test_build_tree_cycle_error() -> None:
     """Test that build_tree raises an error when there are cycles in the tree."""
     # NCBI root (taxid 1 with parent_taxid 1) should NOT raise an error
     tax_data = [
@@ -228,7 +229,7 @@ def test_build_tree_cycle_error():
     result = build_tree(iter(tax_data))
     # Root should have no children since it doesn't add itself as a child
     assert result == {}
-    
+
     # Self-loop with non-root taxid should still be an error
     tax_data = [
         {"taxid": "2", "parent_taxid": "2"},
@@ -266,7 +267,7 @@ def test_build_tree_cycle_error():
         build_tree(iter(tax_data))
 
 
-def test_count_direct_reads_per_taxid():
+def test_count_direct_reads_per_taxid() -> None:
     # Test basic counting with some duplicates
     read_data = [
         {
@@ -331,7 +332,7 @@ def test_count_direct_reads_per_taxid():
     assert isinstance(dedup, Counter)
 
 
-def test_count_direct_reads_per_taxid_group_validation():
+def test_count_direct_reads_per_taxid_group_validation() -> None:
     """Test that count_direct_reads_per_taxid validates group field correctly."""
     # Test that assertion fails when group doesn't match
     read_data_with_wrong_group = [
@@ -346,7 +347,7 @@ def test_count_direct_reads_per_taxid_group_validation():
     with pytest.raises(
         AssertionError, match="Expected group 'expected_group', found 'wrong_group'"
     ):
-        count_direct_reads_per_taxid(read_data_with_wrong_group, "expected_group")
+        count_direct_reads_per_taxid(iter(read_data_with_wrong_group), "expected_group")
 
     # Test with mixed groups (should fail on first mismatch)
     read_data_mixed = [
@@ -367,10 +368,10 @@ def test_count_direct_reads_per_taxid_group_validation():
     with pytest.raises(
         AssertionError, match="Expected group 'correct_group', found 'wrong_group'"
     ):
-        count_direct_reads_per_taxid(read_data_mixed, "correct_group")
+        count_direct_reads_per_taxid(iter(read_data_mixed), "correct_group")
 
 
-def test_build_tree_ncbi_root():
+def test_build_tree_ncbi_root() -> None:
     """Test that build_tree handles NCBI root (taxid 1, parent_taxid 1) correctly."""
     # Test NCBI root with children
     tax_data = [
@@ -381,13 +382,13 @@ def test_build_tree_ncbi_root():
     result = build_tree(iter(tax_data))
     expected = {1: {2, 3}}
     assert result == expected
-    
+
     # Test that root is correctly identified
     root_nodes = roots(result)
     assert root_nodes == {1}
 
 
-def test_get_clade_counts():
+def test_get_clade_counts() -> None:
     # Test with simple tree: 1->2, 1->3, 2->4
     # If node counts are: {1:5, 2:10, 3:7, 4:3}
     # Then clade counts should be:
@@ -444,7 +445,7 @@ def test_get_clade_counts():
     "missing_column",
     ["seq_id", "prim_align_dup_exemplar", "aligner_taxid_lca", "group"],
 )
-def test_missing_reads_columns(tsv_factory, missing_column):
+def test_missing_reads_columns(tsv_factory: Any, missing_column: str) -> None:
     """Test that missing required columns in reads file raise KeyError."""
     # Start with all required columns and appropriate test values
     all_columns = ["seq_id", "prim_align_dup_exemplar", "aligner_taxid_lca", "group"]
@@ -471,7 +472,7 @@ def test_missing_reads_columns(tsv_factory, missing_column):
     "missing_column",
     ["taxid", "parent_taxid"],
 )
-def test_missing_taxonomy_columns(tsv_factory, missing_column):
+def test_missing_taxonomy_columns(tsv_factory: Any, missing_column: str) -> None:
     """Test that missing required columns in taxonomy file raise KeyError."""
     # Start with all required columns
     all_columns = ["taxid", "parent_taxid"]
@@ -487,7 +488,7 @@ def test_missing_taxonomy_columns(tsv_factory, missing_column):
         build_tree(read_tsv(tax_file))
 
 
-def test_group_mismatch_error(tsv_factory):
+def test_group_mismatch_error(tsv_factory: Any) -> None:
     """Test that group mismatch raises AssertionError."""
     # Create reads file with group "test"
     reads_content = "seq_id\tprim_align_dup_exemplar\taligner_taxid_lca\tgroup\nread1\tread1\t100\ttest\n"
@@ -498,7 +499,7 @@ def test_group_mismatch_error(tsv_factory):
         count_direct_reads_per_taxid(read_tsv(reads_file), "wrong_group")
 
 
-def test_header_only_reads_file(tsv_factory):
+def test_header_only_reads_file(tsv_factory: Any) -> None:
     """Test that header-only reads file produces header-only output."""
     # Create header-only reads file
     reads_content = "seq_id\tprim_align_dup_exemplar\taligner_taxid_lca\tgroup\n"

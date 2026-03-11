@@ -9,24 +9,25 @@ import bz2
 from Bio import SeqIO
 from Bio import Seq
 import os
+from typing import IO
 
-def print_log(message):
+def print_log(message: str) -> None:
     print("[", datetime.datetime.now(), "]  ", message, sep="")
 
-def open_by_suffix(filename, mode="r", debug=False):
+def open_by_suffix(filename: str, mode: str = "r", debug: bool = False) -> IO[str]:
     if debug:
         print_log(f"\tOpening file object: {filename}")
         print_log(f"\tOpening mode: {mode}")
         print_log(f"\tGZIP mode: {filename.endswith('.gz')}")
         print_log(f"\tBZ2 mode: {filename.endswith('.bz2')}")
     if filename.endswith('.gz'):
-        return gzip.open(filename, mode + 't')
+        return gzip.open(filename, mode + 't')  # type: ignore[return-value]
     elif filename.endswith('.bz2'):
-        return bz2.BZ2file(filename, mode)
+        return bz2.BZ2File(filename, mode)  # type: ignore[call-overload,return-value,no-any-return]
     else:
         return open(filename, mode)
 
-def join_paired_reads(input_file, output_file, gap="N", debug=False):
+def join_paired_reads(input_file: str, output_file: str, gap: str = "N", debug: bool = False) -> None:
     """Join non-overlapping paired-end reads from an interleaved FASTQ file."""
     with open_by_suffix(input_file, "r", debug) as inf, open_by_suffix(output_file, "w", debug) as outf:
         # Check if file is empty
@@ -67,7 +68,7 @@ def join_paired_reads(input_file, output_file, gap="N", debug=False):
                                           letter_annotations=joined_qual)
             SeqIO.write(joined_read, outf, "fastq")
 
-def main():
+def main() -> None:
     # Parse arguments
     parser = argparse.ArgumentParser(description="Join non-overlapping interleaved read pairs into single sequences.")
     parser.add_argument("reads", help="Path to FASTQ file containing interleaved forward and reverse reads.")

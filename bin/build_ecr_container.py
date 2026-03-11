@@ -80,7 +80,7 @@ def read_container_spec(spec_file: Path) -> dict[str, Any]:
         msg = f"Container spec missing required fields: {', '.join(missing)}"
         logger.error(msg)
         raise ValueError(msg)
-    return spec
+    return spec  # type: ignore[no-any-return]
 
 def compute_spec_hash(spec: dict[str, Any]) -> str:
     """

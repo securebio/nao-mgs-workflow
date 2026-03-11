@@ -5,7 +5,7 @@ import os
 import re
 import sys
 
-def find_dependency(directory, component):
+def find_dependency(directory: str, component: str) -> set[str]:
 
     directory = directory.rstrip("/")
     component = component.replace("/main.nf", "")
@@ -35,7 +35,7 @@ def find_dependency(directory, component):
 
     return file_paths
 
-def identify_component_file(component):
+def identify_component_file(component: str) -> str | None:
     # Search in subworkflows and workflow directories
     search_dirs = ["subworkflows/local/", "workflows/"]
 
@@ -52,7 +52,7 @@ def identify_component_file(component):
                 return path
     return None
 
-def get_subcomponents(component_path):
+def get_subcomponents(component_path: str) -> tuple[set[str], set[str]]:
     with open(component_path, "r") as f:
         component_content = f.read()
 
@@ -69,7 +69,7 @@ def get_subcomponents(component_path):
                 continue
     return modules, workflows
 
-def collect_component_dependencies(component):
+def collect_component_dependencies(component: str) -> tuple[set[str] | None, set[str] | None]:
     file_path = identify_component_file(component)
     if file_path is None:
         return None, None
@@ -77,12 +77,12 @@ def collect_component_dependencies(component):
 
     for wf in list(workflows):
         sub_mods, sub_wfs = collect_component_dependencies(wf)
-        modules.update(sub_mods)
-        workflows.update(sub_wfs)
+        modules.update(sub_mods)  # type: ignore[arg-type]
+        workflows.update(sub_wfs)  # type: ignore[arg-type]
 
     return modules, workflows
 
-def workflow_uses_subworkflow(workflow, subworkflow_path):
+def workflow_uses_subworkflow(workflow: str, subworkflow_path: str) -> bool:
     workflow_path = f"workflows/{workflow}"
     subworkflow_dir = subworkflow_path.replace("/main.nf", "")
 
@@ -96,7 +96,7 @@ def workflow_uses_subworkflow(workflow, subworkflow_path):
         return False
 
 
-def subworkflow_uses_subworkflow(subworkflow, dependent_subworkflow):
+def subworkflow_uses_subworkflow(subworkflow: str, dependent_subworkflow: str) -> bool:
     subworkflow_path = f"subworkflows/local/{subworkflow}/main.nf"
     dependent_subworkflow_dir = dependent_subworkflow.replace("/main.nf", "")
 
@@ -110,7 +110,7 @@ def subworkflow_uses_subworkflow(subworkflow, dependent_subworkflow):
         return False
 
 
-def get_workflow_test(workflow):
+def get_workflow_test(workflow: str) -> str:
     workflow_path = f"workflows/{workflow}"
     if re.search(r'\b' + re.escape("run_dev_se") + r'\b', workflow_path):
         return "tests/workflows/run_dev.nf.test"
@@ -119,7 +119,7 @@ def get_workflow_test(workflow):
         return f"tests/workflows/{base_name}.nf.test"
 
 
-def parse_args():
+def parse_args() -> tuple[str, bool, bool]:
     """Parse arguments and run the test finder."""
     parser = argparse.ArgumentParser(
         description="Find and run tests for specified components"
@@ -154,7 +154,7 @@ def parse_args():
     return component, verbose, skip_subcomponents
 
 
-def main():
+def main() -> None:
     component, verbose, skip_subcomponents = parse_args()
 
     # Validate component name - only allow alphanumerics and underscores
@@ -249,9 +249,9 @@ def main():
             print(f"No subcomponents found for {component}.")
 
         else:
-            for module in modules:
+            for module in modules:  # type: ignore[union-attr]
                 subcomp_tests.update(find_dependency("tests/modules/local/", module))
-            for workflow in workflows:
+            for workflow in workflows:  # type: ignore[union-attr]
                 subcomp_tests.update(find_dependency("tests/subworkflows/local/", workflow))
 
 

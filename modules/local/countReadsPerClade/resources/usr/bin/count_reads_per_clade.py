@@ -14,6 +14,7 @@ import gzip
 import sys
 from collections import Counter, defaultdict
 from collections.abc import Iterator
+from typing import IO, cast
 
 TaxId = int
 # NCBI taxonomy root node - has itself as parent
@@ -22,15 +23,15 @@ ROOT: TaxId = 1
 Tree = defaultdict[TaxId, set[TaxId]]
 
 
-def open_by_suffix(filename: str, mode: str = "r"):
+def open_by_suffix(filename: str, mode: str = "r") -> IO[str]:
     """Parse the suffix of a filename to determine the open method, then open the file.
 
     Can handle .gz, .bz2, and uncompressed files.
     """
     if filename.endswith(".gz"):
-        return gzip.open(filename, mode + "t")
+        return cast(IO[str], gzip.open(filename, mode + "t"))
     if filename.endswith(".bz2"):
-        return bz2.open(filename, mode + "t")
+        return cast(IO[str], bz2.open(filename, mode + "t"))
     return open(filename, mode)
 
 
@@ -137,11 +138,11 @@ def build_tree(
 
 def detect_cycle(tree: Tree) -> bool:
     """Return True if the tree contains a cycle, False otherwise."""
-    visited = set()
-    current_path = set()
+    visited: set[TaxId] = set()
+    current_path: set[TaxId] = set()
 
     # Visit all the nodes, using depth-first search
-    def dfs(node: TaxId):
+    def dfs(node: TaxId) -> bool:
         if node in current_path:
             return True
         if node in visited:
@@ -246,18 +247,19 @@ def write_output_tsv(
         # Write rows in depth-first order
         # If a node does not have a parent, set it to be ROOT: the root of the
         # NCBI taxonomy
-        def dfs(node: TaxId, parent=ROOT) -> None:
-            row = {
+        def dfs(node: TaxId, parent: TaxId = ROOT) -> None:
+            clade_total = clade_counts_total[node]
+            row: dict[str, str | int] = {
                 "group": group,
                 "taxid": node,
                 "parent_taxid": parent,
                 "reads_direct_total": direct_counts_total[node],
                 "reads_direct_dedup": direct_counts_dedup[node],
-                "reads_clade_total": clade_counts_total[node],
+                "reads_clade_total": clade_total,
                 "reads_clade_dedup": clade_counts_dedup[node],
             }
             # Only print clades that have some reads
-            if row["reads_clade_total"] > 0:
+            if clade_total > 0:
                 writer.writerow(row)
             for child in sorted(tree[node]):
                 dfs(child, parent=node)

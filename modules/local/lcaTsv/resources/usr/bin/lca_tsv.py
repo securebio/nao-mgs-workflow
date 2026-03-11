@@ -18,10 +18,10 @@ import gzip
 import bz2
 from dataclasses import dataclass
 from collections import defaultdict
-from typing import TextIO
+from typing import IO, TextIO, cast
 # Configure logging
 class UTCFormatter(logging.Formatter):
-    def formatTime(self, record, datefmt=None):
+    def formatTime(self, record: logging.LogRecord, datefmt: str | None = None) -> str:
         dt = datetime.fromtimestamp(record.created, timezone.utc)
         return dt.strftime('%Y-%m-%d %H:%M:%S UTC')
 logging.basicConfig(level=logging.INFO)
@@ -203,9 +203,9 @@ class Subgroup:
     entries, including taxids, scores, and the top taxid and LCA.
     """
     taxids: list[int]
-    taxids_classified: list[int]
+    taxids_classified: list[bool]
     scores: list[float]
-    summary: dict[str, int|float] | None
+    summary: dict[str, int|float|bool|None] | None
 
 def new_subgroup(
         taxid: int | None,
@@ -519,7 +519,7 @@ def get_output_header(
 def write_output_line(
         fields: list[str],
         headers: list[str],
-        output_file: TextIO,
+        output_file: IO[str],
         ) -> None:
     """
     Write a line to the output file.
@@ -640,7 +640,7 @@ def parse_input_tsv(
         # Get indices of fields
         group_idx, taxid_idx, score_idx = parse_input_header(
             header, group_field, taxid_field, score_field)
-        def parse_line(fields: list[str], group_info: Group | None) -> tuple[Group, dict[int, list[int]]]:
+        def parse_line(fields: list[str], group_info: Group | None) -> Group:
             return process_input_line(fields, group_idx, taxid_idx, score_idx, group_info,
                                       artificial_taxids, unclassified_taxids)
         # Check for empty file
@@ -654,7 +654,7 @@ def parse_input_tsv(
         # Iterate over input file
         n_entries = 1
         n_groups = 1
-        path_cache = {}
+        path_cache: dict[int, list[int]] = {}
         for line in inf:
             # Parse fields
             fields = line.strip().split("\t")
@@ -810,13 +810,13 @@ def parse_args() -> argparse.Namespace:
     # Return parsed arguments
     return parser.parse_args()
 
-def open_by_suffix(filename, mode="r", debug=False):
+def open_by_suffix(filename: str, mode: str = "r", debug: bool = False) -> IO[str]:
     """Parse the suffix of a filename to determine the right open method
     to use, then open the file. Can handle .gz, .bz2, and uncompressed files."""
     if filename.endswith('.gz'):
-        return gzip.open(filename, mode + 't')
+        return cast(IO[str], gzip.open(filename, mode + 't'))
     elif filename.endswith('.bz2'):
-        return bz2.BZ2File(filename, mode)
+        return cast(IO[str], bz2.BZ2File(filename, mode))  # type: ignore[call-overload]
     else:
         return open(filename, mode)
 

@@ -7,25 +7,25 @@ import datetime
 import gzip
 import bz2
 import os
-from typing import List
+from typing import IO
 
-def print_log(message: str):
+def print_log(message: str) -> None:
     print("[", datetime.datetime.now(), "]  ", message, sep="")
 
-def open_by_suffix(filename: str, mode="r", debug=False):
+def open_by_suffix(filename: str, mode: str = "r", debug: bool = False) -> IO[str]:
     if debug:
         print_log(f"\tOpening file object: {filename}")
         print_log(f"\tOpening mode: {mode}")
         print_log(f"\tGZIP mode: {filename.endswith('.gz')}")
         print_log(f"\tBZ2 mode: {filename.endswith('.bz2')}")
     if filename.endswith('.gz'):
-        return gzip.open(filename, mode + 't')
+        return gzip.open(filename, mode + 't')  # type: ignore[return-value]
     elif filename.endswith('.bz2'):
-        return bz2.BZ2file(filename, mode)
+        return bz2.BZ2File(filename, mode)  # type: ignore[call-overload,return-value,no-any-return]
     else:
         return open(filename, mode)
 
-def read_header(infile) -> List[str]:
+def read_header(infile: IO[str]) -> list[str]:
     """Read header from TSV file and return as list.
     Returns empty list if file is empty."""
     header_line = infile.readline()
@@ -34,13 +34,13 @@ def read_header(infile) -> List[str]:
     header = header_line.strip().split("\t")
     return header
 
-def map_headers(header: List[str], reference_header: List[str]) -> List[int]:
+def map_headers(header: list[str], reference_header: list[str]) -> list[int]:
     """Generate mapping of columns in header to reference header."""
     header_mapping = {col: i for i, col in enumerate(header)}
     reference_mapping = [header_mapping[col] for col in reference_header]
     return reference_mapping
 
-def check_headers(header: List[str], reference_header: List[str]) -> bool:
+def check_headers(header: list[str], reference_header: list[str]) -> bool:
     """Check if fields in two headers match and raise error if not."""
     hset = set(header)
     rset = set(reference_header)
@@ -54,7 +54,7 @@ def check_headers(header: List[str], reference_header: List[str]) -> bool:
         msg += f"\n\tExtra fields: {hset - rset}"
     raise ValueError(msg)
 
-def concatenate_tsvs(input_files: List[str], out_path: str):
+def concatenate_tsvs(input_files: list[str], out_path: str) -> None:
     """Concatenate multiple TSV files with matching headers."""
     with open_by_suffix(out_path, "w") as outf:
         # Find the first non-empty file to extract headers
@@ -118,7 +118,7 @@ def concatenate_tsvs(input_files: List[str], out_path: str):
                 print_log(f"Error processing file {input_path}: {str(e)}")
                 raise
 
-def main():
+def main() -> None:
     # Parse arguments
     parser = argparse.ArgumentParser(description="Concatenate multiple TSV files with matching headers.")
     parser.add_argument("input_files", nargs="+", help="Paths to input TSV files.",

@@ -7,24 +7,25 @@ import datetime
 import gzip
 import bz2
 import os
+from typing import IO
 
-def print_log(message):
+def print_log(message: str) -> None:
     print("[", datetime.datetime.now(), "]  ", message, sep="")
 
-def open_by_suffix(filename, mode="r", debug=False):
+def open_by_suffix(filename: str, mode: str = "r", debug: bool = False) -> IO[str]:
     if debug:
         print_log(f"\tOpening file object: {filename}")
         print_log(f"\tOpening mode: {mode}")
         print_log(f"\tGZIP mode: {filename.endswith('.gz')}")
         print_log(f"\tBZ2 mode: {filename.endswith('.bz2')}")
     if filename.endswith('.gz'):
-        return gzip.open(filename, mode + 't')
+        return gzip.open(filename, mode + 't')  # type: ignore[return-value]
     elif filename.endswith('.bz2'):
-        return bz2.BZ2file(filename, mode)
+        return bz2.BZ2File(filename, mode)  # type: ignore[call-overload,return-value,no-any-return]
     else:
         return open(filename, mode)
 
-def add_header_line(input_path, header_fields, out_path):
+def add_header_line(input_path: str, header_fields: list[str], out_path: str) -> None:
     """Add header line to TSV file."""
     with open_by_suffix(input_path) as inf, open_by_suffix(out_path, "w") as outf:
         # Read first line
@@ -58,7 +59,7 @@ def add_header_line(input_path, header_fields, out_path):
         for line in inf:
             outf.write(line)
 
-def main():
+def main() -> None:
     # Parse arguments
     parser = argparse.ArgumentParser(description="Add a header line to a TSV file.")
     parser.add_argument("input_path", help="Path to input TSV file.")
