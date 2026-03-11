@@ -1,11 +1,10 @@
 #!/usr/bin/env python
-DESC = """
-Prepare viral genome metadata from NCBI datasets CLI output for downstream
+"""Prepare viral genome metadata from NCBI datasets CLI output for downstream
 filtering and genome ID extraction.
 
 Reads the merged metadata TSV (from CONCATENATE_TSVS), joins with the virus
 taxonomy DB to add species_taxid, matches genome files to assembly accessions,
-and outputs a metadata file compatible with filter-viral-genbank-metadata.py.
+and outputs a metadata file compatible with filter_viral_genbank_metadata.py.
 """
 
 ###########
@@ -150,7 +149,7 @@ def parse_arguments() -> argparse.Namespace:
     Returns:
         Parsed arguments namespace.
     """
-    parser = argparse.ArgumentParser(description=DESC)
+    parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "merged_metadata", help="Path to merged metadata TSV (may be gzipped).",
     )

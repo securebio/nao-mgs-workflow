@@ -13,9 +13,9 @@ nextflow_process {
             params {}
             process {
                 """
-                input[0] = "${projectDir}/test-data/tiny-index/viral-metadata/merged_metadata.tsv"
-                input[1] = "${projectDir}/test-data/tiny-index/viral-metadata/virus_db.tsv"
-                input[2] = "${projectDir}/test-data/tiny-index/viral-metadata/DUMMY_000000000.0_test_genomic.fna.gz"
+                input[0] = "${projectDir}/test-data/prepareViralMetadata/merged_metadata.tsv"
+                input[1] = "${projectDir}/test-data/prepareViralMetadata/virus_db.tsv"
+                input[2] = "${projectDir}/test-data/prepareViralMetadata/DUMMY_000000000.0_test_genomic.fna.gz"
                 """
             }
         }

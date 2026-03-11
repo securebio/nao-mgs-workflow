@@ -15,7 +15,7 @@ process PREPARE_VIRAL_METADATA {
         mkdir -p input_genomes
         find . -maxdepth 1 -name '*.fna.gz' -exec mv {} input_genomes/ \\;
 
-        prepare-viral-metadata.py \\
+        prepare_viral_metadata.py \\
             ${merged_metadata} \\
             ${virus_db} \\
             input_genomes \\
