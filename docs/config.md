@@ -39,7 +39,9 @@ This configuration file controls the pipeline's main RUN workflow. Its options a
 - `params.genome_patterns_exclude` [str]: Path to a text file specifying string patterns to hard-exclude genomes during viral genome DB generation (e.g. transgenic sequences) (default [`ref/hv_patterns_exclude.txt`](./ref/hv_patterns_exclude.txt).
 - `params.kraken_db` [str]: Path to pre-generated Kraken2 reference database (we use the Standard database by default)
 - `params.blast_db_name` [str]: The name of the BLAST database to use for optional validation of taxonomic assignments (should match the run workflow's `params.blast_db_prefix`).
-- `params.ncbi_viral_params` [str]: Parameters to pass to ncbi-genome-download when generating viral genome DB. Must at a minimum specify `--section genbank` or `--section refseq`.
-- `params.virus_taxid` [int]: The NCBI taxid for the Viruses taxon (currently 10239).
+- `params.assembly_source` [str]: Assembly source for downloading viral genomes via NCBI datasets CLI. Valid values: `"genbank"` or `"refseq"`.
+- `params.ncbi_api_key` [str]: Optional NCBI API key for higher rate limits when downloading genomes. Get one at https://www.ncbi.nlm.nih.gov/account/settings/. Default: `""` (no key).
+- `params.virus_taxid` [int]: The NCBI taxid for the Viruses taxon, used for building the virus taxonomy DB (currently 10239).
+- `params.download_virus_taxid` [str]: Taxid to enumerate child taxa for parallel genome downloads. Defaults to `params.virus_taxid` if empty. Override in test configs to download a smaller subset (e.g., `"2847173"` for Hepatitis D virus 1).
 - `params.viral_taxids_exclude` [str]: Space-separated string of taxids to hard-exclude from the list of host-infecting viruses. Currently includes phage taxa that Virus-Host DB erroneously classifies as human-infecting.
 - `params.host_taxa_screen`: Space-separated list of host taxon names to screen for when building the viral genome database. Should correspond to taxa included in `params.host_taxon_db`.

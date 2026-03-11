@@ -36,7 +36,15 @@ workflow INDEX {
         // Get reference DB of viral genomes of interest
         virus_genome_params = params.collectEntries { k, v -> [k, v] }
         virus_genome_params.putAll([k: "20", hdist: "3", entropy: "0.5", polyx_len: "10"])
-        MAKE_VIRUS_GENOME_DB(params.ncbi_viral_params, MAKE_VIRUS_TAXONOMY_DB.out.db, virus_genome_params)
+        def dl_taxid = params.download_virus_taxid ?: params.virus_taxid
+        MAKE_VIRUS_GENOME_DB(
+            dl_taxid,
+            params.assembly_source,
+            params.ncbi_api_key,
+            MAKE_VIRUS_TAXONOMY_DB.out.db,
+            MAKE_VIRUS_TAXONOMY_DB.out.nodes,
+            virus_genome_params
+        )
         // Download ribosomal references
         WGET_SSU(params.ssu_url, "ssu_ref.fasta.gz")
         WGET_LSU(params.lsu_url, "lsu_ref.fasta.gz")
