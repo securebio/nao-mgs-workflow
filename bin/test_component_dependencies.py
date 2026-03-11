@@ -77,8 +77,10 @@ def collect_component_dependencies(component: str) -> tuple[set[str] | None, set
 
     for wf in list(workflows):
         sub_mods, sub_wfs = collect_component_dependencies(wf)
-        modules.update(sub_mods)  # type: ignore[arg-type]
-        workflows.update(sub_wfs)  # type: ignore[arg-type]
+        if sub_mods is not None:
+            modules.update(sub_mods)
+        if sub_wfs is not None:
+            workflows.update(sub_wfs)
 
     return modules, workflows
 
@@ -249,10 +251,12 @@ def main() -> None:
             print(f"No subcomponents found for {component}.")
 
         else:
-            for module in modules:  # type: ignore[union-attr]
-                subcomp_tests.update(find_dependency("tests/modules/local/", module))
-            for workflow in workflows:  # type: ignore[union-attr]
-                subcomp_tests.update(find_dependency("tests/subworkflows/local/", workflow))
+            if modules is not None:
+                for module in modules:
+                    subcomp_tests.update(find_dependency("tests/modules/local/", module))
+            if workflows is not None:
+                for workflow in workflows:
+                    subcomp_tests.update(find_dependency("tests/subworkflows/local/", workflow))
 
 
             print("=" * 72)

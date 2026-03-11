@@ -5,7 +5,7 @@
 - Added mypy type checking CI workflow (`.github/workflows/mypy.yml`) that runs on PRs when Python files or `pyproject.toml` change.
 - Added type annotations to all Python scripts in `bin/` and `modules/local/` to satisfy mypy strict mode (`disallow_untyped_defs`, `disallow_incomplete_defs`).
 - Added `pandas-stubs` and `types-PyYAML` type stub dependencies; configured mypy overrides to ignore missing stubs for `pysam`, `Bio`, and `tomli`.
-- Fixed `bz2.BZ2file` typos (lowercase 'f') across multiple scripts.
+- Removed unused BZ2 support from `open_by_suffix()` in module scripts (only `build_tiny_test_databases.py` retains it); fixed `bz2.BZ2File` casing in that file.
 
 # v3.2.0.2
 
