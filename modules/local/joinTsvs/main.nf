@@ -10,12 +10,12 @@ process JOIN_TSVS {
     output:
         tuple val(sample), path("${sample}_${label}_${join_type}_joined_${join_field}.tsv.gz"), emit: output
         tuple val(sample), path("input_${tsv1}"), path("input_${tsv2}"), emit: input
-    shell:
-        '''
-        out=!{sample}_!{label}_!{join_type}_joined_!{join_field}.tsv.gz
-        join_tsvs.py !{tsv1} !{tsv2} !{join_field} !{join_type} ${out}
+    script:
+        """
+        out=${sample}_${label}_${join_type}_joined_${join_field}.tsv.gz
+        join_tsvs.py ${tsv1} ${tsv2} ${join_field} ${join_type} \${out}
         # Link input files to output for testing
-        ln -s !{tsv1} input_!{tsv1}
-        ln -s !{tsv2} input_!{tsv2}
-        '''
+        ln -s ${tsv1} input_${tsv1}
+        ln -s ${tsv2} input_${tsv2}
+        """
 }

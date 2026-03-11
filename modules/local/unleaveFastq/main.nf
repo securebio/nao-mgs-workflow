@@ -9,11 +9,11 @@ process UNLEAVE_FASTQ {
     output:
         tuple val(sample), path("${sample}_unleaved_{1,2}.fastq.gz"), emit: output
         tuple val(sample), path("input_${reads_interleaved}"), emit: input
-    shell:
-        '''
-        par="t=!{task.cpus} -Xmx!{task.memory.toGiga()}g"
-        io="in=!{reads_interleaved} out=!{sample}_unleaved_1.fastq.gz out2=!{sample}_unleaved_2.fastq.gz"
-        reformat.sh ${io} ${par}
-        ln -s !{reads_interleaved} input_!{reads_interleaved} # Link input to output for testing
-        '''
+    script:
+        """
+        par="t=${task.cpus} -Xmx${task.memory.toGiga()}g"
+        io="in=${reads_interleaved} out=${sample}_unleaved_1.fastq.gz out2=${sample}_unleaved_2.fastq.gz"
+        reformat.sh \${io} \${par}
+        ln -s ${reads_interleaved} input_${reads_interleaved} # Link input to output for testing
+        """
 }

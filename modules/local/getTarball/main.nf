@@ -8,15 +8,15 @@ process GET_TARBALL {
         val(makedir)
     output:
         path(outdir)
-    shell:
-        '''
-        dl_path=$(basename !{tarball_url})
-        wget "!{tarball_url}" -O ${dl_path}
-        if [[ "!{makedir}" == "true" ]]; then
-            mkdir !{outdir}
-            tar -xzf ${dl_path} -C !{outdir}
+    script:
+        """
+        dl_path=\$(basename ${tarball_url})
+        wget "${tarball_url}" -O \${dl_path}
+        if [[ "${makedir}" == "true" ]]; then
+            mkdir ${outdir}
+            tar -xzf \${dl_path} -C ${outdir}
         else
-            tar -xzf ${dl_path}
+            tar -xzf \${dl_path}
         fi
-        '''
+        """
 }
