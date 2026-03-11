@@ -9,25 +9,33 @@ nextflow_process {
     test("Should prepare metadata with species_taxid and local_filename") {
         tag "expect_success"
         config "tests/configs/index.config"
+        setup {
+            run("GZIP_FILE_BARE") {
+                script "modules/local/gzipFile/main.nf"
+                process {
+                    """
+                    input[0] = file("${projectDir}/test-data/prepareViralMetadata/DUMMY_000000000.0_test_genomic.fna")
+                    """
+                }
+            }
+        }
         when {
             params {}
             process {
                 """
                 input[0] = "${projectDir}/test-data/prepareViralMetadata/merged_metadata.tsv"
                 input[1] = "${projectDir}/test-data/prepareViralMetadata/virus_db.tsv"
-                input[2] = "${projectDir}/test-data/prepareViralMetadata/DUMMY_000000000.0_test_genomic.fna.gz"
+                input[2] = GZIP_FILE_BARE.out
                 """
             }
         }
         then {
             assert process.success
-            // Output metadata should have expected columns
             def meta = path(process.out.metadata[0]).csv(sep: "\t")
             assert "assembly_accession" in meta.columnNames
             assert "species_taxid" in meta.columnNames
             assert "local_filename" in meta.columnNames
             assert meta.rowCount == 1
-            // Genomes output directory should exist with symlinked files
             assert path(process.out.genomes[0]).exists()
         }
     }
