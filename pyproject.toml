@@ -111,6 +111,11 @@ expected-outputs-run = [
     "results/{SAMPLE}_virus_hits.tsv.gz",
 ]
 
+# Platform-specific additions to expected-outputs-run (short-read only)
+expected-outputs-run-shortread-extra = [
+    "results/{SAMPLE}_fastp.json",
+]
+
 expected-outputs-downstream = [
     "input_downstream/input_file.csv",
     "input_downstream/params-downstream.json",
