@@ -1,0 +1,57 @@
+nextflow_process {
+
+    name "Test process DOWNLOAD_VIRAL_GENOMES"
+    script "modules/local/downloadViralGenomes/main.nf"
+    process "DOWNLOAD_VIRAL_GENOMES"
+    tag "module"
+    tag "download_viral_genomes"
+
+    test("Should download genomes for HDV (taxid 2847173)") {
+        tag "expect_success"
+        config "tests/configs/index.config"
+        when {
+            params {}
+            process {
+                """
+                input[0] = "2847173"
+                input[1] = "refseq"
+                input[2] = ""
+                input[3] = "--assembly-level complete"
+                """
+            }
+        }
+        then {
+            assert process.success
+            // metadata.tsv should have the expected header columns
+            def meta = path(process.out.metadata[0]).csv(sep: "\t")
+            assert meta.columnNames == ["assembly_accession", "taxid", "organism_name", "source_database"]
+            assert meta.rowCount >= 1
+            // At least one genome file should be downloaded
+            assert process.out.genomes[0].size() >= 1
+        }
+    }
+
+    test("Should produce empty metadata for nonexistent taxid") {
+        tag "expect_success"
+        config "tests/configs/index.config"
+        when {
+            params {}
+            process {
+                """
+                input[0] = "9999999999"
+                input[1] = "refseq"
+                input[2] = ""
+                input[3] = "--assembly-level complete"
+                """
+            }
+        }
+        then {
+            assert process.success
+            // metadata.tsv should have header only (no data rows)
+            def meta = path(process.out.metadata[0]).csv(sep: "\t")
+            assert meta.columnNames == ["assembly_accession", "taxid", "organism_name", "source_database"]
+            assert meta.rowCount == 0
+        }
+    }
+
+}
