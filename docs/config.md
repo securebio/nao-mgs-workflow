@@ -40,6 +40,7 @@ This configuration file controls the pipeline's main RUN workflow. Its options a
 - `params.kraken_db` [str]: Path to pre-generated Kraken2 reference database (we use the Standard database by default)
 - `params.blast_db_name` [str]: The name of the BLAST database to use for optional validation of taxonomic assignments (should match the run workflow's `params.blast_db_prefix`).
 - `params.assembly_source` [str]: Assembly source for downloading viral genomes via NCBI datasets CLI. Valid values: `"genbank"` or `"refseq"`.
+- `params.datasets_extra_args` [str]: Additional arguments passed to `datasets download genome taxon` (e.g. `"--assembly-level complete"`). Default: `"--assembly-level complete"`.
 - `params.ncbi_api_key` [str]: Optional NCBI API key for higher rate limits when downloading genomes. Get one at https://www.ncbi.nlm.nih.gov/account/settings/. Default: `""` (no key).
 - `params.virus_taxid` [int]: The NCBI taxid for the Viruses taxon, used for building the virus taxonomy DB (currently 10239).
 - `params.download_virus_taxid` [str]: Taxid to enumerate child taxa for parallel genome downloads. Defaults to `params.virus_taxid` if empty. Override in test configs to download a smaller subset (e.g., `"2847173"` for Hepatitis D virus 1).

@@ -41,6 +41,7 @@ workflow INDEX {
             dl_taxid,
             params.assembly_source,
             params.ncbi_api_key,
+            params.datasets_extra_args,
             MAKE_VIRUS_TAXONOMY_DB.out.db,
             MAKE_VIRUS_TAXONOMY_DB.out.nodes,
             virus_genome_params

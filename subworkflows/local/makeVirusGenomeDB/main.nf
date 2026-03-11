@@ -21,6 +21,7 @@ workflow MAKE_VIRUS_GENOME_DB {
         virus_taxid // Taxid to enumerate child taxa for parallel genome downloads
         assembly_source // Assembly source: "genbank" or "refseq"
         ncbi_api_key // Optional NCBI API key for higher rate limits (empty string if not set)
+        datasets_extra_args // Additional arguments passed to `datasets download genome taxon` (e.g. "--assembly-level complete")
         virus_db // TSV giving taxonomic structure and host infection status of virus taxids
         taxonomy_nodes // NCBI taxonomy nodes.dmp file
         other_params // Map containing:
@@ -37,7 +38,7 @@ workflow MAKE_VIRUS_GENOME_DB {
             .splitText().map { it.trim() }.filter { it }
 
         // 2. Download genomes per child taxon in parallel
-        DOWNLOAD_VIRAL_GENOMES(child_taxids_ch, assembly_source, ncbi_api_key)
+        DOWNLOAD_VIRAL_GENOMES(child_taxids_ch, assembly_source, ncbi_api_key, datasets_extra_args)
 
         // 3. Merge per-taxon metadata using existing CONCATENATE_TSVS
         CONCATENATE_TSVS(
