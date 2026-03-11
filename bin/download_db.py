@@ -84,7 +84,7 @@ def get_cache_name(source_path: str) -> str:
     return f"{basename}_{path_hash}"
 
 @contextmanager
-def file_lock(lock_file: Path, timeout_seconds: int | None = None) -> Generator[None, None, None]:
+def file_lock(lock_file: Path, timeout_seconds: float | None = None) -> Generator[None, None, None]:
     """
     Context manager for exclusive file locking.
     Args:
@@ -168,7 +168,7 @@ def sync_from_local(source_path: str, local_path: Path) -> None:
 
 def download_database(
     source_path: str,
-    timeout_seconds: int | None = None,
+    timeout_seconds: float | None = None,
     scratch_dir: Path = Path("/scratch"),
 ) -> Path:
     """

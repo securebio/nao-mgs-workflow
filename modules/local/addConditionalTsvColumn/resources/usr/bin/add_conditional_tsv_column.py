@@ -5,8 +5,7 @@ import csv
 import time
 import datetime
 import gzip
-import bz2
-from typing import IO, Iterator
+from typing import IO, Iterator, cast
 from collections.abc import Sequence
 
 def print_log(message: str) -> None:
@@ -18,11 +17,8 @@ def open_by_suffix(filename: str, mode: str = "r", debug: bool = False) -> IO[st
         print_log(f"\tOpening file object: {filename}")
         print_log(f"\tOpening mode: {mode}")
         print_log(f"\tGZIP mode: {filename.endswith('.gz')}")
-        print_log(f"\tBZ2 mode: {filename.endswith('.bz2')}")
     if filename.endswith('.gz'):
-        return gzip.open(filename, mode + 't', encoding='utf-8')  # type: ignore[return-value]
-    elif filename.endswith('.bz2'):
-        return bz2.open(filename, mode + 't', encoding='utf-8')  # type: ignore[return-value]
+        return cast(IO[str], gzip.open(filename, mode + 't', encoding='utf-8'))
     else:
         return open(filename, mode, encoding='utf-8')
 

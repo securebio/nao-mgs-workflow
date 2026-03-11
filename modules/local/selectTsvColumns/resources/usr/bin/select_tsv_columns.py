@@ -16,9 +16,8 @@ from datetime import datetime, timezone
 import argparse
 import time
 import gzip
-import bz2
 import io
-from typing import IO
+from typing import IO, cast
 
 #=======================================================================
 # Configure logging
@@ -72,11 +71,8 @@ def open_by_suffix(filename: str, mode: str = "r") -> IO[str]:
     logger.debug(f"\tOpening file object: {filename}")
     logger.debug(f"\tOpening mode: {mode}")
     logger.debug(f"\tGZIP mode: {filename.endswith('.gz')}")
-    logger.debug(f"\tBZ2 mode: {filename.endswith('.bz2')}")
     if filename.endswith('.gz'):
-        return gzip.open(filename, mode + 't')  # type: ignore[return-value]
-    elif filename.endswith('.bz2'):
-        return bz2.BZ2File(filename, mode)  # type: ignore[call-overload,return-value,no-any-return]
+        return cast(IO[str], gzip.open(filename, mode + 't'))
     else:
         return open(filename, mode)
 

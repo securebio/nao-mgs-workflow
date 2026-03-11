@@ -3,6 +3,9 @@ name: Mypy Type Check
 on:
   pull_request: # Runs on all PRs
 
+permissions:
+  contents: read
+
 jobs:
   mypy:
     runs-on: ubuntu-latest

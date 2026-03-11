@@ -18,8 +18,7 @@ from datetime import datetime, timezone
 import time
 import tempfile
 import io
-import bz2
-from typing import IO
+from typing import IO, cast
 import shutil
 import math
 
@@ -67,11 +66,8 @@ def open_by_suffix(filename: str, mode: str = "r") -> IO[str]:
     logger.debug(f"Opening file object: {filename}")
     logger.debug(f"Opening mode: {mode}")
     logger.debug(f"GZIP mode: {filename.endswith('.gz')}")
-    logger.debug(f"BZ2 mode: {filename.endswith('.bz2')}")
     if filename.endswith('.gz'):
-        return gzip.open(filename, mode + 't')  # type: ignore[return-value]
-    elif filename.endswith('.bz2'):
-        return bz2.BZ2File(filename, mode)  # type: ignore[call-overload,return-value,no-any-return]
+        return cast(IO[str], gzip.open(filename, mode + 't'))
     else:
         return open(filename, mode)
 

@@ -15,7 +15,6 @@ side.
 import argparse
 import time
 import gzip
-import bz2
 import os
 import logging
 from datetime import datetime, timezone
@@ -60,15 +59,12 @@ def parse_args() -> argparse.Namespace:
 
 def open_by_suffix(filename: str, mode: str = "r") -> IO[str]:
     """Parse the suffix of a filename to determine the right open method
-    to use, then open the file. Can handle .gz, .bz2, and uncompressed files."""
+    to use, then open the file. Can handle .gz and uncompressed files."""
     logger.debug(f"Opening file object: {filename}")
     logger.debug(f"Opening mode: {mode}")
     logger.debug(f"GZIP mode: {filename.endswith('.gz')}")
-    logger.debug(f"BZ2 mode: {filename.endswith('.bz2')}")
     if filename.endswith('.gz'):
         return cast(IO[str], gzip.open(filename, mode + 't'))
-    elif filename.endswith('.bz2'):
-        return cast(IO[str], bz2.BZ2File(filename, mode))  # type: ignore[call-overload]
     else:
         return open(filename, mode)
 

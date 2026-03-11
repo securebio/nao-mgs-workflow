@@ -17,7 +17,6 @@ import argparse
 import pandas as pd
 import time
 import gzip
-import bz2
 import math
 from Bio import Seq
 import io
@@ -99,11 +98,8 @@ def open_by_suffix(filename: str, mode: str = "r") -> IO[str]:
     logger.debug(f"\tOpening file object: {filename}")
     logger.debug(f"\tOpening mode: {mode}")
     logger.debug(f"\tGZIP mode: {filename.endswith('.gz')}")
-    logger.debug(f"\tBZ2 mode: {filename.endswith('.bz2')}")
     if filename.endswith('.gz'):
         return cast(IO[str], gzip.open(filename, mode + 't'))
-    elif filename.endswith('.bz2'):
-        return cast(IO[str], bz2.BZ2File(filename, mode))  # type: ignore[call-overload]
     else:
         return open(filename, mode)
 

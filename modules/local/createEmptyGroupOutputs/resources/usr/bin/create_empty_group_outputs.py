@@ -16,7 +16,7 @@ import argparse
 import gzip
 import io
 import json
-from typing import IO
+from typing import IO, cast
 import logging
 import time
 import tomllib
@@ -58,7 +58,7 @@ def open_by_suffix(filename: str | Path, mode: str = "r") -> IO[str]:
     """
     filename_str = str(filename)
     if filename_str.endswith(".gz"):
-        return gzip.open(filename_str, mode + "t")  # type: ignore[return-value]
+        return cast(IO[str], gzip.open(filename_str, mode + "t"))
     else:
         return open(filename_str, mode)
 

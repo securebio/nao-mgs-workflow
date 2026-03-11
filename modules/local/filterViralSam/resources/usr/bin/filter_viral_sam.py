@@ -14,7 +14,6 @@ add missing mates for unpaired reads.
 import math
 import logging
 import gzip
-import bz2
 import argparse
 from datetime import datetime, timezone
 from dataclasses import dataclass
@@ -90,7 +89,7 @@ def parse_args() -> argparse.Namespace:
 def open_by_suffix(filename: str, mode: str = "r") -> IO[str]:
     """
     Parse the suffix of a filename to determine the right open method
-    to use, then open the file. Can handle .gz, .bz2, and uncompressed files.
+    to use, then open the file. Can handle .gz and uncompressed files.
 
     Args:
         filename (str): Path to file to open
@@ -101,8 +100,6 @@ def open_by_suffix(filename: str, mode: str = "r") -> IO[str]:
     """
     if filename.endswith(".gz"):
         return cast(IO[str], gzip.open(filename, mode + "t"))
-    elif filename.endswith(".bz2"):
-        return cast(IO[str], bz2.BZ2File(filename, mode))  # type: ignore[call-overload]
     else:
         return open(filename, mode)
 

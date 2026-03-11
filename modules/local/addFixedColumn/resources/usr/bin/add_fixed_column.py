@@ -5,8 +5,7 @@ import argparse
 import time
 import datetime
 import gzip
-import bz2
-from typing import IO
+from typing import IO, cast
 
 def print_log(message: str) -> None:
     print("[", datetime.datetime.now(), "]  ", message, sep="")
@@ -16,11 +15,8 @@ def open_by_suffix(filename: str, mode: str = "r", debug: bool = False) -> IO[st
         print_log(f"\tOpening file object: {filename}")
         print_log(f"\tOpening mode: {mode}")
         print_log(f"\tGZIP mode: {filename.endswith('.gz')}")
-        print_log(f"\tBZ2 mode: {filename.endswith('.bz2')}")
     if filename.endswith('.gz'):
-        return gzip.open(filename, mode + 't')  # type: ignore[return-value]
-    elif filename.endswith('.bz2'):
-        return bz2.BZ2File(filename, mode)  # type: ignore[call-overload,return-value,no-any-return]
+        return cast(IO[str], gzip.open(filename, mode + 't'))
     else:
         return open(filename, mode)
 

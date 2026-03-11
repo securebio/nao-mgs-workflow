@@ -8,7 +8,6 @@ Output both deduplicated and total (non-deduplicated) counts.
 """
 
 import argparse
-import bz2
 import csv
 import gzip
 import sys
@@ -26,12 +25,10 @@ Tree = defaultdict[TaxId, set[TaxId]]
 def open_by_suffix(filename: str, mode: str = "r") -> IO[str]:
     """Parse the suffix of a filename to determine the open method, then open the file.
 
-    Can handle .gz, .bz2, and uncompressed files.
+    Can handle .gz and uncompressed files.
     """
     if filename.endswith(".gz"):
         return cast(IO[str], gzip.open(filename, mode + "t"))
-    if filename.endswith(".bz2"):
-        return cast(IO[str], bz2.open(filename, mode + "t"))
     return open(filename, mode)
 
 
