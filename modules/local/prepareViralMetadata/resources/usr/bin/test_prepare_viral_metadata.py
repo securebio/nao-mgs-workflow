@@ -5,15 +5,17 @@ import gzip
 from pathlib import Path
 
 import pytest
+from prepare_viral_metadata import build_species_taxid_map, match_genomes_to_accessions, prepare_metadata
 
-from prepare_viral_metadata import (
-    build_species_taxid_map,
-    match_genomes_to_accessions,
-    prepare_metadata,
-    symlink_genomes,
-)
-
-# ─── Helpers ──────────────────────────────────────────────────────────────────
+ACCS = ["GCA_000001.1", "GCA_000002.1", "GCA_000003.1"]
+META_HEADER = ["assembly_accession", "taxid", "organism_name", "source_database"]
+META_ROWS = [
+    ["GCA_000001.1", "12345", "Virus A", "GenBank"],
+    ["GCA_000002.1", "67890", "Virus B", "GenBank"],
+    ["GCA_000003.1", "99999", "Virus C", "RefSeq"],
+]
+DB_HEADER = ["taxid", "taxid_species", "name"]
+DB_ROWS = [["12345", "12345", "Virus A"], ["67890", "67000", "Virus B"], ["99999", "99000", "Virus C"]]
 
 
 def _write_tsv(path: Path, header: list[str], rows: list[list[str]]) -> Path:
@@ -37,125 +39,68 @@ def _read_tsv(path: Path) -> list[dict[str, str]]:
         return list(csv.DictReader(f, delimiter="\t"))
 
 
-# ─── Shared constants ────────────────────────────────────────────────────────
-
-ACCS = ["GCA_000001.1", "GCA_000002.1", "GCA_000003.1"]
-META_HEADER = ["assembly_accession", "taxid", "organism_name", "source_database"]
-META_ROWS = [
-    ["GCA_000001.1", "12345", "Virus A", "GenBank"],
-    ["GCA_000002.1", "67890", "Virus B", "GenBank"],
-    ["GCA_000003.1", "99999", "Virus C", "RefSeq"],
-]
-DB_HEADER = ["taxid", "taxid_species", "name"]
-DB_ROWS = [
-    ["12345", "12345", "Virus A"],
-    ["67890", "67000", "Virus B"],
-    ["99999", "99000", "Virus C"],
-]
+def _run_prepare(tmp_path, meta_path, db_path, gdir) -> list[dict[str, str]]:
+    """Run prepare_metadata and return output rows."""
+    out_meta, out_genomes = str(tmp_path / "out.txt"), str(tmp_path / "ncbi_genomes")
+    prepare_metadata(str(meta_path), str(db_path), str(gdir), out_meta, out_genomes)
+    return _read_tsv(Path(out_meta))
 
 
 @pytest.fixture()
 def standard_inputs(tmp_path: Path) -> tuple[Path, Path, Path]:
-    """Return (metadata_path, virus_db_path, genome_dir) with 3 accessions."""
     meta = _write_tsv(tmp_path / "meta.tsv", META_HEADER, META_ROWS)
     db = _write_tsv(tmp_path / "db.tsv", DB_HEADER, DB_ROWS)
-    gdir = _make_genome_dir(tmp_path, ACCS)
-    return meta, db, gdir
-
-
-# ─── Tests for build_species_taxid_map ────────────────────────────────────────
+    return meta, db, _make_genome_dir(tmp_path, ACCS)
 
 
 class TestBuildSpeciesTaxidMap:
-    def test_builds_map(self, tmp_path: Path) -> None:
-        db = _write_tsv(tmp_path / "db.tsv", DB_HEADER, DB_ROWS)
-        result = build_species_taxid_map(str(db))
-        assert result == {"12345": "12345", "67890": "67000", "99999": "99000"}
-
-    def test_empty_db(self, tmp_path: Path) -> None:
-        db = _write_tsv(tmp_path / "db.tsv", DB_HEADER, [])
-        assert build_species_taxid_map(str(db)) == {}
-
-
-# ─── Tests for match_genomes_to_accessions ────────────────────────────────────
+    @pytest.mark.parametrize(("db_rows", "expected"), [
+        (DB_ROWS, {"12345": "12345", "67890": "67000", "99999": "99000"}),
+        ([], {}),
+    ], ids=["populated", "empty"])
+    def test_builds_map(self, tmp_path: Path, db_rows: list, expected: dict) -> None:
+        db = _write_tsv(tmp_path / "db.tsv", DB_HEADER, db_rows)
+        assert build_species_taxid_map(str(db)) == expected
 
 
 class TestMatchGenomesToAccessions:
-    @pytest.mark.parametrize(
-        ("accessions", "dir_contents", "expected"),
-        [
-            (["GCA_000001.1", "GCA_000002.1"], ["GCA_000001.1", "GCA_000002.1"],
-             {"GCA_000001.1": "GCA_000001.1_genomic.fna.gz",
-              "GCA_000002.1": "GCA_000002.1_genomic.fna.gz"}),
-            (["GCA_000001.1", "GCA_MISSING.1"], ["GCA_000001.1"],
-             {"GCA_000001.1": "GCA_000001.1_genomic.fna.gz"}),
-            (["GCA_000001.1"], [], {}),
-            ([], ["GCA_000001.1"], {}),
-        ],
-        ids=["all_match", "partial_match", "empty_dir", "empty_accessions"],
-    )
-    def test_match_genomes(
-        self, tmp_path: Path, accessions: list[str],
-        dir_contents: list[str], expected: dict[str, str],
-    ) -> None:
-        gdir = _make_genome_dir(tmp_path, dir_contents)
-        assert match_genomes_to_accessions(gdir, accessions) == expected
-
-
-# ─── Tests for symlink_genomes ────────────────────────────────────────────────
-
-
-class TestSymlinkGenomes:
-    def test_creates_symlinks(self, tmp_path: Path) -> None:
-        gdir = _make_genome_dir(tmp_path, ["GCA_000001.1"])
-        out = tmp_path / "out"
-        symlink_genomes({"GCA_000001.1": "GCA_000001.1_genomic.fna.gz"}, gdir, out)
-        result = list(out.glob("*.fna.gz"))
-        assert len(result) == 1
-        assert result[0].is_symlink()
-
-    def test_empty_mapping(self, tmp_path: Path) -> None:
-        gdir = _make_genome_dir(tmp_path, [])
-        out = tmp_path / "out"
-        symlink_genomes({}, gdir, out)
-        assert out.exists()
-        assert list(out.iterdir()) == []
-
-
-# ─── Tests for prepare_metadata ───────────────────────────────────────────────
+    @pytest.mark.parametrize(("accessions", "dir_contents", "expected"), [
+        (["GCA_000001.1", "GCA_000002.1"], ["GCA_000001.1", "GCA_000002.1"],
+         {"GCA_000001.1": "GCA_000001.1_genomic.fna.gz", "GCA_000002.1": "GCA_000002.1_genomic.fna.gz"}),
+        (["GCA_000001.1", "GCA_MISSING.1"], ["GCA_000001.1"],
+         {"GCA_000001.1": "GCA_000001.1_genomic.fna.gz"}),
+        (["GCA_000001.1"], [], {}),
+        ([], ["GCA_000001.1"], {}),
+    ], ids=["all_match", "partial_match", "empty_dir", "empty_accessions"])
+    def test_match(self, tmp_path: Path, accessions: list[str],
+                   dir_contents: list[str], expected: dict[str, str]) -> None:
+        assert match_genomes_to_accessions(_make_genome_dir(tmp_path, dir_contents), accessions) == expected
 
 
 class TestPrepareMetadata:
     def test_standard_output(self, tmp_path: Path, standard_inputs: tuple[Path, Path, Path]) -> None:
         meta_path, db_path, gdir = standard_inputs
-        out_meta = str(tmp_path / "output.txt")
         out_genomes = str(tmp_path / "ncbi_genomes")
+        out_meta = str(tmp_path / "out.txt")
         prepare_metadata(str(meta_path), str(db_path), str(gdir), out_meta, out_genomes)
         rows = _read_tsv(Path(out_meta))
         assert len(rows) == 3
-        assert all(k in rows[0] for k in ("species_taxid", "local_filename"))
-        species = {r["taxid"]: r["species_taxid"] for r in rows}
-        assert species == {"12345": "12345", "67890": "67000", "99999": "99000"}
+        assert {r["taxid"]: r["species_taxid"] for r in rows} == {"12345": "12345", "67890": "67000", "99999": "99000"}
         assert all(r["local_filename"].startswith(out_genomes) for r in rows)
-        assert len(list(Path(out_genomes).glob("*.fna.gz"))) == 3
+        symlinks = list(Path(out_genomes).glob("*.fna.gz"))
+        assert len(symlinks) == 3 and all(s.is_symlink() for s in symlinks)
 
     def test_missing_genome_drops_row(self, tmp_path: Path, standard_inputs: tuple[Path, Path, Path]) -> None:
         _, db_path, _ = standard_inputs
         meta = _write_tsv(tmp_path / "m.tsv", META_HEADER, [META_ROWS[0], ["GCA_MISSING.1", "67890", "B", "GenBank"]])
         gdir = _make_genome_dir(tmp_path / "sub", ["GCA_000001.1"])
-        out_meta = str(tmp_path / "out.txt")
-        prepare_metadata(str(meta), str(db_path), str(gdir), out_meta, str(tmp_path / "g"))
-        rows = _read_tsv(Path(out_meta))
-        assert len(rows) == 1
-        assert rows[0]["assembly_accession"] == "GCA_000001.1"
+        rows = _run_prepare(tmp_path / "run", meta, db_path, gdir)
+        assert len(rows) == 1 and rows[0]["assembly_accession"] == "GCA_000001.1"
 
     def test_unmapped_taxid_gives_empty_species(self, tmp_path: Path) -> None:
         meta = _write_tsv(tmp_path / "m.tsv", META_HEADER, [["GCA_000001.1", "00000", "X", "GenBank"]])
         db = _write_tsv(tmp_path / "db.tsv", DB_HEADER, [["12345", "12345", "V"]])
-        gdir = _make_genome_dir(tmp_path, ["GCA_000001.1"])
-        out_meta = str(tmp_path / "out.txt")
-        prepare_metadata(str(meta), str(db), str(gdir), out_meta, str(tmp_path / "g"))
-        rows = _read_tsv(Path(out_meta))
+        rows = _run_prepare(tmp_path / "run", meta, db, _make_genome_dir(tmp_path, ["GCA_000001.1"]))
         assert rows[0]["species_taxid"] == ""
 
     def test_gzipped_metadata_input(self, tmp_path: Path, standard_inputs: tuple[Path, Path, Path]) -> None:
@@ -165,6 +110,5 @@ class TestPrepareMetadata:
             w = csv.writer(f, delimiter="\t")
             w.writerow(META_HEADER)
             w.writerows(META_ROWS)
-        out_meta = str(tmp_path / "out.txt")
-        prepare_metadata(str(meta_gz), str(db_path), str(gdir), out_meta, str(tmp_path / "g"))
-        assert len(_read_tsv(Path(out_meta))) == 3
+        rows = _run_prepare(tmp_path / "run", meta_gz, db_path, gdir)
+        assert len(rows) == 3
