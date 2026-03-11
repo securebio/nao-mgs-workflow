@@ -9,6 +9,6 @@ process ENUMERATE_CHILD_TAXA {
         path("child_taxids.txt"), emit: taxids
     shell:
         '''
-        enumerate-child-taxa.py !{nodes_dmp} !{parent_taxid} child_taxids.txt
+        enumerate_child_taxa.py !{nodes_dmp} !{parent_taxid} child_taxids.txt
         '''
 }

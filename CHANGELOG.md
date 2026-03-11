@@ -3,7 +3,7 @@
 - Updated benchmark CI workflow samplesheet paths to use `metadata/` and `raw/` subdirectories, matching internal standards.
 - Added FASTP JSON output to published RUN outputs for QC (short-read data only; ONT uses FILTLONG).
 - Added `ENUMERATE_CHILD_TAXA` module: reads `nodes.dmp` to split downloads by child taxid for parallel genome downloads.
-- Added `DOWNLOAD_VIRAL_GENOMES` module: uses NCBI `datasets` CLI per child taxon, with optional API key support. Distinguishes empty results from real failures for proper Nextflow retry behavior.
+- Added `DOWNLOAD_VIRAL_GENOMES` module: uses NCBI `datasets` CLI per child taxon. Inherits `NCBI_API_KEY` from the launch environment if set.
 - Added `ncbi_datasets` container (`ncbi-datasets-cli=18.20.0`, `unzip=6.0`).
 
 # v3.2.0.2

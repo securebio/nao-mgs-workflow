@@ -1,6 +1,5 @@
 #!/usr/bin/env python
-DESC = """
-Enumerate direct child taxa of a given parent taxid from an NCBI taxonomy
+"""Enumerate direct child taxa of a given parent taxid from an NCBI taxonomy
 nodes.dmp file. If the parent taxid is a leaf (no children), the parent
 taxid itself is emitted.
 """
@@ -74,7 +73,7 @@ def parse_arguments() -> argparse.Namespace:
     Returns:
         Parsed arguments namespace.
     """
-    parser = argparse.ArgumentParser(description=DESC)
+    parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("nodes_dmp", help="Path to NCBI taxonomy nodes.dmp file.")
     parser.add_argument("parent_taxid", help="Parent taxid to find children for.")
     parser.add_argument("output", help="Output file path for child taxids (one per line).")
