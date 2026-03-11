@@ -1,10 +1,11 @@
 # v3.2.0.3-dev
 
+- Updated benchmark CI workflow samplesheet paths to use `metadata/` and `raw/` subdirectories, matching internal standards.
+- Added FASTP JSON output to published RUN outputs for QC (short-read data only; ONT uses FILTLONG).
 - Added mypy type checking CI workflow (`.github/workflows/mypy.yml`) that runs on PRs when Python files or `pyproject.toml` change.
 - Added type annotations to all Python scripts in `bin/` and `modules/local/` to satisfy mypy strict mode (`disallow_untyped_defs`, `disallow_incomplete_defs`).
 - Added `pandas-stubs` and `types-PyYAML` type stub dependencies; configured mypy overrides to ignore missing stubs for `pysam`, `Bio`, and `tomli`.
 - Fixed `bz2.BZ2file` typos (lowercase 'f') across multiple scripts.
-
 # v3.2.0.2
 
 - Fixed AWS OIDC credential expiry in long-running CI workflows. Added `role-duration-seconds` input to the `setup-nf-test` composite action and increased session durations for `rebuild-benchmark-index` (6h), `benchmark-illumina-100M` (2h), `benchmark-ont-100k` (2h), and `test-chained` (2h). Also added a credential refresh step before the benchmark index cleanup to ensure it succeeds even if the main credentials expire.

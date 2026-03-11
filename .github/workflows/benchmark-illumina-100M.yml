@@ -59,7 +59,7 @@ jobs:
           RUST_VERSION="${{ github.base_ref == 'stable' && 'main' || 'dev' }}"
           bin/chain_workflows.py \
             --ref-dir s3://nao-testing/mgs-workflow-test/index-latest/output/ \
-            --samplesheet s3://nao-testing/benchmarks/Illumina_100M/samplesheet.csv \
+            --samplesheet s3://nao-testing/benchmarks/Illumina_100M/metadata/samplesheet.csv \
             --launch-dir test_run_benchmark_100M \
             --base-dir s3://nao-testing-scratch/mgs-workflow-test/benchmark-illumina-100M/ \
             --nextflow-args "--rust_tools_version $RUST_VERSION"

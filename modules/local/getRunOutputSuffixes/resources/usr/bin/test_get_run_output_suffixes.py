@@ -27,12 +27,11 @@ class TestGetRunOutputSuffixes:
                 'expected-outputs-run = [\n'
                 '    "results/{SAMPLE}_virus_hits.tsv.gz",\n'
                 ']\n'
-                'expected-outputs-run-ont = [\n'
-                '    "results/{SAMPLE}_virus_hits.tsv.gz",\n'
-                '    "results/{SAMPLE}_kraken.tsv.gz",\n'
+                'expected-outputs-run-shortread-extra = [\n'
+                '    "results/{SAMPLE}_fastp.json",\n'
                 ']\n',
-                ["kraken.tsv", "virus_hits.tsv"],
-                id="deduplicates_across_sections",
+                ["virus_hits.tsv"],
+                id="reads_only_expected_outputs_run",
             ),
             pytest.param(
                 '[tool.mgs-workflow]\n'

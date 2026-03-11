@@ -1,3 +1,5 @@
+import groovy.json.JsonSlurper
+
 // Helper function: manual table filtering
 def filter_tab = { tab_in, threshold -> csv(tab_in.table.where(
     tab_in.table.intColumn("kraken2_assigned_host_virus").isEqualTo(1).or(
@@ -67,6 +69,16 @@ nextflow_workflow {
                     assert (id in ids_failed)
                 }
             }
+            // FASTP JSON should be emitted and cross-validate with FASTQ
+            assert workflow.out.fastp_json.size() == 1
+            def json_path = path(workflow.out.fastp_json[0][1])
+            assert json_path.exists()
+            assert json_path.size() > 0
+            def json = new JsonSlurper().parse(json_path.toFile())
+            assert json.containsKey("summary")
+            assert json.containsKey("filtering_result")
+            assert json.filtering_result.passed_filter_reads == n_reads_trimmed
+            assert json.summary.before_filtering.total_reads == n_reads_subset
         }
     }
 
@@ -116,9 +128,11 @@ nextflow_workflow {
             for (id in ids_trimmed) {
                 assert id in ids_subset
             }
+            // ONT should not emit fastp_json (uses FILTLONG, not FASTP)
+            assert workflow.out.fastp_json.size() == 0
         }
     }
-    
+
     test("Should handle empty input files properly") {
         config "tests/configs/run.config"
         tag "empty_input"
@@ -162,6 +176,13 @@ nextflow_workflow {
             assert fastq_out_subset.sequences.size() == 0
             assert fastq_out_trimmed.sequences.size() == 0
             assert fastq_out_failed.sequences.size() == 0
+            // FASTP JSON should still be emitted even with empty input
+            assert workflow.out.fastp_json.size() == 1
+            def json_path = path(workflow.out.fastp_json[0][1])
+            assert json_path.exists()
+            def json = new JsonSlurper().parse(json_path.toFile())
+            assert json.containsKey("summary")
+            assert json.filtering_result.passed_filter_reads == 0
         }
     }
 }
