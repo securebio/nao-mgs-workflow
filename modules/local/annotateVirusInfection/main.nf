@@ -10,8 +10,8 @@ process ANNOTATE_VIRUS_INFECTION {
         val(hard_exclude_taxids)
     output:
         path("total-virus-db-annotated.tsv.gz"), emit: db
-    shell:
-        '''
-        annotate_viral_hosts.py !{virus_db} !{host_db} !{infection_db} !{nodes_db} "!{hard_exclude_taxids}" total-virus-db-annotated.tsv.gz
-        '''
+    script:
+        """
+        annotate_viral_hosts.py ${virus_db} ${host_db} ${infection_db} ${nodes_db} "${hard_exclude_taxids}" total-virus-db-annotated.tsv.gz
+        """
 }
