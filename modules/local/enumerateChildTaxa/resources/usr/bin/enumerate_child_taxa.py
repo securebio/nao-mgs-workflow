@@ -33,8 +33,6 @@ def enumerate_children(nodes_path: str, parent_taxid: str) -> list[str]:
     with open(nodes_path) as f:
         for line in f:
             fields = line.strip().split("\t|\t")
-            if len(fields) < 2:
-                continue
             child_id = fields[0].strip()
             parent_id = fields[1].strip()
             if parent_id == parent_taxid and child_id != parent_taxid:
