@@ -11,13 +11,13 @@ process SORT_FILE {
         tuple val(sample), path("${sample}_sorted.${file_suffix}.gz"), emit: output
         tuple val(sample), path("${sample}_in.${file_suffix}.gz"), emit: input
     script:
+        def out = "${sample}_sorted.${file_suffix}.gz"
+        def in_file = "${sample}_in.${file_suffix}.gz"
         """
         set -euo pipefail
-        out=${sample}_sorted.${file_suffix}.gz
-        in=${sample}_in.${file_suffix}.gz
         # Run command
-        zcat ${file} | sort ${sort_string} | gzip > \${out}
+        zcat ${file} | sort ${sort_string} | gzip > ${out}
         # Link input to output for testing
-        ln -s ${file} \${in}
+        ln -s ${file} ${in_file}
         """
 }

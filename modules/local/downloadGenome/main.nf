@@ -7,13 +7,13 @@ process DOWNLOAD_GENOME {
     output:
         path("${name}.fasta.gz"), emit: genome
     script:
+        def path = "${name}.fasta"
         """
-        path=${name}.fasta
         if [[ "${genome_url}" == *.gz ]]; then
-            wget "${genome_url}" -O \${path}.gz
+            wget "${genome_url}" -O ${path}.gz
         else
-            wget "${genome_url}" -O \${path}
-            gzip \${path}
+            wget "${genome_url}" -O ${path}
+            gzip ${path}
         fi
         """
 }

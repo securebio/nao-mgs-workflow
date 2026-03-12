@@ -10,12 +10,12 @@ process BRACKEN {
     output:
         tuple val(sample), path("${sample}.bracken.gz")
     script:
+        def db = db_path
+        def out = "${sample}.bracken"
         """
         #set -euox pipefail
         # Define input/output
-        db=${db_path}
         in=${report}
-        out=${sample}.bracken
         # Handle gzipped report file
         in_status=\$(file -b \$(readlink -f \${in}))
         echo "Input file status: \${in_status}"
@@ -38,21 +38,21 @@ process BRACKEN {
         echo "Number of lines with classification level ${classificationLevel} (z): \${z}"
         if [[ \${x} -eq "0" && \${y} -eq "0" ]]; then
             echo "Empty input file - creating empty output."
-            touch \${out}
+            touch ${out}
         elif [[ \${x} -eq "1" && \${y} -eq "1" ]]; then
             echo "No classified reads in input - creating empty output."
-            touch \${out}
+            touch ${out}
         elif [[ \${z} -eq "0" ]]; then
             echo "No reads classified at desired level in input - creating empty output."
-            touch \${out}
+            touch ${out}
         else
             # Run Bracken
-            io="-d \${db} -i \${in} -o \${out} -t ${threshold}"
+            io="-d ${db} -i \${in} -o ${out} -t ${threshold}"
             par="-l ${classificationLevel}"
             echo "Input okay - running Bracken."
             bracken \${io} \${par}
         fi
         # Gzip output
-        gzip -c \${out} > \${out}.gz
+        gzip -c ${out} > ${out}.gz
         """
 }

@@ -22,11 +22,11 @@ process COMPUTE_TAXID_DISTANCE {
         tuple val(sample), path("distance_${tsv}"), emit: output // Distance-computed TSV
         tuple val(sample), path("input_${tsv}"), emit: input // Input file for testing
     script:
+        // Set up and run Python script
+        def io = "-i ${tsv} -o distance_${tsv} -n ${nodes_db}"
+        def par = "-t1 ${process_params.taxid_field_1} -t2 ${process_params.taxid_field_2} -d1 ${process_params.distance_field_1} -d2 ${process_params.distance_field_2}"
         """
-        # Set up and run Python script
-        io="-i ${tsv} -o distance_${tsv} -n ${nodes_db}"
-        par="-t1 ${process_params.taxid_field_1} -t2 ${process_params.taxid_field_2} -d1 ${process_params.distance_field_1} -d2 ${process_params.distance_field_2}"
-        compute_taxid_distance.py \${io} \${par}
+        compute_taxid_distance.py ${io} ${par}
         # Link input file to output for testing
         ln -s ${tsv} input_${tsv}
         """

@@ -10,21 +10,20 @@ process JOIN_FASTQ {
         tuple val(sample), path("${sample}_joined.fastq.gz"), emit: reads
         tuple val(sample), path("${sample}_joined_in_{merged,unmerged}.fastq.gz"), emit: input
     script:
+        def om = reads[0]
+        def ou = reads[1]
+        def oj = "${sample}_bbmerge_unmerged_joined.fastq.gz"
+        def oo = "${sample}_joined.fastq.gz"
+        def im = "${sample}_joined_in_merged.fastq.gz"
+        def iu = "${sample}_joined_in_unmerged.fastq.gz"
         """
-        # Prepare to join unmerged read pairs
-        om=${reads[0]}
-        ou=${reads[1]}
-        oj=${sample}_bbmerge_unmerged_joined.fastq.gz
         # Join unmerged read pairs
-        join_fastq_interleaved.py \${ou} \${oj} ${ debug ? "--debug" : "" }
+        join_fastq_interleaved.py ${ou} ${oj} ${ debug ? "--debug" : "" }
         # Concatenate single output file
-        oo=${sample}_joined.fastq.gz
-        cat \${om} \${oj} > \${oo}
+        cat ${om} ${oj} > ${oo}
         # Link input reads for testing
-        im=${sample}_joined_in_merged.fastq.gz
-        iu=${sample}_joined_in_unmerged.fastq.gz
-        ln -s \${om} \${im}
-        ln -s \${ou} \${iu}
+        ln -s ${om} ${im}
+        ln -s ${ou} ${iu}
         """
 }
 

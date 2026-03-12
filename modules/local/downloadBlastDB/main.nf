@@ -8,10 +8,9 @@ process DOWNLOAD_BLAST_DB {
         path("${db}"), emit: db
     script:
         """
-        db="${db}"
-        mkdir \${db}
-        cd \${db}
+        mkdir ${db}
+        cd ${db}
         ln -s \$(which curl) /usr/local/bin/curl
-        update_blastdb.pl --source aws --num_threads ${task.cpus} --force --decompress \${db}
+        update_blastdb.pl --source aws --num_threads ${task.cpus} --force --decompress ${db}
         """
 }

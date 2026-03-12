@@ -12,14 +12,14 @@ process PROCESS_VIRAL_BOWTIE2_SAM {
         tuple val(sample), path("${sample}_bowtie2_sam_processed.tsv.gz"), emit: output
         tuple val(sample), path("${sample}_bowtie2_sam_in.tsv.gz"), emit: input
     script:
+        def out = "${sample}_bowtie2_sam_processed.tsv.gz"
+        def meta = genbank_metadata_path
+        def db = viral_db_path
+        def pairedFlag = paired ? "--paired" : "--no-paired"
+        def cmd = "process_viral_bowtie2_sam.py -m ${meta} -v ${db} -o ${out} ${pairedFlag}"
         """
-        out=${sample}_bowtie2_sam_processed.tsv.gz
-        meta=${genbank_metadata_path}
-        db=${viral_db_path}
-        paired=${paired ? "--paired" : "--no-paired"}
-        cmd="process_viral_bowtie2_sam.py -m \${meta} -v \${db} -o \${out} \${paired}"
         # Sort input SAM and pass to script
-        zcat ${sam} | \${cmd}
+        zcat ${sam} | ${cmd}
         # Link input to output for testing
         ln -s ${sam} ${sample}_bowtie2_sam_in.tsv.gz
         """
