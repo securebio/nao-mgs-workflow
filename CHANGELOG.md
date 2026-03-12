@@ -1,3 +1,7 @@
+# v3.2.0.4-dev
+
+- Add custom Claude Code subagent definitions (`.claude/agents/`) and update `.gitignore` to track them.
+
 # v3.2.0.3-dev
 
 - Updated benchmark CI workflow samplesheet paths to use `metadata/` and `raw/` subdirectories, matching internal standards.
