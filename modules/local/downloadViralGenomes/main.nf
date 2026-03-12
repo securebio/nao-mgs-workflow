@@ -14,7 +14,7 @@ process DOWNLOAD_VIRAL_GENOMES {
         datasets download genome taxon ${taxid} \\
             --assembly-source ${assembly_source} \\
             --include genome \\
-            --no-progress \\
+            --no-progressbar \\
             ${extra_args} \\
             --filename output.zip
 
