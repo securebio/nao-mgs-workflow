@@ -71,18 +71,25 @@ def prepare_metadata(
     """
     taxid_to_species = build_species_taxid_map(virus_db_path)
     with open_by_suffix(merged_metadata_path) as f:
-        rows = list(csv.DictReader(f, delimiter="\t"))
+        reader = csv.DictReader(f, delimiter="\t")
+        in_fields = reader.fieldnames or []
+        rows = list(reader)
     logger.info("Read %d metadata rows", len(rows))
     genome_dir, output_dir = Path(genomes_dir), Path(output_genomes_dir)
-    accessions = list({r["assembly_accession"] for r in rows})
+    output_dir.mkdir(parents=True, exist_ok=True)
+    out_fields = list(in_fields) + ["species_taxid", "local_filename"]
+    if not rows:
+        logger.info("No metadata rows to process. Writing header-only output file.")
+        with open(output_metadata_path, "w", newline="") as f:
+            writer = csv.DictWriter(f, fieldnames=out_fields, delimiter="\t")
+            writer.writeheader()
+        return
+    accessions = sorted({r["assembly_accession"] for r in rows})
     acc_to_file = match_genomes_to_accessions(genome_dir, accessions)
     logger.info("Matched %d/%d accessions to genome files", len(acc_to_file), len(accessions))
     # Symlink matched genomes into output directory
-    output_dir.mkdir(parents=True, exist_ok=True)
     for filename in acc_to_file.values():
         os.symlink(os.path.abspath(genome_dir / filename), output_dir / filename)
-    # Write output with added columns, dropping unmatched rows
-    out_fields = list(rows[0].keys()) + ["species_taxid", "local_filename"]
     n_written = 0
     with open(output_metadata_path, "w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=out_fields, delimiter="\t")
