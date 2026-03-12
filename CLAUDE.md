@@ -39,7 +39,7 @@ EOF
 
 **Before creating the PR:**
 - Run the **pr-preflight** agent to check branch readiness (version bump, changelog, lint, schemas)
-- Check whether your changes require documentation updates. If you modified behavior, added features, or changed workflows, update the relevant docs (e.g. `docs/`, `CLAUDE.md`) in the same PR — don't leave documentation for a follow-up.
+- Check whether your changes require documentation updates. If you modified behavior, added features, or changed workflows, update the relevant docs (e.g. `docs/`, `CLAUDE.md`) in the same PR — don't leave documentation for a follow-up. Use the **update-docs** agent to identify and edit affected doc files.
 
 **Important options:**
 - Always use `--base dev` (PRs target `dev`, not `main`)
