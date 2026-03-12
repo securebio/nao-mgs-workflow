@@ -30,7 +30,7 @@ process EXTRACT_VIRAL_HITS_TO_FASTQ {
                             print "ERROR: No column named '\\''seq_id'\\'' in header" > "/dev/stderr"
                             exit 1
                         } else {
-                            print "'\\''seq_id'\\'' column index: " \$colIndex > "/dev/stderr"
+                            print "'\\''seq_id'\\'' column index: " colIndex > "/dev/stderr"
                         }
                         next # Skip printing the header itself
                     }
