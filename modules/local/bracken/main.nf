@@ -32,7 +32,7 @@ process BRACKEN {
         # Handle empty files and files with no assigned reads
         x=\$(wc -l < \${in})
         y=\$(grep -c "\\\\sunclassified\\\$" \${in} || true)
-        z=\$(cat "\${in}" | awk '{print \\\$6}' | grep -c "^${classificationLevel}\\\$" || true)
+        z=\$(cat "\${in}" | awk '{print \$6}' | grep -c "^${classificationLevel}\\\$" || true)
         echo "Number of lines (x): \${x}"
         echo "Number of 'unclassified' lines (y): \${y}"
         echo "Number of lines with classification level ${classificationLevel} (z): \${z}"
