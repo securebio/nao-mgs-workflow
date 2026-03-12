@@ -2,10 +2,7 @@
 
 - Updated benchmark CI workflow samplesheet paths to use `metadata/` and `raw/` subdirectories, matching internal standards.
 - Added FASTP JSON output to published RUN outputs for QC (short-read data only; ONT uses FILTLONG).
-- Added `ENUMERATE_CHILD_TAXA` module: reads `nodes.dmp` to split downloads by child taxid for parallel genome downloads.
-- Added `DOWNLOAD_VIRAL_GENOMES` module: uses NCBI `datasets` CLI per child taxon. Inherits `NCBI_API_KEY` from the launch environment if set.
-- Added `ncbi_datasets` container (`ncbi-datasets-cli=18.20.0`, `unzip=6.0`).
-- Added `PREPARE_VIRAL_METADATA` module: merges per-taxon metadata, adds `species_taxid` from virus taxonomy DB, and maps genome files to `local_filename` for downstream compatibility.
+- Added `ENUMERATE_CHILD_TAXA`, `DOWNLOAD_VIRAL_GENOMES`, and `PREPARE_VIRAL_METADATA` modules for downloading and preparing viral genomes using NCBI's `datasets` CLI, replacing `ncbi-genome-download`.
 
 # v3.2.0.2
 
