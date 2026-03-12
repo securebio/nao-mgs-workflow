@@ -33,8 +33,8 @@ process DOWNLOAD_VIRAL_GENOMES {
 
         # Flatten genome FASTAs into genomes/ directory
         mkdir -p genomes
-        find output/ncbi_dataset/data -name '*.fna' -exec gzip {} +
-        find output/ncbi_dataset/data -name '*.fna.gz' -exec mv {} genomes/ +
+        find output/ncbi_dataset/data -name '*.fna' -exec gzip {} \\;
+        find output/ncbi_dataset/data -name '*.fna.gz' -exec mv {} genomes/ \\;
 
         rm -rf output/ output.zip raw_metadata.tsv
         echo "Downloaded \$((  \$(wc -l < metadata.tsv) - 1  )) assemblies for taxid ${taxid}"
