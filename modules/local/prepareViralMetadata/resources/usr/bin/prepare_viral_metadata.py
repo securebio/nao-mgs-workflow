@@ -10,6 +10,7 @@ import csv
 import gzip
 import logging
 import os
+import re
 import time
 from datetime import UTC, datetime
 from pathlib import Path
@@ -41,6 +42,8 @@ def build_species_taxid_map(virus_db_path: str) -> dict[str, str]:
     logger.info("Read %d entries from virus DB", len(result))
     return result
 
+ACCESSION_RE = re.compile(r"^(GC[AF]_\d+\.\d+)")
+
 def match_genomes_to_accessions(genome_dir: Path, accessions: list[str]) -> dict[str, str]:
     """Match genome .fna.gz files to assembly accessions by filename prefix.
     Args:
@@ -49,12 +52,12 @@ def match_genomes_to_accessions(genome_dir: Path, accessions: list[str]) -> dict
     Returns:
         Dictionary mapping assembly accession to genome filename.
     """
-    genome_files = sorted(genome_dir.glob("*.fna.gz"))
+    acc_set = set(accessions)
     result = {}
-    for acc in accessions:
-        matches = [f for f in genome_files if f.name.startswith(acc)]
-        if matches:
-            result[acc] = matches[0].name
+    for f in sorted(genome_dir.glob("*.fna.gz")):
+        m = ACCESSION_RE.match(f.name)
+        if m and m.group(1) in acc_set and m.group(1) not in result:
+            result[m.group(1)] = f.name
     return result
 
 def prepare_metadata(
