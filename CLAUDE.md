@@ -145,7 +145,7 @@ All Python scripts should have corresponding Pytest scripts in the same director
 
 - Every PR must include a version bump in `pyproject.toml` and a corresponding update to `CHANGELOG.md`. The topmost CHANGELOG heading must match the version in `pyproject.toml`.
 - See `docs/versioning.md` for the versioning scheme and guidance on which version component to increment. See `docs/developer.md` for CHANGELOG formatting conventions.
-- Development versions use the `-dev` suffix (e.g. `3.0.1.3-dev`). If the current version is already a `-dev` version, only change it if the new changes justify a larger bump.
+- Development versions use the `-dev` suffix (e.g. `3.0.1.3-dev`). A `-dev` version is numbered relative to the last release, not to other `-dev` versions — multiple point-level PRs share the same `-dev` version. Only change an existing `-dev` version if the new changes justify a higher-level bump (e.g. point → results).
 
 ### Backwards Compatibility Trackers
 `pyproject.toml` contains two compatibility version fields:

@@ -16,4 +16,8 @@ Users relying on pipeline outputs should take the following actions in response 
 
 Note that, when a version has not yet been merged to `master`, it should have the suffix `-dev`.
 
+## Dev versions and stacking
+
+A `-dev` version represents all unreleased work since the last release. For example, if the last release was `3.2.0.2`, then the current dev version is `3.2.0.3-dev` — representing the next point release in progress. Multiple PRs that each make point-level changes all share the same `-dev` version; they do not each increment the point component. A PR should only change the version from an existing `-dev` version if its changes justify a **higher-level** bump (e.g. point → results would change `3.2.0.3-dev` to `3.2.1.0-dev`).
+
 When updating the pipeline version, both the version in `pyproject.toml` and the topmost heading in `CHANGELOG.md` must be updated to match. See [developer.md](developer.md) for CHANGELOG formatting guidelines.

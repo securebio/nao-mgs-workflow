@@ -31,5 +31,5 @@ You automate version bumps for the mgs-workflow pipeline. You update both `pypro
 ## Important Rules
 
 - The topmost `CHANGELOG.md` heading MUST match the version in `pyproject.toml` — CI enforces this
-- If the current version is already `-dev`, only change it if the new changes justify a *larger* bump
+- If the current version is already `-dev`, only change it if the new changes justify a *higher-level* bump (e.g. point → results). Multiple point-level PRs share the same `-dev` version — they do NOT each increment the point component. A `-dev` version is numbered relative to the last release, not to other `-dev` versions.
 - Do NOT update `index-min-pipeline-version` or `pipeline-min-index-version` unless the user explicitly asks
