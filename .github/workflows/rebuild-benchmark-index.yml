@@ -22,8 +22,16 @@ permissions:
   contents: read
 
 jobs:
-  validate-confirmation:
+  preflight-index-tests:
+    uses: ./.github/workflows/nf-test-workflows-index.yml
+    secrets: inherit
+
+  rebuild-benchmark-index:
+    needs: preflight-index-tests
     runs-on: ubuntu-latest
+    timeout-minutes: 360
+    env:
+      TOWER_ACCESS_TOKEN: ${{ secrets.TOWER_ACCESS_TOKEN }}
     steps:
       - name: Validate confirmation
         env:
@@ -34,23 +42,17 @@ jobs:
             exit 1
           fi
 
-  preflight-index-tests:
-    needs: validate-confirmation
-    uses: ./.github/workflows/nf-test-workflows-index.yml
-    secrets: inherit
-
-  rebuild-benchmark-index:
-    needs: preflight-index-tests
-    runs-on: [self-hosted, nextflow]
-    timeout-minutes: 1440
-    env:
-      TOWER_ACCESS_TOKEN: ${{ secrets.TOWER_ACCESS_TOKEN }}
-    steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Configure AWS credentials and login to ECR Public
-        uses: ./.github/actions/configure-aws
+      - name: Setup nf-test environment
+        uses: ./.github/actions/setup-nf-test
+        with:
+          role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
+          role-duration-seconds: '21600'
+
+      - name: Install Python dependencies
+        run: pip install boto3
 
       - name: Delete old index
         run: |
@@ -70,8 +72,18 @@ jobs:
             -profile batch \
             --base_dir "s3://nao-testing/mgs-workflow-test/index-latest"
 
+      # Uses the action directly (not setup-nf-test) since we only need
+      # fresh credentials, not the full nf-test environment.
+      - name: Refresh AWS credentials for cleanup
+        if: always()
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
+          aws-region: us-east-1
+          role-duration-seconds: '3600'
+
       - name: Clean up Nextflow work directory
-        if: success()
+        if: always()
         run: |
           echo "Removing Nextflow work directory..."
           aws s3 rm s3://nao-testing/mgs-workflow-test/index-latest/work/ --recursive
