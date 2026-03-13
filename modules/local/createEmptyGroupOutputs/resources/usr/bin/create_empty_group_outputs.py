@@ -183,6 +183,9 @@ def load_schema_headers(schema_dir: Path, schema_name: str) -> list[str] | None:
         return None
     with open(schema_path) as f:
         schema = json.load(f)
+    # Skip JSON Schemas — only handle table-schemas
+    if _is_json_schema(schema):
+        return None
     fields = schema.get("fields", [])
     if not fields:
         return None

@@ -193,6 +193,20 @@ class TestLoadSchemaHeaders:
         result = load_schema_headers(tmp_path, "empty")
         assert result is None
 
+    def test_returns_none_for_json_schema(self, tmp_path):
+        """Test that None is returned for JSON Schema files (not table-schemas)."""
+        schema = {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "fields": [
+                {"name": "col1", "type": "string"},
+            ],
+        }
+        schema_path = tmp_path / "fastp.schema.json"
+        schema_path.write_text(json.dumps(schema))
+        result = load_schema_headers(tmp_path, "fastp")
+        assert result is None
+
 
 #=============================================================================
 # Tests for create_empty_outputs
