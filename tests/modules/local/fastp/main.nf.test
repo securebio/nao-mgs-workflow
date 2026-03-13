@@ -91,6 +91,9 @@ nextflow_process {
             def json_path = path(process.out.json[0][1])
             assert json_path.exists()
             assert json_path.size() > 0
+            def html_path = path(process.out.html[0][1])
+            assert html_path.exists()
+            assert html_path.size() > 0
             // Parse and validate FASTP JSON
             def json = new JsonSlurper().parse(json_path.toFile())
             checkFastpJson(json, reads_in, reads_pass, true)
@@ -151,6 +154,9 @@ nextflow_process {
             def json_path = path(process.out.json[0][1])
             assert json_path.exists()
             assert json_path.size() > 0
+            def html_path = path(process.out.html[0][1])
+            assert html_path.exists()
+            assert html_path.size() > 0
             // Parse and validate FASTP JSON
             def json = new JsonSlurper().parse(json_path.toFile())
             checkFastpJson(json, reads_in, reads_pass, false)

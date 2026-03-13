@@ -75,7 +75,8 @@ def combine_sample_jsons(
     """Combine per-sample JSON files into a single dict keyed by sample name.
 
     Each sample entry has 'sample' and 'group' fields injected at the top
-    level, alongside the original JSON content.
+    level, alongside the original JSON content. Note that 'sample' and 'group'
+    keys are unconditionally overwritten if already present in the input JSON.
 
     Args:
         input_files: List of paths to per-sample JSON files.
