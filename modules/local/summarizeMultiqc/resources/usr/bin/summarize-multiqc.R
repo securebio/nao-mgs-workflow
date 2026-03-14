@@ -131,15 +131,11 @@ extract_plot_lines <- function(multiqc_json, plot_id, col_names){
       } else {
         p <- pairs[[i]]
       }
-      as.data.frame(p) %>%
-        setNames(col_names) %>%
-        mutate(file = lines$name[i])
+      data.frame(file = lines$name[i], as.data.frame(p) %>% setNames(col_names))
     }) %>% bind_rows() %>% as_tibble()
   } else {
     data_out <- lapply(lines, function(line) {
-      as.data.frame(line$pairs) %>%
-        setNames(col_names) %>%
-        mutate(file = line$name)
+      data.frame(file = line$name, as.data.frame(line$pairs) %>% setNames(col_names))
     }) %>% bind_rows() %>% as_tibble()
   }
   return(data_out)
@@ -150,13 +146,14 @@ extract_adapter_data <- function(multiqc_json){
   data_out <- extract_plot_lines(multiqc_json, "fastqc_adapter_content_plot",
                                   c("position", "pc_adapters"))
   if (is.null(data_out) || nrow(data_out) == 0){
-    return(tibble(position = numeric(), pc_adapters = numeric(),
-                  file = character(), adapter = character()))
+    return(tibble(file = character(), position = numeric(),
+                  adapter = character(), pc_adapters = numeric()))
   }
   # Adapter name is encoded in the line name as "file - adapter"
   data_out <- data_out %>%
     rename(filename = file) %>%
-    separate_wider_delim("filename", " - ", names=c("file", "adapter"))
+    separate_wider_delim("filename", " - ", names=c("file", "adapter")) %>%
+    select(file, position, adapter, pc_adapters)
   return(data_out)
 }
 
@@ -174,7 +171,7 @@ extract_length_data <- function(multiqc_json){
     }) %>% bind_rows()
     return(tab_out)
   }
-  return(data_out)
+  return(data_out %>% select(length, n_sequences, file))
 }
 
 extract_per_base_quality <- function(multiqc_json){
