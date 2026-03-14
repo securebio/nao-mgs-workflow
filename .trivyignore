@@ -10,3 +10,9 @@ CVE-2026-0861
 # quinn-proto Rust crate embedded in compiled Polars .so (multiqc dependency)
 # No fix available until Polars releases a build with quinn-proto >= 0.11.14
 CVE-2026-31812
+
+# linux-pam: directory traversal (no Debian fix available as of 2026-03-14)
+CVE-2025-6020
+
+# GnuPG gpgv: information disclosure / potential code execution (no Debian fix available as of 2026-03-14)
+CVE-2025-68973

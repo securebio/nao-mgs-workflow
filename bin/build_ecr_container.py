@@ -192,7 +192,7 @@ def generate_dockerfile(spec_filename: str) -> str:
         str: Dockerfile text
     """
     dockerfile = f"""
-FROM mambaorg/micromamba@sha256:008e06cd8432eb558faa4738a092f30b38dd8db3137a5dd3fca57374a790825b
+FROM mambaorg/micromamba@sha256:3955d0f1987accbcc382c37758a3d18c022eeed3e9f4a53f8f1e04feb5f576f8
 USER root
 RUN apt-get update && apt-get install -y procps && rm -rf /var/lib/apt/lists/*
 RUN mkdir -p /opt/conda
