@@ -86,8 +86,8 @@ def compute_spec_hash(spec: dict[str, Any], dockerfile_content: str) -> str:
     """
     Compute a hash of the container specification and Dockerfile for tagging.
 
-    Includes the Dockerfile content so that template changes (e.g. adding
-    apt-get upgrade) invalidate existing image caches and trigger rebuilds.
+    Includes the Dockerfile content so that template changes (e.g. updating
+    the base image digest) invalidate existing image caches and trigger rebuilds.
 
     Args:
         spec (dict[str, Any]): Container specification
@@ -192,9 +192,9 @@ def generate_dockerfile(spec_filename: str) -> str:
         str: Dockerfile text
     """
     dockerfile = f"""
-FROM mambaorg/micromamba:1.5.10
+FROM mambaorg/micromamba@sha256:008e06cd8432eb558faa4738a092f30b38dd8db3137a5dd3fca57374a790825b
 USER root
-RUN apt-get update && apt-get upgrade -y && apt-get install -y procps && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y procps && rm -rf /var/lib/apt/lists/*
 RUN mkdir -p /opt/conda
 COPY {spec_filename} /tmp/environment.yml
 RUN micromamba install -y -n base -f /tmp/environment.yml && \\
