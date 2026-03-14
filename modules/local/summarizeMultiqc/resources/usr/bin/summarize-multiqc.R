@@ -130,8 +130,7 @@ extract_plot_lines <- function(multiqc_json, plot_id, col_names){
       # jsonlite may simplify pairs into a 3D array when all samples have
       # the same number of data points; use array slicing in that case
       if (is.array(pairs) && length(dim(pairs)) == 3) {
-        p <- pairs[i, , , drop = FALSE]
-        dim(p) <- dim(p)[2:3]
+        p <- pairs[i, , ]
       } else {
         p <- pairs[[i]]
       }
