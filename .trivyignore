@@ -1,6 +1,14 @@
 # Trivy ignore file for known false positives and accepted risks
 # See: https://aquasecurity.github.io/trivy/latest/docs/configuration/filtering/#trivyignore
 
+# zlib/minizip: integer overflow in zipOpenNewFileInZip4_64 — Debian does not build
+# the vulnerable minizip code into its zlib binary packages (Debian status: ignored)
+CVE-2023-45853
+
+# glibc: integer overflow in memalign — Debian bookworm marks as <no-dsa>
+# (minor issue, requires attacker control of size+alignment args)
+CVE-2026-0861
+
 # linux-pam: directory traversal (no Debian fix available as of 2026-03-14)
 CVE-2025-6020
 
