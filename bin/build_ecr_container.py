@@ -82,15 +82,20 @@ def read_container_spec(spec_file: Path) -> dict[str, Any]:
         raise ValueError(msg)
     return spec
 
-def compute_spec_hash(spec: dict[str, Any]) -> str:
+def compute_spec_hash(spec: dict[str, Any], dockerfile_content: str) -> str:
     """
-    Compute a hash of the container specification for tagging.
+    Compute a hash of the container specification and Dockerfile for tagging.
+
+    Includes the Dockerfile content so that template changes (e.g. adding
+    apt-get upgrade) invalidate existing image caches and trigger rebuilds.
+
     Args:
         spec (dict[str, Any]): Container specification
+        dockerfile_content (str): Generated Dockerfile content
     Returns:
-        str: Hash of the container specification
+        str: Hash of the container specification and Dockerfile
     """
-    content_str = json.dumps(spec, sort_keys=True)
+    content_str = json.dumps(spec, sort_keys=True) + dockerfile_content
     hash_obj = hashlib.sha256(content_str.encode())
     return hash_obj.hexdigest()[:16]
 
@@ -189,7 +194,7 @@ def generate_dockerfile(spec_filename: str) -> str:
     dockerfile = f"""
 FROM mambaorg/micromamba:1.5.10
 USER root
-RUN apt-get update && apt-get install -y procps && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get upgrade -y && apt-get install -y procps && rm -rf /var/lib/apt/lists/*
 RUN mkdir -p /opt/conda
 COPY {spec_filename} /tmp/environment.yml
 RUN micromamba install -y -n base -f /tmp/environment.yml && \\
@@ -396,7 +401,8 @@ def build_and_push_container(
     try:
         spec = read_container_spec(spec_file)
         label = spec["label"]
-        spec_hash = compute_spec_hash(spec)
+        dockerfile_content = generate_dockerfile(spec_file.name)
+        spec_hash = compute_spec_hash(spec, dockerfile_content)
         logger.info(f"Container: {label}, Hash: {spec_hash}")
         image_tag, image_tag_latest, registry_url, image_exists = setup_ecr_repository(
             label, prefix, spec_hash

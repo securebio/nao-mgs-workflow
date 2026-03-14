@@ -35,10 +35,12 @@ def scan_container(container: str, output_dir: Path) -> Path:
     container_safe = container.replace("/", "_").replace(":", "_")
     output_file = output_dir / f"{container_safe}.json"
     print(f"Scanning {container}...")
-    subprocess.run(
-        ["trivy", "image", "--scanners", "vuln", "--format", "json", "--output", str(output_file), container],
-        check=True,
-    )
+    ignorefile = Path(__file__).resolve().parent.parent / ".trivyignore"
+    cmd = ["trivy", "image", "--scanners", "vuln", "--format", "json", "--output", str(output_file)]
+    if ignorefile.exists():
+        cmd.extend(["--ignorefile", str(ignorefile)])
+    cmd.append(container)
+    subprocess.run(cmd, check=True)
     return output_file
 
 

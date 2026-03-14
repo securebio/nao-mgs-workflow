@@ -66,9 +66,17 @@ process_n_bases <- function(n_bases_vec){
 
 basic_info_fastqc <- function(fastqc_tsv, multiqc_json, single_end){
   # Read in basic stats from multiqc JSON
+  # MultiQC 1.33+ nests stats under module names: {module: {sample: {stats}}}
   stats_json <- multiqc_json$report_general_stats_data
-  tab_json <- lapply(names(stats_json),
-                     function(x) stats_json[[x]] %>% mutate(file=x)) %>% bind_rows() %>%
+  all_samples <- list()
+  for (module in names(stats_json)) {
+    for (sample in names(stats_json[[module]])) {
+      all_samples[[sample]] <- c(all_samples[[sample]], stats_json[[module]][[sample]])
+    }
+  }
+  tab_json <- lapply(names(all_samples), function(x) {
+    as_tibble(all_samples[[x]]) %>% mutate(file = x)
+  }) %>% bind_rows() %>%
     summarize(percent_gc = mean(percent_gc),
               mean_seq_len = mean(avg_sequence_length),
               n_reads_single = sum(total_sequences),
@@ -97,94 +105,95 @@ basic_info_fastqc <- function(fastqc_tsv, multiqc_json, single_end){
   return(bind_cols(tab_json, tab_tsv))
 }
 
-extract_adapter_data_single <- function(adapter_dataset){
-  # Convert a single JSON adapter dataset into a tibble
-  data <- lapply(1:length(adapter_dataset$name), function(n)
-    adapter_dataset$data[[n]] %>% as.data.frame %>%
-      mutate(filename=adapter_dataset$name[n])) %>%
-    bind_rows() %>% as_tibble %>%
-    rename(position=V1, pc_adapters=V2) %>%
-    separate_wider_delim("filename", " - ", names=c("file", "adapter"))
-  return(data)
+extract_plot_lines <- function(multiqc_json, plot_id, col_names){
+  # Extract line data from a MultiQC 1.33+ plot, returning a tibble.
+  # col_names should be a length-2 vector naming the x and y columns.
+  plot_data <- multiqc_json$report_plot_data[[plot_id]]
+  if (is.null(plot_data)) return(NULL)
+  # jsonlite parses datasets as a data frame; lines is a list column.
+  # Access the first dataset's lines: datasets$lines[[1]]
+  lines <- plot_data$datasets$lines[[1]]
+  if (is.null(lines)) return(NULL)
+  # jsonlite may simplify the lines array into:
+  # (a) a data frame with $name and $pairs columns
+  # (b) a named list with $name (vector) and $pairs (list) — parallel structure
+  # (c) a list of individual line objects (each with $name and $pairs)
+  # Cases (a) and (b) both have lines$name as non-NULL; iterate by index.
+  # Case (c) has lines$name as NULL; iterate over elements.
+  if (!is.null(lines$name)) {
+    n <- if (is.data.frame(lines)) nrow(lines) else length(lines$name)
+    pairs <- lines$pairs
+    data_out <- lapply(1:n, function(i) {
+      # jsonlite may simplify pairs into a 3D array when all samples have
+      # the same number of data points; use array slicing in that case
+      if (is.array(pairs) && length(dim(pairs)) == 3) {
+        p <- pairs[i, , , drop = FALSE]
+        dim(p) <- dim(p)[2:3]
+      } else {
+        p <- pairs[[i]]
+      }
+      as.data.frame(p) %>%
+        setNames(col_names) %>%
+        mutate(file = lines$name[i])
+    }) %>% bind_rows() %>% as_tibble()
+  } else {
+    data_out <- lapply(lines, function(line) {
+      as.data.frame(line$pairs) %>%
+        setNames(col_names) %>%
+        mutate(file = line$name)
+    }) %>% bind_rows() %>% as_tibble()
+  }
+  return(data_out)
 }
 
 extract_adapter_data <- function(multiqc_json){
   # Extract adapter data from multiqc JSON
-  datasets <- multiqc_json$report_plot_data$fastqc_adapter_content_plot$datasets$lines
-  data_out <- lapply(datasets, extract_adapter_data_single) %>% bind_rows()
-  # Make sure all columns are present even if no adapters
-  if (nrow(data_out) == 0){
-      data_out <- data_out %>% mutate(file = character(), position = numeric(),
-                                      adapter = character(), pc_adapters = numeric())
+  data_out <- extract_plot_lines(multiqc_json, "fastqc_adapter_content_plot",
+                                  c("position", "pc_adapters"))
+  if (is.null(data_out) || nrow(data_out) == 0){
+    return(tibble(position = numeric(), pc_adapters = numeric(),
+                  file = character(), adapter = character()))
   }
+  # Adapter name is encoded in the line name as "file - adapter"
+  data_out <- data_out %>%
+    rename(filename = file) %>%
+    separate_wider_delim("filename", " - ", names=c("file", "adapter"))
   return(data_out)
-}
-
-extract_length_data_single <- function(length_dataset){
-  # Convert a single JSON length dataset into a tibble
-  data <- lapply(1:length(length_dataset$name), function(n)
-    length_dataset$data[[n]] %>% as.data.frame %>%
-      mutate(filename=length_dataset$name[n])) %>%
-    bind_rows() %>% as_tibble %>%
-    rename(length=V1, n_sequences=V2) %>%
-    rename(file = filename)
-  return(data)
 }
 
 extract_length_data <- function(multiqc_json){
   # Extract length data from multiqc JSON
-  datasets <- multiqc_json$report_plot_data$fastqc_sequence_length_distribution_plot$datasets$lines
-  if (is.null(datasets) || length(datasets) == 0){
-    datasets <- multiqc_json$report_general_stats_headers$avg_sequence_length$dmax
-    filename <- names(multiqc_json$report_saved_raw_data$multiqc_general_stats)
-    seq_num <- sapply(filename, function(x) multiqc_json$report_saved_raw_data$multiqc_general_stats[[x]]$`FastQC_mqc-generalstats-fastqc-total_sequences`)
-    tab_out <- tibble(length=datasets, n_sequences=seq_num, file=filename)
+  data_out <- extract_plot_lines(multiqc_json, "fastqc_sequence_length_distribution_plot",
+                                  c("length", "n_sequences"))
+  if (is.null(data_out) || nrow(data_out) == 0){
+    # Fallback for uniform read lengths (no length distribution plot)
+    stats <- multiqc_json$report_general_stats_data$fastqc
+    tab_out <- lapply(names(stats), function(x) {
+      tibble(length = stats[[x]]$avg_sequence_length,
+             n_sequences = stats[[x]]$total_sequences,
+             file = x)
+    }) %>% bind_rows()
     return(tab_out)
   }
-  data_out <- lapply(datasets, extract_length_data_single) %>% bind_rows()
   return(data_out)
-}
-
-extract_per_base_quality_single <- function(per_base_quality_dataset){
-  # Convert a single JSON per-base-quality dataset into a tibble
-  data <- lapply(1:length(per_base_quality_dataset$name), function(n)
-    per_base_quality_dataset$data[[n]] %>% as.data.frame %>%
-      mutate(file=per_base_quality_dataset$name[n])) %>%
-    bind_rows() %>% as_tibble %>%
-    rename(position=V1, mean_phred_score=V2)
-  return(data)
 }
 
 extract_per_base_quality <- function(multiqc_json){
   # Extract per-base sequence quality data from multiqc JSON
-  datasets <- multiqc_json$report_plot_data$fastqc_per_base_sequence_quality_plot$datasets$lines
-  data_out <- lapply(datasets, extract_per_base_quality_single) %>% bind_rows()
-  # Make sure all columns are present even if no quality data
-  if (nrow(data_out) == 0){
-    data_out <- data_out %>% mutate(file = character(), position = numeric(),
-                                    mean_phred_score = numeric())
+  data_out <- extract_plot_lines(multiqc_json, "fastqc_per_base_sequence_quality_plot",
+                                  c("position", "mean_phred_score"))
+  if (is.null(data_out) || nrow(data_out) == 0){
+    return(tibble(position = numeric(), mean_phred_score = numeric(), file = character()))
   }
   return(data_out)
 }
 
-extract_per_sequence_quality_single <- function(per_sequence_quality_dataset){
-  # Convert a single JSON per-sequence-quality dataset into a tibble
-  data <- lapply(1:length(per_sequence_quality_dataset$name), function(n)
-    per_sequence_quality_dataset$data[[n]] %>% as.data.frame %>%
-      mutate(file=per_sequence_quality_dataset$name[n])) %>%
-    bind_rows() %>% as_tibble %>%
-    rename(mean_phred_score=V1, n_sequences=V2)
-  return(data)
-}
-
 extract_per_sequence_quality <- function(multiqc_json){
-  # Extract per-base sequence quality data from multiqc JSON
-  datasets <- multiqc_json$report_plot_data$fastqc_per_sequence_quality_scores_plot$datasets$lines
-  data_out <- lapply(datasets, extract_per_sequence_quality_single) %>% bind_rows()
-  # Make sure all columns are present even if no quality data
-  if (nrow(data_out) == 0){
-    data_out <- data_out %>% mutate(file = character(), mean_phred_score = numeric(),
-                                    n_sequences = numeric())
+  # Extract per-sequence quality data from multiqc JSON
+  data_out <- extract_plot_lines(multiqc_json, "fastqc_per_sequence_quality_scores_plot",
+                                  c("mean_phred_score", "n_sequences"))
+  if (is.null(data_out) || nrow(data_out) == 0){
+    return(tibble(mean_phred_score = numeric(), n_sequences = numeric(), file = character()))
   }
   return(data_out)
 }
