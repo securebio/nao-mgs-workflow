@@ -1,6 +1,5 @@
 #!/usr/bin/env Rscript
 
-#library(jsonlite)
 library(jsonlite)
 library(optparse)
 library(tidyverse)
