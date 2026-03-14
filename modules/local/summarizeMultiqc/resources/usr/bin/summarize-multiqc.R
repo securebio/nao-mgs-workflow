@@ -131,11 +131,11 @@ extract_plot_lines <- function(multiqc_json, plot_id, col_names){
       } else {
         p <- pairs[[i]]
       }
-      data.frame(file = lines$name[i], as.data.frame(p) %>% setNames(col_names))
+      as.data.frame(p) %>% setNames(col_names) %>% mutate(file = lines$name[i])
     }) %>% bind_rows() %>% as_tibble()
   } else {
     data_out <- lapply(lines, function(line) {
-      data.frame(file = line$name, as.data.frame(line$pairs) %>% setNames(col_names))
+      as.data.frame(line$pairs) %>% setNames(col_names) %>% mutate(file = line$name)
     }) %>% bind_rows() %>% as_tibble()
   }
   return(data_out)
@@ -171,7 +171,7 @@ extract_length_data <- function(multiqc_json){
     }) %>% bind_rows()
     return(tab_out)
   }
-  return(data_out %>% select(length, n_sequences, file))
+  return(data_out)
 }
 
 extract_per_base_quality <- function(multiqc_json){

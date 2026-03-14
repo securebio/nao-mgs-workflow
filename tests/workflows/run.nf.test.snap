@@ -10,10 +10,10 @@
             "tiny_test_qc_basic_stats_raw.tsv.gz:md5,c12c761a834b794312c590c040b79708",
             "tiny_test_qc_length_stats_cleaned.tsv.gz:md5,405c449a09bee818a90ea1ec71bf2b3d",
             "tiny_test_qc_length_stats_raw.tsv.gz:md5,1f8307bf30d5ba145b1bb7c67b782c1c",
-            "tiny_test_qc_quality_base_stats_cleaned.tsv.gz:md5,d13f508f3c11fe3af4a79add40c4a4b8",
-            "tiny_test_qc_quality_base_stats_raw.tsv.gz:md5,0c6b0ad64a4f905f58065218979b1dbc",
-            "tiny_test_qc_quality_sequence_stats_cleaned.tsv.gz:md5,6c5c99d987d661ce668ee4d8fa17ee36",
-            "tiny_test_qc_quality_sequence_stats_raw.tsv.gz:md5,994ddb27463d58a7bfcde68223b6d87f",
+            "tiny_test_qc_quality_base_stats_cleaned.tsv.gz:md5,ea717f8daeecfe0c25a4321c32838f4e",
+            "tiny_test_qc_quality_base_stats_raw.tsv.gz:md5,942420a24e0b063980cc144d5d52a512",
+            "tiny_test_qc_quality_sequence_stats_cleaned.tsv.gz:md5,3d75e2d8664540c1128e0a4e05e00cda",
+            "tiny_test_qc_quality_sequence_stats_raw.tsv.gz:md5,008202868ef01468cc04cfb6c570d7ca",
             "tiny_test_read_counts.tsv:md5,c00f00d8a47a87731a969636e6043b15",
             "tiny_test_virus_hits.tsv.gz:md5,08ef9710c114d575feb0fe0184fa7e8b"
         ],
@@ -21,7 +21,7 @@
             "nf-test": "0.9.3",
             "nextflow": "25.10.4"
         },
-        "timestamp": "2026-03-14T18:35:04.697889459"
+        "timestamp": "2026-03-14T18:57:19.262741322"
     },
     "run_output_ont": {
         "content": [
@@ -33,10 +33,10 @@
             "tiny_test_qc_basic_stats_raw.tsv.gz:md5,c22e11ca8738b666a8cebc64c350a836",
             "tiny_test_qc_length_stats_cleaned.tsv.gz:md5,3875e7be4512132fd32e88a21340f5e7",
             "tiny_test_qc_length_stats_raw.tsv.gz:md5,3eca948b290c2d35e9bcd1f4f754461a",
-            "tiny_test_qc_quality_base_stats_cleaned.tsv.gz:md5,7b40d36b3d7983bc9f867a5004a838bd",
-            "tiny_test_qc_quality_base_stats_raw.tsv.gz:md5,82314d4285ac69d302466325188ed8fb",
-            "tiny_test_qc_quality_sequence_stats_cleaned.tsv.gz:md5,dc87d2994531a3102c84dcfd818be0ec",
-            "tiny_test_qc_quality_sequence_stats_raw.tsv.gz:md5,ac0c1671f78329c91c6d253fa9b77431",
+            "tiny_test_qc_quality_base_stats_cleaned.tsv.gz:md5,7c4cd6c9cfd08b7e92e4e07abc3f7c96",
+            "tiny_test_qc_quality_base_stats_raw.tsv.gz:md5,89a310a8d87f5b5f8dc255b76e86f6de",
+            "tiny_test_qc_quality_sequence_stats_cleaned.tsv.gz:md5,302d27954ffdb2089e5d0e4e83c3f1ba",
+            "tiny_test_qc_quality_sequence_stats_raw.tsv.gz:md5,cbc4f6e87d79599277eb2baf27db6630",
             "tiny_test_read_counts.tsv:md5,7d44efe7dc906747a465ca537cde237f",
             "tiny_test_virus_hits.tsv.gz:md5,886411a9f46e218a784ccb4145c19a87"
         ],
@@ -44,6 +44,6 @@
             "nf-test": "0.9.3",
             "nextflow": "25.10.4"
         },
-        "timestamp": "2026-03-14T18:36:03.46025925"
+        "timestamp": "2026-03-14T18:58:16.919960139"
     }
 }
