@@ -185,25 +185,26 @@ def setup_ecr_repository(
 # LOCAL DOCKER BUILD FUNCTIONS #
 ################################
 
-def get_base_image() -> str:
+def get_base_image(pyproject_path: Path) -> str:
     """Read the container base image from pyproject.toml.
+    Args:
+        pyproject_path (Path): Path to pyproject.toml
     Returns:
         str: Base image reference (e.g. 'mambaorg/micromamba@sha256:...')
     """
-    pyproject_path = Path(__file__).resolve().parent.parent / "pyproject.toml"
     with open(pyproject_path, "rb") as f:
         data = tomllib.load(f)
     return data["tool"]["mgs-workflow"]["container-base-image"]
 
 
-def generate_dockerfile(spec_filename: str) -> str:
+def generate_dockerfile(spec_filename: str, pyproject_path: Path) -> str:
     """Generate a Dockerfile that uses micromamba with a YAML environment file.
     Args:
         spec_filename (str): Name of the spec file
     Returns:
         str: Dockerfile text
     """
-    base_image = get_base_image()
+    base_image = get_base_image(pyproject_path)
     dockerfile = f"""
 FROM {base_image}
 USER root
@@ -398,6 +399,7 @@ def build_and_push_container(
     spec_file: Path,
     prefix: str,
     config_file: Path,
+    pyproject_path: Path = Path("pyproject.toml"),
 ) -> None:
     """
     Build a container from a spec file and push to ECR Public.
@@ -405,6 +407,7 @@ def build_and_push_container(
         spec_file (Path): Path to container spec YAML file
         prefix (str): Repository name prefix
         config_file (Path): Path to containers.config file
+        pyproject_path (Path): Path to pyproject.toml for base image config
     """
     if not spec_file.exists():
         msg = f"Spec file {spec_file} not found"
@@ -414,7 +417,7 @@ def build_and_push_container(
     try:
         spec = read_container_spec(spec_file)
         label = spec["label"]
-        dockerfile_content = generate_dockerfile(spec_file.name)
+        dockerfile_content = generate_dockerfile(spec_file.name, pyproject_path)
         spec_hash = compute_spec_hash(spec, dockerfile_content)
         logger.info(f"Container: {label}, Hash: {spec_hash}")
         image_tag, image_tag_latest, registry_url, image_exists = setup_ecr_repository(
@@ -457,12 +460,20 @@ def parse_args() -> argparse.Namespace:
         default=Path("configs/containers.config"),
         help="Path to containers.config (default: configs/containers.config)",
     )
+    parser.add_argument(
+        "--pyproject",
+        type=Path,
+        default=Path("pyproject.toml"),
+        help="Path to pyproject.toml for base image config (default: pyproject.toml)",
+    )
     args = parser.parse_args()
     return args
 
 def main() -> None:
     args = parse_args()
-    build_and_push_container(args.spec_file, args.prefix, args.config)
+    build_and_push_container(
+        args.spec_file, args.prefix, args.config, args.pyproject
+    )
 
 if __name__ == "__main__":
     main()
