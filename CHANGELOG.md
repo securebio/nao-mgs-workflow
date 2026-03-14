@@ -3,12 +3,8 @@
 - Updated benchmark CI workflow samplesheet paths to use `metadata/` and `raw/` subdirectories, matching internal standards.
 - Added FASTP JSON output to published RUN outputs for QC (short-read data only; ONT uses FILTLONG).
 - Added `COMBINE_SAMPLE_JSONS` module and `CONCAT_JSON_BY_GROUP` subworkflow for combining per-sample JSON files into per-group outputs.
-- Updated containers to resolve Trivy CRITICAL/HIGH vulnerability scan failures:
-    - Pinned base image to `micromamba@sha256:008e06...` digest for reproducible builds.
-    - Bumped BLAST 2.16.0→2.17.0, awscli→2.34.9, curl→8.19.0, MultiQC→1.33, urllib3→2.6.3.
-    - Added `.trivyignore` for three unfixable CVEs and updated the scan script to use it.
-    - Included Dockerfile content in container hash so template changes trigger rebuilds.
-    - Rewrote `summarize-multiqc.R` for MultiQC 1.33 JSON format changes. QC output files now include per-base and per-sequence quality data that MultiQC 1.21 omitted from the JSON.
+- Updated containers to resolve Trivy CRITICAL/HIGH vulnerability scan failures.
+- Updated `summarize-multiqc.R` to correctly handle changes in MultiQC JSON format in new version.
 
 # v3.2.0.2
 
