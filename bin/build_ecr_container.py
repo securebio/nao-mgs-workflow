@@ -18,6 +18,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import tomllib
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -184,6 +185,17 @@ def setup_ecr_repository(
 # LOCAL DOCKER BUILD FUNCTIONS #
 ################################
 
+def get_base_image() -> str:
+    """Read the container base image from pyproject.toml.
+    Returns:
+        str: Base image reference (e.g. 'mambaorg/micromamba@sha256:...')
+    """
+    pyproject_path = Path(__file__).resolve().parent.parent / "pyproject.toml"
+    with open(pyproject_path, "rb") as f:
+        data = tomllib.load(f)
+    return data["tool"]["mgs-workflow"]["container-base-image"]
+
+
 def generate_dockerfile(spec_filename: str) -> str:
     """Generate a Dockerfile that uses micromamba with a YAML environment file.
     Args:
@@ -191,8 +203,9 @@ def generate_dockerfile(spec_filename: str) -> str:
     Returns:
         str: Dockerfile text
     """
+    base_image = get_base_image()
     dockerfile = f"""
-FROM mambaorg/micromamba@sha256:3955d0f1987accbcc382c37758a3d18c022eeed3e9f4a53f8f1e04feb5f576f8
+FROM {base_image}
 USER root
 RUN apt-get update && apt-get install -y procps && rm -rf /var/lib/apt/lists/*
 RUN mkdir -p /opt/conda
