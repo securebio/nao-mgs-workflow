@@ -144,63 +144,51 @@ extract_plot_lines <- function(multiqc_json, plot_id, col_names){
   return(data_out)
 }
 
+extract_plot_or_empty <- function(multiqc_json, plot_id, col_names) {
+  # Extract plot data, returning a typed empty tibble if no data is found.
+  data_out <- extract_plot_lines(multiqc_json, plot_id, col_names)
+  if (!is.null(data_out) && nrow(data_out) > 0) return(data_out)
+  empty <- as_tibble(setNames(
+    lapply(col_names, function(x) numeric()), col_names
+  ))
+  empty$file <- character()
+  return(empty)
+}
+
 extract_adapter_data <- function(multiqc_json){
   # Extract adapter data from multiqc JSON
-  data_out <- extract_plot_lines(multiqc_json, "fastqc_adapter_content_plot",
-                                  c("position", "pc_adapters"))
-  if (is.null(data_out) || nrow(data_out) == 0){
+  data_out <- extract_plot_or_empty(multiqc_json, "fastqc_adapter_content_plot",
+                                     c("position", "pc_adapters"))
+  if (nrow(data_out) == 0){
     return(tibble(file = character(), position = numeric(),
                   adapter = character(), pc_adapters = numeric()))
   }
   # Adapter name is encoded in the line name as "file - adapter"
-  data_out <- data_out %>%
+  data_out %>%
     rename(filename = file) %>%
     separate_wider_delim("filename", " - ", names=c("file", "adapter")) %>%
     select(file, position, adapter, pc_adapters)
-  return(data_out)
 }
 
 extract_length_data <- function(multiqc_json){
   # Extract length data from multiqc JSON
-  data_out <- extract_plot_lines(multiqc_json, "fastqc_sequence_length_distribution_plot",
-                                  c("length", "n_sequences"))
-  if (is.null(data_out) || nrow(data_out) == 0){
-    # Fallback for uniform read lengths (no length distribution plot)
-    stats <- multiqc_json$report_general_stats_data$fastqc
-    if (is.null(stats)){
-      warning("extract_length_data: no length distribution plot found and ",
-              "'fastqc' key missing from report_general_stats_data; ",
-              "returning empty result")
-      return(tibble(length = numeric(), n_sequences = numeric(), file = character()))
-    }
-    tab_out <- lapply(names(stats), function(x) {
-      tibble(length = stats[[x]]$avg_sequence_length,
-             n_sequences = stats[[x]]$total_sequences,
-             file = x)
-    }) %>% bind_rows()
-    return(tab_out)
+  data_out <- extract_plot_or_empty(multiqc_json,
+                                     "fastqc_sequence_length_distribution_plot",
+                                     c("length", "n_sequences"))
+  if (nrow(data_out) > 0) return(data_out)
+  # Fallback for uniform read lengths (no length distribution plot)
+  stats <- multiqc_json$report_general_stats_data$fastqc
+  if (is.null(stats)){
+    warning("extract_length_data: no length distribution plot found and ",
+            "'fastqc' key missing from report_general_stats_data; ",
+            "returning empty result")
+    return(tibble(length = numeric(), n_sequences = numeric(), file = character()))
   }
-  return(data_out)
-}
-
-extract_per_base_quality <- function(multiqc_json){
-  # Extract per-base sequence quality data from multiqc JSON
-  data_out <- extract_plot_lines(multiqc_json, "fastqc_per_base_sequence_quality_plot",
-                                  c("position", "mean_phred_score"))
-  if (is.null(data_out) || nrow(data_out) == 0){
-    return(tibble(position = numeric(), mean_phred_score = numeric(), file = character()))
-  }
-  return(data_out)
-}
-
-extract_per_sequence_quality <- function(multiqc_json){
-  # Extract per-sequence quality data from multiqc JSON
-  data_out <- extract_plot_lines(multiqc_json, "fastqc_per_sequence_quality_scores_plot",
-                                  c("mean_phred_score", "n_sequences"))
-  if (is.null(data_out) || nrow(data_out) == 0){
-    return(tibble(mean_phred_score = numeric(), n_sequences = numeric(), file = character()))
-  }
-  return(data_out)
+  lapply(names(stats), function(x) {
+    tibble(length = stats[[x]]$avg_sequence_length,
+           n_sequences = stats[[x]]$total_sequences,
+           file = x)
+  }) %>% bind_rows()
 }
 
 #============#
@@ -217,9 +205,11 @@ fastqc_tsv <- readr::read_tsv(fastqc_tsv_path, show_col_types = FALSE)
 add_info <- function(tab) mutate(tab, stage=opt$stage, sample=opt$sample)
 basic_info <- basic_info_fastqc(fastqc_tsv, multiqc_json, single_end) %>% add_info
 adapters <- extract_adapter_data(multiqc_json) %>% add_info
-per_base_quality <- extract_per_base_quality(multiqc_json) %>% add_info
+per_base_quality <- extract_plot_or_empty(multiqc_json,
+  "fastqc_per_base_sequence_quality_plot", c("position", "mean_phred_score")) %>% add_info
 lengths <- extract_length_data(multiqc_json) %>% add_info
-per_sequence_quality <- extract_per_sequence_quality(multiqc_json) %>% add_info
+per_sequence_quality <- extract_plot_or_empty(multiqc_json,
+  "fastqc_per_sequence_quality_scores_plot", c("mean_phred_score", "n_sequences")) %>% add_info
 
 # Write tables
 write_tsv(basic_info, out_path_basic)
