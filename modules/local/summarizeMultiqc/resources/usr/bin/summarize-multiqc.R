@@ -167,6 +167,12 @@ extract_length_data <- function(multiqc_json){
   if (is.null(data_out) || nrow(data_out) == 0){
     # Fallback for uniform read lengths (no length distribution plot)
     stats <- multiqc_json$report_general_stats_data$fastqc
+    if (is.null(stats)){
+      warning("extract_length_data: no length distribution plot found and ",
+              "'fastqc' key missing from report_general_stats_data; ",
+              "returning empty result")
+      return(tibble(length = numeric(), n_sequences = numeric(), file = character()))
+    }
     tab_out <- lapply(names(stats), function(x) {
       tibble(length = stats[[x]]$avg_sequence_length,
              n_sequences = stats[[x]]$total_sequences,
