@@ -111,6 +111,10 @@ extract_plot_lines <- function(multiqc_json, plot_id, col_names){
   if (is.null(plot_data)) return(NULL)
   # jsonlite parses datasets as a data frame; lines is a list column.
   # Access the first dataset's lines: datasets$lines[[1]]
+  n_datasets <- if (is.data.frame(plot_data$datasets)) nrow(plot_data$datasets) else length(plot_data$datasets$lines)
+  if (n_datasets > 1) {
+    warning(sprintf("Plot '%s' has %d datasets; only the first is used", plot_id, n_datasets))
+  }
   lines <- plot_data$datasets$lines[[1]]
   if (is.null(lines)) return(NULL)
   # jsonlite may simplify the lines array into:
