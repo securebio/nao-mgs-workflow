@@ -1,10 +1,14 @@
-# v3.2.0.3-dev
+# v3.2.1.0-dev
 
 - Updated benchmark CI workflow samplesheet paths to use `metadata/` and `raw/` subdirectories, matching internal standards.
 - Added FASTP JSON output to published RUN outputs for QC (short-read data only; ONT uses FILTLONG).
 - Added `COMBINE_SAMPLE_JSONS` module and `CONCAT_JSON_BY_GROUP` subworkflow for combining per-sample JSON files into per-group outputs.
-- Rebuilt all containers with Debian security patches (`apt-get upgrade`) and bumped vulnerable dependencies (awscli, curl, multiqc 1.33, ncbi-genome-download, blast 2.17.0) to fix Trivy CRITICAL/HIGH findings. Updated build system to include Dockerfile content in container hash computation. Added `.trivyignore` for false positives (zlib minizip not built in Debian, glibc no-dsa) and unfixable compiled-binary CVEs (Polars/quinn-proto). Updated Trivy scan script to use the ignorefile.
-- Updated `summarize-multiqc.R` for MultiQC 1.33 JSON format changes: `report_general_stats_data` is now nested by module, plot `datasets` use `pairs` instead of `data`, and the `datasets` array is wrapped differently by jsonlite.
+- Updated containers to resolve Trivy CRITICAL/HIGH vulnerability scan failures:
+    - Pinned base image to `micromamba@sha256:008e06...` digest for reproducible builds.
+    - Bumped BLAST 2.16.0→2.17.0, awscli→2.34.9, curl→8.19.0, MultiQC→1.33, urllib3→2.6.3.
+    - Added `.trivyignore` for three unfixable CVEs and updated the scan script to use it.
+    - Included Dockerfile content in container hash so template changes trigger rebuilds.
+    - Rewrote `summarize-multiqc.R` for MultiQC 1.33 JSON format changes. QC output files now include per-base and per-sequence quality data that MultiQC 1.21 omitted from the JSON.
 
 # v3.2.0.2
 
