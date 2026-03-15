@@ -129,10 +129,14 @@ extract_plot_lines <- function(multiqc_json, plot_id, col_names){
     data_out <- lapply(1:n, function(i) {
       # jsonlite may simplify pairs into a 3D array when all samples have
       # the same number of data points; use array slicing in that case.
-      # With a single sample it may further simplify to a 2D matrix.
+      # With a single sample it may further simplify to a 2D matrix
+      # (rows = data points, cols = x/y), so n == 1 and we slice row i.
       if (is.array(pairs) && length(dim(pairs)) == 3) {
         p <- pairs[i, , ]
       } else if (is.matrix(pairs)) {
+        # Single-sample case: pairs is samples x points x 2 collapsed to
+        # points x 2 matrix; i is always 1 here. drop=FALSE keeps it as a
+        # one-row matrix so as.data.frame produces the expected two columns.
         p <- pairs[i, , drop = FALSE]
       } else {
         p <- pairs[[i]]
