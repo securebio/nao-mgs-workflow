@@ -4,7 +4,7 @@
 - Added FASTP JSON output to published RUN outputs for QC (short-read data only; ONT uses FILTLONG).
 - Added `COMBINE_SAMPLE_JSONS` module and `CONCAT_JSON_BY_GROUP` subworkflow for combining per-sample JSON files into per-group outputs.
 - Updated containers to resolve Trivy CRITICAL/HIGH vulnerability scan failures.
-- Updated `summarize-multiqc.R` to correctly handle changes in MultiQC JSON format in new version.
+- Updated `summarize-multiqc.R` to correctly handle changes in MultiQC JSON format in new version. Note: the MultiQC 1.21→1.33 upgrade changes read-length binning (e.g. bins shift from 224/274/324 to 200/250/300) and slightly alters `mean_seq_len` values; these are upstream MultiQC behavioral changes, not pipeline logic changes.
 
 # v3.2.0.2
 

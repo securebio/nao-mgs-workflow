@@ -201,6 +201,7 @@ def generate_dockerfile(spec_filename: str, pyproject_path: Path) -> str:
     """Generate a Dockerfile that uses micromamba with a YAML environment file.
     Args:
         spec_filename (str): Name of the spec file
+        pyproject_path (Path): Path to pyproject.toml for base image config
     Returns:
         str: Dockerfile text
     """
@@ -221,17 +222,19 @@ def build_docker_image_from_spec(
     spec_file: Path,
     image_tag: str,
     build_dir: Path,
+    pyproject_path: Path = Path("pyproject.toml"),
 ) -> None:
     """Build a Docker image from the spec file in a given directory.
     Args:
         spec_file (Path): Path to container spec YAML file
         image_tag (str): Image tag
         build_dir (Path): Path to build directory
+        pyproject_path (Path): Path to pyproject.toml for base image config
     """
     spec_filename = spec_file.name
     shutil.copy(spec_file, build_dir / spec_filename)
     dockerfile_path = build_dir / "Dockerfile"
-    dockerfile_path.write_text(generate_dockerfile(spec_filename))
+    dockerfile_path.write_text(generate_dockerfile(spec_filename, pyproject_path))
     logger.info(f"Building Docker image: {image_tag}")
     try:
         subprocess.run(
@@ -265,6 +268,7 @@ def tag_docker_image(source_tag: str, target_tag: str) -> None:
 def build_container(spec_file: Path,
     image_tag: str,
     image_tag_latest: str,
+    pyproject_path: Path = Path("pyproject.toml"),
 ) -> None:
     """
     Build a Docker container from a spec file.
@@ -272,12 +276,13 @@ def build_container(spec_file: Path,
         spec_file: Path to container spec YAML file
         image_tag: Primary image tag (with hash)
         image_tag_latest: Latest tag for the image
+        pyproject_path: Path to pyproject.toml for base image config
     """
     logger.info("Building container locally")
     with tempfile.TemporaryDirectory() as tmpdir:
         build_dir = Path(tmpdir)
         try:
-            build_docker_image_from_spec(spec_file, image_tag, build_dir)
+            build_docker_image_from_spec(spec_file, image_tag, build_dir, pyproject_path)
             tag_docker_image(image_tag, image_tag_latest)
         except Exception as e:
             msg = f"Error building container: {e}"
@@ -431,7 +436,7 @@ def build_and_push_container(
             if not config_updated:
                 logger.info("Nothing to do - image exists and config is up to date")
         else:
-            build_container(spec_file, image_tag, image_tag_latest)
+            build_container(spec_file, image_tag, image_tag_latest, pyproject_path)
             push_to_ecr(image_tag, image_tag_latest, registry_url)
             update_containers_config(config_file, label, image_tag)
             logger.info(f"Successfully built and pushed: {label}")
