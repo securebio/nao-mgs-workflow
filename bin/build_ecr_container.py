@@ -81,7 +81,7 @@ def read_container_spec(spec_file: Path) -> dict[str, Any]:
         msg = f"Container spec missing required fields: {', '.join(missing)}"
         logger.error(msg)
         raise ValueError(msg)
-    return spec
+    return spec  # type: ignore[no-any-return]
 
 def compute_spec_hash(spec: dict[str, Any], dockerfile_content: str) -> str:
     """
@@ -194,7 +194,7 @@ def get_base_image(pyproject_path: Path) -> str:
     """
     with open(pyproject_path, "rb") as f:
         data = tomllib.load(f)
-    return data["tool"]["mgs-workflow"]["container-base-image"]
+    return str(data["tool"]["mgs-workflow"]["container-base-image"])
 
 
 def generate_dockerfile(spec_filename: str, pyproject_path: Path) -> str:

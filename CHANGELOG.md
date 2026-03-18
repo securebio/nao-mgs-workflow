@@ -2,6 +2,7 @@
 
 - Updated benchmark CI workflow samplesheet paths to use `metadata/` and `raw/` subdirectories, matching internal standards.
 - Added FASTP JSON output to published RUN outputs for QC (short-read data only; ONT uses FILTLONG).
+- Added mypy type-checking CI and type annotations to all Python scripts in `bin/` and `modules/local/`, with `pandas-stubs` and `types-PyYAML` stub dependencies.
 - Added `COMBINE_SAMPLE_JSONS` module and `CONCAT_JSON_BY_GROUP` subworkflow for combining per-sample JSON files into per-group outputs.
 - Updated containers to resolve Trivy CRITICAL/HIGH vulnerability scan failures.
 - Updated `summarize-multiqc.R` to correctly handle changes in MultiQC JSON format in new version. Note: the MultiQC 1.21→1.33 upgrade changes read-length binning (e.g. bins shift from 224/274/324 to 200/250/300) and slightly alters `mean_seq_len` values; these are upstream MultiQC behavioral changes, not pipeline logic changes.

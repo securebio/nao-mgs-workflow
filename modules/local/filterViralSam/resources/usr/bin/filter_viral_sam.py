@@ -14,12 +14,10 @@ add missing mates for unpaired reads.
 import math
 import logging
 import gzip
-import bz2
 import argparse
-import datetime
 from datetime import datetime, timezone
 from dataclasses import dataclass
-from typing import Dict, Optional, Tuple, Iterator
+from typing import IO, Dict, Optional, Tuple, Iterator, cast
 from collections import defaultdict
 from Bio import SeqIO
 
@@ -33,7 +31,7 @@ class UTCFormatter(logging.Formatter):
         Formatted log timestamps in UTC timezone
     """
 
-    def formatTime(self, record, datefmt=None):
+    def formatTime(self, record: logging.LogRecord, datefmt: str | None = None) -> str:
         """
         Format log timestamps in UTC timezone.
 
@@ -88,10 +86,10 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def open_by_suffix(filename: str, mode: str = "r"):
+def open_by_suffix(filename: str, mode: str = "r") -> IO[str]:
     """
     Parse the suffix of a filename to determine the right open method
-    to use, then open the file. Can handle .gz, .bz2, and uncompressed files.
+    to use, then open the file. Can handle .gz and uncompressed files.
 
     Args:
         filename (str): Path to file to open
@@ -101,9 +99,7 @@ def open_by_suffix(filename: str, mode: str = "r"):
         File handle appropriate for the file compression type
     """
     if filename.endswith(".gz"):
-        return gzip.open(filename, mode + "t")
-    elif filename.endswith(".bz2"):
-        return bz2.BZ2File(filename, mode)
+        return cast(IO[str], gzip.open(filename, mode + "t"))
     else:
         return open(filename, mode)
 

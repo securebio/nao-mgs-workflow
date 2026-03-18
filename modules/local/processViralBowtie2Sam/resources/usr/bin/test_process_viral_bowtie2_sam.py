@@ -1,5 +1,7 @@
 #!/usr/bin/env python
 
+from pathlib import Path
+
 import pytest
 import gzip
 
@@ -9,7 +11,7 @@ import process_viral_bowtie2_sam
 class TestProcessViralBowtie2Sam:
     """Test the process_viral_bowtie2_sam module."""
 
-    def test_empty_file_produces_header_only_output(self, tmp_path):
+    def test_empty_file_produces_header_only_output(self, tmp_path: Path) -> None:
         """Test that empty SAM file produces output with only header."""
         # Create empty SAM input file (gzipped)
         sam_input = tmp_path / "empty.sam.gz"

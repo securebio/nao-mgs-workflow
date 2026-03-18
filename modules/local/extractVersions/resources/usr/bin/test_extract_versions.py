@@ -1,5 +1,7 @@
 #!/usr/bin/env python
 
+from typing import Any
+
 import pytest
 
 import extract_versions
@@ -28,7 +30,7 @@ class TestGetNestedValue:
             "single_key",
         ],
     )
-    def test_get_nested_value(self, data, keys, default, expected):
+    def test_get_nested_value(self, data: dict[str, Any], keys: tuple[str, ...], default: Any, expected: Any) -> None:
         """Test retrieving nested values with various inputs."""
         assert get_nested_value(data, *keys, default=default) == expected
 
@@ -82,7 +84,7 @@ class TestExtractVersionInfo:
             "prerelease_tag",
         ],
     )
-    def test_extract_version_info(self, toml_data, expected):
+    def test_extract_version_info(self, toml_data: dict[str, Any], expected: VersionInfo) -> None:
         """Test extracting version info from various TOML structures."""
         assert extract_version_info(toml_data) == expected
 
@@ -94,7 +96,7 @@ class TestExtractVersionInfo:
         ],
         ids=["missing_version", "missing_project"],
     )
-    def test_extract_version_info_raises(self, toml_data):
+    def test_extract_version_info_raises(self, toml_data: dict[str, Any]) -> None:
         """Test that missing required fields raise KeyError."""
         with pytest.raises(KeyError):
             extract_version_info(toml_data)
@@ -120,8 +122,8 @@ class TestExtractVersionsIntegration:
         ids=["with_optional_fields", "without_optional_fields"],
     )
     def test_extract_versions_output(
-        self, temp_file_helper, capsys, pipeline_toml, index_toml, expected_lines
-    ):
+        self, temp_file_helper: Any, capsys: pytest.CaptureFixture[str], pipeline_toml: str, index_toml: str, expected_lines: list[str]
+    ) -> None:
         """Test extracting versions from TOML files."""
         pipeline_file = temp_file_helper.create_file("pipeline.toml", pipeline_toml)
         index_file = temp_file_helper.create_file("index.toml", index_toml)

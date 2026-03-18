@@ -6,14 +6,13 @@
 
 # Import libraries
 import pandas as pd
-from typing import Dict, Set, List
 import argparse
 import logging
 from datetime import datetime, timezone
 
 # Configure logging
 class UTCFormatter(logging.Formatter):
-    def formatTime(self, record, datefmt=None):
+    def formatTime(self, record: logging.LogRecord, datefmt: str | None = None) -> str:
         dt = datetime.fromtimestamp(record.created, timezone.utc)
         return dt.strftime('%Y-%m-%d %H:%M:%S UTC')
 logging.basicConfig(level=logging.INFO)
@@ -28,7 +27,7 @@ logger.addHandler(handler)
 # Main function
 #=======================================================================
 
-def main():
+def main() -> None:
     logger.info("Initializing script.")
     # Define argument parsing
     parser = argparse.ArgumentParser(description="Filter a ncbi-genome-download viral metadata TSV by host infection status.")

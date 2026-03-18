@@ -6,12 +6,12 @@ Extract version information from pyproject.toml files and output as environment 
 
 import argparse
 from dataclasses import dataclass
-from typing import Optional
+from typing import Any, Optional
 
 try:
     import tomllib
 except ImportError:
-    import tomli as tomllib
+    import tomli as tomllib  # type: ignore[no-redef]
 
 
 @dataclass
@@ -39,13 +39,13 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def read_toml(path: str) -> dict:
+def read_toml(path: str) -> dict[str, Any]:
     """Read and parse a TOML file."""
     with open(path, "rb") as f:
         return tomllib.load(f)
 
 
-def get_nested_value(data: dict, *keys, default=None):
+def get_nested_value(data: dict[str, Any], *keys: str, default: Any = None) -> Any:
     """
     Safely get a nested value from a dictionary.
 
@@ -57,7 +57,7 @@ def get_nested_value(data: dict, *keys, default=None):
     Returns:
         The value at the key path, or default if not found
     """
-    current = data
+    current: Any = data
     for key in keys:
         if not isinstance(current, dict):
             return default
@@ -67,7 +67,7 @@ def get_nested_value(data: dict, *keys, default=None):
     return current
 
 
-def extract_version_info(toml_data: dict) -> VersionInfo:
+def extract_version_info(toml_data: dict[str, Any]) -> VersionInfo:
     """
     Extract version information from parsed TOML data.
 

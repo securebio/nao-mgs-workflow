@@ -4,13 +4,15 @@ import gzip
 import os
 import shutil
 import tempfile
+from collections.abc import Generator
 from pathlib import Path
+from typing import Any
 
 import pytest
 
 
 @pytest.fixture
-def tsv_factory(tmp_path):
+def tsv_factory(tmp_path: Path) -> Any:
     """Factory fixture for TSV file operations.
 
     Provides methods to create and read both plain and gzipped TSV files.
@@ -24,32 +26,32 @@ def tsv_factory(tmp_path):
     """
 
     class TSVFactory:
-        def __init__(self, tmp_path):
+        def __init__(self, tmp_path: Path) -> None:
             self.tmp_path = tmp_path
 
-        def create_plain(self, filename, content):
+        def create_plain(self, filename: str, content: str) -> str:
             """Create a plain TSV file with the given content."""
             file_path = self.tmp_path / filename
             file_path.write_text(content)
             return str(file_path)
 
-        def create_gzip(self, filename, content):
+        def create_gzip(self, filename: str, content: str) -> str:
             """Create a gzipped TSV file with the given content."""
             file_path = self.tmp_path / filename
             with gzip.open(file_path, "wt") as f:
                 f.write(content)
             return str(file_path)
 
-        def read_plain(self, filepath):
+        def read_plain(self, filepath: str) -> str:
             """Read content from a plain TSV file."""
             return Path(filepath).read_text()
 
-        def read_gzip(self, filepath):
+        def read_gzip(self, filepath: str) -> str:
             """Read content from a gzipped TSV file."""
             with gzip.open(filepath, "rt") as f:
                 return f.read()
 
-        def get_path(self, filename):
+        def get_path(self, filename: str) -> str:
             """Get the full path for a file in the temp directory."""
             return str(self.tmp_path / filename)
 
@@ -57,7 +59,7 @@ def tsv_factory(tmp_path):
 
 
 @pytest.fixture
-def common_tsv_data():
+def common_tsv_data() -> dict[str, str]:
     """Common TSV test datasets used across multiple test modules.
 
     Provides standard test data patterns like empty files, header-only files,
@@ -76,7 +78,7 @@ def common_tsv_data():
 
 
 @pytest.fixture
-def temp_file_helper():
+def temp_file_helper() -> Generator[Any, None, None]:
     """Helper for temporary file operations with automatic cleanup.
 
     Provides methods for creating TSV files from headers/rows and managing
@@ -93,10 +95,10 @@ def temp_file_helper():
     """
 
     class TempFileHelper:
-        def __init__(self):
+        def __init__(self) -> None:
             self.temp_dir = tempfile.mkdtemp()
 
-        def create_tsv(self, filename, header, rows):
+        def create_tsv(self, filename: str, header: list[str], rows: list[list[str]]) -> str:
             """Create a TSV file from header and rows."""
             filepath = os.path.join(self.temp_dir, filename)
             with open(filepath, "w") as f:
@@ -105,28 +107,28 @@ def temp_file_helper():
                     f.write("\t".join(row) + "\n")
             return filepath
 
-        def create_file(self, filename, content):
+        def create_file(self, filename: str, content: str) -> str:
             """Create a file with the given content."""
             filepath = os.path.join(self.temp_dir, filename)
             with open(filepath, "w") as f:
                 f.write(content)
             return filepath
 
-        def read_file(self, filepath):
+        def read_file(self, filepath: str) -> str:
             """Read content from a file."""
             with open(filepath, "r") as f:
                 return f.read()
 
-        def read_tsv_lines(self, filepath):
+        def read_tsv_lines(self, filepath: str) -> list[str]:
             """Read TSV file and return lines as a list."""
             with open(filepath, "r") as f:
                 return [line.strip() for line in f if line.strip()]
 
-        def get_path(self, filename):
+        def get_path(self, filename: str) -> str:
             """Get the full path for a file in the temp directory."""
             return os.path.join(self.temp_dir, filename)
 
-        def cleanup(self):
+        def cleanup(self) -> None:
             """Clean up all temporary files."""
             if os.path.exists(self.temp_dir):
                 shutil.rmtree(self.temp_dir)
