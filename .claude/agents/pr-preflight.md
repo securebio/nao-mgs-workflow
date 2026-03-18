@@ -1,7 +1,7 @@
 ---
 name: pr-preflight
 description: Run pre-push PR checklist (read-only diagnostics)
-model: sonnet
+model: opus
 tools: Bash, Read, Grep, Glob
 ---
 

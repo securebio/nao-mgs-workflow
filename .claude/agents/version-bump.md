@@ -1,7 +1,7 @@
 ---
 name: version-bump
 description: Automate version bump in pyproject.toml and CHANGELOG.md entry
-model: sonnet
+model: opus
 tools: Bash, Read, Edit, Write, Grep, Glob
 ---
 
