@@ -2,7 +2,8 @@
 
 - Updated benchmark CI workflow samplesheet paths to use `metadata/` and `raw/` subdirectories, matching internal standards.
 - Added FASTP JSON output to published RUN outputs for QC (short-read data only; ONT uses FILTLONG).
-- Migrated all 57 Nextflow modules from deprecated `shell:` blocks (`!{var}` interpolation) to `script:` blocks (`${var}` interpolation). This is a pure refactoring with no behavior change; `shell:` is deprecated in modern Nextflow.
+- Migrated all 57 Nextflow modules from deprecated `shell:` blocks (`!{var}` interpolation) to `script:` blocks (`${var}` interpolation); `shell:` is deprecated in modern Nextflow.
+- Fixed two escaping bugs caught during the shell-to-script migration: `$RANDOM` in `subsetFastn` was being expanded by the shell instead of Bash at runtime, and the awk debug message in `extractViralHitsToFastq` was printing a field value instead of the numeric column index.
 
 # v3.2.0.2
 
