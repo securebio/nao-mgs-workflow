@@ -9,10 +9,10 @@ process HEAD_TSV {
     output:
         tuple val(sample), path("head_${tsv}"), emit: output
         tuple val(sample), path("input_${tsv}"), emit: input
-    shell:
-        '''
-        head_tsv.py !{tsv} !{headers} head_!{tsv}
+    script:
+        """
+        head_tsv.py ${tsv} ${headers} head_${tsv}
         # Link input to output for testing
-        ln -s !{tsv} input_!{tsv}
-        '''
+        ln -s ${tsv} input_${tsv}
+        """
 }

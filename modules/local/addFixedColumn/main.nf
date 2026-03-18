@@ -12,10 +12,10 @@ process ADD_FIXED_COLUMN {
     output:
         tuple val(sample), path("labeled_${label}_${tsv}"), emit: output
         tuple val(sample), path("input_${tsv}"), emit: input
-    shell:
-        '''
-        add_fixed_column.py !{tsv} !{column} !{value} labeled_!{label}_!{tsv}
+    script:
+        """
+        add_fixed_column.py ${tsv} ${column} ${value} labeled_${label}_${tsv}
         # Link input files for testing
-        ln -s !{tsv} input_!{tsv}
-        '''
+        ln -s ${tsv} input_${tsv}
+        """
 }

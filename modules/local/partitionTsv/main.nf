@@ -8,9 +8,9 @@ process PARTITION_TSV {
     output:
         tuple val(sample), path("partition_*_${tsv}"), emit: output, optional: true
         tuple val(sample), path("input_${tsv}"), emit: input
-    shell:
-        '''
-        partition_tsv.py -i !{tsv} -c !{column}
-        ln -s !{tsv} input_!{tsv} # Link input to output for testing
-        '''
+    script:
+        """
+        partition_tsv.py -i ${tsv} -c ${column}
+        ln -s ${tsv} input_${tsv} # Link input to output for testing
+        """
 }

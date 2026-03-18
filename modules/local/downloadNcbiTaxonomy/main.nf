@@ -6,9 +6,9 @@ process DOWNLOAD_NCBI_TAXONOMY {
         val(taxonomy_url)
     output:
         path("taxonomy.zip")
-    shell:
-        '''
-        path=taxonomy.zip
-        wget !{taxonomy_url} -O ${path}
-        '''
+    script:
+        def path = "taxonomy.zip"
+        """
+        wget ${taxonomy_url} -O ${path}
+        """
 }

@@ -7,8 +7,8 @@ process WGET {
         val(name)
     output:
         path("${name}"), emit: file
-    shell:
-        '''
-        wget "!{url}" -O !{name}
-        '''
+    script:
+        """
+        wget "${url}" -O ${name}
+        """
 }
