@@ -6,6 +6,8 @@
 - Updated containers to resolve Trivy CRITICAL/HIGH vulnerability scan failures.
 - Updated `summarize-multiqc.R` to correctly handle changes in MultiQC JSON format in new version. Note: the MultiQC 1.21→1.33 upgrade changes read-length binning (e.g. bins shift from 224/274/324 to 200/250/300) and slightly alters `mean_seq_len` values; these are upstream MultiQC behavioral changes, not pipeline logic changes.
 - Fixed O(N²) combinatorial explosion in `DISCOVER_RUN_OUTPUT` that caused OOM failures for large deliveries (~2,273 samples). Replaced glob-then-filter approach with direct path construction from known (sample, suffix) pairs, reducing channel items from O(files × samples) to O(samples × suffixes).
+- Migrated all 57 Nextflow modules from deprecated `shell:` blocks (`!{var}` interpolation) to `script:` blocks (`${var}` interpolation); `shell:` is deprecated in modern Nextflow.
+- Fixed two escaping bugs caught during the shell-to-script migration: `$RANDOM` in `subsetFastn` was being expanded by the shell instead of Bash at runtime, and the awk debug message in `extractViralHitsToFastq` was printing a field value instead of the numeric column index.
 
 # v3.2.0.2
 
