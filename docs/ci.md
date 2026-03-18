@@ -73,9 +73,6 @@ Runs Rust unit tests and builds the `nao-rust-tools` container when Rust source 
 
 Scans all containers defined in `configs/containers.config` for security vulnerabilities using [Trivy](https://trivy.dev/).
 
-> [!NOTE]
-> As of 2026-01-28, the Trivy test is expected to fail and is not required to pass to merge PRs.
-
 ### Version and changelog checks
 
 These checks run unconditionally (no path filtering) to ensure version consistency across the codebase.
