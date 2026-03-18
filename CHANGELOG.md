@@ -1,5 +1,7 @@
 # v3.2.1.0-dev
 
+- Add custom Claude Code subagent definitions (`.claude/agents/`) and update `.gitignore` to track them.
+
 - Updated benchmark CI workflow samplesheet paths to use `metadata/` and `raw/` subdirectories, matching internal standards.
 - Added FASTP JSON output to published RUN outputs for QC (short-read data only; ONT uses FILTLONG).
 - Added mypy type-checking CI and type annotations to all Python scripts in `bin/` and `modules/local/`, with `pandas-stubs` and `types-PyYAML` stub dependencies.
