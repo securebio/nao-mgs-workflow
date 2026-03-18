@@ -1,5 +1,7 @@
 #!/usr/bin/env python
 
+from typing import Any
+
 import pytest
 
 import select_tsv_columns
@@ -8,7 +10,7 @@ import select_tsv_columns
 class TestGetHeaderIndex:
     """Test the get_header_index function."""
 
-    def test_field_found(self):
+    def test_field_found(self) -> None:
         """Test finding a field in headers."""
         headers = ["col1", "col2", "col3"]
         index = select_tsv_columns.get_header_index(headers, "col2", "keep")
@@ -19,7 +21,7 @@ class TestGetHeaderIndex:
         [("keep", ValueError), ("drop", type(None))],
         ids=["keep_mode_raises_error", "drop_mode_returns_none"],
     )
-    def test_field_not_found(self, mode, expected_error):
+    def test_field_not_found(self, mode: str, expected_error: type) -> None:
         """Test missing field behavior in different modes."""
         headers = ["col1", "col2", "col3"]
         if expected_error is ValueError:
@@ -42,7 +44,7 @@ class TestJoinLine:
         ],
         ids=["basic", "single", "empty"],
     )
-    def test_join_line(self, inputs, expected):
+    def test_join_line(self, inputs: list[str], expected: str) -> None:
         """Test joining strings with tabs."""
         result = select_tsv_columns.join_line(inputs)
         assert result == expected
@@ -60,7 +62,7 @@ class TestSubsetLine:
         ],
         ids=["basic", "single", "reorder"],
     )
-    def test_subset_line(self, inputs, indices, expected):
+    def test_subset_line(self, inputs: list[str], indices: list[int], expected: list[str]) -> None:
         """Test subsetting a list by indices."""
         result = select_tsv_columns.subset_line(inputs, indices)
         assert result == expected
@@ -80,8 +82,8 @@ class TestSelectColumns:
         ids=["keep_mode_basic", "drop_mode_basic", "keep_single_column", "keep_all_columns"],
     )
     def test_select_columns_success_cases(
-        self, tsv_factory, mode, columns, expected_output
-    ):
+        self, tsv_factory: Any, mode: str, columns: list[str], expected_output: str
+    ) -> None:
         """Test successful column selection scenarios."""
         input_file = tsv_factory.create_plain(
             "input.tsv", "col1\tcol2\tcol3\tcol4\nval1\tval2\tval3\tval4\n"
@@ -103,8 +105,8 @@ class TestSelectColumns:
         ids=["empty_file", "header_only_file_keep", "header_only_file_drop"],
     )
     def test_select_columns_edge_cases(
-        self, tsv_factory, input_content, columns, mode, expected_output
-    ):
+        self, tsv_factory: Any, input_content: str, columns: list[str], mode: str, expected_output: str
+    ) -> None:
         """Test edge cases for column selection."""
         input_file = tsv_factory.create_plain("input.tsv", input_content)
         output_file = tsv_factory.get_path("output.tsv")
@@ -119,7 +121,7 @@ class TestSelectColumns:
         ["plain", "gzip"],
         ids=["plain_tsv", "gzipped_tsv"],
     )
-    def test_select_columns_file_formats(self, tsv_factory, file_format):
+    def test_select_columns_file_formats(self, tsv_factory: Any, file_format: str) -> None:
         """Test column selection with different file formats."""
         input_content = "col1\tcol2\tcol3\nval1\tval2\tval3\n"
         expected = "col1\tcol3\nval1\tval3\n"
@@ -142,7 +144,7 @@ class TestSelectColumns:
 
         assert result == expected
 
-    def test_keep_missing_field(self, tsv_factory):
+    def test_keep_missing_field(self, tsv_factory: Any) -> None:
         """Test that missing field in keep mode raises ValueError."""
         input_file = tsv_factory.create_plain(
             "input.tsv", "col1\tcol2\tcol3\nval1\tval2\tval3\n"
@@ -154,7 +156,7 @@ class TestSelectColumns:
                 input_file, output_file, ["col1", "missing_col"], "keep"
             )
 
-    def test_drop_missing_field(self, tsv_factory):
+    def test_drop_missing_field(self, tsv_factory: Any) -> None:
         """Test that missing field in drop mode is ignored with warning."""
         input_file = tsv_factory.create_plain(
             "input.tsv", "col1\tcol2\tcol3\nval1\tval2\tval3\n"
@@ -170,7 +172,7 @@ class TestSelectColumns:
         expected = "col1\tcol3\nval1\tval3\n"
         assert result == expected
 
-    def test_drop_all_fields(self, tsv_factory):
+    def test_drop_all_fields(self, tsv_factory: Any) -> None:
         """Test that dropping all fields raises ValueError."""
         input_file = tsv_factory.create_plain("input.tsv", "col1\tcol2\nval1\tval2\n")
         output_file = tsv_factory.get_path("output.tsv")

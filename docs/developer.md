@@ -58,7 +58,7 @@ These guidelines represent best practices to implement in new code, though some 
 - Python style: 
     - Loosely follow PEP 8 conventions.
     - Type hints are encouraged. When used, prefer Python 3.12+ native syntax (e.g. `list[str]`, `str | None`) over imports from the `typing` module.
-    - Linting and type checking are encouraged (our go-to tools are `ruff` for linting and `mypy` for type checking), but not currently required.
+    - Linting is encouraged using `ruff`. Type checking with `mypy` is enforced in CI (see `.github/workflows/mypy.yml`).
     - Formatting applied (including in nested directories) will follow the configuration in `pyproject.toml`.
     - After making any formatting changes, carefully review the diff to ensure no unintended modifications were introduced that could affect functionality.
 
@@ -106,7 +106,18 @@ Where possible, we use [Seqera Wave containers](https://docs.seqera.io/wave), ma
 3. Run `bin/build_wave_container.py PATH_TO_YAML_FILE` to initiate the container build on Wave. The script will automatically update `configs.containers.config` with the appropriate container path.
 4. Wait a few minutes for the container to build before calling processes that depend on it.
 
-If you need a container with functionality beyond what's possible with Conda and Wave, you can build a custom Docker container and host it on [Docker Hub](https://hub.docker.com/). To do this, create a new Dockerfile in the `docker` directory. The name should have the prefix `nao-` followed by a descriptive name containing lowercase letters and hyphens, e.g. `docker/nao-blast-awscli.Dockerfile`. Once the Dockerfile is created, a repo maintainer can build and push it to Docker Hub using the script `bin/build-push-docker.sh`. (This should be done by a repo maintainer as it requires being logged in to DockerHub with the securebio username.) 
+If you need a container with functionality beyond what's possible with Conda and Wave, you can build a custom Docker container and host it on [Docker Hub](https://hub.docker.com/). To do this, create a new Dockerfile in the `docker` directory. The name should have the prefix `nao-` followed by a descriptive name containing lowercase letters and hyphens, e.g. `docker/nao-blast-awscli.Dockerfile`. Once the Dockerfile is created, a repo maintainer can build and push it to Docker Hub using the script `bin/build-push-docker.sh`. (This should be done by a repo maintainer as it requires being logged in to DockerHub with the securebio username.)
+
+### Base image pinning
+
+The `container-base-image` field in `pyproject.toml` pins the `mambaorg/micromamba` base image by digest (e.g. `mambaorg/micromamba@sha256:...`). Wave containers built by `bin/build_wave_container.py` use this digest to ensure reproducible builds.
+
+**When to update:** Update the base image digest to pick up OS-level security patches — for example, when the Trivy container scan flags CVEs originating from the base image.
+
+**How to update:**
+1. Find the latest `mambaorg/micromamba` amd64 digest on [Docker Hub](https://hub.docker.com/r/mambaorg/micromamba/tags).
+2. Update the `container-base-image` field in `pyproject.toml` with the new `sha256:` digest.
+3. Rebuild all Wave containers by running `bin/build_wave_container.py` for each YAML file in the `containers` directory.
 
 ## Python Development Setup
 

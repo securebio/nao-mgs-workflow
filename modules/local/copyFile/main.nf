@@ -7,10 +7,10 @@ process COPY_FILE {
         val(outname)
     output:
         tuple val(sample), path("${sample}_${outname}")
-    shell:
-        '''
-        cp !{file} !{sample}_!{outname}
-        '''
+    script:
+        """
+        cp ${file} ${sample}_${outname}
+        """
 }
 
 // Copy a file without sample annotation
@@ -24,10 +24,10 @@ process COPY_FILE_BARE {
         val(outname)
     output:
         path("${outname}")
-    shell:
-        '''
-        if [ "!{file}" != "!{outname}" ]; then
-            cp !{file} !{outname}
+    script:
+        """
+        if [ "${file}" != "${outname}" ]; then
+            cp ${file} ${outname}
         fi
-        '''
+        """
 }

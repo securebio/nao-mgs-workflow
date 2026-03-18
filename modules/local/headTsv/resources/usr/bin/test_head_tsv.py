@@ -1,5 +1,7 @@
 #!/usr/bin/env python
 
+from typing import Any
+
 import pytest
 
 import head_tsv
@@ -30,8 +32,8 @@ class TestAddHeaderLine:
         ids=["basic_functionality", "empty_file", "single_column"],
     )
     def test_add_header_success_cases(
-        self, tsv_factory, input_content, header_fields, expected_output
-    ):
+        self, tsv_factory: Any, input_content: str, header_fields: list[str], expected_output: str
+    ) -> None:
         """Test adding headers to various TSV file formats."""
         input_file = tsv_factory.create_plain("input.tsv", input_content)
         output_file = tsv_factory.get_path("output.tsv")
@@ -46,7 +48,7 @@ class TestAddHeaderLine:
         ["plain", "gzip"],
         ids=["plain_tsv", "gzipped_tsv"],
     )
-    def test_add_header_file_formats(self, tsv_factory, file_format):
+    def test_add_header_file_formats(self, tsv_factory: Any, file_format: str) -> None:
         """Test adding header with both plain and gzipped files."""
         input_content = "val1\tval2\n"
         header_fields = ["col1", "col2"]
@@ -68,7 +70,7 @@ class TestAddHeaderLine:
 
         assert result == expected
 
-    def test_mismatched_field_count(self, tsv_factory):
+    def test_mismatched_field_count(self, tsv_factory: Any) -> None:
         """Test that mismatched field counts raise ValueError."""
         input_file = tsv_factory.create_plain("input.tsv", "val1\tval2\tval3\n")
         output_file = tsv_factory.get_path("output.tsv")

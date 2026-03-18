@@ -5,26 +5,23 @@ import argparse
 import time
 import datetime
 import gzip
-import bz2
 import os
+from typing import IO, cast
 
-def print_log(message):
+def print_log(message: str) -> None:
     print("[", datetime.datetime.now(), "]  ", message, sep="")
 
-def open_by_suffix(filename, mode="r", debug=False):
+def open_by_suffix(filename: str, mode: str = "r", debug: bool = False) -> IO[str]:
     if debug:
         print_log(f"\tOpening file object: {filename}")
         print_log(f"\tOpening mode: {mode}")
         print_log(f"\tGZIP mode: {filename.endswith('.gz')}")
-        print_log(f"\tBZ2 mode: {filename.endswith('.bz2')}")
     if filename.endswith('.gz'):
-        return gzip.open(filename, mode + 't')
-    elif filename.endswith('.bz2'):
-        return bz2.BZ2file(filename, mode)
+        return cast(IO[str], gzip.open(filename, mode + 't'))
     else:
         return open(filename, mode)
 
-def add_sample_column(input_path, sample_name, sample_column, out_path):
+def add_sample_column(input_path: str, sample_name: str, sample_column: str, out_path: str) -> None:
     """Add sample name column to TSV file."""
     with open_by_suffix(input_path) as inf, open_by_suffix(out_path, "w") as outf:
         # Read header line
@@ -51,7 +48,7 @@ def add_sample_column(input_path, sample_name, sample_column, out_path):
             if line.strip():  # Skip completely empty lines
                 outf.write(line.strip() + "\t" + sample_name + "\n")
 
-def main():
+def main() -> None:
     # Parse arguments
     parser = argparse.ArgumentParser(description="Add sample name column to TSV file.")
     parser.add_argument("input_path", help="Path to input TSV file.")

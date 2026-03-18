@@ -2,6 +2,8 @@
 
 # TODO: Add unit tests for individual functions in a future pass
 
+from typing import Any
+
 import pytest
 
 import rehead_tsv
@@ -10,7 +12,7 @@ import rehead_tsv
 class TestReheadTsv:
     """Test the rehead_tsv module."""
 
-    def test_missing_first_input_field_raises_error(self, tsv_factory):
+    def test_missing_first_input_field_raises_error(self, tsv_factory: Any) -> None:
         """Test that missing first/only input field raises ValueError."""
         input_content = "x\ty\tz\n0\t1\t2\n3\t4\t5\n"
         input_file = tsv_factory.create_plain("input.tsv", input_content)
@@ -19,7 +21,7 @@ class TestReheadTsv:
         with pytest.raises(ValueError, match="Input field not found in file header: xyz"):
             rehead_tsv.rename_columns(input_file, ["xyz"], ["abc"], output_file)
 
-    def test_missing_later_input_field_raises_error(self, tsv_factory):
+    def test_missing_later_input_field_raises_error(self, tsv_factory: Any) -> None:
         """Test that missing later input field raises ValueError."""
         input_content = "x\ty\tz\n0\t1\t2\n3\t4\t5\n"
         input_file = tsv_factory.create_plain("input.tsv", input_content)
@@ -28,7 +30,7 @@ class TestReheadTsv:
         with pytest.raises(ValueError, match="Input field not found in file header: xyz"):
             rehead_tsv.rename_columns(input_file, ["x", "xyz"], ["a", "abc"], output_file)
 
-    def test_more_input_fields_than_output_raises_error(self, tsv_factory):
+    def test_more_input_fields_than_output_raises_error(self, tsv_factory: Any) -> None:
         """Test that mismatched field list lengths raises ValueError."""
         input_content = "x\ty\tz\n0\t1\t2\n3\t4\t5\n"
         input_file = tsv_factory.create_plain("input.tsv", input_content)
@@ -37,7 +39,7 @@ class TestReheadTsv:
         with pytest.raises(ValueError, match="Input and output field lists must be the same length"):
             rehead_tsv.rename_columns(input_file, ["x", "y"], ["a"], output_file)
 
-    def test_more_output_fields_than_input_raises_error(self, tsv_factory):
+    def test_more_output_fields_than_input_raises_error(self, tsv_factory: Any) -> None:
         """Test that mismatched field list lengths raises ValueError."""
         input_content = "x\ty\tz\n0\t1\t2\n3\t4\t5\n"
         input_file = tsv_factory.create_plain("input.tsv", input_content)
@@ -46,7 +48,7 @@ class TestReheadTsv:
         with pytest.raises(ValueError, match="Input and output field lists must be the same length"):
             rehead_tsv.rename_columns(input_file, ["x"], ["a", "b"], output_file)
 
-    def test_no_change_when_headers_match_one_field(self, tsv_factory):
+    def test_no_change_when_headers_match_one_field(self, tsv_factory: Any) -> None:
         """Test that output matches input when old and new headers are same (one field)."""
         input_content = "x\ty\tz\n0\t1\t2\n3\t4\t5\n3\t5\t6\n6\t7\t8\n"
         input_file = tsv_factory.create_plain("input.tsv", input_content)
@@ -57,7 +59,7 @@ class TestReheadTsv:
         result = tsv_factory.read_plain(output_file)
         assert result == input_content
 
-    def test_no_change_when_headers_match_multiple_fields(self, tsv_factory):
+    def test_no_change_when_headers_match_multiple_fields(self, tsv_factory: Any) -> None:
         """Test that output matches input when old and new headers are same (multiple fields)."""
         input_content = "x\ty\tz\n0\t1\t2\n3\t4\t5\n3\t5\t6\n6\t7\t8\n"
         input_file = tsv_factory.create_plain("input.tsv", input_content)
@@ -68,7 +70,7 @@ class TestReheadTsv:
         result = tsv_factory.read_plain(output_file)
         assert result == input_content
 
-    def test_successfully_change_header_one_field(self, tsv_factory):
+    def test_successfully_change_header_one_field(self, tsv_factory: Any) -> None:
         """Test successfully changing header with one field."""
         input_content = "x\ty\tz\n0\t1\t2\n3\t4\t5\n3\t5\t6\n6\t7\t8\n"
         input_file = tsv_factory.create_plain("input.tsv", input_content)
@@ -91,7 +93,7 @@ class TestReheadTsv:
         # Verify dimensions
         assert len(lines) == 5
 
-    def test_successfully_change_header_multiple_fields(self, tsv_factory):
+    def test_successfully_change_header_multiple_fields(self, tsv_factory: Any) -> None:
         """Test successfully changing header with multiple fields."""
         input_content = "x\ty\tz\n0\t1\t2\n3\t4\t5\n3\t5\t6\n6\t7\t8\n"
         input_file = tsv_factory.create_plain("input.tsv", input_content)
@@ -114,7 +116,7 @@ class TestReheadTsv:
         # Verify dimensions
         assert len(lines) == 5
 
-    def test_empty_input_file(self, tsv_factory):
+    def test_empty_input_file(self, tsv_factory: Any) -> None:
         """Test that empty input file produces empty output."""
         input_file = tsv_factory.create_plain("input.tsv", "")
         output_file = tsv_factory.get_path("output.tsv")

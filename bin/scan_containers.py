@@ -35,10 +35,12 @@ def scan_container(container: str, output_dir: Path) -> Path:
     container_safe = container.replace("/", "_").replace(":", "_")
     output_file = output_dir / f"{container_safe}.json"
     print(f"Scanning {container}...")
-    subprocess.run(
-        ["trivy", "image", "--scanners", "vuln", "--format", "json", "--output", str(output_file), container],
-        check=True,
-    )
+    ignorefile = Path(__file__).resolve().parent.parent / ".trivyignore"
+    cmd = ["trivy", "image", "--scanners", "vuln", "--format", "json", "--output", str(output_file)]
+    if ignorefile.exists():
+        cmd.extend(["--ignorefile", str(ignorefile)])
+    cmd.append(container)
+    subprocess.run(cmd, check=True)
     return output_file
 
 
@@ -47,7 +49,7 @@ def aggregate_results(output_dir: Path) -> tuple[dict, dict, bool]:
     Aggregate scan results and check for critical/high vulnerabilities.
     Returns a tuple of (summary dict, total counts dict, has_critical_or_high).
     """
-    summary = {"containers": []}
+    summary: dict[str, list[dict[str, object]]] = {"containers": []}
     total_counts = {"CRITICAL": 0, "HIGH": 0, "MEDIUM": 0, "LOW": 0, "UNKNOWN": 0}
     has_critical_or_high = False
     for result_file in sorted(output_dir.glob("*.json")):
@@ -79,7 +81,7 @@ def aggregate_results(output_dir: Path) -> tuple[dict, dict, bool]:
     return summary, total_counts, has_critical_or_high
 
 
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser(description="Scan container images with Trivy")
     parser.add_argument("--config", default="configs/containers.config", help="Path to Nextflow config file")
     parser.add_argument("--output-dir", default="trivy_results", help="Directory for scan results")

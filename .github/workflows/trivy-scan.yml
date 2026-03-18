@@ -4,6 +4,7 @@ on:
   pull_request: # Runs on all PRs (with path filter)
     paths:
       - 'configs/containers.config'
+      - '.trivyignore'
       - '.github/workflows/trivy-scan.yml'
 
 jobs:

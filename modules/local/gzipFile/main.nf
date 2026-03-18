@@ -7,10 +7,10 @@ process GZIP_FILE {
         tuple val(sample), path(file)
     output:
         tuple val(sample), path("${file}.gz")
-    shell:
-        '''
-        gzip -c !{file} > !{file}.gz
-        '''
+    script:
+        """
+        gzip -c ${file} > ${file}.gz
+        """
 }
 
 // Gzip a file without sample annotation
@@ -22,8 +22,8 @@ process GZIP_FILE_BARE {
         tuple path(file)
     output:
         path("${file}.gz")
-    shell:
-        '''
-        gzip -c !{file} > !{file}.gz
-        '''
+    script:
+        """
+        gzip -c ${file} > ${file}.gz
+        """
 }

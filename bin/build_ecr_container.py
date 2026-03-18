@@ -18,6 +18,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import tomllib
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -80,17 +81,22 @@ def read_container_spec(spec_file: Path) -> dict[str, Any]:
         msg = f"Container spec missing required fields: {', '.join(missing)}"
         logger.error(msg)
         raise ValueError(msg)
-    return spec
+    return spec  # type: ignore[no-any-return]
 
-def compute_spec_hash(spec: dict[str, Any]) -> str:
+def compute_spec_hash(spec: dict[str, Any], dockerfile_content: str) -> str:
     """
-    Compute a hash of the container specification for tagging.
+    Compute a hash of the container specification and Dockerfile for tagging.
+
+    Includes the Dockerfile content so that template changes (e.g. updating
+    the base image digest) invalidate existing image caches and trigger rebuilds.
+
     Args:
         spec (dict[str, Any]): Container specification
+        dockerfile_content (str): Generated Dockerfile content
     Returns:
-        str: Hash of the container specification
+        str: Hash of the container specification and Dockerfile
     """
-    content_str = json.dumps(spec, sort_keys=True)
+    content_str = json.dumps(spec, sort_keys=True) + dockerfile_content
     hash_obj = hashlib.sha256(content_str.encode())
     return hash_obj.hexdigest()[:16]
 
@@ -179,15 +185,29 @@ def setup_ecr_repository(
 # LOCAL DOCKER BUILD FUNCTIONS #
 ################################
 
-def generate_dockerfile(spec_filename: str) -> str:
+def get_base_image(pyproject_path: Path) -> str:
+    """Read the container base image from pyproject.toml.
+    Args:
+        pyproject_path (Path): Path to pyproject.toml
+    Returns:
+        str: Base image reference (e.g. 'mambaorg/micromamba@sha256:...')
+    """
+    with open(pyproject_path, "rb") as f:
+        data = tomllib.load(f)
+    return str(data["tool"]["mgs-workflow"]["container-base-image"])
+
+
+def generate_dockerfile(spec_filename: str, pyproject_path: Path) -> str:
     """Generate a Dockerfile that uses micromamba with a YAML environment file.
     Args:
         spec_filename (str): Name of the spec file
+        pyproject_path (Path): Path to pyproject.toml for base image config
     Returns:
         str: Dockerfile text
     """
+    base_image = get_base_image(pyproject_path)
     dockerfile = f"""
-FROM mambaorg/micromamba:1.5.10
+FROM {base_image}
 USER root
 RUN apt-get update && apt-get install -y procps && rm -rf /var/lib/apt/lists/*
 RUN mkdir -p /opt/conda
@@ -202,17 +222,19 @@ def build_docker_image_from_spec(
     spec_file: Path,
     image_tag: str,
     build_dir: Path,
+    pyproject_path: Path = Path("pyproject.toml"),
 ) -> None:
     """Build a Docker image from the spec file in a given directory.
     Args:
         spec_file (Path): Path to container spec YAML file
         image_tag (str): Image tag
         build_dir (Path): Path to build directory
+        pyproject_path (Path): Path to pyproject.toml for base image config
     """
     spec_filename = spec_file.name
     shutil.copy(spec_file, build_dir / spec_filename)
     dockerfile_path = build_dir / "Dockerfile"
-    dockerfile_path.write_text(generate_dockerfile(spec_filename))
+    dockerfile_path.write_text(generate_dockerfile(spec_filename, pyproject_path))
     logger.info(f"Building Docker image: {image_tag}")
     try:
         subprocess.run(
@@ -246,6 +268,7 @@ def tag_docker_image(source_tag: str, target_tag: str) -> None:
 def build_container(spec_file: Path,
     image_tag: str,
     image_tag_latest: str,
+    pyproject_path: Path = Path("pyproject.toml"),
 ) -> None:
     """
     Build a Docker container from a spec file.
@@ -253,12 +276,13 @@ def build_container(spec_file: Path,
         spec_file: Path to container spec YAML file
         image_tag: Primary image tag (with hash)
         image_tag_latest: Latest tag for the image
+        pyproject_path: Path to pyproject.toml for base image config
     """
     logger.info("Building container locally")
     with tempfile.TemporaryDirectory() as tmpdir:
         build_dir = Path(tmpdir)
         try:
-            build_docker_image_from_spec(spec_file, image_tag, build_dir)
+            build_docker_image_from_spec(spec_file, image_tag, build_dir, pyproject_path)
             tag_docker_image(image_tag, image_tag_latest)
         except Exception as e:
             msg = f"Error building container: {e}"
@@ -380,6 +404,7 @@ def build_and_push_container(
     spec_file: Path,
     prefix: str,
     config_file: Path,
+    pyproject_path: Path = Path("pyproject.toml"),
 ) -> None:
     """
     Build a container from a spec file and push to ECR Public.
@@ -387,6 +412,7 @@ def build_and_push_container(
         spec_file (Path): Path to container spec YAML file
         prefix (str): Repository name prefix
         config_file (Path): Path to containers.config file
+        pyproject_path (Path): Path to pyproject.toml for base image config
     """
     if not spec_file.exists():
         msg = f"Spec file {spec_file} not found"
@@ -396,7 +422,8 @@ def build_and_push_container(
     try:
         spec = read_container_spec(spec_file)
         label = spec["label"]
-        spec_hash = compute_spec_hash(spec)
+        dockerfile_content = generate_dockerfile(spec_file.name, pyproject_path)
+        spec_hash = compute_spec_hash(spec, dockerfile_content)
         logger.info(f"Container: {label}, Hash: {spec_hash}")
         image_tag, image_tag_latest, registry_url, image_exists = setup_ecr_repository(
             label, prefix, spec_hash
@@ -409,7 +436,7 @@ def build_and_push_container(
             if not config_updated:
                 logger.info("Nothing to do - image exists and config is up to date")
         else:
-            build_container(spec_file, image_tag, image_tag_latest)
+            build_container(spec_file, image_tag, image_tag_latest, pyproject_path)
             push_to_ecr(image_tag, image_tag_latest, registry_url)
             update_containers_config(config_file, label, image_tag)
             logger.info(f"Successfully built and pushed: {label}")
@@ -438,12 +465,20 @@ def parse_args() -> argparse.Namespace:
         default=Path("configs/containers.config"),
         help="Path to containers.config (default: configs/containers.config)",
     )
+    parser.add_argument(
+        "--pyproject",
+        type=Path,
+        default=Path("pyproject.toml"),
+        help="Path to pyproject.toml for base image config (default: pyproject.toml)",
+    )
     args = parser.parse_args()
     return args
 
 def main() -> None:
     args = parse_args()
-    build_and_push_container(args.spec_file, args.prefix, args.config)
+    build_and_push_container(
+        args.spec_file, args.prefix, args.config, args.pyproject
+    )
 
 if __name__ == "__main__":
     main()

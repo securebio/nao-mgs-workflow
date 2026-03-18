@@ -17,17 +17,16 @@ import argparse
 from datetime import datetime, timezone
 import time
 import gzip
-import bz2
 from dataclasses import dataclass
 from collections import defaultdict
-from typing import TextIO
+from typing import IO, TextIO, cast
 
 #=======================================================================
 # Configure logging
 #=======================================================================
 
 class UTCFormatter(logging.Formatter):
-    def formatTime(self, record, datefmt=None):
+    def formatTime(self, record: logging.LogRecord, datefmt: str | None = None) -> str:
         dt = datetime.fromtimestamp(record.created, timezone.utc)
         return dt.strftime('%Y-%m-%d %H:%M:%S UTC')
 logging.basicConfig(level=logging.INFO)
@@ -63,13 +62,11 @@ def parse_args() -> argparse.Namespace:
     # Return parsed arguments
     return parser.parse_args()
 
-def open_by_suffix(filename, mode="r", debug=False):
+def open_by_suffix(filename: str, mode: str = "r", debug: bool = False) -> IO[str]:
     """Parse the suffix of a filename to determine the right open method
-    to use, then open the file. Can handle .gz, .bz2, and uncompressed files."""
+    to use, then open the file. Can handle .gz and uncompressed files."""
     if filename.endswith('.gz'):
-        return gzip.open(filename, mode + 't')
-    elif filename.endswith('.bz2'):
-        return bz2.BZ2File(filename, mode)
+        return cast(IO[str], gzip.open(filename, mode + 't'))
     else:
         return open(filename, mode)
 
@@ -235,8 +232,8 @@ def compute_lca(
         return None
 
 def compute_taxonomic_distance(
-        taxid_1: int,
-        taxid_2: int,
+        taxid_1: int | None,
+        taxid_2: int | None,
         child_to_parent: dict[int, int],
         path_cache: dict[int, list[int]],
         ) -> tuple[int|None, int|None, dict[int, list[int]]]:
@@ -323,7 +320,7 @@ def process_input_to_output(
         header_fields_out = header_fields + [field_names["distance_1"], field_names["distance_2"]]
         outf.write(join_line(header_fields_out))
         # Process rest of input file
-        path_cache = {}
+        path_cache: dict[int, list[int]] = {}
         n_entries = 0
         for line in inf:
             # If line is empty, break

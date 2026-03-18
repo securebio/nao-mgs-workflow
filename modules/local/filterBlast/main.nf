@@ -10,11 +10,11 @@ process FILTER_BLAST {
     output:
         tuple val(sample), path("${sample}_blast_filtered.tsv.gz"), emit: output
         tuple val(sample), path("${sample}_blast_in.tsv.gz"), emit: input
-    shell:
-        '''
+    script:
+        """
         # Run script
-        filter_blast.py -i !{blast_hits_sorted} -o !{sample}_blast_filtered.tsv.gz -r !{max_rank} -f !{min_frac}
+        filter_blast.py -i ${blast_hits_sorted} -o ${sample}_blast_filtered.tsv.gz -r ${max_rank} -f ${min_frac}
         # Link input to output for testing
-        ln -s !{blast_hits_sorted} !{sample}_blast_in.tsv.gz
-        '''
+        ln -s ${blast_hits_sorted} ${sample}_blast_in.tsv.gz
+        """
 }

@@ -13,10 +13,10 @@ process CHECK_TSV_DUPLICATES {
     output:
         tuple val(sample), path("checked_${tsv}"), emit: output
         tuple val(sample), path("input_${tsv}"), emit: input
-    shell:
-        '''
-        check_tsv_duplicates.py -i !{tsv} -f "!{field}" -o checked_!{tsv}
+    script:
+        """
+        check_tsv_duplicates.py -i ${tsv} -f "${field}" -o checked_${tsv}
         # Link input to output for testing
-        ln -s !{tsv} input_!{tsv}
-        '''
+        ln -s ${tsv} input_${tsv}
+        """
 }

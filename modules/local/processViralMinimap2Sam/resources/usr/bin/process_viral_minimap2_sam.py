@@ -57,7 +57,7 @@ HEADER_FIELDS = [
 ]
 
 
-def read_fastq_record(fh) -> tuple[str, str, str] | None:
+def read_fastq_record(fh: Any) -> tuple[str, str, str] | None:
     """Read one FASTQ record (4 lines). Returns (read_id, seq, qual) or None at EOF.
 
     Uses manual line parsing instead of BioPython SeqIO to preserve the raw ASCII
@@ -75,7 +75,7 @@ def read_fastq_record(fh) -> tuple[str, str, str] | None:
     return (read_id, seq, qual)
 
 
-def extract_viral_taxid(genome_id: str, genbank_metadata, viral_taxids) -> str:
+def extract_viral_taxid(genome_id: str, genbank_metadata: dict[str, list[str]], viral_taxids: set[str]) -> str:
     """Return taxid for a genome, preferring whichever of taxid/species_taxid is viral."""
     try:
         taxid, species_taxid = genbank_metadata[genome_id]
@@ -89,7 +89,7 @@ def extract_viral_taxid(genome_id: str, genbank_metadata, viral_taxids) -> str:
 
 
 def parse_sam_alignment(
-    read, genbank_metadata, viral_taxids, clean_seq: str, clean_qual: str
+    read: Any, genbank_metadata: dict[str, list[str]], viral_taxids: set[str], clean_seq: str, clean_qual: str
 ) -> dict[str, Any]:
     """Parse a Minimap2 SAM alignment into an output dict."""
     taxid = extract_viral_taxid(read.reference_name, genbank_metadata, viral_taxids)
@@ -129,7 +129,7 @@ def parse_sam_alignment(
 
 
 def process_sam(
-    sam_file: str, out_file: str, genbank_metadata, viral_taxids, fastq_file: str
+    sam_file: str, out_file: str, genbank_metadata: dict[str, list[str]], viral_taxids: set[str], fastq_file: str
 ) -> None:
     """Process a Minimap2 SAM file using streaming merge join with sorted FASTQ.
 

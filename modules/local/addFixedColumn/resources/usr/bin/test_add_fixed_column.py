@@ -1,5 +1,7 @@
 #!/usr/bin/env python
 
+from typing import Any
+
 import pytest
 
 import add_fixed_column
@@ -21,8 +23,8 @@ class TestAddColumn:
         ids=["basic_functionality", "empty_file", "header_only"],
     )
     def test_add_column_success_cases(
-        self, tsv_factory, input_content, expected_output
-    ):
+        self, tsv_factory: Any, input_content: str, expected_output: str
+    ) -> None:
         """Test adding a column to various TSV file formats."""
         input_file = tsv_factory.create_plain("input.tsv", input_content)
         output_file = tsv_factory.get_path("output.tsv")
@@ -32,7 +34,7 @@ class TestAddColumn:
         result = tsv_factory.read_plain(output_file)
         assert result == expected_output
 
-    def test_column_already_exists(self, tsv_factory):
+    def test_column_already_exists(self, tsv_factory: Any) -> None:
         """Test that adding an existing column raises ValueError."""
         input_file = tsv_factory.create_plain(
             "input.tsv", "col1\tcol2\tcol3\nval1\tval2\tval3\n"
@@ -65,8 +67,8 @@ class TestAddColumn:
         ids=["multi_column_basic", "multi_column_empty_file", "multi_column_header_only"],
     )
     def test_add_multiple_columns(
-        self, tsv_factory, input_content, columns, expected_output
-    ):
+        self, tsv_factory: Any, input_content: str, columns: str, expected_output: str
+    ) -> None:
         """Test adding multiple comma-separated columns at once."""
         input_file = tsv_factory.create_plain("input.tsv", input_content)
         output_file = tsv_factory.get_path("output.tsv")
@@ -76,7 +78,7 @@ class TestAddColumn:
         result = tsv_factory.read_plain(output_file)
         assert result == expected_output
 
-    def test_multi_column_already_exists(self, tsv_factory):
+    def test_multi_column_already_exists(self, tsv_factory: Any) -> None:
         """Test that adding multiple columns raises ValueError if any exists."""
         input_file = tsv_factory.create_plain(
             "input.tsv", "col1\tcol2\tcol3\nval1\tval2\tval3\n"
