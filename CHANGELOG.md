@@ -1,16 +1,27 @@
-# v3.2.1.0-dev
+# v3.2.1.0
+
+## New workflow outputs
+
+- Added FASTP JSON output to published RUN outputs for QC (short-read data only; ONT uses FILTLONG).
+- Added `COMBINE_SAMPLE_JSONS` module and `CONCAT_JSON_BY_GROUP` subworkflow for combining per-sample JSON files into per-group outputs. (Will be used in a future release to add FASTP JSONs to DOWNSTREAM output.)
+
+## Cleanup & best practice
+
+- Added mypy type-checking CI and type annotations to all Python scripts in `bin/` and `modules/local/`, with `pandas-stubs` and `types-PyYAML` stub dependencies.
+- Updated benchmark CI workflow samplesheet paths to use `metadata/` and `raw/` subdirectories, matching internal standards.
+- Updated containers to resolve Trivy CRITICAL/HIGH vulnerability scan failures.
+- Migrated all 57 Nextflow modules from deprecated `shell:` blocks (`!{var}` interpolation) to `script:` blocks (`${var}` interpolation); `shell:` is deprecated in modern Nextflow.
+
+# Bugfixes
+
+- Updated `summarize-multiqc.R` to correctly handle changes in MultiQC JSON format in new version. Note: the MultiQC 1.21→1.33 upgrade changes read-length binning (e.g. bins shift from 224/274/324 to 200/250/300) and slightly alters `mean_seq_len` values; these are upstream MultiQC behavioral changes, not pipeline logic changes.
+- Fixed O(N²) combinatorial explosion in `DISCOVER_RUN_OUTPUT` that caused OOM failures for large deliveries (~2,273 samples). Replaced glob-then-filter approach with direct path construction from known (sample, suffix) pairs, reducing channel items from O(files × samples) to O(samples × suffixes).
+- Fixed two escaping bugs caught during the shell-to-script migration: `$RANDOM` in `subsetFastn` was being expanded by the shell instead of Bash at runtime, and the awk debug message in `extractViralHitsToFastq` was printing a field value instead of the numeric column index.
+
+# Coding agents
 
 - Add custom Claude Code subagent definitions (`.claude/agents/`) and update `.gitignore` to track them.
 
-- Updated benchmark CI workflow samplesheet paths to use `metadata/` and `raw/` subdirectories, matching internal standards.
-- Added FASTP JSON output to published RUN outputs for QC (short-read data only; ONT uses FILTLONG).
-- Added mypy type-checking CI and type annotations to all Python scripts in `bin/` and `modules/local/`, with `pandas-stubs` and `types-PyYAML` stub dependencies.
-- Added `COMBINE_SAMPLE_JSONS` module and `CONCAT_JSON_BY_GROUP` subworkflow for combining per-sample JSON files into per-group outputs.
-- Updated containers to resolve Trivy CRITICAL/HIGH vulnerability scan failures.
-- Updated `summarize-multiqc.R` to correctly handle changes in MultiQC JSON format in new version. Note: the MultiQC 1.21→1.33 upgrade changes read-length binning (e.g. bins shift from 224/274/324 to 200/250/300) and slightly alters `mean_seq_len` values; these are upstream MultiQC behavioral changes, not pipeline logic changes.
-- Fixed O(N²) combinatorial explosion in `DISCOVER_RUN_OUTPUT` that caused OOM failures for large deliveries (~2,273 samples). Replaced glob-then-filter approach with direct path construction from known (sample, suffix) pairs, reducing channel items from O(files × samples) to O(samples × suffixes).
-- Migrated all 57 Nextflow modules from deprecated `shell:` blocks (`!{var}` interpolation) to `script:` blocks (`${var}` interpolation); `shell:` is deprecated in modern Nextflow.
-- Fixed two escaping bugs caught during the shell-to-script migration: `$RANDOM` in `subsetFastn` was being expanded by the shell instead of Bash at runtime, and the awk debug message in `extractViralHitsToFastq` was printing a field value instead of the numeric column index.
 
 # v3.2.0.2
 
