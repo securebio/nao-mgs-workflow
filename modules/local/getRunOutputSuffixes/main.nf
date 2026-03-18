@@ -6,8 +6,8 @@ process GET_RUN_OUTPUT_SUFFIXES {
         path(pyproject)
     output:
         env(SUFFIXES), emit: suffixes
-    shell:
-        '''
-        SUFFIXES=$(get_run_output_suffixes.py !{pyproject} | tr '\\n' ',' | sed 's/,$//')
-        '''
+    script:
+        """
+        SUFFIXES=\$(get_run_output_suffixes.py ${pyproject} | tr '\\n' ',' | sed 's/,\$//')
+        """
 }

@@ -27,6 +27,7 @@ package.json
 
 .claude/*
 !.claude/agents
+.review-loop/
 uv.lock
 
 # Post-processing build artifacts

@@ -141,6 +141,10 @@ All Python scripts should have corresponding Pytest scripts in the same director
 - Distinguish clearly between unit tests of high-level functions (which can be useful even if heavily mocked) and integration tests of the whole code stack (which should keep mocks to a minimum).
 - Use `@patch` decorators (including class-level decorators for shared mocks) rather than `with patch(...)` context managers.
 
+### Mypy / Type Checking
+
+Mypy is enforced in CI via `.github/workflows/mypy.yml` — all Python in `bin/` and `modules/local/` must pass `python -m mypy bin/ modules/local/`. Add per-package `[[tool.mypy.overrides]]` in `pyproject.toml` for untyped third-party libraries rather than inline `# type: ignore` comments.
+
 ## Versioning and Changelog
 
 **Both of these are required for PRs to `dev` — CI will fail if they're missing.**

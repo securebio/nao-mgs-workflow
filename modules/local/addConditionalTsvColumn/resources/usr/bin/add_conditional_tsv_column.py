@@ -5,26 +5,24 @@ import csv
 import time
 import datetime
 import gzip
-import bz2
+from typing import IO, Iterator, cast
+from collections.abc import Sequence
 
-def print_log(message):
+def print_log(message: str) -> None:
     print("[", datetime.datetime.now(), "]  ", message, sep="")
 
-def open_by_suffix(filename, mode="r", debug=False):
+def open_by_suffix(filename: str, mode: str = "r", debug: bool = False) -> IO[str]:
     """Open file with automatic decompression based on file extension."""
     if debug:
         print_log(f"\tOpening file object: {filename}")
         print_log(f"\tOpening mode: {mode}")
         print_log(f"\tGZIP mode: {filename.endswith('.gz')}")
-        print_log(f"\tBZ2 mode: {filename.endswith('.bz2')}")
     if filename.endswith('.gz'):
-        return gzip.open(filename, mode + 't', encoding='utf-8')
-    elif filename.endswith('.bz2'):
-        return bz2.open(filename, mode + 't', encoding='utf-8')
+        return cast(IO[str], gzip.open(filename, mode + 't', encoding='utf-8'))
     else:
         return open(filename, mode, encoding='utf-8')
 
-def validate_columns(fieldnames, chk_col, if_col, else_col):
+def validate_columns(fieldnames: Sequence[str], chk_col: str, if_col: str, else_col: str) -> None:
     """Validate that all required columns exist in the header."""
     missing_cols = []
     if chk_col not in fieldnames:
@@ -41,14 +39,14 @@ def validate_columns(fieldnames, chk_col, if_col, else_col):
             f" Available columns: {', '.join(fieldnames)}"
         )
 
-def process_rows(reader, chk_col, match_val, if_col, else_col, new_hdr):
+def process_rows(reader: csv.DictReader[str], chk_col: str, match_val: str, if_col: str, else_col: str, new_hdr: str) -> Iterator[dict[str, str]]:
     """Generator that processes rows and adds conditional column value."""
     for row in reader:
         # Select value based on condition
         row[new_hdr] = row[if_col] if row[chk_col] == match_val else row[else_col]
         yield row
 
-def add_conditional_column(input_path, chk_col, match_val, if_col, else_col, new_hdr, out_path):
+def add_conditional_column(input_path: str, chk_col: str, match_val: str, if_col: str, else_col: str, new_hdr: str, out_path: str) -> None:
     """Add conditional column to TSV file based on check column value."""
     with open_by_suffix(input_path) as inf, open_by_suffix(out_path, "w") as outf:
         # Use DictReader for cleaner column access by name
@@ -69,7 +67,7 @@ def add_conditional_column(input_path, chk_col, match_val, if_col, else_col, new
         for row in process_rows(reader, chk_col, match_val, if_col, else_col, new_hdr):
             outf.write("\t".join(row[col] for col in fieldnames_out) + "\n")
 
-def main():
+def main() -> None:
     # Parse arguments using named parameters
     parser = argparse.ArgumentParser(
         description="Add a conditional column to TSV file based on check column value."

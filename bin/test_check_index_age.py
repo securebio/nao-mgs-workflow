@@ -20,14 +20,14 @@ from check_index_age import (
 
 class TestGetMaxIndexAgeDays:
     @pytest.mark.parametrize("age_days", [90, 120])
-    def test_reads_value(self, tmp_path, age_days):
+    def test_reads_value(self, tmp_path: Path, age_days: int) -> None:
         pyproject = tmp_path / "pyproject.toml"
         pyproject.write_text(
             f"[tool.mgs-workflow]\nmax-stable-index-age-days = {age_days}\n"
         )
         assert get_max_index_age_days(str(pyproject)) == age_days
 
-    def test_missing_key(self, tmp_path):
+    def test_missing_key(self, tmp_path: Path) -> None:
         pyproject = tmp_path / "pyproject.toml"
         pyproject.write_text("[tool.mgs-workflow]\n")
         with pytest.raises(KeyError):
@@ -44,10 +44,10 @@ class TestParseIndexDate:
         ],
         ids=["typical", "year-boundary", "extra-whitespace"],
     )
-    def test_parses_date(self, time_text, expected):
+    def test_parses_date(self, time_text: str, expected: date) -> None:
         assert parse_index_date(time_text) == expected
 
-    def test_invalid_format(self):
+    def test_invalid_format(self) -> None:
         with pytest.raises(ValueError):
             parse_index_date("not a timestamp")
 
@@ -63,12 +63,12 @@ class TestCheckIndexAge:
         ],
         ids=["within-limit", "exactly-at-limit", "one-over", "well-over"],
     )
-    def test_age_check(self, index_date, max_age, today, expected_ok, expected_days):
+    def test_age_check(self, index_date: date, max_age: int, today: date, expected_ok: bool, expected_days: int) -> None:
         is_ok, age_days = check_index_age(index_date, max_age, today=today)
         assert is_ok is expected_ok
         assert age_days == expected_days
 
-    def test_defaults_to_today(self):
+    def test_defaults_to_today(self) -> None:
         is_ok, age_days = check_index_age(date.today(), 90)
         assert is_ok is True
         assert age_days == 0
@@ -76,7 +76,7 @@ class TestCheckIndexAge:
 
 class TestFetchTimeTxtFromS3:
     @patch("check_index_age.boto3.client")
-    def test_parses_s3_uri_and_returns_content(self, mock_boto_client):
+    def test_parses_s3_uri_and_returns_content(self, mock_boto_client: MagicMock) -> None:
         mock_body = MagicMock()
         mock_body.read.return_value = b"2025-01-15 14:30:00 UTC (+0000)\n"
         mock_client = mock_boto_client.return_value
@@ -92,15 +92,15 @@ class TestFetchTimeTxtFromS3:
 @patch("check_index_age.fetch_time_txt_from_s3")
 @patch("check_index_age.parse_arguments")
 class TestMain:
-    def _make_args(self, pyproject_path):
+    def _make_args(self, pyproject_path: str) -> MagicMock:
         return MagicMock(
             s3_time_txt="s3://bucket/time.txt",
             pyproject=pyproject_path,
         )
 
     def test_passes_when_index_is_fresh(
-        self, mock_parse_args, mock_fetch, mock_date, tmp_path
-    ):
+        self, mock_parse_args: MagicMock, mock_fetch: MagicMock, mock_date: MagicMock, tmp_path: Path
+    ) -> None:
         pyproject = tmp_path / "pyproject.toml"
         pyproject.write_text("[tool.mgs-workflow]\nmax-stable-index-age-days = 90\n")
         mock_parse_args.return_value = self._make_args(str(pyproject))
@@ -110,8 +110,8 @@ class TestMain:
         main()  # should not raise
 
     def test_raises_when_index_is_stale(
-        self, mock_parse_args, mock_fetch, mock_date, tmp_path
-    ):
+        self, mock_parse_args: MagicMock, mock_fetch: MagicMock, mock_date: MagicMock, tmp_path: Path
+    ) -> None:
         pyproject = tmp_path / "pyproject.toml"
         pyproject.write_text("[tool.mgs-workflow]\nmax-stable-index-age-days = 90\n")
         mock_parse_args.return_value = self._make_args(str(pyproject))
