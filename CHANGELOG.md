@@ -1,3 +1,7 @@
+# v3.2.1.1-dev
+
+- Update benchmark samplesheet paths in CI workflows to use the new top-level `nao-testing` S3 locations (removing `benchmarks/` prefix).
+
 # v3.2.1.0
 
 ## New workflow outputs

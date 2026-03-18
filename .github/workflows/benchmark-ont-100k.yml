@@ -59,7 +59,7 @@ jobs:
           RUST_VERSION="${{ github.base_ref == 'stable' && 'main' || 'dev' }}"
           bin/chain_workflows.py \
             --ref-dir s3://nao-testing/mgs-workflow-test/index-latest/output/ \
-            --samplesheet s3://nao-testing/benchmarks/ONT_100k/metadata/samplesheet.csv \
+            --samplesheet s3://nao-testing/ONT_100k/metadata/samplesheet.csv \
             --launch-dir test_run_benchmark_ont_100k \
             --base-dir s3://nao-testing-scratch/mgs-workflow-test/benchmark-ont-100k/ \
             --platform ont \
