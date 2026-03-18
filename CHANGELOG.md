@@ -3,6 +3,7 @@
 - Updated benchmark CI workflow samplesheet paths to use `metadata/` and `raw/` subdirectories, matching internal standards.
 - Added FASTP JSON output to published RUN outputs for QC (short-read data only; ONT uses FILTLONG).
 - Added `COMBINE_SAMPLE_JSONS` module and `CONCAT_JSON_BY_GROUP` subworkflow for combining per-sample JSON files into per-group outputs.
+- Fixed O(N²) combinatorial explosion in `DISCOVER_RUN_OUTPUT` that caused OOM failures for large deliveries (~2,273 samples). Replaced glob-then-filter approach with direct path construction from known (sample, suffix) pairs, reducing channel items from O(files × samples) to O(samples × suffixes).
 
 # v3.2.0.2
 
