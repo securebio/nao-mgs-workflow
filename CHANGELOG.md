@@ -1,9 +1,13 @@
+# v3.2.1.1-dev
+
+- Added FASTP JSON output to published DOWNSTREAM outputs for QC (short-read data only; ONT uses FILTLONG), using `CONCAT_JSON_BY_GROUP` to merge per-sample FASTP JSONs into per-group outputs.
+
 # v3.2.1.0
 
 ## New workflow outputs
 
 - Added FASTP JSON output to published RUN outputs for QC (short-read data only; ONT uses FILTLONG).
-- Added `COMBINE_SAMPLE_JSONS` module and `CONCAT_JSON_BY_GROUP` subworkflow for combining per-sample JSON files into per-group outputs. (Will be used in a future release to add FASTP JSONs to DOWNSTREAM output.)
+- Added `COMBINE_SAMPLE_JSONS` module and `CONCAT_JSON_BY_GROUP` subworkflow for combining per-sample JSON files into per-group outputs.
 
 ## Cleanup & best practice
 
@@ -21,7 +25,6 @@
 ## Coding agents
 
 - Add custom Claude Code subagent definitions (`.claude/agents/`) and update `.gitignore` to track them.
-
 
 # v3.2.0.2
 

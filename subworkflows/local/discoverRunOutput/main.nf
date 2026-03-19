@@ -13,9 +13,10 @@ workflow DISCOVER_RUN_OUTPUT {
         run_dirs        // Channel of tuple(label, resolved_run_results_dir), unique
         groups          // Channel of tuple(label, sample, group)
         pyproject_path  // Path to pyproject.toml
+        platform        // Platform string (e.g. "illumina", "ont")
     main:
         // Extract valid per-sample output suffixes from pyproject.toml
-        suffixes_ch = GET_RUN_OUTPUT_SUFFIXES(pyproject_path).suffixes  // comma-separated string
+        suffixes_ch = GET_RUN_OUTPUT_SUFFIXES(pyproject_path, platform).suffixes  // comma-separated string
         // For each (sample, suffix), construct the expected path and check existence.
         // This avoids the O(N²) explosion of globbing all files then combining with
         // all samples: instead we do O(N × suffixes) direct path probes.
