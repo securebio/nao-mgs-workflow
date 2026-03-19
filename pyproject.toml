@@ -14,6 +14,7 @@ dependencies = [
     "mypy>=1.18.1",
     "pandas-stubs",
     "types-PyYAML",
+    "types-jsonschema",
     # Needed until https://github.com/securebio/nao-dedup/pull/12 has been
     # merged and we've updated post-processing/nao-dedup/ to depend on the
     # no-python version.
