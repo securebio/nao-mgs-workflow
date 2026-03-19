@@ -102,7 +102,7 @@ class TestGetSchemaNameFromPattern:
         ("{GROUP}_fastp.json", "fastp"),
         ("{GROUP}_validation_hits.tsv.gz", "validation_hits"),
     ])
-    def test_extracts_schema_name(self, pattern, expected):
+    def test_extracts_schema_name(self, pattern: str, expected: str) -> None:
         """Test schema name extraction from various patterns."""
         assert get_schema_name_from_pattern(pattern) == expected
 
@@ -114,7 +114,7 @@ class TestGetSchemaNameFromPattern:
 class TestLoadSchemaHeaders:
     """Tests for load_schema_headers function."""
 
-    def test_returns_headers_when_schema_exists(self, tmp_path):
+    def test_returns_headers_when_schema_exists(self, tmp_path: Path) -> None:
         """Test that headers are returned from a valid schema file."""
         schema = {
             "fields": [
@@ -127,12 +127,12 @@ class TestLoadSchemaHeaders:
         result = load_schema_headers(tmp_path, "test")
         assert result == ["col1", "col2"]
 
-    def test_returns_none_when_no_schema(self, tmp_path):
+    def test_returns_none_when_no_schema(self, tmp_path: Path) -> None:
         """Test that None is returned when no schema file exists."""
         result = load_schema_headers(tmp_path, "nonexistent")
         assert result is None
 
-    def test_returns_none_when_no_fields(self, tmp_path):
+    def test_returns_none_when_no_fields(self, tmp_path: Path) -> None:
         """Test that None is returned when schema has no fields."""
         schema_path = tmp_path / "empty.schema.json"
         schema_path.write_text(json.dumps({"fields": []}))
@@ -181,7 +181,7 @@ class TestCreateEmptyOutputs:
         assert output_dir.exists()
 
     @pytest.mark.parametrize("use_schema_dir", [False, True], ids=["no_schema", "with_schema"])
-    def test_mixed_tsv_and_json_patterns(self, tmp_path, use_schema_dir):
+    def test_mixed_tsv_and_json_patterns(self, tmp_path: Path, use_schema_dir: bool) -> None:
         """Test creating both TSV and JSON outputs together."""
         output_dir = tmp_path / "output"
         patterns = ["{GROUP}_data.tsv.gz", "{GROUP}_fastp.json"]
@@ -329,7 +329,7 @@ class TestIntegration:
         assert len(created) == 1
         assert "g1_validation_hits.tsv.gz" in created[0]
 
-    def test_mixed_tsv_and_json_integration(self, tmp_path):
+    def test_mixed_tsv_and_json_integration(self, tmp_path: Path) -> None:
         """Test full workflow with both TSV and JSON patterns."""
         groups = {"empty_g1"}
 
