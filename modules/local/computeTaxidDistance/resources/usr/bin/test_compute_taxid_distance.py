@@ -3,6 +3,8 @@
 # TODO: Add unit tests for individual functions (parse_nodes_db, path_to_root,
 # compute_lca, compute_taxonomic_distance, etc.) in a future pass
 
+from typing import Any
+
 import pytest
 
 import compute_taxid_distance
@@ -12,7 +14,7 @@ class TestComputeTaxidDistance:
     """Test the compute_taxid_distance module."""
 
     @pytest.fixture
-    def test_nodes_db(self, tsv_factory):
+    def test_nodes_db(self, tsv_factory: Any) -> str:
         """Create a test taxonomy nodes database."""
         content = (
             "1\t|\t1\n"
@@ -31,18 +33,20 @@ class TestComputeTaxidDistance:
             "8001\t|\t8000\n"
             "8002\t|\t8000\n"
         )
-        return tsv_factory.create_plain("nodes.dmp", content)
+        result: str = tsv_factory.create_plain("nodes.dmp", content)
+        return result
 
     @pytest.fixture
-    def truncated_nodes_db(self, tsv_factory):
+    def truncated_nodes_db(self, tsv_factory: Any) -> str:
         """Create a truncated taxonomy nodes database (missing root)."""
         content = (
             "9000\t|\t9999\n"
             "9001\t|\t9000\n"
         )
-        return tsv_factory.create_plain("nodes_truncated.dmp", content)
+        result: str = tsv_factory.create_plain("nodes_truncated.dmp", content)
+        return result
 
-    def test_missing_taxid_field(self, tsv_factory, test_nodes_db):
+    def test_missing_taxid_field(self, tsv_factory: Any, test_nodes_db: str) -> None:
         """Test that missing taxid field raises ValueError."""
         input_file = tsv_factory.create_plain(
             "input.tsv",
@@ -67,7 +71,7 @@ class TestComputeTaxidDistance:
                 child_to_parent
             )
 
-    def test_distance_field_1_already_exists(self, tsv_factory, test_nodes_db):
+    def test_distance_field_1_already_exists(self, tsv_factory: Any, test_nodes_db: str) -> None:
         """Test that existing distance field 1 raises ValueError."""
         input_file = tsv_factory.create_plain(
             "input.tsv",
@@ -92,7 +96,7 @@ class TestComputeTaxidDistance:
                 child_to_parent
             )
 
-    def test_distance_field_2_already_exists(self, tsv_factory, test_nodes_db):
+    def test_distance_field_2_already_exists(self, tsv_factory: Any, test_nodes_db: str) -> None:
         """Test that existing distance field 2 raises ValueError."""
         input_file = tsv_factory.create_plain(
             "input.tsv",
@@ -117,12 +121,12 @@ class TestComputeTaxidDistance:
                 child_to_parent
             )
 
-    def test_missing_root_in_taxonomy_db(self, tsv_factory, truncated_nodes_db):
+    def test_missing_root_in_taxonomy_db(self, tsv_factory: Any, truncated_nodes_db: str) -> None:
         """Test that missing root in taxonomy DB raises AssertionError."""
         with pytest.raises(AssertionError, match="Taxonomy DB does not contain root"):
             compute_taxid_distance.parse_nodes_db(truncated_nodes_db)
 
-    def test_empty_input_file_no_header(self, tsv_factory, test_nodes_db):
+    def test_empty_input_file_no_header(self, tsv_factory: Any, test_nodes_db: str) -> None:
         """Test that empty input file (no header) raises ValueError."""
         input_file = tsv_factory.create_plain("input.tsv", "")
         output_file = tsv_factory.get_path("output.tsv")
@@ -144,7 +148,7 @@ class TestComputeTaxidDistance:
                 child_to_parent
             )
 
-    def test_header_only_input(self, tsv_factory, test_nodes_db):
+    def test_header_only_input(self, tsv_factory: Any, test_nodes_db: str) -> None:
         """Test that input file with header only produces header-only output."""
         input_file = tsv_factory.create_plain(
             "input.tsv",
@@ -199,14 +203,14 @@ class TestComputeTaxidDistance:
     )
     def test_valid_input_cases(
         self,
-        tsv_factory,
-        test_nodes_db,
-        taxid1,
-        taxid2,
-        exp_dist1,
-        exp_dist2,
-        comment
-    ):
+        tsv_factory: Any,
+        test_nodes_db: str,
+        taxid1: str,
+        taxid2: str,
+        exp_dist1: str,
+        exp_dist2: str,
+        comment: str,
+    ) -> None:
         """Test computation of taxonomic distances for various taxid pairs."""
         input_content = f"taxid1\ttaxid2\tcomment\n{taxid1}\t{taxid2}\t{comment}\n"
         input_file = tsv_factory.create_plain("input.tsv", input_content)

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import gzip
+from pathlib import Path
 
 import pytest
 import sort_sam
@@ -8,19 +9,19 @@ import sort_sam
 MINIMAL_HEADER = "@HD\tVN:1.6\tSO:queryname\n@SQ\tSN:ref1\tLN:10000\n"
 
 
-def _write_sam_gz(path, content):
+def _write_sam_gz(path: Path, content: str) -> None:
     with gzip.open(str(path), "wt") as f:
         f.write(content)
 
 
-def _read_lines(path):
+def _read_lines(path: Path) -> list[str]:
     with open(str(path)) as f:
         return f.readlines()
 
 
 class TestSortSam:
 
-    def test_empty_sam_header_only(self, tmp_path):
+    def test_empty_sam_header_only(self, tmp_path: Path) -> None:
         """Header-only SAM produces output with just headers."""
         inp = tmp_path / "input.sam.gz"
         out = tmp_path / "sorted.sam"
@@ -40,7 +41,7 @@ class TestSortSam:
         ],
         ids=["already_sorted", "reverse_sorted"],
     )
-    def test_sort_order(self, tmp_path, order, expected):
+    def test_sort_order(self, tmp_path: Path, order: list[str], expected: list[str]) -> None:
         """Alignments are sorted by QNAME regardless of input order."""
         inp = tmp_path / "input.sam.gz"
         out = tmp_path / "sorted.sam"
@@ -55,7 +56,7 @@ class TestSortSam:
         qnames = [l.split("\t")[0] for l in lines if not l.startswith("@")]
         assert qnames == expected
 
-    def test_multiple_alignments_per_read(self, tmp_path):
+    def test_multiple_alignments_per_read(self, tmp_path: Path) -> None:
         """Multiple alignments for the same read are grouped together."""
         inp = tmp_path / "input.sam.gz"
         out = tmp_path / "sorted.sam"
@@ -73,7 +74,7 @@ class TestSortSam:
         qnames = [l.split("\t")[0] for l in lines if not l.startswith("@")]
         assert qnames == ["readA", "readA", "readB"]
 
-    def test_header_preservation(self, tmp_path):
+    def test_header_preservation(self, tmp_path: Path) -> None:
         """All header types (@HD, @SQ, @RG, @PG, @CO) are preserved in order."""
         inp = tmp_path / "input.sam.gz"
         out = tmp_path / "sorted.sam"

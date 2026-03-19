@@ -6,12 +6,12 @@
             "tiny_test_kraken.tsv.gz:md5,b92e96228ff584c883f74b6f6e855a60",
             "tiny_test_qc_adapter_stats_cleaned.tsv.gz:md5,d15e65d588573c8ccb2687414e37f905",
             "tiny_test_qc_adapter_stats_raw.tsv.gz:md5,d15e65d588573c8ccb2687414e37f905",
-            "tiny_test_qc_basic_stats_cleaned.tsv.gz:md5,9d044c322169f16b5e7c261443ce43f4",
+            "tiny_test_qc_basic_stats_cleaned.tsv.gz:md5,ebf796e994bdae153e5e3a2aa0327127",
             "tiny_test_qc_basic_stats_raw.tsv.gz:md5,c12c761a834b794312c590c040b79708",
             "tiny_test_qc_length_stats_cleaned.tsv.gz:md5,405c449a09bee818a90ea1ec71bf2b3d",
             "tiny_test_qc_length_stats_raw.tsv.gz:md5,1f8307bf30d5ba145b1bb7c67b782c1c",
-            "tiny_test_qc_quality_base_stats_cleaned.tsv.gz:md5,12a4dea36876f023d0dfd3531f1a28b3",
-            "tiny_test_qc_quality_base_stats_raw.tsv.gz:md5,45645177912d784729338d411a39c173",
+            "tiny_test_qc_quality_base_stats_cleaned.tsv.gz:md5,ea717f8daeecfe0c25a4321c32838f4e",
+            "tiny_test_qc_quality_base_stats_raw.tsv.gz:md5,942420a24e0b063980cc144d5d52a512",
             "tiny_test_qc_quality_sequence_stats_cleaned.tsv.gz:md5,3d75e2d8664540c1128e0a4e05e00cda",
             "tiny_test_qc_quality_sequence_stats_raw.tsv.gz:md5,008202868ef01468cc04cfb6c570d7ca",
             "tiny_test_read_counts.tsv:md5,c00f00d8a47a87731a969636e6043b15",
@@ -21,7 +21,7 @@
             "nf-test": "0.9.3",
             "nextflow": "25.10.4"
         },
-        "timestamp": "2026-03-06T23:30:18.739469432"
+        "timestamp": "2026-03-14T18:57:19.262741322"
     },
     "run_output_ont": {
         "content": [
@@ -29,12 +29,12 @@
             "tiny_test_kraken.tsv.gz:md5,cce4f37145ef2a1d04ad478078b9c2ea",
             "tiny_test_qc_adapter_stats_cleaned.tsv.gz:md5,d15e65d588573c8ccb2687414e37f905",
             "tiny_test_qc_adapter_stats_raw.tsv.gz:md5,d15e65d588573c8ccb2687414e37f905",
-            "tiny_test_qc_basic_stats_cleaned.tsv.gz:md5,13737edbb681afaa937dac62a35cc485",
-            "tiny_test_qc_basic_stats_raw.tsv.gz:md5,3bd95e2d86f11e619de3c86dd816684e",
-            "tiny_test_qc_length_stats_cleaned.tsv.gz:md5,b493a8af4fa9ab50156f4904ee114af8",
-            "tiny_test_qc_length_stats_raw.tsv.gz:md5,fec48b0ce5d936fd0490f27339c244b5",
-            "tiny_test_qc_quality_base_stats_cleaned.tsv.gz:md5,a38640fd547b5799fc5b15a2cfd16c2d",
-            "tiny_test_qc_quality_base_stats_raw.tsv.gz:md5,7e6075e3964a4f5e065f464729484bee",
+            "tiny_test_qc_basic_stats_cleaned.tsv.gz:md5,9c836e9aee69a3dfb4c80b194cf9086f",
+            "tiny_test_qc_basic_stats_raw.tsv.gz:md5,c22e11ca8738b666a8cebc64c350a836",
+            "tiny_test_qc_length_stats_cleaned.tsv.gz:md5,3875e7be4512132fd32e88a21340f5e7",
+            "tiny_test_qc_length_stats_raw.tsv.gz:md5,3eca948b290c2d35e9bcd1f4f754461a",
+            "tiny_test_qc_quality_base_stats_cleaned.tsv.gz:md5,7c4cd6c9cfd08b7e92e4e07abc3f7c96",
+            "tiny_test_qc_quality_base_stats_raw.tsv.gz:md5,89a310a8d87f5b5f8dc255b76e86f6de",
             "tiny_test_qc_quality_sequence_stats_cleaned.tsv.gz:md5,302d27954ffdb2089e5d0e4e83c3f1ba",
             "tiny_test_qc_quality_sequence_stats_raw.tsv.gz:md5,cbc4f6e87d79599277eb2baf27db6630",
             "tiny_test_read_counts.tsv:md5,7d44efe7dc906747a465ca537cde237f",
@@ -42,8 +42,8 @@
         ],
         "meta": {
             "nf-test": "0.9.3",
-            "nextflow": "25.10.3"
+            "nextflow": "25.10.4"
         },
-        "timestamp": "2026-02-03T22:29:39.032558607"
+        "timestamp": "2026-03-14T18:58:16.919960139"
     }
 }

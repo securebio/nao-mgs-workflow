@@ -9,9 +9,9 @@ process CONCATENATE_FILES {
     output:
         path("${name}.${ext}"), emit: output
         path("${name}_in_0.${ext}"), emit: input
-    shell:
-        '''
-        cat !{files} > !{name}.!{ext}
-        ln -s !{files[0]} !{name}_in_0.!{ext} # Link input to output for testing
-        '''
+    script:
+        """
+        cat ${files} > ${name}.${ext}
+        ln -s ${files[0]} ${name}_in_0.${ext} # Link input to output for testing
+        """
 }

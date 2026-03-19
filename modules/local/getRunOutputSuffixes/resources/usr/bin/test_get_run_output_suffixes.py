@@ -51,7 +51,7 @@ class TestGetRunOutputSuffixes:
             ),
         ],
     )
-    def test_get_run_output_suffixes(self, tmp_path, toml_content, expected):
+    def test_get_run_output_suffixes(self, tmp_path: Path, toml_content: str, expected: list[str]) -> None:
         pyproject = tmp_path / "pyproject.toml"
         pyproject.write_text(toml_content)
         assert get_run_output_suffixes.get_run_output_suffixes(pyproject) == expected
@@ -71,13 +71,13 @@ class TestGetRunOutputSuffixes:
             ),
         ],
     )
-    def test_platform_filtering(self, tmp_path, platform, expected):
+    def test_platform_filtering(self, tmp_path: Path, platform: str, expected: list[str]) -> None:
         pyproject = tmp_path / "pyproject.toml"
         pyproject.write_text(self.TOML_WITH_SHORTREAD_EXTRA)
         result = get_run_output_suffixes.get_run_output_suffixes(pyproject, platform)
         assert result == expected
 
-    def test_against_real_pyproject(self):
+    def test_against_real_pyproject(self) -> None:
         """Smoke test against the actual repo pyproject.toml."""
         pyproject = Path(__file__).resolve().parents[6] / "pyproject.toml"
         if not pyproject.exists():
@@ -93,7 +93,7 @@ class TestGetRunOutputSuffixes:
 class TestMain:
     """Test the main() CLI entrypoint."""
 
-    def test_prints_suffixes_to_stdout(self, tmp_path, capsys):
+    def test_prints_suffixes_to_stdout(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
         pyproject = tmp_path / "pyproject.toml"
         pyproject.write_text(
             '[tool.mgs-workflow]\n'
@@ -107,7 +107,7 @@ class TestMain:
         captured = capsys.readouterr()
         assert captured.out == "bracken.tsv\nread_counts.tsv\n"
 
-    def test_exits_on_missing_file(self, tmp_path):
+    def test_exits_on_missing_file(self, tmp_path: Path) -> None:
         with patch(
             "sys.argv",
             ["get_run_output_suffixes.py", "--platform", "illumina", str(tmp_path / "nonexistent.toml")],
