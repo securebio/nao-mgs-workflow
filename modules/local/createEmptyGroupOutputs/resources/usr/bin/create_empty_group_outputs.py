@@ -133,7 +133,7 @@ def create_empty_outputs(
     schema_dir: Path | None = None,
 ) -> list[str]:
     """
-    Create empty gzipped files for each group and pattern combination.
+    Create empty output files for each group and pattern combination.
 
     When a table-schema exists for an output pattern, the file includes
     a header row with column names from the schema.

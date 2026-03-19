@@ -115,7 +115,7 @@ This is a reusable subworkflow that discovers all per-sample TSV and JSON files 
 
 ### Concatenate all per-sample RUN outputs by group (`CONCAT_RUN_OUTPUTS_BY_GROUP`)
 
-This subworkflow wraps multiple calls to `CONCAT_BY_GROUP` (see below) to concatenate all per-sample RUN output types (viral hits, read counts, Kraken reports, Bracken abundance estimates, and QC statistics) into per-group TSVs, and calls `CONCAT_JSON_BY_GROUP` to merge per-sample FASTP JSON files into per-group JSON outputs. It emits `hits` separately (used by downstream duplicate marking, validation, and clade counting), `fastp_json` (per-group combined FASTP QC data, short-read only), and mixes all other TSV outputs into a single `other` channel that flows directly to the published results.
+This subworkflow wraps multiple calls to `CONCAT_BY_GROUP` (see below) to concatenate all per-sample RUN output types (viral hits, read counts, Kraken reports, Bracken abundance estimates, and QC statistics) into per-group TSVs, and calls `CONCAT_JSON_BY_GROUP` to merge per-sample FASTP JSON files into per-group JSON outputs. It emits three output channels: `hits` (used by downstream duplicate marking, validation, and clade counting), `fastp_json` (per-group combined FASTP QC data, short-read only), and `other` (all remaining TSV outputs, which flow directly to the published results).
 
 
 ### Concatenate per-sample outputs into per-group TSVs (`CONCAT_BY_GROUP`)
