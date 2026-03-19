@@ -2,6 +2,8 @@
 
 # TODO: Add unit tests for individual functions in a future pass
 
+from pathlib import Path
+
 import pytest
 import pandas as pd
 
@@ -11,7 +13,7 @@ import raise_taxonomy_ranks
 class TestRaiseTaxonomyRanks:
     """Test the raise_taxonomy_ranks module."""
 
-    def test_raise_ranks_on_test_data(self, tmp_path):
+    def test_raise_ranks_on_test_data(self, tmp_path: Path) -> None:
         """Test raising ranks on test data with expected output."""
         # Create test input DataFrame matching test-taxonomy-ranked.tsv structure
         input_data = {
@@ -57,9 +59,9 @@ class TestRaiseTaxonomyRanks:
         result_genus = result["taxid_genus"].fillna("NA").tolist()
         result_family = result["taxid_family"].fillna("NA").tolist()
 
-        expected_species_str = ["NA" if pd.isna(v) else v for v in expected_species]
-        expected_genus_str = ["NA" if pd.isna(v) else v for v in expected_genus]
-        expected_family_str = ["NA" if pd.isna(v) else v for v in expected_family]
+        expected_species_str = ["NA" if v is pd.NA else v for v in expected_species]
+        expected_genus_str = ["NA" if v is pd.NA else v for v in expected_genus]
+        expected_family_str = ["NA" if v is pd.NA else v for v in expected_family]
 
         assert result_species == expected_species_str
         assert result_genus == expected_genus_str

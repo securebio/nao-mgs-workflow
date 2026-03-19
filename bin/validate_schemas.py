@@ -124,7 +124,7 @@ def find_data_files(output_dir: Path) -> list[Path]:
     Returns:
         List of paths to data files.
     """
-    files = []
+    files: list[Path] = []
     for results_dir in output_dir.glob("results*"):
         if results_dir.is_dir():
             files.extend(f for f in results_dir.iterdir() if f.is_file())

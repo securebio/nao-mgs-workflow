@@ -8,10 +8,10 @@ process EXTRACT_NCBI_TAXONOMY {
         path("taxonomy"), emit: dir
         path("taxonomy-nodes.dmp"), emit: nodes
         path("taxonomy-names.dmp"), emit: names
-    shell:
-        '''
-        unzip !{taxonomy_zip} -d taxonomy
+    script:
+        """
+        unzip ${taxonomy_zip} -d taxonomy
         cp taxonomy/nodes.dmp taxonomy-nodes.dmp
         cp taxonomy/names.dmp taxonomy-names.dmp
-        '''
+        """
 }

@@ -1,28 +1,29 @@
 #!/usr/bin/env python3
 
 import gzip
+from pathlib import Path
 
 import pytest
 import sort_fastq
 
 
-def _write_fastq_gz(path, content):
+def _write_fastq_gz(path: Path, content: str) -> None:
     with gzip.open(str(path), "wt") as f:
         f.write(content)
 
 
-def _read_lines(path):
+def _read_lines(path: Path) -> list[str]:
     with open(str(path)) as f:
         return f.readlines()
 
 
-def _make_fastq_record(read_id, seq="ACGTACGT", qual="IIIIIIII"):
+def _make_fastq_record(read_id: str, seq: str = "ACGTACGT", qual: str = "IIIIIIII") -> str:
     return f"@{read_id}\n{seq}\n+\n{qual}\n"
 
 
 class TestSortFastq:
 
-    def test_empty_fastq(self, tmp_path):
+    def test_empty_fastq(self, tmp_path: Path) -> None:
         """Empty FASTQ produces empty output."""
         inp = tmp_path / "input.fastq.gz"
         out = tmp_path / "sorted.fastq"
@@ -41,7 +42,7 @@ class TestSortFastq:
         ],
         ids=["already_sorted", "reverse_sorted"],
     )
-    def test_sort_order(self, tmp_path, order, expected):
+    def test_sort_order(self, tmp_path: Path, order: list[str], expected: list[str]) -> None:
         """Reads are sorted by read ID regardless of input order."""
         inp = tmp_path / "input.fastq.gz"
         out = tmp_path / "sorted.fastq"
@@ -54,7 +55,7 @@ class TestSortFastq:
         read_ids = [lines[i].strip().lstrip("@") for i in range(0, len(lines), 4)]
         assert read_ids == expected
 
-    def test_sequence_quality_association_preserved(self, tmp_path):
+    def test_sequence_quality_association_preserved(self, tmp_path: Path) -> None:
         """Each read's sequence and quality stay paired after sorting."""
         inp = tmp_path / "input.fastq.gz"
         out = tmp_path / "sorted.fastq"

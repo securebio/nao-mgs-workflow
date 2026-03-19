@@ -8,8 +8,8 @@ process ADD_GENBANK_GENOME_IDS {
         val(filename_prefix)
     output:
         path("${filename_prefix}-metadata-gid.tsv.gz")
-    shell:
-        '''
+    script:
+        """
         #!/usr/bin/env python
         # Import packages
         import json
@@ -17,7 +17,7 @@ process ADD_GENBANK_GENOME_IDS {
         import pandas as pd
         from Bio.SeqIO.FastaIO import SimpleFastaParser
         # Import metadata and get filepaths
-        meta_db = pd.read_csv("!{genbank_metadata}", sep="\t", dtype=str)
+        meta_db = pd.read_csv("${genbank_metadata}", sep="\\t", dtype=str)
         filepaths = meta_db["local_filename"]
         # Iterate over filepaths to extract genome IDs
         gid_lists = []
@@ -37,7 +37,7 @@ process ADD_GENBANK_GENOME_IDS {
         meta_db_gid = meta_db.iloc[list(indices)].copy()
         meta_db_gid["genome_id"] = values
         # Write output
-        out_path = "!{filename_prefix}-metadata-gid.tsv.gz"
-        meta_db_gid.to_csv(out_path, sep="\t", index=False)
-        '''
+        out_path = "${filename_prefix}-metadata-gid.tsv.gz"
+        meta_db_gid.to_csv(out_path, sep="\\t", index=False)
+        """
 }

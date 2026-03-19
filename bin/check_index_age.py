@@ -82,7 +82,8 @@ def fetch_time_txt_from_s3(s3_uri: str) -> str:
     bucket, key = s3_path.split("/", 1)
     s3_client = boto3.client("s3")
     response = s3_client.get_object(Bucket=bucket, Key=key)
-    return response["Body"].read().decode("utf-8")
+    content: str = response["Body"].read().decode("utf-8")
+    return content
 
 def check_index_age(
     index_date: date,

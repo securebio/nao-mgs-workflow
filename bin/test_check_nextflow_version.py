@@ -4,6 +4,7 @@
 import json
 import sys
 from pathlib import Path
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -21,17 +22,17 @@ from check_nextflow_version import (
 
 class TestValidateSemver:
     @pytest.mark.parametrize("version", ["1.2.3", "0.0.0", "10.20.30", "25.10.0"])
-    def test_valid(self, version):
+    def test_valid(self, version: str) -> None:
         assert validate_semver(version, "test") == version
 
     @pytest.mark.parametrize(
         "version", ["", "1.2", "1.2.3.4", "v1.2.3", "1.2.3-dev", "a.b.c"]
     )
-    def test_invalid(self, version):
+    def test_invalid(self, version: str) -> None:
         with pytest.raises(ValueError, match="Invalid version format"):
             validate_semver(version, "test")
 
-    def test_error_includes_source(self):
+    def test_error_includes_source(self) -> None:
         with pytest.raises(ValueError, match="my_file.txt"):
             validate_semver("bad", "my_file.txt")
 
@@ -45,7 +46,7 @@ class TestGetPinnedVersion:
             ("// Comment\nmanifest {\n    nextflowVersion = '!>=99.99.99'\n}\ndocker.enabled = true", "99.99.99"),
         ],
     )
-    def test_valid(self, tmp_path, content, expected):
+    def test_valid(self, tmp_path: Path, content: str, expected: str) -> None:
         config = tmp_path / "profiles.config"
         config.write_text(content)
         assert get_pinned_version(config) == expected
@@ -60,7 +61,7 @@ class TestGetPinnedVersion:
             "nextflowVersion = '!>=1.2.3.4'",  # 4 parts
         ],
     )
-    def test_invalid(self, tmp_path, content):
+    def test_invalid(self, tmp_path: Path, content: str) -> None:
         config = tmp_path / "profiles.config"
         config.write_text(content)
         with pytest.raises(ValueError, match="Could not find nextflowVersion"):
@@ -69,7 +70,7 @@ class TestGetPinnedVersion:
 
 class TestGetLatestVersion:
     @pytest.mark.parametrize("tag_name,expected", [("v25.10.0", "25.10.0"), ("25.10.0", "25.10.0")])
-    def test_valid(self, tag_name, expected):
+    def test_valid(self, tag_name: str, expected: str) -> None:
         mock_response = MagicMock()
         mock_response.read.return_value = json.dumps({"tag_name": tag_name}).encode()
         mock_response.__enter__ = MagicMock(return_value=mock_response)
@@ -78,7 +79,7 @@ class TestGetLatestVersion:
         with patch("urllib.request.urlopen", return_value=mock_response):
             assert get_latest_version("https://api.example.com") == expected
 
-    def test_invalid_version_format(self):
+    def test_invalid_version_format(self) -> None:
         mock_response = MagicMock()
         mock_response.read.return_value = json.dumps({"tag_name": "v1.2"}).encode()
         mock_response.__enter__ = MagicMock(return_value=mock_response)
@@ -90,7 +91,7 @@ class TestGetLatestVersion:
 
 
 class TestGetLatestNonExcludedVersion:
-    def _mock_releases_response(self, releases_data):
+    def _mock_releases_response(self, releases_data: list[dict[str, object]]) -> MagicMock:
         """Create a mock response returning the given releases list."""
         mock_response = MagicMock()
         mock_response.read.return_value = json.dumps(releases_data).encode()
@@ -98,7 +99,7 @@ class TestGetLatestNonExcludedVersion:
         mock_response.__exit__ = MagicMock(return_value=False)
         return mock_response
 
-    def test_skips_excluded_versions(self):
+    def test_skips_excluded_versions(self) -> None:
         """Test that excluded versions are skipped and next available is returned."""
         releases_data = [
             {"tag_name": "v25.10.3", "prerelease": False, "draft": False},
@@ -109,7 +110,7 @@ class TestGetLatestNonExcludedVersion:
             result = get_latest_non_excluded_version({"25.10.3"})
             assert result == "25.10.2"
 
-    def test_skips_multiple_excluded_versions(self):
+    def test_skips_multiple_excluded_versions(self) -> None:
         """Test that multiple excluded versions are skipped."""
         releases_data = [
             {"tag_name": "v25.10.3", "prerelease": False, "draft": False},
@@ -124,7 +125,7 @@ class TestGetLatestNonExcludedVersion:
         "prerelease,draft",
         [(True, False), (False, True), (True, True)]
     )
-    def test_skips_prerelease_and_draft(self, prerelease, draft):
+    def test_skips_prerelease_and_draft(self, prerelease: bool, draft: bool) -> None:
         """Test that prerelease and draft releases are skipped."""
         releases_data = [
             {"tag_name": "v25.10.3", "prerelease": prerelease, "draft": draft},
@@ -134,7 +135,7 @@ class TestGetLatestNonExcludedVersion:
             result = get_latest_non_excluded_version(set())
             assert result == "25.10.2"
 
-    def test_skips_invalid_version_format(self):
+    def test_skips_invalid_version_format(self) -> None:
         """Test that releases with invalid version formats are skipped."""
         releases_data = [
             {"tag_name": "v25.10", "prerelease": False, "draft": False},  # Invalid: only 2 parts
@@ -144,7 +145,7 @@ class TestGetLatestNonExcludedVersion:
             result = get_latest_non_excluded_version(set())
             assert result == "25.10.2"
 
-    def test_raises_when_all_excluded(self):
+    def test_raises_when_all_excluded(self) -> None:
         """Test that an error is raised when all releases are excluded."""
         releases_data = [
             {"tag_name": "v25.10.2", "prerelease": False, "draft": False},
@@ -156,16 +157,16 @@ class TestGetLatestNonExcludedVersion:
 
 
 class TestCompareVersions:
-    def test_matching_versions(self):
+    def test_matching_versions(self) -> None:
         compare_versions("25.10.0", "25.10.0")
 
-    def test_mismatched_versions(self):
+    def test_mismatched_versions(self) -> None:
         with pytest.raises(ValueError, match="Version mismatch: 25.10.0 != 25.10.1"):
             compare_versions("25.10.0", "25.10.1")
 
 
 class TestMain:
-    def _mock_api_response(self, version):
+    def _mock_api_response(self, version: str) -> MagicMock:
         """Create a mock response returning the given version."""
         mock_response = MagicMock()
         mock_response.read.return_value = json.dumps({"tag_name": f"v{version}"}).encode()
@@ -173,7 +174,7 @@ class TestMain:
         mock_response.__exit__ = MagicMock(return_value=False)
         return mock_response
 
-    def test_versions_match(self, tmp_path, capsys):
+    def test_versions_match(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
         config = tmp_path / "profiles.config"
         config.write_text("manifest {\n    nextflowVersion = '!>=25.10.0'\n}")
 
@@ -186,7 +187,7 @@ class TestMain:
         assert "Latest Nextflow version: 25.10.0" in captured.out
         assert "OK: Pinned version matches target release" in captured.out
 
-    def test_versions_mismatch(self, tmp_path):
+    def test_versions_mismatch(self, tmp_path: Path) -> None:
         config = tmp_path / "profiles.config"
         config.write_text("manifest {\n    nextflowVersion = '!>=25.10.0'\n}")
 
@@ -195,7 +196,7 @@ class TestMain:
                 with pytest.raises(ValueError, match="Version mismatch: 25.10.0 != 25.10.1"):
                     main()
 
-    def test_invalid_config(self, tmp_path):
+    def test_invalid_config(self, tmp_path: Path) -> None:
         config = tmp_path / "profiles.config"
         config.write_text("manifest {}")
 
@@ -210,7 +211,7 @@ class TestMain:
             ("25.10.0", False, "Version mismatch: 25.10.0 != 25.10.2"),  # Pinned doesn't match
         ]
     )
-    def test_excluded_latest_version(self, tmp_path, capsys, pinned_version, should_match, expected_error):
+    def test_excluded_latest_version(self, tmp_path: Path, capsys: pytest.CaptureFixture[str], pinned_version: str, should_match: bool, expected_error: str | None) -> None:
         """Test when latest version is excluded and script finds next available version."""
         config = tmp_path / "profiles.config"
         config.write_text(f"manifest {{\n    nextflowVersion = '!>={pinned_version}'\n}}")
@@ -226,7 +227,7 @@ class TestMain:
         mock_releases.__enter__ = MagicMock(return_value=mock_releases)
         mock_releases.__exit__ = MagicMock(return_value=False)
 
-        def mock_urlopen(request, timeout=None):
+        def mock_urlopen(request: Any, timeout: Any = None) -> MagicMock:
             if "releases/latest" in request.full_url:
                 return mock_latest
             return mock_releases

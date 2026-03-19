@@ -1,5 +1,7 @@
 import gzip
 import json
+from pathlib import Path
+
 import pytest
 from create_empty_group_outputs import (
     open_by_suffix,
@@ -16,7 +18,7 @@ from create_empty_group_outputs import (
 # Test helpers
 #=============================================================================
 
-def write_pyproject(path, illumina_outputs, ont_outputs):
+def write_pyproject(path: Path, illumina_outputs: list[str], ont_outputs: list[str]) -> None:
     """Write a minimal pyproject.toml with expected outputs."""
     content = "[tool.mgs-workflow]\n"
     content += f"expected-outputs-downstream = {illumina_outputs!r}\n"
@@ -32,7 +34,7 @@ class TestOpenBySuffix:
     """Tests for open_by_suffix function."""
 
     @pytest.mark.parametrize("suffix", [".gz", ".tsv"])
-    def test_writes_and_reads_file(self, tmp_path, suffix):
+    def test_writes_and_reads_file(self, tmp_path: Path, suffix: str) -> None:
         """Test that files can be written and read with correct compression."""
         filepath = tmp_path / f"test{suffix}"
         test_content = "hello\nworld"
@@ -81,7 +83,7 @@ class TestGetGroupOutputPatterns:
             ["{GROUP}_clade.tsv.gz", "{GROUP}_fastp.json"],
         ),
     ])
-    def test_extracts_patterns(self, tmp_path, platform, illumina, ont, expected):
+    def test_extracts_patterns(self, tmp_path: Path, platform: str, illumina: list[str], ont: list[str], expected: list[str]) -> None:
         """Test extraction of patterns containing {GROUP}."""
         pyproject_path = tmp_path / "pyproject.toml"
         write_pyproject(pyproject_path, illumina, ont)
@@ -101,7 +103,7 @@ class TestGetSchemaNameFromPattern:
         ("{GROUP}_fastp.json", "fastp"),
         ("{GROUP}_validation_hits.tsv.gz", "validation_hits"),
     ])
-    def test_extracts_schema_name(self, pattern, expected):
+    def test_extracts_schema_name(self, pattern: str, expected: str) -> None:
         """Test schema name extraction from various patterns."""
         assert get_schema_name_from_pattern(pattern) == expected
 
@@ -113,7 +115,7 @@ class TestGetSchemaNameFromPattern:
 class TestLoadEmptyJson:
     """Tests for load_empty_json function."""
 
-    def test_returns_empty_object_for_object_schema(self, tmp_path):
+    def test_returns_empty_object_for_object_schema(self, tmp_path: Path) -> None:
         """Test that '{}' is returned for JSON Schema with type: object and no required props."""
         schema = {
             "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -122,7 +124,7 @@ class TestLoadEmptyJson:
         (tmp_path / "fastp.schema.json").write_text(json.dumps(schema))
         assert load_empty_json(tmp_path, "fastp") == "{}"
 
-    def test_includes_required_properties(self, tmp_path):
+    def test_includes_required_properties(self, tmp_path: Path) -> None:
         """Test that required top-level properties are populated with empty values."""
         schema = {
             "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -135,10 +137,12 @@ class TestLoadEmptyJson:
             },
         }
         (tmp_path / "test.schema.json").write_text(json.dumps(schema))
-        result = json.loads(load_empty_json(tmp_path, "test"))
+        raw = load_empty_json(tmp_path, "test")
+        assert raw is not None
+        result = json.loads(raw)
         assert result == {"name": "", "count": 0, "tags": []}
 
-    def test_returns_empty_array_for_array_schema(self, tmp_path):
+    def test_returns_empty_array_for_array_schema(self, tmp_path: Path) -> None:
         """Test that '[]' is returned for JSON Schema with type: array."""
         schema = {
             "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -147,11 +151,11 @@ class TestLoadEmptyJson:
         (tmp_path / "items.schema.json").write_text(json.dumps(schema))
         assert load_empty_json(tmp_path, "items") == "[]"
 
-    def test_returns_none_when_no_schema(self, tmp_path):
+    def test_returns_none_when_no_schema(self, tmp_path: Path) -> None:
         """Test that None is returned when no schema file exists."""
         assert load_empty_json(tmp_path, "nonexistent") is None
 
-    def test_returns_none_for_table_schema(self, tmp_path):
+    def test_returns_none_for_table_schema(self, tmp_path: Path) -> None:
         """Test that None is returned for table-schema files (not JSON Schema)."""
         schema = {
             "$schema": "https://specs.frictionlessdata.io/schemas/table-schema.json",
@@ -168,7 +172,7 @@ class TestLoadEmptyJson:
 class TestLoadSchemaHeaders:
     """Tests for load_schema_headers function."""
 
-    def test_returns_headers_when_schema_exists(self, tmp_path):
+    def test_returns_headers_when_schema_exists(self, tmp_path: Path) -> None:
         """Test that headers are returned from a valid schema file."""
         schema = {
             "fields": [
@@ -181,19 +185,19 @@ class TestLoadSchemaHeaders:
         result = load_schema_headers(tmp_path, "test")
         assert result == ["col1", "col2"]
 
-    def test_returns_none_when_no_schema(self, tmp_path):
+    def test_returns_none_when_no_schema(self, tmp_path: Path) -> None:
         """Test that None is returned when no schema file exists."""
         result = load_schema_headers(tmp_path, "nonexistent")
         assert result is None
 
-    def test_returns_none_when_no_fields(self, tmp_path):
+    def test_returns_none_when_no_fields(self, tmp_path: Path) -> None:
         """Test that None is returned when schema has no fields."""
         schema_path = tmp_path / "empty.schema.json"
         schema_path.write_text(json.dumps({"fields": []}))
         result = load_schema_headers(tmp_path, "empty")
         assert result is None
 
-    def test_returns_none_for_json_schema(self, tmp_path):
+    def test_returns_none_for_json_schema(self, tmp_path: Path) -> None:
         """Test that None is returned for JSON Schema files (not table-schemas)."""
         schema = {
             "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -225,13 +229,13 @@ class TestCreateEmptyOutputs:
         # Empty patterns
         ({"g1"}, [], 0),
     ])
-    def test_creates_correct_number_of_files(self, tmp_path, groups, patterns, expected_count):
+    def test_creates_correct_number_of_files(self, tmp_path: Path, groups: set[str], patterns: list[str], expected_count: int) -> None:
         """Test that correct number of files are created."""
         output_dir = tmp_path / "output"
         created = create_empty_outputs(groups, patterns, str(output_dir))
         assert len(created) == expected_count
 
-    def test_files_are_empty_and_valid_gzip(self, tmp_path):
+    def test_files_are_empty_and_valid_gzip(self, tmp_path: Path) -> None:
         """Test that created files are valid empty gzip files."""
         output_dir = tmp_path / "output"
         create_empty_outputs({"g1"}, ["{GROUP}_test.tsv.gz"], str(output_dir))
@@ -241,7 +245,7 @@ class TestCreateEmptyOutputs:
         with gzip.open(filepath, "rt") as f:
             assert f.read() == ""
 
-    def test_creates_nested_output_directory(self, tmp_path):
+    def test_creates_nested_output_directory(self, tmp_path: Path) -> None:
         """Test that nested output directory is created if needed."""
         output_dir = tmp_path / "nested" / "output"
         assert not output_dir.exists()
@@ -249,7 +253,7 @@ class TestCreateEmptyOutputs:
         assert output_dir.exists()
 
     @pytest.mark.parametrize("use_schema_dir", [False, True], ids=["no_schema", "with_schema"])
-    def test_mixed_tsv_and_json_patterns(self, tmp_path, use_schema_dir):
+    def test_mixed_tsv_and_json_patterns(self, tmp_path: Path, use_schema_dir: bool) -> None:
         """Test creating both TSV and JSON outputs together."""
         output_dir = tmp_path / "output"
         patterns = ["{GROUP}_data.tsv.gz", "{GROUP}_fastp.json"]
@@ -296,7 +300,7 @@ class TestCreateEmptyOutputs:
 class TestParseArgs:
     """Tests for parse_args function."""
 
-    def test_parses_required_args(self, monkeypatch):
+    def test_parses_required_args(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Test parsing of required arguments."""
         monkeypatch.setattr(
             "sys.argv",
@@ -309,7 +313,7 @@ class TestParseArgs:
         assert args.platform == "illumina"  # default
         assert args.pattern_filter is None  # default
 
-    def test_parses_empty_groups(self, monkeypatch):
+    def test_parses_empty_groups(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Test parsing of empty groups string."""
         monkeypatch.setattr(
             "sys.argv",
@@ -319,7 +323,7 @@ class TestParseArgs:
         assert args.missing_groups == ""
 
     @pytest.mark.parametrize("platform", ["illumina", "ont"])
-    def test_parses_platform_option(self, monkeypatch, platform):
+    def test_parses_platform_option(self, monkeypatch: pytest.MonkeyPatch, platform: str) -> None:
         """Test parsing of --platform option."""
         monkeypatch.setattr(
             "sys.argv",
@@ -328,7 +332,7 @@ class TestParseArgs:
         args = parse_args()
         assert args.platform == platform
 
-    def test_parses_output_dir_option(self, monkeypatch):
+    def test_parses_output_dir_option(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Test parsing of --output-dir option."""
         monkeypatch.setattr(
             "sys.argv",
@@ -337,7 +341,7 @@ class TestParseArgs:
         args = parse_args()
         assert args.output_dir == "output/"
 
-    def test_parses_pattern_filter_option(self, monkeypatch):
+    def test_parses_pattern_filter_option(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Test parsing of --pattern-filter option."""
         monkeypatch.setattr(
             "sys.argv",
@@ -358,7 +362,7 @@ class TestIntegration:
         ("illumina", ["{GROUP}_clade.tsv.gz", "{GROUP}_dup.tsv.gz"]),
         ("ont", ["{GROUP}_val.tsv.gz"]),
     ])
-    def test_full_workflow(self, tmp_path, platform, expected_patterns):
+    def test_full_workflow(self, tmp_path: Path, platform: str, expected_patterns: list[str]) -> None:
         """Test the complete workflow from comma-separated groups to output files."""
         # Groups as comma-separated string (simulating Nextflow input)
         groups_str = "empty_g1,empty_g2"
@@ -382,7 +386,7 @@ class TestIntegration:
         assert patterns == expected_patterns
         assert len(created) == len(groups) * len(patterns)
 
-    def test_pattern_filter(self, tmp_path):
+    def test_pattern_filter(self, tmp_path: Path) -> None:
         """Test that pattern_filter correctly filters output patterns."""
         groups = {"g1"}
 
@@ -410,7 +414,7 @@ class TestIntegration:
         assert len(created) == 1
         assert "g1_validation_hits.tsv.gz" in created[0]
 
-    def test_mixed_tsv_and_json_integration(self, tmp_path):
+    def test_mixed_tsv_and_json_integration(self, tmp_path: Path) -> None:
         """Test full workflow with both TSV and JSON patterns."""
         groups = {"empty_g1"}
 

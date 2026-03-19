@@ -7,10 +7,10 @@ process DOWNLOAD_VIRAL_NCBI {
     output:
         path("ncbi_metadata.txt"), emit: metadata
         path("ncbi_genomes"), emit: genomes
-    shell:
-        '''
-        par="--formats fasta --flat-output --verbose --parallel !{task.cpus}"
-        io="--output-folder ncbi_genomes --metadata-table ncbi_metadata.txt"
-        ncbi-genome-download !{ncbi_viral_params} ${par} ${io} viral
-        '''
+    script:
+        def par = "--formats fasta --flat-output --verbose --parallel ${task.cpus}"
+        def io = "--output-folder ncbi_genomes --metadata-table ncbi_metadata.txt"
+        """
+        ncbi-genome-download ${ncbi_viral_params} ${par} ${io} viral
+        """
 }
