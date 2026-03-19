@@ -1,4 +1,4 @@
-# v3.3.0.0-dev
+# v3.2.1.1-dev
 
 - Added FASTP JSON output to published DOWNSTREAM outputs for QC (short-read data only; ONT uses FILTLONG), using `CONCAT_JSON_BY_GROUP` to merge per-sample FASTP JSONs into per-group outputs.
 
