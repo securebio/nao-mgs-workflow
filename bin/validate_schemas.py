@@ -213,6 +213,8 @@ def validate_json_file(data_file: Path, schema: dict) -> tuple[bool, list[str]]:
             data = json.load(f)
     except json.JSONDecodeError as e:
         return False, [f"Invalid JSON: {e}"]
+    except OSError as e:
+        return False, [f"Cannot read file: {e}"]
     validator_cls = validator_for(schema)
     try:
         validator_cls.check_schema(schema)

@@ -266,6 +266,27 @@ class TestValidateJsonFile:
         assert len(errors) == 1
         assert "Invalid JSON" in errors[0]
 
+    def test_missing_file_returns_error(self, tmp_path: Path) -> None:
+        """Missing data file should produce a clean FAIL, not an exception."""
+        data_file = tmp_path / "nonexistent.json"
+        is_valid, errors = validate_json_file(data_file, self.PERMISSIVE_SCHEMA)
+        assert not is_valid
+        assert len(errors) == 1
+        assert "Cannot read file" in errors[0]
+
+    def test_invalid_schema_returns_error(self, tmp_path: Path) -> None:
+        """Invalid schema should produce a clean FAIL, not an exception."""
+        data_file = tmp_path / "test.json"
+        data_file.write_text("{}")
+        bad_schema = {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "not_a_valid_type",
+        }
+        is_valid, errors = validate_json_file(data_file, bad_schema)
+        assert not is_valid
+        assert len(errors) == 1
+        assert "Invalid schema" in errors[0]
+
 #################
 # validate_file #
 #################
@@ -538,7 +559,7 @@ expected-outputs-downstream = [
         (schema_dir / "fastp.schema.json").write_text(json.dumps(schema))
         output_dir = tmp_path / "output"
         output_dir.mkdir()
-        results = output_dir / "results"
+        results = output_dir / "results_downstream"
         results.mkdir()
         (results / "group1_fastp.json").write_text("{}")
         exit_code = validate_outputs(output_dir, schema_dir, pyproject)
