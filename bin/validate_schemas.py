@@ -195,11 +195,7 @@ def reordered_to_schema(
         yield Path(tmp.name)
 
 def _is_json_schema(schema: dict) -> bool:
-    """Check whether a loaded schema dict is a JSON Schema (vs a table-schema).
-
-    Note: duplicated in createEmptyGroupOutputs' create_empty_group_outputs.py
-    (can't share across Nextflow module boundary). Keep both copies in sync.
-    """
+    """Check whether a loaded schema dict is a JSON Schema (vs a table-schema)."""
     return "json-schema.org" in schema.get("$schema", "")
 
 def validate_json_file(data_file: Path, schema: dict) -> tuple[bool, list[str]]:
@@ -217,6 +213,10 @@ def validate_json_file(data_file: Path, schema: dict) -> tuple[bool, list[str]]:
     except json.JSONDecodeError as e:
         return False, [f"Invalid JSON: {e}"]
     validator_cls = validator_for(schema)
+    try:
+        validator_cls.check_schema(schema)
+    except Exception as e:
+        return False, [f"Invalid schema: {e}"]
     validator = validator_cls(schema)
     errors = sorted(validator.iter_errors(data), key=lambda e: list(e.absolute_path))
     if not errors:

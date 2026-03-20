@@ -7,7 +7,6 @@ from create_empty_group_outputs import (
     open_by_suffix,
     get_group_output_patterns,
     get_schema_name_from_pattern,
-    load_empty_json,
     load_schema_headers,
     create_empty_outputs,
     parse_args,
@@ -75,7 +74,8 @@ class TestGetGroupOutputPatterns:
             ["input/file.csv"],
             [],
         ),
-        # JSON patterns are also extracted
+        # JSON patterns are also extracted (fastp JSON is handled by combineSampleJsons,
+        # not createEmptyGroupOutputs, but the pattern extraction is generic)
         (
             "illumina",
             ["results/{GROUP}_clade.tsv.gz", "results/{GROUP}_fastp.json"],
@@ -109,77 +109,6 @@ class TestGetSchemaNameFromPattern:
 
 
 #=============================================================================
-# Tests for load_empty_json
-#=============================================================================
-
-class TestLoadEmptyJson:
-    """Tests for load_empty_json function."""
-
-    def test_returns_empty_object_for_object_schema(self, tmp_path: Path) -> None:
-        """Test that '{}' is returned for JSON Schema with type: object and no required props."""
-        schema = {
-            "$schema": "https://json-schema.org/draft/2020-12/schema",
-            "type": "object",
-        }
-        (tmp_path / "fastp.schema.json").write_text(json.dumps(schema))
-        assert load_empty_json(tmp_path, "fastp") == "{}"
-
-    def test_includes_required_properties(self, tmp_path: Path) -> None:
-        """Test that required top-level properties are populated with empty values."""
-        schema = {
-            "$schema": "https://json-schema.org/draft/2020-12/schema",
-            "type": "object",
-            "required": ["name", "count", "tags"],
-            "properties": {
-                "name": {"type": "string"},
-                "count": {"type": "integer"},
-                "tags": {"type": "array"},
-            },
-        }
-        (tmp_path / "test.schema.json").write_text(json.dumps(schema))
-        raw = load_empty_json(tmp_path, "test")
-        assert raw is not None
-        result = json.loads(raw)
-        assert result == {"name": "", "count": 0, "tags": []}
-
-    def test_returns_empty_array_for_array_schema(self, tmp_path: Path) -> None:
-        """Test that '[]' is returned for JSON Schema with type: array."""
-        schema = {
-            "$schema": "https://json-schema.org/draft/2020-12/schema",
-            "type": "array",
-        }
-        (tmp_path / "items.schema.json").write_text(json.dumps(schema))
-        assert load_empty_json(tmp_path, "items") == "[]"
-
-    def test_returns_none_when_no_schema(self, tmp_path: Path) -> None:
-        """Test that None is returned when no schema file exists."""
-        assert load_empty_json(tmp_path, "nonexistent") is None
-
-    def test_real_fastp_schema_returns_empty_object(self) -> None:
-        """The real fastp schema maps sample names to entries via additionalProperties.
-
-        An empty group has zero samples, so {} is the correct empty output.
-        This is NOT dead code — the schema intentionally has no top-level
-        required/properties because the key set is dynamic (sample names).
-        """
-        repo_root = Path(__file__).resolve().parents[5]
-        schema_dir = repo_root / "schemas"
-        if not (schema_dir / "fastp.schema.json").exists():
-            pytest.skip("Real fastp schema not available")
-        result = load_empty_json(schema_dir, "fastp")
-        assert result == "{}"
-
-    def test_returns_none_for_table_schema(self, tmp_path: Path) -> None:
-        """Test that None is returned for table-schema files (not JSON Schema)."""
-        schema = {
-            "$schema": "https://specs.frictionlessdata.io/schemas/table-schema.json",
-            "fields": [{"name": "col1", "type": "string"}],
-        }
-        (tmp_path / "data.schema.json").write_text(json.dumps(schema))
-        assert load_empty_json(tmp_path, "data") is None
-
-
-#=============================================================================
 # Tests for load_schema_headers
 #=============================================================================
 
@@ -209,20 +138,6 @@ class TestLoadSchemaHeaders:
         schema_path = tmp_path / "empty.schema.json"
         schema_path.write_text(json.dumps({"fields": []}))
         result = load_schema_headers(tmp_path, "empty")
-        assert result is None
-
-    def test_returns_none_for_json_schema(self, tmp_path: Path) -> None:
-        """Test that None is returned for JSON Schema files (not table-schemas)."""
-        schema = {
-            "$schema": "https://json-schema.org/draft/2020-12/schema",
-            "type": "object",
-            "fields": [
-                {"name": "col1", "type": "string"},
-            ],
-        }
-        schema_path = tmp_path / "fastp.schema.json"
-        schema_path.write_text(json.dumps(schema))
-        result = load_schema_headers(tmp_path, "fastp")
         assert result is None
 
 
@@ -267,44 +182,27 @@ class TestCreateEmptyOutputs:
         assert output_dir.exists()
 
     @pytest.mark.parametrize("use_schema_dir", [False, True], ids=["no_schema", "with_schema"])
-    def test_mixed_tsv_and_json_patterns(self, tmp_path: Path, use_schema_dir: bool) -> None:
-        """Test creating both TSV and JSON outputs together."""
+    def test_with_schema_headers(self, tmp_path: Path, use_schema_dir: bool) -> None:
+        """Test creating TSV outputs with and without schema headers."""
         output_dir = tmp_path / "output"
-        patterns = ["{GROUP}_data.tsv.gz", "{GROUP}_fastp.json"]
+        patterns = ["{GROUP}_data.tsv.gz"]
         schema_dir = None
         if use_schema_dir:
             schema_dir = tmp_path / "schemas"
             schema_dir.mkdir()
             table_schema = {"fields": [{"name": "col1"}, {"name": "col2"}]}
             (schema_dir / "data.schema.json").write_text(json.dumps(table_schema))
-            # Use required properties so output differs from no-schema default
-            json_schema = {
-                "$schema": "https://json-schema.org/draft/2020-12/schema",
-                "type": "object",
-                "required": ["name", "count"],
-                "properties": {
-                    "name": {"type": "string"},
-                    "count": {"type": "integer"},
-                },
-            }
-            (schema_dir / "fastp.schema.json").write_text(json.dumps(json_schema))
         create_empty_outputs({"g1"}, patterns, str(output_dir), schema_dir)
 
         tsv_path = output_dir / "g1_data.tsv.gz"
-        json_path = output_dir / "g1_fastp.json"
         assert tsv_path.exists()
-        assert json_path.exists()
 
         with gzip.open(tsv_path, "rt") as f:
             content = f.read()
         if use_schema_dir:
             assert content == "col1\tcol2\n"
-            # Schema-derived JSON includes required keys with empty values
-            result = json.loads(json_path.read_text())
-            assert result == {"name": "", "count": 0}
         else:
             assert content == ""
-            assert json_path.read_text() == "{}"
 
 
 #=============================================================================
@@ -428,38 +326,3 @@ class TestIntegration:
         assert len(created) == 1
         assert "g1_validation_hits.tsv.gz" in created[0]
 
-    def test_mixed_tsv_and_json_integration(self, tmp_path: Path) -> None:
-        """Test full workflow with both TSV and JSON patterns."""
-        groups = {"empty_g1"}
-
-        # Create pyproject.toml with both TSV and JSON patterns
-        pyproject_path = tmp_path / "pyproject.toml"
-        write_pyproject(
-            pyproject_path,
-            illumina_outputs=[
-                "results/{GROUP}_clade.tsv.gz",
-                "results/{GROUP}_fastp.json",
-            ],
-            ont_outputs=[],
-        )
-
-        # Run the workflow
-        patterns = get_group_output_patterns(str(pyproject_path), "illumina")
-        output_dir = tmp_path / "output"
-        created = create_empty_outputs(groups, patterns, str(output_dir))
-
-        # Verify both files created
-        assert len(created) == 2
-
-        # TSV should be empty gzip
-        tsv_path = output_dir / "empty_g1_clade.tsv.gz"
-        assert tsv_path.exists()
-        with gzip.open(tsv_path, "rt") as f:
-            assert f.read() == ""
-
-        # JSON should have empty object
-        json_path = output_dir / "empty_g1_fastp.json"
-        assert json_path.exists()
-        with open(json_path) as f:
-            data = json.load(f)
-        assert data == {}
