@@ -107,7 +107,11 @@ def get_schema_name_from_pattern(pattern: str) -> str:
 
 
 def _is_json_schema(schema: dict) -> bool:
-    """Check whether a loaded schema dict is a JSON Schema (vs a table-schema)."""
+    """Check whether a loaded schema dict is a JSON Schema (vs a table-schema).
+
+    Note: duplicated in bin/validate_schemas.py (can't share across Nextflow
+    module boundary). Keep both copies in sync.
+    """
     return "json-schema.org" in schema.get("$schema", "")
 
 
@@ -164,6 +168,9 @@ def load_empty_json(schema_dir: Path, schema_name: str) -> str | None:
                 prop_schema = properties.get(key, {})
                 obj[key] = _empty_value_for_type(prop_schema.get("type", "null"))
             return json.dumps(obj)
+        # Schemas that use additionalProperties (e.g. fastp, which maps sample
+        # names to entries) have no top-level required/properties.  An empty
+        # object is correct here: an empty group has zero samples.
         return "{}"
     elif schema_type == "array":
         return "[]"

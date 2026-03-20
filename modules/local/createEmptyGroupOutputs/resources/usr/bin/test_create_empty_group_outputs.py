@@ -155,6 +155,20 @@ class TestLoadEmptyJson:
         """Test that None is returned when no schema file exists."""
         assert load_empty_json(tmp_path, "nonexistent") is None
 
+    def test_real_fastp_schema_returns_empty_object(self) -> None:
+        """The real fastp schema maps sample names to entries via additionalProperties.
+
+        An empty group has zero samples, so {} is the correct empty output.
+        This is NOT dead code — the schema intentionally has no top-level
+        required/properties because the key set is dynamic (sample names).
+        """
+        repo_root = Path(__file__).resolve().parents[5]
+        schema_dir = repo_root / "schemas"
+        if not (schema_dir / "fastp.schema.json").exists():
+            pytest.skip("Real fastp schema not available")
+        result = load_empty_json(schema_dir, "fastp")
+        assert result == "{}"
+
     def test_returns_none_for_table_schema(self, tmp_path: Path) -> None:
         """Test that None is returned for table-schema files (not JSON Schema)."""
         schema = {
