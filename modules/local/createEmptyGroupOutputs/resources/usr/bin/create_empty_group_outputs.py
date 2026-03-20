@@ -133,28 +133,27 @@ def create_empty_outputs(
     schema_dir: Path | None = None,
 ) -> list[str]:
     """
-    Create empty TSV output files for each group and pattern combination.
+    Create empty output files for each group and pattern combination.
 
-    For TSV outputs, uses table-schema headers when available. JSON patterns
-    are skipped — per-group JSON outputs (e.g. fastp) are produced by
-    combineSampleJsons, not this module.
+    When a table-schema exists for an output pattern, the file includes
+    a header row with column names from the schema.
     Args:
         groups (set[str]): Set of group names to create outputs for.
         patterns (list[str]): List of filename patterns with {GROUP} placeholder.
         output_dir (str): Directory to write output files.
-        schema_dir (Path | None): Directory containing schema files.
+        schema_dir (Path | None): Directory containing table-schema files.
     Returns:
         list[str]: List of paths to created files.
     """
-    # Filter out JSON patterns — JSON outputs are handled by combineSampleJsons
-    patterns = [p for p in patterns if not p.endswith(".json")]
     output_path = Path(output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
-    # Pre-load schema info for each pattern
+    # Pre-load headers for each TSV pattern
     pattern_headers: dict[str, list[str] | None] = {}
     for pattern in patterns:
-        schema_name = get_schema_name_from_pattern(pattern)
+        if pattern.endswith(".json"):
+            continue
         if schema_dir:
+            schema_name = get_schema_name_from_pattern(pattern)
             headers = load_schema_headers(schema_dir, schema_name)
             if headers:
                 logger.info(f"Found schema for {pattern}: {schema_name}.schema.json")
@@ -168,12 +167,20 @@ def create_empty_outputs(
         for pattern in patterns:
             filename = pattern.replace("{GROUP}", group)
             filepath = output_path / filename
-            headers = pattern_headers[pattern]
-            with open_by_suffix(filepath, "w") as f:
-                if headers:
-                    f.write("\t".join(headers) + "\n")
-            created_files.append(str(filepath))
-            logger.info(f"Created: {filepath}" + (" (with headers)" if headers else ""))
+            if pattern.endswith(".json"):
+                # JSON output: write empty JSON object
+                with open(filepath, "w") as f:
+                    f.write("{}")
+                created_files.append(str(filepath))
+                logger.info(f"Created: {filepath} (JSON)")
+            else:
+                # TSV output: write header row if schema exists
+                headers = pattern_headers[pattern]
+                with open_by_suffix(filepath, "w") as f:
+                    if headers:
+                        f.write("\t".join(headers) + "\n")
+                created_files.append(str(filepath))
+                logger.info(f"Created: {filepath}" + (" (with headers)" if headers else ""))
     return created_files
 
 #=============================================================================
@@ -215,7 +222,7 @@ def parse_args() -> argparse.Namespace:
         "--schema-dir",
         type=Path,
         default=None,
-        help="Directory containing schema files for generating empty outputs",
+        help="Directory containing table-schema files for generating headers",
     )
     return parser.parse_args()
 

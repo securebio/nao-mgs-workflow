@@ -74,8 +74,7 @@ class TestGetGroupOutputPatterns:
             ["input/file.csv"],
             [],
         ),
-        # JSON patterns are also extracted (fastp JSON is handled by combineSampleJsons,
-        # not createEmptyGroupOutputs, but the pattern extraction is generic)
+        # JSON patterns are also extracted
         (
             "illumina",
             ["results/{GROUP}_clade.tsv.gz", "results/{GROUP}_fastp.json"],
@@ -182,20 +181,22 @@ class TestCreateEmptyOutputs:
         assert output_dir.exists()
 
     @pytest.mark.parametrize("use_schema_dir", [False, True], ids=["no_schema", "with_schema"])
-    def test_with_schema_headers(self, tmp_path: Path, use_schema_dir: bool) -> None:
-        """Test creating TSV outputs with and without schema headers."""
+    def test_mixed_tsv_and_json_patterns(self, tmp_path: Path, use_schema_dir: bool) -> None:
+        """Test creating both TSV and JSON outputs together."""
         output_dir = tmp_path / "output"
-        patterns = ["{GROUP}_data.tsv.gz"]
+        patterns = ["{GROUP}_data.tsv.gz", "{GROUP}_fastp.json"]
         schema_dir = None
         if use_schema_dir:
             schema_dir = tmp_path / "schemas"
             schema_dir.mkdir()
-            table_schema = {"fields": [{"name": "col1"}, {"name": "col2"}]}
-            (schema_dir / "data.schema.json").write_text(json.dumps(table_schema))
+            schema = {"fields": [{"name": "col1"}, {"name": "col2"}]}
+            (schema_dir / "data.schema.json").write_text(json.dumps(schema))
         create_empty_outputs({"g1"}, patterns, str(output_dir), schema_dir)
 
         tsv_path = output_dir / "g1_data.tsv.gz"
+        json_path = output_dir / "g1_fastp.json"
         assert tsv_path.exists()
+        assert json_path.exists()
 
         with gzip.open(tsv_path, "rt") as f:
             content = f.read()
@@ -203,6 +204,8 @@ class TestCreateEmptyOutputs:
             assert content == "col1\tcol2\n"
         else:
             assert content == ""
+        # JSON should be plain-text (not gzipped) empty object regardless of schema_dir
+        assert json_path.read_text() == "{}"
 
 
 #=============================================================================
@@ -326,3 +329,38 @@ class TestIntegration:
         assert len(created) == 1
         assert "g1_validation_hits.tsv.gz" in created[0]
 
+    def test_mixed_tsv_and_json_integration(self, tmp_path: Path) -> None:
+        """Test full workflow with both TSV and JSON patterns."""
+        groups = {"empty_g1"}
+
+        # Create pyproject.toml with both TSV and JSON patterns
+        pyproject_path = tmp_path / "pyproject.toml"
+        write_pyproject(
+            pyproject_path,
+            illumina_outputs=[
+                "results/{GROUP}_clade.tsv.gz",
+                "results/{GROUP}_fastp.json",
+            ],
+            ont_outputs=[],
+        )
+
+        # Run the workflow
+        patterns = get_group_output_patterns(str(pyproject_path), "illumina")
+        output_dir = tmp_path / "output"
+        created = create_empty_outputs(groups, patterns, str(output_dir))
+
+        # Verify both files created
+        assert len(created) == 2
+
+        # TSV should be empty gzip
+        tsv_path = output_dir / "empty_g1_clade.tsv.gz"
+        assert tsv_path.exists()
+        with gzip.open(tsv_path, "rt") as f:
+            assert f.read() == ""
+
+        # JSON should have empty object
+        json_path = output_dir / "empty_g1_fastp.json"
+        assert json_path.exists()
+        with open(json_path) as f:
+            data = json.load(f)
+        assert data == {}

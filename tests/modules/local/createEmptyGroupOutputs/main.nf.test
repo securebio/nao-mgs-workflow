@@ -46,9 +46,8 @@ nextflow_process {
             def pyproject = path(process.out.pyproject[0])
             def schemasDir = process.out.schemas[0]
             def patterns = getGroupPatterns(pyproject, "illumina")
-            // Only TSV patterns are handled (JSON outputs like fastp are
-            // produced by combineSampleJsons, not createEmptyGroupOutputs)
             def tsvPatterns = patterns.findAll { !it.endsWith(".json") }
+            def jsonPatterns = patterns.findAll { it.endsWith(".json") }
 
             // Verify TSV outputs: one per group per TSV pattern
             def tsvFiles = process.out.outputs.flatten()
@@ -73,6 +72,14 @@ nextflow_process {
                 } else {
                     assert lines.size() == 0 : "${filename} should be empty (no schema)"
                 }
+            }
+
+            // Verify JSON outputs: one per group per JSON pattern
+            def jsonFiles = process.out.json_outputs.flatten()
+            assert jsonFiles.size() == groups.size() * jsonPatterns.size()
+            jsonFiles.each { f ->
+                def content = path(f).text
+                assert content == "{}" : "${f} should contain empty JSON object"
             }
         }
     }
