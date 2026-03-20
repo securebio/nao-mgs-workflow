@@ -555,8 +555,6 @@ class TestFastpSchemaIntegration:
         repo_root = Path(__file__).resolve().parent.parent
         schema_path = repo_root / "schemas" / "fastp.schema.json"
         data_path = repo_root / "test-data" / "results" / "downstream_output_shortread" / "tt1_fastp.json"
-        if not schema_path.exists() or not data_path.exists():
-            pytest.skip("Real test data or schema not available")
         is_valid, errors = validate_file(data_path, schema_path)
         assert is_valid, f"Validation errors: {errors}"
 
@@ -571,8 +569,6 @@ class TestFastpSchemaIntegration:
         repo_root = Path(__file__).resolve().parent.parent
         schema_path = repo_root / "schemas" / "fastp.schema.json"
         fixture_path = repo_root / "test-data" / "downstream" / "empty" / "empty_sample_fastp.json"
-        if not schema_path.exists() or not fixture_path.exists():
-            pytest.skip("Real test data or schema not available")
         with open(schema_path) as f:
             full_schema = json.load(f)
         # Extract sample_entry and inject $defs so $ref resolution works

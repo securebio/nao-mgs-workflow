@@ -33,6 +33,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from frictionless import Dialect, Resource, formats, system, validate
+from jsonschema.exceptions import SchemaError
 from jsonschema.validators import validator_for
 
 ###########
@@ -215,7 +216,7 @@ def validate_json_file(data_file: Path, schema: dict) -> tuple[bool, list[str]]:
     validator_cls = validator_for(schema)
     try:
         validator_cls.check_schema(schema)
-    except Exception as e:
+    except SchemaError as e:
         return False, [f"Invalid schema: {e}"]
     validator = validator_cls(schema)
     errors = sorted(validator.iter_errors(data), key=lambda e: list(e.absolute_path))
