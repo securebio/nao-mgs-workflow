@@ -1,3 +1,7 @@
+# v3.2.1.2-dev
+
+- CI: Hardened Trivy vulnerability scans against supply chain attacks by replacing unpinned apt installs with SHA-pinned `trivy-action` (`rust-tools.yml`) and version-pinned GitHub release with SHA256 verification (`trivy-scan.yml`).
+
 # v3.2.1.1-dev
 
 - Added FASTP JSON output to published DOWNSTREAM outputs for QC (short-read data only; ONT uses FILTLONG), using `CONCAT_JSON_BY_GROUP` to merge per-sample FASTP JSONs into per-group outputs.
