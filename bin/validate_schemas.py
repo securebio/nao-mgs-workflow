@@ -31,8 +31,9 @@ from collections.abc import Generator
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
-from jsonschema.validators import validator_for
+
 from frictionless import Dialect, Resource, formats, system, validate
+from jsonschema.validators import validator_for
 
 ###########
 # LOGGING #

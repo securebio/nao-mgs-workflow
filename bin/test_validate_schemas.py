@@ -544,6 +544,12 @@ expected-outputs-downstream = [
         exit_code = validate_outputs(output_dir, schema_dir, pyproject)
         assert exit_code == expected_exit
 
+
+###############################
+# TestFastpSchemaIntegration  #
+###############################
+
+class TestFastpSchemaIntegration:
     def test_real_fastp_schema_integration(self) -> None:
         """Integration test: validate real test data against the fastp schema."""
         repo_root = Path(__file__).resolve().parent.parent
