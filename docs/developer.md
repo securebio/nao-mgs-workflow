@@ -279,7 +279,7 @@ All new output files should have a complete schema, and all existing schemas sho
 - A `primaryKey` entry describing a set of fields that are collectively guaranteed to uniquely identify each row (can often be a single field).
 - A `missingValues` entry listing permitted null values (typically `""` and `"NA"`).
 
-**JSON Schemas** (for JSON outputs) should follow the [JSON Schema draft/2020-12](https://json-schema.org/draft/2020-12/json-schema-core) convention, with a `$schema` field pointing to `https://json-schema.org/draft/2020-12/schema`.
+**JSON Schemas** (for JSON outputs) should follow the [JSON Schema draft/2020-12](https://json-schema.org/draft/2020-12/json-schema-core) convention, with a `$schema` field pointing to `https://json-schema.org/draft/2020-12/schema`. Include `description` fields on all definitions and properties, and `examples` on leaf properties, to aid both human readers and automated validation tooling.
 
 ### Versioning and guarantees
 
