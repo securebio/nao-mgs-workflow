@@ -22,11 +22,13 @@ jobs:
           python-version: '3.12'
 
       - name: Install Trivy
+        env:
+          TRIVY_VERSION: "0.69.3"
+          TRIVY_SHA256: "a484057aafde31089cf2558ca0f79a4bc835125a5ee6834183a5bcf0735af358"
         run: |
-          wget -qO - https://aquasecurity.github.io/trivy-repo/deb/public.key | sudo apt-key add -
-          echo "deb https://aquasecurity.github.io/trivy-repo/deb $(lsb_release -sc) main" | sudo tee -a /etc/apt/sources.list.d/trivy.list
-          sudo apt-get update
-          sudo apt-get install trivy
+          curl -sL "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_Linux-64bit.deb" -o "trivy_${TRIVY_VERSION}_Linux-64bit.deb"
+          echo "${TRIVY_SHA256}  trivy_${TRIVY_VERSION}_Linux-64bit.deb" | sha256sum --check
+          sudo dpkg -i "trivy_${TRIVY_VERSION}_Linux-64bit.deb"
 
       - name: Run Trivy scan
         run: python bin/scan_containers.py --config configs/containers.config --output-dir trivy_results
