@@ -14,7 +14,6 @@ table-schema exists for an output, the file includes a header row.
 # Standard library imports
 import argparse
 import gzip
-import io
 import json
 from typing import IO, cast
 import logging
