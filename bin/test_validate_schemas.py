@@ -14,6 +14,7 @@ from validate_schemas import (
     get_output_schema_names,
     reordered_to_schema,
     validate_file,
+    validate_json_file,
     validate_outputs,
 )
 
@@ -226,6 +227,66 @@ class TestReorderedToSchema:
             with reordered_to_schema(data_file, schema_path) as path:
                 pass
 
+#######################
+# validate_json_file  #
+#######################
+
+class TestValidateJsonFile:
+    SCHEMA_WITH_REQUIRED = {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {"name": {"type": "string"}, "count": {"type": "integer"}},
+        "required": ["name"],
+    }
+    PERMISSIVE_SCHEMA = {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+    }
+
+    @pytest.mark.parametrize("schema,data,should_pass", [
+        (SCHEMA_WITH_REQUIRED, {"name": "hello"}, True),
+        (SCHEMA_WITH_REQUIRED, {}, False),
+        (SCHEMA_WITH_REQUIRED, {"name": "hello", "count": "not_an_int"}, False),
+        (PERMISSIVE_SCHEMA, {}, True),
+    ], ids=["valid", "missing_required", "wrong_type", "empty_object_permissive"])
+    def test_validates_json(self, tmp_path: Path, schema: dict, data: dict, should_pass: bool) -> None:
+        data_file = tmp_path / "test.json"
+        data_file.write_text(json.dumps(data))
+        is_valid, errors = validate_json_file(data_file, schema)
+        assert is_valid == should_pass
+        if not should_pass:
+            assert len(errors) > 0
+
+    def test_malformed_json_returns_error(self, tmp_path: Path) -> None:
+        """Malformed JSON should produce a clean FAIL, not an exception."""
+        data_file = tmp_path / "bad.json"
+        data_file.write_text("{not valid json")
+        is_valid, errors = validate_json_file(data_file, self.PERMISSIVE_SCHEMA)
+        assert not is_valid
+        assert len(errors) == 1
+        assert "Invalid JSON" in errors[0]
+
+    def test_missing_file_returns_error(self, tmp_path: Path) -> None:
+        """Missing data file should produce a clean FAIL, not an exception."""
+        data_file = tmp_path / "nonexistent.json"
+        is_valid, errors = validate_json_file(data_file, self.PERMISSIVE_SCHEMA)
+        assert not is_valid
+        assert len(errors) == 1
+        assert "Cannot read file" in errors[0]
+
+    def test_invalid_schema_returns_error(self, tmp_path: Path) -> None:
+        """Invalid schema should produce a clean FAIL, not an exception."""
+        data_file = tmp_path / "test.json"
+        data_file.write_text("{}")
+        bad_schema = {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "not_a_valid_type",
+        }
+        is_valid, errors = validate_json_file(data_file, bad_schema)
+        assert not is_valid
+        assert len(errors) == 1
+        assert "Invalid schema" in errors[0]
+
 #################
 # validate_file #
 #################
@@ -376,6 +437,27 @@ class TestValidateFile:
         assert not is_valid
         assert len(errors) >= 3
 
+    @pytest.mark.parametrize("data,should_pass", [
+        ({"name": "hello"}, True),
+        ({}, False),
+    ], ids=["valid_json", "invalid_json"])
+    def test_json_schema_dispatch(self, tmp_path: Path, data: dict, should_pass: bool) -> None:
+        """validate_file dispatches to JSON Schema validation for JSON Schemas."""
+        schema = {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {"name": {"type": "string"}},
+            "required": ["name"],
+        }
+        schema_path = tmp_path / "test.schema.json"
+        schema_path.write_text(json.dumps(schema))
+        data_file = tmp_path / "test.json"
+        data_file.write_text(json.dumps(data))
+        is_valid, errors = validate_file(data_file, schema_path)
+        assert is_valid == should_pass
+        if not should_pass:
+            assert len(errors) > 0
+
 ####################
 # validate_outputs #
 ####################
@@ -457,3 +539,67 @@ expected-outputs-downstream = [
         pyproject = tmp_path / "nonexistent.toml"
         exit_code = validate_outputs(output_dir, schema_dir, pyproject)
         assert exit_code == 1
+
+    @pytest.mark.parametrize("schema,expected_exit", [
+        ({"$schema": "https://json-schema.org/draft/2020-12/schema", "type": "object"}, 0),
+        ({"$schema": "https://json-schema.org/draft/2020-12/schema", "type": "object",
+          "properties": {"name": {"type": "string"}}, "required": ["name"]}, 1),
+    ], ids=["valid_json", "invalid_json"])
+    def test_json_validation(self, tmp_path: Path, schema: dict, expected_exit: int) -> None:
+        """JSON files are validated against JSON Schemas."""
+        pyproject = tmp_path / "pyproject.toml"
+        pyproject.write_text("""
+[tool.mgs-workflow]
+expected-outputs-downstream = [
+    "results_downstream/{GROUP}_fastp.json",
+]
+""")
+        schema_dir = tmp_path / "schemas"
+        schema_dir.mkdir()
+        (schema_dir / "fastp.schema.json").write_text(json.dumps(schema))
+        output_dir = tmp_path / "output"
+        output_dir.mkdir()
+        results = output_dir / "results_downstream"
+        results.mkdir()
+        (results / "group1_fastp.json").write_text("{}")
+        exit_code = validate_outputs(output_dir, schema_dir, pyproject)
+        assert exit_code == expected_exit
+
+
+###############################
+# TestFastpSchemaIntegration  #
+###############################
+
+class TestFastpSchemaIntegration:
+    def test_real_fastp_schema_integration(self) -> None:
+        """Integration test: validate real test data against the fastp schema."""
+        repo_root = Path(__file__).resolve().parent.parent
+        schema_path = repo_root / "schemas" / "fastp.schema.json"
+        data_path = repo_root / "test-data" / "results" / "downstream_output_shortread" / "tt1_fastp.json"
+        is_valid, errors = validate_file(data_path, schema_path)
+        assert is_valid, f"Validation errors: {errors}"
+
+    def test_empty_sample_fixture_matches_sample_entry_schema(self) -> None:
+        """Validate empty_sample_fastp.json against the sample_entry sub-schema.
+
+        Catches schema tightenings that would break the empty fixture before
+        they surface in the full DOWNSTREAM workflow test.
+        """
+        from jsonschema.validators import validator_for
+
+        repo_root = Path(__file__).resolve().parent.parent
+        schema_path = repo_root / "schemas" / "fastp.schema.json"
+        fixture_path = repo_root / "test-data" / "downstream" / "empty" / "empty_sample_fastp.json"
+        with open(schema_path) as f:
+            full_schema = json.load(f)
+        # Extract sample_entry and inject $defs so $ref resolution works
+        sample_entry_schema = {**full_schema["$defs"]["sample_entry"], "$defs": full_schema["$defs"]}
+        with open(fixture_path) as f:
+            fixture_data = json.load(f)
+        # The fixture is a per-sample file; add pipeline-injected fields
+        fixture_data["sample"] = "empty_sample"
+        fixture_data["group"] = "empty_group"
+        validator_cls = validator_for(full_schema)
+        validator = validator_cls(sample_entry_schema)
+        errors = sorted(validator.iter_errors(fixture_data), key=lambda e: list(e.absolute_path))
+        assert not errors, f"Fixture fails sample_entry validation: {[e.message for e in errors]}"

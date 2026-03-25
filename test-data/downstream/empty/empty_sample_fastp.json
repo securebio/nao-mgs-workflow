@@ -1,1 +1,102 @@
-{}
+{
+  "summary": {
+    "fastp_version": "0.23.4",
+    "sequencing": "paired end (0 cycles + 0 cycles)",
+    "before_filtering": {
+      "total_reads": 0,
+      "total_bases": 0,
+      "q20_bases": 0,
+      "q30_bases": 0,
+      "q20_rate": 0,
+      "q30_rate": 0,
+      "read1_mean_length": 0,
+      "read2_mean_length": 0,
+      "gc_content": 0
+    },
+    "after_filtering": {
+      "total_reads": 0,
+      "total_bases": 0,
+      "q20_bases": 0,
+      "q30_bases": 0,
+      "q20_rate": 0,
+      "q30_rate": 0,
+      "read1_mean_length": 0,
+      "read2_mean_length": 0,
+      "gc_content": 0
+    }
+  },
+  "filtering_result": {
+    "passed_filter_reads": 0,
+    "corrected_reads": 0,
+    "corrected_bases": 0,
+    "low_quality_reads": 0,
+    "too_many_N_reads": 0,
+    "low_complexity_reads": 0,
+    "too_short_reads": 0,
+    "too_long_reads": 0
+  },
+  "adapter_cutting": {
+    "adapter_trimmed_reads": 0,
+    "adapter_trimmed_bases": 0,
+    "read1_adapter_sequence": "",
+    "read2_adapter_sequence": "",
+    "read1_adapter_counts": {},
+    "read2_adapter_counts": {}
+  },
+  "polyx_trimming": {
+    "total_polyx_trimmed_reads": 0,
+    "polyx_trimmed_reads": {"A": 0, "T": 0, "C": 0, "G": 0},
+    "total_polyx_trimmed_bases": 0,
+    "polyx_trimmed_bases": {"A": 0, "T": 0, "C": 0, "G": 0}
+  },
+  "insert_size": {
+    "peak": 0,
+    "unknown": 0,
+    "histogram": []
+  },
+  "read1_before_filtering": {
+    "total_reads": 0,
+    "total_bases": 0,
+    "q20_bases": 0,
+    "q30_bases": 0,
+    "total_cycles": 0,
+    "quality_curves": {},
+    "content_curves": {},
+    "kmer_count": {},
+    "overrepresented_sequences": {}
+  },
+  "read2_before_filtering": {
+    "total_reads": 0,
+    "total_bases": 0,
+    "q20_bases": 0,
+    "q30_bases": 0,
+    "total_cycles": 0,
+    "quality_curves": {},
+    "content_curves": {},
+    "kmer_count": {},
+    "overrepresented_sequences": {}
+  },
+  "read1_after_filtering": {
+    "total_reads": 0,
+    "total_bases": 0,
+    "q20_bases": 0,
+    "q30_bases": 0,
+    "total_cycles": 0,
+    "quality_curves": {},
+    "content_curves": {},
+    "kmer_count": {},
+    "overrepresented_sequences": {}
+  },
+  "read2_after_filtering": {
+    "total_reads": 0,
+    "total_bases": 0,
+    "q20_bases": 0,
+    "q30_bases": 0,
+    "total_cycles": 0,
+    "quality_curves": {},
+    "content_curves": {},
+    "kmer_count": {},
+    "overrepresented_sequences": {}
+  },
+  "command": "fastp --in1 /dev/null --in2 /dev/null --json out.json --correction --detect_adapter_for_pe --trim_poly_x --dont_eval_duplication --low_complexity_filter"
+}
