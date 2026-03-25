@@ -46,25 +46,23 @@ nextflow_process {
             def pyproject = path(process.out.pyproject[0])
             def schemasDir = process.out.schemas[0]
             def patterns = getGroupPatterns(pyproject, "illumina")
-            def tsvPatterns = patterns.findAll { !it.endsWith(".json") }
-            def jsonPatterns = patterns.findAll { it.endsWith(".json") }
 
-            // Verify TSV outputs: one per group per TSV pattern
-            def tsvFiles = process.out.outputs.flatten()
-            assert tsvFiles.size() == groups.size() * tsvPatterns.size()
-            def tsvFilenames = tsvFiles.collect { it.toString().split('/').last() }.sort()
+            // Verify outputs: one per group per pattern
+            def files = process.out.outputs.flatten()
+            assert files.size() == groups.size() * patterns.size()
+            def filenames = files.collect { it.toString().split('/').last() }.sort()
             groups.each { group ->
-                tsvPatterns.each { pattern ->
+                patterns.each { pattern ->
                     def expected = pattern.replace("{GROUP}", group)
-                    assert tsvFilenames.contains(expected) : "Missing expected TSV: ${expected}"
+                    assert filenames.contains(expected) : "Missing expected file: ${expected}"
                 }
             }
 
-            // Verify schema-header behaviour for each TSV pattern
-            tsvPatterns.each { pattern ->
+            // Verify schema-header behaviour for each pattern
+            patterns.each { pattern ->
                 def expectedHeaders = getSchemaHeaders(schemasDir, pattern)
                 def filename = pattern.replace("{GROUP}", groups[0])
-                def f = tsvFiles.find { it.toString().split('/').last() == filename }
+                def f = files.find { it.toString().split('/').last() == filename }
                 def lines = path(f).linesGzip
                 if (expectedHeaders) {
                     assert lines.size() == 1 : "${filename} should have exactly a header row"
@@ -72,14 +70,6 @@ nextflow_process {
                 } else {
                     assert lines.size() == 0 : "${filename} should be empty (no schema)"
                 }
-            }
-
-            // Verify JSON outputs: one per group per JSON pattern
-            def jsonFiles = process.out.json_outputs.flatten()
-            assert jsonFiles.size() == groups.size() * jsonPatterns.size()
-            jsonFiles.each { f ->
-                def content = path(f).text
-                assert content == "{}" : "${f} should contain empty JSON object"
             }
         }
     }

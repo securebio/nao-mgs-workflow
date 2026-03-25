@@ -147,11 +147,9 @@ def create_empty_outputs(
     """
     output_path = Path(output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
-    # Pre-load headers for each TSV pattern
+    # Pre-load headers for each pattern
     pattern_headers: dict[str, list[str] | None] = {}
     for pattern in patterns:
-        if pattern.endswith(".json"):
-            continue
         if schema_dir:
             schema_name = get_schema_name_from_pattern(pattern)
             headers = load_schema_headers(schema_dir, schema_name)
@@ -167,20 +165,12 @@ def create_empty_outputs(
         for pattern in patterns:
             filename = pattern.replace("{GROUP}", group)
             filepath = output_path / filename
-            if pattern.endswith(".json"):
-                # JSON output: write empty JSON object
-                with open(filepath, "w") as f:
-                    f.write("{}")
-                created_files.append(str(filepath))
-                logger.info(f"Created: {filepath} (JSON)")
-            else:
-                # TSV output: write header row if schema exists
-                headers = pattern_headers[pattern]
-                with open_by_suffix(filepath, "w") as f:
-                    if headers:
-                        f.write("\t".join(headers) + "\n")
-                created_files.append(str(filepath))
-                logger.info(f"Created: {filepath}" + (" (with headers)" if headers else ""))
+            headers = pattern_headers[pattern]
+            with open_by_suffix(filepath, "w") as f:
+                if headers:
+                    f.write("\t".join(headers) + "\n")
+            created_files.append(str(filepath))
+            logger.info(f"Created: {filepath}" + (" (with headers)" if headers else ""))
     return created_files
 
 #=============================================================================
