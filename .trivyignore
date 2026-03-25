@@ -18,3 +18,33 @@ CVE-2025-6020
 
 # GnuPG gpgv: information disclosure / potential code execution (no Debian fix available as of 2026-03-14)
 CVE-2025-68973
+
+# ── Go stdlib v1.23.4 in ncbi-datasets-cli 18.21.0 (ncbi_datasets container) ──
+# The NCBI datasets/dataformat binaries are pre-compiled Go executables distributed
+# via conda-forge. They ship Go stdlib v1.23.4; fixes require Go >= 1.24.6+.
+# We cannot rebuild these — only NCBI can, by updating their Go toolchain.
+# As of 2026-03-25, conda-forge ncbi-datasets-cli 18.21.0 is the latest version.
+#
+# Risk assessment: these binaries run in an isolated container that only downloads
+# genome metadata from NCBI's API and writes local files. They do not serve TLS,
+# connect to Postgres, or process untrusted archives — so the practical attack
+# surface for these CVEs is minimal in our pipeline context.
+#
+# TODO: Remove these ignores when a newer ncbi-datasets-cli is available on
+# conda-forge built with Go >= 1.24.13. Check with:
+#   conda search -c conda-forge ncbi-datasets-cli
+#
+# crypto/tls: unexpected session resumption (CRITICAL)
+CVE-2025-68121
+# database/sql: Postgres scan race condition (HIGH)
+CVE-2025-47907
+# archive/tar: unbounded allocation parsing GNU sparse map (HIGH)
+CVE-2025-58183
+# net/url: memory exhaustion in query parameter parsing (HIGH)
+CVE-2025-61726
+# archive/zip: excessive CPU consumption building archive index (HIGH)
+CVE-2025-61728
+# crypto/x509: DoS via crafted certificate (HIGH)
+CVE-2025-61729
+# net/url: incorrect parsing of IPv6 host literals (HIGH)
+CVE-2026-25679
