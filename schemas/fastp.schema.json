@@ -335,10 +335,10 @@
           "type": "object",
           "description": "Number of reads trimmed per base type.",
           "properties": {
-            "A": { "type": "integer", "minimum": 0 },
-            "T": { "type": "integer", "minimum": 0 },
-            "C": { "type": "integer", "minimum": 0 },
-            "G": { "type": "integer", "minimum": 0 }
+            "A": { "type": "integer", "minimum": 0, "description": "Reads with poly-A tails trimmed.", "examples": [0] },
+            "T": { "type": "integer", "minimum": 0, "description": "Reads with poly-T tails trimmed.", "examples": [0] },
+            "C": { "type": "integer", "minimum": 0, "description": "Reads with poly-C tails trimmed.", "examples": [0] },
+            "G": { "type": "integer", "minimum": 0, "description": "Reads with poly-G tails trimmed.", "examples": [0] }
           },
           "required": ["A", "T", "C", "G"],
           "additionalProperties": false
@@ -353,10 +353,10 @@
           "type": "object",
           "description": "Number of bases trimmed per base type.",
           "properties": {
-            "A": { "type": "integer", "minimum": 0 },
-            "T": { "type": "integer", "minimum": 0 },
-            "C": { "type": "integer", "minimum": 0 },
-            "G": { "type": "integer", "minimum": 0 }
+            "A": { "type": "integer", "minimum": 0, "description": "Bases trimmed from poly-A tails.", "examples": [0] },
+            "T": { "type": "integer", "minimum": 0, "description": "Bases trimmed from poly-T tails.", "examples": [0] },
+            "C": { "type": "integer", "minimum": 0, "description": "Bases trimmed from poly-C tails.", "examples": [0] },
+            "G": { "type": "integer", "minimum": 0, "description": "Bases trimmed from poly-G tails.", "examples": [0] }
           },
           "required": ["A", "T", "C", "G"],
           "additionalProperties": false
@@ -400,11 +400,11 @@
           "examples": [151]
         },
         "quality_curves": {
-          "description": "Per-cycle quality score curves (e.g. 'mean' quality at each sequencing cycle).",
+          "description": "Mean base quality score at each sequencing cycle, overall ('mean') and per called base ('A', 'T', 'C', 'G').",
           "$ref": "#/$defs/per_cycle_curves"
         },
         "content_curves": {
-          "description": "Per-cycle base composition curves (e.g. fraction of A, T, C, G, N at each cycle).",
+          "description": "Per-cycle base content as fraction of each base ('A', 'T', 'C', 'G', 'N', 'GC') at each sequencing cycle.",
           "$ref": "#/$defs/per_cycle_curves"
         },
         "kmer_count": {
