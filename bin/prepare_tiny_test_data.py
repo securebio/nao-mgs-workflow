@@ -344,8 +344,8 @@ def generate_illumina_data(fasta_viral: Path,
     for fasta in [fasta_viral] + fasta_other:
         if not fasta.exists():
             raise FileNotFoundError(f"FASTA file not found: {fasta}")
-    with tempfile.TemporaryDirectory() as tmpdir:
-        tmpdir = Path(tmpdir)
+    with tempfile.TemporaryDirectory() as tmpdir_str:
+        tmpdir = Path(tmpdir_str)
         r1_files = []
         r2_files = []
         logger.info(f"Generating Illumina test data from each input file...")
@@ -440,8 +440,8 @@ def generate_ont_data(fasta_viral: Path,
         if not fasta.exists():
             raise FileNotFoundError(f"FASTA file not found: {fasta}")
 
-    with tempfile.TemporaryDirectory() as tmpdir:
-        tmpdir = Path(tmpdir)
+    with tempfile.TemporaryDirectory() as tmpdir_str:
+        tmpdir = Path(tmpdir_str)
         fastq_files = []
 
         # Download NanoSim model
@@ -544,7 +544,7 @@ def parse_arguments() -> argparse.Namespace:
     )
     return parser.parse_args()
 
-def main():
+def main() -> None:
     """Main entry point for the script."""
     args = parse_arguments()
     generate_illumina_data(

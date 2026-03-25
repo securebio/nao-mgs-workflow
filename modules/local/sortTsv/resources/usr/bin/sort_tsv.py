@@ -18,7 +18,7 @@ from datetime import datetime, timezone
 import time
 import tempfile
 import io
-import bz2
+from typing import IO, cast
 import shutil
 import math
 
@@ -27,7 +27,7 @@ import math
 #=======================================================================
 
 class UTCFormatter(logging.Formatter):
-    def formatTime(self, record, datefmt=None):
+    def formatTime(self, record: logging.LogRecord, datefmt: str | None = None) -> str:
         dt = datetime.fromtimestamp(record.created, timezone.utc)
         return dt.strftime('%Y-%m-%d %H:%M:%S UTC')
 logging.basicConfig(level=logging.DEBUG)
@@ -53,7 +53,7 @@ def parse_args() -> argparse.Namespace:
     # Return parsed arguments
     return parser.parse_args()
 
-def open_by_suffix(filename: str, mode: str = "r") -> io.TextIOWrapper:
+def open_by_suffix(filename: str, mode: str = "r") -> IO[str]:
     """
     Open a file with the appropriate compression, based on
     the filename suffix.
@@ -61,16 +61,13 @@ def open_by_suffix(filename: str, mode: str = "r") -> io.TextIOWrapper:
         filename (str): The path to the file to open.
         mode (str): The mode to open the file in.
     Returns:
-        io.TextIOWrapper: The opened file object.
+        IO[str]: The opened file object.
     """
     logger.debug(f"Opening file object: {filename}")
     logger.debug(f"Opening mode: {mode}")
     logger.debug(f"GZIP mode: {filename.endswith('.gz')}")
-    logger.debug(f"BZ2 mode: {filename.endswith('.bz2')}")
     if filename.endswith('.gz'):
-        return gzip.open(filename, mode + 't')
-    elif filename.endswith('.bz2'):
-        return bz2.BZ2File(filename, mode)
+        return cast(IO[str], gzip.open(filename, mode + 't'))
     else:
         return open(filename, mode)
 
@@ -199,7 +196,7 @@ def run_sort(input_file: str,
 # Main function
 #=======================================================================
 
-def main():
+def main() -> None:
     logger.info("Initializing script.")
     start_time = time.time()
     # Parse arguments

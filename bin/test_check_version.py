@@ -20,7 +20,7 @@ class TestValidateVersion:
         "10.20.30.40",
         "1.2.3.4-dev",
     ])
-    def test_valid(self, version):
+    def test_valid(self, version: str) -> None:
         assert validate_version(version, "test") == version
 
     @pytest.mark.parametrize("version", [
@@ -31,18 +31,18 @@ class TestValidateVersion:
         "1.2.3.4-beta",
         "a.b.c.d",
     ])
-    def test_invalid(self, version):
+    def test_invalid(self, version: str) -> None:
         with pytest.raises(ValueError, match="Invalid version format"):
             validate_version(version, "test")
 
-    def test_error_includes_source(self):
+    def test_error_includes_source(self) -> None:
         with pytest.raises(ValueError, match="my_file.txt"):
             validate_version("bad", "my_file.txt")
 
 
 class TestGetPyprojectVersion:
     @pytest.mark.parametrize("version", ["1.2.3.4", "1.2.3.4-dev"])
-    def test_valid(self, tmp_path, version):
+    def test_valid(self, tmp_path: Path, version: str) -> None:
         pyproject = tmp_path / "pyproject.toml"
         pyproject.write_text(f'[project]\nversion = "{version}"\n')
         assert get_pyproject_version(str(pyproject)) == version
@@ -52,7 +52,7 @@ class TestGetPyprojectVersion:
         ('[tool]\nname = "test"\n', KeyError),
         ('[project]\nversion = "1.2.3"\n', ValueError),
     ])
-    def test_invalid(self, tmp_path, content, error):
+    def test_invalid(self, tmp_path: Path, content: str, error: type[Exception]) -> None:
         pyproject = tmp_path / "pyproject.toml"
         pyproject.write_text(content)
         with pytest.raises(error):
@@ -61,7 +61,7 @@ class TestGetPyprojectVersion:
 
 class TestGetChangelogVersion:
     @pytest.mark.parametrize("version", ["1.2.3.4", "1.2.3.4-dev"])
-    def test_valid(self, tmp_path, version):
+    def test_valid(self, tmp_path: Path, version: str) -> None:
         changelog = tmp_path / "CHANGELOG.md"
         changelog.write_text(f"# v{version}\n\n## Changes\n")
         assert get_changelog_version(str(changelog)) == version
@@ -72,7 +72,7 @@ class TestGetChangelogVersion:
         ("", "must start with '# v'"),
         ("# v1.2.3\n", "Invalid version format"),
     ])
-    def test_invalid(self, tmp_path, content, match):
+    def test_invalid(self, tmp_path: Path, content: str, match: str) -> None:
         changelog = tmp_path / "CHANGELOG.md"
         changelog.write_text(content)
         with pytest.raises(ValueError, match=match):

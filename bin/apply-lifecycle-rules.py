@@ -4,12 +4,14 @@ import argparse
 import json
 import boto3
 import sys
+from typing import Any
 from botocore.exceptions import ClientError
 
-def load_lifecycle_config(config_path):
+def load_lifecycle_config(config_path: str) -> dict[str, Any]:
     try:
         with open(config_path, 'r') as f:
-            return json.load(f)
+            result: dict[str, Any] = json.load(f)
+            return result
     except json.JSONDecodeError:
         print(f"Error: {config_path} contains invalid JSON")
         sys.exit(1)
@@ -17,7 +19,7 @@ def load_lifecycle_config(config_path):
         print(f"Error: Could not find file {config_path}")
         sys.exit(1)
 
-def print_lifecycle_rules(rules):
+def print_lifecycle_rules(rules: list[dict[str, Any]]) -> None:
     if not rules:
         print("No lifecycle rules configured")
         return
@@ -29,16 +31,17 @@ def print_lifecycle_rules(rules):
             print(f"  Expiration: {rule['Expiration'].get('Days', 'N/A')} days")
         print()
 
-def get_current_rules(s3, bucket_name):
+def get_current_rules(s3: Any, bucket_name: str) -> list[dict[str, Any]]:
     try:
         response = s3.get_bucket_lifecycle_configuration(Bucket=bucket_name)
-        return response.get('Rules', [])
+        rules: list[dict[str, Any]] = response.get('Rules', [])
+        return rules
     except ClientError as e:
         if e.response['Error']['Code'] == 'NoSuchLifecycleConfiguration':
             return []
         raise
 
-def apply_lifecycle_rules(bucket_name, lifecycle_config):
+def apply_lifecycle_rules(bucket_name: str, lifecycle_config: dict[str, Any]) -> None:
     s3 = boto3.client('s3')
     
     try:
@@ -53,7 +56,7 @@ def apply_lifecycle_rules(bucket_name, lifecycle_config):
         # Apply the new configuration
         s3.put_bucket_lifecycle_configuration(
             Bucket=bucket_name,
-            LifecycleConfiguration=lifecycle_config
+            LifecycleConfiguration=lifecycle_config  # type: ignore[arg-type]
         )
         print(f"\nSuccessfully applied new lifecycle rules to bucket: {bucket_name}")
         
@@ -72,7 +75,7 @@ def apply_lifecycle_rules(bucket_name, lifecycle_config):
             print(f"Error applying lifecycle rules: {str(e)}")
         sys.exit(1)
 
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser(description='Apply S3 lifecycle rules to a bucket')
     parser.add_argument('config_file', help='Path to lifecycle configuration JSON file')
     parser.add_argument('bucket_name', help='Name of the S3 bucket')

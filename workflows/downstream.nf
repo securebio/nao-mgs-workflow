@@ -29,7 +29,7 @@ workflow DOWNSTREAM {
         start_time_str = load_ch.start_time_str
         // Discover all per-sample output files and match to groups
         pipeline_pyproject_path = file("${projectDir}/pyproject.toml")
-        discover_ch = DISCOVER_RUN_OUTPUT(load_ch.run_dirs, load_ch.groups, pipeline_pyproject_path).output
+        discover_ch = DISCOVER_RUN_OUTPUT(load_ch.run_dirs, load_ch.groups, pipeline_pyproject_path, params.platform).output
         // Concatenate per-sample outputs into per-group TSVs
         concat_ch = CONCAT_RUN_OUTPUTS_BY_GROUP(discover_ch)
         // Prepare inputs for clade counting and validating taxonomic assignments
@@ -79,5 +79,6 @@ workflow DOWNSTREAM {
         results_downstream = dup_output_ch.mix(
                                 clade_counts_ch,
                                 validate_ch.annotated_hits,
-                                concat_ch.other)
+                                concat_ch.other,
+                                concat_ch.fastp_json)
 }

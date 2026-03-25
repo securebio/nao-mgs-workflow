@@ -11,8 +11,8 @@ process FILTER_VIRAL_GENBANK_METADATA {
         path("${name_pattern}-metadata-filtered.tsv.gz"), emit: db
         path("${name_pattern}-accessions.csv"), emit: accession
         path("${name_pattern}-paths.csv"), emit: path
-    shell:
-        '''
-        filter-viral-genbank-metadata.py !{metadata_db} !{virus_db} "!{host_taxa}" !{name_pattern}-metadata-filtered.tsv.gz !{name_pattern}-accessions.csv !{name_pattern}-paths.csv
-        '''
+    script:
+        """
+        filter-viral-genbank-metadata.py ${metadata_db} ${virus_db} "${host_taxa}" ${name_pattern}-metadata-filtered.tsv.gz ${name_pattern}-accessions.csv ${name_pattern}-paths.csv
+        """
 }

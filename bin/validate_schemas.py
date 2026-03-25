@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 DESC = """
-Validate workflow output files against table-schema definitions.
+Validate workflow output files against schema definitions.
 
 This script finds output files in results*/ subdirectories that have
-corresponding table-schemas in the schemas/ directory and validates them
-using the frictionless library. Files without schemas are skipped.
+corresponding schemas in the schemas/ directory and validates them.
+TSV files are validated against table-schemas using the frictionless library;
+JSON files are validated against JSON Schemas using the jsonschema library.
+Files without schemas are skipped.
 
 Exit codes:
   0 - All validations passed (or no files to validate)
@@ -29,7 +31,10 @@ from collections.abc import Generator
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
+
 from frictionless import Dialect, Resource, formats, system, validate
+from jsonschema.exceptions import SchemaError
+from jsonschema.validators import validator_for
 
 ###########
 # LOGGING #
@@ -121,7 +126,7 @@ def find_data_files(output_dir: Path) -> list[Path]:
     Returns:
         List of paths to data files.
     """
-    files = []
+    files: list[Path] = []
     for results_dir in output_dir.glob("results*"):
         if results_dir.is_dir():
             files.extend(f for f in results_dir.iterdir() if f.is_file())
@@ -190,15 +195,59 @@ def reordered_to_schema(
         tmp.flush()
         yield Path(tmp.name)
 
+def _is_json_schema(schema: dict) -> bool:
+    """Check whether a loaded schema dict is a JSON Schema (vs a table-schema)."""
+    return "json-schema.org" in schema.get("$schema", "")
+
+def validate_json_file(data_file: Path, schema: dict) -> tuple[bool, list[str]]:
+    """
+    Validate a JSON data file against a JSON Schema.
+    Args:
+        data_file: Path to the JSON data file.
+        schema: The loaded JSON Schema dictionary.
+    Returns:
+        Tuple of (is_valid, list of error messages).
+    """
+    try:
+        with open(data_file) as f:
+            data = json.load(f)
+    except json.JSONDecodeError as e:
+        return False, [f"Invalid JSON: {e}"]
+    except OSError as e:
+        return False, [f"Cannot read file: {e}"]
+    validator_cls = validator_for(schema)
+    try:
+        validator_cls.check_schema(schema)
+    except SchemaError as e:
+        return False, [f"Invalid schema: {e}"]
+    validator = validator_cls(schema)
+    errors = sorted(validator.iter_errors(data), key=lambda e: list(e.absolute_path))
+    if not errors:
+        return True, []
+    messages = []
+    for error in errors:
+        path = ".".join(str(p) for p in error.absolute_path) if error.absolute_path else "(root)"
+        messages.append(f"[{path}] {error.message}")
+    return False, messages
+
 def validate_file(data_file: Path, schema_path: Path) -> tuple[bool, list[str]]:
     """
     Validate a data file against a schema.
+
+    Dispatches to JSON Schema validation for JSON Schemas, or frictionless
+    table-schema validation for table-schemas.
     Args:
         data_file: Path to the data file.
         schema_path: Path to the schema file.
     Returns:
         Tuple of (is_valid, list of error messages).
     """
+    with open(schema_path) as f:
+        schema = json.load(f)
+    if _is_json_schema(schema):
+        return validate_json_file(data_file, schema)
+    # Table-schema path: reordered_to_schema and frictionless expect a file path,
+    # so the schema is re-read from disk by those functions (intentional).
     with decompressed_path(data_file) as uncompressed:
         with reordered_to_schema(uncompressed, schema_path) as file_to_validate:
             dialect = Dialect(controls=[formats.CsvControl(delimiter="\t")])

@@ -2,6 +2,9 @@
 
 # TODO: Add unit tests for individual functions in a future pass
 
+from pathlib import Path
+from typing import Any
+
 import pytest
 import os
 import glob
@@ -12,14 +15,14 @@ import partition_tsv
 class TestPartitionTsv:
     """Test the partition_tsv module."""
 
-    def test_empty_file_raises_error(self, tsv_factory):
+    def test_empty_file_raises_error(self, tsv_factory: Any) -> None:
         """Test that empty file raises ValueError."""
         input_file = tsv_factory.create_plain("input.tsv", "")
 
         with pytest.raises(ValueError, match="Input file is empty"):
             partition_tsv.partition(input_file, "x")
 
-    def test_missing_column_raises_error(self, tsv_factory):
+    def test_missing_column_raises_error(self, tsv_factory: Any) -> None:
         """Test that missing partition column raises ValueError."""
         input_content = "x\ty\tz\n0\t1\t2\n3\t4\t5\n"
         input_file = tsv_factory.create_plain("input.tsv", input_content)
@@ -27,7 +30,7 @@ class TestPartitionTsv:
         with pytest.raises(ValueError, match="Required column is missing from header line: test"):
             partition_tsv.partition(input_file, "test")
 
-    def test_unsorted_file_raises_error(self, tsv_factory, tmp_path):
+    def test_unsorted_file_raises_error(self, tsv_factory: Any, tmp_path: Path) -> None:
         """Test that unsorted file raises ValueError."""
         input_content = "x\tv\tw\n3\t4\t5\n6\t7\t8\n0\t1\t2\n"
         input_file = tsv_factory.create_plain("input.tsv", input_content)
@@ -43,7 +46,7 @@ class TestPartitionTsv:
         finally:
             os.chdir(original_cwd)
 
-    def test_header_only_input(self, tsv_factory, tmp_path):
+    def test_header_only_input(self, tsv_factory: Any, tmp_path: Path) -> None:
         """Test that header-only input produces no output files."""
         input_content = "x\ty\tz\n"
         input_file = tsv_factory.create_plain("input.tsv", input_content)
@@ -62,7 +65,7 @@ class TestPartitionTsv:
         finally:
             os.chdir(original_cwd)
 
-    def test_single_value_partition(self, tsv_factory, tmp_path):
+    def test_single_value_partition(self, tsv_factory: Any, tmp_path: Path) -> None:
         """Test partitioning file with single partition value across multiple rows."""
         input_content = "x\ty\tz\n3\t4\t5\n3\t5\t6\n3\t7\t8\n3\t9\t10\n"
         input_file = tsv_factory.create_plain("input.tsv", input_content)
@@ -87,7 +90,7 @@ class TestPartitionTsv:
         finally:
             os.chdir(original_cwd)
 
-    def test_multi_value_partition(self, tsv_factory, tmp_path):
+    def test_multi_value_partition(self, tsv_factory: Any, tmp_path: Path) -> None:
         """Test partitioning file with multiple partition values."""
         input_content = "x\ty\tz\n0\t1\t2\n3\t4\t5\n3\t5\t6\n6\t7\t8\n"
         input_file = tsv_factory.create_plain("input.tsv", input_content)

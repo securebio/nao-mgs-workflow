@@ -22,6 +22,7 @@ nextflow_workflow {
                     ["tt1", "tiny_test", "group_a"]
                 )
                 input[2] = file("${projectDir}/pyproject.toml")
+                input[3] = "illumina"
                 '''
             }
         }
@@ -43,6 +44,7 @@ nextflow_workflow {
             def filenames = workflow.out.output.collect { path(it[2]).getFileName().toString() } as Set
             assert "tiny_test_virus_hits.tsv" in filenames
             assert "tiny_test_read_counts.tsv" in filenames
+            assert "tiny_test_fastp.json" in filenames
         }
     }
 
@@ -61,6 +63,7 @@ nextflow_workflow {
                 )
                 // Uses a pyproject.toml with an extra expected output that doesn't exist
                 input[2] = file("${projectDir}/test-data/discoverRunOutput/pyproject_extra_suffix.toml")
+                input[3] = "illumina"
                 '''
             }
         }
@@ -84,6 +87,7 @@ nextflow_workflow {
                     ["tt1", "nonexistent_sample", "group_a"]
                 )
                 input[2] = file("${projectDir}/pyproject.toml")
+                input[3] = "illumina"
                 '''
             }
         }
@@ -91,6 +95,7 @@ nextflow_workflow {
             assert !workflow.success
             assert "  tt1 / nonexistent_sample / virus_hits.tsv" in workflow.stdout
             assert "  tt1 / nonexistent_sample / bracken.tsv" in workflow.stdout
+            assert "  tt1 / nonexistent_sample / fastp.json" in workflow.stdout
         }
     }
 
@@ -112,6 +117,7 @@ nextflow_workflow {
                     ["tt1", "tiny", "group_b"]
                 )
                 input[2] = file("${projectDir}/pyproject.toml")
+                input[3] = "illumina"
                 '''
             }
         }

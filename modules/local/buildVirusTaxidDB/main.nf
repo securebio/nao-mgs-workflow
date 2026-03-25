@@ -8,15 +8,15 @@ process BUILD_VIRUS_TAXID_DB {
         val(virus_taxid)
     output:
         path("total-virus-db.tsv.gz"), emit: db
-    shell:
-        '''
+    script:
+        """
         #!/usr/bin/env Rscript
 
         # Setup
         library(tidyverse)
-        nodes_path <- "!{taxonomy_nodes}"
-        names_path <- "!{taxonomy_names}"
-        virus_taxid <- "!{virus_taxid}"
+        nodes_path <- "${taxonomy_nodes}"
+        names_path <- "${taxonomy_names}"
+        virus_taxid <- "${virus_taxid}"
         out_path   <- "total-virus-db.tsv.gz"
 
         # Import NCBI data (NB: convoluted method for names file to avoid problems from unpaired quotes)
@@ -41,7 +41,7 @@ process BUILD_VIRUS_TAXID_DB {
             left_join(names, by="taxid") %>% select(-alt_name)
         virus_db_scinames <- filter(virus_db, type == "scientific name") %>%
             group_by(taxid) %>% filter(row_number() == 1) %>% select(-type)
-        virus_db_other <- filter(virus_db, !taxid %in% virus_db_scinames$taxid) %>%
+        virus_db_other <- filter(virus_db, !taxid %in% virus_db_scinames\$taxid) %>%
             group_by(taxid) %>% filter(row_number() == 1) %>% select(-type)
         virus_db_out <- bind_rows(virus_db_scinames, virus_db_other) %>%
             select(taxid, name, rank, parent_taxid) %>% arrange(taxid) %>%
@@ -50,5 +50,5 @@ process BUILD_VIRUS_TAXID_DB {
 
         # Write output
         write_tsv(virus_db_out, out_path)
-        '''
+        """
 }

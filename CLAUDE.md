@@ -37,7 +37,9 @@ EOF
 2. **Changes list**: Bulleted list of specific changes with their justifications
 3. **Footer**: Always include the "Generated with Claude Code" attribution
 
-**Before creating the PR**, check whether your changes require documentation updates. If you modified behavior, added features, or changed workflows, update the relevant docs (e.g. `docs/`, `CLAUDE.md`) in the same PR — don't leave documentation for a follow-up.
+**Before creating the PR:**
+- Run the **pr-preflight** agent to check branch readiness (version bump, changelog, lint, schemas)
+- Check whether your changes require documentation updates. If you modified behavior, added features, or changed workflows, update the relevant docs (e.g. `docs/`, `CLAUDE.md`) in the same PR — don't leave documentation for a follow-up. Use the **update-docs** agent to identify and edit affected doc files.
 
 **Important options:**
 - Always use `--base dev` (PRs target `dev`, not `main`)
@@ -66,7 +68,7 @@ When the user asks you to handle PR review comments:
 
 ### Checking CI Status
 
-When working on changes to an existing PR branch, proactively check CI status with `gh pr checks` to identify test failures, timeouts, or version-check errors. Don't wait for the user to point out failures — catch and address them as part of your workflow.
+When working on changes to an existing PR branch, proactively check CI status with `gh pr checks` to identify test failures, timeouts, or version-check errors. Don't wait for the user to point out failures — catch and address them as part of your workflow. Use the **ci-debugger** agent to diagnose failures.
 
 ### GitHub Actions Workflows
 
@@ -139,13 +141,16 @@ All Python scripts should have corresponding Pytest scripts in the same director
 - Distinguish clearly between unit tests of high-level functions (which can be useful even if heavily mocked) and integration tests of the whole code stack (which should keep mocks to a minimum).
 - Use `@patch` decorators (including class-level decorators for shared mocks) rather than `with patch(...)` context managers.
 
+### Mypy / Type Checking
+
+Mypy is enforced in CI via `.github/workflows/mypy.yml` — all Python in `bin/` and `modules/local/` must pass `python -m mypy bin/ modules/local/`. Add per-package `[[tool.mypy.overrides]]` in `pyproject.toml` for untyped third-party libraries rather than inline `# type: ignore` comments.
+
 ## Versioning and Changelog
 
 **Both of these are required for PRs to `dev` — CI will fail if they're missing.**
 
 - Every PR must include a version bump in `pyproject.toml` and a corresponding update to `CHANGELOG.md`. The topmost CHANGELOG heading must match the version in `pyproject.toml`.
-- See `docs/versioning.md` for the versioning scheme and guidance on which version component to increment. See `docs/developer.md` for CHANGELOG formatting conventions.
-- Development versions use the `-dev` suffix (e.g. `3.0.1.3-dev`). If the current version is already a `-dev` version, only change it if the new changes justify a larger bump.
+- See `docs/versioning.md` for the full versioning scheme. **Always** use the **version-bump** agent to automate version bumps and changelog entries — do not determine versions manually. The 4-number scheme (Major.Schema.Results.Point) is easy to confuse; the agent reads the versioning rules and determines the appropriate bump level from the branch diff.
 
 ### Backwards Compatibility Trackers
 `pyproject.toml` contains two compatibility version fields:
@@ -155,7 +160,7 @@ All Python scripts should have corresponding Pytest scripts in the same director
 **When to update these:** Only when changes create incompatibilities between the index and RUN/DOWNSTREAM workflows. Most PRs do NOT need to update these. When in doubt, ask the user.
 
 ### Schemas
-If your changes affect pipeline output files, review the corresponding schema files in `schemas/`. Changes to schema fields beyond `title` and `description` require a schema (2nd-number) version bump. See the Schemas section of `docs/developer.md` for details.
+If your changes affect pipeline output files, use the **schema-checker** agent to validate schema completeness and consistency. It checks schemas against the conventions in `docs/developer.md` and determines whether a schema version bump is needed.
 
 When creating new schemas, always include `primaryKey` and `example` fields on every schema and field respectively, matching the conventions in existing schemas (e.g. `read_counts.schema.json`).
 

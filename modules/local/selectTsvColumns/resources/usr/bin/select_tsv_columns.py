@@ -16,15 +16,15 @@ from datetime import datetime, timezone
 import argparse
 import time
 import gzip
-import bz2
 import io
+from typing import IO, cast
 
 #=======================================================================
 # Configure logging
 #=======================================================================
 
 class UTCFormatter(logging.Formatter):
-    def formatTime(self, record, datefmt=None):
+    def formatTime(self, record: logging.LogRecord, datefmt: str | None = None) -> str:
         dt = datetime.fromtimestamp(record.created, timezone.utc)
         return dt.strftime('%Y-%m-%d %H:%M:%S UTC')
 logging.basicConfig(level=logging.INFO)
@@ -59,23 +59,20 @@ def parse_args() -> argparse.Namespace:
     # Return parsed arguments
     return parser.parse_args()
 
-def open_by_suffix(filename: str, mode: str = "r") -> io.TextIOWrapper:
+def open_by_suffix(filename: str, mode: str = "r") -> IO[str]:
     """
     Open a file with the appropriate compression, as inferred from the filename suffix.
     Args:
         filename (str): Path to file.
         mode (str): Mode to open file in.
     Returns:
-        TextIOWrapper: File object.
+        IO[str]: File object.
     """
     logger.debug(f"\tOpening file object: {filename}")
     logger.debug(f"\tOpening mode: {mode}")
     logger.debug(f"\tGZIP mode: {filename.endswith('.gz')}")
-    logger.debug(f"\tBZ2 mode: {filename.endswith('.bz2')}")
     if filename.endswith('.gz'):
-        return gzip.open(filename, mode + 't')
-    elif filename.endswith('.bz2'):
-        return bz2.BZ2file(filename, mode)
+        return cast(IO[str], gzip.open(filename, mode + 't'))
     else:
         return open(filename, mode)
 
@@ -130,13 +127,14 @@ def select_columns(input_path: str, output_path: str, fields: list[str], mode: s
             return
         headers_in = header_line.split("\t")
         # Get indices of selected fields
-        indices = [get_header_index(headers_in, field, mode) for field in fields]
+        indices_raw = [get_header_index(headers_in, field, mode) for field in fields]
         # Get indices of fields to keep
+        indices_keep: list[int]
         if mode == "keep":
-            indices_keep = indices
+            indices_keep = [i for i in indices_raw if i is not None]
         elif mode == "drop":
-            indices = [i for i in indices if i is not None]
-            indices_keep = [i for i in range(len(headers_in)) if i not in indices]
+            indices_drop = [i for i in indices_raw if i is not None]
+            indices_keep = [i for i in range(len(headers_in)) if i not in indices_drop]
         if not indices_keep:
             raise ValueError("Dropping all fields.")
         # Write new header
@@ -155,7 +153,7 @@ def select_columns(input_path: str, output_path: str, fields: list[str], mode: s
 # Main function
 #=======================================================================
 
-def main():
+def main() -> None:
     logger.info("Initializing script.")
     start_time = time.time()
     # Parse arguments

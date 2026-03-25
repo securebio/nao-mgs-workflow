@@ -7,9 +7,9 @@ process CONCATENATE_FASTA_GZIPPED {
         val(name)
     output:
         path("${name}.fasta.gz")
-    shell:
-        '''
-        cat !{files} > !{name}.fasta.gz
-        '''
+    script:
+        """
+        cat ${files} > ${name}.fasta.gz
+        """
 }
 

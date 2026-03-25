@@ -14,8 +14,7 @@ import argparse
 import csv
 import sys
 import gzip
-import bz2
-from typing import TextIO, Any, Union
+from typing import IO, TextIO, Any, Union, cast
 from datetime import datetime, timezone
 
 
@@ -28,7 +27,7 @@ class UTCFormatter(logging.Formatter):
         Formatted log timestamps in UTC timezone
     """
 
-    def formatTime(self, record, datefmt=None):
+    def formatTime(self, record: logging.LogRecord, datefmt: str | None = None) -> str:
         """
         Format log timestamps in UTC timezone.
 
@@ -56,22 +55,20 @@ logger.addHandler(handler)
 # =======================================================================
 
 
-def open_by_suffix(filename: str, mode: str = "r"):
+def open_by_suffix(filename: str, mode: str = "r") -> IO[str]:
     """
     Parse the suffix of a filename to determine the right open method
-    to use, then open the file. Can handle .gz, .bz2, and uncompressed files.
+    to use, then open the file. Can handle .gz and uncompressed files.
 
     Args:
         filename (str): Path to file to open
         mode (str): File open mode (default "r")
 
     Returns:
-        File handle appropriate for the file compression type
+        IO[str]: File handle appropriate for the file compression type
     """
     if filename.endswith(".gz"):
-        return gzip.open(filename, mode + "t")
-    elif filename.endswith(".bz2"):
-        return bz2.BZ2File(filename, mode)
+        return cast(IO[str], gzip.open(filename, mode + "t"))
     else:
         return open(filename, mode)
 
@@ -91,14 +88,14 @@ def parse_args() -> argparse.Namespace:
         "--input",
         type=lambda f: open_by_suffix(f, "r"),
         required=True,
-        help="Input TSV file. Supports .gz and .bz2 compression.",
+        help="Input TSV file. Supports .gz compression.",
     )
     parser.add_argument(
         "-o",
         "--output",
         type=lambda f: open_by_suffix(f, "w"),
         required=True,
-        help="Output filtered TSV file. Supports .gz and .bz2 compression.",
+        help="Output filtered TSV file. Supports .gz compression.",
     )
     parser.add_argument(
         "-c",

@@ -2,6 +2,8 @@
 
 # TODO: Add unit tests for individual functions in a future pass
 
+from typing import Any
+
 import pytest
 import logging
 
@@ -11,7 +13,7 @@ import filter_tsv_column_by_value
 class TestFilterTsvColumnByValue:
     """Test the filter_tsv_column_by_value module."""
 
-    def test_empty_file_keep_matching(self, tsv_factory):
+    def test_empty_file_keep_matching(self, tsv_factory: Any) -> None:
         """Test handling of completely empty file with keep_matching=True."""
         input_file = tsv_factory.create_plain("input.tsv", "")
         output_file = tsv_factory.get_path("output.tsv")
@@ -33,7 +35,7 @@ class TestFilterTsvColumnByValue:
         result = tsv_factory.read_plain(output_file)
         assert result == ""
 
-    def test_header_only_keep_matching(self, tsv_factory):
+    def test_header_only_keep_matching(self, tsv_factory: Any) -> None:
         """Test handling of header-only file with keep_matching=True."""
         input_content = "x\ty\tz\n"
         input_file = tsv_factory.create_plain("input.tsv", input_content)
@@ -54,7 +56,7 @@ class TestFilterTsvColumnByValue:
         result = tsv_factory.read_plain(output_file)
         assert result == input_content
 
-    def test_missing_column_raises_error(self, tsv_factory):
+    def test_missing_column_raises_error(self, tsv_factory: Any) -> None:
         """Test that missing column raises ValueError."""
         input_content = "x\ty\tz\n0\t1\t2\n3\t4\t5\n"
         input_file = tsv_factory.create_plain("input.tsv", input_content)
@@ -73,7 +75,7 @@ class TestFilterTsvColumnByValue:
                     logger=logger
                 )
 
-    def test_filter_keep_no_rows(self, tsv_factory):
+    def test_filter_keep_no_rows(self, tsv_factory: Any) -> None:
         """Test filtering that removes all rows (keep_matching=True, no matching values)."""
         input_content = "x\ty\tz\n0\t1\t2\n3\t4\t5\n3\t5\t6\n6\t7\t8\n"
         input_file = tsv_factory.create_plain("input.tsv", input_content)
@@ -98,7 +100,7 @@ class TestFilterTsvColumnByValue:
         assert len(lines) == 1
         assert lines[0] == "x\ty\tz"
 
-    def test_filter_keep_matching_rows(self, tsv_factory):
+    def test_filter_keep_matching_rows(self, tsv_factory: Any) -> None:
         """Test keeping rows with matching value (keep_matching=True)."""
         input_content = "x\ty\tz\n0\t1\t2\n3\t4\t5\n3\t5\t6\n6\t7\t8\n"
         input_file = tsv_factory.create_plain("input.tsv", input_content)
@@ -124,7 +126,7 @@ class TestFilterTsvColumnByValue:
         assert lines[0] == "x\ty\tz"
         assert lines[1] == "6\t7\t8"
 
-    def test_filter_discard_matching_rows(self, tsv_factory):
+    def test_filter_discard_matching_rows(self, tsv_factory: Any) -> None:
         """Test discarding rows with matching value (keep_matching=False)."""
         input_content = "x\ty\tz\n0\t1\t2\n3\t4\t5\n3\t5\t6\n6\t7\t8\n"
         input_file = tsv_factory.create_plain("input.tsv", input_content)
@@ -157,7 +159,7 @@ class TestFilterTsvColumnByValue:
             fields = line.split("\t")
             assert int(fields[0]) != 6
     
-    def test_filter_lines_with_quotes(self, tsv_factory):
+    def test_filter_lines_with_quotes(self, tsv_factory: Any) -> None:
         """Should correctly handle fields with quotes (regression test)."""
         input_content = 'x\ty\tz\n"0"\t"1"\t"2"\n"0"\t"3"\t"4"\n'
         input_file = tsv_factory.create_plain("input.tsv", input_content)

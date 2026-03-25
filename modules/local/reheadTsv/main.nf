@@ -9,10 +9,10 @@ process REHEAD_TSV {
     output:
         tuple val(sample), path("renamed_${tsv}"), emit: output
         tuple val(sample), path("input_${tsv}"), emit: input
-    shell:
-        '''
-        rehead_tsv.py !{tsv} !{old_fields} !{new_fields} renamed_!{tsv}
+    script:
+        """
+        rehead_tsv.py ${tsv} ${old_fields} ${new_fields} renamed_${tsv}
         # Link input to output for testing
-        ln -s !{tsv} input_!{tsv}
-        '''
+        ln -s ${tsv} input_${tsv}
+        """
 }
