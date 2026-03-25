@@ -2,6 +2,7 @@
 """Tests for chain_workflows.py."""
 
 import csv
+from collections.abc import Callable, Generator
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -76,7 +77,7 @@ class TestGenerateDownstreamInput:
         return d
 
     @pytest.fixture
-    def make_samplesheet(self, tmp_path: Path):
+    def make_samplesheet(self, tmp_path: Path) -> Callable[[list[str]], Path]:
         """Factory fixture that writes a samplesheet CSV and returns its path."""
         def _make(samples: list[str]) -> Path:
             path = tmp_path / "samplesheet.csv"
@@ -94,7 +95,7 @@ class TestGenerateDownstreamInput:
         ids=["single_sample", "multiple_samples"],
     )
     def test_generates_correct_files(
-        self, launch_dir: Path, make_samplesheet, samples: list[str]
+        self, launch_dir: Path, make_samplesheet: Callable[[list[str]], Path], samples: list[str]
     ) -> None:
         sheet = make_samplesheet(samples)
         run_results_dir = "s3://bucket/run/output/results"
@@ -209,7 +210,7 @@ class TestExecuteNextflow:
 
 class TestMain:
     @pytest.fixture
-    def mock_deps(self, tmp_path: Path):
+    def mock_deps(self, tmp_path: Path) -> Generator[dict[str, MagicMock | dict[str, Path] | Path], None, None]:
         """Mock all external dependencies of main(), yielding them for assertions."""
         mock_args = MagicMock()
         mock_args.launch_dir = tmp_path / "launch"

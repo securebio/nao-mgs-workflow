@@ -23,7 +23,7 @@ class TestParseVersionHeader:
         ("#v1.2.3.4", "1.2.3.4"),  # No space after #
         ("#  v1.2.3.4", "1.2.3.4"),  # Multiple spaces
     ])
-    def test_valid_headers(self, line, expected):
+    def test_valid_headers(self, line: str, expected: str) -> None:
         """Test parsing of valid version headers."""
         assert parse_version_header(line) == expected
 
@@ -40,7 +40,7 @@ class TestParseVersionHeader:
         "   ",  # Whitespace only
         "# Some other header",  # Not a version
     ])
-    def test_invalid_headers(self, line):
+    def test_invalid_headers(self, line: str) -> None:
         """Test that invalid headers return None."""
         assert parse_version_header(line) is None
 
@@ -95,7 +95,7 @@ class TestExtractChangelog:
             "- Feature\n",
         ),
     ])
-    def test_extraction_scenarios(self, tmp_path, content, version, expected):
+    def test_extraction_scenarios(self, tmp_path: Path, content: str, version: str, expected: str) -> None:
         """Test various extraction scenarios."""
         changelog = tmp_path / "CHANGELOG.md"
         changelog.write_text(content)
@@ -128,7 +128,7 @@ class TestExtractChangelog:
             "## Breaking Changes\n- Breaking feature\n## Bug Fixes\n- Fixed bug\n",
         ),
     ])
-    def test_formatting_preservation(self, tmp_path, content, version, expected):
+    def test_formatting_preservation(self, tmp_path: Path, content: str, version: str, expected: str) -> None:
         """Test that formatting is preserved correctly."""
         changelog = tmp_path / "CHANGELOG.md"
         changelog.write_text(content)
@@ -149,20 +149,20 @@ class TestExtractChangelog:
             "Version 1.0.0.0 found in CHANGELOG.md but contains no content",
         ),
     ])
-    def test_errors(self, tmp_path, content, version, match):
+    def test_errors(self, tmp_path: Path, content: str, version: str, match: str) -> None:
         """Test error conditions."""
         changelog = tmp_path / "CHANGELOG.md"
         changelog.write_text(content)
         with pytest.raises(ValueError, match=match):
             extract_changelog(version, changelog)
 
-    def test_file_not_found(self, tmp_path):
+    def test_file_not_found(self, tmp_path: Path) -> None:
         """Test error when changelog file doesn't exist."""
         nonexistent = tmp_path / "nonexistent.md"
         with pytest.raises(FileNotFoundError, match="Changelog file not found"):
             extract_changelog("1.0.0.0", nonexistent)
 
-    def test_realistic_changelog(self, tmp_path):
+    def test_realistic_changelog(self, tmp_path: Path) -> None:
         """Test with a realistic changelog format similar to the actual project."""
         changelog = tmp_path / "CHANGELOG.md"
         changelog.write_text(

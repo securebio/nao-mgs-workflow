@@ -12,29 +12,29 @@ process VSEARCH_CLUSTER_LIST {
         tuple val(sample), path("${sample}_*_vsearch_summary.tsv.gz"), emit: summary
         tuple val(sample), path("${sample}_*_vsearch_log.txt"), emit: log
         tuple val(sample), path("input_*"), emit: input
-    shell:
-        '''
-        for reads_file in !{reads}; do
+    script:
+        """
+        for reads_file in ${reads}; do
             # Define paths and parameters
-            species=$(basename ${reads_file} | grep -oP '!{sample}_\\K\\d+(?=_)')
-            if [ -z "$species" ]; then
-                >&2 echo "Error: Could not extract species from filename: ${reads_file}"
+            species=\$(basename \${reads_file} | grep -oP '${sample}_\\K\\d+(?=_)')
+            if [ -z "\$species" ]; then
+                >&2 echo "Error: Could not extract species from filename: \${reads_file}"
                 exit 1
             fi
-            or=!{sample}_${species}_vsearch_reps.fasta
-            os=!{sample}_${species}_vsearch_summary.tsv
-            log=!{sample}_${species}_vsearch_log.txt
-            io="--log ${log} --centroids ${or} --uc ${os} --cluster_fast ${reads_file}"
-            par="--threads !{task.cpus} --id !{identity_threshold} --iddef !{identity_method} --minseqlength !{min_seq_length}"
+            or=${sample}_\${species}_vsearch_reps.fasta
+            os=${sample}_\${species}_vsearch_summary.tsv
+            log=${sample}_\${species}_vsearch_log.txt
+            io="--log \${log} --centroids \${or} --uc \${os} --cluster_fast \${reads_file}"
+            par="--threads ${task.cpus} --id ${identity_threshold} --iddef ${identity_method} --minseqlength ${min_seq_length}"
             # Add decompression if necessary
-            par="${par}$([[ ${reads_file} == *.gz ]] && echo ' --gzip_decompress' || echo '')"
+            par="\${par}\$([[ \${reads_file} == *.gz ]] && echo ' --gzip_decompress' || echo '')"
             # Execute
-            vsearch ${par} ${io}
+            vsearch \${par} \${io}
             # Gzip outputs
-            gzip -c ${or} > ${or}.gz
-            gzip -c ${os} > ${os}.gz
+            gzip -c \${or} > \${or}.gz
+            gzip -c \${os} > \${os}.gz
             # Link input to output for testing
-            ln -s ${reads_file} input_${reads_file}
+            ln -s \${reads_file} input_\${reads_file}
         done
-        '''
+        """
 }

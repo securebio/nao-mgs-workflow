@@ -3,5 +3,5 @@ label: ncbi_datasets
 channels:
   - conda-forge
 dependencies:
-  - conda-forge::ncbi-datasets-cli=18.20.0
+  - conda-forge::ncbi-datasets-cli=18.21.0
   - conda-forge::unzip=6.0

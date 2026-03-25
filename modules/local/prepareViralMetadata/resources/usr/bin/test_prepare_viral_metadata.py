@@ -35,7 +35,7 @@ def _read_tsv(path: Path) -> list[dict[str, str]]:
     with open(path) as f:
         return list(csv.DictReader(f, delimiter="\t"))
 
-def _run_prepare(tmp_path, meta_path, db_path, gdir) -> list[dict[str, str]]:
+def _run_prepare(tmp_path: Path, meta_path: Path, db_path: Path, gdir: Path) -> list[dict[str, str]]:
     """Run prepare_metadata and return output rows."""
     out_meta, out_genomes = str(tmp_path / "out.txt"), str(tmp_path / "ncbi_genomes")
     prepare_metadata(str(meta_path), str(db_path), str(gdir), out_meta, out_genomes)
@@ -81,6 +81,18 @@ class TestPrepareMetadata:
         assert all(r["local_filename"].startswith(out_genomes) for r in rows)
         symlinks = list(Path(out_genomes).glob("*.fna.gz"))
         assert len(symlinks) == 3 and all(s.is_symlink() for s in symlinks)
+
+    def test_empty_metadata_writes_header_only(self, tmp_path: Path, standard_inputs: tuple[Path, Path, Path]) -> None:
+        _, db_path, gdir = standard_inputs
+        meta = _write_tsv(tmp_path / "empty.tsv", META_HEADER, [])
+        out_meta = str(tmp_path / "out.txt")
+        out_genomes = str(tmp_path / "ncbi_genomes")
+        prepare_metadata(str(meta), str(db_path), str(gdir), out_meta, out_genomes)
+        rows = _read_tsv(Path(out_meta))
+        assert len(rows) == 0
+        with open(out_meta) as f:
+            header = f.readline().strip().split("\t")
+        assert header == META_HEADER + ["species_taxid", "local_filename"]
 
     def test_missing_genome_drops_row(self, tmp_path: Path, standard_inputs: tuple[Path, Path, Path]) -> None:
         _, db_path, _ = standard_inputs

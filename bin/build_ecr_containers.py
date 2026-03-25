@@ -29,6 +29,12 @@ def main() -> None:
         help="Repository name prefix (default: nao-mgs-workflow)",
     )
     parser.add_argument(
+        "--pyproject",
+        type=Path,
+        default=Path("pyproject.toml"),
+        help="Path to pyproject.toml for base image config (default: pyproject.toml)",
+    )
+    parser.add_argument(
         "--continue-on-error",
         action="store_true",
         help="Continue if a container build fails",
@@ -55,7 +61,7 @@ def main() -> None:
         logger.info(f"[{i}/{len(spec_files)}] Processing {spec_file.name}...")
         try:
             build_and_push_container(
-                spec_file, args.prefix, config_file
+                spec_file, args.prefix, config_file, args.pyproject
             )
             logger.info("")
         except Exception as e:

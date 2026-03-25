@@ -14,7 +14,7 @@ nextflow_process {
                 script "modules/local/gzipFile/main.nf"
                 process {
                     """
-                    input[0] = file("${projectDir}/test-data/prepareViralMetadata/DUMMY_000000000.0_test_genomic.fna")
+                    input[0] = file("${projectDir}/test-data/prepareViralMetadata/GCA_000000000.0_test_genomic.fna")
                     """
                 }
             }

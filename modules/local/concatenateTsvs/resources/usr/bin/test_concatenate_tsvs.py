@@ -1,5 +1,7 @@
 #!/usr/bin/env python
 
+from typing import Any
+
 import pytest
 
 import concatenate_tsvs
@@ -47,8 +49,8 @@ class TestConcatenateTsvs:
         ],
     )
     def test_concatenate_success_cases(
-        self, tsv_factory, files_content, expected_output
-    ):
+        self, tsv_factory: Any, files_content: list[str], expected_output: str
+    ) -> None:
         """Test various successful concatenation scenarios."""
         input_files = [
             tsv_factory.create_plain(f"file{i}.tsv", content)
@@ -66,7 +68,7 @@ class TestConcatenateTsvs:
         ["plain", "gzip"],
         ids=["plain_tsv", "gzipped_tsv"],
     )
-    def test_concatenate_file_formats(self, tsv_factory, file_format):
+    def test_concatenate_file_formats(self, tsv_factory: Any, file_format: str) -> None:
         """Test concatenating files in different formats."""
         file1_content = "col1\tcol2\nval1\tval2\n"
         file2_content = "col1\tcol2\nval3\tval4\n"
@@ -90,7 +92,7 @@ class TestConcatenateTsvs:
 
         assert result == expected
 
-    def test_mismatched_headers(self, tsv_factory):
+    def test_mismatched_headers(self, tsv_factory: Any) -> None:
         """Test that mismatched headers raise ValueError."""
         file1 = tsv_factory.create_plain(
             "file1.tsv", "col1\tcol2\tcol3\nval1\tval2\tval3\n"

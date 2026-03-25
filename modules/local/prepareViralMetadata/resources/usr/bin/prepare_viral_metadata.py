@@ -10,9 +10,11 @@ import csv
 import gzip
 import logging
 import os
+import re
 import time
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import IO, cast
 
 class UTCFormatter(logging.Formatter):
     def formatTime(self, record: logging.LogRecord, datefmt: str | None = None) -> str:
@@ -25,9 +27,10 @@ handler.setFormatter(UTCFormatter("[%(asctime)s] %(message)s"))
 logger.handlers.clear()
 logger.addHandler(handler)
 
-def open_by_suffix(path: str, mode: str = "r"):
+def open_by_suffix(path: str, mode: str = "r") -> IO[str]:
     """Open a file, transparently handling .gz compression."""
-    return gzip.open(path, mode + "t") if path.endswith(".gz") else open(path, mode)
+    f = gzip.open(path, mode + "t") if path.endswith(".gz") else open(path, mode)
+    return cast(IO[str], f)
 
 def build_species_taxid_map(virus_db_path: str) -> dict[str, str]:
     """Build taxid -> species_taxid mapping from virus taxonomy DB.
@@ -41,6 +44,8 @@ def build_species_taxid_map(virus_db_path: str) -> dict[str, str]:
     logger.info("Read %d entries from virus DB", len(result))
     return result
 
+ACCESSION_RE = re.compile(r"^(GC[AF]_\d+\.\d+)")
+
 def match_genomes_to_accessions(genome_dir: Path, accessions: list[str]) -> dict[str, str]:
     """Match genome .fna.gz files to assembly accessions by filename prefix.
     Args:
@@ -49,12 +54,12 @@ def match_genomes_to_accessions(genome_dir: Path, accessions: list[str]) -> dict
     Returns:
         Dictionary mapping assembly accession to genome filename.
     """
-    genome_files = sorted(genome_dir.glob("*.fna.gz"))
+    acc_set = set(accessions)
     result = {}
-    for acc in accessions:
-        matches = [f for f in genome_files if f.name.startswith(acc)]
-        if matches:
-            result[acc] = matches[0].name
+    for f in sorted(genome_dir.glob("*.fna.gz")):
+        m = ACCESSION_RE.match(f.name)
+        if m and m.group(1) in acc_set and m.group(1) not in result:
+            result[m.group(1)] = f.name
     return result
 
 def prepare_metadata(
@@ -71,18 +76,25 @@ def prepare_metadata(
     """
     taxid_to_species = build_species_taxid_map(virus_db_path)
     with open_by_suffix(merged_metadata_path) as f:
-        rows = list(csv.DictReader(f, delimiter="\t"))
+        reader = csv.DictReader(f, delimiter="\t")
+        in_fields = reader.fieldnames or []
+        rows = list(reader)
     logger.info("Read %d metadata rows", len(rows))
     genome_dir, output_dir = Path(genomes_dir), Path(output_genomes_dir)
-    accessions = list({r["assembly_accession"] for r in rows})
+    output_dir.mkdir(parents=True, exist_ok=True)
+    out_fields = list(in_fields) + ["species_taxid", "local_filename"]
+    if not rows:
+        logger.info("No metadata rows to process. Writing header-only output file.")
+        with open(output_metadata_path, "w", newline="") as f:
+            writer = csv.DictWriter(f, fieldnames=out_fields, delimiter="\t")
+            writer.writeheader()
+        return
+    accessions = sorted({r["assembly_accession"] for r in rows})
     acc_to_file = match_genomes_to_accessions(genome_dir, accessions)
     logger.info("Matched %d/%d accessions to genome files", len(acc_to_file), len(accessions))
     # Symlink matched genomes into output directory
-    output_dir.mkdir(parents=True, exist_ok=True)
     for filename in acc_to_file.values():
         os.symlink(os.path.abspath(genome_dir / filename), output_dir / filename)
-    # Write output with added columns, dropping unmatched rows
-    out_fields = list(rows[0].keys()) + ["species_taxid", "local_filename"]
     n_written = 0
     with open(output_metadata_path, "w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=out_fields, delimiter="\t")

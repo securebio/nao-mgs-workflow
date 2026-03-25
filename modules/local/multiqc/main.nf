@@ -7,8 +7,8 @@ process MULTIQC_LABELED {
     output:
         path("multiqc_report.html"), emit: report
         tuple val(stage_label), val(sample), path("multiqc_data"), emit: data
-    shell:
-        '''
+    script:
+        """
         multiqc .
-        '''
+        """
 }

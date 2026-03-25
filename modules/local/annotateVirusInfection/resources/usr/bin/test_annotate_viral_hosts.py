@@ -47,6 +47,8 @@ State meanings:
 # Preamble
 # =======================================================================
 
+from pathlib import Path
+
 import pytest
 import pandas as pd
 import itertools
@@ -515,7 +517,7 @@ class TestMarkDirectInfections:
         """Test behavior with empty host taxids set."""
         # Arrange
         virus_taxids = pd.Series(["virus1", "virus2"])
-        host_taxids = set()  # Empty set
+        host_taxids: set[str] = set()  # Empty set
         virus_host_mapping = {
             "virus1": {"host1", "host2"},
             "virus2": {"host3"},
@@ -974,7 +976,7 @@ class TestMarkDescendantInfections:
     def test_assertion_unresolved_remaining(self, simple_tree: dict[str, set[str]]) -> None:
         """Test that assertion fires if UNRESOLVED remains (shouldn't happen in practice)."""
         # Arrange - Create a tree with an isolated UNRESOLVED node
-        isolated_tree = {"isolated": set()}
+        isolated_tree: dict[str, set[str]] = {"isolated": set()}
         statuses = pd.Series({"isolated": UNRESOLVED})
         
         # Act & Assert
@@ -984,7 +986,7 @@ class TestMarkDescendantInfections:
     def test_assertion_maybe_inconsistent_remaining(self, simple_tree: dict[str, set[str]]) -> None:
         """Test that assertion fires if MAYBE_INCONSISTENT remains (shouldn't happen in practice)."""
         # Arrange - Create a tree with an isolated MAYBE_INCONSISTENT node
-        isolated_tree = {"isolated": set()}
+        isolated_tree: dict[str, set[str]] = {"isolated": set()}
         statuses = pd.Series({"isolated": MAYBE_INCONSISTENT})
         
         # Act & Assert
@@ -1055,7 +1057,7 @@ class TestAddDescendants:
     def test_no_descendants(self) -> None:
         """Test that function returns input set unchanged when no descendants."""
         # Arrange
-        virus_tree = {
+        virus_tree: dict[str, set[str]] = {
             "1": set(),
             "2": set(),
             "3": set(),
@@ -1076,7 +1078,7 @@ class TestAddDescendants:
             "2": set(),
             "3": set(),
         }
-        taxids_start = set()
+        taxids_start: set[str] = set()
         
         # Act
         result = add_descendants(virus_tree, taxids_start)
@@ -1156,8 +1158,8 @@ class TestExcludeInfections:
             "2": CONSISTENT,
             "3": UNCLEAR,
         })
-        exclude_taxids = []
-        
+        exclude_taxids: list[str] = []
+
         # Act
         result = exclude_infections(virus_tree, statuses.copy(), exclude_taxids)
         
@@ -1265,7 +1267,7 @@ class TestMarkAncestorInfections:
 class TestGetHostTaxids:
     """Test the get_host_taxids function."""
 
-    def test_multiple_hosts(self, host_taxonomy_nodes) -> None:
+    def test_multiple_hosts(self, host_taxonomy_nodes: pd.DataFrame) -> None:
         """Test that each host is expanded correctly."""
         # Arrange
         hosts = {
@@ -1283,7 +1285,7 @@ class TestGetHostTaxids:
     def test_empty_input(self) -> None:
         """Test that empty input returns empty dictionary."""
         # Arrange
-        hosts = {}
+        hosts: dict[str, str] = {}
         nodes = pd.DataFrame()
         
         # Act
@@ -1300,7 +1302,7 @@ class TestGetHostTaxids:
 class TestGetVirusHostMapping:
     """Test the get_virus_host_mapping function."""
 
-    def test_valid_tsv(self, tmp_path) -> None:
+    def test_valid_tsv(self, tmp_path: Path) -> None:
         """Test reading valid TSV returns correct mapping."""
         # Arrange
         tsv_content = (
@@ -1321,7 +1323,7 @@ class TestGetVirusHostMapping:
         assert result["2"] == {"200"}
         assert result["3"] == {"300"}
 
-    def test_duplicate_entries(self, tmp_path) -> None:
+    def test_duplicate_entries(self, tmp_path: Path) -> None:
         """Test that duplicate entries are handled correctly."""
         # Arrange
         tsv_content = (
@@ -1341,7 +1343,7 @@ class TestGetVirusHostMapping:
         assert result["1"] == {"100", "101"}  # Duplicates removed
         assert result["2"] == {"200"}
 
-    def test_empty_file(self, tmp_path) -> None:
+    def test_empty_file(self, tmp_path: Path) -> None:
         """Test that empty file returns empty dictionary."""
         # Arrange
         tsv_content = "virus tax id\thost tax id"  # Header only
@@ -1362,10 +1364,10 @@ class TestGetVirusHostMapping:
 class TestAnnotateVirusDbSingle:
     """Test the annotate_virus_db_single function."""
 
-    def test_column_naming(self, sample_virus_db, sample_virus_tree, monkeypatch) -> None:
+    def test_column_naming(self, sample_virus_db: pd.DataFrame, sample_virus_tree: dict[str, set[str]], monkeypatch: pytest.MonkeyPatch) -> None:
         """Test that infection status column is named correctly."""
         # Mock check_infection since it's a complex function with many dependencies
-        def mock_check_infection(virus_taxids, host_taxids, virus_tree, virus_host_mapping, hard_exclude):
+        def mock_check_infection(virus_taxids: pd.Series, host_taxids: set[str], virus_tree: dict[str, set[str]], virus_host_mapping: dict[str, set[str]], hard_exclude: list[str]) -> pd.Series:  # type: ignore[type-arg]
             return pd.Series([MATCH, INCONSISTENT, UNCLEAR], index=virus_taxids)
         
         monkeypatch.setattr("annotate_viral_hosts.check_infection", mock_check_infection)
@@ -1373,8 +1375,8 @@ class TestAnnotateVirusDbSingle:
         # Arrange
         host_name = "human"
         host_taxids = {"9606"}
-        virus_host_mapping = {}
-        hard_exclude = []
+        virus_host_mapping: dict[str, set[str]] = {}
+        hard_exclude: list[str] = []
         
         # Act
         result = annotate_virus_db_single(

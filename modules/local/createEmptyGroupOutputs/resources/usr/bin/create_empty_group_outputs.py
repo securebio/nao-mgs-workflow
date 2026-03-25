@@ -16,6 +16,7 @@ import argparse
 import gzip
 import io
 import json
+from typing import IO, cast
 import logging
 import time
 import tomllib
@@ -46,18 +47,18 @@ logger.addHandler(handler)
 # File I/O helpers
 #=============================================================================
 
-def open_by_suffix(filename: str | Path, mode: str = "r") -> io.TextIOWrapper:
+def open_by_suffix(filename: str | Path, mode: str = "r") -> IO[str]:
     """
     Open a file using the appropriate method based on its suffix.
     Args:
         filename (str | Path): Path to file to open.
         mode (str): File open mode (default "r").
     Returns:
-        io.TextIOWrapper: File handle appropriate for the file compression type.
+        IO[str]: File handle appropriate for the file compression type.
     """
     filename_str = str(filename)
     if filename_str.endswith(".gz"):
-        return gzip.open(filename_str, mode + "t")
+        return cast(IO[str], gzip.open(filename_str, mode + "t"))
     else:
         return open(filename_str, mode)
 
@@ -124,6 +125,7 @@ def load_schema_headers(schema_dir: Path, schema_name: str) -> list[str] | None:
         return None
     return [field["name"] for field in fields]
 
+
 def create_empty_outputs(
     groups: set[str],
     patterns: list[str],
@@ -131,7 +133,7 @@ def create_empty_outputs(
     schema_dir: Path | None = None,
 ) -> list[str]:
     """
-    Create empty gzipped files for each group and pattern combination.
+    Create empty output files for each group and pattern combination.
 
     When a table-schema exists for an output pattern, the file includes
     a header row with column names from the schema.
@@ -145,9 +147,11 @@ def create_empty_outputs(
     """
     output_path = Path(output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
-    # Pre-load headers for each pattern
+    # Pre-load headers for each TSV pattern
     pattern_headers: dict[str, list[str] | None] = {}
     for pattern in patterns:
+        if pattern.endswith(".json"):
+            continue
         if schema_dir:
             schema_name = get_schema_name_from_pattern(pattern)
             headers = load_schema_headers(schema_dir, schema_name)
@@ -163,12 +167,20 @@ def create_empty_outputs(
         for pattern in patterns:
             filename = pattern.replace("{GROUP}", group)
             filepath = output_path / filename
-            headers = pattern_headers[pattern]
-            with open_by_suffix(filepath, "w") as f:
-                if headers:
-                    f.write("\t".join(headers) + "\n")
-            created_files.append(str(filepath))
-            logger.info(f"Created: {filepath}" + (" (with headers)" if headers else ""))
+            if pattern.endswith(".json"):
+                # JSON output: write empty JSON object
+                with open(filepath, "w") as f:
+                    f.write("{}")
+                created_files.append(str(filepath))
+                logger.info(f"Created: {filepath} (JSON)")
+            else:
+                # TSV output: write header row if schema exists
+                headers = pattern_headers[pattern]
+                with open_by_suffix(filepath, "w") as f:
+                    if headers:
+                        f.write("\t".join(headers) + "\n")
+                created_files.append(str(filepath))
+                logger.info(f"Created: {filepath}" + (" (with headers)" if headers else ""))
     return created_files
 
 #=============================================================================

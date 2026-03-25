@@ -93,7 +93,7 @@ def divide_test_files(test_files: List[Path], n_workers: int) -> List[List[Path]
     """
     if not test_files:
         return [[] for _ in range(n_workers)]
-    worker_files = [[] for _ in range(n_workers)]
+    worker_files: list[list[Path]] = [[] for _ in range(n_workers)]
     for i, test_file in enumerate(test_files):
         worker_files[i % n_workers].append(test_file)
     return worker_files

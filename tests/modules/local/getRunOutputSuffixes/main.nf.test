@@ -7,13 +7,14 @@ nextflow_process {
     tag "module"
     tag "get_run_output_suffixes"
 
-    test("Should extract suffixes from pyproject.toml") {
+    test("Should extract suffixes from pyproject.toml for illumina") {
         tag "expect_success"
         when {
             params {}
             process {
                 '''
                 input[0] = file("${projectDir}/pyproject.toml")
+                input[1] = "illumina"
                 '''
             }
         }
@@ -25,8 +26,31 @@ nextflow_process {
             assert "read_counts.tsv" in suffixes
             assert "bracken.tsv" in suffixes
             assert "kraken.tsv" in suffixes
+            // Illumina includes shortread-extra suffixes
+            assert "fastp.json" in suffixes
             // No suffix should end with .gz
             suffixes.each { assert !it.endsWith(".gz") }
+        }
+    }
+
+    test("Should exclude shortread-extra suffixes for ONT") {
+        tag "expect_success"
+        when {
+            params {}
+            process {
+                '''
+                input[0] = file("${projectDir}/pyproject.toml")
+                input[1] = "ont"
+                '''
+            }
+        }
+        then {
+            assert process.success
+            def suffixes = process.out.suffixes[0].split(',') as Set
+            assert "virus_hits.tsv" in suffixes
+            assert "read_counts.tsv" in suffixes
+            // ONT should not include shortread-extra suffixes
+            assert !("fastp.json" in suffixes)
         }
     }
 }

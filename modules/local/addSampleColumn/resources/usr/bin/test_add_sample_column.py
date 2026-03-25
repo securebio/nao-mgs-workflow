@@ -1,5 +1,7 @@
 #!/usr/bin/env python
 
+from typing import Any
+
 import pytest
 
 import add_sample_column
@@ -25,8 +27,8 @@ class TestAddSampleColumn:
         ids=["basic_functionality", "empty_file", "header_only", "empty_lines_skipped"],
     )
     def test_add_sample_column_success_cases(
-        self, tsv_factory, input_content, expected_output
-    ):
+        self, tsv_factory: Any, input_content: str, expected_output: str
+    ) -> None:
         """Test adding a sample column to various TSV file formats."""
         input_file = tsv_factory.create_plain("input.tsv", input_content)
         output_file = tsv_factory.get_path("output.tsv")
@@ -43,7 +45,7 @@ class TestAddSampleColumn:
         ["plain", "gzip"],
         ids=["plain_tsv", "gzipped_tsv"],
     )
-    def test_add_sample_column_file_formats(self, tsv_factory, file_format):
+    def test_add_sample_column_file_formats(self, tsv_factory: Any, file_format: str) -> None:
         """Test adding sample column with both plain and gzipped files."""
         input_content = "col1\tcol2\nval1\tval2\n"
         expected = "col1\tcol2\tsample\nval1\tval2\tsample_001\n"
@@ -66,7 +68,7 @@ class TestAddSampleColumn:
 
         assert result == expected
 
-    def test_column_already_exists(self, tsv_factory):
+    def test_column_already_exists(self, tsv_factory: Any) -> None:
         """Test that adding an existing column raises ValueError."""
         input_file = tsv_factory.create_plain(
             "input.tsv", "col1\tcol2\tcol3\nval1\tval2\tval3\n"

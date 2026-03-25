@@ -58,7 +58,7 @@ These guidelines represent best practices to implement in new code, though some 
 - Python style: 
     - Loosely follow PEP 8 conventions.
     - Type hints are encouraged. When used, prefer Python 3.12+ native syntax (e.g. `list[str]`, `str | None`) over imports from the `typing` module.
-    - Linting and type checking are encouraged (our go-to tools are `ruff` for linting and `mypy` for type checking), but not currently required.
+    - Linting is encouraged using `ruff`. Type checking with `mypy` is enforced in CI (see `.github/workflows/mypy.yml`).
     - Formatting applied (including in nested directories) will follow the configuration in `pyproject.toml`.
     - After making any formatting changes, carefully review the diff to ensure no unintended modifications were introduced that could affect functionality.
 
@@ -106,7 +106,18 @@ Where possible, we use [Seqera Wave containers](https://docs.seqera.io/wave), ma
 3. Run `bin/build_wave_container.py PATH_TO_YAML_FILE` to initiate the container build on Wave. The script will automatically update `configs.containers.config` with the appropriate container path.
 4. Wait a few minutes for the container to build before calling processes that depend on it.
 
-If you need a container with functionality beyond what's possible with Conda and Wave, you can build a custom Docker container and host it on [Docker Hub](https://hub.docker.com/). To do this, create a new Dockerfile in the `docker` directory. The name should have the prefix `nao-` followed by a descriptive name containing lowercase letters and hyphens, e.g. `docker/nao-blast-awscli.Dockerfile`. Once the Dockerfile is created, a repo maintainer can build and push it to Docker Hub using the script `bin/build-push-docker.sh`. (This should be done by a repo maintainer as it requires being logged in to DockerHub with the securebio username.) 
+If you need a container with functionality beyond what's possible with Conda and Wave, you can build a custom Docker container and host it on [Docker Hub](https://hub.docker.com/). To do this, create a new Dockerfile in the `docker` directory. The name should have the prefix `nao-` followed by a descriptive name containing lowercase letters and hyphens, e.g. `docker/nao-blast-awscli.Dockerfile`. Once the Dockerfile is created, a repo maintainer can build and push it to Docker Hub using the script `bin/build-push-docker.sh`. (This should be done by a repo maintainer as it requires being logged in to DockerHub with the securebio username.)
+
+### Base image pinning
+
+The `container-base-image` field in `pyproject.toml` pins the `mambaorg/micromamba` base image by digest (e.g. `mambaorg/micromamba@sha256:...`). Wave containers built by `bin/build_wave_container.py` use this digest to ensure reproducible builds.
+
+**When to update:** Update the base image digest to pick up OS-level security patches — for example, when the Trivy container scan flags CVEs originating from the base image.
+
+**How to update:**
+1. Find the latest `mambaorg/micromamba` amd64 digest on [Docker Hub](https://hub.docker.com/r/mambaorg/micromamba/tags).
+2. Update the `container-base-image` field in `pyproject.toml` with the new `sha256:` digest.
+3. Rebuild all Wave containers by running `bin/build_wave_container.py` for each YAML file in the `containers` directory.
 
 ## Python Development Setup
 
@@ -256,15 +267,19 @@ Only pipeline maintainers should author a new release. The process for going thr
 
 ## Schemas
 
-We are currently in the process of defining and enforcing [schemas](../schemas/) for our output files, using the [table schema standard](https://datapackage.org/standard/table-schema/) and [frictionless Python framework](https://framework.frictionlessdata.io/). Not all output files yet have schemas; those that have been added are used to validate test outputs in Github Actions to ensure that the output produced matches the schema.
+We are currently in the process of defining and enforcing [schemas](../schemas/) for our output files. TSV outputs use the [table schema standard](https://datapackage.org/standard/table-schema/) validated by the [frictionless Python framework](https://framework.frictionlessdata.io/); JSON outputs use [JSON Schema](https://json-schema.org/) (draft/2020-12) validated by the [jsonschema](https://python-jsonschema.readthedocs.io/) library. Both schema types live in `schemas/` and are distinguished by their `$schema` field. Not all output files yet have schemas; those that have been added are used to validate test outputs in Github Actions to ensure that the output produced matches the schema.
 
 ### Policy
 
-All new tabular output files should have a complete schema, and all existing schemas should be maintained. To add a new schema, create a corresponding JSON file in `schemas`. All schemas should have:
+All new output files should have a complete schema, and all existing schemas should be maintained. To add a new schema, create a corresponding JSON file in `schemas`.
+
+**Table-schemas** (for TSV outputs) should have:
 
 - A `fields` entry with subentries for each column in the associated output file (no missing columns). Each column subentry should at minimum have `name`, `type`, `title`, & `description` fields. Most should also have a `constraints` fields delimiting permitted values.
 - A `primaryKey` entry describing a set of fields that are collectively guaranteed to uniquely identify each row (can often be a single field).
 - A `missingValues` entry listing permitted null values (typically `""` and `"NA"`).
+
+**JSON Schemas** (for JSON outputs) should follow the [JSON Schema draft/2020-12](https://json-schema.org/draft/2020-12/json-schema-core) convention, with a `$schema` field pointing to `https://json-schema.org/draft/2020-12/schema`. Include `description` fields on all definitions and properties, and `examples` on leaf properties, to aid both human readers and automated validation tooling. Descriptions and examples may be omitted on sub-properties where the meaning is obvious from the parent property's description (e.g., individual base-type keys under a "per base type" parent).
 
 ### Versioning and guarantees
 
@@ -277,6 +292,6 @@ Under our [versioning policy](./versioning.md), changes to schema `title` and `d
 ### Working with schemas
 
 - If you are working on a change that affects pipeline outputs, review the schema files for affected outputs where available, to know what's expected for each column.
-- If an input to DOWNSTREAM has no data, the `createEmptyGroupOutputs` module will generate header-only outputs based on schemas where available. Output files with no corresponding schema will be empty.
+- If an input to DOWNSTREAM has no data, the `createEmptyGroupOutputs` module will generate header-only TSV outputs and empty JSON objects. Output files with no corresponding schema will be empty.
 - To validate output files locally, run `bin/validate_schemas.py`.
 - If you are developing code external to this repository that depends on its outputs, you should review the corresponding schemas to understand what guarantees you can expect.

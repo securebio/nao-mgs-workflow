@@ -1,13 +1,36 @@
-# v3.2.0.3-dev
+# v3.2.1.1-dev
 
-- Updated benchmark CI workflow samplesheet paths to use `metadata/` and `raw/` subdirectories, matching internal standards.
-- Added FASTP JSON output to published RUN outputs for QC (short-read data only; ONT uses FILTLONG).
-- Added `ENUMERATE_CHILD_TAXA` module: reads `nodes.dmp` to split downloads by child taxid for parallel genome downloads.
-- Added `DOWNLOAD_VIRAL_GENOMES` module: uses NCBI `datasets` CLI per child taxon. Inherits `NCBI_API_KEY` from the launch environment if set.
-- Added `ncbi_datasets` container (`ncbi-datasets-cli=18.20.0`, `unzip=6.0`).
-- Added `PREPARE_VIRAL_METADATA` module: merges per-taxon metadata, adds `species_taxid` from virus taxonomy DB, and maps genome files to `local_filename` for downstream compatibility.
 - Wired new modules into `makeVirusGenomeDB` subworkflow, replacing `ncbi-genome-download` with NCBI `datasets` CLI for the INDEX workflow. Downloads are now parallelized across child taxa for better fault tolerance.
 - Removed `params.ncbi_viral_params` config parameter. Replaced with `params.assembly_source` (`"genbank"` or `"refseq"`), `params.datasets_extra_args`, and optional `params.download_virus_taxid`. NCBI API keys are now read from the `NCBI_API_KEY` environment variable (used automatically by the `datasets` CLI).
+- Updated `ncbi_datasets` container to `ncbi-datasets-cli=18.21.0`.
+- CI: Hardened Trivy vulnerability scans against supply chain attacks by replacing unpinned apt installs with SHA-pinned `trivy-action` (`rust-tools.yml`) and version-pinned GitHub release with SHA256 verification (`trivy-scan.yml`).
+- Added FASTP JSON output to published DOWNSTREAM outputs for QC (short-read data only; ONT uses FILTLONG), using `CONCAT_JSON_BY_GROUP` to merge per-sample FASTP JSONs into per-group outputs.
+- Added `ENUMERATE_CHILD_TAXA`, `DOWNLOAD_VIRAL_GENOMES`, and `PREPARE_VIRAL_METADATA` modules for downloading and preparing viral genomes using NCBI's `datasets` CLI, to replace `ncbi-genome-download` in a follow-up PR.
+
+# v3.2.1.0
+
+## New workflow outputs
+
+- Added FASTP JSON output to published RUN and DOWNSTREAM outputs for QC (short-read data only; ONT uses FILTLONG).
+- Added `COMBINE_SAMPLE_JSONS` module and `CONCAT_JSON_BY_GROUP` subworkflow for combining per-sample JSON files into per-group outputs.
+- Added `schemas/fastp.schema.json` (JSON Schema) for per-group FASTP output and extended `bin/validate_schemas.py` to validate JSON files against JSON Schema definitions.
+
+## Cleanup & best practice
+
+- Added mypy type-checking CI and type annotations to all Python scripts in `bin/` and `modules/local/`, with `pandas-stubs` and `types-PyYAML` stub dependencies.
+- Updated benchmark CI workflow samplesheet paths to use `metadata/` and `raw/` subdirectories, matching internal standards.
+- Updated containers to resolve Trivy CRITICAL/HIGH vulnerability scan failures.
+- Migrated all 57 Nextflow modules from deprecated `shell:` blocks (`!{var}` interpolation) to `script:` blocks (`${var}` interpolation); `shell:` is deprecated in modern Nextflow.
+
+## Bugfixes
+
+- Updated `summarize-multiqc.R` to correctly handle changes in MultiQC JSON format in new version. Note: the MultiQC 1.21→1.33 upgrade changes read-length binning (e.g. bins shift from 224/274/324 to 200/250/300) and slightly alters `mean_seq_len` values; these are upstream MultiQC behavioral changes, not pipeline logic changes.
+- Fixed O(N²) combinatorial explosion in `DISCOVER_RUN_OUTPUT` that caused OOM failures for large deliveries (~2,273 samples). Replaced glob-then-filter approach with direct path construction from known (sample, suffix) pairs, reducing channel items from O(files × samples) to O(samples × suffixes).
+- Fixed two escaping bugs caught during the shell-to-script migration: `$RANDOM` in `subsetFastn` was being expanded by the shell instead of Bash at runtime, and the awk debug message in `extractViralHitsToFastq` was printing a field value instead of the numeric column index.
+
+## Coding agents
+
+- Add custom Claude Code subagent definitions (`.claude/agents/`) and update `.gitignore` to track them.
 
 # v3.2.0.2
 

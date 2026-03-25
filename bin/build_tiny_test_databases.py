@@ -9,7 +9,6 @@ Build tiny reference databases for testing: taxonomy, Kraken2, Bracken, and BLAS
 
 import argparse
 import gzip
-import bz2
 import logging
 import re
 import subprocess
@@ -17,6 +16,7 @@ import tempfile
 import shutil
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import IO
 from urllib.request import urlopen
 import boto3
 
@@ -108,12 +108,13 @@ def download_sequence(url: str) -> str:
         str: FASTA content as string
     """
     with urlopen(url) as response:
-        return response.read().decode('utf-8')
+        content: str = response.read().decode('utf-8')
+        return content
 
-def open_by_suffix(filename: str | Path, mode: str = "r"):
+def open_by_suffix(filename: str | Path, mode: str = "r") -> IO[str]:
     """
     Parse the suffix of a filename to determine the right open method
-    to use, then open the file. Can handle .gz, .bz2, and uncompressed files.
+    to use, then open the file. Can handle .gz and uncompressed files.
     Args:
         filename (str | Path): Path to file to open
         mode (str): File open mode (default "r")
@@ -122,9 +123,7 @@ def open_by_suffix(filename: str | Path, mode: str = "r"):
     """
     filename_str = str(filename)
     if filename_str.endswith(".gz"):
-        return gzip.open(filename_str, mode + "t")
-    elif filename_str.endswith(".bz2"):
-        return bz2.BZ2File(filename_str, mode)
+        return gzip.open(filename_str, mode + "t")  # type: ignore[return-value]
     else:
         return open(filename_str, mode)
 
@@ -155,8 +154,8 @@ def add_sequences_to_kraken_library(
         sequences (list[tuple[str, str | Path, int]]): List of (filename, source, taxid) tuples where source is URL or Path
         output_dir (Path): Kraken2 database directory
     """
-    with tempfile.TemporaryDirectory() as tmpdir:
-        tmpdir = Path(tmpdir)
+    with tempfile.TemporaryDirectory() as tmpdir_str:
+        tmpdir = Path(tmpdir_str)
         for filename, source, taxid in sequences:
             output_path = tmpdir / filename
             if isinstance(source, Path):
@@ -430,8 +429,8 @@ def run_build(args: argparse.Namespace) -> None:
     urls = parse_config(args.config_file)
 
     # Build in temporary directory
-    with tempfile.TemporaryDirectory() as tmpdir:
-        tmpdir = Path(tmpdir)
+    with tempfile.TemporaryDirectory() as tmpdir_str:
+        tmpdir = Path(tmpdir_str)
         kraken_dir = tmpdir / "tiny-kraken2-db"
         blast_dir = tmpdir / "tiny_blast_db"
         kraken_dir.mkdir(parents=True, exist_ok=True)
@@ -471,7 +470,7 @@ def run_build(args: argparse.Namespace) -> None:
             f"{args.s3_prefix}/{taxonomy_zip.name}"
         )
 
-def main():
+def main() -> None:
     """Main entry point for the script."""
     args = parse_arguments()
     validate_inputs(args)
