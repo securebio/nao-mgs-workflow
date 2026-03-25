@@ -14,6 +14,7 @@ import re
 import time
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import IO, cast
 
 class UTCFormatter(logging.Formatter):
     def formatTime(self, record: logging.LogRecord, datefmt: str | None = None) -> str:
@@ -26,9 +27,10 @@ handler.setFormatter(UTCFormatter("[%(asctime)s] %(message)s"))
 logger.handlers.clear()
 logger.addHandler(handler)
 
-def open_by_suffix(path: str, mode: str = "r"):
+def open_by_suffix(path: str, mode: str = "r") -> IO[str]:
     """Open a file, transparently handling .gz compression."""
-    return gzip.open(path, mode + "t") if path.endswith(".gz") else open(path, mode)
+    f = gzip.open(path, mode + "t") if path.endswith(".gz") else open(path, mode)
+    return cast(IO[str], f)
 
 def build_species_taxid_map(virus_db_path: str) -> dict[str, str]:
     """Build taxid -> species_taxid mapping from virus taxonomy DB.

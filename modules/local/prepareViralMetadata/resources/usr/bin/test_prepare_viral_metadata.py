@@ -35,7 +35,7 @@ def _read_tsv(path: Path) -> list[dict[str, str]]:
     with open(path) as f:
         return list(csv.DictReader(f, delimiter="\t"))
 
-def _run_prepare(tmp_path, meta_path, db_path, gdir) -> list[dict[str, str]]:
+def _run_prepare(tmp_path: Path, meta_path: Path, db_path: Path, gdir: Path) -> list[dict[str, str]]:
     """Run prepare_metadata and return output rows."""
     out_meta, out_genomes = str(tmp_path / "out.txt"), str(tmp_path / "ncbi_genomes")
     prepare_metadata(str(meta_path), str(db_path), str(gdir), out_meta, out_genomes)
