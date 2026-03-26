@@ -38,11 +38,9 @@ workflow INDEX {
         virus_genome_params.putAll([k: "20", hdist: "3", entropy: "0.5", polyx_len: "10"])
         def dl_taxid = params.download_virus_taxid ?: params.virus_taxid
         MAKE_VIRUS_GENOME_DB(
-            dl_taxid,
-            params.assembly_source,
-            params.datasets_extra_args,
-            MAKE_VIRUS_TAXONOMY_DB.out.db,
-            MAKE_VIRUS_TAXONOMY_DB.out.nodes,
+            params.download_virus_taxid ?: params.virus_taxid,
+            params.assembly_source, params.datasets_extra_args,
+            MAKE_VIRUS_TAXONOMY_DB.out.db, MAKE_VIRUS_TAXONOMY_DB.out.nodes,
             virus_genome_params
         )
         // Download ribosomal references
