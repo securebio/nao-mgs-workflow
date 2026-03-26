@@ -45,6 +45,7 @@ nextflow_process {
             def groups = ["group1", "group2"]
             def pyproject = path(process.out.pyproject[0])
             def schemasDir = process.out.schemas[0]
+            // Ignore JSON files (these are handled separately by dedicated aggregation code)
             def patterns = getGroupPatterns(pyproject, "illumina").findAll { !it.endsWith(".json") }
 
             // Verify outputs: one per group per pattern
