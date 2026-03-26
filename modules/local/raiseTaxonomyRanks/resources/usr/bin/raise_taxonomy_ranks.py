@@ -6,8 +6,6 @@
 
 # Import libraries
 import pandas as pd
-import subprocess
-from typing import Dict, Set, List
 import argparse
 from collections import defaultdict
 import logging
@@ -15,7 +13,7 @@ from datetime import datetime, timezone
 
 # Configure logging
 class UTCFormatter(logging.Formatter):
-    def formatTime(self, record, datefmt=None):
+    def formatTime(self, record: logging.LogRecord, datefmt: str | None = None) -> str:
         dt = datetime.fromtimestamp(record.created, timezone.utc)
         return dt.strftime('%Y-%m-%d %H:%M:%S UTC')
 logging.basicConfig(level=logging.INFO)
@@ -90,8 +88,8 @@ def raise_rank(taxids: pd.Series, target_rank: str,
     # Replace taxids above the target rank with pd.NA
     ranks_high = RANKS[RANKS.index(target_rank)+1:]
     ranks = db.loc[taxids, "rank"]
-    taxids_out = taxids.where(~ranks.isin(ranks_high), pd.NA)
-    return taxids_out
+    taxids_out = taxids.where(~ranks.isin(ranks_high), pd.NA)  # type: ignore[call-overload]
+    return taxids_out  # type: ignore[no-any-return]
 
 def raise_rank_db(db: pd.DataFrame, target_rank: str) -> pd.DataFrame:
     """
@@ -106,11 +104,11 @@ def raise_rank_db(db: pd.DataFrame, target_rank: str) -> pd.DataFrame:
             containing the taxids at the target rank.
     """
     new_col_name = "taxid_" + target_rank
-    new_col_values = raise_rank(db.index, target_rank, db)
+    new_col_values = raise_rank(db.index, target_rank, db)  # type: ignore[arg-type]
     db[new_col_name] = new_col_values
     return db
 
-def raise_ranks_db(db: pd.DataFrame, target_ranks: List[str]) -> pd.DataFrame:
+def raise_ranks_db(db: pd.DataFrame, target_ranks: list[str]) -> pd.DataFrame:
     """
     Given a DataFrame of taxids and their parent taxids, add columns
     containing the corresponding taxids at each target taxonomic rank.
@@ -130,7 +128,7 @@ def raise_ranks_db(db: pd.DataFrame, target_ranks: List[str]) -> pd.DataFrame:
 # Main function
 #=======================================================================
 
-def main():
+def main() -> None:
     logger.info("Initializing script.")
     # Define argument parsing
     desc = "Given a TSV of taxids and their parent taxids, add columns " \

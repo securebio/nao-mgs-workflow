@@ -9,12 +9,12 @@ process SORT_TSV {
     output:
         tuple val(sample), path("sorted_${sort_field}_${tsv}"), emit: sorted
         tuple val(sample), path("input_${tsv}"), emit: input
-    shell:
-        '''
+    script:
+        """
         # Run the Python script to sort the TSV
-        sort_tsv.py -m !{task.memory.toGiga()} !{tsv} !{sort_field} sorted_!{sort_field}_!{tsv}
-        
+        sort_tsv.py -m ${task.memory.toGiga()} ${tsv} ${sort_field} sorted_${sort_field}_${tsv}
+
         # Link input to output for testing
-        ln -s !{tsv} input_!{tsv}
-        '''
+        ln -s ${tsv} input_${tsv}
+        """
 }

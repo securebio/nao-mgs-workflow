@@ -16,6 +16,7 @@ include { CONCAT_BY_GROUP as CONCAT_QC_QUALITY_BASE_STATS_CLEANED_BY_GROUP } fro
 include { CONCAT_BY_GROUP as CONCAT_QC_QUALITY_BASE_STATS_RAW_BY_GROUP } from "../concatByGroup"
 include { CONCAT_BY_GROUP as CONCAT_QC_QUALITY_SEQUENCE_STATS_CLEANED_BY_GROUP } from "../concatByGroup"
 include { CONCAT_BY_GROUP as CONCAT_QC_QUALITY_SEQUENCE_STATS_RAW_BY_GROUP } from "../concatByGroup"
+include { CONCAT_JSON_BY_GROUP as CONCAT_FASTP_JSON_BY_GROUP } from "../concatJsonByGroup"
 
 /***********
 | WORKFLOW |
@@ -39,6 +40,7 @@ workflow CONCAT_RUN_OUTPUTS_BY_GROUP {
         qc_quality_base_stats_raw_ch         = CONCAT_QC_QUALITY_BASE_STATS_RAW_BY_GROUP(files, "qc_quality_base_stats_raw.tsv", "qc_quality_base_stats_raw").groups
         qc_quality_sequence_stats_cleaned_ch = CONCAT_QC_QUALITY_SEQUENCE_STATS_CLEANED_BY_GROUP(files, "qc_quality_sequence_stats_cleaned.tsv", "qc_quality_sequence_stats_cleaned").groups
         qc_quality_sequence_stats_raw_ch     = CONCAT_QC_QUALITY_SEQUENCE_STATS_RAW_BY_GROUP(files, "qc_quality_sequence_stats_raw.tsv", "qc_quality_sequence_stats_raw").groups
+        fastp_json_ch                        = CONCAT_FASTP_JSON_BY_GROUP(files, "fastp.json", "fastp").groups
     emit:
         hits  = hits_ch
         other = read_counts_ch.mix(
@@ -49,4 +51,5 @@ workflow CONCAT_RUN_OUTPUTS_BY_GROUP {
             qc_quality_base_stats_cleaned_ch, qc_quality_base_stats_raw_ch,
             qc_quality_sequence_stats_cleaned_ch, qc_quality_sequence_stats_raw_ch,
         )
+        fastp_json = fastp_json_ch
 }

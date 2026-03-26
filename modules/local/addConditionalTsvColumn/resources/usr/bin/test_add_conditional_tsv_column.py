@@ -1,5 +1,7 @@
 #!/usr/bin/env python
 
+from typing import Any
+
 import pytest
 
 import add_conditional_tsv_column
@@ -8,7 +10,7 @@ import add_conditional_tsv_column
 class TestAddConditionalColumn:
     """Test the add_conditional_column function."""
 
-    def test_add_conditional_column_basic(self, tsv_factory):
+    def test_add_conditional_column_basic(self, tsv_factory: Any) -> None:
         """Test adding a conditional column based on check column values."""
         input_content = "x\ty\tz\n0\t100\t200\n1\t300\t400\n0\t500\t600\n"
         expected_output = "x\ty\tz\tselected\n0\t100\t200\t100\n1\t300\t400\t400\n0\t500\t600\t500\n"
@@ -29,7 +31,7 @@ class TestAddConditionalColumn:
         result = tsv_factory.read_plain(output_file)
         assert result == expected_output
 
-    def test_add_conditional_column_empty_file(self, tsv_factory):
+    def test_add_conditional_column_empty_file(self, tsv_factory: Any) -> None:
         """Test that empty file is handled correctly."""
         input_file = tsv_factory.create_plain("input.tsv", "")
         output_file = tsv_factory.get_path("output.tsv")
@@ -47,7 +49,7 @@ class TestAddConditionalColumn:
         result = tsv_factory.read_plain(output_file)
         assert result == ""
 
-    def test_add_conditional_column_header_only(self, tsv_factory):
+    def test_add_conditional_column_header_only(self, tsv_factory: Any) -> None:
         """Test that header-only file gets new column added to header."""
         input_content = "x\ty\tz\n"
         expected_output = "x\ty\tz\tselected\n"
@@ -76,7 +78,7 @@ class TestAddConditionalColumn:
             ("else_col", "not_there"),
         ],
     )
-    def test_missing_columns(self, tsv_factory, col_to_make_missing, missing_col_name):
+    def test_missing_columns(self, tsv_factory: Any, col_to_make_missing: str, missing_col_name: str) -> None:
         input_file = tsv_factory.create_plain(
             "input.tsv", "x\ty\tz\n0\t100\t200\n"
         )
@@ -100,7 +102,7 @@ class TestAddConditionalColumn:
         'AAAA"BBBB',
         "AAAA'BBBB",
     ])
-    def test_fields_with_quote_characters_not_escaped(self, tsv_factory, quote_string):
+    def test_fields_with_quote_characters_not_escaped(self, tsv_factory: Any, quote_string: str) -> None:
         """Test that fields containing quote characters are not CSV-escaped.
 
         This is important for FASTQ quality strings which may contain the '"'

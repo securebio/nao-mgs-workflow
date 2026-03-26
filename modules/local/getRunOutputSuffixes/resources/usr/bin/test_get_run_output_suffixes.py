@@ -9,6 +9,16 @@ from pathlib import Path
 class TestGetRunOutputSuffixes:
     """Test the get_run_output_suffixes function."""
 
+    TOML_WITH_SHORTREAD_EXTRA = (
+        '[tool.mgs-workflow]\n'
+        'expected-outputs-run = [\n'
+        '    "results/{SAMPLE}_virus_hits.tsv.gz",\n'
+        ']\n'
+        'expected-outputs-run-shortread-extra = [\n'
+        '    "results/{SAMPLE}_fastp.json",\n'
+        ']\n'
+    )
+
     @pytest.mark.parametrize(
         "toml_content,expected",
         [
@@ -21,18 +31,6 @@ class TestGetRunOutputSuffixes:
                 ']\n',
                 ["read_counts.tsv", "virus_hits.tsv"],
                 id="extracts_sample_suffixes_and_strips_gz",
-            ),
-            pytest.param(
-                '[tool.mgs-workflow]\n'
-                'expected-outputs-run = [\n'
-                '    "results/{SAMPLE}_virus_hits.tsv.gz",\n'
-                ']\n'
-                'expected-outputs-run-ont = [\n'
-                '    "results/{SAMPLE}_virus_hits.tsv.gz",\n'
-                '    "results/{SAMPLE}_kraken.tsv.gz",\n'
-                ']\n',
-                ["kraken.tsv", "virus_hits.tsv"],
-                id="deduplicates_across_sections",
             ),
             pytest.param(
                 '[tool.mgs-workflow]\n'
@@ -53,27 +51,49 @@ class TestGetRunOutputSuffixes:
             ),
         ],
     )
-    def test_get_run_output_suffixes(self, tmp_path, toml_content, expected):
+    def test_get_run_output_suffixes(self, tmp_path: Path, toml_content: str, expected: list[str]) -> None:
         pyproject = tmp_path / "pyproject.toml"
         pyproject.write_text(toml_content)
         assert get_run_output_suffixes.get_run_output_suffixes(pyproject) == expected
 
-    def test_against_real_pyproject(self):
+    @pytest.mark.parametrize(
+        "platform,expected",
+        [
+            pytest.param(
+                "illumina",
+                ["fastp.json", "virus_hits.tsv"],
+                id="illumina_includes_shortread_extra",
+            ),
+            pytest.param(
+                "ont",
+                ["virus_hits.tsv"],
+                id="ont_excludes_shortread_extra",
+            ),
+        ],
+    )
+    def test_platform_filtering(self, tmp_path: Path, platform: str, expected: list[str]) -> None:
+        pyproject = tmp_path / "pyproject.toml"
+        pyproject.write_text(self.TOML_WITH_SHORTREAD_EXTRA)
+        result = get_run_output_suffixes.get_run_output_suffixes(pyproject, platform)
+        assert result == expected
+
+    def test_against_real_pyproject(self) -> None:
         """Smoke test against the actual repo pyproject.toml."""
         pyproject = Path(__file__).resolve().parents[6] / "pyproject.toml"
         if not pyproject.exists():
             pytest.skip("pyproject.toml not found at repo root")
-        result = get_run_output_suffixes.get_run_output_suffixes(pyproject)
+        result = get_run_output_suffixes.get_run_output_suffixes(pyproject, "illumina")
         assert len(result) > 0
         assert "virus_hits.tsv" in result
         assert "read_counts.tsv" in result
+        assert "fastp.json" in result
         for s in result:
             assert not s.endswith(".gz")
 
 class TestMain:
     """Test the main() CLI entrypoint."""
 
-    def test_prints_suffixes_to_stdout(self, tmp_path, capsys):
+    def test_prints_suffixes_to_stdout(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
         pyproject = tmp_path / "pyproject.toml"
         pyproject.write_text(
             '[tool.mgs-workflow]\n'
@@ -82,15 +102,15 @@ class TestMain:
             '    "results/{SAMPLE}_read_counts.tsv",\n'
             ']\n'
         )
-        with patch("sys.argv", ["get_run_output_suffixes.py", str(pyproject)]):
+        with patch("sys.argv", ["get_run_output_suffixes.py", "--platform", "illumina", str(pyproject)]):
             get_run_output_suffixes.main()
         captured = capsys.readouterr()
         assert captured.out == "bracken.tsv\nread_counts.tsv\n"
 
-    def test_exits_on_missing_file(self, tmp_path):
+    def test_exits_on_missing_file(self, tmp_path: Path) -> None:
         with patch(
             "sys.argv",
-            ["get_run_output_suffixes.py", str(tmp_path / "nonexistent.toml")],
+            ["get_run_output_suffixes.py", "--platform", "illumina", str(tmp_path / "nonexistent.toml")],
         ):
             with pytest.raises(SystemExit):
                 get_run_output_suffixes.main()

@@ -5,30 +5,27 @@ import argparse
 import time
 import datetime
 import gzip
-import bz2
 import os
+from typing import IO, cast
 
-def print_log(message):
+def print_log(message: str) -> None:
     print("[", datetime.datetime.now(), "]  ", message, sep="")
 
-def open_by_suffix(filename, mode="r", debug=False):
+def open_by_suffix(filename: str, mode: str = "r", debug: bool = False) -> IO[str]:
     if debug:
         print_log(f"\tOpening file object: {filename}")
         print_log(f"\tOpening mode: {mode}")
         print_log(f"\tGZIP mode: {filename.endswith('.gz')}")
-        print_log(f"\tBZ2 mode: {filename.endswith('.bz2')}")
     if filename.endswith('.gz'):
-        return gzip.open(filename, mode + 't')
-    elif filename.endswith('.bz2'):
-        return bz2.BZ2file(filename, mode)
+        return cast(IO[str], gzip.open(filename, mode + 't'))
     else:
         return open(filename, mode)
 
-def write_line(line_list, output_file):
+def write_line(line_list: list[str], output_file: IO[str]) -> None:
     """Write a line to the output file."""
     output_file.write("\t".join(line_list) + "\n")
 
-def filter_blast(input_path, output_path, max_rank, min_frac, query_index, bitscore_index):
+def filter_blast(input_path: str, output_path: str, max_rank: int, min_frac: float, query_index: int, bitscore_index: int) -> None:
     """Filter BLAST input based on query ID and bitscore."""
     max_field = max(query_index, bitscore_index)
     # Open files
@@ -41,10 +38,10 @@ def filter_blast(input_path, output_path, max_rank, min_frac, query_index, bitsc
         write_line(header_fields, outf)
         # Read and process lines
         line = inf.readline()
-        query_last = None
-        bitscore_rank = 0
-        bitscore_max = 0
-        bitscore_frac = 0
+        query_last: str | None = None
+        bitscore_rank: int = 0
+        bitscore_max: float = 0.0
+        bitscore_frac: float = 0.0
         while line:
             # Split line into fields
             fields = line.rstrip("\n").split("\t")
@@ -86,7 +83,7 @@ def filter_blast(input_path, output_path, max_rank, min_frac, query_index, bitsc
             write_line(out_fields, outf)
             line = inf.readline()
 
-def main():
+def main() -> None:
     # Parse arguments
     parser = argparse.ArgumentParser(description="Filter sorted BLAST output by query ID (ascending) and bitscore (descending).")
     parser.add_argument("--input", "-i", type=str, help="Path to input TSV file containing sorted BLAST output.")

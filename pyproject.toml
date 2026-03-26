@@ -4,13 +4,17 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "mgs-workflow"
-version = "3.2.0.3-dev"
+version = "3.2.1.1-dev"
 requires-python = ">=3.12"
 dependencies = [
     "biopython>=1.85",
     "boto3",
     "frictionless>=5.18.0",
+    "jsonschema>=4.20.0",
     "mypy>=1.18.1",
+    "pandas-stubs",
+    "types-PyYAML",
+    "types-jsonschema",
     # Needed until https://github.com/securebio/nao-dedup/pull/12 has been
     # merged and we've updated post-processing/nao-dedup/ to depend on the
     # no-python version.
@@ -42,6 +46,10 @@ warn_unused_configs = true
 disallow_untyped_defs = true
 disallow_incomplete_defs = true
 check_untyped_defs = true
+
+[[tool.mypy.overrides]]
+module = ["pysam", "pysam.*", "Bio", "Bio.*", "tomli", "boto3", "boto3.*", "botocore", "botocore.*"]
+ignore_missing_imports = true
 
 [tool.ruff]
 # Comprehensive rule selection
@@ -78,6 +86,8 @@ exclude = [
 target-version = "py312"
 
 [tool.mgs-workflow]
+# Base image digest (amd64) for container builds — update this to pick up OS-level security patches
+container-base-image = "mambaorg/micromamba@sha256:3955d0f1987accbcc382c37758a3d18c022eeed3e9f4a53f8f1e04feb5f576f8"
 # Minimum pipeline version required to use indexes built with this pipeline version
 index-min-pipeline-version = "2.8.1.2"
 # Minimum index version required by this pipeline version
@@ -111,6 +121,11 @@ expected-outputs-run = [
     "results/{SAMPLE}_virus_hits.tsv.gz",
 ]
 
+# Platform-specific additions to expected-outputs-run (short-read only)
+expected-outputs-run-shortread-extra = [
+    "results/{SAMPLE}_fastp.json",
+]
+
 expected-outputs-downstream = [
     "input_downstream/input_file.csv",
     "input_downstream/params-downstream.json",
@@ -119,6 +134,7 @@ expected-outputs-downstream = [
     "results_downstream/{GROUP}_bracken.tsv.gz",
     "results_downstream/{GROUP}_clade_counts.tsv.gz",
     "results_downstream/{GROUP}_duplicate_stats.tsv.gz",
+    "results_downstream/{GROUP}_fastp.json",
     "results_downstream/{GROUP}_kraken.tsv.gz",
     "results_downstream/{GROUP}_qc_adapter_stats_cleaned.tsv.gz",
     "results_downstream/{GROUP}_qc_adapter_stats_raw.tsv.gz",

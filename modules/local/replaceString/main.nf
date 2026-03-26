@@ -11,11 +11,11 @@ process REPLACE_STRING {
     output:
         tuple val(label), path("${label}_${outname}"), emit: output
         tuple val(label), path("${label}_input_${file}"), emit: input
-    shell:
-        '''
-        sed 's/!{old_string}/!{new_string}/g' !{file} > !{label}_!{outname}
-        ln -s !{file} !{label}_input_!{file}
-        '''
+    script:
+        """
+        sed 's/${old_string}/${new_string}/g' ${file} > ${label}_${outname}
+        ln -s ${file} ${label}_input_${file}
+        """
 }
 
 // Replace a string in a compressed file while retaining channel structure
@@ -31,9 +31,9 @@ process REPLACE_STRING_IN_COMPRESSED_FILE {
     output:
         tuple val(label), path("${label}_${outname}"), emit: output
         tuple val(label), path("${label}_input_${file}"), emit: input
-    shell:
-        '''
-        zcat !{file} | sed 's/!{old_string}/!{new_string}/g' | gzip > !{label}_!{outname}
-        ln -s !{file} !{label}_input_!{file}
-        '''
+    script:
+        """
+        zcat ${file} | sed 's/${old_string}/${new_string}/g' | gzip > ${label}_${outname}
+        ln -s ${file} ${label}_input_${file}
+        """
 }

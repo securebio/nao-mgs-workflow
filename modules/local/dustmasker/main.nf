@@ -6,10 +6,10 @@ process DUSTMASKER_FASTA_GZIPPED {
         path(fasta_gzipped)
     output:
         path("masked.fasta.gz")
-    shell:
-        '''
-        zcat -f !{fasta_gzipped} | dustmasker -out "masked.fasta" -outfmt fasta
+    script:
+        """
+        zcat -f ${fasta_gzipped} | dustmasker -out "masked.fasta" -outfmt fasta
         sed -i '/^>/!s/[a-z]/x/g' masked.fasta
         gzip masked.fasta
-        '''
+        """
 }

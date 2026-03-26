@@ -33,6 +33,7 @@ nextflow_workflow {
                     ["tt1", "tiny_test", file("${run_dir}/tiny_test_qc_quality_base_stats_raw.tsv"), "group_a"],
                     ["tt1", "tiny_test", file("${run_dir}/tiny_test_qc_quality_sequence_stats_cleaned.tsv"), "group_a"],
                     ["tt1", "tiny_test", file("${run_dir}/tiny_test_qc_quality_sequence_stats_raw.tsv"), "group_a"],
+                    ["tt1", "tiny_test", file("${run_dir}/tiny_test_fastp.json"), "group_a"],
                     ["tt2", "tiny_test", file("${ont_dir}/tiny_test_virus_hits.tsv"), "group_b"],
                     ["tt2", "tiny_test", file("${ont_dir}/tiny_test_read_counts.tsv"), "group_b"],
                     ["tt2", "tiny_test", file("${ont_dir}/tiny_test_kraken.tsv"), "group_b"],
@@ -106,6 +107,19 @@ nextflow_workflow {
                     assert lines[i].split("\t")[groupIdx] == output[0]
                 }
             }
+
+            // Should produce 1 group for fastp_json (only group_a has fastp.json input)
+            assert workflow.out.fastp_json.size() == 1
+            def fastp_a = workflow.out.fastp_json.find { it[0] == "group_a" }
+            assert fastp_a != null
+            assert path(fastp_a[1]).getFileName().toString() == "group_a_fastp.json"
+
+            // Verify combined FASTP JSON contains sample key with nested data
+            def slurper = new groovy.json.JsonSlurper()
+            def fastp_combined = slurper.parse(path(fastp_a[1]).toFile())
+            assert fastp_combined.containsKey("tiny_test")
+            assert fastp_combined["tiny_test"]["sample"] == "tiny_test"
+            assert fastp_combined["tiny_test"]["group"] == "group_a"
         }
     }
 }

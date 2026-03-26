@@ -63,7 +63,10 @@ nextflow_pipeline {
         then {
             assert workflow.success
             // Verify expected outputs match pyproject.toml (sample name: tiny_test)
-            def expected = getExpectedOutputs(path("${projectDir}/pyproject.toml"), "run", "tiny_test")
+            def pyproject = path("${projectDir}/pyproject.toml")
+            def expected = getExpectedOutputs(pyproject, "run", "tiny_test")
+            expected.addAll(getExpectedOutputs(pyproject, "run-shortread-extra", "tiny_test"))
+            expected.sort()
             def observed = getObservedOutputs(path("${launchDir}/output"))
             assert observed == expected : "Expected ${expected} but got ${observed}"
             // Verify result file contents match snapshot
