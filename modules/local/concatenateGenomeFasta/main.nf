@@ -16,7 +16,7 @@ process CONCATENATE_GENOME_FASTA {
         head ${path_file}
         # Concatenate files listed by paths
         if [[ -s ${path_file} ]]; then
-            cat \$(cat ${path_file}) > genomes.fasta.gz
+            xargs cat < ${path_file} > genomes.fasta.gz
         else
             echo "No matching files found!"
             exit 1
