@@ -32,37 +32,31 @@ workflow MAKE_VIRUS_GENOME_DB {
                      // - polyx_len: minimum length of polyX runs to filter out with bbduk
     main:
         // 1. Enumerate child taxa for parallel download
-        ENUMERATE_CHILD_TAXA(taxonomy_nodes, virus_taxid)
-        child_taxids_ch = ENUMERATE_CHILD_TAXA.out.taxids
+        child_ch = ENUMERATE_CHILD_TAXA(taxonomy_nodes, virus_taxid)
+        child_taxids_ch = child_ch.taxids
             .splitText().map { it.trim() }.filter { it }
-
         // 2. Download genomes per child taxon in parallel
-        DOWNLOAD_VIRAL_GENOMES(child_taxids_ch, assembly_source, datasets_extra_args)
-
+        download_ch = DOWNLOAD_VIRAL_GENOMES(child_taxids_ch, assembly_source, datasets_extra_args)
         // 3. Merge per-taxon metadata using existing CONCATENATE_TSVS
-        CONCATENATE_TSVS(
-            DOWNLOAD_VIRAL_GENOMES.out.metadata.collect(),
+        concat_ch = CONCATENATE_TSVS(
+            download_ch.metadata.collect(),
             "ncbi-viral-metadata-raw"
         )
-
         // 4. Prepare final metadata (add species_taxid, local_filename)
-        PREPARE_VIRAL_METADATA(
-            CONCATENATE_TSVS.out.output,
-            virus_db,
-            DOWNLOAD_VIRAL_GENOMES.out.genomes.collect()
+        prepare_ch = PREPARE_VIRAL_METADATA(
+            concat_ch.output, virus_db, download_ch.genomes.collect()
         )
-
         // 5. Filter genome metadata by taxid to identify genomes to retain
-        meta_ch = FILTER_VIRAL_GENBANK_METADATA(PREPARE_VIRAL_METADATA.out.metadata, virus_db, other_params.host_taxa_screen, "virus-genome")
+        meta_ch = FILTER_VIRAL_GENBANK_METADATA(prepare_ch.metadata, virus_db, other_params.host_taxa_screen, "virus-genome")
         // 6. Add genome IDs to Genbank metadata file
-        gid_ch = ADD_GENBANK_GENOME_IDS(meta_ch.db, PREPARE_VIRAL_METADATA.out.genomes, "virus-genome")
+        gid_ch = ADD_GENBANK_GENOME_IDS(meta_ch.db, prepare_ch.genomes, "virus-genome")
         // 7. Concatenate matching genomes
-        concat_ch = CONCATENATE_GENOME_FASTA(PREPARE_VIRAL_METADATA.out.genomes, meta_ch.path)
+        genome_concat_ch = CONCATENATE_GENOME_FASTA(prepare_ch.genomes, meta_ch.path)
         // 8. Filter to remove undesired/contaminated genomes
-        filter_ch = FILTER_GENOME_FASTA(concat_ch, other_params.genome_patterns_exclude, "virus-genomes-filtered")
-	// 9. Mask to remove adapters, low-entropy regions, and polyX
-	mask_params = other_params + [name_pattern: "virus-genomes"]
-	mask_ch = MASK_GENOME_FASTA(filter_ch, other_params.adapters, mask_params)
+        filter_ch = FILTER_GENOME_FASTA(genome_concat_ch, other_params.genome_patterns_exclude, "virus-genomes-filtered")
+        // 9. Mask to remove adapters, low-entropy regions, and polyX
+        mask_params = other_params + [name_pattern: "virus-genomes"]
+        mask_ch = MASK_GENOME_FASTA(filter_ch, other_params.adapters, mask_params)
     emit:
         fasta = mask_ch.masked
         metadata = gid_ch
