@@ -36,7 +36,7 @@ workflow MAKE_VIRUS_GENOME_DB {
         child_taxids_ch = child_ch.taxids
             .splitText().map { it.trim() }.filter { it }
         // 2. Download genomes per child taxon in parallel
-        download_ch = DOWNLOAD_VIRAL_GENOMES(child_taxids_ch, assembly_source, datasets_extra_args)
+        download_ch = DOWNLOAD_VIRAL_GENOMES(child_taxids_ch, assembly_source, datasets_extra_args, 5)
         // 3. Merge per-taxon metadata using existing CONCATENATE_TSVS
         concat_ch = CONCATENATE_TSVS(
             download_ch.metadata.collect(),
