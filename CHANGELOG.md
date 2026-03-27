@@ -2,6 +2,7 @@
 
 - Hardened Trivy vulnerability scans against supply chain attacks by replacing unpinned apt installs with specific pinned version hashes.
 - Added FASTP JSON output to published DOWNSTREAM outputs for QC (short-read data only).
+- Extended schema validation code to cover JSON files in DOWNSTREAM output, and added `schemas/fastp.schema.json`.
 - Began work to reduce INDEX workflow failures:
     - Reduced `DOWNLOAD_BLAST_DB` resource allocation to reduce peer-reset failures.
     - Used `xargs cat` instead of `cat $(cat ...)` in `CONCATENATE_GENOME_FASTA` to avoid argument-list-too-long errors with large genome databases.
@@ -14,7 +15,6 @@
 
 - Added FASTP JSON output to published RUN and DOWNSTREAM outputs for QC (short-read data only; ONT uses FILTLONG).
 - Added `COMBINE_SAMPLE_JSONS` module and `CONCAT_JSON_BY_GROUP` subworkflow for combining per-sample JSON files into per-group outputs.
-- Added `schemas/fastp.schema.json` (JSON Schema) for per-group FASTP output and extended `bin/validate_schemas.py` to validate JSON files against JSON Schema definitions.
 
 ## Cleanup & best practice
 
