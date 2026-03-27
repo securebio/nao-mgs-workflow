@@ -14,21 +14,15 @@ To run the workflow on new data, you need:
 
 1. Accessible **raw data** files in Gzipped FASTQ format, named appropriately.
 2. A **sample sheet** file specifying the samples to be analyzed, along with paths to the forward and reverse read files for each sample.
-3. A **config file** in a clean launch directory, pointing to:
-    - The base directory in which to put the working and output directories (`params.base_dir`).
-    - The directory containing the outputs of the reference workflow (`params.ref_dir`).
-    - The sample sheet (`params.sample_sheet`).
-    - The platform (e.g. `illumina` or `ont`)
-    - Various other parameter values.
 
 > [!TIP]
-> We recommend starting each Nextflow pipeline run in a clean launch directory, containing only your sample sheet and config file.
+> We recommend starting each Nextflow pipeline run in a clean launch directory, containing your sample sheet.
 
 ### 1.1. The sample sheet
 
 The sample sheet must be an uncompressed CSV file with the following headers in the order specified:
 
-For paired data: 
+For paired data:
 - `sample` (1st column): Sample ID
 - `fastq_1` (2nd column): Path to FASTQ file 1 which should be the forward read for this sample
 - `fastq_2` (3rd column): Path to FASTQ file 2 which should be the reverse read for this sample
@@ -41,9 +35,9 @@ If you're working with NAO data, [mgs-metadata](https://github.com/naobservatory
 
 ### 1.2. The config file
 
-The config file specifies parameters and other configuration options used by Nextflow in executing the pipeline. To create a config file for your pipeline run, copy the appropriate config file for your platform (`configs/run.config` for Pacbio/Illumina/Aviti; or `configs/run_ont.config` for ONT) into your launch directory as a file named `nextflow.config`.
+The config file specifies default parameters and other configuration options used by Nextflow in executing the pipeline. Choose the appropriate config file for your platform: `configs/run.config` for Pacbio/Illumina/Aviti, or `configs/run_ont.config` for ONT. You can reference it directly with `-c` when running the pipeline — no need to copy or edit it, since per-run values (base directory, reference directory, queue, etc.) can be supplied as `--<param>` flags on the command line. See [Running the pipeline](#3-running-the-pipeline) below.
 
-Most entries in the config file can be left at their default values. The per-run values (base directory, reference directory, platform, queue, etc.) can be supplied as `--<param>` flags on the command line instead of editing the config file — see [Running the pipeline](#3-running-the-pipeline) below. See [here](./config.md) for a full description of all config parameters.
+If you do need to customize non-default settings (e.g. `bt2_score_threshold`, `n_reads_profile`), copy the config file into your launch directory as `nextflow.config` and edit it there. See [here](./config.md) for a full description of all config parameters.
 
 ## 2. Choosing a profile
 
@@ -69,17 +63,19 @@ Calling the pipeline without specifying a profile will run the `batch` profile b
 
 ## 3. Running the pipeline
 
-After creating your sample sheet and config files and choosing a profile, navigate to the launch directory containing your config file. You can then run the pipeline as follows:
+After creating your sample sheet and choosing a profile, navigate to a clean launch directory. You can then run the pipeline as follows:
 
 ```
-nextflow run <PATH/TO/PIPELINE/DIR> -resume \
+nextflow run <PATH/TO/PIPELINE/DIR> \
+  -c <PATH/TO/PIPELINE/DIR>/configs/run.config \
+  -resume \
   --base_dir <BASE_DIR> \
   --ref_dir <REF_DIR> \
   --platform <PLATFORM> \
   --queue <BATCH_QUEUE_NAME>
 ```
 
-where `<PATH/TO/PIPELINE/DIR>` specifies the path to the directory containing the pipeline files from this repository (in particular, `main.nf`) from the launch directory. Any `params.*` value in the config file can be overridden with `--<param>` on the command line.
+where `<PATH/TO/PIPELINE/DIR>` specifies the path to the directory containing the pipeline files from this repository. Any `params.*` value in the config file can be overridden with `--<param>` on the command line. If you copied the config file into the launch directory as `nextflow.config`, you can omit the `-c` flag.
 
 > [!TIP]
 > If you are running the pipeline with its default profile (`batch`) you can omit the `-profile` declaration. To use a different profile, add `-profile <PROFILE_NAME>` to the command.

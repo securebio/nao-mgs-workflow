@@ -2,11 +2,11 @@
 
 Nextflow configuration is controlled by `.config` files, which specify parameters and other options used in executing the pipeline.
 
-All configuration files used in the pipeline are stored in the `configs` directory. To configure a specific pipeline run, copy the appropriate config file for that pipeline mode (e.g. `run.config` or `run_ont.config`) into the launch directory, rename it to `nextflow.config`, and edit it as appropriate. That config file will in turn call other, standard config files included in the `configs` directory.
+All configuration files used in the pipeline are stored in the `configs` directory. You can reference the appropriate config file directly with `-c` (e.g. `-c configs/run.config`), or copy it into the launch directory as `nextflow.config` if you need to customize non-default settings.
 
 Any `params.*` value can be overridden on the command line using `--<param> <value>` (e.g. `--queue my-batch-queue`, `--base_dir s3://my-bucket/run1`). This is the recommended way to set per-run values like `base_dir`, `ref_dir`, `platform`, and `queue`.
 
-The rest of this page describes the specific options present in each config file, with a focus on those intended to be copied and edited by users.
+The rest of this page describes the specific options present in each config file.
 
 ## Run workflow configuration (`configs/run.config` and `configs/run_ont.config`)
 

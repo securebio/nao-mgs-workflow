@@ -67,8 +67,7 @@ In order to cut down on the time it takes to run our test suite, we have switche
 
 1. Create new reference datasets using `bin/build_tiny_test_databases.py`. The defaults provided should suffice in most cases.
 2. Generate the new test index:
-    a. Create a fresh launch directory and copy the config file: `cp configs/index-for-run-test.config LAUNCH_DIR/nextflow.config`.
-    b. Execute the workflow from the launch directory, specifying a base directory and Batch job queue: `nextflow run PATH_TO_REPO_DIR --base_dir BASE_DIR --queue BATCH_QUEUE_NAME`. (This usually takes about 10 minutes.)
+    a. Execute the workflow from a fresh launch directory: `nextflow run PATH_TO_REPO_DIR -c PATH_TO_REPO_DIR/configs/index-for-run-test.config --base_dir BASE_DIR --queue BATCH_QUEUE_NAME`. (This usually takes about 10 minutes.)
     d. Copy the tiny index from S3 to the repo: `aws s3 cp --recursive BASE_DIR/output test-data/tiny-index/output`, followed by `rm -r test-data/tiny-index/output/logging/trace*` to remove run-specific information we don't want in the repo.
 3. Generate test input data (simulated ONT & Illumina reads):
     a. Set up an environment with appropriate versions of InSilicoSeq and NanoSim, e.g. with Conda: `conda env create -f test-data/tiny-index/reads/env.yml; conda activate GenerateTestData`

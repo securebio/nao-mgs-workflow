@@ -103,21 +103,19 @@ nf-test test
 > [!NOTE]
 > **For repository maintainers:** The recommended way to rebuild the benchmark index is via the "Rebuild benchmark index" workflow in GitHub Actions (`rebuild-benchmark-index.yml`). This runs INDEX nf-tests as a preflight check, builds the index to the test bucket, and verifies freshness automatically. See the [CI documentation](./ci.md#benchmark-index-management) for details.
 
-Create a new directory outside the repo directory and copy over the index workflow config file as `nextflow.config` in that directory:
+Create a new launch directory outside the repo directory and run the index workflow, passing the config file with `-c` and specifying per-run values on the command line:
 
 ```
 mkdir index
 cd index
-cp REPO_DIR/configs/index.config nextflow.config
+nextflow run REPO_DIR \
+  -c REPO_DIR/configs/index.config \
+  -resume \
+  --base_dir <BASE_DIR> \
+  --queue <BATCH_QUEUE_NAME>
 ```
 
-Next, edit `nextflow.config` such that `params.base_dir` points to the directory (likely on S3) where you want to store your index files. (You shouldn't need to modify anything else about the config file at this stage. However, if you'd like to, you can [learn more about what each parameter does here](./config.md).)
-
-Next, call `nextflow run` pointing at the repo directory:
-
-```
-nextflow run PATH_TO_REPO_DIR -resume
-```
+Replace `<BASE_DIR>` with the directory (likely on S3) where you want to store your index files, and `<BATCH_QUEUE_NAME>` with your AWS Batch job queue name. (You shouldn't need to modify anything else at this stage. However, if you'd like to, you can [learn more about what each parameter does here](./config.md).)
 
 > [!TIP]
 > You don't need to point `nextflow run` at `main.nf` any other workflow file; pointing to the directory will cause Nextflow to automatically run `main.nf` from that directory.
@@ -130,25 +128,25 @@ To confirm that the pipeline works in your hands, we recommend running it on a s
 
 1. Prepare the launch directory:
     - Create a clean launch directory outside the repository directory.
-    - Copy over the run workflow config file to a new file in the launch directory labeled `nextflow.config`.
-        - Example below shows `run.config`; for the ONT platform, remember to use `run_ont.config` instead
     - Copy the test-data sample sheet from the repository directory to the launch directory.
 
 ```
 mkdir launch
 cd launch
-cp REPO_DIR/configs/run.config nextflow.config 
 cp REPO_DIR/test-data/samplesheet.csv samplesheet.csv
 ```
 
-2. Edit the config file (`nextflow.config`):
-    - Edit `params.ref_dir` to point to the index directory you chose or created above (specifically `PATH_TO_REF_DIR/output`)
-    - Edit `params.base_dir` to point to where you would like the pipeline to save intermediate and final pipeline outputs.
-3. Choose a profile as described [here](./usage.md).
-4. Run the pipeline from the launch directory:
+2. Choose a profile as described [here](./usage.md).
+3. Run the pipeline from the launch directory, passing per-run values on the command line (example below shows `run.config`; for the ONT platform, use `run_ont.config` instead):
 
 ```
-nextflow run -resume -profile <PROFILE> REPO_DIR
+nextflow run REPO_DIR \
+  -c REPO_DIR/configs/run.config \
+  -resume \
+  --base_dir <BASE_DIR> \
+  --ref_dir <PATH_TO_REF_DIR>/output \
+  --platform illumina \
+  --queue <BATCH_QUEUE_NAME>
 ```
 
 Once the pipeline is complete, output and logging files will be available in the `output` subdirectory of the base directory specified in the config file.
