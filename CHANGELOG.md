@@ -1,11 +1,11 @@
-# v3.2.1.1-dev
+# v3.2.1.1
 
-- CI: Hardened Trivy vulnerability scans against supply chain attacks by replacing unpinned apt installs with SHA-pinned `trivy-action` (`rust-tools.yml`) and version-pinned GitHub release with SHA256 verification (`trivy-scan.yml`).
-- Added FASTP JSON output to published DOWNSTREAM outputs for QC (short-read data only; ONT uses FILTLONG), using `CONCAT_JSON_BY_GROUP` to merge per-sample FASTP JSONs into per-group outputs.
-- Remove dead JSON-handling code from `createEmptyGroupOutputs` that was superseded by the new `CONCAT_JSON_BY_GROUP` subworkflow.
-- Added `ENUMERATE_CHILD_TAXA`, `DOWNLOAD_VIRAL_GENOMES`, and `PREPARE_VIRAL_METADATA` modules for downloading and preparing viral genomes using NCBI's `datasets` CLI, to replace `ncbi-genome-download` in a follow-up PR.
-- Downgraded `DOWNLOAD_BLAST_DB` resource label from `max` to `xsmall` — this is a single-threaded download that doesn't need 32 cores.
-- Used `xargs cat` instead of `cat $(cat ...)` in `CONCATENATE_GENOME_FASTA` to avoid argument-list-too-long errors with large genome databases.
+- Hardened Trivy vulnerability scans against supply chain attacks by replacing unpinned apt installs with specific pinned version hashes.
+- Added FASTP JSON output to published DOWNSTREAM outputs for QC (short-read data only).
+- Began work to reduce INDEX workflow failures:
+    - Reduced `DOWNLOAD_BLAST_DB` resource allocation to reduce peer-reset failures.
+    - Used `xargs cat` instead of `cat $(cat ...)` in `CONCATENATE_GENOME_FASTA` to avoid argument-list-too-long errors with large genome databases.
+    - Implemented new modules for downloading viral genomes using NCBI `datasets` CLI (not yet wired into workflow).
 
 # v3.2.1.0
 
