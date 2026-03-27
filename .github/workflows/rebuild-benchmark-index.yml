@@ -65,12 +65,11 @@ jobs:
           JOB_QUEUE: ${{ inputs.job_queue }}
         run: |
           mkdir -p launch_dir
-          echo "process.queue = \"${JOB_QUEUE}\"" > launch_dir/queue.config
           nextflow run . \
             -c configs/index.config \
-            -c launch_dir/queue.config \
             -profile batch \
-            --base_dir "s3://nao-testing/mgs-workflow-test/index-latest"
+            --base_dir "s3://nao-testing/mgs-workflow-test/index-latest" \
+            --queue "${JOB_QUEUE}"
 
       # Uses the action directly (not setup-nf-test) since we only need
       # fresh credentials, not the full nf-test environment.

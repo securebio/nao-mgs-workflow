@@ -6,6 +6,7 @@
     - Reduced `DOWNLOAD_BLAST_DB` resource allocation to reduce peer-reset failures.
     - Used `xargs cat` instead of `cat $(cat ...)` in `CONCATENATE_GENOME_FASTA` to avoid argument-list-too-long errors with large genome databases.
     - Implemented new modules for downloading viral genomes using NCBI `datasets` CLI (not yet wired into workflow).
+- Updated config files and documentation to enable direct specification of job queue from the command line.
 
 # v3.2.1.0
 

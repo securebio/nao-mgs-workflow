@@ -98,7 +98,7 @@ To mitigate this, you can configure a **fallback queue** that uses On-Demand ins
 ### Setup
 
 1. Create two Batch job queues (see Step 3 above): one backed by a Spot compute environment, and one backed by an On-Demand compute environment.
-2. In your `nextflow.config`, use a Groovy closure for `process.queue`:
+2. In your `nextflow.config`, use a Groovy closure for `process.queue` (note: closures cannot be passed via `--queue` on the command line, so this must be set directly in the config file):
 
 ```groovy
 process.queue = { task.attempt > 1 ? "my-on-demand-queue" : "my-spot-queue" }
