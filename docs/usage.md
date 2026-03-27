@@ -41,23 +41,16 @@ If you're working with NAO data, [mgs-metadata](https://github.com/naobservatory
 
 ### 1.2. The config file
 
-The config file specifies parameters and other configuration options used by Nextflow in executing the pipeline. To create a config file for your pipeline run, copy appropriate config file for your platform (`configs/run.config` for Pacbio/Illumina/Aviti; or `configs/run_ont.config` for ONT) into your launch directory as a file named `nextflow.config`, then modify the file as follows:
+The config file specifies parameters and other configuration options used by Nextflow in executing the pipeline. To create a config file for your pipeline run, copy the appropriate config file for your platform (`configs/run.config` for Pacbio/Illumina/Aviti; or `configs/run_ont.config` for ONT) into your launch directory as a file named `nextflow.config`.
 
-- Make sure `params.mode = "run"`; this instructs the pipeline to execute the [core run workflow](./run.md).
-- Edit `params.ref_dir` to point to the directory containing the outputs of the reference workflow.
-- Edit `params.sample_sheet` to point to your sample sheet.
-- Edit `params.base_dir` to point to the directory in which Nextflow should put the pipeline working and output directories.
-- Make sure `params.platform` matches your data
-- If running on AWS Batch (see below), edit `params.queue` to the name of your Batch job queue (or pass `--queue <name>` on the command line).
-
-Most other entries in the config file can be left at their default values for most runs. See [here](./config.md) for a full description of config file parameters and their meanings.
+Most entries in the config file can be left at their default values. The per-run values (base directory, reference directory, platform, queue, etc.) can be supplied as `--<param>` flags on the command line instead of editing the config file — see [Running the pipeline](#3-running-the-pipeline) below. See [here](./config.md) for a full description of all config parameters.
 
 ## 2. Choosing a profile
 
 The pipeline can be run in multiple ways by modifying various configuration variables specified in `configs/profiles.config`. Currently, three profiles are implemented, all of which assume the workflow is being launched from an AWS EC2 instance:
 
 - `batch (default)`:  **Most reliable way to run the pipeline**
-  - This profile is the default and attempts to run the pipeline with AWS Batch. This is the most reliable and convenient way to run the pipeline, but requires significant additional setup (described [here](./batch.md)). Before running the pipeline using this profile, make sure `params.queue` in your config file is pointing to the correct Batch job queue (or pass `--queue` on the command line).
+  - This profile is the default and attempts to run the pipeline with AWS Batch. This is the most reliable and convenient way to run the pipeline, but requires significant additional setup (described [here](./batch.md)). Before running the pipeline using this profile, make sure you specify `--queue` on the command line or set `params.queue` in your config file to the correct Batch job queue.
   - Note that this profile uses automatic reference file caching (in the `/scratch` directory on the instance), which significantly reduces large database load times. 
       - To turn off file caching, remove the `aws.batch.volumes = ['/scratch:/scratch']` line from the relevant profile.
 - `ec2_local`: **Requires the least setup, but is bottlenecked by your instance's compute, memory and storage.**
@@ -79,17 +72,17 @@ Calling the pipeline without specifying a profile will run the `batch` profile b
 After creating your sample sheet and config files and choosing a profile, navigate to the launch directory containing your config file. You can then run the pipeline as follows:
 
 ```
-nextflow run -resume -profile <PROFILE> <PATH/TO/PIPELINE/DIR>
+nextflow run <PATH/TO/PIPELINE/DIR> -resume \
+  --base_dir <BASE_DIR> \
+  --ref_dir <REF_DIR> \
+  --platform <PLATFORM> \
+  --queue <BATCH_QUEUE_NAME>
 ```
 
-where `<PATH/TO/PIPELINE/DIR>` specifies the path to the directory containing the pipeline files from this repository (in particular, `main.nf`) from the launch directory.
+where `<PATH/TO/PIPELINE/DIR>` specifies the path to the directory containing the pipeline files from this repository (in particular, `main.nf`) from the launch directory. Any `params.*` value in the config file can be overridden with `--<param>` on the command line.
 
 > [!TIP]
-> If you are running the pipeline with its default profile (`batch`) you can omit the `-profile` declaration and simply write:
->
-> ```
-> nextflow run -resume PATH/TO/PIPELINE/DIR
-> ```
+> If you are running the pipeline with its default profile (`batch`) you can omit the `-profile` declaration. To use a different profile, add `-profile <PROFILE_NAME>` to the command.
 
 > [!TIP]
 > It's highly recommended that you always run `nextflow run` with the `-resume` option enabled. It doesn't do any harm if you haven't run a workflow before, and getting into the habit will help you avoid much sadness when you want to resume it without rerunning all your jobs.
