@@ -21,7 +21,7 @@ This configuration file controls the pipeline's main RUN workflow. Its options a
 - `params.bracken_threshold` [int]: Minimum number of reads that must be assigned to a taxon for Bracken to include it. (default 1)
 - `params.host_taxon` [str]: Host taxon to use for host-infecting virus identification with Kraken2. (default "vertebrate")
 - `random_seed` [str]: Seed for non-deterministic processes. If left blank; a random seed will be chosen; we generally recommend setting a value for reproducibility.
-- `process.queue` [str or closure]: The [AWS Batch job queue](./batch.md) to use for this pipeline run. Supports a Groovy closure for [spot instance fallback](./batch.md#spot-instance-fallback).
+- `params.queue` [str]: The [AWS Batch job queue](./batch.md) to use for this pipeline run. Can also be set via `--queue` on the command line. For [spot instance fallback](./batch.md#spot-instance-fallback) using a Groovy closure, edit `process.queue` directly in the config file.
 
 ## Index workflow (`configs/index.config`)
 

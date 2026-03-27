@@ -48,7 +48,7 @@ The config file specifies parameters and other configuration options used by Nex
 - Edit `params.sample_sheet` to point to your sample sheet.
 - Edit `params.base_dir` to point to the directory in which Nextflow should put the pipeline working and output directories.
 - Make sure `params.platform` matches your data
-- If running on AWS Batch (see below), edit `process.queue` to the name of your Batch job queue.
+- If running on AWS Batch (see below), edit `params.queue` to the name of your Batch job queue (or pass `--queue <name>` on the command line).
 
 Most other entries in the config file can be left at their default values for most runs. See [here](./config.md) for a full description of config file parameters and their meanings.
 
@@ -57,7 +57,7 @@ Most other entries in the config file can be left at their default values for mo
 The pipeline can be run in multiple ways by modifying various configuration variables specified in `configs/profiles.config`. Currently, three profiles are implemented, all of which assume the workflow is being launched from an AWS EC2 instance:
 
 - `batch (default)`:  **Most reliable way to run the pipeline**
-  - This profile is the default and attempts to run the pipeline with AWS Batch. This is the most reliable and convenient way to run the pipeline, but requires significant additional setup (described [here](./batch.md)). Before running the pipeline using this profile, make sure `process.queue` in your config file is pointing to the correct Batch job queue.
+  - This profile is the default and attempts to run the pipeline with AWS Batch. This is the most reliable and convenient way to run the pipeline, but requires significant additional setup (described [here](./batch.md)). Before running the pipeline using this profile, make sure `params.queue` in your config file is pointing to the correct Batch job queue (or pass `--queue` on the command line).
   - Note that this profile uses automatic reference file caching (in the `/scratch` directory on the instance), which significantly reduces large database load times. 
       - To turn off file caching, remove the `aws.batch.volumes = ['/scratch:/scratch']` line from the relevant profile.
 - `ec2_local`: **Requires the least setup, but is bottlenecked by your instance's compute, memory and storage.**
