@@ -1,13 +1,18 @@
-# v3.2.1.1-dev
+# v3.2.1.2-dev
 
 - Wired new modules into `makeVirusGenomeDB` subworkflow, replacing `ncbi-genome-download` with NCBI `datasets` CLI for the INDEX workflow. Downloads are now parallelized across child taxa for better fault tolerance.
 - Removed `params.ncbi_viral_params` config parameter. Replaced with `params.assembly_source` (`"genbank"` or `"refseq"`), `params.datasets_extra_args`, and optional `params.download_virus_taxid`. NCBI API keys are now read from the `NCBI_API_KEY` environment variable (used automatically by the `datasets` CLI).
 - Updated `ncbi_datasets` container to `ncbi-datasets-cli=18.21.0`.
-- CI: Hardened Trivy vulnerability scans against supply chain attacks by replacing unpinned apt installs with SHA-pinned `trivy-action` (`rust-tools.yml`) and version-pinned GitHub release with SHA256 verification (`trivy-scan.yml`).
-- Added FASTP JSON output to published DOWNSTREAM outputs for QC (short-read data only; ONT uses FILTLONG), using `CONCAT_JSON_BY_GROUP` to merge per-sample FASTP JSONs into per-group outputs.
-- Added `ENUMERATE_CHILD_TAXA`, `DOWNLOAD_VIRAL_GENOMES`, and `PREPARE_VIRAL_METADATA` modules for downloading and preparing viral genomes using NCBI's `datasets` CLI, to replace `ncbi-genome-download` in a follow-up PR.
-- Downgraded `DOWNLOAD_BLAST_DB` resource label from `max` to `xsmall` — this is a single-threaded download that doesn't need 32 cores.
-- Used `xargs cat` instead of `cat $(cat ...)` in `CONCATENATE_GENOME_FASTA` to avoid argument-list-too-long errors with large genome databases.
+
+# v3.2.1.1
+
+- Hardened Trivy vulnerability scans against supply chain attacks by replacing unpinned apt installs with specific pinned version hashes.
+- Added FASTP JSON output to published DOWNSTREAM outputs for QC (short-read data only).
+- Began work to reduce INDEX workflow failures:
+    - Reduced `DOWNLOAD_BLAST_DB` resource allocation to reduce peer-reset failures.
+    - Used `xargs cat` instead of `cat $(cat ...)` in `CONCATENATE_GENOME_FASTA` to avoid argument-list-too-long errors with large genome databases.
+    - Implemented new modules for downloading viral genomes using NCBI `datasets` CLI (not yet wired into workflow).
+- Updated config files and documentation to enable direct specification of job queue from the command line.
 
 # v3.2.1.0
 
