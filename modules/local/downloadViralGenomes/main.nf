@@ -8,8 +8,8 @@ process DOWNLOAD_VIRAL_GENOMES {
         val(extra_args)
         val(max_attempts)
     output:
-        path("genomes/*.fna.gz"), emit: genomes
-        path("metadata.tsv"), emit: metadata
+        path("${taxid}_genomes/*.fna.gz"), emit: genomes
+        path("${taxid}_metadata.tsv"), emit: metadata
     script:
         """
         # 1. Download dehydrated package (metadata + manifest only)
@@ -46,12 +46,12 @@ process DOWNLOAD_VIRAL_GENOMES {
         # 4. Replace header with standardized column names
         { echo -e "assembly_accession\\ttaxid\\torganism_name\\tsource_database"
           tail -n +2 raw_metadata.tsv
-        } > metadata.tsv
+        } > ${taxid}_metadata.tsv
 
         # 5. Collect genome FASTAs into genomes/ directory
-        mkdir -p genomes
-        find output/ncbi_dataset/data -name '*.fna.gz' -exec mv {} genomes/ \\;
+        mkdir -p ${taxid}_genomes
+        find output/ncbi_dataset/data -name '*.fna.gz' -exec mv {} ${taxid}_genomes/ \\;
         rm -rf output/ output.zip raw_metadata.tsv
-        echo "Downloaded \$((  \$(wc -l < metadata.tsv) - 1  )) assemblies for taxid ${taxid}"
+        echo "Downloaded \$((  \$(wc -l < ${taxid}_metadata.tsv) - 1  )) assemblies for taxid ${taxid}"
         """
 }
