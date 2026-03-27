@@ -6,6 +6,7 @@
 - Added `ENUMERATE_CHILD_TAXA`, `DOWNLOAD_VIRAL_GENOMES`, and `PREPARE_VIRAL_METADATA` modules for downloading and preparing viral genomes using NCBI's `datasets` CLI, to replace `ncbi-genome-download` in a follow-up PR.
 - Downgraded `DOWNLOAD_BLAST_DB` resource label from `max` to `xsmall` — this is a single-threaded download that doesn't need 32 cores.
 - Used `xargs cat` instead of `cat $(cat ...)` in `CONCATENATE_GENOME_FASTA` to avoid argument-list-too-long errors with large genome databases.
+- Updated config files and documentation to enable direct specification of job queue from the command line.
 
 # v3.2.1.0
 

@@ -2,9 +2,11 @@
 
 Nextflow configuration is controlled by `.config` files, which specify parameters and other options used in executing the pipeline.
 
-All configuration files used in the pipeline are stored in the `configs` directory. To configure a specific pipeline run, copy the appropriate config file for that pipeline mode (e.g. `run.config` or `run_ont.config`) into the launch directory, rename it to `nextflow.config`, and edit it as appropriate. That config file will in turn call other, standard config files included in the `configs` directory.
+All configuration files used in the pipeline are stored in the `configs` directory. You can reference the appropriate config file directly with `-c` (e.g. `-c configs/run.config`), or copy it into the launch directory as `nextflow.config` if you need to customize non-default settings.
 
-The rest of this page describes the specific options present in each config file, with a focus on those intended to be copied and edited by users.
+Any `params.*` value can be overridden on the command line using `--<param> <value>` (e.g. `--queue my-batch-queue`, `--base_dir s3://my-bucket/run1`). This is the recommended way to set per-run values like `base_dir`, `ref_dir`, `platform`, and `queue`.
+
+The rest of this page describes the specific options present in each config file.
 
 ## Run workflow configuration (`configs/run.config` and `configs/run_ont.config`)
 
@@ -20,8 +22,8 @@ This configuration file controls the pipeline's main RUN workflow. Its options a
 - `params.bt2_score_threshold` [float]: The length-normalized Bowtie2 score threshold above which a read is considered a valid hit for a host-infecting virus (typically 15 or 20).
 - `params.bracken_threshold` [int]: Minimum number of reads that must be assigned to a taxon for Bracken to include it. (default 1)
 - `params.host_taxon` [str]: Host taxon to use for host-infecting virus identification with Kraken2. (default "vertebrate")
-- `random_seed` [str]: Seed for non-deterministic processes. If left blank; a random seed will be chosen; we generally recommend setting a value for reproducibility.
-- `process.queue` [str or closure]: The [AWS Batch job queue](./batch.md) to use for this pipeline run. Supports a Groovy closure for [spot instance fallback](./batch.md#spot-instance-fallback).
+- `params.random_seed` [str]: Seed for non-deterministic processes. If left blank; a random seed will be chosen; we generally recommend setting a value for reproducibility.
+- `params.queue` [str]: The [AWS Batch job queue](./batch.md) to use for this pipeline run. For [spot instance fallback](./batch.md#spot-instance-fallback) using a Groovy closure, edit `process.queue` directly in the config file.
 
 ## Index workflow (`configs/index.config`)
 
