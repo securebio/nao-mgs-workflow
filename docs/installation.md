@@ -5,7 +5,7 @@ This page describes how to install the pipeline and configure your computing env
 > [!IMPORTANT]
 > This pipeline has been developed to run on Linux environments, primarily on AWS EC2 instances. It has not been tested or debugged on MacOS or Windows machines, and is not guaranteed to work on those environments.
 
-## 1. Install dependencies 
+## 1. Install dependencies
 
 To run this workflow with full functionality, you need access to the following dependencies:
 

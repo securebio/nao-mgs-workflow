@@ -14,9 +14,15 @@ To run the workflow on new data, you need:
 
 1. Accessible **raw data** files in Gzipped FASTQ format, named appropriately.
 2. A **sample sheet** file specifying the samples to be analyzed, along with paths to the forward and reverse read files for each sample.
+3. A **config file** (either referenced directly from the `configs` directory, or copied into a clean launch directory and edited), pointing to:
+    - The base directory in which to put the working and output directories (`params.base_dir`).
+    - The directory containing the outputs of the reference workflow (`params.ref_dir`).
+    - The sample sheet (`params.sample_sheet`).
+    - The platform (e.g. `illumina` or `ont`)
+    - Various other parameter values.
 
 > [!TIP]
-> We recommend starting each Nextflow pipeline run in a clean launch directory, containing your sample sheet.
+> We recommend starting each Nextflow pipeline run in a clean launch directory containing your sample sheet.
 
 ### 1.1. The sample sheet
 
@@ -35,9 +41,12 @@ If you're working with NAO data, [mgs-metadata](https://github.com/naobservatory
 
 ### 1.2. The config file
 
-The config file specifies default parameters and other configuration options used by Nextflow in executing the pipeline. Choose the appropriate config file for your platform: `configs/run.config` for Pacbio/Illumina/Aviti, or `configs/run_ont.config` for ONT. You can reference it directly with `-c` when running the pipeline — no need to copy or edit it, since per-run values (base directory, reference directory, queue, etc.) can be supplied as `--<param>` flags on the command line. See [Running the pipeline](#3-running-the-pipeline) below.
+The config file specifies parameters and other configuration options used by Nextflow in executing the pipeline. To pass a configuration to your pipeline run, you have two main choices:
 
-If you do need to customize non-default settings (e.g. `bt2_score_threshold`, `n_reads_profile`), copy the config file into your launch directory as `nextflow.config` and edit it there. See [here](./config.md) for a full description of all config parameters.
+1. Point Nextflow to an existing config file in the `configs` directory using the `-c` flag, then fill in placeholder values for each missing parameter with `--<param>`. This is the recommended approach; see [Running the pipeline](#3-running-the-pipeline) below for more details.
+2. Copy a config file from the `configs` directory into your launch directory, then edit the copy directly to fill in placeholder values and any non-default settings.
+
+Choose the appropriate config file for your platform: `configs/run.config` for Pacbio/Illumina/Aviti, or `configs/run_ont.config` for ONT. See [here](./config.md) for a full description of all config parameters.
 
 ## 2. Choosing a profile
 
@@ -45,7 +54,7 @@ The pipeline can be run in multiple ways by modifying various configuration vari
 
 - `batch (default)`:  **Most reliable way to run the pipeline**
   - This profile is the default and attempts to run the pipeline with AWS Batch. This is the most reliable and convenient way to run the pipeline, but requires significant additional setup (described [here](./batch.md)). Before running the pipeline using this profile, make sure you specify `--queue` on the command line or set `params.queue` in your config file to the correct Batch job queue.
-  - Note that this profile uses automatic reference file caching (in the `/scratch` directory on the instance), which significantly reduces large database load times. 
+  - Note that this profile uses automatic reference file caching (in the `/scratch` directory on the instance), which significantly reduces large database load times.
       - To turn off file caching, remove the `aws.batch.volumes = ['/scratch:/scratch']` line from the relevant profile.
 - `ec2_local`: **Requires the least setup, but is bottlenecked by your instance's compute, memory and storage.**
   - This profile attempts to run the whole pipeline locally on your EC2 instance, storing all files on instance-linked block storage.
@@ -67,7 +76,7 @@ After creating your sample sheet and choosing a profile, navigate to a clean lau
 
 ```
 nextflow run <PATH/TO/PIPELINE/DIR> \
-  -c <PATH/TO/PIPELINE/DIR>/configs/run.config \
+  -c <PATH/TO/CONFIG/FILE> \
   -resume \
   --base_dir <BASE_DIR> \
   --ref_dir <REF_DIR> \
@@ -75,10 +84,10 @@ nextflow run <PATH/TO/PIPELINE/DIR> \
   --queue <BATCH_QUEUE_NAME>
 ```
 
-where `<PATH/TO/PIPELINE/DIR>` specifies the path to the directory containing the pipeline files from this repository. Any `params.*` value in the config file can be overridden with `--<param>` on the command line. If you copied the config file into the launch directory as `nextflow.config`, you can omit the `-c` flag.
+where `<PATH/TO/PIPELINE/DIR>` specifies the path to the directory containing this repository's `main.nf` file. Any `params.*` value in the config file can be overridden with `--<param>` on the command line. If you copied the config file into the launch directory as `nextflow.config`, you can omit the `-c` flag.
 
 > [!TIP]
-> If you are running the pipeline with its default profile (`batch`) you can omit the `-profile` declaration. To use a different profile, add `-profile <PROFILE_NAME>` to the command.
+> To use a non-default profile, add `-profile <PROFILE_NAME>` to the command.
 
 > [!TIP]
 > It's highly recommended that you always run `nextflow run` with the `-resume` option enabled. It doesn't do any harm if you haven't run a workflow before, and getting into the habit will help you avoid much sadness when you want to resume it without rerunning all your jobs.
