@@ -1,3 +1,7 @@
+# v3.2.1.2-dev
+
+- Switched rust-tools container base image from Debian bookworm-slim to Alpine 3.21 to fix CVE-2026-0861 and CVE-2023-45853.
+
 # v3.2.1.1
 
 - Hardened Trivy vulnerability scans against supply chain attacks by replacing unpinned apt installs with specific pinned version hashes.
