@@ -267,15 +267,19 @@ Only pipeline maintainers should author a new release. The process for going thr
 
 ## Schemas
 
-We are currently in the process of defining and enforcing [schemas](../schemas/) for our output files, using the [table schema standard](https://datapackage.org/standard/table-schema/) and [frictionless Python framework](https://framework.frictionlessdata.io/). Not all output files yet have schemas; those that have been added are used to validate test outputs in Github Actions to ensure that the output produced matches the schema.
+We are currently in the process of defining and enforcing [schemas](../schemas/) for our output files. TSV outputs use the [table schema standard](https://datapackage.org/standard/table-schema/) validated by the [frictionless Python framework](https://framework.frictionlessdata.io/); JSON outputs use [JSON Schema](https://json-schema.org/) (draft/2020-12) validated by the [jsonschema](https://python-jsonschema.readthedocs.io/) library. Both schema types live in `schemas/` and are distinguished by their `$schema` field. Not all output files yet have schemas; those that have been added are used to validate test outputs in Github Actions to ensure that the output produced matches the schema.
 
 ### Policy
 
-All new tabular output files should have a complete schema, and all existing schemas should be maintained. To add a new schema, create a corresponding JSON file in `schemas`. All schemas should have:
+All new output files should have a complete schema, and all existing schemas should be maintained. To add a new schema, create a corresponding JSON file in `schemas`.
+
+**Table-schemas** (for TSV outputs) should have:
 
 - A `fields` entry with subentries for each column in the associated output file (no missing columns). Each column subentry should at minimum have `name`, `type`, `title`, & `description` fields. Most should also have a `constraints` fields delimiting permitted values.
 - A `primaryKey` entry describing a set of fields that are collectively guaranteed to uniquely identify each row (can often be a single field).
 - A `missingValues` entry listing permitted null values (typically `""` and `"NA"`).
+
+**JSON Schemas** (for JSON outputs) should follow the [JSON Schema draft/2020-12](https://json-schema.org/draft/2020-12/json-schema-core) convention, with a `$schema` field pointing to `https://json-schema.org/draft/2020-12/schema`. Include `description` fields on all definitions and properties, and `examples` on leaf properties, to aid both human readers and automated validation tooling. Descriptions and examples may be omitted on sub-properties where the meaning is obvious from the parent property's description (e.g., individual base-type keys under a "per base type" parent).
 
 ### Versioning and guarantees
 
@@ -288,6 +292,6 @@ Under our [versioning policy](./versioning.md), changes to schema `title` and `d
 ### Working with schemas
 
 - If you are working on a change that affects pipeline outputs, review the schema files for affected outputs where available, to know what's expected for each column.
-- If an input to DOWNSTREAM has no data, the `createEmptyGroupOutputs` module will generate header-only outputs based on schemas where available. Output files with no corresponding schema will be empty.
+- If an input to DOWNSTREAM has no data, the `createEmptyGroupOutputs` module will generate header-only TSV outputs. Output files with no corresponding schema will be empty.
 - To validate output files locally, run `bin/validate_schemas.py`.
 - If you are developing code external to this repository that depends on its outputs, you should review the corresponding schemas to understand what guarantees you can expect.

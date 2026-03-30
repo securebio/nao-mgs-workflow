@@ -1,10 +1,13 @@
 import gzip
+import json
 from pathlib import Path
 
 import pytest
 from create_empty_group_outputs import (
     open_by_suffix,
     get_group_output_patterns,
+    get_schema_name_from_pattern,
+    load_schema_headers,
     create_empty_outputs,
     parse_args,
 )
@@ -77,6 +80,56 @@ class TestGetGroupOutputPatterns:
         pyproject_path = tmp_path / "pyproject.toml"
         write_pyproject(pyproject_path, illumina, ont)
         assert get_group_output_patterns(str(pyproject_path), platform) == expected
+
+
+#=============================================================================
+# Tests for get_schema_name_from_pattern
+#=============================================================================
+
+class TestGetSchemaNameFromPattern:
+    """Tests for get_schema_name_from_pattern function."""
+
+    @pytest.mark.parametrize("pattern,expected", [
+        ("{GROUP}_duplicate_stats.tsv.gz", "duplicate_stats"),
+        ("{GROUP}_clade_counts.tsv.gz", "clade_counts"),
+        ("{GROUP}_validation_hits.tsv.gz", "validation_hits"),
+    ])
+    def test_extracts_schema_name(self, pattern: str, expected: str) -> None:
+        """Test schema name extraction from various patterns."""
+        assert get_schema_name_from_pattern(pattern) == expected
+
+
+#=============================================================================
+# Tests for load_schema_headers
+#=============================================================================
+
+class TestLoadSchemaHeaders:
+    """Tests for load_schema_headers function."""
+
+    def test_returns_headers_when_schema_exists(self, tmp_path: Path) -> None:
+        """Test that headers are returned from a valid schema file."""
+        schema = {
+            "fields": [
+                {"name": "col1", "type": "string"},
+                {"name": "col2", "type": "integer"},
+            ]
+        }
+        schema_path = tmp_path / "test.schema.json"
+        schema_path.write_text(json.dumps(schema))
+        result = load_schema_headers(tmp_path, "test")
+        assert result == ["col1", "col2"]
+
+    def test_returns_none_when_no_schema(self, tmp_path: Path) -> None:
+        """Test that None is returned when no schema file exists."""
+        result = load_schema_headers(tmp_path, "nonexistent")
+        assert result is None
+
+    def test_returns_none_when_no_fields(self, tmp_path: Path) -> None:
+        """Test that None is returned when schema has no fields."""
+        schema_path = tmp_path / "empty.schema.json"
+        schema_path.write_text(json.dumps({"fields": []}))
+        result = load_schema_headers(tmp_path, "empty")
+        assert result is None
 
 
 #=============================================================================

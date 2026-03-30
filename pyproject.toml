@@ -4,15 +4,17 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "mgs-workflow"
-version = "3.2.1.0"
+version = "3.2.1.1"
 requires-python = ">=3.12"
 dependencies = [
     "biopython>=1.85",
     "boto3",
     "frictionless>=5.18.0",
+    "jsonschema>=4.20.0",
     "mypy>=1.18.1",
     "pandas-stubs",
     "types-PyYAML",
+    "types-jsonschema",
     # Needed until https://github.com/securebio/nao-dedup/pull/12 has been
     # merged and we've updated post-processing/nao-dedup/ to depend on the
     # no-python version.
@@ -132,6 +134,7 @@ expected-outputs-downstream = [
     "results_downstream/{GROUP}_bracken.tsv.gz",
     "results_downstream/{GROUP}_clade_counts.tsv.gz",
     "results_downstream/{GROUP}_duplicate_stats.tsv.gz",
+    "results_downstream/{GROUP}_fastp.json",
     "results_downstream/{GROUP}_kraken.tsv.gz",
     "results_downstream/{GROUP}_qc_adapter_stats_cleaned.tsv.gz",
     "results_downstream/{GROUP}_qc_adapter_stats_raw.tsv.gz",

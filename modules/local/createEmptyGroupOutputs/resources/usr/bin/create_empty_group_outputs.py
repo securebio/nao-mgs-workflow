@@ -14,7 +14,6 @@ table-schema exists for an output, the file includes a header row.
 # Standard library imports
 import argparse
 import gzip
-import io
 import json
 from typing import IO, cast
 import logging
@@ -125,6 +124,7 @@ def load_schema_headers(schema_dir: Path, schema_name: str) -> list[str] | None:
         return None
     return [field["name"] for field in fields]
 
+
 def create_empty_outputs(
     groups: set[str],
     patterns: list[str],
@@ -132,7 +132,7 @@ def create_empty_outputs(
     schema_dir: Path | None = None,
 ) -> list[str]:
     """
-    Create empty gzipped files for each group and pattern combination.
+    Create empty output files for each group and pattern combination.
 
     When a table-schema exists for an output pattern, the file includes
     a header row with column names from the schema.
