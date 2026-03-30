@@ -1,0 +1,57 @@
+Specific Qs about proper processing of Ultima reads:
+3. Read trimming
+Yes, adapter trimming is still required. The Ultima Server will automatically trim standard and custom sequencing adapters for full compatibility with downstream analysis tools Ultimagenomics, so if you're working from on-instrument FASTQ output, adapters may already be trimmed. But verify this — the Minnesota RNA-seq benchmark found that when using Illumina-adapter library prep kits on Ultima, adapters comprising roughly the first 70 base pairs and representing the highest-quality segment of UG 100 reads were sequenced despite not being necessary for the Ultima protocol and were subsequently removed prior to analysis Umn.
+Quality trimming is also relevant and arguably more important than for Illumina, because base calling error rates increased sharply after position 200 bp within each read bioRxiv. A quality-based tail trim (e.g., fastp or bbduk with a sliding window, something like Q15 threshold) is advisable. The variable read lengths mean you'll also want a minimum-length filter post-trimming. For metagenomics, I'd suggest 50 bp minimum.
+4. Low-entropy/low-complexity filtering
+Yes, this is important and arguably more so than for Illumina. The homopolymer indel errors can produce reads that look like low-complexity sequence even when the underlying template isn't truly low-complexity — a read spanning a poly-A tract can end up with systematic length errors that look like repetitive noise. Use bbduk entropy filtering or fastp's low-complexity filter. The Ultima "high-confidence region" definition itself excludes homopolymer regions of length greater than 12 base pairs and limited regions of low complexity Illumina, which tells you that the platform itself acknowledges these are problematic zones. For your viral metagenomics, where poly-A tails are biologically real and common (especially in RNA viruses), you'll need to be thoughtful — aggressive low-complexity filtering could remove real viral reads with legitimate poly-A tails, while not filtering will retain noisy reads. I'd recommend moderate entropy filtering and being aware that poly-A-adjacent read quality will be lower than average.
+5. K-mer-based methods (Kraken, BBDuk)
+This is where the Ultima error profile creates the most interesting challenges. K-mer methods depend on exact (or near-exact) k-mer matching, and indel errors are far more destructive to k-mers than substitution errors. A single 1-bp insertion in a read shifts the reading frame of every downstream k-mer, destroying all of them. By contrast, a substitution error only corrupts the k-mers that overlap the error position (at most k k-mers).
+For Kraken2: the default k=35 should still work, but you should expect somewhat reduced sensitivity compared to Illumina, especially for reads that traverse homopolymer regions. Kraken2's confidence scoring threshold becomes more important here — you may need to lower it slightly to compensate for lost k-mers. The translated search mode (Kraken2X) could be valuable for your viral work since protein-level matching is inherently robust to frameshifting indels. You might also consider supplementing with Kaiju (protein-level classification) for better sensitivity on indel-prone reads.
+For BBDuk (positive/negative filtering): BBDuk by default uses k=31 and allows 0 mismatches for reference matching. For adapter trimming this is fine (adapters don't have homopolymers typically). For viral filtering, you may want to reduce k slightly (e.g., k=27) and/or allow 1 mismatch (hdist=1) to recover reads where a homopolymer indel has disrupted k-mer matches. For human depletion (negative filtering), the same applies — but here false negatives (human reads not removed) are the risk, and lowering stringency increases false positives (viral reads incorrectly flagged as human). This tradeoff is harder and connects to your competitive mapping question below.
+Overall: k-mer methods are still appropriate, but you should expect a modest sensitivity hit and may want to compensate by using slightly shorter k-mers or allowing hamming-distance mismatches. The effect will be most pronounced for reads overlapping long homopolymers.
+6. Preferred mappers
+The Ultima Aligner (UA), a derivative of BWA, supports alignment of 300bp single-end reads Ultimagenomics and is optimized for their data. BWA-MEM is the community standard for Ultima alignment because its gapped alignment algorithm naturally handles the indel-heavy error profile.
+Bowtie2 will work but is not ideal. Bowtie2's default scoring penalizes gaps more heavily relative to mismatches than BWA-MEM does, which means it's better suited to Illumina's substitution-dominant errors. For Ultima data, you'd want to adjust Bowtie2's gap penalties (--rdg and --rfg flags) to be less punishing. In --very-sensitive mode, Bowtie2 should be adequate, but you'll likely see lower mapping rates than BWA-MEM for the same data unless you tune gap penalties.
+Minimap2 with the -ax sr preset is a strong option for metagenomics. For >100bp Illumina short reads, minimap2 is three times as fast as BWA-MEM and Bowtie2, and as accurate on simulated data GitHub. Its speed advantage matters a lot for large metagenomics datasets. Minimap2 is also relatively gap-tolerant. For Ultima's ~300bp reads, minimap2 -ax sr should work well. You could even experiment with -ax map-hifi if you find -ax sr is too strict on indels, though that preset is designed for much longer reads and may overfit.
+My recommendation: BWA-MEM or minimap2 -ax sr as your primary mappers. Use BWA-MEM if you need maximum sensitivity for divergent viral mapping; use minimap2 if throughput matters more.
+
+
+Overall summary of differences between Illumina and Ultima:
+Error profiles
+
+Ultima's primary error type is indels, particularly in homopolymer regions, while Genohub Blog Illumina tends toward substitution errors with lower indel rates. So they're complementary — not "one is worse," but they're worse in different ways.
+Homopolymer error rates at length 8 are roughly 10% for Ultima vs. ~1% for Illumina. Substack
+Ultima base calling error rates increase sharply after position ~200 bp in a read, whereas Illumina errors tend to be higher earlier in the read. bioRxiv
+Variant calling degrades strongly in homopolymer tracts >10 bp for Ultima. bioRxiv
+
+Read structure
+
+Illumina produces fixed-length reads (e.g., 2×151 bp paired-end), while Ultima produces single-end reads of variable length (~50–285 bp). Umn This has downstream consequences for duplicate marking, structural variant detection, and insert size estimation.
+
+Data representation & "flow space"
+
+Ultima uses a flow-based sequencing approach where one nucleotide is flowed at a time in order, and accuracy is assessed in "flow space" rather than traditional base space. Broad Institute The flow order is captured in the BAM/CRAM header and is needed by downstream tools.
+Output is in standard formats (FASTQ, CRAM), so existing tools can read the files Genohub Blog, but they often need flow-aware adaptations to work well.
+
+Bioinformatics pipeline differences
+
+GATK's HaplotypeCaller has been adapted with a new "flow-based" likelihood model replacing the classic HMM, plus a Random Forest variant filter replacing VQSR. Terra
+Ultima uses an adapted version of DeepVariant, Sentieon DNAscope, or GATK with supplementary quality tags for improved flow-to-base-space translation. Ultimagenomics
+Picard's MarkDuplicatesSpark has been adapted with a --flowbased parameter to handle ambiguity in aligned read starts Broad Institute — since single-end variable-length reads make duplicate identification trickier.
+Ultima's on-board aligner (a BWA derivative) handles trimming, demux, and UMI-aware dedup specifically adapted for single-end reads, outputting aligned CRAMs. Ultimagenomics
+
+On-instrument trimming
+
+Ultima's Trimmer software segments each read and processes each segment (pass-through, trimming, barcode/adapter matching), writing info to configurable SAM tags. Ultimagenomics This is more integrated than Illumina's typical workflow where you'd run a separate tool like Trimmomatic/fastp.
+
+GC bias & coverage
+
+The UG 100 shows significant coverage drop-off in GC-rich regions compared to Illumina Illumina, which can affect clinically relevant genes like FMR1 and BRCA1.
+
+High-confidence regions (HCR)
+
+Ultima defines a "high confidence region" that excludes ~10% of the genome (or ~4.2% depending on version), masking regions where their error rates are highest. bioRxiv This is important to be aware of when comparing published accuracy metrics — Ultima's reported numbers often use this restricted region while Illumina reports against the full NIST benchmark.
+
+Ecosystem maturity
+
+Illumina has a much larger ecosystem of validated protocols, analysis pipelines, and community support. Genohub Blog Ultima's toolchain is growing but more limited and sometimes requires Ultima-specific forks of standard tools.

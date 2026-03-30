@@ -1,0 +1,45 @@
+I need to adapt this mgs-workflow pipeline to process approx. 10 billion reads of Ultima data across ~30 samples.  (Each sample for this run happens to be split into 2 fastqs as noted below). The data is untargeted RNA-sequencing metagenomic data from wastewater samples.
+
+Some more details on our needs:
+- mgs-workflow is currently built to process (unpaired) ONT data and paired-end Illumina data
+- This is for the analysis of a pilot where we determine whether to start using Ultima for a signficant part of our production sequencing
+- So, this needs to be a fairly *high-quality* analysis (ie, the mapping/filtering/trimming choices should be well-matched to the data)
+- But, the code doesn't need to be production-quality--it doesn't need to be fully tested, it can be relatively slow/expensive to run, it can use slightly sub-optimal methods, etc.
+- We should follow the basic structure of mgs-workflow for these data (I think this pipeline probably has some generally suboptimal choices for our metagenomics, but we don't need to fix these--we just need to adapt it for Ultima).
+   - We have the same wastewater samples, sequenced with 150bp paired-end Illumina and already run through mgs-workflow that we want to compare to, so we want to make sure the Ultima results from the pipeline are as far as possible *comparable* to Illumina
+- Due to the size of the data, we'll want to run on AWS Batch (as we usually do), so following the pipeline conventions, make sure everything is Dockerized, etc
+
+
+
+Some details on the experiment:
+It's a handful for wastewater samples from municipal plants. (We have paired samples sequenced with Illumina that have already been run through the Illumina pipeline)
+
+From the core
+"The yield of this UG100 sequencing run was decent, at 9.015 billion reads. The library was indexed with a single Ultima barcode resulting in a single unaligned CRAM output file containing all of the reads for the library. I then used the Ultima "Trimmer" tool to demultiplex the reads using the sample barcode information you provided in the sample submission form. The Trimmer tool searches for and removes the Illumina adapter sequences at the beginning and ends of the reads, extracting the i5 and i7 index sequences from them, and demultiplexes the reads based on those sequences.
+
+For relatively short  (~200bp or smaller) library fragments the Illumina adapters with indexes will be seen at both ends of the read. For longer library fragments only the adapter sequence (and its i5 index sequence) at the beginning (5') end of the read will be seen. Since these samples were indexed with dual unique barcodes it is only necessary to see one of the indexes in order to assign a read to a sample. The Trimmer tool outputs two files for each sample, one with reads where both the i5 and i7 index sequences were seen (e.g. 44_20250211-ATTAACAAGG-TGTTGTTCGT.cram), and one with reads where only the i5 index was seen (e.g. 44_20250211-NA-TGTTGTTCGT.cram).
+
+You'll likely want to convert these unaligned CRAM files to fastq format, which can be done with samtools:
+samtools fastq -0 output.fastq input.cram
+Then for each sample you could concatenate the two fastq files into a single fastq file and then proceed with processing the data such as running FastQC or aligning to a reference genome with BWA or Bowtie2.
+
+So, to summarize:
+The reads are adapter trimmed
+Our assessment of what appeared to be i5 and i7 reads is correct
+You were correct that the "NA-TGTTGTTCGT"-style files contain reads where it didn't encounter the i7 index
+It's recommended that we concatenate the two CRAMs/FASTQs for each sample"
+
+
+
+I already did some querying of various LLMs about appropriate processing methods for Ultima--you can see the notes (1 file per LLM) in ultima_proc/
+
+
+Can you please read through those docs and look through this codebase and sketch out, at a moderately high level, 3 approaches to the Ultima analysis with mgs-workflow, focusing on the RUN workflow only for now.
+- "Illumina path": modify the part of RUN currently used for paired-end Illumina data in a minimal fashion to accomodate Ultima data.\
+- "ONT path": modify the part of RUN currently used for ONT data in a minimal fashion to accomodate Ultima data\
+- "middle path": reuse existing modules (only adding new bioinformatics tools as a last resort :) ) but make a new version of RUN that is more optimized for Ultima and that borrows from both the Illumina and ONT path.\
+
+\
+As I said, please focus on the RUN workflow only for now. I think the extraction of vertebrate-infecting viral reads more important than the taxonomic profiling (kraken) and QC arm of the workflow, so focus most of your thought on accurately identifying viral reads for Ultima (though don't completely neglect taxonomic profiling and QC)
+\
+Please write up each of these high-level plans in a separate doc of 50-200 lines. Feel free to ask questions as you work! \

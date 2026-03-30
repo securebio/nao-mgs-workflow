@@ -1,0 +1,15 @@
+Gemini
+1. Are ideal BLAST settings different?
+Yes. Because Ultima's dominant errors are indels rather than substitutions, you should decrease gap opening and extension penalties (similar to how you would tune for Oxford Nanopore). Conversely, you can afford to keep mismatch penalties relatively strict, as true base substitutions are rare.
+
+ChatGPT
+1) BLAST settings: somewhat different from Illumina, very different from ONT.
+
+For Ultima, I would still use short-read BLAST logic, not long-read/ONT logic. The main difference from a typical Illumina default is that I would be a bit less strict for read-level rescue and viral confirmation, because Ultima’s flow-based errors are enriched in homopolymer and related sequence contexts. NCBI’s own guidance is that megablast is for very close matches (best when identity is ~95%+), dc-megablast is for more dissimilar targets, and blastn allows smaller word sizes and more sensitivity. In practice, that means: use megablast for confirming reads against an expected near-identical virus/reference, but prefer dc-megablast or blastn for rescuing candidate viral reads or checking divergent hits. Keep low-complexity masking (DUST) on.
+
+A good operational split is: fast screening with k-mer/mapping, then BLAST only for rescue/validation of ambiguous viral candidates. BLAST is not where I’d spend the main optimization effort for very large wastewater datasets.
+
+Claude
+
+1. BLAST settings
+There's no published Ultima-specific BLAST guidance, but the reasoning is straightforward. Because the dominant error mode is small indels (not substitutions), you want to make sure your BLAST parameters don't penalize indels too harshly relative to Illumina defaults. Standard BLAST with default gap penalties is already fairly tolerant for short indels, but for metagenomics where you're using BLASTn or megablast against viral databases with potentially divergent targets, you may benefit from slightly reducing gap open/extend penalties or using the blastn task (rather than megablast) which is more sensitive to gapped alignments. The key adjustment versus Illumina: don't use settings that assume errors are overwhelmingly substitutions. For example, if you've historically used very stringent percent-identity cutoffs for filtering BLAST hits, those will be hit harder by indel errors in homopolymer regions. Consider using e-value or bitscore-based filtering rather than strict percent identity thresholds, or at minimum be more lenient on gap parameters.
