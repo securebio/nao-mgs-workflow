@@ -49,7 +49,7 @@ process BBDUK_HITS_INTERLEAVE {
         def stats = "${sample}_${params_map.suffix}_bbduk.stats.txt"
         def ref = "${contaminant_ref}"
         def io = "in=stdin.fastq ref=${ref} out=${op} outm=${of} stats=${stats}"
-        def par = "minkmerhits=${params_map.min_kmer_hits} k=${params_map.k} interleaved=t t=${task.cpus} -Xmx${task.memory.toGiga()}g"
+        def par = "minkmerhits=${params_map.min_kmer_hits} k=${params_map.k} hdist=${params_map.hdist} interleaved=t t=${task.cpus} -Xmx${task.memory.toGiga()}g" // Ultima: hdist added for hamming distance tolerance
         """
         # Execute
         paste <(${extractCmd} ${in1} | paste - - - - ) <(${extractCmd} ${in2} | paste - - - -) | tr "\t" "\n" | bbduk.sh ${io} ${par}

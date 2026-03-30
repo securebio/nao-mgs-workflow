@@ -27,7 +27,8 @@ process FASTP {
         def oh = "${sample}_fastp.html"
         def ad = adapters
         def io = "--failed_out ${of} --html ${oh} --json ${oj} --adapter_fasta ${ad} --stdin --stdout ${interleaved ? '--interleaved_in' : ''}"
-        def par = "--cut_front --cut_tail --correction --detect_adapter_for_pe --trim_poly_x --cut_mean_quality 20 --average_qual 20 --qualified_quality_phred 20 --verbose --dont_eval_duplication --thread ${task.cpus} --low_complexity_filter"
+        // Ultima: removed --correction and --detect_adapter_for_pe (incompatible with simulated PE); lowered Q thresholds from 20 to 15
+        def par = "--cut_front --cut_tail --trim_poly_x --cut_mean_quality 15 --average_qual 15 --qualified_quality_phred 15 --verbose --dont_eval_duplication --thread ${task.cpus} --low_complexity_filter"
         def of_trimmed = of - ~/.gz$/
         def op_trimmed = op - ~/.gz$/
         """

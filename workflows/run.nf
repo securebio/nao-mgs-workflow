@@ -84,7 +84,8 @@ workflow RUN {
         short_params["aln_score_threshold"] = params.bt2_score_threshold // rename to match
         short_params["min_kmer_hits"] = "1"
         short_params["bbduk_suffix"] = "viral"
-        short_params["k"] = "24" 
+        short_params["k"] = "21" // Ultima: lower k from 24 for homopolymer tolerance
+        short_params["hdist"] = "1" // Ultima: hamming distance tolerance for kmer matching
         EXTRACT_VIRAL_READS_SHORT(samplesheet_ch, params.ref_dir, short_params)
         hits_final = EXTRACT_VIRAL_READS_SHORT.out.hits_final
         inter_lca = EXTRACT_VIRAL_READS_SHORT.out.inter_lca
