@@ -1,7 +1,10 @@
 # =============================================================================
 # Stage 1: Builder
 # =============================================================================
-FROM rust:1.83-slim-bookworm AS builder
+FROM rust:1.83-alpine3.21 AS builder
+
+# musl-dev provides headers for C compilation (needed by bzip2-sys)
+RUN apk add --no-cache musl-dev
 
 WORKDIR /build
 
@@ -12,16 +15,15 @@ RUN cd rust-tools && cargo build --workspace --release
 
 # =============================================================================
 # Stage 2: Runtime
-# Minimal Debian image with only the runtime dependencies Rust binaries need
+# Alpine eliminates Debian glibc/zlib CVEs; musl + panic=abort makes Rust
+# binaries fully static, so no libgcc runtime dependency is needed.
 # =============================================================================
-FROM debian:bookworm-slim
+FROM alpine:3.21
 
-# libgcc-s1 provides runtime support for Rust binaries compiled with the GNU
-# toolchain (e.g., stack unwinding primitives, 128-bit integer operations).
-# This is standard for dynamically-linked Rust binaries.
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends libgcc-s1 procps \
-    && rm -rf /var/lib/apt/lists/*
+# bash:   Nextflow script blocks default to /bin/bash
+# grep:   GNU grep with PCRE support (-oP) used in Nextflow modules
+# procps: Nextflow resource monitoring
+RUN apk add --no-cache bash grep procps
 
 # Copy compiled binaries from builder
 # Add additional binaries here as tools are added to the workspace
