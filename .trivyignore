@@ -48,3 +48,12 @@ CVE-2025-61728
 CVE-2025-61729
 # net/url: incorrect parsing of IPv6 host literals (HIGH)
 CVE-2026-25679
+
+# ── Debian bookworm base image: no fixes available ──
+# ncurses: stack-based buffer overflow in infocmp CLI tool (no-dsa, low urgency)
+# Our containers never invoke infocmp. Fix only in sid (6.6+).
+CVE-2025-69720
+
+# systemd: IPC API mishandling from unprivileged callers causing service freeze
+# Our containers don't run systemd services. Fix only in sid (260.1+).
+CVE-2026-29111
