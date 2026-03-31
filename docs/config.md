@@ -41,8 +41,8 @@ This configuration file controls the pipeline's main RUN workflow. Its options a
 - `params.genome_patterns_exclude` [str]: Path to a text file specifying string patterns to hard-exclude genomes during viral genome DB generation (e.g. transgenic sequences) (default [`ref/hv_patterns_exclude.txt`](./ref/hv_patterns_exclude.txt).
 - `params.kraken_db` [str]: Path to pre-generated Kraken2 reference database (we use the Standard database by default)
 - `params.blast_db_name` [str]: The name of the BLAST database to use for optional validation of taxonomic assignments (should match the run workflow's `params.blast_db_prefix`).
-- `params.assembly_source` [str]: Assembly source for downloading viral genomes via NCBI datasets CLI. Valid values: `"genbank"` or `"refseq"`.
-- `params.datasets_extra_args` [str]: Additional arguments passed to `datasets download genome taxon` (e.g. `"--assembly-level complete"`). Default: `"--assembly-level complete"`. To use an NCBI API key for higher rate limits, set the `NCBI_API_KEY` environment variable before launching the pipeline.
+- `params.assembly_source` [str]: Assembly source for downloading viral genomes via NCBI datasets CLI. Valid values: `"genbank"`, `"refseq"`, or `"all"`. Default: `"all"`.
+- `params.datasets_extra_args` [str]: Additional arguments passed to `datasets download genome taxon`. Default: `""` (no extra arguments). To use an NCBI API key for higher rate limits, set the `NCBI_API_KEY` environment variable before launching the pipeline.
 - `params.virus_taxid` [int]: The NCBI taxid for the Viruses taxon, used for building the virus taxonomy DB (currently 10239).
 - `params.download_virus_taxid` [str]: Taxid to enumerate child taxa for parallel genome downloads. Defaults to `params.virus_taxid` if empty. Override in test configs to download a smaller subset (e.g., `"2847173"` for Hepatitis D virus 1).
 - `params.viral_taxids_exclude` [str]: Space-separated string of taxids to hard-exclude from the list of host-infecting viruses. Currently includes phage taxa that Virus-Host DB erroneously classifies as human-infecting.

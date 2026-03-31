@@ -1,8 +1,7 @@
 # v3.2.1.2-dev
 
 - Wired new modules into `makeVirusGenomeDB` subworkflow, replacing `ncbi-genome-download` with NCBI `datasets` CLI for the INDEX workflow. Downloads are now parallelized across child taxa for better fault tolerance.
-- Removed `params.ncbi_viral_params` config parameter. Replaced with `params.assembly_source` (`"genbank"` or `"refseq"`), `params.datasets_extra_args`, and optional `params.download_virus_taxid`. NCBI API keys are now read from the `NCBI_API_KEY` environment variable (used automatically by the `datasets` CLI).
-- Updated `ncbi_datasets` container to `ncbi-datasets-cli=18.21.0`.
+- Removed `params.ncbi_viral_params` config parameter. Replaced with `params.assembly_source` (`"genbank"`, `"refseq"`, or `"all"`), `params.datasets_extra_args`, and optional `params.download_virus_taxid`. NCBI API keys are now read from the `NCBI_API_KEY` environment variable (used automatically by the `datasets` CLI).
 - Switched rust-tools container base image from Debian bookworm-slim to Alpine 3.21 to fix CVE-2026-0861 and CVE-2023-45853.
 
 # v3.2.1.1
