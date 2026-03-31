@@ -1,6 +1,7 @@
 # v3.2.1.2-dev
 
 - Switched rust-tools container base image from Debian bookworm-slim to Alpine 3.21 to fix CVE-2026-0861 and CVE-2023-45853.
+- Added `sim_dup_group_size` column to `similarity_duplicate_marking` post-processing tool output.
 
 # v3.2.1.1
 

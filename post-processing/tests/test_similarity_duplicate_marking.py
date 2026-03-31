@@ -3,10 +3,11 @@
 
 import csv
 import gzip
-import pytest
-import subprocess
 import shutil
+import subprocess
 from pathlib import Path
+
+import pytest
 
 
 @pytest.fixture(scope="session")
@@ -137,6 +138,9 @@ class TestEndToEnd:
         # Each read should be its own similarity exemplar
         assert rows[0]["sim_dup_exemplar"] == "read1"
         assert rows[1]["sim_dup_exemplar"] == "read2"
+        # Each is an exemplar with no duplicates, so group_size = 1
+        assert rows[0]["sim_dup_group_size"] == "1"
+        assert rows[1]["sim_dup_group_size"] == "1"
 
     def test_alignment_duplicates_get_na(self, binary_path, tsv_factory):
         """Test that alignment duplicates get 'NA' for sim_dup_exemplar."""
@@ -160,6 +164,11 @@ class TestEndToEnd:
         assert rows[2]["sim_dup_exemplar"] == "read3"
         # read2 is alignment duplicate, should have 'NA'
         assert rows[1]["sim_dup_exemplar"] == "NA"
+        # read1 has 2 reads in its alignment group (read1 + read2), read3 has 1
+        assert rows[0]["sim_dup_group_size"] == "2"
+        assert rows[2]["sim_dup_group_size"] == "1"
+        # Alignment dup gets NA
+        assert rows[1]["sim_dup_group_size"] == "NA"
 
     def test_similarity_duplicates_among_alignment_unique(self, binary_path, tsv_factory):
         """Test similarity deduplication among alignment-unique reads."""
@@ -185,6 +194,16 @@ class TestEndToEnd:
         assert rows[2]["sim_dup_exemplar"] == exemplar
         # read2 is alignment duplicate, should have 'NA'
         assert rows[1]["sim_dup_exemplar"] == "NA"
+        # The sim exemplar gets total group size:
+        # read1 has 2 alignment reads (read1 + read2), read3 has 1, total = 3
+        for row in rows:
+            if row["seq_id"] == exemplar:
+                assert row["sim_dup_group_size"] == "3"
+            elif row["prim_align_dup_exemplar"] == row["seq_id"]:
+                # Alignment-unique but sim dup
+                assert row["sim_dup_group_size"] == "NA"
+        # Alignment dup always gets NA
+        assert rows[1]["sim_dup_group_size"] == "NA"
 
     def test_empty_file(self, binary_path, tsv_factory):
         """Test handling of file with only header."""
@@ -197,6 +216,7 @@ class TestEndToEnd:
         # Verify output has header but no data rows
         assert len(rows) == 0
         assert "sim_dup_exemplar" in fieldnames
+        assert "sim_dup_group_size" in fieldnames
 
     def test_single_read(self, binary_path, tsv_factory):
         """Test handling of single read."""
@@ -213,6 +233,7 @@ class TestEndToEnd:
 
         assert len(rows) == 1
         assert rows[0]["sim_dup_exemplar"] == "read1"
+        assert rows[0]["sim_dup_group_size"] == "1"
 
     def test_column_order_preserved(self, binary_path, tsv_factory):
         """Test that output columns match input order and extra columns preserved."""
@@ -234,7 +255,7 @@ class TestEndToEnd:
         expected_fields = [
             "extra1", "seq_id", "extra2", "query_seq", "query_seq_rev",
             "query_qual", "query_qual_rev", "prim_align_dup_exemplar",
-            "extra3", "sim_dup_exemplar"
+            "extra3", "sim_dup_exemplar", "sim_dup_group_size",
         ]
         assert fieldnames == expected_fields
 
@@ -263,3 +284,65 @@ class TestEndToEnd:
         # read2 and read3 are alignment duplicates
         assert rows[1]["sim_dup_exemplar"] == "NA"
         assert rows[2]["sim_dup_exemplar"] == "NA"
+        # read1 is the sim exemplar with all 3 reads in its alignment group
+        assert rows[0]["sim_dup_group_size"] == "3"
+        # Alignment dups get NA
+        assert rows[1]["sim_dup_group_size"] == "NA"
+        assert rows[2]["sim_dup_group_size"] == "NA"
+
+    def test_multi_level_dedup_group_sizes(self, binary_path, tsv_factory):
+        """Test group sizes with multiple alignment groups merging via similarity.
+
+        Two alignment-unique reads (read_a and read_c) that are similarity
+        duplicates of each other, each with their own alignment duplicates.
+        The final sim exemplar should get the combined count.
+        """
+        seq = "A" * 76
+        qual_high = "I" * 76
+        qual_low = "5" * 76
+
+        content = create_test_tsv_content([
+            # Alignment group 1: read_a (exemplar) + read_b (align dup)
+            ("read_a", seq, qual_high, "read_a"),
+            ("read_b", seq, qual_low, "read_a"),
+            # Alignment group 2: read_c (exemplar) + read_d, read_e (align dups)
+            ("read_c", seq, qual_low, "read_c"),
+            ("read_d", seq, qual_low, "read_c"),
+            ("read_e", seq, qual_low, "read_c"),
+        ])
+        input_file = tsv_factory.create_gzip("input.tsv.gz", content)
+        output_file = tsv_factory.get_path("output.tsv.gz")
+
+        rows, fieldnames = run_binary_and_get_output(
+            binary_path, input_file, output_file,
+        )
+
+        assert "sim_dup_group_size" in fieldnames
+
+        # read_a and read_c are sim dups (identical sequences).
+        # They should share the same sim_dup_exemplar.
+        row_a = next(r for r in rows if r["seq_id"] == "read_a")
+        row_b = next(r for r in rows if r["seq_id"] == "read_b")
+        row_c = next(r for r in rows if r["seq_id"] == "read_c")
+        row_d = next(r for r in rows if r["seq_id"] == "read_d")
+        row_e = next(r for r in rows if r["seq_id"] == "read_e")
+
+        exemplar = row_a["sim_dup_exemplar"]
+        assert row_c["sim_dup_exemplar"] == exemplar
+
+        # Alignment dups always get NA / NA
+        assert row_b["sim_dup_exemplar"] == "NA"
+        assert row_b["sim_dup_group_size"] == "NA"
+        assert row_d["sim_dup_exemplar"] == "NA"
+        assert row_d["sim_dup_group_size"] == "NA"
+        assert row_e["sim_dup_exemplar"] == "NA"
+        assert row_e["sim_dup_group_size"] == "NA"
+
+        # The sim exemplar gets total count: 2 (read_a group) + 3 (read_c group) = 5
+        # The sim dup gets NA
+        if exemplar == "read_a":
+            assert row_a["sim_dup_group_size"] == "5"
+            assert row_c["sim_dup_group_size"] == "NA"
+        else:
+            assert row_c["sim_dup_group_size"] == "5"
+            assert row_a["sim_dup_group_size"] == "NA"

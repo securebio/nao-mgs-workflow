@@ -3,6 +3,7 @@ use flate2::read::GzDecoder;
 use flate2::write::GzEncoder;
 use flate2::Compression;
 use nao_dedup::{DedupContext, DedupParams, MinimizerParams, ReadPair};
+use std::collections::HashMap;
 use std::env;
 use std::fs::File;
 use std::io::{BufRead, BufReader, BufWriter, Write};
@@ -34,6 +35,7 @@ fn main() -> Result<()> {
     // Pass 1: Process alignment-unique reads
     let mut n_reads = 0;
     let mut alignment_unique_count = 0;
+    let mut align_dup_counts: HashMap<String, u32> = HashMap::new();
 
     eprintln!("Running similarity-based deduplication on alignment-unique reads...");
 
@@ -91,6 +93,11 @@ fn main() -> Result<()> {
         let seq_id = fields[seq_id_idx];
         let prim_align_exemplar = fields[prim_align_idx];
 
+        // Count all reads (including alignment dups) per alignment-unique exemplar
+        *align_dup_counts
+            .entry(prim_align_exemplar.to_string())
+            .or_insert(0) += 1;
+
         // Only process alignment-unique reads
         if seq_id != prim_align_exemplar {
             continue;
@@ -119,6 +126,16 @@ fn main() -> Result<()> {
     // Finalize Pass 1
     ctx.finalize();
 
+    // Compute similarity duplicate group sizes.
+    // For each alignment-unique exemplar, map it to its similarity exemplar,
+    // then aggregate the alignment dup counts by similarity exemplar.
+    let mut group_sizes: HashMap<String, u32> = HashMap::new();
+    for (au_id, count) in &align_dup_counts {
+        let sim_exemplar = ctx.get_cluster_id(au_id);
+        *group_sizes.entry(sim_exemplar).or_insert(0) += count;
+    }
+    drop(align_dup_counts);
+
     // Pass 2: Write output with sim_dup_exemplar column
     eprintln!("Pass 2: Writing output with sim_dup_exemplar column...");
 
@@ -135,7 +152,7 @@ fn main() -> Result<()> {
 
     // Skip header line and write stored header with new column
     lines.next();
-    writeln!(writer, "{}\tsim_dup_exemplar", header.trim_end())
+    writeln!(writer, "{}\tsim_dup_exemplar\tsim_dup_group_size", header.trim_end())
         .context("Failed to write header")?;
 
     let mut n_prim_align_dups = 0;
@@ -160,12 +177,21 @@ fn main() -> Result<()> {
 
         if seq_id != prim_align_exemplar {
             // Alignment duplicate - fast path
-            writeln!(writer, "{}\tNA", line.trim_end()).context("Failed to write line")?;
+            writeln!(writer, "{}\tNA\tNA", line.trim_end()).context("Failed to write line")?;
             n_prim_align_dups += 1;
         } else {
             // Alignment-unique - query for similarity exemplar
             let sim_exemplar = ctx.get_cluster_id(seq_id);
-            writeln!(writer, "{}\t{}", line.trim_end(), sim_exemplar)
+
+            // Only the surviving similarity exemplar gets the nonzero group size;
+            // reads that are sim dups (pointing to a different exemplar) get NA.
+            let group_size = if sim_exemplar == seq_id {
+                format!("{}", group_sizes.get(&sim_exemplar).unwrap_or(&0))
+            } else {
+                "NA".to_string()
+            };
+
+            writeln!(writer, "{}\t{}\t{}", line.trim_end(), sim_exemplar, group_size)
                 .context("Failed to write line")?;
 
             if sim_exemplar != seq_id {
