@@ -56,6 +56,15 @@ class TestBuildSpeciesTaxidMap:
         db = _write_tsv(tmp_path / "db.tsv", DB_HEADER, db_rows)
         assert build_species_taxid_map(str(db)) == expected
 
+    def test_gzipped_db(self, tmp_path: Path) -> None:
+        """Gzipped virus DB is read correctly via open_by_suffix."""
+        db_gz = tmp_path / "db.tsv.gz"
+        with gzip.open(db_gz, "wt", newline="") as f:
+            w = csv.writer(f, delimiter="\t")
+            w.writerow(DB_HEADER)
+            w.writerows(DB_ROWS)
+        assert build_species_taxid_map(str(db_gz)) == {"12345": "12345", "67890": "67000", "99999": "99000"}
+
 class TestMatchGenomesToAccessions:
     @pytest.mark.parametrize(("accessions", "dir_contents", "expected"), [
         (["GCA_000001.1", "GCA_000002.1"], ["GCA_000001.1", "GCA_000002.1"],

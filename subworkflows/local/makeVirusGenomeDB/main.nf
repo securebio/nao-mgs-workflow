@@ -19,8 +19,8 @@ include { MASK_GENOME_FASTA } from "../../../modules/local/maskGenomeFasta"
 workflow MAKE_VIRUS_GENOME_DB {
     take:
         virus_taxid // Taxid to enumerate child taxa for parallel genome downloads
-        assembly_source // Assembly source: "genbank" or "refseq"
-        datasets_extra_args // Additional arguments passed to `datasets download genome taxon` (e.g. "--assembly-level complete")
+        assembly_source // Assembly source: "genbank", "refseq", or "all"
+        datasets_extra_args // Additional arguments passed to `datasets download genome taxon`
         virus_db // TSV giving taxonomic structure and host infection status of virus taxids
         taxonomy_nodes // NCBI taxonomy nodes.dmp file
         other_params // Map containing:
