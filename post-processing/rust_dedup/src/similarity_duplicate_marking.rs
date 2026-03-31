@@ -186,7 +186,10 @@ fn main() -> Result<()> {
             // Only the surviving similarity exemplar gets the nonzero group size;
             // reads that are sim dups (pointing to a different exemplar) get NA.
             let group_size = if sim_exemplar == seq_id {
-                format!("{}", group_sizes.get(&sim_exemplar).unwrap_or(&0))
+                let size = group_sizes.get(&sim_exemplar).with_context(|| {
+                    format!("sim_exemplar {} missing from group_sizes", sim_exemplar)
+                })?;
+                format!("{}", size)
             } else {
                 "NA".to_string()
             };
