@@ -132,10 +132,12 @@ If you have:
   higher quality.
 
 Then:
-- Read A gets `sim_dup_exemplar = "C"` (chosen as exemplar based on quality)
-- Read B gets `sim_dup_exemplar = "NA"` (already marked as duplicate via
-  alignment)
-- Read C gets `sim_dup_exemplar = "C"` (similarity duplicate of A)
+- Read A gets `sim_dup_exemplar = "C"`, `sim_dup_group_size = "NA"` (similarity
+  duplicate of C, not the exemplar)
+- Read B gets `sim_dup_exemplar = "NA"`, `sim_dup_group_size = "NA"` (already
+  marked as duplicate via alignment)
+- Read C gets `sim_dup_exemplar = "C"`, `sim_dup_group_size = "3"` (exemplar
+  with 2 reads from A's alignment group + 1 from C's)
 
 To learn that the "all things considered" exemplar for B is C, you'd see that B
 has a `prim_align_dup_exemplar` of A, and that A has a `sim_dup_exemplar` of C.
