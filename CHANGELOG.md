@@ -1,7 +1,7 @@
 # v3.2.1.2-dev
 
 - Switched rust-tools container base image from Debian bookworm-slim to Alpine 3.21 to fix CVE-2026-0861 and CVE-2023-45853.
-- Added CVE-2025-69720 (ncurses) and CVE-2026-29111 (systemd) to `.trivyignore` as no Debian bookworm fix is available for other containers.
+- Added CVE-2025-69720 (ncurses), CVE-2026-29111 (systemd), and CVE-2026-4046 (glibc iconv) to `.trivyignore` as no Debian bookworm fix is available for other containers.
 - Added expiration dates (`exp:2026-06-30`) to all `.trivyignore` entries to force periodic re-evaluation.
 
 # v3.2.1.1

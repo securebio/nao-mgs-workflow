@@ -50,6 +50,10 @@ CVE-2025-61729 exp:2026-06-30
 CVE-2026-25679 exp:2026-06-30
 
 # ── Debian bookworm base image: no fixes available ──
+# glibc: DoS via iconv() with specific character set conversions (fix_deferred)
+# Our containers don't perform attacker-controlled iconv conversions.
+CVE-2026-4046 exp:2026-06-30
+
 # ncurses: stack-based buffer overflow in infocmp CLI tool (no-dsa, low urgency)
 # Our containers never invoke infocmp. Fix only in sid (6.6+).
 CVE-2025-69720 exp:2026-06-30
