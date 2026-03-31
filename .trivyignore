@@ -3,21 +3,21 @@
 
 # zlib/minizip: integer overflow in zipOpenNewFileInZip4_64 — Debian does not build
 # the vulnerable minizip code into its zlib binary packages (Debian status: ignored)
-CVE-2023-45853
+CVE-2023-45853 exp:2026-06-30
 
 # glibc: integer overflow in memalign — Debian bookworm marks as <no-dsa>
 # (minor issue, requires attacker control of size+alignment args)
-CVE-2026-0861
+CVE-2026-0861 exp:2026-06-30
 
 # quinn-proto Rust crate embedded in compiled Polars .so (multiqc dependency)
 # No fix available until Polars releases a build with quinn-proto >= 0.11.14
-CVE-2026-31812
+CVE-2026-31812 exp:2026-06-30
 
 # linux-pam: directory traversal (no Debian fix available as of 2026-03-14)
-CVE-2025-6020
+CVE-2025-6020 exp:2026-06-30
 
 # GnuPG gpgv: information disclosure / potential code execution (no Debian fix available as of 2026-03-14)
-CVE-2025-68973
+CVE-2025-68973 exp:2026-06-30
 
 # ── Go stdlib v1.23.4 in ncbi-datasets-cli 18.21.0 (ncbi_datasets container) ──
 # The NCBI datasets/dataformat binaries are pre-compiled Go executables distributed
@@ -35,16 +35,29 @@ CVE-2025-68973
 #   conda search -c conda-forge ncbi-datasets-cli
 #
 # crypto/tls: unexpected session resumption (CRITICAL)
-CVE-2025-68121
+CVE-2025-68121 exp:2026-06-30
 # database/sql: Postgres scan race condition (HIGH)
-CVE-2025-47907
+CVE-2025-47907 exp:2026-06-30
 # archive/tar: unbounded allocation parsing GNU sparse map (HIGH)
-CVE-2025-58183
+CVE-2025-58183 exp:2026-06-30
 # net/url: memory exhaustion in query parameter parsing (HIGH)
-CVE-2025-61726
+CVE-2025-61726 exp:2026-06-30
 # archive/zip: excessive CPU consumption building archive index (HIGH)
-CVE-2025-61728
+CVE-2025-61728 exp:2026-06-30
 # crypto/x509: DoS via crafted certificate (HIGH)
-CVE-2025-61729
+CVE-2025-61729 exp:2026-06-30
 # net/url: incorrect parsing of IPv6 host literals (HIGH)
-CVE-2026-25679
+CVE-2026-25679 exp:2026-06-30
+
+# ── Debian bookworm base image: no fixes available ──
+# glibc: DoS via iconv() with specific character set conversions (fix_deferred)
+# Our containers don't perform attacker-controlled iconv conversions.
+CVE-2026-4046 exp:2026-06-30
+
+# ncurses: stack-based buffer overflow in infocmp CLI tool (no-dsa, low urgency)
+# Our containers never invoke infocmp. Fix only in sid (6.6+).
+CVE-2025-69720 exp:2026-06-30
+
+# systemd: IPC API mishandling from unprivileged callers causing service freeze
+# Our containers don't run systemd services. Fix only in sid (260.1+).
+CVE-2026-29111 exp:2026-06-30
