@@ -15,7 +15,8 @@ COPY rust-tools/ ./rust-tools/
 RUN cd rust-tools && cargo build --workspace --release
 
 # Install nucleaze from GitHub (external tool, not a workspace member)
-RUN cargo install nucleaze --git https://github.com/jackdougle/nucleaze.git --rev 2208f36
+# Pinned to v1.4.2 commit hash for immutability (tags are mutable)
+RUN cargo install nucleaze --git https://github.com/jackdougle/nucleaze.git --rev 333912e
 
 # =============================================================================
 # Stage 2: Runtime
