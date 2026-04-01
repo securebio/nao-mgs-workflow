@@ -10,11 +10,18 @@ process SIMULATE_PE {
         tuple val(sample), path(fastq)
     output:
         tuple val(sample), path("${sample}_R1.fastq.gz"), path("${sample}_R2.fastq.gz"), emit: reads
+        path("${sample}_simulate_pe.log"), emit: log
     script:
         """
-        # Filter to min length 1 to remove empty reads, then use as R1
-        seqtk seq -L 1 ${fastq} | gzip -c > ${sample}_R1.fastq.gz
-        # Generate R2 as reverse complement of filtered reads
-        seqtk seq -L 1 -r -l 0 ${fastq} | gzip -c > ${sample}_R2.fastq.gz
+        # Count original reads (fast line count / 4)
+        total=\$(zcat ${fastq} | wc -l)
+        total=\$((total / 4))
+        # Filter empty reads to R1, counting kept reads in the same pass
+        kept=\$(seqtk seq -L 1 ${fastq} | tee >(gzip -c > ${sample}_R1.fastq.gz) | awk 'NR % 4 == 1' | wc -l)
+        dropped=\$((total - kept))
+        # R2 = reverse complement of filtered R1
+        seqtk seq -r -l 0 ${sample}_R1.fastq.gz | gzip -c > ${sample}_R2.fastq.gz
+        # Write log
+        echo "${sample}: \${total} total reads, \${kept} kept, \${dropped} dropped (empty)" > ${sample}_simulate_pe.log
         """
 }
