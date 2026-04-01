@@ -39,7 +39,7 @@ def build_species_taxid_map(virus_db_path: str) -> dict[str, str]:
     Returns:
         Dictionary mapping taxid to species-level taxid.
     """
-    with open(virus_db_path) as f:
+    with open_by_suffix(virus_db_path) as f:
         result = {row["taxid"]: row["taxid_species"] for row in csv.DictReader(f, delimiter="\t")}
     logger.info("Read %d entries from virus DB", len(result))
     return result

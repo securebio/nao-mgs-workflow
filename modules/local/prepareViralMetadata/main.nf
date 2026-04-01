@@ -1,7 +1,7 @@
 // Prepare viral genome metadata for downstream filtering and genome ID extraction
 process PREPARE_VIRAL_METADATA {
     label "python"
-    label "single"
+    label "single_cpu_16GB_memory"
     input:
         path(merged_metadata)
         path(virus_db)
