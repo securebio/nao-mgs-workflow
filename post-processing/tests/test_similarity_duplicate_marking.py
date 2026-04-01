@@ -3,10 +3,11 @@
 
 import csv
 import gzip
-import pytest
-import subprocess
 import shutil
+import subprocess
 from pathlib import Path
+
+import pytest
 
 
 @pytest.fixture(scope="session")
@@ -137,6 +138,9 @@ class TestEndToEnd:
         # Each read should be its own similarity exemplar
         assert rows[0]["sim_dup_exemplar"] == "read1"
         assert rows[1]["sim_dup_exemplar"] == "read2"
+        # Each is an exemplar with no duplicates, so group_size = 1
+        assert rows[0]["sim_dup_group_size"] == "1"
+        assert rows[1]["sim_dup_group_size"] == "1"
 
     def test_alignment_duplicates_get_na(self, binary_path, tsv_factory):
         """Test that alignment duplicates get 'NA' for sim_dup_exemplar."""
@@ -160,6 +164,11 @@ class TestEndToEnd:
         assert rows[2]["sim_dup_exemplar"] == "read3"
         # read2 is alignment duplicate, should have 'NA'
         assert rows[1]["sim_dup_exemplar"] == "NA"
+        # read1 has 2 reads in its alignment group (read1 + read2), read3 has 1
+        assert rows[0]["sim_dup_group_size"] == "2"
+        assert rows[2]["sim_dup_group_size"] == "1"
+        # Alignment dup gets NA
+        assert rows[1]["sim_dup_group_size"] == "NA"
 
     def test_similarity_duplicates_among_alignment_unique(self, binary_path, tsv_factory):
         """Test similarity deduplication among alignment-unique reads."""
@@ -181,10 +190,21 @@ class TestEndToEnd:
 
         # read1 and read3 are alignment-unique and similar
         # They should have the same sim_dup_exemplar
+        # (identical quality scores, so either could be chosen as exemplar)
         exemplar = rows[0]["sim_dup_exemplar"]
         assert rows[2]["sim_dup_exemplar"] == exemplar
         # read2 is alignment duplicate, should have 'NA'
         assert rows[1]["sim_dup_exemplar"] == "NA"
+        # The sim exemplar gets total group size:
+        # read1 has 2 alignment reads (read1 + read2), read3 has 1, total = 3
+        if exemplar == "read1":
+            assert rows[0]["sim_dup_group_size"] == "3"
+            assert rows[2]["sim_dup_group_size"] == "NA"
+        else:
+            assert rows[2]["sim_dup_group_size"] == "3"
+            assert rows[0]["sim_dup_group_size"] == "NA"
+        # Alignment dup always gets NA
+        assert rows[1]["sim_dup_group_size"] == "NA"
 
     def test_empty_file(self, binary_path, tsv_factory):
         """Test handling of file with only header."""
@@ -197,6 +217,7 @@ class TestEndToEnd:
         # Verify output has header but no data rows
         assert len(rows) == 0
         assert "sim_dup_exemplar" in fieldnames
+        assert "sim_dup_group_size" in fieldnames
 
     def test_single_read(self, binary_path, tsv_factory):
         """Test handling of single read."""
@@ -213,6 +234,7 @@ class TestEndToEnd:
 
         assert len(rows) == 1
         assert rows[0]["sim_dup_exemplar"] == "read1"
+        assert rows[0]["sim_dup_group_size"] == "1"
 
     def test_column_order_preserved(self, binary_path, tsv_factory):
         """Test that output columns match input order and extra columns preserved."""
@@ -234,7 +256,7 @@ class TestEndToEnd:
         expected_fields = [
             "extra1", "seq_id", "extra2", "query_seq", "query_seq_rev",
             "query_qual", "query_qual_rev", "prim_align_dup_exemplar",
-            "extra3", "sim_dup_exemplar"
+            "extra3", "sim_dup_exemplar", "sim_dup_group_size",
         ]
         assert fieldnames == expected_fields
 
@@ -263,3 +285,53 @@ class TestEndToEnd:
         # read2 and read3 are alignment duplicates
         assert rows[1]["sim_dup_exemplar"] == "NA"
         assert rows[2]["sim_dup_exemplar"] == "NA"
+        # read1 is the sim exemplar with all 3 reads in its alignment group
+        assert rows[0]["sim_dup_group_size"] == "3"
+        # Alignment dups get NA
+        assert rows[1]["sim_dup_group_size"] == "NA"
+        assert rows[2]["sim_dup_group_size"] == "NA"
+
+    def test_multi_level_dedup_group_sizes(self, binary_path, tsv_factory):
+        """Test group sizes with multiple alignment groups merging via similarity.
+
+        Two alignment-unique reads (read1 and read3) that are similarity
+        duplicates of each other, each with their own alignment duplicates.
+        The final sim exemplar should get the combined count.
+        """
+        seq = "A" * 76
+        qual_high = "I" * 76
+        qual_low = "5" * 76
+
+        content = create_test_tsv_content([
+            # Alignment group 1: read1 (exemplar) + read2 (align dup)
+            ("read1", seq, qual_high, "read1"),
+            ("read2", seq, qual_low, "read1"),
+            # Alignment group 2: read3 (exemplar) + read4, read5 (align dups)
+            ("read3", seq, qual_low, "read3"),
+            ("read4", seq, qual_low, "read3"),
+            ("read5", seq, qual_low, "read3"),
+        ])
+        input_file = tsv_factory.create_gzip("input.tsv.gz", content)
+        output_file = tsv_factory.get_path("output.tsv.gz")
+
+        rows, fieldnames = run_binary_and_get_output(
+            binary_path, input_file, output_file,
+        )
+
+        assert "sim_dup_group_size" in fieldnames
+
+        # read1 has higher quality, so it should be the sim exemplar
+        assert rows[0]["sim_dup_exemplar"] == "read1"
+        assert rows[2]["sim_dup_exemplar"] == "read1"
+        # Alignment dups always get NA
+        assert rows[1]["sim_dup_exemplar"] == "NA"
+        assert rows[3]["sim_dup_exemplar"] == "NA"
+        assert rows[4]["sim_dup_exemplar"] == "NA"
+
+        # The sim exemplar gets total count: 2 (read1 group) + 3 (read3 group) = 5
+        assert rows[0]["sim_dup_group_size"] == "5"
+        # Sim dup and alignment dups all get NA
+        assert rows[1]["sim_dup_group_size"] == "NA"
+        assert rows[2]["sim_dup_group_size"] == "NA"
+        assert rows[3]["sim_dup_group_size"] == "NA"
+        assert rows[4]["sim_dup_group_size"] == "NA"
