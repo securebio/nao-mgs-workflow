@@ -1,10 +1,11 @@
 # =============================================================================
 # Stage 1: Builder
 # =============================================================================
-FROM rust:1.83-alpine3.21 AS builder
+FROM rust:1.88-alpine3.21 AS builder
 
 # musl-dev provides headers for C compilation (needed by bzip2-sys)
-RUN apk add --no-cache musl-dev
+# git is needed for cargo install from GitHub repositories
+RUN apk add --no-cache musl-dev git
 
 WORKDIR /build
 
@@ -12,6 +13,10 @@ WORKDIR /build
 # The workspace Cargo.toml lists all members; --workspace builds them all
 COPY rust-tools/ ./rust-tools/
 RUN cd rust-tools && cargo build --workspace --release
+
+# Install nucleaze from GitHub (external tool, not a workspace member)
+# Pinned to v1.4.2 commit hash for immutability (tags are mutable)
+RUN cargo install nucleaze --git https://github.com/jackdougle/nucleaze.git --rev 333912e
 
 # =============================================================================
 # Stage 2: Runtime
@@ -29,10 +34,12 @@ RUN apk add --no-cache bash grep procps
 # Add additional binaries here as tools are added to the workspace
 COPY --from=builder /build/rust-tools/target/release/mark_duplicates /usr/local/bin/
 COPY --from=builder /build/rust-tools/target/release/process_vsearch_cluster_output /usr/local/bin/
+COPY --from=builder /usr/local/cargo/bin/nucleaze /usr/local/bin/
 
 # Verify binaries are executable
 RUN mark_duplicates --help
 RUN process_vsearch_cluster_output --help
+RUN nucleaze --help
 
 # Default to shell for debugging
 CMD ["/bin/sh"]
