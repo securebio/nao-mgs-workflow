@@ -2,7 +2,10 @@
 | MODULES AND SUBWORKFLOWS |
 ***************************/
 
-include { DOWNLOAD_VIRAL_NCBI } from "../../../modules/local/downloadViralNCBI"
+include { ENUMERATE_CHILD_TAXA } from "../../../modules/local/enumerateChildTaxa"
+include { DOWNLOAD_VIRAL_GENOMES } from "../../../modules/local/downloadViralGenomes"
+include { CONCATENATE_TSVS } from "../../../modules/local/concatenateTsvs"
+include { PREPARE_VIRAL_METADATA } from "../../../modules/local/prepareViralMetadata"
 include { FILTER_VIRAL_GENBANK_METADATA } from "../../../modules/local/filterViralGenbankMetadata"
 include { ADD_GENBANK_GENOME_IDS } from "../../../modules/local/addGenbankGenomeIDs"
 include { CONCATENATE_GENOME_FASTA } from "../../../modules/local/concatenateGenomeFasta"
@@ -15,30 +18,45 @@ include { MASK_GENOME_FASTA } from "../../../modules/local/maskGenomeFasta"
 
 workflow MAKE_VIRUS_GENOME_DB {
     take:
-        ncbi_viral_params // Parameters for downloading genomic sequences from NCBI's GenBank or RefSeq databases
-                          // Any additional sequence-specific options can be provided here, supplementing the default download settings.
+        virus_taxid // Taxid to enumerate child taxa for parallel genome downloads
+        assembly_source // Assembly source: "genbank", "refseq", or "all"
+        datasets_extra_args // Additional arguments passed to `datasets download genome taxon`
         virus_db // TSV giving taxonomic structure and host infection status of virus taxids
-        other_params // Map containing: 
+        taxonomy_nodes // NCBI taxonomy nodes.dmp file
+        other_params // Map containing:
                      // - genome_patterns_exclude: File of sequence header patterns to exclude from genome DB
                      // - host_taxa_screen: Tuple of host taxa to include
-                     // - adapters: FASTA file of adapters to maskkmer length to use for bbduk adapater masking in referenceK-mer size for masking low-complexity regions
+                     // - adapters: FASTA file of adapters to mask
                      // - hdist: hdist (allowed mismatches) to use for bbduk adapter masking
                      // - entropy: entropy cutoff for bbduk filtering of low-complexity regions
                      // - polyx_len: minimum length of polyX runs to filter out with bbduk
-    main:        
-        // 1. Download viral Genbank
-        dl_ch = DOWNLOAD_VIRAL_NCBI(ncbi_viral_params)
-        // 2. Filter genome metadata by taxid to identify genomes to retain
-        meta_ch = FILTER_VIRAL_GENBANK_METADATA(dl_ch.metadata, virus_db, other_params.host_taxa_screen, "virus-genome")
-        // 3. Add genome IDs to Genbank metadata file
-        gid_ch = ADD_GENBANK_GENOME_IDS(meta_ch.db, dl_ch.genomes, "virus-genome")
-        // 4. Concatenate matching genomes
-        concat_ch = CONCATENATE_GENOME_FASTA(dl_ch.genomes, meta_ch.path)
-        // 5. Filter to remove undesired/contaminated genomes
-        filter_ch = FILTER_GENOME_FASTA(concat_ch, other_params.genome_patterns_exclude, "virus-genomes-filtered")
-	// 6. Mask to remove adapters, low-entropy regions, and polyX
-	mask_params = other_params + [name_pattern: "virus-genomes"]
-	mask_ch = MASK_GENOME_FASTA(filter_ch, other_params.adapters, mask_params)
+    main:
+        // 1. Enumerate child taxa for parallel download
+        child_ch = ENUMERATE_CHILD_TAXA(taxonomy_nodes, virus_taxid)
+        child_taxids_ch = child_ch.taxids
+            .splitText().map { it.trim() }.filter { it }
+        // 2. Download genomes per child taxon in parallel
+        download_ch = DOWNLOAD_VIRAL_GENOMES(child_taxids_ch, assembly_source, datasets_extra_args, 5)
+        // 3. Merge per-taxon metadata using existing CONCATENATE_TSVS
+        concat_ch = CONCATENATE_TSVS(
+            download_ch.metadata.collect(),
+            "ncbi-viral-metadata-raw"
+        )
+        // 4. Prepare final metadata (add species_taxid, local_filename)
+        prepare_ch = PREPARE_VIRAL_METADATA(
+            concat_ch.output, virus_db, download_ch.genomes.collect()
+        )
+        // 5. Filter genome metadata by taxid to identify genomes to retain
+        meta_ch = FILTER_VIRAL_GENBANK_METADATA(prepare_ch.metadata, virus_db, other_params.host_taxa_screen, "virus-genome")
+        // 6. Add genome IDs to Genbank metadata file
+        gid_ch = ADD_GENBANK_GENOME_IDS(meta_ch.db, prepare_ch.genomes, "virus-genome")
+        // 7. Concatenate matching genomes
+        genome_concat_ch = CONCATENATE_GENOME_FASTA(prepare_ch.genomes, meta_ch.path)
+        // 8. Filter to remove undesired/contaminated genomes
+        filter_ch = FILTER_GENOME_FASTA(genome_concat_ch, other_params.genome_patterns_exclude, "virus-genomes-filtered")
+        // 9. Mask to remove adapters, low-entropy regions, and polyX
+        mask_params = other_params + [name_pattern: "virus-genomes"]
+        mask_ch = MASK_GENOME_FASTA(filter_ch, other_params.adapters, mask_params)
     emit:
         fasta = mask_ch.masked
         metadata = gid_ch

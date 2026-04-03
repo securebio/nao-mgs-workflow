@@ -1,3 +1,16 @@
+# v3.2.1.2
+
+- Add `nucleaze` to the rust-tools container and bump Rust toolchain from 1.83 to 1.88.
+- Continued to reduce INDEX workflow failures:
+    - Wired new modules into `makeVirusGenomeDB` subworkflow, replacing `ncbi-genome-download` with NCBI `datasets` CLI for the INDEX workflow. Downloads are now parallelized across child taxa for better fault tolerance.
+    - Removed `params.ncbi_viral_params` config parameter. Replaced with `params.assembly_source` (`"genbank"`, `"refseq"`, or `"all"`), `params.datasets_extra_args`, and optional `params.download_virus_taxid`. NCBI API keys are now read from the `NCBI_API_KEY` environment variable (used automatically by the `datasets` CLI).
+- Addressed Trivy scan issues:
+    - Switched rust-tools container base image from Debian bookworm-slim to Alpine 3.21 to fix CVE-2026-0861 and CVE-2023-45853.
+    - Added CVE-2025-69720 (ncurses), CVE-2026-29111 (systemd), and CVE-2026-4046 (glibc iconv) to `.trivyignore` as no Debian bookworm fix is available for other containers.
+    - Added expiration dates (`exp:2026-06-30`) to all `.trivyignore` entries to force periodic re-evaluation.
+    - Enabled Trivy container vulnerability scans on all PRs (previously only triggered by container config changes).
+- Added `sim_dup_group_size` column to `similarity_duplicate_marking` post-processing tool output.
+
 # v3.2.1.1
 
 - Hardened Trivy vulnerability scans against supply chain attacks by replacing unpinned apt installs with specific pinned version hashes.

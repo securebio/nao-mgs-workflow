@@ -85,25 +85,34 @@ or anything else with the same structure.
 #### Output Format
 
 The output is a gzipped TSV file containing all input columns in the same order
-as the input, plus a final new column `sim_dup_exemplar`:
+as the input, plus two new columns:
 
-- For reads where `prim_align_dup_exemplar == seq_id`: Contains the similarity
-  exemplar ID (the read's own `seq_id` if not a similarity duplicate)
-- For all other reads: Contains `'NA'` (these reads were already identified as
-  duplicates by alignment, so no similarity check is needed)
+- **`sim_dup_exemplar`**:
+  - For reads where `prim_align_dup_exemplar == seq_id`: Contains the similarity
+    exemplar ID (the read's own `seq_id` if not a similarity duplicate)
+  - For all other reads: Contains `'NA'` (these reads were already identified as
+    duplicates by alignment, so no similarity check is needed)
+
+- **`sim_dup_group_size`**:
+  - For similarity exemplar reads (`sim_dup_exemplar == seq_id`): The total
+    number of reads in the similarity group, counting all alignment duplicates
+    of each member
+  - For all other reads: Contains `'NA'`
 
 #### Algorithm
 
-1. **First pass**: Reads only alignment-unique reads from input:
-   - Filters to reads where `prim_align_dup_exemplar == seq_id`
-   - Runs similarity-based deduplication on these reads using nao-dedup's
-     streaming algorithm
+1. **First pass (read)**: Streams through the input, counting reads per
+   alignment-unique exemplar (for group size computation) and running
+   similarity-based deduplication on the alignment-unique reads via
+   nao-dedup's streaming algorithm. After streaming, computes similarity
+   group sizes by summing alignment duplicate counts across each group.
 
-2. **Second pass**: Writes output with the new `sim_dup_exemplar` column:
-   - For alignment-unique reads: Uses the similarity exemplar
-   - For alignment duplicates: Writes `'NA'`
+2. **Second pass (write)**: Streams through the input again, writing all rows
+   with the new `sim_dup_exemplar` and `sim_dup_group_size` columns (see
+   Output Format above).
 
-This two-pass approach avoids loading the entire TSV into memory.
+Each pass streams through the file, avoiding loading the entire TSV into
+memory.
 
 #### Memory Considerations
 
@@ -123,10 +132,12 @@ If you have:
   higher quality.
 
 Then:
-- Read A gets `sim_dup_exemplar = "C"` (chosen as exemplar based on quality)
-- Read B gets `sim_dup_exemplar = "NA"` (already marked as duplicate via
-  alignment)
-- Read C gets `sim_dup_exemplar = "C"` (similarity duplicate of A)
+- Read A gets `sim_dup_exemplar = "C"`, `sim_dup_group_size = "NA"` (similarity
+  duplicate of C, not the exemplar)
+- Read B gets `sim_dup_exemplar = "NA"`, `sim_dup_group_size = "NA"` (already
+  marked as duplicate via alignment)
+- Read C gets `sim_dup_exemplar = "C"`, `sim_dup_group_size = "3"` (exemplar
+  with 2 reads from A's alignment group + 1 from C's)
 
 To learn that the "all things considered" exemplar for B is C, you'd see that B
 has a `prim_align_dup_exemplar` of A, and that A has a `sim_dup_exemplar` of C.

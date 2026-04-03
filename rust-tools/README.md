@@ -3,9 +3,17 @@
 Rust utilities that run as part of the Nextflow pipeline. These are compiled into the
 `nao-rust-tools` container and used by processes with `label "rust_tools"`.
 
-## Current Tools
+## Workspace Tools
 
 - **mark_duplicates** — Marks duplicate alignments in SAM/BAM data
+- **process_vsearch_cluster_output** — Processes tabular output from VSEARCH clustering
+
+## External Tools
+
+These tools are not workspace members but are installed into the `nao-rust-tools`
+container via `cargo install` in the Dockerfile:
+
+- **nucleaze** — K-mer based read filtering against a reference index ([source](https://github.com/jackdougle/nucleaze))
 
 ## Adding or Modifying Tools
 
