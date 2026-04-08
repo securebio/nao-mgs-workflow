@@ -334,6 +334,15 @@ def parse_arguments() -> argparse.Namespace:
         default=None,
         help="Nextflow profile to use (passed to nf-test as --profile=<value>)"
     )
+    parser.add_argument(
+        "--repo-root",
+        type=Path,
+        default=None,
+        help=(
+            "Root directory of the Nextflow project, as an absolute or "
+            "relative path. Default: parent of the script's directory"
+        ),
+    )
     args = parser.parse_args()
     if args.num_workers < 1:
         parser.error("--num-workers must be at least 1")
@@ -345,9 +354,7 @@ def main() -> None:
     start_time = time.time()
     args = parse_arguments()
     logger.info(f"Arguments: {args}")
-    # Use absolute() instead of resolve() to avoid following symlinks, so that
-    # symlinked copies of this script find the repo they're linked into.
-    repo_root = Path(__file__).absolute().parent.parent
+    repo_root = args.repo_root or Path(__file__).resolve().parent.parent
     original_cwd = os.getcwd()
     try:
         os.chdir(repo_root)

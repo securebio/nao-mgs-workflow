@@ -20,25 +20,32 @@ if [[ ${#missing_vars[@]} -gt 0 ]]; then
   exit 1
 fi
 
-# Get the directory of this script and go to the parent directory
+# Get the directory of this script
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-cd "$SCRIPT_DIR/.." || exit 1
 
-# Check if --num-workers flag is present
+# Parse --repo-root and --num-workers from arguments
 use_parallel=false
-for arg in "$@"; do
-  if [[ "$arg" == "--num-workers" ]]; then
-    use_parallel=true
-    break
-  fi
+repo_root=""
+args=()
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --repo-root) repo_root="$2"; shift 2 ;;
+    --num-workers) use_parallel=true; args+=("$1" "$2"); shift 2 ;;
+    *) args+=("$1"); shift ;;
+  esac
 done
+set -- "${args[@]}"
+
+# Default to parent of script directory; resolve to absolute
+repo_root="$(cd "${repo_root:-$SCRIPT_DIR/..}" && pwd)"
+cd "$repo_root"
 
 # Run tests and fix ownership of files created by Docker.
 # Docker creates files as root, so we use sudo to change ownership back to the user.
 # We temporarily disable exit-on-error to ensure cleanup happens regardless of test results.
 set +e
 if [[ "$use_parallel" == "true" ]]; then
-  python3 bin/run_nf_test_parallel.py "$@"
+  python3 "$SCRIPT_DIR/run_nf_test_parallel.py" --repo-root "$repo_root" "$@"
   exit_code=$?
 else
   nf-test test "$@"
