@@ -1,3 +1,7 @@
+# v3.2.1.3-dev
+
+- Made repo root detection in `run_nf_test_parallel.py` symlink-safe, allowing the script to be symlinked from other repositories.
+
 # v3.2.1.2
 
 - Add `nucleaze` to the rust-tools container and bump Rust toolchain from 1.83 to 1.88.
