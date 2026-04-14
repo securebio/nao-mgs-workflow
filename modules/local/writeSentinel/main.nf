@@ -36,6 +36,9 @@ process WRITE_SENTINEL {
         expected = expected.sort()
         // Check files exist in output directory with exponential backoff
         // Handles both local and S3 paths via Nextflow's file() API
+        if ((config.max_wait_mins as long) < 0) {
+            error("sentinel_max_wait_mins must be >= 0, got ${config.max_wait_mins}")
+        }
         def maxWaitMs = (config.max_wait_mins as long) * 60 * 1000
         def intervalMs = 15000L
         def totalWaitedMs = 0L
@@ -52,12 +55,12 @@ process WRITE_SENTINEL {
             missing = expected.findAll { !file("${config.output_dir}/${it}").exists() }
         }
         // If file check completes without error, write sentinel.json
-        def sentinel = [
+        def sentinelContent = [
             runStartedAt: start_time,
-            runCompletedAt: new java.util.Date().format("yyyy-MM-dd HH:mm:ss z (Z)")
+            runCompletedAt: new java.util.Date().format("yyyy-MM-dd HH:mm:ss z (Z)", TimeZone.getTimeZone("UTC"))
         ]
         task.workDir.resolve("sentinel.json").text =
             groovy.json.JsonOutput.prettyPrint(
-                groovy.json.JsonOutput.toJson(sentinel)
+                groovy.json.JsonOutput.toJson(sentinelContent)
             ) + "\n"
 }
