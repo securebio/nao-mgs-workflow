@@ -54,6 +54,14 @@ nextflow_pipeline {
             // Verify result file contents match snapshot
             def resultPaths = getResultPaths("${launchDir}/output", expected)
             assert snapshot(*resultPaths).match("downstream_output_shortread")
+            // Verify experimental downstream output exists
+            def experimentalDir = path("${launchDir}/output/experimental_downstream")
+            def experimentalFiles = []
+            experimentalDir.eachFileRecurse(FILES) { file ->
+                experimentalFiles << experimentalDir.relativize(file).toString()
+            }
+            assert experimentalFiles.size() == 1
+            assert experimentalFiles[0] == "tt1_duplicate_reads_similarity.tsv.gz"
         }
     }
 
@@ -71,6 +79,9 @@ nextflow_pipeline {
             // Verify result file contents match snapshot
             def resultPaths = getResultPaths("${launchDir}/output", expected)
             assert snapshot(*resultPaths).match("downstream_output_ont")
+            // Verify no experimental downstream output for ONT
+            def experimentalDir = new File("${launchDir}/output/experimental_downstream")
+            assert !experimentalDir.exists() || experimentalDir.list().length == 0
         }
     }
 
@@ -88,6 +99,18 @@ nextflow_pipeline {
             def expected = getExpectedOutputs(path("${projectDir}/pyproject.toml"), "downstream", "empty_group")
             def observed = getObservedOutputs(path("${launchDir}/output"))
             assert observed == expected : "Expected ${expected} but got ${observed}"
+            // Verify experimental downstream output exists with correct headers
+            def experimentalDir = path("${launchDir}/output/experimental_downstream")
+            def experimentalFiles = []
+            experimentalDir.eachFileRecurse(FILES) { file ->
+                experimentalFiles << file
+            }
+            assert experimentalFiles.size() == 1
+            def lines = experimentalFiles[0].linesGzip
+            assert lines.size() == 1 // header only, no data rows
+            def header = lines[0].split("\t") as List
+            assert "sim_dup_exemplar" in header
+            assert "sim_dup_group_size" in header
         }
     }
 
