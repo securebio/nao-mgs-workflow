@@ -80,6 +80,7 @@ nextflow_pipeline {
             def resultPaths = getResultPaths("${launchDir}/output", expected)
             assert snapshot(*resultPaths).match("downstream_output_ont")
             // Verify no experimental downstream output for ONT
+            // Uses new File() instead of path() because path() fails if the directory doesn't exist
             def experimentalDir = new File("${launchDir}/output/experimental_downstream")
             assert !experimentalDir.exists() || experimentalDir.list().length == 0
         }
