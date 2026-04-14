@@ -3,6 +3,7 @@
 - Add CVE-2026-32280, CVE-2026-32282 (Go stdlib in ncbi_datasets container) and CVE-2026-40192 (Pillow in multiqc container) to `.trivyignore`. No upstream fixes available; updated TODO with latest check results.
 - Add `experimental/` and `experimental_downstream/` output directories for staging new outputs that are not yet guaranteed to be stable across point releases.
 - Add `mark_duplicates_similarity` to the rust-tools workspace and Docker container for similarity-based duplicate marking.
+- Add `MARK_SIMILARITY_DUPLICATES` Nextflow process and integrate into `MARK_VIRAL_DUPLICATES` subworkflow.
 
 # v3.2.1.2
 
