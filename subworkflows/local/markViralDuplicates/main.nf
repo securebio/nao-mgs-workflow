@@ -7,6 +7,7 @@ include { SORT_TSV as SORT_STATS } from "../../../modules/local/sortTsv"
 include { SORT_TSV as SORT_READS } from "../../../modules/local/sortTsv"
 include { COPY_FILE as COPY_STATS } from "../../../modules/local/copyFile"
 include { COPY_FILE as COPY_READS } from "../../../modules/local/copyFile"
+include { MARK_SIMILARITY_DUPLICATES } from "../../../modules/local/markSimilarityDuplicates"
 
 /***********
 | WORKFLOW |
@@ -28,7 +29,10 @@ workflow MARK_VIRAL_DUPLICATES {
         reads_out_ch = COPY_READS(reads_sorted_ch, "duplicate_reads.tsv.gz")
         stats_out_ch = COPY_STATS(stats_sorted_ch, "duplicate_stats.tsv.gz")
         out_ch = reads_out_ch.combine(stats_out_ch, by: 0)
+        // 4. Run similarity-based duplicate marking on alignment-deduplicated reads
+        sim_dup_ch = MARK_SIMILARITY_DUPLICATES(reads_out_ch).output
     emit:
         dup = out_ch
+        sim_dup = sim_dup_ch
         test_in = groups
 }

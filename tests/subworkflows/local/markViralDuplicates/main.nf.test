@@ -48,6 +48,13 @@ nextflow_workflow {
                 assert r["prim_align_dup_count"] == tab_out.columns["prim_align_dup_exemplar"].count(exemplar) // Dup counts should match exemplar assignments
             }
             assert tab_meta.columns["prim_align_dup_count"].sum() == tab_out.rowCount
+            // Similarity duplicate output should have expected dimensions
+            def tab_sim = path(workflow.out.sim_dup[0][1]).csv(sep: "\t", decompress: true)
+            assert tab_sim.rowCount == tab_in.rowCount
+            assert tab_sim.columnCount == tab_in.columnCount + 3
+            assert "sim_dup_exemplar" in tab_sim.columnNames
+            assert "sim_dup_group_size" in tab_sim.columnNames
+            assert tab_in.columns["seq_id"].toSorted() == tab_sim.columns["seq_id"].toSorted()
         }
     }
 
@@ -91,6 +98,13 @@ nextflow_workflow {
                 assert r["prim_align_dup_count"] == tab_out.columns["prim_align_dup_exemplar"].count(exemplar) // Dup counts should match exemplar assignments
             }
             assert tab_meta.columns["prim_align_dup_count"].sum() == tab_out.rowCount
+            // Similarity duplicate output should have expected dimensions
+            def tab_sim = path(workflow.out.sim_dup[0][1]).csv(sep: "\t", decompress: true)
+            assert tab_sim.rowCount == tab_in.rowCount
+            assert tab_sim.columnCount == tab_in.columnCount + 3
+            assert "sim_dup_exemplar" in tab_sim.columnNames
+            assert "sim_dup_group_size" in tab_sim.columnNames
+            assert tab_in.columns["seq_id"].toSorted() == tab_sim.columns["seq_id"].toSorted()
         }
     }
 
@@ -134,6 +148,13 @@ nextflow_workflow {
                 assert r["prim_align_dup_count"] == tab_out.columns["prim_align_dup_exemplar"].count(exemplar) // Dup counts should match exemplar assignments
             }
             assert tab_meta.columns["prim_align_dup_count"].sum() == tab_out.rowCount
+            // Similarity duplicate output should have expected dimensions
+            def tab_sim = path(workflow.out.sim_dup[0][1]).csv(sep: "\t", decompress: true)
+            assert tab_sim.rowCount == tab_in.rowCount
+            assert tab_sim.columnCount == tab_in.columnCount + 3
+            assert "sim_dup_exemplar" in tab_sim.columnNames
+            assert "sim_dup_group_size" in tab_sim.columnNames
+            assert tab_in.columns["seq_id"].toSorted() == tab_sim.columns["seq_id"].toSorted()
         }
     }
 
