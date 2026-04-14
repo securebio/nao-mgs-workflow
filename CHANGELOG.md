@@ -4,6 +4,7 @@
 - Add `experimental/` and `experimental_downstream/` output directories for staging new outputs that are not yet guaranteed to be stable across point releases.
 - Add `mark_duplicates_similarity` to the rust-tools workspace and Docker container for similarity-based duplicate marking.
 - Add `MARK_SIMILARITY_DUPLICATES` Nextflow process and integrate into `MARK_VIRAL_DUPLICATES` subworkflow.
+- Wire similarity dedup output into `experimental_downstream` channel for short-read platforms.
 
 # v3.2.1.2
 
