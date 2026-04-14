@@ -150,7 +150,9 @@ For each group of reads identified as duplicates, the algorithm selects the read
 [^pairwise]: Because of the fuzzy matching used to identify duplicates, it is possible for duplicate annotation to be intransitive: i.e. read A is a duplicate of read B, and read B is a duplicate of read C, but read A is not a duplicate of read C. As currently implemented, the algorithm will group a read into a duplicate group if it matches any single read already in that duplicate group, potentially leading to the grouping of reads that would not be considered duplicates of each other in isolation. The reporting of the pairwise duplicate statistic in the summary file allows for quantification of this phenomenon, and potential adjustment of parameters if too high a fraction of non-matching reads are being grouped together in this way.
 
 > [!CAUTION] 
-> **Experimental feature:** After alignment-based duplicate marking, the subworkflow also runs **similarity-based duplicate marking** using the `mark_duplicates_similarity` tool. This step takes the alignment-deduplicated reads and groups alignment-unique reads by sequence similarity using minimizer-based clustering (via the [nao-dedup](https://github.com/securebio/nao-dedup) library). The output adds `sim_dup_exemplar` and `sim_dup_group_size` columns. This output is published as an experimental output (`duplicate_reads_similarity.tsv.gz`) and is not yet guaranteed to be stable across releases.
+> **Experimental feature, not guaranteed stable** 
+>
+> After alignment-based duplicate marking, the subworkflow also runs **similarity-based duplicate marking** using the `mark_duplicates_similarity` tool. This step takes the alignment-deduplicated reads and groups alignment-unique reads by sequence similarity using minimizer-based clustering (via the [nao-dedup](https://github.com/securebio/nao-dedup) library). The output (`duplicate_reads_similarity.tsv.gz`) adds `sim_dup_exemplar` and `sim_dup_group_size` columns.
 
 ```mermaid
 ---
@@ -165,7 +167,7 @@ B --> D[SORT_TSV]
 C --> E(Annotated hits TSVs)
 D --> F(Summary TSVs)
 E --> G[MARK SIMILARITY DUPLICATES]
-G --> H(Similarity-annotated hits TSVs [experimental])
+G --> H(EXPERIMENTAL: Similarity-annotated hits TSVs)
 style A fill:#fff,stroke:#000
 style E fill:#000,color:#fff,stroke:#000
 style F fill:#000,color:#fff,stroke:#000
