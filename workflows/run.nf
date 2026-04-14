@@ -19,6 +19,7 @@ include { COPY_FILE_BARE as COPY_INDEX_PYPROJECT } from "../modules/local/copyFi
 include { COPY_FILE_BARE as COPY_PYPROJECT } from "../modules/local/copyFile"
 include { COPY_FILE_BARE as COPY_SAMPLESHEET } from "../modules/local/copyFile"
 include { COPY_FILE_BARE as COPY_ADAPTERS } from "../modules/local/copyFile"
+include { WRITE_SENTINEL } from "../modules/local/writeSentinel"
 
 /***********************
 | AUXILIARY FUNCTIONS |
@@ -120,13 +121,33 @@ workflow RUN {
     samplesheet_ch = COPY_SAMPLESHEET(Channel.fromPath(params.sample_sheet), "samplesheet.csv")
     adapters_ch = COPY_ADAPTERS(Channel.fromPath(params.adapters), "adapters.fasta")
 
+    // Pre-define expected-output channels for reuse in dependency collection and emit
+    input_run_ch = index_params_ch.mix(samplesheet_ch, adapters_ch, params_ch)
+    logging_run_ch = index_pyproject_ch.mix(time_ch, pyproject_ch)
+    qc_results_run_ch = COUNT_READS.out.output.mix(
+        RUN_QC.out.pre_qc, RUN_QC.out.post_qc, SUBSET_TRIM.out.fastp_json)
+    other_results_run_ch = hits_final.mix(PROFILE.out.bracken, PROFILE.out.kraken)
+
+    // Validate published outputs and write sentinel
+    WRITE_SENTINEL(
+        input_run_ch.mix(logging_run_ch, qc_results_run_ch, other_results_run_ch).collect(),
+        LOAD_SAMPLESHEET.out.samplesheet.map { sample, _reads -> sample }.collect(),
+        start_time_str, [
+            output_dir: "${params.base_dir}/output",
+            pyproject_path: "${projectDir}/pyproject.toml",
+            platform: params.platform,
+            max_wait_mins: params.sentinel_max_wait_mins ?: 32
+        ]
+    )
+
     emit:
-        input_run = index_params_ch.mix(samplesheet_ch, adapters_ch, params_ch)
-        logging_run = index_pyproject_ch.mix(time_ch, pyproject_ch)
+        input_run = input_run_ch
+        logging_run = logging_run_ch
         intermediates_run = inter_lca.mix(inter_aligner)
         reads_raw_viral = bbduk_match
         reads_trimmed_viral = bbduk_trimmed
-        qc_results_run = COUNT_READS.out.output.mix(RUN_QC.out.pre_qc, RUN_QC.out.post_qc, SUBSET_TRIM.out.fastp_json)
-        other_results_run = hits_final.mix(PROFILE.out.bracken, PROFILE.out.kraken)
+        qc_results_run = qc_results_run_ch
+        other_results_run = other_results_run_ch
         experimental_run = Channel.empty()
+        sentinel_run = WRITE_SENTINEL.out.sentinel
 }
