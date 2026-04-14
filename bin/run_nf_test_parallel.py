@@ -345,7 +345,7 @@ def main() -> None:
     start_time = time.time()
     args = parse_arguments()
     logger.info(f"Arguments: {args}")
-    repo_root = Path(__file__).resolve().parent.parent
+    repo_root = Path(__file__).absolute().parent.parent
     original_cwd = os.getcwd()
     try:
         os.chdir(repo_root)
