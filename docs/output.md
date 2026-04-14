@@ -17,9 +17,8 @@ The `experimental/` (INDEX and RUN workflows) and `experimental_downstream/` (DO
 - Are NOT tracked in the `expected-outputs-*` lists in `pyproject.toml`
 - Are NOT guaranteed to have schemas or complete documentation
 - May change or be removed in any release, including point (4th-number) releases
-- Should NOT be relied upon by downstream consumers until promoted to standard output directories
 
-These directories allow new output features to ship for early feedback without waiting for a stable release.
+Downstream consumers use experimental outputs at their own risk, and are responsible for keeping their code up to date with changes in the structure and contents of these files across releases. Once ready, experimental outputs are promoted into regular outputs and become subject to the standard output guarantees.
 
 ## Run workflow
 
