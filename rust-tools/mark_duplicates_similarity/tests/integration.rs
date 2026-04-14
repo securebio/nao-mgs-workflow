@@ -245,8 +245,8 @@ fn test_column_order_preserved() {
     // Manually create content with extra columns in non-standard order
     let content = format!(
         "extra1\tseq_id\textra2\tquery_seq\tquery_seq_rev\t\
-         query_qual\tquery_qual_rev\tprim_align_dup_exemplar\textra3\n\
-         val1\tread1\tval2\t{seq}\t{seq}\t{qual}\t{qual}\tread1\tval3\n"
+query_qual\tquery_qual_rev\tprim_align_dup_exemplar\textra3\n\
+val1\tread1\tval2\t{seq}\t{seq}\t{qual}\t{qual}\tread1\tval3\n"
     );
 
     let files = TestFiles::new("col_order");
