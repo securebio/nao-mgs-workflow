@@ -33,11 +33,13 @@ RUN apk add --no-cache bash grep procps
 # Copy compiled binaries from builder
 # Add additional binaries here as tools are added to the workspace
 COPY --from=builder /build/rust-tools/target/release/mark_duplicates /usr/local/bin/
+COPY --from=builder /build/rust-tools/target/release/mark_duplicates_similarity /usr/local/bin/
 COPY --from=builder /build/rust-tools/target/release/process_vsearch_cluster_output /usr/local/bin/
 COPY --from=builder /usr/local/cargo/bin/nucleaze /usr/local/bin/
 
 # Verify binaries are executable
 RUN mark_duplicates --help
+RUN mark_duplicates_similarity --help
 RUN process_vsearch_cluster_output --help
 RUN nucleaze --help
 
