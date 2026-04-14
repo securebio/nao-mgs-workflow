@@ -41,8 +41,6 @@ jobs:
               - '.github/actions/setup-rust-container/**'
               - 'rust-tools/**'
               - 'docker/nao-rust-tools.Dockerfile'
-              - 'bin/run-nf-test.sh'
-              - 'bin/run_nf_test_parallel.py'
       - name: Setup nf-test environment
         if: steps.filter.outputs.run == 'true'
         uses: ./.github/actions/setup-nf-test
