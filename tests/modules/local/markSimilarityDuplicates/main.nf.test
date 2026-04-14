@@ -1,0 +1,98 @@
+nextflow_process {
+
+    name "Test process MARK_SIMILARITY_DUPLICATES"
+    script "modules/local/markSimilarityDuplicates/main.nf"
+    process "MARK_SIMILARITY_DUPLICATES"
+    config "tests/configs/downstream.config"
+    tag "module"
+    tag "mark_similarity_duplicates"
+
+    // Test data (test_input.tsv) contains 4 reads:
+    //   read1: alignment-unique, high quality (I) — sim exemplar for itself + read3's group
+    //   read2: alignment duplicate of read1 (prim_align_dup_exemplar=read1) — gets NA (skipped)
+    //   read3: alignment-unique, same sequence as read1, lower quality (H) — similarity dup of read1, gets NA group_size
+    //   read4: alignment-unique, different sequence, low quality (5) — own sim exemplar, group_size=1
+
+    test("Should run without failures") {
+        tag "expect_success"
+        setup {
+            run("GZIP_FILE") {
+                script "modules/local/gzipFile/main.nf"
+                process {
+                    '''
+                    input[0] = Channel.of("test")
+                        | combine(Channel.of("${projectDir}/test-data/markSimilarityDuplicates/test_input.tsv"))
+                    '''
+                }
+            }
+        }
+        when {
+            process {
+                '''
+                input[0] = GZIP_FILE.out
+                '''
+            }
+        }
+        then {
+            assert process.success
+            // Read input and output
+            def tab_in = path(process.out.input[0][1]).csv(sep: "\t", decompress: true)
+            def tab_out = path(process.out.output[0][1]).csv(sep: "\t", decompress: true)
+            // Row count should match
+            assert tab_out.rowCount == tab_in.rowCount
+            // Should have exactly 2 new columns (expected_ columns are carried through from input)
+            assert tab_out.columnCount == tab_in.columnCount + 2
+            // New columns should be sim_dup_exemplar and sim_dup_group_size
+            assert "sim_dup_exemplar" in tab_out.columnNames
+            assert "sim_dup_group_size" in tab_out.columnNames
+            // Original columns should be preserved
+            for (c in tab_in.columnNames) {
+                assert c in tab_out.columnNames
+            }
+            // seq_id values should be preserved
+            assert tab_in.columns["seq_id"].toSorted() == tab_out.columns["seq_id"].toSorted()
+            // Compare observed values to expected values embedded in test data
+            def line_mapping = tab_out.columns["seq_id"].collect{ element -> tab_in.columns["seq_id"].indexOf(element) }
+            for (int i = 0; i < tab_out.rowCount; i++) {
+                def in_idx = line_mapping[i]
+                def expected_exemplar = tab_in.columns["expected_sim_dup_exemplar"][in_idx]
+                def expected_group_size = tab_in.columns["expected_sim_dup_group_size"][in_idx]
+                assert tab_out.columns["sim_dup_exemplar"][i] == expected_exemplar
+                assert tab_out.columns["sim_dup_group_size"][i] == expected_group_size
+            }
+        }
+    }
+
+    test("Should handle header-only input") {
+        tag "expect_success"
+        setup {
+            run("GZIP_FILE") {
+                script "modules/local/gzipFile/main.nf"
+                process {
+                    '''
+                    input[0] = Channel.of("test")
+                        | combine(Channel.of("${projectDir}/test-data/markSimilarityDuplicates/test_input_empty.tsv"))
+                    '''
+                }
+            }
+        }
+        when {
+            process {
+                '''
+                input[0] = GZIP_FILE.out
+                '''
+            }
+        }
+        then {
+            assert process.success
+            // nf-test csv parser returns empty columnNames for header-only files,
+            // so parse the header line manually
+            def lines = path(process.out.output[0][1]).linesGzip
+            assert lines.size() == 1 // header only, no data rows
+            def header = lines[0].split("\t") as List
+            assert "sim_dup_exemplar" in header
+            assert "sim_dup_group_size" in header
+        }
+    }
+
+}
