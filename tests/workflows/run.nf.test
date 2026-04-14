@@ -17,7 +17,7 @@ def getExpectedOutputs = { pyprojectPath, workflowKey, sampleOrGroupName ->
 
 // Get observed output files, excluding intermediates and trace files
 def getObservedOutputs = { outputDir ->
-    def excludePatterns = ["intermediates", "trace"]
+    def excludePatterns = ["intermediates", "trace", "experimental"]
     def observedFiles = []
     outputDir.eachFileRecurse(FILES) { file ->
         def relPath = outputDir.relativize(file).toString()
