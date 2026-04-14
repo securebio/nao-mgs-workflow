@@ -1,3 +1,7 @@
+# v3.2.1.3-dev
+
+- Add CVE-2026-32280, CVE-2026-32282 (Go stdlib in ncbi_datasets container) and CVE-2026-40192 (Pillow in multiqc container) to `.trivyignore`. No upstream fixes available; updated TODO with latest check results.
+
 # v3.2.1.2
 
 - Add `nucleaze` to the rust-tools container and bump Rust toolchain from 1.83 to 1.88.
