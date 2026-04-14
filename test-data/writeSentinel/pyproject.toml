@@ -1,0 +1,12 @@
+[project]
+version = "0.0.0"
+
+[tool.mgs-workflow]
+expected-outputs-run = [
+    "input/params.json",
+    "results/{SAMPLE}_counts.tsv",
+]
+
+expected-outputs-run-shortread-extra = [
+    "results/{SAMPLE}_extra.json",
+]
