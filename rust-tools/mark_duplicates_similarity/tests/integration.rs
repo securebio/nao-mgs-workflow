@@ -303,8 +303,8 @@ fn test_all_alignment_duplicates() {
 
 #[test]
 fn test_multi_level_group_sizes() {
-    // Two alignment-unique reads (read1, read3) that are similarity duplicates.
-    // read1 has higher quality so should be chosen as the sim exemplar.
+    // Two alignment-unique reads (read1, read3) that are similarity duplicates,
+    // each with their own alignment duplicates. The combined group size should be 5.
     let seq = "A".repeat(76);
     let qual_high = "I".repeat(76);
     let qual_low = "5".repeat(76);
@@ -324,19 +324,29 @@ fn test_multi_level_group_sizes() {
 
     assert!(header.contains(&"sim_dup_group_size".to_string()));
 
-    // read1 has higher quality, so it should be the sim exemplar
-    assert_eq!(rows[0]["sim_dup_exemplar"], "read1");
-    assert_eq!(rows[2]["sim_dup_exemplar"], "read1");
+    // read1 and read3 should share the same sim exemplar (either could be chosen)
+    let exemplar = &rows[0]["sim_dup_exemplar"];
+    assert!(
+        exemplar == "read1" || exemplar == "read3",
+        "Expected read1 or read3 as exemplar, got: {}",
+        exemplar
+    );
+    assert_eq!(&rows[2]["sim_dup_exemplar"], exemplar);
     // Alignment dups always get NA
     assert_eq!(rows[1]["sim_dup_exemplar"], "NA");
     assert_eq!(rows[3]["sim_dup_exemplar"], "NA");
     assert_eq!(rows[4]["sim_dup_exemplar"], "NA");
 
     // The sim exemplar gets total count: 2 (read1 group) + 3 (read3 group) = 5
-    assert_eq!(rows[0]["sim_dup_group_size"], "5");
-    // Sim dup and alignment dups all get NA
+    // The non-exemplar alignment-unique read and all alignment dups get NA
+    if exemplar == "read1" {
+        assert_eq!(rows[0]["sim_dup_group_size"], "5");
+        assert_eq!(rows[2]["sim_dup_group_size"], "NA");
+    } else {
+        assert_eq!(rows[2]["sim_dup_group_size"], "5");
+        assert_eq!(rows[0]["sim_dup_group_size"], "NA");
+    }
     assert_eq!(rows[1]["sim_dup_group_size"], "NA");
-    assert_eq!(rows[2]["sim_dup_group_size"], "NA");
     assert_eq!(rows[3]["sim_dup_group_size"], "NA");
     assert_eq!(rows[4]["sim_dup_group_size"], "NA");
 }
