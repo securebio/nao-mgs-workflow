@@ -2,12 +2,24 @@
 
 If the pipeline runs to completion, the following output files are expected. In the future, we will add more specific information about the outputs, including in-depth descriptions of the columns in the output files.
 
-All pipeline output can be found in the `output` directory, which is broken into four subdirectories:
+All pipeline output can be found in the `output` directory, which is broken into five subdirectories:
 
 - `input`: Directory containing saved input information (useful for trying to reproduce someone else's results)
 - `logging`: Log files containing meta-level information about the pipeline run itself.
 - `intermediates`: Intermediate files produced by key stages in the run workflow, saved for nonstandard downstream analysis.
 - `results`: Directory containing processed results files for standard downstream analysis.
+- `experimental`: Directory containing experimental outputs that are under active development and not yet guaranteed to be stable. See below for details.
+
+## Experimental outputs
+
+The `experimental/` (INDEX and RUN workflows) and `experimental_downstream/` (DOWNSTREAM workflow) directories contain outputs that are under active development. Files in these directories:
+
+- Are NOT tracked in the `expected-outputs-*` lists in `pyproject.toml`
+- Are NOT guaranteed to have schemas or complete documentation
+- May change or be removed in any release, including point (4th-number) releases
+- Should NOT be relied upon by downstream consumers until promoted to standard output directories
+
+These directories allow new output features to ship for early feedback without waiting for a stable release.
 
 ## Run workflow
 

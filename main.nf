@@ -18,6 +18,7 @@ workflow {
         logging_index = params.mode == 'index' ? INDEX.out.logging_index : Channel.empty()
         ref_dbs = params.mode == 'index' ? INDEX.out.ref_dbs : Channel.empty()
         alignment_indexes = params.mode == 'index' ? INDEX.out.alignment_indexes : Channel.empty()
+        experimental_index = params.mode == 'index' ? INDEX.out.experimental_index : Channel.empty()
         // RUN workflow publishing
         input_run = params.mode == 'run' ? RUN.out.input_run : Channel.empty()
         logging_run = params.mode == 'run' ? RUN.out.logging_run : Channel.empty()
@@ -26,11 +27,13 @@ workflow {
         reads_trimmed_viral = params.mode == 'run' ? RUN.out.reads_trimmed_viral : Channel.empty()
         qc_results_run = params.mode == 'run' ? RUN.out.qc_results_run : Channel.empty()
         other_results_run = params.mode == 'run' ? RUN.out.other_results_run : Channel.empty()
+        experimental_run = params.mode == 'run' ? RUN.out.experimental_run : Channel.empty()
         // DOWNSTREAM workflow publishing
         input_downstream = params.mode == 'downstream' ? DOWNSTREAM.out.input_downstream  : Channel.empty()
         logging_downstream = params.mode == 'downstream' ? DOWNSTREAM.out.logging_downstream  : Channel.empty()
         intermediates_downstream = params.mode == 'downstream' ? DOWNSTREAM.out.intermediates_downstream  : Channel.empty()
         results_downstream = params.mode == 'downstream' ? DOWNSTREAM.out.results_downstream  : Channel.empty()
+        experimental_downstream = params.mode == 'downstream' ? DOWNSTREAM.out.experimental_downstream  : Channel.empty()
 }
         
 output {
@@ -49,6 +52,10 @@ output {
     }
     alignment_indexes {
         path "results"
+        tags nextflow_file_class: "publish", "nextflow.io/temporary": "false"
+    }
+    experimental_index {
+        path "experimental"
         tags nextflow_file_class: "publish", "nextflow.io/temporary": "false"
     }
     // RUN workflow output
@@ -80,6 +87,10 @@ output {
         path "results"
         tags nextflow_file_class: "publish", "nextflow.io/temporary": "false"
     }
+    experimental_run {
+        path "experimental"
+        tags nextflow_file_class: "publish", "nextflow.io/temporary": "false"
+    }
     // DOWNSTREAM workflow output
     input_downstream {
         path "input_downstream"
@@ -95,6 +106,10 @@ output {
     }
     results_downstream {
         path "results_downstream"
+        tags nextflow_file_class: "publish", "nextflow.io/temporary": "false"
+    }
+    experimental_downstream {
+        path "experimental_downstream"
         tags nextflow_file_class: "publish", "nextflow.io/temporary": "false"
     }
 }

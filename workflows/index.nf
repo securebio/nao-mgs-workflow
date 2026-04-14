@@ -93,4 +93,5 @@ workflow INDEX {
             MAKE_RIBO_INDEX.out.mm2,
             MAKE_CONTAMINANT_INDEX.out.mm2
         )
+        experimental_index = Channel.empty()
 }

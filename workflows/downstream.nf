@@ -81,4 +81,5 @@ workflow DOWNSTREAM {
                                 validate_ch.annotated_hits,
                                 concat_ch.other,
                                 concat_ch.fastp_json)
+        experimental_downstream = Channel.empty()
 }
