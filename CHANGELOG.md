@@ -5,6 +5,7 @@
 - Add CVE-2026-32280, CVE-2026-32282 (Go stdlib in ncbi_datasets container) and CVE-2026-40192 (Pillow in multiqc container) to `.trivyignore`. No upstream fixes available; updated TODO with latest check results.
 - Add `experimental/` and `experimental_downstream/` output directories for staging new outputs that are not yet guaranteed to be stable across point releases.
 - Add similarity-based duplicate marking to DOWNSTREAM as an experimental output via the new `MARK_SIMILARITY_DUPLICATES` module and `rust-tools/mark_duplicates_similarity` Rust library.
+- Add sentinel file (`sentinel.json`) to the RUN workflow's `logging/` directory that validates all expected outputs have been published before writing a completion marker with timestamps. Adds configurable `sentinel_max_wait_mins` parameter.
 
 # v3.2.1.2
 
