@@ -1,3 +1,7 @@
+# v3.2.1.3-dev
+
+- Add `experimental/` and `experimental_downstream/` output directories for staging new outputs that are not yet guaranteed to be stable across point releases.
+
 # v3.2.1.2
 
 - Add `nucleaze` to the rust-tools container and bump Rust toolchain from 1.83 to 1.88.

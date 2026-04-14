@@ -128,4 +128,5 @@ workflow RUN {
         reads_trimmed_viral = bbduk_trimmed
         qc_results_run = COUNT_READS.out.output.mix(RUN_QC.out.pre_qc, RUN_QC.out.post_qc, SUBSET_TRIM.out.fastp_json)
         other_results_run = hits_final.mix(PROFILE.out.bracken, PROFILE.out.kraken)
+        experimental_run = Channel.empty()
 }
