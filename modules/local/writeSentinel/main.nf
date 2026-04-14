@@ -2,7 +2,7 @@
 // then write a sentinel.json completion marker with timestamps.
 // Uses exec: to run on the head node for native S3 support via file().exists().
 process WRITE_SENTINEL {
-    label "single"
+    executor 'local'
     input:
         val(ready)           // Dependency signal: collected items from all output channels
         val(sample_names)    // List of sample names from samplesheet
@@ -13,6 +13,7 @@ process WRITE_SENTINEL {
     exec:
         // Parse expected output patterns from pyproject.toml
         // Uses the same regex approach as the test helper getExpectedOutputs
+        // Assumes array values in pyproject.toml do not contain literal ] characters
         def pyprojectText = file(config.pyproject_path).text
         def keys = ["run"]
         if (config.platform == "illumina") keys.add("run-shortread-extra")

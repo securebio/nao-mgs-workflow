@@ -63,6 +63,7 @@ nextflow_pipeline {
         then {
             // Should run without failures
             assert workflow.success
+            assertSentinelValid("${launchDir}/output")
         }
     }
 
