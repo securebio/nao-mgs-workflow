@@ -10,6 +10,6 @@ process MARK_SIMILARITY_DUPLICATES {
     script:
     """
     mark_duplicates_similarity -i "${tsv}" -o "similarity-duplicate-marked_${tsv}"
-    ln -s ${tsv} input_${tsv}
+    ln -s "${tsv}" "input_${tsv}"
     """
 }

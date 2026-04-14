@@ -7,6 +7,12 @@ nextflow_process {
     tag "module"
     tag "mark_similarity_duplicates"
 
+    // Test data (test_input.tsv) contains 4 reads:
+    //   read1: alignment-unique, high quality (I) — sim exemplar for itself + read3's group
+    //   read2: alignment duplicate of read1 (prim_align_dup_exemplar=read1) — gets NA (skipped)
+    //   read3: alignment-unique, same sequence as read1, lower quality (H) — similarity dup of read1, gets NA group_size
+    //   read4: alignment-unique, different sequence, low quality (5) — own sim exemplar, group_size=1
+
     test("Should run without failures") {
         tag "expect_success"
         setup {
