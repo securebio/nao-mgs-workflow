@@ -1,6 +1,7 @@
 # v3.2.1.3-dev
 
 - Add `experimental/` and `experimental_downstream/` output directories for staging new outputs that are not yet guaranteed to be stable across point releases.
+- Add `mark_duplicates_similarity` to the rust-tools workspace and Docker container for similarity-based duplicate marking.
 
 # v3.2.1.2
 

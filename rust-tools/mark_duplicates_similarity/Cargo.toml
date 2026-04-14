@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+# Pinned to nao-dedup main branch, commit "Add rust binary for processing fastqs (#7)"
 nao_dedup = { git = "https://github.com/securebio/nao-dedup", rev = "404c7080e4f5a73d0fbdd02e535858c74b0ebeb0" }
 flate2 = "1.0"
 anyhow = "1.0"

@@ -58,7 +58,8 @@ struct TestFiles {
 
 impl TestFiles {
     fn new(prefix: &str) -> Self {
-        let dir = std::env::temp_dir().join(format!("sim_dup_test_{}", prefix));
+        let tid = format!("{:?}", std::thread::current().id());
+        let dir = std::env::temp_dir().join(format!("sim_dup_test_{}_{}", prefix, tid));
         std::fs::create_dir_all(&dir).unwrap();
         Self {
             input_gz: dir.join("input.tsv.gz"),
@@ -338,4 +339,42 @@ fn test_multi_level_group_sizes() {
     assert_eq!(rows[2]["sim_dup_group_size"], "NA");
     assert_eq!(rows[3]["sim_dup_group_size"], "NA");
     assert_eq!(rows[4]["sim_dup_group_size"], "NA");
+}
+
+#[test]
+fn test_error_on_missing_column() {
+    // Input missing the required prim_align_dup_exemplar column
+    let content = "seq_id\tquery_seq\tquery_seq_rev\tquery_qual\tquery_qual_rev\n\
+read1\tACGT\tACGT\tIIII\tIIII\n";
+
+    let files = TestFiles::new("missing_col");
+    files.write_input(content);
+
+    let output = files.run();
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("Missing required column"),
+        "Expected 'Missing required column' error, got: {}",
+        stderr
+    );
+}
+
+#[test]
+fn test_error_on_malformed_line() {
+    // Header is valid but data row has too few fields
+    let content = "seq_id\tquery_seq\tquery_seq_rev\tquery_qual\tquery_qual_rev\tprim_align_dup_exemplar\n\
+read1\tACGT\n";
+
+    let files = TestFiles::new("malformed");
+    files.write_input(content);
+
+    let output = files.run();
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("Malformed line") || stderr.contains("expected at least"),
+        "Expected malformed line error, got: {}",
+        stderr
+    );
 }

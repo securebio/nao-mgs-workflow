@@ -172,8 +172,12 @@ fn main() -> Result<()> {
 
     // Skip header line and write stored header with new column
     lines.next();
-    writeln!(writer, "{}\tsim_dup_exemplar\tsim_dup_group_size", header.trim_end())
-        .context("Failed to write header")?;
+    writeln!(
+        writer,
+        "{}\tsim_dup_exemplar\tsim_dup_group_size",
+        header.trim_end()
+    )
+    .context("Failed to write header")?;
 
     let mut n_prim_align_dups = 0;
     let mut n_sim_dups = 0;
