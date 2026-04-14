@@ -6,7 +6,8 @@ process WRITE_SENTINEL {
     input:
         val(ready)           // Dependency signal: collected items from all output channels
         val(sample_names)    // List of sample names from samplesheet
-        val(config)          // Map: start_time, output_dir, pyproject_path, platform, max_wait_mins
+        val(start_time)      // Start time string
+        val(config)          // Map: output_dir, pyproject_path, platform, max_wait_mins
     output:
         path("sentinel.json"), emit: sentinel
     exec:
@@ -52,7 +53,7 @@ process WRITE_SENTINEL {
         }
         // If file check completes without error, write sentinel.json
         def sentinel = [
-            runStartedAt: config.start_time,
+            runStartedAt: start_time,
             runCompletedAt: new java.util.Date().format("yyyy-MM-dd HH:mm:ss z (Z)")
         ]
         task.workDir.resolve("sentinel.json").text =

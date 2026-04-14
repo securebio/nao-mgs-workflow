@@ -15,8 +15,8 @@ nextflow_process {
                 '''
                 input[0] = ["done"]
                 input[1] = ["sample1"]
-                input[2] = [
-                    start_time: "2026-01-01 00:00:00 UTC (+0000)",
+                input[2] = "2026-01-01 00:00:00 UTC (+0000)"
+                input[3] = [
                     output_dir: "${projectDir}/test-data/writeSentinel/output_shortread",
                     pyproject_path: "${projectDir}/test-data/writeSentinel/pyproject.toml",
                     platform: "illumina",
@@ -46,8 +46,8 @@ nextflow_process {
                 // This verifies that ONT mode skips expected-outputs-run-shortread-extra
                 input[0] = ["done"]
                 input[1] = ["sample1"]
-                input[2] = [
-                    start_time: "2026-01-01 00:00:00 UTC (+0000)",
+                input[2] = "2026-01-01 00:00:00 UTC (+0000)"
+                input[3] = [
                     output_dir: "${projectDir}/test-data/writeSentinel/output_ont",
                     pyproject_path: "${projectDir}/test-data/writeSentinel/pyproject.toml",
                     platform: "ont",
@@ -76,8 +76,8 @@ nextflow_process {
                 // pyproject that has patterns matching those files (no {SAMPLE} expansion)
                 input[0] = ["done"]
                 input[1] = []
-                input[2] = [
-                    start_time: "2026-01-01 00:00:00 UTC (+0000)",
+                input[2] = "2026-01-01 00:00:00 UTC (+0000)"
+                input[3] = [
                     output_dir: "s3://nao-testing/tiny-test",
                     pyproject_path: "${projectDir}/test-data/writeSentinel/pyproject_s3.toml",
                     platform: "illumina",
@@ -105,8 +105,8 @@ nextflow_process {
                 // Point at a directory that exists but has no expected output files
                 input[0] = ["done"]
                 input[1] = ["sample1"]
-                input[2] = [
-                    start_time: "2026-01-01 00:00:00 UTC (+0000)",
+                input[2] = "2026-01-01 00:00:00 UTC (+0000)"
+                input[3] = [
                     output_dir: "${projectDir}/test-data/writeSentinel",
                     pyproject_path: "${projectDir}/test-data/writeSentinel/pyproject.toml",
                     platform: "illumina",
