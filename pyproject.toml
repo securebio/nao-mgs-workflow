@@ -104,7 +104,6 @@ expected-outputs-run = [
     "input/samplesheet.csv",
     "logging/pyproject.toml",
     "logging/pyproject-index.toml",
-    "logging/time.txt",
     "results/{SAMPLE}_bracken.tsv.gz",
     "results/{SAMPLE}_kraken.tsv.gz",
     "results/{SAMPLE}_qc_adapter_stats_cleaned.tsv.gz",

@@ -113,7 +113,6 @@ workflow RUN {
     // Prepare other publishing variables
     params_str = groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(params))
     params_ch = Channel.of(params_str).collectFile(name: "params-run.json")
-    time_ch = start_time_str.map { it + "\n" }.collectFile(name: "time.txt")
     // Note: we send these input/logging files through a COPY_FILE_BASE process
     // because nextflow 25.04 now only publishes files that have passed through the working directory.
     // We first tried collectFile() as an alternative; however it intermittantly gives serialization errors.
@@ -123,7 +122,7 @@ workflow RUN {
 
     // Pre-define expected-output channels for reuse in dependency collection and emit
     input_run_ch = index_params_ch.mix(samplesheet_ch, adapters_ch, params_ch)
-    logging_run_ch = index_pyproject_ch.mix(time_ch, pyproject_ch)
+    logging_run_ch = index_pyproject_ch.mix(pyproject_ch)
     qc_results_run_ch = COUNT_READS.out.output.mix(
         RUN_QC.out.pre_qc, RUN_QC.out.post_qc, SUBSET_TRIM.out.fastp_json)
     other_results_run_ch = hits_final.mix(PROFILE.out.bracken, PROFILE.out.kraken)
