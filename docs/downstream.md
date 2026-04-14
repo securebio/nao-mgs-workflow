@@ -161,17 +161,17 @@ config:
   layout: horizontal
 ---
 flowchart LR
-A("Partitioned sample group TSVs <br> (CONCAT_BY_GROUP)") --> B[MARK ALIGNMENT DUPLICATES]
+A("Partitioned sample group TSVs <br> (CONCAT_BY_GROUP)") --> B[MARK_ALIGNMENT_DUPLICATES]
 B --> C[SORT_TSV]
 B --> D[SORT_TSV]
 C --> E(Annotated hits TSVs)
 D --> F(Summary TSVs)
-E --> G[MARK SIMILARITY DUPLICATES]
+D --> G[MARK_SIMILARITY_DUPLICATES]
 G --> H(EXPERIMENTAL: Similarity-annotated hits TSVs)
 style A fill:#fff,stroke:#000
 style E fill:#000,color:#fff,stroke:#000
 style F fill:#000,color:#fff,stroke:#000
-style H fill:#888,color:#fff,stroke:#000
+style H fill:#000,color:#fff,stroke:#000
 ```
 
 ### Validate viral taxonomic assignments (`VALIDATE_VIRAL_ASSIGNMENTS`)
