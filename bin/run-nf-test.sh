@@ -38,7 +38,7 @@ done
 # We temporarily disable exit-on-error to ensure cleanup happens regardless of test results.
 set +e
 if [[ "$use_parallel" == "true" ]]; then
-  python3 bin/run_nf_test_parallel.py "$@"
+  python3 "$SCRIPT_DIR/run_nf_test_parallel.py" "$@"
   exit_code=$?
 else
   nf-test test "$@"
