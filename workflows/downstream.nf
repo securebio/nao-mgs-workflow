@@ -51,6 +51,7 @@ workflow DOWNSTREAM {
             viral_hits_ch = PAD_ONT_COLUMNS(viral_hits_ch, pad_cols, "NA", "padded").output
             dup_output_ch = Channel.empty()
             clade_counts_ch = Channel.empty()
+            sim_dup_ch = Channel.empty()
         }
         else {
             // Short-read: Mark duplicates based on alignment coordinates
@@ -59,6 +60,7 @@ workflow DOWNSTREAM {
             dup_output_ch = MARK_VIRAL_DUPLICATES.out.dup.map { label, _reads, stats -> [label, stats] }
             // Generate clade counts
             clade_counts_ch = COUNT_READS_PER_CLADE(viral_hits_ch, viral_db).output
+            sim_dup_ch = MARK_VIRAL_DUPLICATES.out.sim_dup
         }
         // Validate taxonomic assignments
         def validation_params = params.collectEntries { k, v -> [k, v] }
@@ -81,5 +83,5 @@ workflow DOWNSTREAM {
                                 validate_ch.annotated_hits,
                                 concat_ch.other,
                                 concat_ch.fastp_json)
-        experimental_downstream = Channel.empty()
+        experimental_downstream = sim_dup_ch
 }
