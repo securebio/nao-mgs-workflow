@@ -19,26 +19,47 @@ nextflow_workflow {
             }
         }
         then {
-            // Should run without errors
             assert workflow.success
+            assert workflow.out.pipeline_pyproject_path
+            assert workflow.out.index_pyproject_path
         }
     }
 
-    test("Should pass when all versions are compatible") {
+    test("Should pass when index is newer but compatible") {
         tag "expect_success"
         config "tests/configs/run.config"
         when {
             params {}
             workflow {
                 """
-                input[0] = "${projectDir}/test-data/checkVersionCompatibility/versions-compatible"
-                input[1] = "${projectDir}/test-data/checkVersionCompatibility/versions-compatible"
+                input[0] = "${projectDir}/test-data/checkVersionCompatibility/index-newer-compatible"
+                input[1] = "${projectDir}/test-data/checkVersionCompatibility/index-newer-compatible"
                 """
             }
         }
         then {
-            // Should run without errors
             assert workflow.success
+            assert workflow.out.pipeline_pyproject_path
+            assert workflow.out.index_pyproject_path
+        }
+    }
+
+    test("Should pass with legacy index format") {
+        tag "expect_success"
+        config "tests/configs/run.config"
+        when {
+            params {}
+            workflow {
+                """
+                input[0] = "${projectDir}/test-data/checkVersionCompatibility/legacy-format"
+                input[1] = "${projectDir}/test-data/checkVersionCompatibility/legacy-format"
+                """
+            }
+        }
+        then {
+            assert workflow.success
+            assert workflow.out.pipeline_pyproject_path
+            assert workflow.out.index_pyproject_path
         }
     }
 
