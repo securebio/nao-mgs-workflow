@@ -20,8 +20,8 @@ nextflow_workflow {
         }
         then {
             assert workflow.success
-            assert workflow.out.pipeline_pyproject_path
-            assert workflow.out.index_pyproject_path
+            assert workflow.out.pipeline_pyproject_path.flatten().any { path(it).getFileName().toString() == "pyproject.toml" }
+            assert workflow.out.index_pyproject_path.flatten().any { path(it).getFileName().toString() == "pyproject.toml" }
         }
     }
 
@@ -39,8 +39,8 @@ nextflow_workflow {
         }
         then {
             assert workflow.success
-            assert workflow.out.pipeline_pyproject_path
-            assert workflow.out.index_pyproject_path
+            assert workflow.out.pipeline_pyproject_path.flatten().any { path(it).getFileName().toString() == "pyproject.toml" }
+            assert workflow.out.index_pyproject_path.flatten().any { path(it).getFileName().toString() == "pyproject.toml" }
         }
     }
 
@@ -58,8 +58,9 @@ nextflow_workflow {
         }
         then {
             assert workflow.success
-            assert workflow.out.pipeline_pyproject_path
-            assert workflow.out.index_pyproject_path
+            assert workflow.out.pipeline_pyproject_path.flatten().any { path(it).getFileName().toString() == "pyproject.toml" }
+            // Legacy fallback creates a temp file with .toml extension
+            assert workflow.out.index_pyproject_path.flatten().any { path(it).getFileName().toString().endsWith(".toml") }
         }
     }
 
