@@ -13,8 +13,8 @@ nextflow_workflow {
             params {}
             workflow {
                 """
-                input[0] = file("${projectDir}/test-data/checkVersionCompatibility/pyproject-1000-1000.toml")
-                input[1] = file("${projectDir}/test-data/checkVersionCompatibility/pyproject-1000-1000.toml")
+                input[0] = "${projectDir}/test-data/checkVersionCompatibility/versions-equal"
+                input[1] = "${projectDir}/test-data/checkVersionCompatibility/versions-equal"
                 """
             }
         }
@@ -31,8 +31,8 @@ nextflow_workflow {
             params {}
             workflow {
                 """
-                input[0] = file("${projectDir}/test-data/checkVersionCompatibility/pyproject-1000-1000.toml")
-                input[1] = file("${projectDir}/test-data/checkVersionCompatibility/pyproject-1001-1000.toml")
+                input[0] = "${projectDir}/test-data/checkVersionCompatibility/versions-compatible"
+                input[1] = "${projectDir}/test-data/checkVersionCompatibility/versions-compatible"
                 """
             }
         }
@@ -49,8 +49,8 @@ nextflow_workflow {
             params {}
             workflow {
                 """
-                input[0] = file("${projectDir}/test-data/checkVersionCompatibility/pyproject-1001-1001.toml")
-                input[1] = file("${projectDir}/test-data/checkVersionCompatibility/pyproject-1000-1000.toml")
+                input[0] = "${projectDir}/test-data/checkVersionCompatibility/index-too-old"
+                input[1] = "${projectDir}/test-data/checkVersionCompatibility/index-too-old"
                 """
             }
         }
@@ -70,8 +70,8 @@ nextflow_workflow {
             params {}
             workflow {
                 """
-                input[0] = file("${projectDir}/test-data/checkVersionCompatibility/pyproject-1000-1000.toml")
-                input[1] = file("${projectDir}/test-data/checkVersionCompatibility/pyproject-1001-1001.toml")
+                input[0] = "${projectDir}/test-data/checkVersionCompatibility/pipeline-too-old"
+                input[1] = "${projectDir}/test-data/checkVersionCompatibility/pipeline-too-old"
                 """
             }
         }
@@ -91,8 +91,8 @@ nextflow_workflow {
             params {}
             workflow {
                 """
-                input[0] = file("${projectDir}/test-data/checkVersionCompatibility/pyproject-1000-1000.toml")
-                input[1] = file("${projectDir}/test-data/checkVersionCompatibility/pyproject-invalid.toml")
+                input[0] = "${projectDir}/test-data/checkVersionCompatibility/index-invalid"
+                input[1] = "${projectDir}/test-data/checkVersionCompatibility/index-invalid"
                 """
             }
         }
