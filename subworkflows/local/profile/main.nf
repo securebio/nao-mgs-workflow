@@ -24,20 +24,19 @@ include { CONCATENATE_TSVS_LABELED as CONCATENATE_BRACKEN_PER_SAMPLE } from "../
 workflow PROFILE {
     take:
         reads_ch
-        kraken_db_ch
-        ref_dir
         single_end
-        params_map // min_kmer_fraction, k, ribo_suffix, bracken_threshold, platform, db_download_timeout
+        params_map // min_kmer_fraction, k, ribo_suffix, bracken_threshold, platform, db_download_timeout, ref_dir
     main:
+        kraken_db_ch = "${params_map.ref_dir}/results/kraken_db"
         // Separate ribosomal reads
         if (params_map.platform == "ont") {
-            ribo_ref = "${ref_dir}/results/mm2-ribo-index"
+            ribo_ref = "${params_map.ref_dir}/results/mm2-ribo-index"
             ribo_minimap2_params = params_map + [remove_sq: false, alignment_params: ""]
             ribo_ch = MINIMAP2(reads_ch, ribo_ref, ribo_minimap2_params)
             ribo_in = ribo_ch.reads_mapped
             noribo_in = ribo_ch.reads_unmapped
         } else {
-            ribo_path = "${ref_dir}/results/ribo-ref-concat.fasta.gz"
+            ribo_path = "${params_map.ref_dir}/results/ribo-ref-concat.fasta.gz"
             ribo_bbduk_params = params_map + [interleaved: single_end.map{!it}]
             ribo_ch = BBDUK(reads_ch, ribo_path, ribo_bbduk_params)
             ribo_in = ribo_ch.match

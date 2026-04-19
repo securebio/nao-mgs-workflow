@@ -31,10 +31,8 @@ workflow RUN {
         count_ch = COUNT_READS(samplesheet_ch.samplesheet, samplesheet_ch.single_end)
         subset_ch = SUBSET_TRIM(samplesheet_ch.samplesheet, samplesheet_ch.single_end, params)
         qc_ch = RUN_QC(subset_ch.subset_reads, subset_ch.trimmed_subset_reads, samplesheet_ch.single_end)
-        // Profile ribosomal and non-ribosomal reads of the subset adapter-trimmed reads
-        kraken_db_path = "${params.ref_dir}/results/kraken_db"
-        def profile_params = params.collectEntries { k, v -> [k, v] } + [min_kmer_fraction: "0.4", k: "27", ribo_suffix: "ribo"]
-        profile_ch = PROFILE(subset_ch.trimmed_subset_reads, kraken_db_path, params.ref_dir, samplesheet_ch.single_end, profile_params)
+        def profile_params = params + [min_kmer_fraction: "0.4", k: "27", ribo_suffix: "ribo"]
+        profile_ch = PROFILE(subset_ch.trimmed_subset_reads, samplesheet_ch.single_end, profile_params)
     emit:
         input_run = input_log_ch.input_run
         logging_run = input_log_ch.logging_run
