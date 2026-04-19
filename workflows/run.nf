@@ -25,7 +25,6 @@ workflow RUN {
         // Setup
         compat_ch = CHECK_VERSION_COMPATIBILITY(params.ref_dir, projectDir)
         samplesheet_ch = LOAD_SAMPLESHEET(params.sample_sheet, params.platform, false)
-        input_log_ch = PREPARE_INPUT_LOGGING(params, compat_ch.index_pyproject_path, compat_ch.pipeline_pyproject_path, samplesheet_ch.start_time_str)
         // Results
         viral_ch = EXTRACT_VIRAL_READS(samplesheet_ch.samplesheet, params)
         count_ch = COUNT_READS(samplesheet_ch.samplesheet, samplesheet_ch.single_end)
@@ -33,6 +32,8 @@ workflow RUN {
         qc_ch = RUN_QC(subset_ch.subset_reads, subset_ch.trimmed_subset_reads, samplesheet_ch.single_end)
         def profile_params = params + [min_kmer_fraction: "0.4", k: "27", ribo_suffix: "ribo"]
         profile_ch = PROFILE(subset_ch.trimmed_subset_reads, samplesheet_ch.single_end, profile_params)
+        // Prepare input and logging files for publishing
+        input_log_ch = PREPARE_INPUT_LOGGING(params, compat_ch.index_pyproject_path, compat_ch.pipeline_pyproject_path, samplesheet_ch.start_time_str)
     emit:
         input_run = input_log_ch.input_run
         logging_run = input_log_ch.logging_run
