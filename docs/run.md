@@ -45,9 +45,9 @@ To perform these functions, the workflow runs a series of subworkflows responsib
     - [Taxonomic assignment (TAXONOMY)](#taxonomic-assignment-taxonomy)
     - [QC (QC)](#qc-qc)
 3. [Analysis subworkflows](#analysis-subworkflows): Perform the primary analysis
-    - An EXTRACT_VIRAL_READS subworkflow that depends on the read type
-        - [Viral identification for Illumina reads and other short reads (EXTRACT_VIRAL_READS_SHORT)](#viral-identification-short-read-version)
-        - [Viral identification for ONT reads and other long reads (EXTRACT_VIRAL_READS_ONT)](#viral-identification-ont-version)
+    - [Viral identification (EXTRACT_VIRAL_READS)](#viral-identification) — dispatches to platform-specific implementations internally
+        - [Short-read version (EXTRACT_VIRAL_READS_SHORT)](#viral-identification-short-read-version)
+        - [ONT version (EXTRACT_VIRAL_READS_ONT)](#viral-identification-ont-version)
     - [Taxonomic profiling (PROFILE)](#taxonomic-profiling-profile)
 4. [QC subworkflows](#qc-subworkflows): Conduct quality control on the analysis results
     - [Count total reads (COUNT_TOTAL_READS)](#count-total-reads-count_total_reads)
