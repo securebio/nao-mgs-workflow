@@ -45,7 +45,7 @@ To perform these functions, the workflow runs a series of subworkflows responsib
     - [Taxonomic assignment (TAXONOMY)](#taxonomic-assignment-taxonomy)
     - [QC (QC)](#qc-qc)
 3. [Analysis subworkflows](#analysis-subworkflows): Perform the primary analysis
-    - [Viral identification (EXTRACT_VIRAL_READS)](#viral-identification) — dispatches to platform-specific implementations internally
+    - [Viral identification (EXTRACT_VIRAL_READS)](#viral-identification-extract_viral_reads) — dispatches to platform-specific implementations internally
         - [Short-read version (EXTRACT_VIRAL_READS_SHORT)](#viral-identification-short-read-version)
         - [ONT version (EXTRACT_VIRAL_READS_ONT)](#viral-identification-ont-version)
     - [Taxonomic profiling (PROFILE)](#taxonomic-profiling-profile)
@@ -185,8 +185,12 @@ style J fill:#000,color:#fff,stroke:#000
 
 ## Analysis subworkflows
 
-### Viral identification (short read version)
-#### EXTRACT_VIRAL_READS_SHORT
+### Viral identification (EXTRACT_VIRAL_READS)
+
+The `EXTRACT_VIRAL_READS` subworkflow dispatches to a platform-specific implementation based on the sequencing platform. For short reads (Illumina), it calls `EXTRACT_VIRAL_READS_SHORT`; for long reads (ONT), it calls `EXTRACT_VIRAL_READS_ONT`. It normalizes the outputs from both paths into a common set of channels for downstream use.
+
+#### Viral identification (short read version)
+##### EXTRACT_VIRAL_READS_SHORT
 
 The goal of this subworkflow is to sensitively, specifically, and efficiently identify reads arising from host-infecting viruses. It takes as input paired-end short-reads and uses a multi-step process designed to keep computational costs low while minimizing false-positive and false-negative errors.
 
@@ -232,8 +236,8 @@ style K fill:#000,color:#fff,stroke:#000
 6. The reads that make it through the score filter are then run through our [custom LCA algorithm](./lca.md). The LCA taxid assignment is what we use to classify reads in the final viral hits table.
 7. The LCA and processed bowtie2 output are run through [PROCESS_LCA_ALIGNER_OUTPUT](#process-lca-aligner-output-processlcaaligneroutput) to organize and clean the output viral hits table.
 
-### Viral identification (ONT version)
-#### EXTRACT_VIRAL_READS_ONT
+#### Viral identification (ONT version)
+##### EXTRACT_VIRAL_READS_ONT
 
 The goal of this subworkflow is to sensitively, specifically, and efficiently identify reads arising from host-infecting viruses. It takes as input ONT (oxford nanopore) reads. Due to the smaller size of ONT datasets compared to most short-read datasets, EXTRACT_VIRAL_READS_ONT currently uses a simpler workflow than EXTRACT_VIRAL_READS_SHORT, and is less optimized for low computational costs.
 
