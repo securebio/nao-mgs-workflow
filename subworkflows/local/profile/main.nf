@@ -25,7 +25,7 @@ workflow PROFILE {
     take:
         reads_ch
         single_end
-        params_map // min_kmer_fraction, k, ribo_suffix, bracken_threshold, platform, db_download_timeout, ref_dir
+        params_map // Uses: min_kmer_fraction, k, ribo_suffix, bracken_threshold, platform, db_download_timeout, ref_dir
     main:
         kraken_db_ch = "${params_map.ref_dir}/results/kraken_db"
         // Separate ribosomal reads

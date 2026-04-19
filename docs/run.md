@@ -13,16 +13,14 @@ config:
 flowchart LR
 A(Raw reads) --> B[LOAD_SAMPLESHEET]
 B --> C[COUNT_TOTAL_READS] & E[SUBSET_TRIM]
-B --> |Short reads|D1[EXTRACT_VIRAL_READS_SHORT]
-B --> |ONT reads|D2[EXTRACT_VIRAL_READS_ONT]
+B --> D[EXTRACT_VIRAL_READS]
 E --> I(Subset reads)
 E --> J(Subset trimmed reads)
 J --> G[RUN_QC] & H[PROFILE]
 I --> G[RUN_QC]
 %% Adjust layout by placing subgraphs in specific order
 subgraph "Viral identification"
-D1
-D2
+D
 end
 subgraph "Taxonomic Profile"
 H

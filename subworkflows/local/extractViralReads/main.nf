@@ -26,11 +26,13 @@ workflow EXTRACT_VIRAL_READS {
             bbduk_match = Channel.empty()
             bbduk_trimmed = Channel.empty()
         } else {
-            params_map["aln_score_threshold"] = params_map.bt2_score_threshold
-            params_map["min_kmer_hits"] = "1"
-            params_map["bbduk_suffix"] = "viral"
-            params_map["k"] = "24"
-            EXTRACT_VIRAL_READS_SHORT(reads_ch, params_map.ref_dir, params_map)
+            def short_params = params_map + [
+                aln_score_threshold: params_map.bt2_score_threshold,
+                min_kmer_hits: "1",
+                bbduk_suffix: "viral",
+                k: "24"
+            ]
+            EXTRACT_VIRAL_READS_SHORT(reads_ch, params_map.ref_dir, short_params)
             hits_final = EXTRACT_VIRAL_READS_SHORT.out.hits_final
             inter_lca = EXTRACT_VIRAL_READS_SHORT.out.inter_lca
             inter_aligner = EXTRACT_VIRAL_READS_SHORT.out.inter_bowtie
