@@ -118,6 +118,9 @@ nextflow_process {
             assert process.failed
             assert process.errorReport.contains("Timed out after 0 minutes waiting for")
             assert process.errorReport.contains("published output file(s)")
+            // Assert that {GROUP} was expanded to "tt1" in the missing-file list
+            assert process.errorReport.contains("tt1_counts.tsv.gz")
+            assert process.errorReport.contains("tt1_extra.json")
         }
     }
 

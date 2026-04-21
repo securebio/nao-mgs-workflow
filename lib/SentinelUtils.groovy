@@ -63,7 +63,7 @@ class SentinelUtils {
     }
 
     // Resolve params.sentinel_max_wait_mins to a long, falling back to 32 if unset.
-    static long resolveMaxWaitMins(params) {
+    static long resolveMaxWaitMins(Object params) {
         return params.sentinel_max_wait_mins != null ? params.sentinel_max_wait_mins as long : 32L
     }
 

@@ -41,6 +41,9 @@ def assertSentinelValid = { outputDir, group ->
     def sentinelData = new groovy.json.JsonSlurper().parse(sentinelFile.toFile())
     assert sentinelData.downstreamStartedAt != null : "downstreamStartedAt missing"
     assert sentinelData.downstreamCompletedAt != null : "downstreamCompletedAt missing"
+    def timestampFormat = /\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} UTC \(\+0000\)/
+    assert sentinelData.downstreamStartedAt ==~ timestampFormat : "downstreamStartedAt format mismatch"
+    assert sentinelData.downstreamCompletedAt ==~ timestampFormat : "downstreamCompletedAt format mismatch"
 }
 
 nextflow_pipeline {
