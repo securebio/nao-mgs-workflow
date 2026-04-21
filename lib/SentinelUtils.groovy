@@ -15,7 +15,8 @@ class SentinelUtils {
         def placeholder = "{${wildcard}}"
         for (k in keys) {
             def fullKey = "expected-outputs-${k}"
-            def sectionMatch = (pyprojectText =~ /(?s)${fullKey} = \[(.*?)\]/)
+            def quotedKey = java.util.regex.Pattern.quote(fullKey)
+            def sectionMatch = (pyprojectText =~ /(?s)${quotedKey} = \[(.*?)\]/)
             if (sectionMatch) {
                 def patterns = (sectionMatch[0][1] =~ /"([^"]+)"/).collect { it[1] }
                 for (pattern in patterns) {
@@ -32,10 +33,11 @@ class SentinelUtils {
         return expected.sort().unique()
     }
 
-    // Poll outputDir for each expected file with exponential backoff (starting at 15s).
+    // Poll outputDir for each expected file with exponential backoff (starting at 15s,
+    // capped at 60s so the polling cadence stays responsive for long timeouts).
     // Throws on timeout with a message listing missing files.
     //   exists : closure taking a full path string and returning true if the file exists.
-    //            Callers typically pass `{ p -> file(p).exists() }` so S3 paths work via Nextflow's file() API.
+    //            Callers pass `{ p -> file(p).exists() }` so S3 paths work via Nextflow's file() API.
     static void waitForFiles(List<String> expected, String outputDir, long maxWaitMins,
                               Closure<Boolean> exists) {
         if (maxWaitMins < 0) {
@@ -54,9 +56,14 @@ class SentinelUtils {
             }
             Thread.sleep(intervalMs)
             totalWaitedMs += intervalMs
-            intervalMs = intervalMs * 2
+            intervalMs = Math.min(intervalMs * 2, 60000L)
             missing = expected.findAll { !exists.call("${outputDir}/${it}") }
         }
+    }
+
+    // Resolve params.sentinel_max_wait_mins to a long, falling back to 32 if unset.
+    static long resolveMaxWaitMins(params) {
+        return params.sentinel_max_wait_mins != null ? params.sentinel_max_wait_mins as long : 32L
     }
 
     // Current UTC timestamp in the sentinel format used across workflows.

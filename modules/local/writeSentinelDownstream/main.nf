@@ -10,7 +10,7 @@ process WRITE_SENTINEL_DOWNSTREAM {
         val(downstream_start_time)     // DOWNSTREAM start time string
         val(config)                    // Map: output_dir, pyproject_path, platform, max_wait_mins
     output:
-        tuple val(group), path("${group}_sentinel.json"), emit: sentinel
+        path("${group}_sentinel.json"), emit: sentinel
     exec:
         def pyprojectText = file(config.pyproject_path).text
         def wfKey = config.platform == "ont" ? "downstream-ont" : "downstream"

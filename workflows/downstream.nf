@@ -95,7 +95,7 @@ workflow DOWNSTREAM {
                 output_dir: "${params.base_dir}/output",
                 pyproject_path: "${projectDir}/pyproject.toml",
                 platform: params.platform,
-                max_wait_mins: params.sentinel_max_wait_mins != null ? params.sentinel_max_wait_mins : 32
+                max_wait_mins: SentinelUtils.resolveMaxWaitMins(params)
             ]
         )
 
@@ -105,5 +105,5 @@ workflow DOWNSTREAM {
         intermediates_downstream = validate_ch.blast_results
         results_downstream = results_downstream_ch
         experimental_downstream = sim_dup_ch
-        sentinel_downstream = WRITE_SENTINEL_DOWNSTREAM.out.sentinel.map { _group, sentinel -> sentinel }
+        sentinel_downstream = WRITE_SENTINEL_DOWNSTREAM.out.sentinel
 }

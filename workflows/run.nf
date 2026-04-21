@@ -135,7 +135,7 @@ workflow RUN {
             output_dir: "${params.base_dir}/output",
             pyproject_path: "${projectDir}/pyproject.toml",
             platform: params.platform,
-            max_wait_mins: params.sentinel_max_wait_mins != null ? params.sentinel_max_wait_mins : 32
+            max_wait_mins: SentinelUtils.resolveMaxWaitMins(params)
         ]
     )
 

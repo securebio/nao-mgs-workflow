@@ -28,11 +28,11 @@ nextflow_process {
         then {
             assert process.success
             def sentinel = new groovy.json.JsonSlurper().parse(
-                path(process.out.sentinel[0][1]).toFile()
+                path(process.out.sentinel[0]).toFile()
             )
             assert sentinel.downstreamStartedAt == "2026-01-01 00:00:00 UTC (+0000)"
             assert sentinel.downstreamCompletedAt != null
-            assert sentinel.downstreamCompletedAt.contains("UTC")
+            assert sentinel.downstreamCompletedAt ==~ /\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} UTC \(\+0000\)/
         }
     }
 
@@ -58,7 +58,7 @@ nextflow_process {
         then {
             assert process.success
             def sentinel = new groovy.json.JsonSlurper().parse(
-                path(process.out.sentinel[0][1]).toFile()
+                path(process.out.sentinel[0]).toFile()
             )
             assert sentinel.downstreamStartedAt == "2026-01-01 00:00:00 UTC (+0000)"
             assert sentinel.downstreamCompletedAt != null
@@ -88,7 +88,7 @@ nextflow_process {
         then {
             assert process.success
             def sentinel = new groovy.json.JsonSlurper().parse(
-                path(process.out.sentinel[0][1]).toFile()
+                path(process.out.sentinel[0]).toFile()
             )
             assert sentinel.downstreamStartedAt == "2026-01-01 00:00:00 UTC (+0000)"
             assert sentinel.downstreamCompletedAt != null
@@ -118,6 +118,30 @@ nextflow_process {
             assert process.failed
             assert process.errorReport.contains("Timed out after 0 minutes waiting for")
             assert process.errorReport.contains("published output file(s)")
+        }
+    }
+
+    test("Should fail when max_wait_mins is negative") {
+        tag "expect_fail"
+        when {
+            params {}
+            process {
+                '''
+                input[0] = "tt1"
+                input[1] = ["done"]
+                input[2] = "2026-01-01 00:00:00 UTC (+0000)"
+                input[3] = [
+                    output_dir: "${projectDir}/test-data/writeSentinelDownstream/output_shortread",
+                    pyproject_path: "${projectDir}/test-data/writeSentinelDownstream/pyproject.toml",
+                    platform: "illumina",
+                    max_wait_mins: -1
+                ]
+                '''
+            }
+        }
+        then {
+            assert process.failed
+            assert process.errorReport.contains("max_wait_mins must be >= 0")
         }
     }
 }
