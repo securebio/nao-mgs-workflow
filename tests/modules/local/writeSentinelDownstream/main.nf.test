@@ -101,12 +101,12 @@ nextflow_process {
             params {}
             process {
                 '''
-                // Point at a directory that exists but has no expected output files
+                // Point at a nonexistent path so the test is robust to future fixture additions
                 input[0] = "tt1"
                 input[1] = ["done"]
                 input[2] = "2026-01-01 00:00:00 UTC (+0000)"
                 input[3] = [
-                    output_dir: "${projectDir}/test-data/writeSentinelDownstream",
+                    output_dir: "${projectDir}/test-data/writeSentinelDownstream/nonexistent_output_dir",
                     pyproject_path: "${projectDir}/test-data/writeSentinelDownstream/pyproject.toml",
                     platform: "illumina",
                     max_wait_mins: 0

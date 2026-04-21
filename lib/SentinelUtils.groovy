@@ -30,6 +30,7 @@ class SentinelUtils {
                 }
             }
         }
+        // unique() is defensive against accidental duplicates in expected-outputs-* arrays
         return expected.sort().unique()
     }
 
