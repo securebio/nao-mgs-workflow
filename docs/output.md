@@ -68,6 +68,12 @@ Main heading represents the folder name, and subheadings represent a description
 - `{sample}_bracken.tsv.gz`: Bracken output reports in TSV format for a given sample, labeled by ribosomal status, for subset samples produced by SUBSET_TRIM.
 - `{sample}_kraken.tsv.gz`: Kraken output reports in TSV format for a given sample, labeled by ribosomal status, for subset samples produced by SUBSET_TRIM.
 
+## Downstream workflow
+
+### `logging_downstream/`
+
+- `{group}_sentinel.json`: Per-group completion marker written after all expected DOWNSTREAM output files for that group have been verified. Contains `downstreamStartedAt` and `downstreamCompletedAt` timestamps. One file is written per group in the input CSV; external systems can check for these files to confirm DOWNSTREAM completed successfully for each group.
+
 ## Index workflow
 
 Main heading represents the folder name, and subheadings describes the tool that consumes the file. Files that are consumed by multiple tools or are not consumed by any tools are put in the `General` subheading. If the file is not in the heading folder name, the relative path is given.

@@ -6,6 +6,7 @@
 - Add `experimental/` and `experimental_downstream/` output directories for staging new outputs that are not yet guaranteed to be stable across point releases.
 - Add similarity-based duplicate marking to DOWNSTREAM as an experimental output via the new `MARK_SIMILARITY_DUPLICATES` module and `rust-tools/mark_duplicates_similarity` Rust library.
 - Add sentinel file (`sentinel.json`) to the RUN workflow's `logging/` directory that validates all expected outputs have been published before writing a completion marker with timestamps. Adds configurable `sentinel_max_wait_mins` parameter. Remove `logging/time.txt` from RUN expected outputs (superseded by `sentinel.json`'s `runStartedAt` field).
+- Add per-group sentinel file (`{group}_sentinel.json`) to the DOWNSTREAM workflow's `logging_downstream/` directory that validates all expected `{GROUP}`-expanded outputs have been published before writing a completion marker with timestamps, reusing the existing `sentinel_max_wait_mins` parameter.
 
 # v3.2.1.2
 
