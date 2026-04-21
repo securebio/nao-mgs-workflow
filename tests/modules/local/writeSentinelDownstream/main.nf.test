@@ -1,0 +1,123 @@
+nextflow_process {
+
+    name "Test process WRITE_SENTINEL_DOWNSTREAM"
+    script "modules/local/writeSentinelDownstream/main.nf"
+    process "WRITE_SENTINEL_DOWNSTREAM"
+    config "tests/configs/downstream.config"
+    tag "module"
+    tag "write_sentinel_downstream"
+
+    test("Should write sentinel when all expected outputs exist") {
+        tag "expect_success"
+        when {
+            params {}
+            process {
+                '''
+                input[0] = "tt1"
+                input[1] = ["done"]
+                input[2] = "2026-01-01 00:00:00 UTC (+0000)"
+                input[3] = [
+                    output_dir: "${projectDir}/test-data/writeSentinelDownstream/output_shortread",
+                    pyproject_path: "${projectDir}/test-data/writeSentinelDownstream/pyproject.toml",
+                    platform: "illumina",
+                    max_wait_mins: 1
+                ]
+                '''
+            }
+        }
+        then {
+            assert process.success
+            def sentinel = new groovy.json.JsonSlurper().parse(
+                path(process.out.sentinel[0][1]).toFile()
+            )
+            assert sentinel.downstreamStartedAt == "2026-01-01 00:00:00 UTC (+0000)"
+            assert sentinel.downstreamCompletedAt != null
+            assert sentinel.downstreamCompletedAt.contains("UTC")
+        }
+    }
+
+    test("Should write sentinel for ONT (uses expected-outputs-downstream-ont)") {
+        tag "expect_success"
+        when {
+            params {}
+            process {
+                '''
+                // ONT fixture lacks short-read-only files (e.g. extra.json); ONT key must be used
+                input[0] = "tt1"
+                input[1] = ["done"]
+                input[2] = "2026-01-01 00:00:00 UTC (+0000)"
+                input[3] = [
+                    output_dir: "${projectDir}/test-data/writeSentinelDownstream/output_ont",
+                    pyproject_path: "${projectDir}/test-data/writeSentinelDownstream/pyproject.toml",
+                    platform: "ont",
+                    max_wait_mins: 1
+                ]
+                '''
+            }
+        }
+        then {
+            assert process.success
+            def sentinel = new groovy.json.JsonSlurper().parse(
+                path(process.out.sentinel[0][1]).toFile()
+            )
+            assert sentinel.downstreamStartedAt == "2026-01-01 00:00:00 UTC (+0000)"
+            assert sentinel.downstreamCompletedAt != null
+        }
+    }
+
+    test("Should write sentinel when output directory is on S3") {
+        tag "expect_success"
+        when {
+            params {}
+            process {
+                '''
+                // Uses existing files in the nao-testing bucket with a fixture
+                // pyproject that has patterns matching those files (no {GROUP} expansion)
+                input[0] = "fixture_group"
+                input[1] = ["done"]
+                input[2] = "2026-01-01 00:00:00 UTC (+0000)"
+                input[3] = [
+                    output_dir: "s3://nao-testing/tiny-test",
+                    pyproject_path: "${projectDir}/test-data/writeSentinelDownstream/pyproject_s3.toml",
+                    platform: "illumina",
+                    max_wait_mins: 1
+                ]
+                '''
+            }
+        }
+        then {
+            assert process.success
+            def sentinel = new groovy.json.JsonSlurper().parse(
+                path(process.out.sentinel[0][1]).toFile()
+            )
+            assert sentinel.downstreamStartedAt == "2026-01-01 00:00:00 UTC (+0000)"
+            assert sentinel.downstreamCompletedAt != null
+        }
+    }
+
+    test("Should fail when expected outputs are missing") {
+        tag "expect_fail"
+        when {
+            params {}
+            process {
+                '''
+                // Point at a directory that exists but has no expected output files
+                input[0] = "tt1"
+                input[1] = ["done"]
+                input[2] = "2026-01-01 00:00:00 UTC (+0000)"
+                input[3] = [
+                    output_dir: "${projectDir}/test-data/writeSentinelDownstream",
+                    pyproject_path: "${projectDir}/test-data/writeSentinelDownstream/pyproject.toml",
+                    platform: "illumina",
+                    max_wait_mins: 0
+                ]
+                '''
+            }
+        }
+        then {
+            assert process.failed
+            assert process.errorReport.contains("Timed out after 0 minutes waiting for")
+            assert process.errorReport.contains("published output file(s)")
+        }
+    }
+}
