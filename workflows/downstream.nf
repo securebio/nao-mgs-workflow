@@ -17,6 +17,7 @@ include { COPY_FILE_BARE as COPY_INPUT } from "../modules/local/copyFile"
 include { COPY_FILE_BARE as COPY_TIME } from "../modules/local/copyFile"
 include { SORT_TSV as SORT_ONT_HITS } from "../modules/local/sortTsv"
 include { ADD_FIXED_COLUMN as PAD_ONT_COLUMNS } from "../modules/local/addFixedColumn"
+include { WRITE_SENTINEL_DOWNSTREAM } from "../modules/local/writeSentinelDownstream"
 
 /*****************
 | MAIN WORKFLOWS |
@@ -74,14 +75,35 @@ workflow DOWNSTREAM {
         time_file = start_time_str.map { it + "\n" }.collectFile(name: "time.txt")
         time_ch = COPY_TIME(time_file, "time.txt")
 
+        // Pre-define publish-channel aggregates so we can both emit them and feed them into the sentinel barrier
+        input_downstream_ch = params_ch.mix(input_file_ch)
+        logging_downstream_ch = time_ch.mix(pyproject_ch)
+        results_downstream_ch = dup_output_ch.mix(
+                                    clade_counts_ch,
+                                    validate_ch.annotated_hits,
+                                    concat_ch.other,
+                                    concat_ch.fastp_json)
+
+        // Validate published outputs and write per-group sentinels
+        groups_only_ch = load_ch.groups
+            .map { _label, _sample, group -> group }
+            .unique()
+        WRITE_SENTINEL_DOWNSTREAM(
+            groups_only_ch,
+            input_downstream_ch.mix(logging_downstream_ch, results_downstream_ch).collect(),
+            start_time_str, [
+                output_dir: "${params.base_dir}/output",
+                pyproject_path: "${projectDir}/pyproject.toml",
+                platform: params.platform,
+                max_wait_mins: params.sentinel_max_wait_mins != null ? params.sentinel_max_wait_mins : 32
+            ]
+        )
+
     emit:
-        input_downstream = params_ch.mix(input_file_ch)
-        logging_downstream = time_ch.mix(pyproject_ch)
+        input_downstream = input_downstream_ch
+        logging_downstream = logging_downstream_ch
         intermediates_downstream = validate_ch.blast_results
-        results_downstream = dup_output_ch.mix(
-                                clade_counts_ch,
-                                validate_ch.annotated_hits,
-                                concat_ch.other,
-                                concat_ch.fastp_json)
+        results_downstream = results_downstream_ch
         experimental_downstream = sim_dup_ch
+        sentinel_downstream = WRITE_SENTINEL_DOWNSTREAM.out.sentinel.map { _group, sentinel -> sentinel }
 }

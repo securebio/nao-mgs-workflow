@@ -17,7 +17,7 @@ def getExpectedOutputs = { pyprojectPath, workflowKey, sampleOrGroupName ->
 
 // Get observed output files, excluding intermediates and trace files
 def getObservedOutputs = { outputDir ->
-    def excludePatterns = ["intermediates", "intermediates_downstream", "trace", "experimental", "experimental_downstream"]
+    def excludePatterns = ["intermediates", "intermediates_downstream", "trace", "experimental", "experimental_downstream", "sentinel"]
     def observedFiles = []
     outputDir.eachFileRecurse(FILES) { file ->
         def relPath = outputDir.relativize(file).toString()
@@ -32,6 +32,15 @@ def getResultPaths = { outputDir, expectedFiles ->
     return expectedFiles
         .findAll { it.startsWith("results_downstream/") }
         .collect { path(outputDir + "/" + it) }
+}
+
+// Verify per-group sentinel.json exists and contains expected fields
+def assertSentinelValid = { outputDir, group ->
+    def sentinelFile = path("${outputDir}/logging_downstream/${group}_sentinel.json")
+    assert sentinelFile.exists() : "${group}_sentinel.json not found"
+    def sentinelData = new groovy.json.JsonSlurper().parse(sentinelFile.toFile())
+    assert sentinelData.downstreamStartedAt != null : "downstreamStartedAt missing"
+    assert sentinelData.downstreamCompletedAt != null : "downstreamCompletedAt missing"
 }
 
 nextflow_pipeline {
@@ -62,6 +71,7 @@ nextflow_pipeline {
             }
             assert experimentalFiles.size() == 1
             assert experimentalFiles[0] == "tt1_duplicate_reads_similarity.tsv.gz"
+            assertSentinelValid("${launchDir}/output", "tt1")
         }
     }
 
@@ -83,6 +93,7 @@ nextflow_pipeline {
             // Uses new File() instead of path() because path() fails if the directory doesn't exist
             def experimentalDir = new File("${launchDir}/output/experimental_downstream")
             assert !experimentalDir.exists() || experimentalDir.list().length == 0
+            assertSentinelValid("${launchDir}/output", "tt1")
         }
     }
 
@@ -112,6 +123,7 @@ nextflow_pipeline {
             def header = lines[0].split("\t") as List
             assert "sim_dup_exemplar" in header
             assert "sim_dup_group_size" in header
+            assertSentinelValid("${launchDir}/output", "empty_group")
         }
     }
 
