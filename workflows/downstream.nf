@@ -90,7 +90,7 @@ workflow DOWNSTREAM {
             .unique()
         WRITE_SENTINEL_DOWNSTREAM(
             groups_only_ch,
-            input_downstream_ch.mix(logging_downstream_ch, results_downstream_ch).collect(),
+            input_downstream_ch.mix(logging_downstream_ch, results_downstream_ch, sim_dup_ch).collect(),
             start_time_str, [
                 output_dir: "${params.base_dir}/output",
                 pyproject_path: "${projectDir}/pyproject.toml",

@@ -2,6 +2,8 @@
 // then write a per-group {group}_sentinel.json completion marker with timestamps.
 // Runs once per group; uses exec: on the head node for native S3 support via file().exists().
 // Shared regex/poll/timestamp helpers live in lib/SentinelUtils.groovy.
+// Note: if the per-group fan-out channel is empty (e.g. a groups TSV with only a header),
+// this process does not run and no sentinel is produced.
 process WRITE_SENTINEL_DOWNSTREAM {
     executor 'local'
     input:
