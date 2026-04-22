@@ -59,8 +59,9 @@ nextflow_workflow {
         then {
             assert workflow.success
             assert workflow.out.pipeline_pyproject_path.flatten().any { path(it).getFileName().toString() == "pyproject.toml" }
-            // Legacy fallback creates a temp file with .toml extension
-            assert workflow.out.index_pyproject_path.flatten().any { path(it).getFileName().toString().endsWith(".toml") }
+            // Legacy fallback creates a temp file via File.createTempFile("index-pyproject", ".toml"),
+            // which guarantees the filename starts with the prefix.
+            assert workflow.out.index_pyproject_path.flatten().any { path(it).getFileName().toString().startsWith("index-pyproject") }
         }
     }
 

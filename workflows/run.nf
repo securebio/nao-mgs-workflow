@@ -14,8 +14,51 @@ include { SUBSET_TRIM } from "../subworkflows/local/subsetTrim"
 include { RUN_QC } from "../subworkflows/local/runQc"
 include { PROFILE} from "../subworkflows/local/profile"
 include { CHECK_VERSION_COMPATIBILITY } from "../subworkflows/local/checkVersionCompatibility"
+<<<<<<< HEAD
 include { PREPARE_INPUT_LOGGING } from "../subworkflows/local/prepareInputLogging"
 
+||||||| 60e6e2f8
+include { COPY_FILE_BARE as COPY_INDEX_PARAMS } from "../modules/local/copyFile"
+include { COPY_FILE_BARE as COPY_INDEX_PYPROJECT } from "../modules/local/copyFile"
+include { COPY_FILE_BARE as COPY_PYPROJECT } from "../modules/local/copyFile"
+include { COPY_FILE_BARE as COPY_SAMPLESHEET } from "../modules/local/copyFile"
+include { COPY_FILE_BARE as COPY_ADAPTERS } from "../modules/local/copyFile"
+
+/***********************
+| AUXILIARY FUNCTIONS |
+***********************/
+
+def getIndexPyprojectPath(ref_dir) {
+    /* Get the pyproject.toml path for an index, with backwards compatibility
+    for old indexes that use separate version text files. */
+    def index_pyproject_file = file("${ref_dir}/logging/pyproject.toml")
+    if (index_pyproject_file.exists()) {
+        return index_pyproject_file
+    }
+    // Fall back to old format - generate pyproject content from old files
+    def index_version = file("${ref_dir}/logging/pipeline-version.txt").text.trim()
+    def index_min_pipeline = file("${ref_dir}/logging/index-min-pipeline-version.txt").text.trim()
+    def pyproject_content = """\
+[project]
+version = "${index_version}"
+
+[tool.mgs-workflow]
+index-min-pipeline-version = "${index_min_pipeline}"
+"""
+    def temp_file = File.createTempFile("index-pyproject", ".toml")
+    temp_file.text = pyproject_content
+    temp_file.deleteOnExit()
+    return file(temp_file.absolutePath)
+}
+
+=======
+include { COPY_FILE_BARE as COPY_INDEX_PARAMS } from "../modules/local/copyFile"
+include { COPY_FILE_BARE as COPY_INDEX_PYPROJECT } from "../modules/local/copyFile"
+include { COPY_FILE_BARE as COPY_PYPROJECT } from "../modules/local/copyFile"
+include { COPY_FILE_BARE as COPY_SAMPLESHEET } from "../modules/local/copyFile"
+include { COPY_FILE_BARE as COPY_ADAPTERS } from "../modules/local/copyFile"
+
+>>>>>>> dev
 /*****************
 | MAIN WORKFLOWS |
 *****************/
@@ -23,9 +66,19 @@ include { PREPARE_INPUT_LOGGING } from "../subworkflows/local/prepareInputLoggin
 // Complete primary workflow
 workflow RUN {
     main:
+<<<<<<< HEAD
     // Setup
     compat_ch = CHECK_VERSION_COMPATIBILITY(params.ref_dir, projectDir)
     samplesheet_ch = LOAD_SAMPLESHEET(params.sample_sheet, params.platform, false)
+||||||| 60e6e2f8
+    // Check index/pipeline version compatibility
+    pipeline_pyproject_path = file("${projectDir}/pyproject.toml")
+    index_pyproject_path = getIndexPyprojectPath(params.ref_dir)
+    CHECK_VERSION_COMPATIBILITY(pipeline_pyproject_path, index_pyproject_path)
+=======
+    // Check index/pipeline version compatibility
+    CHECK_VERSION_COMPATIBILITY(params.ref_dir, projectDir)
+>>>>>>> dev
 
     // Extract human-viral reads
     if ( params.platform == "ont" ) {

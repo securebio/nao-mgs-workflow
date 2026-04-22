@@ -42,11 +42,11 @@ index-min-pipeline-version = "${index_min_pipeline}"
 
 workflow CHECK_VERSION_COMPATIBILITY {
     take:
-        ref_dir       // Index directory (contains logging/pyproject.toml)
-        pipeline_dir  // Pipeline root directory (contains pyproject.toml)
+        ref_dir      // Index directory (contains logging/pyproject.toml)
+        project_dir  // Local project directory for the current pipeline execution (contains pyproject.toml)
     main:
         // Derive pyproject.toml paths from directories
-        pipeline_pyproject_path = file("${pipeline_dir}/pyproject.toml")
+        pipeline_pyproject_path = file("${project_dir}/pyproject.toml")
         index_pyproject_path = getIndexPyprojectPath(ref_dir)
 
         // Extract version info from pyproject.toml files using a process
