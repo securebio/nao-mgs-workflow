@@ -26,18 +26,15 @@ nextflow_workflow {
             assert workflow.out.input_run.size() == 4
             def inputFiles = workflow.out.input_run.collect { path(it).getFileName().toString() } as Set
             assert inputFiles == ["params-index.json", "samplesheet.csv", "adapters.fasta", "params-run.json"] as Set
-            // Verify logging_run channel contains 3 expected files
-            assert workflow.out.logging_run.size() == 3
+            // Verify logging_run channel contains 2 expected files
+            assert workflow.out.logging_run.size() == 2
             def loggingFiles = workflow.out.logging_run.collect { path(it).getFileName().toString() } as Set
-            assert loggingFiles == ["pyproject-index.toml", "time.txt", "pyproject.toml"] as Set
+            assert loggingFiles == ["pyproject-index.toml", "pyproject.toml"] as Set
             // Verify params JSON contains expected keys
             def paramsFile = workflow.out.input_run.find { path(it).getFileName().toString() == "params-run.json" }
             def paramsText = path(paramsFile).text
             assert paramsText.contains('"ref_dir"')
             assert paramsText.contains('"sample_sheet"')
-            // Verify time.txt contains the start time
-            def timeFile = workflow.out.logging_run.find { path(it).getFileName().toString() == "time.txt" }
-            assert path(timeFile).text.trim() == "2026-01-21 13:48:36 UTC (+0000)"
         }
     }
 
