@@ -11,7 +11,7 @@ class SentinelUtils {
     // Assumes array values in pyproject.toml do not contain literal ] characters.
     static List<String> getExpectedOutputs(String pyprojectText, List<String> keys,
                                             String wildcard, List<String> names) {
-        def expected = []
+        List<String> expected = []
         def placeholder = "{${wildcard}}"
         for (k in keys) {
             def fullKey = "expected-outputs-${k}"
