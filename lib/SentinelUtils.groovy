@@ -1,4 +1,4 @@
-// Shared helpers for the WRITE_SENTINEL and WRITE_SENTINEL_DOWNSTREAM modules.
+// Shared helpers for the WRITE_SENTINEL_RUN and WRITE_SENTINEL_DOWNSTREAM modules.
 // Files in lib/ are automatically loaded by Nextflow and callable from exec: blocks.
 
 class SentinelUtils {
@@ -34,9 +34,8 @@ class SentinelUtils {
         return expected.sort().unique()
     }
 
-    // Poll outputDir for each expected file with exponential backoff (starting at 15s,
-    // capped at 60s so the polling cadence stays responsive for long timeouts).
-    // Throws on timeout with a message listing missing files.
+    // Poll outputDir for each expected file with exponential backoff starting at 15s
+    // (each interval doubles, uncapped). Throws on timeout with a message listing missing files.
     //   exists : closure taking a full path string and returning true if the file exists.
     //            Callers pass `{ p -> file(p).exists() }` so S3 paths work via Nextflow's file() API.
     static void waitForFiles(List<String> expected, String outputDir, long maxWaitMins,
@@ -52,12 +51,12 @@ class SentinelUtils {
             if (totalWaitedMs >= maxWaitMs) {
                 throw new RuntimeException(
                     "Timed out after ${maxWaitMins} minutes waiting for " +
-                    "${missing.size()} published output file(s):\n  " +
+                    "${missing.size()}/${expected.size()} remaining published output file(s):\n  " +
                     missing.join("\n  "))
             }
             Thread.sleep(intervalMs)
             totalWaitedMs += intervalMs
-            intervalMs = Math.min(intervalMs * 2, 60000L)
+            intervalMs = intervalMs * 2
             missing = expected.findAll { !exists.call("${outputDir}/${it}") }
         }
     }

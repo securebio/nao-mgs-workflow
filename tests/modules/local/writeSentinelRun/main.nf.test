@@ -1,11 +1,11 @@
 nextflow_process {
 
-    name "Test process WRITE_SENTINEL"
-    script "modules/local/writeSentinel/main.nf"
-    process "WRITE_SENTINEL"
+    name "Test process WRITE_SENTINEL_RUN"
+    script "modules/local/writeSentinelRun/main.nf"
+    process "WRITE_SENTINEL_RUN"
     config "tests/configs/run.config"
     tag "module"
-    tag "write_sentinel"
+    tag "write_sentinel_run"
 
     test("Should write sentinel when all expected outputs exist") {
         tag "expect_success"
@@ -17,10 +17,10 @@ nextflow_process {
                 input[1] = ["sample1"]
                 input[2] = "2026-01-01 00:00:00 UTC (+0000)"
                 input[3] = [
-                    output_dir: "${projectDir}/test-data/writeSentinel/output_shortread",
-                    pyproject_path: "${projectDir}/test-data/writeSentinel/pyproject.toml",
+                    output_dir: "${projectDir}/test-data/writeSentinelRun/output_shortread",
+                    pyproject_path: "${projectDir}/test-data/writeSentinelRun/pyproject.toml",
                     platform: "illumina",
-                    max_wait_mins: 1
+                    sentinel_max_wait_mins: 1
                 ]
                 '''
             }
@@ -48,10 +48,10 @@ nextflow_process {
                 input[1] = ["sample1"]
                 input[2] = "2026-01-01 00:00:00 UTC (+0000)"
                 input[3] = [
-                    output_dir: "${projectDir}/test-data/writeSentinel/output_ont",
-                    pyproject_path: "${projectDir}/test-data/writeSentinel/pyproject.toml",
+                    output_dir: "${projectDir}/test-data/writeSentinelRun/output_ont",
+                    pyproject_path: "${projectDir}/test-data/writeSentinelRun/pyproject.toml",
                     platform: "ont",
-                    max_wait_mins: 1
+                    sentinel_max_wait_mins: 1
                 ]
                 '''
             }
@@ -79,9 +79,9 @@ nextflow_process {
                 input[2] = "2026-01-01 00:00:00 UTC (+0000)"
                 input[3] = [
                     output_dir: "s3://nao-testing/tiny-test",
-                    pyproject_path: "${projectDir}/test-data/writeSentinel/pyproject_s3.toml",
+                    pyproject_path: "${projectDir}/test-data/writeSentinelRun/pyproject_s3.toml",
                     platform: "illumina",
-                    max_wait_mins: 1
+                    sentinel_max_wait_mins: 1
                 ]
                 '''
             }
@@ -107,10 +107,10 @@ nextflow_process {
                 input[1] = ["sample1"]
                 input[2] = "2026-01-01 00:00:00 UTC (+0000)"
                 input[3] = [
-                    output_dir: "${projectDir}/test-data/writeSentinel",
-                    pyproject_path: "${projectDir}/test-data/writeSentinel/pyproject.toml",
+                    output_dir: "${projectDir}/test-data/writeSentinelRun",
+                    pyproject_path: "${projectDir}/test-data/writeSentinelRun/pyproject.toml",
                     platform: "illumina",
-                    max_wait_mins: 0
+                    sentinel_max_wait_mins: 0
                 ]
                 '''
             }

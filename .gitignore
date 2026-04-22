@@ -30,6 +30,7 @@ package.json
 !.claude/agents
 .review-loop/
 uv.lock
+tmp/**
 
 # Post-processing build artifacts
 post-processing/bin/
