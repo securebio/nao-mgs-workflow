@@ -1,16 +1,19 @@
-# v3.2.1.3-dev
+# v3.2.1.3
 
-- Make `bin/run-nf-test.sh` and `bin/run_nf_test_parallel.py` symlink-safe for downstream repos.
+## New workflow outputs
+
+- Add `experimental/` and `experimental_downstream/` output directories for staging new outputs that are not yet guaranteed to be stable across point releases
+- Add similarity-based duplicate marking to DOWNSTREAM as an experimental output via the new `MARK_SIMILARITY_DUPLICATES` module and `rust-tools/mark_duplicates_similarity` Rust library
+- Add in-workflow verification of expected outputs to RUN and DOWNSTREAM via `WRITE_SENTINEL_*` processes. These check all expected outputs have been published, then write sentinel JSON files to output (`logging/sentinel.json` for RUN, `logging_downstream/{GROUP}_sentinel.json` for DOWNSTREAM)
+
+## Cleanup and best practice
+
+- Make `bin/run-nf-test.sh` and `bin/run_nf_test_parallel.py` symlink-safe for dependent repos
 - Add authenticated ECR Public login to Trivy scan workflow to avoid anonymous pull rate limits
-- Add CVE-2026-32280, CVE-2026-32282 (Go stdlib in ncbi_datasets container) and CVE-2026-40192 (Pillow in multiqc container) to `.trivyignore`. No upstream fixes available; updated TODO with latest check results.
-- Add CVE-2026-32281, CVE-2026-32283 (Go stdlib HIGH CVEs in ncbi_datasets container) to `.trivyignore`. Not practically exploitable in our context (TLS client-only, no untrusted cert chains, no TLS 1.3 server); no upstream fix available.
-- Add `experimental/` and `experimental_downstream/` output directories for staging new outputs that are not yet guaranteed to be stable across point releases.
-- Add similarity-based duplicate marking to DOWNSTREAM as an experimental output via the new `MARK_SIMILARITY_DUPLICATES` module and `rust-tools/mark_duplicates_similarity` Rust library.
-- Add sentinel file (`sentinel.json`) to the RUN workflow's `logging/` directory that validates all expected outputs have been published before writing a completion marker with timestamps. Adds configurable `sentinel_max_wait_mins` parameter. Remove `logging/time.txt` from RUN expected outputs (superseded by `sentinel.json`'s `runStartedAt` field).
-- Add per-group sentinel file (`{group}_sentinel.json`) to the DOWNSTREAM workflow's `logging_downstream/` directory that validates all expected `{GROUP}`-expanded outputs have been published before writing a completion marker with timestamps, reusing the existing `sentinel_max_wait_mins` parameter. Remove `logging_downstream/time.txt` from DOWNSTREAM expected outputs (superseded by `{group}_sentinel.json`'s `downstreamStartedAt` field).
-- Refactor `CHECK_VERSION_COMPATIBILITY` subworkflow to derive pyproject paths internally from `ref_dir` and `pipeline_dir`, simplifying the interface in `workflows/run.nf`.
-- Extract input/logging file preparation from the RUN workflow into a new `PREPARE_INPUT_LOGGING` subworkflow.
-- Extract viral read extraction dispatch into a new `EXTRACT_VIRAL_READS` subworkflow and simplify the `PROFILE` interface.
+- Add several Trivy CVEs to `.trivyignore` (no fix currently available; expiry set in June 2026 to force review)
+- Extract shared Groovy code for sentinel file generation to `lib/SentinelUtils.groovy`
+- Remove `logging/time.txt` and `logging_downstream/time.txt`; superseded by new sentinel JSONs
+- Make RUN workflow clearer and more readable by moving derived variables and conditional statements into subworkflows, including new `PREPARE_INPUT_LOGGING` and `EXTRACT_VIRAL_READS` subworkflows
 
 # v3.2.1.2
 
