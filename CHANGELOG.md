@@ -1,3 +1,7 @@
+# v3.2.1.4-dev
+
+- Add AdapterRemoval v2.3.4 container (`containers/adapterremoval.yml`) and `withLabel: AdapterRemoval` block in `configs/containers.config`, making the image available for downstream pipelines to consume. No pipeline modules use this container yet.
+
 # v3.2.1.3
 
 ## New workflow outputs
