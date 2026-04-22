@@ -8,45 +8,13 @@
 
 include { LOAD_SAMPLESHEET } from "../subworkflows/local/loadSampleSheet"
 include { COUNT_READS } from "../modules/local/countReads"
-include { EXTRACT_VIRAL_READS_SHORT } from "../subworkflows/local/extractViralReadsShort"
-include { EXTRACT_VIRAL_READS_ONT } from "../subworkflows/local/extractViralReadsONT"
+include { EXTRACT_VIRAL_READS } from "../subworkflows/local/extractViralReads"
 include { SUBSET_TRIM } from "../subworkflows/local/subsetTrim"
 include { RUN_QC } from "../subworkflows/local/runQc"
 include { PROFILE} from "../subworkflows/local/profile"
 include { CHECK_VERSION_COMPATIBILITY } from "../subworkflows/local/checkVersionCompatibility"
-include { COPY_FILE_BARE as COPY_INDEX_PARAMS } from "../modules/local/copyFile"
-include { COPY_FILE_BARE as COPY_INDEX_PYPROJECT } from "../modules/local/copyFile"
-include { COPY_FILE_BARE as COPY_PYPROJECT } from "../modules/local/copyFile"
-include { COPY_FILE_BARE as COPY_SAMPLESHEET } from "../modules/local/copyFile"
-include { COPY_FILE_BARE as COPY_ADAPTERS } from "../modules/local/copyFile"
+include { PREPARE_INPUT_LOGGING } from "../subworkflows/local/prepareInputLogging"
 include { WRITE_SENTINEL } from "../modules/local/writeSentinel"
-
-/***********************
-| AUXILIARY FUNCTIONS |
-***********************/
-
-def getIndexPyprojectPath(ref_dir) {
-    /* Get the pyproject.toml path for an index, with backwards compatibility
-    for old indexes that use separate version text files. */
-    def index_pyproject_file = file("${ref_dir}/logging/pyproject.toml")
-    if (index_pyproject_file.exists()) {
-        return index_pyproject_file
-    }
-    // Fall back to old format - generate pyproject content from old files
-    def index_version = file("${ref_dir}/logging/pipeline-version.txt").text.trim()
-    def index_min_pipeline = file("${ref_dir}/logging/index-min-pipeline-version.txt").text.trim()
-    def pyproject_content = """\
-[project]
-version = "${index_version}"
-
-[tool.mgs-workflow]
-index-min-pipeline-version = "${index_min_pipeline}"
-"""
-    def temp_file = File.createTempFile("index-pyproject", ".toml")
-    temp_file.text = pyproject_content
-    temp_file.deleteOnExit()
-    return file(temp_file.absolutePath)
-}
 
 /*****************
 | MAIN WORKFLOWS |
@@ -55,98 +23,38 @@ index-min-pipeline-version = "${index_min_pipeline}"
 // Complete primary workflow
 workflow RUN {
     main:
-    // Check index/pipeline version compatibility
-    pipeline_pyproject_path = file("${projectDir}/pyproject.toml")
-    index_pyproject_path = getIndexPyprojectPath(params.ref_dir)
-    CHECK_VERSION_COMPATIBILITY(pipeline_pyproject_path, index_pyproject_path)
-
-    // Setting reference paths
-    kraken_db_path = "${params.ref_dir}/results/kraken_db"
-
-    // Load samplesheet and check platform
-    LOAD_SAMPLESHEET(params.sample_sheet, params.platform, false)
-    samplesheet_ch = LOAD_SAMPLESHEET.out.samplesheet
-    start_time_str = LOAD_SAMPLESHEET.out.start_time_str
-    single_end_ch = LOAD_SAMPLESHEET.out.single_end
-
-    // Count reads in files
-    COUNT_READS(samplesheet_ch, single_end_ch)
-
-    // Extract and count human-viral reads
-    if ( params.platform == "ont" ) {
-        EXTRACT_VIRAL_READS_ONT(samplesheet_ch, params.ref_dir, params.taxid_artificial, params.db_download_timeout)
-        hits_final = EXTRACT_VIRAL_READS_ONT.out.hits_final
-        inter_lca = EXTRACT_VIRAL_READS_ONT.out.inter_lca
-        inter_aligner = EXTRACT_VIRAL_READS_ONT.out.inter_minimap2
-        bbduk_match = Channel.empty()
-        bbduk_trimmed = Channel.empty()
-     } else {
-        def short_params = params.collectEntries { k, v -> [k, v] }
-        short_params["aln_score_threshold"] = params.bt2_score_threshold // rename to match
-        short_params["min_kmer_hits"] = "1"
-        short_params["bbduk_suffix"] = "viral"
-        short_params["k"] = "24" 
-        EXTRACT_VIRAL_READS_SHORT(samplesheet_ch, params.ref_dir, short_params)
-        hits_final = EXTRACT_VIRAL_READS_SHORT.out.hits_final
-        inter_lca = EXTRACT_VIRAL_READS_SHORT.out.inter_lca
-        inter_aligner = EXTRACT_VIRAL_READS_SHORT.out.inter_bowtie
-        bbduk_match = EXTRACT_VIRAL_READS_SHORT.out.bbduk_match
-        bbduk_trimmed = EXTRACT_VIRAL_READS_SHORT.out.bbduk_trimmed
-    }
-
-    // Subset reads to target number, and trim adapters
-    def subset_trim_params = params.collectEntries { k, v -> [k, v] }
-    SUBSET_TRIM(samplesheet_ch, single_end_ch, subset_trim_params)
-
-    // Run QC on subset reads before and after adapter trimming
-    RUN_QC(SUBSET_TRIM.out.subset_reads, SUBSET_TRIM.out.trimmed_subset_reads, single_end_ch)
-
-    // Profile ribosomal and non-ribosomal reads of the subset adapter-trimmed reads
-    def profile_params = params.collectEntries { k, v -> [k, v] } + [min_kmer_fraction: "0.4", k: "27", ribo_suffix: "ribo"]
-    PROFILE(SUBSET_TRIM.out.trimmed_subset_reads, kraken_db_path, params.ref_dir, single_end_ch, profile_params)
-
-    // Get index files for publishing
-    index_params_path = file("${params.ref_dir}/input/index-params.json")
-    index_params_ch = COPY_INDEX_PARAMS(Channel.fromPath(index_params_path), "params-index.json")
-    index_pyproject_ch = COPY_INDEX_PYPROJECT(Channel.fromPath(index_pyproject_path), "pyproject-index.toml")
-
-    // Prepare other publishing variables
-    params_str = groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(params))
-    params_ch = Channel.of(params_str).collectFile(name: "params-run.json")
-    // Note: we send these input/logging files through a COPY_FILE_BASE process
-    // because nextflow 25.04 now only publishes files that have passed through the working directory.
-    // We first tried collectFile() as an alternative; however it intermittantly gives serialization errors.
-    pyproject_ch = COPY_PYPROJECT(Channel.fromPath(pipeline_pyproject_path), "pyproject.toml")
-    samplesheet_ch = COPY_SAMPLESHEET(Channel.fromPath(params.sample_sheet), "samplesheet.csv")
-    adapters_ch = COPY_ADAPTERS(Channel.fromPath(params.adapters), "adapters.fasta")
-
-    // Pre-define expected-output channels for reuse in dependency collection and emit
-    input_run_ch = index_params_ch.mix(samplesheet_ch, adapters_ch, params_ch)
-    logging_run_ch = index_pyproject_ch.mix(pyproject_ch)
-    qc_results_run_ch = COUNT_READS.out.output.mix(
-        RUN_QC.out.pre_qc, RUN_QC.out.post_qc, SUBSET_TRIM.out.fastp_json)
-    other_results_run_ch = hits_final.mix(PROFILE.out.bracken, PROFILE.out.kraken)
-
-    // Validate published outputs and write sentinel
-    WRITE_SENTINEL(
-        input_run_ch.mix(logging_run_ch, qc_results_run_ch, other_results_run_ch).collect(),
-        LOAD_SAMPLESHEET.out.samplesheet.map { sample, _reads -> sample }.collect(),
-        start_time_str, [
+        // Setup
+        compat_ch = CHECK_VERSION_COMPATIBILITY(params.ref_dir, projectDir)
+        samplesheet_ch = LOAD_SAMPLESHEET(params.sample_sheet, params.platform, false)
+        // Results
+        viral_ch = EXTRACT_VIRAL_READS(samplesheet_ch.samplesheet, params)
+        count_ch = COUNT_READS(samplesheet_ch.samplesheet, samplesheet_ch.single_end)
+        subset_ch = SUBSET_TRIM(samplesheet_ch.samplesheet, samplesheet_ch.single_end, params)
+        qc_ch = RUN_QC(subset_ch.subset_reads, subset_ch.trimmed_subset_reads, samplesheet_ch.single_end)
+        def profile_params = params + [min_kmer_fraction: "0.4", k: "27", ribo_suffix: "ribo"]
+        profile_ch = PROFILE(subset_ch.trimmed_subset_reads, samplesheet_ch.single_end, profile_params)
+        // Prepare output streams
+        input_log_ch = PREPARE_INPUT_LOGGING(params, compat_ch.index_pyproject_path, compat_ch.pipeline_pyproject_path, samplesheet_ch.start_time_str)
+        qc_results_ch = count_ch.output.mix(qc_ch.pre_qc, qc_ch.post_qc, subset_ch.fastp_json)
+        other_results_ch = viral_ch.hits_final.mix(profile_ch.bracken, profile_ch.kraken)
+        // Validate published outputs and write sentinel
+        expected_ch = input_log_ch.input_run.mix(input_log_ch.logging_run, qc_results_ch, other_results_ch)
+        sentinel_samples = samplesheet_ch.samplesheet.map { sample, _reads -> sample }.collect()
+        sentinel_params = [
             output_dir: "${params.base_dir}/output",
             pyproject_path: "${projectDir}/pyproject.toml",
             platform: params.platform,
             max_wait_mins: params.sentinel_max_wait_mins != null ? params.sentinel_max_wait_mins : 32
         ]
-    )
-
+        sentinel_ch = WRITE_SENTINEL(expected_ch.collect(), sentinel_samples, samplesheet_ch.start_time_str, sentinel_params)
     emit:
-        input_run = input_run_ch
-        logging_run = logging_run_ch
-        intermediates_run = inter_lca.mix(inter_aligner)
-        reads_raw_viral = bbduk_match
-        reads_trimmed_viral = bbduk_trimmed
-        qc_results_run = qc_results_run_ch
-        other_results_run = other_results_run_ch
+        input_run = input_log_ch.input_run
+        logging_run = input_log_ch.logging_run
+        intermediates_run = viral_ch.inter_lca.mix(viral_ch.inter_aligner)
+        reads_raw_viral = viral_ch.bbduk_match
+        reads_trimmed_viral = viral_ch.bbduk_trimmed
+        qc_results_run = qc_results_ch
+        other_results_run = other_results_ch
         experimental_run = Channel.empty()
         sentinel_run = WRITE_SENTINEL.out.sentinel
 }

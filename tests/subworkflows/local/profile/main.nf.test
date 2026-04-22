@@ -16,20 +16,11 @@ nextflow_workflow {
             params {}
             workflow {
                 '''
-                def profile_params = [
-                    min_kmer_fraction: "0.4",
-                    k: "27",
-                    ribo_suffix: "ribo",
-                    bracken_threshold: "1",
-                    platform: "illumina",
-                    db_download_timeout: params.db_download_timeout
-                ]
+                def profile_params = params + [min_kmer_fraction: "0.4", k: "27", ribo_suffix: "ribo"]
                 input[0] = Channel.of("test")
                     | combine(Channel.of("${projectDir}/test-data/toy-data/empty_file.txt"))
-                input[1] = "${params.ref_dir}/results/kraken_db"
-                input[2] = "${params.ref_dir}"
-                input[3] = Channel.of(true)
-                input[4] = profile_params
+                input[1] = Channel.of(true)
+                input[2] = profile_params
                 '''
             }
 
@@ -60,20 +51,11 @@ nextflow_workflow {
             }
             workflow {
                 '''
-                def profile_params = [
-                    min_kmer_fraction: "0.4",
-                    k: "27",
-                    ribo_suffix: "ribo",
-                    bracken_threshold: "1",
-                    platform: "illumina",
-                    db_download_timeout: params.db_download_timeout
-                ]
+                def profile_params = params + [min_kmer_fraction: "0.4", k: "27", ribo_suffix: "ribo"]
                 input[0] = Channel.of("test")
                     | combine(Channel.of("${projectDir}/test-data/tiny-index/reads/interleaved.fastq"))
-                input[1] = "${params.ref_dir}/results/kraken_db"
-                input[2] = "${params.ref_dir}"
-                input[3] = Channel.of(false)
-                input[4] = profile_params
+                input[1] = Channel.of(false)
+                input[2] = profile_params
                 '''
             }
         }
@@ -99,20 +81,11 @@ nextflow_workflow {
             params {}
             workflow {
                 '''
-                def profile_params = [
-                    min_kmer_fraction: "0.4",
-                    k: "27",
-                    ribo_suffix: "ribo",
-                    bracken_threshold: "1",
-                    platform: "ont",
-                    db_download_timeout: params.db_download_timeout
-                ]
+                def profile_params = params + [min_kmer_fraction: "0.4", k: "27", ribo_suffix: "ribo"]
                 input[0] = Channel.of("test")
                     | combine(Channel.of("${projectDir}/test-data/tiny-index/reads/ont.fastq"))
-                input[1] = "${params.ref_dir}/results/kraken_db"
-                input[2] = "${params.ref_dir}"
-                input[3] = Channel.of(true)
-                input[4] = profile_params
+                input[1] = Channel.of(true)
+                input[2] = profile_params
                 '''
             }
         }
