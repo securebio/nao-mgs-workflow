@@ -10,14 +10,14 @@ process WRITE_SENTINEL_DOWNSTREAM {
         val(group)                     // Group name; drives per-group fan-out
         val(ready)                     // Dependency signal: collected items from all downstream publish channels
         val(downstream_start_time)     // DOWNSTREAM start time string
-        val(config)                    // Map: output_dir, pyproject_path, platform, max_wait_mins
+        val(params_map)                // Workflow params (+ output_dir and pyproject_path injected by caller)
     output:
         path("${group}_sentinel.json"), emit: sentinel
     exec:
-        def pyprojectText = file(config.pyproject_path).text
-        def wfKey = config.platform == "ont" ? "downstream-ont" : "downstream"
+        def pyprojectText = file(params_map.pyproject_path).text
+        def wfKey = params_map.platform == "ont" ? "downstream-ont" : "downstream"
         def expected = SentinelUtils.getExpectedOutputs(pyprojectText, [wfKey], "GROUP", [group as String])
-        SentinelUtils.waitForFiles(expected, config.output_dir as String, config.max_wait_mins as long) { p -> file(p).exists() }
+        SentinelUtils.waitForFiles(expected, params_map.output_dir as String, SentinelUtils.resolveMaxWaitMins(params_map)) { p -> file(p).exists() }
         def sentinelContent = [
             downstreamStartedAt: downstream_start_time,
             downstreamCompletedAt: SentinelUtils.nowUtc()

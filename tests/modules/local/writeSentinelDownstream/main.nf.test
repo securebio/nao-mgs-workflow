@@ -20,7 +20,7 @@ nextflow_process {
                     output_dir: "${projectDir}/test-data/writeSentinelDownstream/output_shortread",
                     pyproject_path: "${projectDir}/test-data/writeSentinelDownstream/pyproject.toml",
                     platform: "illumina",
-                    max_wait_mins: 1
+                    sentinel_max_wait_mins: 1
                 ]
                 '''
             }
@@ -50,7 +50,7 @@ nextflow_process {
                     output_dir: "${projectDir}/test-data/writeSentinelDownstream/output_ont",
                     pyproject_path: "${projectDir}/test-data/writeSentinelDownstream/pyproject.toml",
                     platform: "ont",
-                    max_wait_mins: 1
+                    sentinel_max_wait_mins: 1
                 ]
                 '''
             }
@@ -80,7 +80,7 @@ nextflow_process {
                     output_dir: "s3://nao-testing/tiny-test",
                     pyproject_path: "${projectDir}/test-data/writeSentinelDownstream/pyproject_s3.toml",
                     platform: "illumina",
-                    max_wait_mins: 1
+                    sentinel_max_wait_mins: 1
                 ]
                 '''
             }
@@ -109,7 +109,7 @@ nextflow_process {
                     output_dir: "${projectDir}/test-data/writeSentinelDownstream/nonexistent_output_dir",
                     pyproject_path: "${projectDir}/test-data/writeSentinelDownstream/pyproject.toml",
                     platform: "illumina",
-                    max_wait_mins: 0
+                    sentinel_max_wait_mins: 0
                 ]
                 '''
             }
@@ -137,7 +137,7 @@ nextflow_process {
                     output_dir: "${projectDir}/test-data/writeSentinelDownstream/output_shortread",
                     pyproject_path: "${projectDir}/test-data/writeSentinelDownstream/pyproject.toml",
                     platform: "illumina",
-                    max_wait_mins: -1
+                    sentinel_max_wait_mins: -1
                 ]
                 '''
             }
