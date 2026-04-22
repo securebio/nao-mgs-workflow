@@ -14,7 +14,7 @@ include { RUN_QC } from "../subworkflows/local/runQc"
 include { PROFILE} from "../subworkflows/local/profile"
 include { CHECK_VERSION_COMPATIBILITY } from "../subworkflows/local/checkVersionCompatibility"
 include { PREPARE_INPUT_LOGGING } from "../subworkflows/local/prepareInputLogging"
-include { WRITE_SENTINEL } from "../modules/local/writeSentinel"
+include { WRITE_SENTINEL_RUN } from "../modules/local/writeSentinelRun"
 
 /*****************
 | MAIN WORKFLOWS |
@@ -46,7 +46,7 @@ workflow RUN {
             platform: params.platform,
             max_wait_mins: params.sentinel_max_wait_mins != null ? params.sentinel_max_wait_mins : 32
         ]
-        sentinel_ch = WRITE_SENTINEL(expected_ch.collect(), sentinel_samples, samplesheet_ch.start_time_str, sentinel_params)
+        sentinel_ch = WRITE_SENTINEL_RUN(expected_ch.collect(), sentinel_samples, samplesheet_ch.start_time_str, sentinel_params)
     emit:
         input_run = input_log_ch.input_run
         logging_run = input_log_ch.logging_run
@@ -56,5 +56,5 @@ workflow RUN {
         qc_results_run = qc_results_ch
         other_results_run = other_results_ch
         experimental_run = Channel.empty()
-        sentinel_run = WRITE_SENTINEL.out.sentinel
+        sentinel_run = WRITE_SENTINEL_RUN.out.sentinel
 }

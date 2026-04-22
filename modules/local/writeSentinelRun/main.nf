@@ -1,7 +1,7 @@
 // Validate that all expected RUN output files have been published,
 // then write a sentinel.json completion marker with timestamps.
 // Uses exec: to run on the head node for native S3 support via file().exists().
-process WRITE_SENTINEL {
+process WRITE_SENTINEL_RUN {
     executor 'local'
     input:
         val(ready)           // Dependency signal: collected items from all output channels
