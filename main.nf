@@ -28,6 +28,7 @@ workflow {
         qc_results_run = params.mode == 'run' ? RUN.out.qc_results_run : Channel.empty()
         other_results_run = params.mode == 'run' ? RUN.out.other_results_run : Channel.empty()
         experimental_run = params.mode == 'run' ? RUN.out.experimental_run : Channel.empty()
+        sentinel_run = params.mode == 'run' ? RUN.out.sentinel_run : Channel.empty()
         // DOWNSTREAM workflow publishing
         input_downstream = params.mode == 'downstream' ? DOWNSTREAM.out.input_downstream  : Channel.empty()
         logging_downstream = params.mode == 'downstream' ? DOWNSTREAM.out.logging_downstream  : Channel.empty()
@@ -89,6 +90,10 @@ output {
     }
     experimental_run {
         path "experimental"
+        tags nextflow_file_class: "publish", "nextflow.io/temporary": "false"
+    }
+    sentinel_run {
+        path "logging"
         tags nextflow_file_class: "publish", "nextflow.io/temporary": "false"
     }
     // DOWNSTREAM workflow output

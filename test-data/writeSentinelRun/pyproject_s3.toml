@@ -1,0 +1,11 @@
+# Fixture for S3 test: patterns match files that already exist in s3://nao-testing/tiny-test/
+[project]
+version = "0.0.0"
+
+[tool.mgs-workflow]
+expected-outputs-run = [
+    "raw/tiny-test_R1.fastq.gz",
+    "raw/tiny-test_R2.fastq.gz",
+]
+
+expected-outputs-run-shortread-extra = []
