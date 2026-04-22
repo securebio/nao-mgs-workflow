@@ -3,6 +3,7 @@
 - Make `bin/run-nf-test.sh` and `bin/run_nf_test_parallel.py` symlink-safe for downstream repos.
 - Add authenticated ECR Public login to Trivy scan workflow to avoid anonymous pull rate limits
 - Add CVE-2026-32280, CVE-2026-32282 (Go stdlib in ncbi_datasets container) and CVE-2026-40192 (Pillow in multiqc container) to `.trivyignore`. No upstream fixes available; updated TODO with latest check results.
+- Add CVE-2026-32281, CVE-2026-32283 (Go stdlib HIGH CVEs in ncbi_datasets container) to `.trivyignore`. Not practically exploitable in our context (TLS client-only, no untrusted cert chains, no TLS 1.3 server); no upstream fix available.
 - Add `experimental/` and `experimental_downstream/` output directories for staging new outputs that are not yet guaranteed to be stable across point releases.
 - Add similarity-based duplicate marking to DOWNSTREAM as an experimental output via the new `MARK_SIMILARITY_DUPLICATES` module and `rust-tools/mark_duplicates_similarity` Rust library.
 - Add sentinel file (`sentinel.json`) to the RUN workflow's `logging/` directory that validates all expected outputs have been published before writing a completion marker with timestamps. Adds configurable `sentinel_max_wait_mins` parameter. Remove `logging/time.txt` from RUN expected outputs (superseded by `sentinel.json`'s `runStartedAt` field).
