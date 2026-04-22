@@ -13,32 +13,55 @@ nextflow_workflow {
             params {}
             workflow {
                 """
-                input[0] = file("${projectDir}/test-data/checkVersionCompatibility/pyproject-1000-1000.toml")
-                input[1] = file("${projectDir}/test-data/checkVersionCompatibility/pyproject-1000-1000.toml")
+                input[0] = "${projectDir}/test-data/checkVersionCompatibility/versions-equal"
+                input[1] = "${projectDir}/test-data/checkVersionCompatibility/versions-equal"
                 """
             }
         }
         then {
-            // Should run without errors
             assert workflow.success
+            assert workflow.out.pipeline_pyproject_path.flatten().any { path(it).getFileName().toString() == "pyproject.toml" }
+            assert workflow.out.index_pyproject_path.flatten().any { path(it).getFileName().toString() == "pyproject.toml" }
         }
     }
 
-    test("Should pass when all versions are compatible") {
+    test("Should pass when index is newer but compatible") {
         tag "expect_success"
         config "tests/configs/run.config"
         when {
             params {}
             workflow {
                 """
-                input[0] = file("${projectDir}/test-data/checkVersionCompatibility/pyproject-1000-1000.toml")
-                input[1] = file("${projectDir}/test-data/checkVersionCompatibility/pyproject-1001-1000.toml")
+                input[0] = "${projectDir}/test-data/checkVersionCompatibility/index-newer-compatible"
+                input[1] = "${projectDir}/test-data/checkVersionCompatibility/index-newer-compatible"
                 """
             }
         }
         then {
-            // Should run without errors
             assert workflow.success
+            assert workflow.out.pipeline_pyproject_path.flatten().any { path(it).getFileName().toString() == "pyproject.toml" }
+            assert workflow.out.index_pyproject_path.flatten().any { path(it).getFileName().toString() == "pyproject.toml" }
+        }
+    }
+
+    test("Should pass with legacy index format") {
+        tag "expect_success"
+        config "tests/configs/run.config"
+        when {
+            params {}
+            workflow {
+                """
+                input[0] = "${projectDir}/test-data/checkVersionCompatibility/legacy-format"
+                input[1] = "${projectDir}/test-data/checkVersionCompatibility/legacy-format"
+                """
+            }
+        }
+        then {
+            assert workflow.success
+            assert workflow.out.pipeline_pyproject_path.flatten().any { path(it).getFileName().toString() == "pyproject.toml" }
+            // Legacy fallback creates a temp file via File.createTempFile("index-pyproject", ".toml"),
+            // which guarantees the filename starts with the prefix.
+            assert workflow.out.index_pyproject_path.flatten().any { path(it).getFileName().toString().startsWith("index-pyproject") }
         }
     }
 
@@ -49,8 +72,8 @@ nextflow_workflow {
             params {}
             workflow {
                 """
-                input[0] = file("${projectDir}/test-data/checkVersionCompatibility/pyproject-1001-1001.toml")
-                input[1] = file("${projectDir}/test-data/checkVersionCompatibility/pyproject-1000-1000.toml")
+                input[0] = "${projectDir}/test-data/checkVersionCompatibility/index-too-old"
+                input[1] = "${projectDir}/test-data/checkVersionCompatibility/index-too-old"
                 """
             }
         }
@@ -70,8 +93,8 @@ nextflow_workflow {
             params {}
             workflow {
                 """
-                input[0] = file("${projectDir}/test-data/checkVersionCompatibility/pyproject-1000-1000.toml")
-                input[1] = file("${projectDir}/test-data/checkVersionCompatibility/pyproject-1001-1001.toml")
+                input[0] = "${projectDir}/test-data/checkVersionCompatibility/pipeline-too-old"
+                input[1] = "${projectDir}/test-data/checkVersionCompatibility/pipeline-too-old"
                 """
             }
         }
@@ -91,8 +114,8 @@ nextflow_workflow {
             params {}
             workflow {
                 """
-                input[0] = file("${projectDir}/test-data/checkVersionCompatibility/pyproject-1000-1000.toml")
-                input[1] = file("${projectDir}/test-data/checkVersionCompatibility/pyproject-invalid.toml")
+                input[0] = "${projectDir}/test-data/checkVersionCompatibility/index-invalid"
+                input[1] = "${projectDir}/test-data/checkVersionCompatibility/index-invalid"
                 """
             }
         }

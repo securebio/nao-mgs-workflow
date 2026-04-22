@@ -20,33 +20,6 @@ include { COPY_FILE_BARE as COPY_PYPROJECT } from "../modules/local/copyFile"
 include { COPY_FILE_BARE as COPY_SAMPLESHEET } from "../modules/local/copyFile"
 include { COPY_FILE_BARE as COPY_ADAPTERS } from "../modules/local/copyFile"
 
-/***********************
-| AUXILIARY FUNCTIONS |
-***********************/
-
-def getIndexPyprojectPath(ref_dir) {
-    /* Get the pyproject.toml path for an index, with backwards compatibility
-    for old indexes that use separate version text files. */
-    def index_pyproject_file = file("${ref_dir}/logging/pyproject.toml")
-    if (index_pyproject_file.exists()) {
-        return index_pyproject_file
-    }
-    // Fall back to old format - generate pyproject content from old files
-    def index_version = file("${ref_dir}/logging/pipeline-version.txt").text.trim()
-    def index_min_pipeline = file("${ref_dir}/logging/index-min-pipeline-version.txt").text.trim()
-    def pyproject_content = """\
-[project]
-version = "${index_version}"
-
-[tool.mgs-workflow]
-index-min-pipeline-version = "${index_min_pipeline}"
-"""
-    def temp_file = File.createTempFile("index-pyproject", ".toml")
-    temp_file.text = pyproject_content
-    temp_file.deleteOnExit()
-    return file(temp_file.absolutePath)
-}
-
 /*****************
 | MAIN WORKFLOWS |
 *****************/
@@ -55,9 +28,7 @@ index-min-pipeline-version = "${index_min_pipeline}"
 workflow RUN {
     main:
     // Check index/pipeline version compatibility
-    pipeline_pyproject_path = file("${projectDir}/pyproject.toml")
-    index_pyproject_path = getIndexPyprojectPath(params.ref_dir)
-    CHECK_VERSION_COMPATIBILITY(pipeline_pyproject_path, index_pyproject_path)
+    CHECK_VERSION_COMPATIBILITY(params.ref_dir, projectDir)
 
     // Setting reference paths
     kraken_db_path = "${params.ref_dir}/results/kraken_db"
@@ -107,7 +78,7 @@ workflow RUN {
     // Get index files for publishing
     index_params_path = file("${params.ref_dir}/input/index-params.json")
     index_params_ch = COPY_INDEX_PARAMS(Channel.fromPath(index_params_path), "params-index.json")
-    index_pyproject_ch = COPY_INDEX_PYPROJECT(Channel.fromPath(index_pyproject_path), "pyproject-index.toml")
+    index_pyproject_ch = COPY_INDEX_PYPROJECT(CHECK_VERSION_COMPATIBILITY.out.index_pyproject_path, "pyproject-index.toml")
 
     // Prepare other publishing variables
     params_str = groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(params))
@@ -116,7 +87,7 @@ workflow RUN {
     // Note: we send these input/logging files through a COPY_FILE_BASE process
     // because nextflow 25.04 now only publishes files that have passed through the working directory.
     // We first tried collectFile() as an alternative; however it intermittantly gives serialization errors.
-    pyproject_ch = COPY_PYPROJECT(Channel.fromPath(pipeline_pyproject_path), "pyproject.toml")
+    pyproject_ch = COPY_PYPROJECT(CHECK_VERSION_COMPATIBILITY.out.pipeline_pyproject_path, "pyproject.toml")
     samplesheet_ch = COPY_SAMPLESHEET(Channel.fromPath(params.sample_sheet), "samplesheet.csv")
     adapters_ch = COPY_ADAPTERS(Channel.fromPath(params.adapters), "adapters.fasta")
 

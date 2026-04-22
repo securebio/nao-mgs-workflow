@@ -3,5 +3,5 @@ name = "mgs-workflow"
 version = "1.0.0.0"
 
 [tool.mgs-workflow]
-index-min-pipeline-version = "1.0.a.1"
+index-min-pipeline-version = "1.0.0.0"
 pipeline-min-index-version = "1.0.0.0"
