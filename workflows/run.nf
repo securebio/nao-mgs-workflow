@@ -14,11 +14,7 @@ include { SUBSET_TRIM } from "../subworkflows/local/subsetTrim"
 include { RUN_QC } from "../subworkflows/local/runQc"
 include { PROFILE} from "../subworkflows/local/profile"
 include { CHECK_VERSION_COMPATIBILITY } from "../subworkflows/local/checkVersionCompatibility"
-include { COPY_FILE_BARE as COPY_INDEX_PARAMS } from "../modules/local/copyFile"
-include { COPY_FILE_BARE as COPY_INDEX_PYPROJECT } from "../modules/local/copyFile"
-include { COPY_FILE_BARE as COPY_PYPROJECT } from "../modules/local/copyFile"
-include { COPY_FILE_BARE as COPY_SAMPLESHEET } from "../modules/local/copyFile"
-include { COPY_FILE_BARE as COPY_ADAPTERS } from "../modules/local/copyFile"
+include { PREPARE_INPUT_LOGGING } from "../subworkflows/local/prepareInputLogging"
 
 /*****************
 | MAIN WORKFLOWS |
@@ -27,24 +23,13 @@ include { COPY_FILE_BARE as COPY_ADAPTERS } from "../modules/local/copyFile"
 // Complete primary workflow
 workflow RUN {
     main:
-    // Check index/pipeline version compatibility
-    CHECK_VERSION_COMPATIBILITY(params.ref_dir, projectDir)
+    // Setup
+    compat_ch = CHECK_VERSION_COMPATIBILITY(params.ref_dir, projectDir)
+    samplesheet_ch = LOAD_SAMPLESHEET(params.sample_sheet, params.platform, false)
 
-    // Setting reference paths
-    kraken_db_path = "${params.ref_dir}/results/kraken_db"
-
-    // Load samplesheet and check platform
-    LOAD_SAMPLESHEET(params.sample_sheet, params.platform, false)
-    samplesheet_ch = LOAD_SAMPLESHEET.out.samplesheet
-    start_time_str = LOAD_SAMPLESHEET.out.start_time_str
-    single_end_ch = LOAD_SAMPLESHEET.out.single_end
-
-    // Count reads in files
-    COUNT_READS(samplesheet_ch, single_end_ch)
-
-    // Extract and count human-viral reads
+    // Extract human-viral reads
     if ( params.platform == "ont" ) {
-        EXTRACT_VIRAL_READS_ONT(samplesheet_ch, params.ref_dir, params.taxid_artificial, params.db_download_timeout)
+        EXTRACT_VIRAL_READS_ONT(samplesheet_ch.samplesheet, params.ref_dir, params.taxid_artificial, params.db_download_timeout)
         hits_final = EXTRACT_VIRAL_READS_ONT.out.hits_final
         inter_lca = EXTRACT_VIRAL_READS_ONT.out.inter_lca
         inter_aligner = EXTRACT_VIRAL_READS_ONT.out.inter_minimap2
@@ -56,7 +41,7 @@ workflow RUN {
         short_params["min_kmer_hits"] = "1"
         short_params["bbduk_suffix"] = "viral"
         short_params["k"] = "24" 
-        EXTRACT_VIRAL_READS_SHORT(samplesheet_ch, params.ref_dir, short_params)
+        EXTRACT_VIRAL_READS_SHORT(samplesheet_ch.samplesheet, params.ref_dir, short_params)
         hits_final = EXTRACT_VIRAL_READS_SHORT.out.hits_final
         inter_lca = EXTRACT_VIRAL_READS_SHORT.out.inter_lca
         inter_aligner = EXTRACT_VIRAL_READS_SHORT.out.inter_bowtie
@@ -64,40 +49,26 @@ workflow RUN {
         bbduk_trimmed = EXTRACT_VIRAL_READS_SHORT.out.bbduk_trimmed
     }
 
-    // Subset reads to target number, and trim adapters
-    def subset_trim_params = params.collectEntries { k, v -> [k, v] }
-    SUBSET_TRIM(samplesheet_ch, single_end_ch, subset_trim_params)
-
-    // Run QC on subset reads before and after adapter trimming
-    RUN_QC(SUBSET_TRIM.out.subset_reads, SUBSET_TRIM.out.trimmed_subset_reads, single_end_ch)
+    // Other results
+    count_ch = COUNT_READS(samplesheet_ch.samplesheet, samplesheet_ch.single_end)
+    subset_ch = SUBSET_TRIM(samplesheet_ch.samplesheet, samplesheet_ch.single_end, params)
+    qc_ch = RUN_QC(subset_ch.subset_reads, subset_ch.trimmed_subset_reads, samplesheet_ch.single_end)
 
     // Profile ribosomal and non-ribosomal reads of the subset adapter-trimmed reads
+    kraken_db_path = "${params.ref_dir}/results/kraken_db"
     def profile_params = params.collectEntries { k, v -> [k, v] } + [min_kmer_fraction: "0.4", k: "27", ribo_suffix: "ribo"]
-    PROFILE(SUBSET_TRIM.out.trimmed_subset_reads, kraken_db_path, params.ref_dir, single_end_ch, profile_params)
+    profile_ch = PROFILE(subset_ch.trimmed_subset_reads, kraken_db_path, params.ref_dir, samplesheet_ch.single_end, profile_params)
 
-    // Get index files for publishing
-    index_params_path = file("${params.ref_dir}/input/index-params.json")
-    index_params_ch = COPY_INDEX_PARAMS(Channel.fromPath(index_params_path), "params-index.json")
-    index_pyproject_ch = COPY_INDEX_PYPROJECT(CHECK_VERSION_COMPATIBILITY.out.index_pyproject_path, "pyproject-index.toml")
-
-    // Prepare other publishing variables
-    params_str = groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(params))
-    params_ch = Channel.of(params_str).collectFile(name: "params-run.json")
-    time_ch = start_time_str.map { it + "\n" }.collectFile(name: "time.txt")
-    // Note: we send these input/logging files through a COPY_FILE_BASE process
-    // because nextflow 25.04 now only publishes files that have passed through the working directory.
-    // We first tried collectFile() as an alternative; however it intermittantly gives serialization errors.
-    pyproject_ch = COPY_PYPROJECT(CHECK_VERSION_COMPATIBILITY.out.pipeline_pyproject_path, "pyproject.toml")
-    samplesheet_ch = COPY_SAMPLESHEET(Channel.fromPath(params.sample_sheet), "samplesheet.csv")
-    adapters_ch = COPY_ADAPTERS(Channel.fromPath(params.adapters), "adapters.fasta")
+    // Prepare input and logging files for publishing
+    input_log_ch = PREPARE_INPUT_LOGGING(params, compat_ch.index_pyproject_path, compat_ch.pipeline_pyproject_path, samplesheet_ch.start_time_str)
 
     emit:
-        input_run = index_params_ch.mix(samplesheet_ch, adapters_ch, params_ch)
-        logging_run = index_pyproject_ch.mix(time_ch, pyproject_ch)
+        input_run = input_log_ch.input_run
+        logging_run = input_log_ch.logging_run
         intermediates_run = inter_lca.mix(inter_aligner)
         reads_raw_viral = bbduk_match
         reads_trimmed_viral = bbduk_trimmed
-        qc_results_run = COUNT_READS.out.output.mix(RUN_QC.out.pre_qc, RUN_QC.out.post_qc, SUBSET_TRIM.out.fastp_json)
-        other_results_run = hits_final.mix(PROFILE.out.bracken, PROFILE.out.kraken)
+        qc_results_run = count_ch.output.mix(qc_ch.pre_qc, qc_ch.post_qc, subset_ch.fastp_json)
+        other_results_run = hits_final.mix(profile_ch.bracken, profile_ch.kraken)
         experimental_run = Channel.empty()
 }

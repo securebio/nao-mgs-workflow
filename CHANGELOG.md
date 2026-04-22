@@ -6,6 +6,7 @@
 - Add `experimental/` and `experimental_downstream/` output directories for staging new outputs that are not yet guaranteed to be stable across point releases.
 - Add similarity-based duplicate marking to DOWNSTREAM as an experimental output via the new `MARK_SIMILARITY_DUPLICATES` module and `rust-tools/mark_duplicates_similarity` Rust library.
 - Refactor `CHECK_VERSION_COMPATIBILITY` subworkflow to derive pyproject paths internally from `ref_dir` and `pipeline_dir`, simplifying the interface in `workflows/run.nf`.
+- Extract input/logging file preparation from the RUN workflow into a new `PREPARE_INPUT_LOGGING` subworkflow.
 
 # v3.2.1.2
 

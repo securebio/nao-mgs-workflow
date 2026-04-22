@@ -1,0 +1,44 @@
+nextflow_workflow {
+
+    name "Test subworkflow PREPARE_INPUT_LOGGING"
+    script "subworkflows/local/prepareInputLogging/main.nf"
+    workflow "PREPARE_INPUT_LOGGING"
+    tag "prepare_input_logging"
+    tag "subworkflow"
+
+    test("Should prepare input and logging files for publishing") {
+        tag "expect_success"
+        config "tests/configs/run.config"
+        when {
+            params {}
+            workflow {
+                """
+                input[0] = params
+                input[1] = Channel.fromPath("${projectDir}/test-data/tiny-index/output/logging/pyproject.toml")
+                input[2] = Channel.fromPath("${projectDir}/pyproject.toml")
+                input[3] = Channel.of("2026-01-21 13:48:36 UTC (+0000)")
+                """
+            }
+        }
+        then {
+            assert workflow.success
+            // Verify input_run channel contains 4 expected files
+            assert workflow.out.input_run.size() == 4
+            def inputFiles = workflow.out.input_run.collect { path(it).getFileName().toString() } as Set
+            assert inputFiles == ["params-index.json", "samplesheet.csv", "adapters.fasta", "params-run.json"] as Set
+            // Verify logging_run channel contains 3 expected files
+            assert workflow.out.logging_run.size() == 3
+            def loggingFiles = workflow.out.logging_run.collect { path(it).getFileName().toString() } as Set
+            assert loggingFiles == ["pyproject-index.toml", "time.txt", "pyproject.toml"] as Set
+            // Verify params JSON contains expected keys
+            def paramsFile = workflow.out.input_run.find { path(it).getFileName().toString() == "params-run.json" }
+            def paramsText = path(paramsFile).text
+            assert paramsText.contains('"ref_dir"')
+            assert paramsText.contains('"sample_sheet"')
+            // Verify time.txt contains the start time
+            def timeFile = workflow.out.logging_run.find { path(it).getFileName().toString() == "time.txt" }
+            assert path(timeFile).text.trim() == "2026-01-21 13:48:36 UTC (+0000)"
+        }
+    }
+
+}
