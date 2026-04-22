@@ -40,10 +40,7 @@ workflow RUN {
         // Validate published outputs and write sentinel
         expected_ch = input_log_ch.input_run.mix(input_log_ch.logging_run, qc_results_ch, other_results_ch)
         sentinel_samples = samplesheet_ch.samplesheet.map { sample, _reads -> sample }.collect()
-        sentinel_params = params + [
-            output_dir: "${params.base_dir}/output",
-            pyproject_path: "${projectDir}/pyproject.toml"
-        ]
+        sentinel_params = params + [output_dir: "${params.base_dir}/output", pyproject_path: "${projectDir}/pyproject.toml"]
         sentinel_ch = WRITE_SENTINEL_RUN(expected_ch.collect(), sentinel_samples, samplesheet_ch.start_time_str, sentinel_params)
     emit:
         input_run = input_log_ch.input_run
