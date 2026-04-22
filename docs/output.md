@@ -35,7 +35,7 @@ Main heading represents the folder name, and subheadings represent a description
 
 - `pyproject.toml`: Project configuration file containing the pipeline version and compatibility version constraints (copied from repository).
 - `pyproject-index.toml`: Project configuration file from the index directory, containing the index's pipeline version and compatibility constraints (copied from index directory).
-- `sentinel.json`: Completion marker written after all expected output files have been verified. Contains `runStartedAt` and `runCompletedAt` timestamps. External systems can check for this file to confirm the run completed successfully.
+- `sentinel.json`: Completion marker written after all expected output files have been verified. Contains `runStartedAt` and `runCompletedAt` timestamps. External systems can check for this file to confirm the run completed successfully. The `sentinel_max_wait_mins` parameter (default 32) controls how long to wait for expected outputs before timing out.
 - `trace_<timestamp>.tsv`: Tab delimited log of all the information for each task run in the pipeline including runtime, memory usage, exit status, etc. Can be used to create an execution timeline using the the script `bin/plot-timeline-script.R` after the pipeline has finished running. More information regarding the trace file format can be found [here](https://www.nextflow.io/docs/latest/reports.html#trace-file).
 
 ### `intermediates/`
@@ -67,6 +67,12 @@ Main heading represents the folder name, and subheadings represent a description
 #### Taxonomic identification
 - `{sample}_bracken.tsv.gz`: Bracken output reports in TSV format for a given sample, labeled by ribosomal status, for subset samples produced by SUBSET_TRIM.
 - `{sample}_kraken.tsv.gz`: Kraken output reports in TSV format for a given sample, labeled by ribosomal status, for subset samples produced by SUBSET_TRIM.
+
+## Downstream workflow
+
+### `logging_downstream/`
+
+- `{group}_sentinel.json`: Per-group completion marker written after all expected DOWNSTREAM output files for that group have been verified. Contains `downstreamStartedAt` and `downstreamCompletedAt` timestamps. One file is written and published independently per group in the input CSV, so external systems can check for each file to confirm DOWNSTREAM completed successfully for that group. If the input CSV resolves to an empty groups channel (e.g. a groups TSV with only a header), no sentinels are written at all. The `sentinel_max_wait_mins` parameter (default 32) controls how long to wait for expected outputs before timing out.
 
 ## Index workflow
 

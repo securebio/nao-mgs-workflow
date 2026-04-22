@@ -1,0 +1,14 @@
+[project]
+version = "0.0.0"
+
+[tool.mgs-workflow]
+expected-outputs-downstream = [
+    "input_downstream/input_file.csv",
+    "results_downstream/{GROUP}_counts.tsv.gz",
+    "results_downstream/{GROUP}_extra.json",
+]
+
+expected-outputs-downstream-ont = [
+    "input_downstream/input_file.csv",
+    "results_downstream/{GROUP}_counts.tsv.gz",
+]

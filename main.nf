@@ -35,6 +35,7 @@ workflow {
         intermediates_downstream = params.mode == 'downstream' ? DOWNSTREAM.out.intermediates_downstream  : Channel.empty()
         results_downstream = params.mode == 'downstream' ? DOWNSTREAM.out.results_downstream  : Channel.empty()
         experimental_downstream = params.mode == 'downstream' ? DOWNSTREAM.out.experimental_downstream  : Channel.empty()
+        sentinel_downstream = params.mode == 'downstream' ? DOWNSTREAM.out.sentinel_downstream  : Channel.empty()
 }
         
 output {
@@ -115,6 +116,10 @@ output {
     }
     experimental_downstream {
         path "experimental_downstream"
+        tags nextflow_file_class: "publish", "nextflow.io/temporary": "false"
+    }
+    sentinel_downstream {
+        path "logging_downstream"
         tags nextflow_file_class: "publish", "nextflow.io/temporary": "false"
     }
 }
