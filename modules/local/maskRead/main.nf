@@ -3,6 +3,9 @@
 // sub-linearly at large sizes. Size-bucketed allocation keeps headroom sane
 // across the range of ONT merged-library inputs while avoiding large reservations
 // for small inputs. Input sizes in the closure refer to the gzipped FASTQ file size.
+// The closure assumes `reads` is a single Path. If the input is ever refactored
+// to accept multiple files, `reads.size()` silently returns the list length
+// (in elements) rather than file bytes, and every input falls through to 32.GB.
 process MASK_FASTQ_READS {
     label "BBTools"
     cpus 16

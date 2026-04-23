@@ -4,8 +4,6 @@
     - Replaces `label "large"` with a module-level input-size-aware memory closure (32 / 64 / 128 GiB tiers, chosen from `reads.size()`). CPU allocation unchanged at 16.
     - Documents the input-size-aware memory-closure pattern in `docs/developer.md` as an exception to the "every process uses a resource label" convention.
     - Adds a `withName: 'MASK_FASTQ_READS'` cap in `tests/nextflow.config` so existing module tests fit GitHub runner limits after the label was removed.
-- Reduce the ONT `FILTLONG` stage from 8 CPUs to 1 since `filtlong` is single-threaded (#737).
-    - Changes `label "small"` to `label "single_cpu_16GB_memory"`. Memory unchanged at 16 GiB.
 
 # v3.2.1.3
 

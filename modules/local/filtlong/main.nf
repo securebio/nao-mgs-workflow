@@ -1,5 +1,5 @@
 process FILTLONG {
-    label "single_cpu_16GB_memory"
+    label "small"
     label "filtlong"
     input:
         tuple val(sample), path(reads)
