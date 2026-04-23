@@ -14,7 +14,7 @@ nextflow_process {
     tag "maskRead"
     tag "resource_allocation"
 
-    test("Allocates 32 GiB + 8 CPUs for < 2 GB input (small bucket)") {
+    test("Allocates 32 GiB + 16 CPUs for < 2 GB input (small bucket)") {
         tag "expect_success"
         options "-stub"
         setup {
@@ -36,7 +36,7 @@ nextflow_process {
         then {
             assert process.success
             def log = path(process.out.resource_log[0]).text
-            assert log.contains("task.cpus=8")
+            assert log.contains("task.cpus=16")
             assert log.contains("task.memory_gb=32")
         }
     }

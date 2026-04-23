@@ -5,7 +5,7 @@
 // for small inputs. Input sizes in the closure refer to the gzipped FASTQ file size.
 process MASK_FASTQ_READS {
     label "BBTools"
-    cpus   = { reads.size() > 10.GB ? 16 : reads.size() > 2.GB ? 16 : 8 }
+    cpus   = 16
     memory = { reads.size() > 10.GB ? 128.GB : reads.size() > 2.GB ? 64.GB : 32.GB }
     input:
         tuple val(sample), path(reads)
