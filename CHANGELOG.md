@@ -5,10 +5,13 @@
 - Make `MASK_FASTQ_READS` memory input-size-aware (32 / 64 / 128 GiB based on gzipped FASTQ size) to prevent OOMs on merged ONT libraries larger than ~6 GB. CPU allocation unchanged at 16 (same as the previous `label "large"`).
 - Change `EXTRACT_VIRAL_READS_ONT:FILTLONG` from `label "small"` (8 CPUs) to `label "single_cpu_16GB_memory"` (1 CPU) since filtlong is single-threaded; memory unchanged at 16 GiB.
 
+## Documentation
+
+- Document the input-size-aware memory-closure pattern in `docs/developer.md` as an exception to the "every process uses a resource label" convention.
+
 ## Testing
 
-- Add `tests/modules/local/maskRead/resource_allocation.nf.test` exercising all three branches of the new `MASK_FASTQ_READS` closure via stub-mode + sparse-file fixtures.
-- Add a CI-compatibility `withName: 'MASK_FASTQ_READS'` cap in `tests/nextflow.config` so existing maskRead tests fit GitHub runner resources after the label was removed.
+- Add a CI-compatibility `withName: 'MASK_FASTQ_READS'` cap in `tests/nextflow.config` so existing maskRead tests fit GitHub runner resources after the process's `label "large"` was removed.
 
 # v3.2.1.3
 
