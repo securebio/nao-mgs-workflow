@@ -1,3 +1,17 @@
+# v3.2.1.4-dev
+
+## Resource-tier adjustments for ONT viral-read extraction
+
+- Make `MASK_FASTQ_READS` memory input-size-aware (32 / 64 / 128 GiB based on gzipped FASTQ size) to prevent OOMs on merged ONT libraries larger than ~6 GB. CPU stays at 16 for inputs above 2 GB and drops to 8 for smaller inputs.
+- Change `EXTRACT_VIRAL_READS_ONT:FILTLONG` from `label "small"` (8 CPUs) to `label "single_cpu_16GB_memory"` (1 CPU) since filtlong is single-threaded; memory unchanged at 16 GiB.
+- Bump `SORT_MINIMAP2_VIRAL` memory from 16 to 32 GiB via `withName:` override in `configs/resources.config` to cover viral-rich ONT libraries (observed peak/alloc ratio 0.84 at the 16 GiB tier). Other `SORT_TSV` aliases keep the 16 GiB default.
+- Change `PROCESS_VIRAL_MINIMAP2_SAM` from `label "single"` (4 GiB) to `label "single_cpu_16GB_memory"` (16 GiB) for runtime-variance safety margin.
+
+## Testing
+
+- Add `tests/modules/local/maskRead/resource_allocation.nf.test` exercising all three branches of the new `MASK_FASTQ_READS` closure via stub-mode + sparse-file fixtures.
+- Add a CI-compatibility `withName: 'MASK_FASTQ_READS'` cap in `tests/nextflow.config` so existing maskRead tests fit GitHub runner resources after the label was removed.
+
 # v3.2.1.3
 
 ## New workflow outputs
