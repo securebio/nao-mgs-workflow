@@ -1,0 +1,72 @@
+nextflow_function {
+
+    name "Test ResourceTierUtils.maskFastqReadsMemory"
+    function "ResourceTierUtils.maskFastqReadsMemory"
+    config "tests/configs/run.config"
+    tag "lib"
+    tag "resource_tier_utils"
+
+    test("Returns 32 GB at the 2 GB boundary") {
+        tag "expect_success"
+        tag "bucket_32"
+        when {
+            function {
+                """
+                input[0] = 2L * 1024 * 1024 * 1024
+                """
+            }
+        }
+        then {
+            assert function.success
+            assert function.result.giga == 32
+        }
+    }
+
+    test("Returns 64 GB just above 2 GB") {
+        tag "expect_success"
+        tag "bucket_64_low"
+        when {
+            function {
+                """
+                input[0] = 2L * 1024 * 1024 * 1024 + 1
+                """
+            }
+        }
+        then {
+            assert function.success
+            assert function.result.giga == 64
+        }
+    }
+
+    test("Returns 64 GB at the 10 GB boundary") {
+        tag "expect_success"
+        tag "bucket_64_high"
+        when {
+            function {
+                """
+                input[0] = 10L * 1024 * 1024 * 1024
+                """
+            }
+        }
+        then {
+            assert function.success
+            assert function.result.giga == 64
+        }
+    }
+
+    test("Returns 128 GB just above 10 GB") {
+        tag "expect_success"
+        tag "bucket_128"
+        when {
+            function {
+                """
+                input[0] = 10L * 1024 * 1024 * 1024 + 1
+                """
+            }
+        }
+        then {
+            assert function.success
+            assert function.result.giga == 128
+        }
+    }
+}
