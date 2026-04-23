@@ -1,8 +1,7 @@
 # v3.2.1.4-dev
 
 - Prevent `MASK_FASTQ_READS` from running out of memory on merged ONT libraries larger than ~6 GB of gzipped FASTQ (#737).
-    - Replaces `label "large"` with a module-level input-size-aware memory closure (32 / 64 / 128 GiB tiers, chosen from `reads.size()`). CPU allocation unchanged at 16.
-    - Extracts the tier selection to `lib/ResourceTierUtils.groovy` as a pure, unit-testable function (`maskFastqReadsMemory`), with an nf-test covering each bucket boundary.
+    - Replaces `label "large"` with an input-size-aware memory closure (32 / 64 / 128 GiB tiers, chosen from `reads.size()`). Tier-selection logic lives in `lib/ResourceTierUtils.groovy` (`maskFastqReadsMemory`), covered by `nextflow_function` tests at each bucket boundary. CPU allocation unchanged at 16.
     - Documents the input-size-aware memory-closure pattern in `docs/developer.md` as an exception to the "every process uses a resource label" convention.
     - Adds a `withName: 'MASK_FASTQ_READS'` cap in `tests/nextflow.config` so existing module tests fit GitHub runner limits after the label was removed.
 
