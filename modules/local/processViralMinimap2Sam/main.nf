@@ -1,7 +1,7 @@
 // Process SAM file (add reference taxid, add clean read information, turn into TSV)
 process PROCESS_VIRAL_MINIMAP2_SAM {
     label "pysam_biopython"
-    label "single_cpu_16GB_memory"
+    label "single"
     input:
         tuple val(sample), path(virus_sam), path(clean_reads)
         path genbank_metadata_path
