@@ -1,10 +1,16 @@
 nextflow_function {
 
-    name "Test ResourceTierUtils.maskFastqReadsMemory"
-    function "ResourceTierUtils.maskFastqReadsMemory"
+    name "Test ResourceTierUtils.pickMemoryTier"
+    function "ResourceTierUtils.pickMemoryTier"
     config "tests/configs/run.config"
     tag "lib"
     tag "resource_tier_utils"
+
+    // Sparse temp files let us exercise multi-GB tier boundaries without
+    // writing real bytes; Path.size() reports the apparent (logical) size.
+    // PROD_THRESHOLDS / PROD_MEMORIES mirror the tiers wired up in
+    // configs/resources.config (bbmask_resources) so the tests pin the
+    // production configuration, not an arbitrary tier list.
 
     test("Returns 32 GB at the 2 GB boundary") {
         tag "expect_success"
@@ -12,7 +18,11 @@ nextflow_function {
         when {
             function {
                 """
-                input[0] = 2L * 1024 * 1024 * 1024
+                def p = java.nio.file.Files.createTempFile('tier', '.tmp')
+                new java.io.RandomAccessFile(p.toFile(), 'rw').with { setLength(2L * 1024 * 1024 * 1024); close() }
+                input[0] = p
+                input[1] = ['2 GB', '10 GB']
+                input[2] = ['32 GB', '64 GB', '128 GB']
                 """
             }
         }
@@ -28,7 +38,11 @@ nextflow_function {
         when {
             function {
                 """
-                input[0] = 2L * 1024 * 1024 * 1024 + 1
+                def p = java.nio.file.Files.createTempFile('tier', '.tmp')
+                new java.io.RandomAccessFile(p.toFile(), 'rw').with { setLength(2L * 1024 * 1024 * 1024 + 1); close() }
+                input[0] = p
+                input[1] = ['2 GB', '10 GB']
+                input[2] = ['32 GB', '64 GB', '128 GB']
                 """
             }
         }
@@ -44,7 +58,11 @@ nextflow_function {
         when {
             function {
                 """
-                input[0] = 10L * 1024 * 1024 * 1024
+                def p = java.nio.file.Files.createTempFile('tier', '.tmp')
+                new java.io.RandomAccessFile(p.toFile(), 'rw').with { setLength(10L * 1024 * 1024 * 1024); close() }
+                input[0] = p
+                input[1] = ['2 GB', '10 GB']
+                input[2] = ['32 GB', '64 GB', '128 GB']
                 """
             }
         }
@@ -60,13 +78,99 @@ nextflow_function {
         when {
             function {
                 """
-                input[0] = 10L * 1024 * 1024 * 1024 + 1
+                def p = java.nio.file.Files.createTempFile('tier', '.tmp')
+                new java.io.RandomAccessFile(p.toFile(), 'rw').with { setLength(10L * 1024 * 1024 * 1024 + 1); close() }
+                input[0] = p
+                input[1] = ['2 GB', '10 GB']
+                input[2] = ['32 GB', '64 GB', '128 GB']
                 """
             }
         }
         then {
             assert function.success
             assert function.result.giga == 128
+        }
+    }
+
+    test("Below smallest threshold falls into smallest tier") {
+        tag "expect_success"
+        tag "bucket_32_tiny"
+        when {
+            function {
+                """
+                def p = java.nio.file.Files.createTempFile('tier', '.tmp')
+                new java.io.RandomAccessFile(p.toFile(), 'rw').with { setLength(1024L); close() }
+                input[0] = p
+                input[1] = ['2 GB', '10 GB']
+                input[2] = ['32 GB', '64 GB', '128 GB']
+                """
+            }
+        }
+        then {
+            assert function.success
+            assert function.result.giga == 32
+        }
+    }
+
+    test("Empty threshold list returns the single memory value") {
+        tag "expect_success"
+        tag "single_tier"
+        when {
+            function {
+                """
+                def p = java.nio.file.Files.createTempFile('tier', '.tmp')
+                new java.io.RandomAccessFile(p.toFile(), 'rw').with { setLength(42L); close() }
+                input[0] = p
+                input[1] = []
+                input[2] = ['16 GB']
+                """
+            }
+        }
+        then {
+            assert function.success
+            assert function.result.giga == 16
+        }
+    }
+
+    test("Sums byte sizes across a List input") {
+        tag "expect_success"
+        tag "list_input"
+        when {
+            function {
+                """
+                def p1 = java.nio.file.Files.createTempFile('tier', '.tmp')
+                new java.io.RandomAccessFile(p1.toFile(), 'rw').with { setLength(1L * 1024 * 1024 * 1024); close() }
+                def p2 = java.nio.file.Files.createTempFile('tier', '.tmp')
+                new java.io.RandomAccessFile(p2.toFile(), 'rw').with { setLength(2L * 1024 * 1024 * 1024); close() }
+                // 1 GiB + 2 GiB = 3 GiB, above the 2 GB threshold -> 64 GB tier.
+                input[0] = [p1, p2]
+                input[1] = ['2 GB', '10 GB']
+                input[2] = ['32 GB', '64 GB', '128 GB']
+                """
+            }
+        }
+        then {
+            assert function.success
+            assert function.result.giga == 64
+        }
+    }
+
+    test("Throws when memories and thresholds disagree on size") {
+        tag "expect_failure"
+        tag "invariant"
+        when {
+            function {
+                """
+                def p = java.nio.file.Files.createTempFile('tier', '.tmp')
+                new java.io.RandomAccessFile(p.toFile(), 'rw').with { setLength(1024L); close() }
+                input[0] = p
+                input[1] = ['2 GB', '10 GB']
+                input[2] = ['32 GB']
+                """
+            }
+        }
+        then {
+            assert !function.success
         }
     }
 }

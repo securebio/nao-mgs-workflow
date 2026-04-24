@@ -1,16 +1,8 @@
 // Mask low complexity FASTQ read regions. Only works on gzipped FASTQ files.
-// BBMask peak memory scales ~linearly with input bases at small sizes and
-// sub-linearly at large sizes. Size-bucketed allocation (see
-// lib/ResourceTierUtils.groovy) keeps headroom sane across the range of
-// ONT merged-library inputs while avoiding large reservations for small
-// inputs. The closure assumes `reads` is a single Path; if the input is
-// ever refactored to accept multiple files, `reads.size()` silently returns
-// the list length rather than file bytes, and every input falls through to
-// the smallest (32 GB) tier.
+// Peak memory scales with input size; see the `bbmask_resources` label for tiers.
 process MASK_FASTQ_READS {
     label "BBTools"
-    cpus 16
-    memory { ResourceTierUtils.maskFastqReadsMemory(reads.size()) }
+    label "bbmask_resources"
     input:
         tuple val(sample), path(reads)
         val(window_size)

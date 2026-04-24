@@ -28,7 +28,8 @@ These guidelines represent best practices to implement in new code, though some 
     - Each workflow should have a `<workflow_name>.md` document in `docs/`.
 - Process conventions (see `modules/local/vsearch/main.nf` for an example of a well-written process that follows these conventions):
     - All processes should have a label specifying needed resources (e.g. `label "small"`). Resources are then specified in `configs/resources.config`.
-        - Exception: when peak memory scales strongly with input size such that a single label would either under-provision the largest inputs (causing OOMs) or over-provision the smallest (wasting Batch capacity), a process may declare an input-size-aware `memory` closure directly in the module. Keep the tier-selection logic in a `lib/*.groovy` helper so it can be unit-tested via `nextflow_function` (see `lib/ResourceTierUtils.groovy` and `tests/lib/resourceTierUtils/main.nf.test`); the module's `memory` closure should be a one-line call into the helper. See `modules/local/maskRead/main.nf` for an example.
+        - Most labels declare static resources (`cpus = 8; memory = 16.GB`).
+        - When a process's peak memory scales strongly with input size, the label's `memory` directive may be a closure over the process inputs — e.g. `memory = { ResourceTierUtils.pickMemoryTier(reads, ...) }`. Keep the tier-selection logic in a `lib/*.groovy` helper so it can be unit-tested via `nextflow_function`. See `bbmask_resources` in `configs/resources.config`, `lib/ResourceTierUtils.groovy`, and `tests/lib/resourceTierUtils/main.nf.test` for an example.
     - All processes should have a label specifying the Docker container to use (e.g. `label "BBTools"`). Containers are then specified in `configs/containers.config`.
     - Any processes that are used only for testing should have `label "testing"`.
     - All processes should emit their input (for testing validation); use `ln -s` to link the input to the output.

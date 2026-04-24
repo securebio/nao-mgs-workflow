@@ -1,9 +1,10 @@
 # v3.2.1.4-dev
 
 - Prevent `MASK_FASTQ_READS` from running out of memory on merged ONT libraries larger than ~6 GB of gzipped FASTQ (#737).
-    - Replaces `label "large"` with an input-size-aware memory closure (32 / 64 / 128 GiB tiers, chosen from `reads.size()`). Tier-selection logic lives in `lib/ResourceTierUtils.groovy` (`maskFastqReadsMemory`), covered by `nextflow_function` tests at each bucket boundary. CPU allocation unchanged at 16.
-    - Documents the input-size-aware memory-closure pattern in `docs/developer.md` as an exception to the "every process uses a resource label" convention.
-    - Adds a `withName: 'MASK_FASTQ_READS'` cap in `tests/nextflow.config` so existing module tests fit GitHub runner limits after the label was removed.
+    - Replaces `label "large"` with a new `label "bbmask_resources"` whose `memory` directive is an input-size-aware closure (32 / 64 / 128 GiB tiers, chosen from input byte size). The label and its closure live in `configs/resources.config` alongside other resource labels; the module itself stays label-only. CPU allocation unchanged at 16.
+    - Tier-selection logic lives in `lib/ResourceTierUtils.groovy` as a generic `pickMemoryTier(input, thresholds, memories)` helper, covered by `nextflow_function` tests for boundary cases, single-tier usage, list summation, and the invariant that `memories.size() == thresholds.size() + 1`.
+    - Documents closure-based memory directives in `docs/developer.md` as a variant of the existing "resources live in `configs/resources.config`" pattern.
+    - Replaces a `withName: 'MASK_FASTQ_READS'` CI cap in `tests/nextflow.config` with a uniform `withLabel: bbmask_resources` override, matching how every other resource label is capped in the same file.
 
 # v3.2.1.3
 
