@@ -1,7 +1,8 @@
 // Mask low complexity FASTQ read regions. Only works on gzipped FASTQ files.
+// Peak memory scales with input size; see the `bbmask_resources` label for tiers.
 process MASK_FASTQ_READS {
-    label "large"
     label "BBTools"
+    label "bbmask_resources"
     input:
         tuple val(sample), path(reads)
         val(window_size)
