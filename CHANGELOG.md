@@ -1,3 +1,20 @@
+# v3.2.1.3
+
+## New workflow outputs
+
+- Add `experimental/` and `experimental_downstream/` output directories for staging new outputs that are not yet guaranteed to be stable across point releases
+- Add similarity-based duplicate marking to DOWNSTREAM as an experimental output via the new `MARK_SIMILARITY_DUPLICATES` module and `rust-tools/mark_duplicates_similarity` Rust library
+- Add in-workflow verification of expected outputs to RUN and DOWNSTREAM via `WRITE_SENTINEL_*` processes. These check all expected outputs have been published, then write sentinel JSON files to output (`logging/sentinel.json` for RUN, `logging_downstream/{GROUP}_sentinel.json` for DOWNSTREAM)
+
+## Cleanup and best practice
+
+- Make `bin/run-nf-test.sh` and `bin/run_nf_test_parallel.py` symlink-safe for dependent repos
+- Add authenticated ECR Public login to Trivy scan workflow to avoid anonymous pull rate limits
+- Add several Trivy CVEs to `.trivyignore` (no fix currently available; expiry set in June 2026 to force review)
+- Extract shared Groovy code for sentinel file generation to `lib/SentinelUtils.groovy`
+- Remove `logging/time.txt` and `logging_downstream/time.txt`; superseded by new sentinel JSONs
+- Make RUN workflow clearer and more readable by moving derived variables and conditional statements into subworkflows, including new `PREPARE_INPUT_LOGGING` and `EXTRACT_VIRAL_READS` subworkflows
+
 # v3.2.1.2
 
 - Add `nucleaze` to the rust-tools container and bump Rust toolchain from 1.83 to 1.88.

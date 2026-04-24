@@ -14,9 +14,9 @@ include { VALIDATE_VIRAL_ASSIGNMENTS } from "../subworkflows/local/validateViral
 include { COUNT_READS_PER_CLADE } from "../modules/local/countReadsPerClade"
 include { COPY_FILE_BARE as COPY_PYPROJECT } from "../modules/local/copyFile"
 include { COPY_FILE_BARE as COPY_INPUT } from "../modules/local/copyFile"
-include { COPY_FILE_BARE as COPY_TIME } from "../modules/local/copyFile"
 include { SORT_TSV as SORT_ONT_HITS } from "../modules/local/sortTsv"
 include { ADD_FIXED_COLUMN as PAD_ONT_COLUMNS } from "../modules/local/addFixedColumn"
+include { WRITE_SENTINEL_DOWNSTREAM } from "../modules/local/writeSentinelDownstream"
 
 /*****************
 | MAIN WORKFLOWS |
@@ -51,6 +51,7 @@ workflow DOWNSTREAM {
             viral_hits_ch = PAD_ONT_COLUMNS(viral_hits_ch, pad_cols, "NA", "padded").output
             dup_output_ch = Channel.empty()
             clade_counts_ch = Channel.empty()
+            sim_dup_ch = Channel.empty()
         }
         else {
             // Short-read: Mark duplicates based on alignment coordinates
@@ -59,6 +60,7 @@ workflow DOWNSTREAM {
             dup_output_ch = MARK_VIRAL_DUPLICATES.out.dup.map { label, _reads, stats -> [label, stats] }
             // Generate clade counts
             clade_counts_ch = COUNT_READS_PER_CLADE(viral_hits_ch, viral_db).output
+            sim_dup_ch = MARK_VIRAL_DUPLICATES.out.sim_dup
         }
         // Validate taxonomic assignments
         def validation_params = params.collectEntries { k, v -> [k, v] }
@@ -69,16 +71,33 @@ workflow DOWNSTREAM {
         params_ch = Channel.of(params_str).collectFile(name: "params-downstream.json")
         pyproject_ch = COPY_PYPROJECT(Channel.fromPath(pipeline_pyproject_path), "pyproject.toml")
         input_file_ch = COPY_INPUT(Channel.fromPath(params.input_file), "input_file.csv")
-        time_file = start_time_str.map { it + "\n" }.collectFile(name: "time.txt")
-        time_ch = COPY_TIME(time_file, "time.txt")
+
+        // Pre-define publish-channel aggregates so we can both emit them and feed them into the sentinel barrier
+        input_downstream_ch = params_ch.mix(input_file_ch)
+        logging_downstream_ch = pyproject_ch
+        results_downstream_ch = dup_output_ch.mix(
+                                    clade_counts_ch,
+                                    validate_ch.annotated_hits,
+                                    concat_ch.other,
+                                    concat_ch.fastp_json)
+
+        // Validate published outputs and write per-group sentinels
+        groups_only_ch = load_ch.groups
+            .map { _label, _sample, group -> group }
+            .unique()
+        sentinel_params = params + [output_dir: "${params.base_dir}/output", pyproject_path: "${projectDir}/pyproject.toml"]
+        WRITE_SENTINEL_DOWNSTREAM(
+            groups_only_ch,
+            input_downstream_ch.mix(logging_downstream_ch, results_downstream_ch).collect(),
+            start_time_str,
+            sentinel_params
+        )
 
     emit:
-        input_downstream = params_ch.mix(input_file_ch)
-        logging_downstream = time_ch.mix(pyproject_ch)
+        input_downstream = input_downstream_ch
+        logging_downstream = logging_downstream_ch
         intermediates_downstream = validate_ch.blast_results
-        results_downstream = dup_output_ch.mix(
-                                clade_counts_ch,
-                                validate_ch.annotated_hits,
-                                concat_ch.other,
-                                concat_ch.fastp_json)
+        results_downstream = results_downstream_ch
+        experimental_downstream = sim_dup_ch
+        sentinel_downstream = WRITE_SENTINEL_DOWNSTREAM.out.sentinel
 }

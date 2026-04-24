@@ -1,0 +1,62 @@
+nextflow_workflow {
+
+    name "Test subworkflow EXTRACT_VIRAL_READS"
+    script "subworkflows/local/extractViralReads/main.nf"
+    workflow "EXTRACT_VIRAL_READS"
+    tag "subworkflow"
+    tag "extract_viral_reads"
+
+    test("Should extract viral reads for Illumina paired-end data") {
+        tag "expect_success"
+        tag "paired_end"
+        config "tests/configs/run.config"
+        when {
+            workflow {
+                '''
+                input[0] = Channel.of(["test", ["${projectDir}/test-data/tiny-index/reads/R1.fastq", "${projectDir}/test-data/tiny-index/reads/R2.fastq"]])
+                input[1] = params
+                '''
+            }
+        }
+        then {
+            assert workflow.success
+            // All 5 emit channels should be present
+            assert workflow.out.hits_final.size() > 0
+            assert workflow.out.inter_lca.size() > 0
+            assert workflow.out.inter_aligner.size() > 0
+            assert workflow.out.bbduk_match.size() > 0
+            assert workflow.out.bbduk_trimmed.size() > 0
+            // hits_final should be a valid gzipped TSV with rows
+            def hits_tab = path(workflow.out.hits_final[0][1]).csv(sep: "\t", decompress: true)
+            assert hits_tab.rowCount > 0
+        }
+    }
+
+    test("Should extract viral reads for ONT data") {
+        tag "expect_success"
+        tag "ont"
+        config "tests/configs/run_ont.config"
+        when {
+            workflow {
+                '''
+                input[0] = Channel.of(["test", "${projectDir}/test-data/tiny-index/reads/ont.fastq"])
+                input[1] = params
+                '''
+            }
+        }
+        then {
+            assert workflow.success
+            // Core emit channels should be present
+            assert workflow.out.hits_final.size() > 0
+            assert workflow.out.inter_lca.size() > 0
+            assert workflow.out.inter_aligner.size() > 0
+            // BBDuk channels should be empty for ONT
+            assert workflow.out.bbduk_match.size() == 0
+            assert workflow.out.bbduk_trimmed.size() == 0
+            // hits_final should be a valid gzipped TSV with rows
+            def hits_tab = path(workflow.out.hits_final[0][1]).csv(sep: "\t", decompress: true)
+            assert hits_tab.rowCount > 0
+        }
+    }
+
+}

@@ -29,7 +29,7 @@ nextflow_process {
             assert process.errorReport.contains("Empty input file")
             assert !process.errorReport.contains("Missing required header")
             assert !process.errorReport.contains("Invalid field count")
-            assert !process.errorReport.contains("invalid value for one of the arguments")
+            assert !process.errorReport.contains("invalid value")
         }
     }
 
@@ -53,7 +53,7 @@ nextflow_process {
             assert !process.errorReport.contains("Empty input file")
             assert !process.errorReport.contains("Missing required header")
             assert process.errorReport.contains("Invalid field count")
-            assert !process.errorReport.contains("invalid value for one of the arguments")
+            assert !process.errorReport.contains("invalid value")
         }
     }
 
@@ -77,7 +77,7 @@ nextflow_process {
             assert !process.errorReport.contains("Empty input file")
             assert process.errorReport.contains("Missing required header")
             assert !process.errorReport.contains("Invalid field count")
-            assert !process.errorReport.contains("invalid value for one of the arguments")
+            assert !process.errorReport.contains("invalid value")
         }
     }
 
@@ -101,7 +101,7 @@ nextflow_process {
             assert !process.errorReport.contains("Empty input file")
             assert !process.errorReport.contains("Missing required header")
             assert !process.errorReport.contains("Invalid field count")
-            assert process.errorReport.contains("invalid value for one of the arguments")
+            assert process.errorReport.contains("invalid value")
         }
     }
 
@@ -125,7 +125,7 @@ nextflow_process {
             assert !process.errorReport.contains("Empty input file")
             assert !process.errorReport.contains("Missing required header")
             assert !process.errorReport.contains("Invalid field count")
-            assert process.errorReport.contains("invalid value for one of the arguments")
+            assert process.errorReport.contains("invalid value")
         }
     }
 

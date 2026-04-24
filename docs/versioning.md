@@ -7,6 +7,8 @@ From version 2.6.0.0 we're adopting a new 4-number versioning scheme, described 
 3. **Results:** The third number will be incremented each time the results are no longer directly comparable to previous versions.
 4. **Point:** The fourth number will be incremented any other time the pipeline code changes in a manner that doesn't meet the criteria above, such as changes that impact performance but not results; changes to documentation; options that are off by default; and new output files that don't interfere with existing outputs (including additions to the `expected-outputs-*` lists in `pyproject.toml`).
 
+**Experimental outputs:** The `experimental/` and `experimental_downstream/` output directories are exempt from the above guarantees. Files in these directories may change or be removed in any release, including point releases. See [output.md](output.md) for details.
+
 Users relying on pipeline outputs should take the following actions in response to pipeline changes:
 
 1. **Point change or higher:** Review changes for new outputs and options that could be relevant to user's application.

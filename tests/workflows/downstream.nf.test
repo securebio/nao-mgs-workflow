@@ -17,7 +17,7 @@ def getExpectedOutputs = { pyprojectPath, workflowKey, sampleOrGroupName ->
 
 // Get observed output files, excluding intermediates and trace files
 def getObservedOutputs = { outputDir ->
-    def excludePatterns = ["intermediates", "intermediates_downstream", "trace"]
+    def excludePatterns = ["intermediates", "intermediates_downstream", "trace", "experimental", "experimental_downstream", "sentinel"]
     def observedFiles = []
     outputDir.eachFileRecurse(FILES) { file ->
         def relPath = outputDir.relativize(file).toString()
@@ -32,6 +32,18 @@ def getResultPaths = { outputDir, expectedFiles ->
     return expectedFiles
         .findAll { it.startsWith("results_downstream/") }
         .collect { path(outputDir + "/" + it) }
+}
+
+// Verify per-group sentinel.json exists and contains expected fields
+def assertSentinelValid = { outputDir, group ->
+    def sentinelFile = path("${outputDir}/logging_downstream/${group}_sentinel.json")
+    assert sentinelFile.exists() : "${group}_sentinel.json not found"
+    def sentinelData = new groovy.json.JsonSlurper().parse(sentinelFile.toFile())
+    assert sentinelData.downstreamStartedAt != null : "downstreamStartedAt missing"
+    assert sentinelData.downstreamCompletedAt != null : "downstreamCompletedAt missing"
+    def timestampFormat = /\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} UTC \(\+0000\)/
+    assert sentinelData.downstreamStartedAt ==~ timestampFormat : "downstreamStartedAt format mismatch"
+    assert sentinelData.downstreamCompletedAt ==~ timestampFormat : "downstreamCompletedAt format mismatch"
 }
 
 nextflow_pipeline {
@@ -54,6 +66,15 @@ nextflow_pipeline {
             // Verify result file contents match snapshot
             def resultPaths = getResultPaths("${launchDir}/output", expected)
             assert snapshot(*resultPaths).match("downstream_output_shortread")
+            // Verify experimental downstream output exists
+            def experimentalDir = path("${launchDir}/output/experimental_downstream")
+            def experimentalFiles = []
+            experimentalDir.eachFileRecurse(FILES) { file ->
+                experimentalFiles << experimentalDir.relativize(file).toString()
+            }
+            assert experimentalFiles.size() == 1
+            assert experimentalFiles[0] == "tt1_duplicate_reads_similarity.tsv.gz"
+            assertSentinelValid("${launchDir}/output", "tt1")
         }
     }
 
@@ -71,6 +92,11 @@ nextflow_pipeline {
             // Verify result file contents match snapshot
             def resultPaths = getResultPaths("${launchDir}/output", expected)
             assert snapshot(*resultPaths).match("downstream_output_ont")
+            // Verify no experimental downstream output for ONT
+            // Uses new File() instead of path() because path() fails if the directory doesn't exist
+            def experimentalDir = new File("${launchDir}/output/experimental_downstream")
+            assert !experimentalDir.exists() || experimentalDir.list().length == 0
+            assertSentinelValid("${launchDir}/output", "tt1")
         }
     }
 
@@ -88,6 +114,19 @@ nextflow_pipeline {
             def expected = getExpectedOutputs(path("${projectDir}/pyproject.toml"), "downstream", "empty_group")
             def observed = getObservedOutputs(path("${launchDir}/output"))
             assert observed == expected : "Expected ${expected} but got ${observed}"
+            // Verify experimental downstream output exists with correct headers
+            def experimentalDir = path("${launchDir}/output/experimental_downstream")
+            def experimentalFiles = []
+            experimentalDir.eachFileRecurse(FILES) { file ->
+                experimentalFiles << file
+            }
+            assert experimentalFiles.size() == 1
+            def lines = experimentalFiles[0].linesGzip
+            assert lines.size() == 1 // header only, no data rows
+            def header = lines[0].split("\t") as List
+            assert "sim_dup_exemplar" in header
+            assert "sim_dup_group_size" in header
+            assertSentinelValid("${launchDir}/output", "empty_group")
         }
     }
 

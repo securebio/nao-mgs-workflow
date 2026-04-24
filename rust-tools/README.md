@@ -6,6 +6,7 @@ Rust utilities that run as part of the Nextflow pipeline. These are compiled int
 ## Workspace Tools
 
 - **mark_duplicates** — Marks duplicate alignments in SAM/BAM data
+- **mark_duplicates_similarity** — Marks similarity-based duplicates among alignment-unique reads using [nao-dedup](https://github.com/securebio/nao-dedup)
 - **process_vsearch_cluster_output** — Processes tabular output from VSEARCH clustering
 
 ## External Tools
@@ -22,6 +23,7 @@ development workflow, and how to add new tools.
 
 ## Note on post-processing/rust_dedup/
 
-A separate Rust tool exists in `post-processing/rust_dedup/` for similarity-based
-duplicate marking. That tool is currently a standalone post-processing utility (not
-part of the Nextflow pipeline) and may be consolidated here in a future PR.
+The similarity-based duplicate marking tool has been copied into this workspace as
+`mark_duplicates_similarity`. The original source in `post-processing/rust_dedup/`
+is retained for backwards compatibility with `securebio/nao-mgs-partner-reports`
+and will be removed once that dependency is migrated.

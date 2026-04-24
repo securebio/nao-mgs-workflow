@@ -2,12 +2,23 @@
 
 If the pipeline runs to completion, the following output files are expected. In the future, we will add more specific information about the outputs, including in-depth descriptions of the columns in the output files.
 
-All pipeline output can be found in the `output` directory, which is broken into four subdirectories:
+All pipeline output can be found in the `output` directory, which is broken into five subdirectories:
 
 - `input`: Directory containing saved input information (useful for trying to reproduce someone else's results)
 - `logging`: Log files containing meta-level information about the pipeline run itself.
 - `intermediates`: Intermediate files produced by key stages in the run workflow, saved for nonstandard downstream analysis.
 - `results`: Directory containing processed results files for standard downstream analysis.
+- `experimental`: Directory containing experimental outputs that are under active development and not yet guaranteed to be stable. See below for details.
+
+## Experimental outputs
+
+The `experimental/` (INDEX and RUN workflows) and `experimental_downstream/` (DOWNSTREAM workflow) directories contain outputs that are under active development. Files in these directories:
+
+- Are NOT tracked in the `expected-outputs-*` lists in `pyproject.toml`
+- Are NOT guaranteed to have schemas or complete documentation
+- May change or be removed in any release, including point (4th-number) releases
+
+Downstream consumers use experimental outputs at their own risk, and are responsible for keeping their code up to date with changes in the structure and contents of these files across releases. Once ready, experimental outputs are promoted into regular outputs and become subject to the standard output guarantees.
 
 ## Run workflow
 
@@ -24,12 +35,12 @@ Main heading represents the folder name, and subheadings represent a description
 
 - `pyproject.toml`: Project configuration file containing the pipeline version and compatibility version constraints (copied from repository).
 - `pyproject-index.toml`: Project configuration file from the index directory, containing the index's pipeline version and compatibility constraints (copied from index directory).
-- `time.txt`: Start time of the run.
+- `sentinel.json`: Completion marker written after all expected output files have been verified. Contains `runStartedAt` and `runCompletedAt` timestamps. External systems can check for this file to confirm the run completed successfully. The `sentinel_max_wait_mins` parameter (default 32) controls how long to wait for expected outputs before timing out.
 - `trace_<timestamp>.tsv`: Tab delimited log of all the information for each task run in the pipeline including runtime, memory usage, exit status, etc. Can be used to create an execution timeline using the the script `bin/plot-timeline-script.R` after the pipeline has finished running. More information regarding the trace file format can be found [here](https://www.nextflow.io/docs/latest/reports.html#trace-file).
 
 ### `intermediates/`
 
-- `aligner_hits_all.tsv.gz`: List of all putative viral alignments (primary, secondary and supplementary) from the aligner used in the `RUN` workflow (bowtie2 for EXTRACT_VIRAL_READS_SHORT or minimap2 for EXTRACT_VIRAL_READS_ONT) with modified columns from the [SAM specification](https://samtools.github.io/hts-specs/SAMv1.pdf).
+- `aligner_hits_all.tsv.gz`: List of all putative viral alignments (primary, secondary and supplementary) from the aligner used in the `EXTRACT_VIRAL_READS` subworkflow (bowtie2 for short reads or minimap2 for ONT) with modified columns from the [SAM specification](https://samtools.github.io/hts-specs/SAMv1.pdf).
 - `lca_hits_all.tsv.gz`: List of putative viral reads after having applied LCA to `aligner_hits_all.tsv.gz`, along with columns representing summary statistics.
 - `reads/raw_viral/*`: Directory containing raw reads corresponding to those reads that survive initial viral screening with BBDuk. (Note: this is not currently produced for ONT data.)
 
@@ -56,6 +67,12 @@ Main heading represents the folder name, and subheadings represent a description
 #### Taxonomic identification
 - `{sample}_bracken.tsv.gz`: Bracken output reports in TSV format for a given sample, labeled by ribosomal status, for subset samples produced by SUBSET_TRIM.
 - `{sample}_kraken.tsv.gz`: Kraken output reports in TSV format for a given sample, labeled by ribosomal status, for subset samples produced by SUBSET_TRIM.
+
+## Downstream workflow
+
+### `logging_downstream/`
+
+- `{group}_sentinel.json`: Per-group completion marker written after all expected DOWNSTREAM output files for that group have been verified. Contains `downstreamStartedAt` and `downstreamCompletedAt` timestamps. One file is written and published independently per group in the input CSV, so external systems can check for each file to confirm DOWNSTREAM completed successfully for that group. If the input CSV resolves to an empty groups channel (e.g. a groups TSV with only a header), no sentinels are written at all. The `sentinel_max_wait_mins` parameter (default 32) controls how long to wait for expected outputs before timing out.
 
 ## Index workflow
 
