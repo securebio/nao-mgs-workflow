@@ -1,5 +1,6 @@
 # v3.2.1.4-dev
 
+- Tolerate viral taxa with no linked NCBI assemblies in `DOWNLOAD_VIRAL_GENOMES`. The module now detects the `datasets download genome taxon` "no genome data is currently available" error and emits an empty `${taxid}_genomes/` (declared `optional`) plus a header-only `${taxid}_metadata.tsv`, instead of failing the whole `MAKE_VIRUS_GENOME_DB` subworkflow whenever any single child taxon happens to have no assemblies. This covers the case where NCBI publishes a new viral family/genus to the taxonomy before assemblies are linked to it.
 - Add CVE-2026-41989 (libgcrypt20) to `.trivyignore`; no Debian fix available and not exercised by our pipeline.
 - Prevent `MASK_FASTQ_READS` from running out of memory on merged ONT libraries larger than ~6 GB of gzipped FASTQ (#737).
     - Replaces `label "large"` with a new `label "bbmask_resources"` whose `memory` directive is an input-size-aware closure (32 / 64 / 128 GiB tiers, chosen from input byte size). The label and its closure live in `configs/resources.config` alongside other resource labels; the module itself stays label-only. CPU allocation unchanged at 16.

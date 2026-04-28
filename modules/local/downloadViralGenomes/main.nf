@@ -8,18 +8,37 @@ process DOWNLOAD_VIRAL_GENOMES {
         val(extra_args)
         val(max_attempts)
     output:
-        path("${taxid}_genomes/*.fna.gz"), emit: genomes
+        path("${taxid}_genomes/*.fna.gz"), optional: true, emit: genomes
         path("${taxid}_metadata.tsv"), emit: metadata
     script:
         """
-        # 1. Download dehydrated package (metadata + manifest only)
+        # 1. Download dehydrated package (metadata + manifest only).
+        # NCBI's taxonomy can include taxa whose assemblies haven't been linked
+        # yet (typical lag between ICTV publishing a new taxon and its genomes
+        # appearing). Tolerate that by emitting empty outputs instead of failing.
+        set +e
         datasets download genome taxon ${taxid} \\
             --assembly-source ${assembly_source} \\
             --include genome \\
             --no-progressbar \\
             --dehydrated \\
             ${extra_args} \\
-            --filename output.zip
+            --filename output.zip 2> dl_err.txt
+        rc=\$?
+        set -e
+        cat dl_err.txt >&2
+        if [ \$rc -ne 0 ]; then
+            if grep -q "no genome data is currently available" dl_err.txt; then
+                mkdir -p ${taxid}_genomes
+                printf 'assembly_accession\\ttaxid\\torganism_name\\tsource_database\\n' > ${taxid}_metadata.tsv
+                echo "Taxon ${taxid} has no assemblies available; emitting empty outputs." >&2
+                rm -f dl_err.txt
+                exit 0
+            fi
+            rm -f dl_err.txt
+            exit \$rc
+        fi
+        rm -f dl_err.txt
         unzip -o output.zip -d output/
 
         # 2. Rehydrate: download actual genome files with retry and exponential backoff

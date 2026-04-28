@@ -1,0 +1,5 @@
+#!/bin/bash
+# Stub for testing the empty-taxon path of DOWNLOAD_VIRAL_GENOMES. Always exits
+# with the same stderr signature NCBI emits when a taxon has no assemblies.
+echo "Error: The taxonomy ID 'TEST' is valid for 'TestEmpty', but no genome data is currently available for this taxon." >&2
+exit 1
