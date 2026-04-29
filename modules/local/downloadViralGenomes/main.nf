@@ -28,7 +28,7 @@ process DOWNLOAD_VIRAL_GENOMES {
             --filename output.zip 2> dl_err.txt
         then
             cat dl_err.txt >&2
-            if grep -qE 'no genome data is currently available for this taxon\\.' dl_err.txt; then
+            if grep -qE '^Error:.*no genome data is currently available for this taxon\\.\$' dl_err.txt; then
                 mkdir -p ${taxid}_genomes
                 printf '${metadata_header}\\n' > ${taxid}_metadata.tsv
                 echo "Taxon ${taxid} has no assemblies available; emitting empty outputs." >&2
