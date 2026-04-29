@@ -1,5 +1,6 @@
 # v3.2.1.4-dev
 
+- Add `--batch_job_role` parameter to allow Batch profiles to use an IAM job role instead of exported AWS credentials (#742).
 - Prevent `MASK_FASTQ_READS` from running out of memory on merged ONT libraries larger than ~6 GB of gzipped FASTQ (#737).
     - Replaces `label "large"` with a new `label "bbmask_resources"` whose `memory` directive is an input-size-aware closure (32 / 64 / 128 GiB tiers, chosen from input byte size). The label and its closure live in `configs/resources.config` alongside other resource labels; the module itself stays label-only. CPU allocation unchanged at 16.
     - Tier-selection logic is a generic `ResourceTierUtils.pickMemoryTier(input, thresholds, memories)` helper declared at the top of `configs/resources.config`. The class lives in the config file (rather than `lib/*.groovy`) because Nextflow's `lib/` auto-loading puts classes on the script classpath but not the config classpath; config-scope `memory = { … }` closures can't resolve `lib/` classes.

@@ -106,6 +106,15 @@ process.queue = { task.attempt > 1 ? "my-on-demand-queue" : "my-spot-queue" }
 
 Note: Nextflow cannot distinguish Spot reclamation from other failures (both surface as exit code 1), so all retries are routed to the fallback queue regardless of failure cause.
 
+## Optional: use a Batch job role
+
+By default, the `standard`, `batch`, and `test_run` profiles enable `fusion.exportStorageCredentials`, so Nextflow propagates the caller's AWS credentials to Batch containers as environment variables. If your AWS environment provides an IAM role that Batch jobs can assume — with the S3 read/write permissions needed for your sample sheet, index, and base directories — you can pass its ARN with `--batch_job_role <ARN>`. When set:
+
+- The role is attached to Batch jobs via `aws.batch.jobRole`.
+- `fusion.exportStorageCredentials` is automatically disabled for that run, so containers obtain credentials from the role rather than from environment variables.
+
+The role's trust policy must allow `ecs-tasks.amazonaws.com` to assume it, and the IAM principal launching Nextflow must have `iam:PassRole` for the role. When `--batch_job_role` is omitted, profile behavior is unchanged.
+
 ## 4. Run Nextflow with Batch
 
 Finally, you need to use all the infrastructure you've just set up to actually run a Nextflow workflow! We recommend using our [test dataset](https://github.com/naobservatory/mgs-workflow/blob/will-merge-master/docs/installation.md#6-run-the-pipeline-on-test-data) to get started.
