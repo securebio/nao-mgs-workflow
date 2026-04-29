@@ -9,6 +9,9 @@
 #                 to propagate this as a process failure.
 # Argv is echoed back on stderr so a path drift (the bind mount missing the
 # real `datasets` binary) shows up in `.command.err` for debugging.
+# Additionally, the `Should emit empty outputs when taxon has no assemblies` test
+# would fail in that case since the stub will fail to overwrite the `datasets` binary
+# with an error like `Error: The taxonomy ID '99999999' does not match any existing taxids for 'genome`.
 
 echo "STUB_DATASETS_ARGV: $*" >&2
 
