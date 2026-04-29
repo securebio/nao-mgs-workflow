@@ -11,33 +11,34 @@ process DOWNLOAD_VIRAL_GENOMES {
         path("${taxid}_genomes/*.fna.gz"), optional: true, emit: genomes
         path("${taxid}_metadata.tsv"), emit: metadata
     script:
+        // Header schema for ${taxid}_metadata.tsv. Reused in the empty-taxon
+        // branch and the happy-path header rewrite below — keep them in sync.
+        def metadata_header = "assembly_accession\\ttaxid\\torganism_name\\tsource_database"
         """
         # 1. Download dehydrated package (metadata + manifest only).
         # NCBI's taxonomy can include taxa whose assemblies haven't been linked
         # yet (typical lag between ICTV publishing a new taxon and its genomes
         # appearing). Tolerate that by emitting empty outputs instead of failing.
-        set +e
-        datasets download genome taxon ${taxid} \\
+        if ! datasets download genome taxon ${taxid} \\
             --assembly-source ${assembly_source} \\
             --include genome \\
             --no-progressbar \\
             --dehydrated \\
             ${extra_args} \\
             --filename output.zip 2> dl_err.txt
-        rc=\$?
-        set -e
-        cat dl_err.txt >&2
-        if [ \$rc -ne 0 ]; then
-            if grep -q "no genome data is currently available" dl_err.txt; then
+        then
+            cat dl_err.txt >&2
+            if grep -qE 'no genome data is currently available for this taxon\\.' dl_err.txt; then
                 mkdir -p ${taxid}_genomes
-                printf 'assembly_accession\\ttaxid\\torganism_name\\tsource_database\\n' > ${taxid}_metadata.tsv
+                printf '${metadata_header}\\n' > ${taxid}_metadata.tsv
                 echo "Taxon ${taxid} has no assemblies available; emitting empty outputs." >&2
                 rm -f dl_err.txt
                 exit 0
             fi
             rm -f dl_err.txt
-            exit \$rc
+            exit 1
         fi
+        cat dl_err.txt >&2
         rm -f dl_err.txt
         unzip -o output.zip -d output/
 
@@ -63,7 +64,7 @@ process DOWNLOAD_VIRAL_GENOMES {
             > raw_metadata.tsv
 
         # 4. Replace header with standardized column names
-        { echo -e "assembly_accession\\ttaxid\\torganism_name\\tsource_database"
+        { echo -e "${metadata_header}"
           tail -n +2 raw_metadata.tsv
         } > ${taxid}_metadata.tsv
 

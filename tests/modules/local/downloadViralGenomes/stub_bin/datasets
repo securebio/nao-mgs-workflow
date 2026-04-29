@@ -1,5 +1,33 @@
 #!/bin/bash
-# Stub for testing the empty-taxon path of DOWNLOAD_VIRAL_GENOMES. Always exits
-# with the same stderr signature NCBI emits when a taxon has no assemblies.
-echo "Error: The taxonomy ID 'TEST' is valid for 'TestEmpty', but no genome data is currently available for this taxon." >&2
+# Stub for testing DOWNLOAD_VIRAL_GENOMES failure paths. Behavior is selected
+# by the taxid argument so a single config can drive both happy- and
+# negative-failure tests:
+#   - 99999999 -> emits the "no genome data" sentinel NCBI returns when a
+#                 taxon has no linked assemblies. The module is expected to
+#                 swallow this and emit empty outputs.
+#   - 88888888 -> emits a generic, non-sentinel error. The module is expected
+#                 to propagate this as a process failure.
+# Argv is echoed back on stderr so a path drift (the bind mount missing the
+# real `datasets` binary) shows up in `.command.err` for debugging.
+
+echo "STUB_DATASETS_ARGV: $*" >&2
+
+taxid=""
+prev=""
+for arg in "$@"; do
+    if [ "$prev" = "taxon" ]; then
+        taxid="$arg"
+        break
+    fi
+    prev="$arg"
+done
+
+case "$taxid" in
+    88888888)
+        echo "Error: connection timeout while contacting NCBI servers." >&2
+        ;;
+    *)
+        echo "Error: The taxonomy ID 'TEST' is valid for 'TestEmpty', but no genome data is currently available for this taxon." >&2
+        ;;
+esac
 exit 1

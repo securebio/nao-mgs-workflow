@@ -62,4 +62,28 @@ nextflow_process {
         }
     }
 
+    test("Should fail when datasets errors with a non-empty-taxon message") {
+        tag "expect_failed"
+        tag "empty_taxon"
+        // Same stubbed `datasets` as above, but invoked with a taxid that
+        // makes the stub emit a generic error instead of the empty-taxon
+        // sentinel. Guards against future loosening of the grep filter
+        // letting unrelated `datasets` failures slip through silently.
+        config "tests/configs/empty_taxon.config"
+        when {
+            params {}
+            process {
+                """
+                input[0] = "88888888"
+                input[1] = "refseq"
+                input[2] = ""
+                input[3] = 5
+                """
+            }
+        }
+        then {
+            assert process.failed
+        }
+    }
+
 }
