@@ -35,7 +35,7 @@ nextflow_process {
     // selects its error message by the taxid it was invoked with:
     //   - taxid 99999999 -> empty-taxon sentinel ("no genome data is currently
     //                       available for this taxon.") that the module is
-    //                       expected to swallow into empty outputs.
+    //                       expected to handle and then emit empty outputs for.
     //   - taxid 88888888 -> generic "connection timeout" error that the module
     //                       is expected to propagate as a failure.
     test("Should emit empty outputs when taxon has no assemblies") {

@@ -11,14 +11,12 @@ process DOWNLOAD_VIRAL_GENOMES {
         path("${taxid}_genomes/*.fna.gz"), optional: true, emit: genomes
         path("${taxid}_metadata.tsv"), emit: metadata
     script:
-        // Header schema for ${taxid}_metadata.tsv. Reused in the empty-taxon
-        // branch and the happy-path header rewrite below — keep them in sync.
+        // Header schema for ${taxid}_metadata.tsv
         def metadata_header = "assembly_accession\\ttaxid\\torganism_name\\tsource_database"
         """
         # 1. Download dehydrated package (metadata + manifest only).
-        # NCBI's taxonomy can include taxa whose assemblies haven't been linked
-        # yet (typical lag between ICTV publishing a new taxon and its genomes
-        # appearing). Tolerate that by emitting empty outputs instead of failing.
+        # NCBI's taxonomy can include taxa without assemblies,
+        # so catch and emit empty outputs instead of failing.
         if ! datasets download genome taxon ${taxid} \\
             --assembly-source ${assembly_source} \\
             --include genome \\

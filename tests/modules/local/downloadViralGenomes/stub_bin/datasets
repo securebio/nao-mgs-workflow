@@ -4,7 +4,7 @@
 # negative-failure tests:
 #   - 99999999 -> emits the "no genome data" sentinel NCBI returns when a
 #                 taxon has no linked assemblies. The module is expected to
-#                 swallow this and emit empty outputs.
+#                 handle this and emit empty outputs.
 #   - 88888888 -> emits a generic, non-sentinel error. The module is expected
 #                 to propagate this as a process failure.
 # Argv is echoed back on stderr so a path drift (the bind mount missing the
