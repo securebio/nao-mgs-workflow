@@ -1,6 +1,7 @@
 # v3.2.1.5-dev
 
 - Bump minimum Nextflow version from 25.10.4 to 26.04.0.
+    - Pin nf-test to 0.9.5 (was implicit 0.9.3 from `nf-core/setup-nf-test@v1` default). Nf-test 0.9.4 added strict-syntax support for the auto-generated test wrappers, which Nextflow 26.04.0's strict parser requires (older versions emit `WORKFLOW(*input)` splats that 26.04.0 rejects).
 - Clean up Nextflow code to conform to strict syntax in preparation for adding `nextflow lint` to CI. No behavioral changes.
     - Replace `env BAREWORD` with `env('STRING')` in process output declarations.
     - Rename deprecated `Channel.X` factory calls to `channel.X`.
