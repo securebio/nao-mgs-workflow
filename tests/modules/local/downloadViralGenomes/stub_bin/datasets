@@ -23,11 +23,18 @@ for arg in "$@"; do
 done
 
 case "$taxid" in
+    99999999)
+        echo "Error: The taxonomy ID 'TEST' is valid for 'TestEmpty', but no genome data is currently available for this taxon." >&2
+        exit 1
+        ;;
     88888888)
         echo "Error: connection timeout while contacting NCBI servers." >&2
+        exit 1
         ;;
     *)
-        echo "Error: The taxonomy ID 'TEST' is valid for 'TestEmpty', but no genome data is currently available for this taxon." >&2
+        # Force an explicit branch decision for any new test taxid: silently
+        # falling through to the empty-taxon sentinel would mis-cover tests.
+        echo "stub: unrecognized taxid '$taxid' — add an explicit case arm" >&2
+        exit 2
         ;;
 esac
-exit 1
