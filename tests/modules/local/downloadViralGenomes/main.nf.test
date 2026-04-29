@@ -90,6 +90,9 @@ nextflow_process {
         }
         then {
             assert process.failed
+            // Confirm the failure was the stub's generic-error branch, not an
+            // unrelated failure.
+            assert process.errorReport.contains("Error: connection timeout while contacting NCBI servers.")
         }
     }
 
