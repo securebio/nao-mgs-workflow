@@ -1,5 +1,6 @@
 # v3.2.1.5-dev
 
+- Bump minimum Nextflow version from 25.10.4 to 26.04.0.
 - Clean up Nextflow code to conform to strict syntax in preparation for adding `nextflow lint` to CI. No behavioral changes.
     - Replace `env BAREWORD` with `env('STRING')` in process output declarations.
     - Rename deprecated `Channel.X` factory calls to `channel.X`.
