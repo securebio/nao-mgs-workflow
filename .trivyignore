@@ -71,6 +71,13 @@ CVE-2026-40192 exp:2026-06-30
 # Our containers don't perform attacker-controlled iconv conversions.
 CVE-2026-4046 exp:2026-06-30
 
+# libgcrypt20: heap overflow / DoS via crafted ECDH ciphertext to gcry_pk_decrypt
+# (no Debian fix available as of 2026-04-29; fixed in upstream libgcrypt >= 1.12.2)
+# Our pipeline containers never decrypt attacker-controlled ECDH ciphertext.
+# Check for a Debian fix at:
+#   https://security-tracker.debian.org/tracker/CVE-2026-41989
+CVE-2026-41989 exp:2026-06-30
+
 # ncurses: stack-based buffer overflow in infocmp CLI tool (no-dsa, low urgency)
 # Our containers never invoke infocmp. Fix only in sid (6.6+).
 CVE-2025-69720 exp:2026-06-30
