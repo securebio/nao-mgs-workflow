@@ -34,7 +34,7 @@ workflow RUN {
         def profile_params = params + [min_kmer_fraction: "0.4", k: "27", ribo_suffix: "ribo"]
         profile_ch = PROFILE(subset_ch.trimmed_subset_reads, samplesheet_ch.single_end, profile_params)
         // Prepare output streams
-        input_log_ch = PREPARE_INPUT_LOGGING(params, compat_ch.index_pyproject_path, compat_ch.pipeline_pyproject_path, samplesheet_ch.start_time_str)
+        input_log_ch = PREPARE_INPUT_LOGGING(params, compat_ch.index_pyproject_path, compat_ch.pipeline_pyproject_path)
         qc_results_ch = count_ch.output.mix(qc_ch.pre_qc, qc_ch.post_qc, subset_ch.fastp_json)
         other_results_ch = viral_ch.hits_final.mix(profile_ch.bracken, profile_ch.kraken)
         // Validate published outputs and write sentinel

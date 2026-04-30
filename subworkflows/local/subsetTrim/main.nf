@@ -25,8 +25,8 @@ workflow SUBSET_TRIM {
             paired: !v
         }
         // Forward reads into one of two channels based on endedness (the other will be empty)
-        reads_ch_single = single_end_check.single.combine(reads_ch).map{it -> [it[1], it[2]] }
-        reads_ch_paired = single_end_check.paired.combine(reads_ch).map{it -> [it[1], it[2]] }
+        reads_ch_single = single_end_check.single.combine(reads_ch).map { _flag, sample, reads -> [sample, reads] }
+        reads_ch_paired = single_end_check.paired.combine(reads_ch).map { _flag, sample, reads -> [sample, reads] }
         // Subset reads according to endedness (other channel will be empty)
         subset_ch_single = SUBSET_SINGLE(reads_ch_single, params_map.n_reads_profile, params_map.random_seed).output
         subset_ch_paired = SUBSET_PAIRED(reads_ch_paired, params_map.n_reads_profile, params_map.random_seed).output

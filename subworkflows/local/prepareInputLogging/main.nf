@@ -21,7 +21,6 @@ workflow PREPARE_INPUT_LOGGING {
         params_map              // Map: full params object
         index_pyproject_path    // Channel: from CHECK_VERSION_COMPATIBILITY.out.index_pyproject_path
         pipeline_pyproject_path // Channel: from CHECK_VERSION_COMPATIBILITY.out.pipeline_pyproject_path
-        _start_time_str         // Value channel: from LOAD_SAMPLESHEET.out.start_time_str (currently unused)
     main:
         // Serialize run params to JSON
         params_str = groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(params_map))
