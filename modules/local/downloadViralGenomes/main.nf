@@ -8,18 +8,34 @@ process DOWNLOAD_VIRAL_GENOMES {
         val(extra_args)
         val(max_attempts)
     output:
-        path("${taxid}_genomes/*.fna.gz"), emit: genomes
+        path("${taxid}_genomes/*.fna.gz"), optional: true, emit: genomes
         path("${taxid}_metadata.tsv"), emit: metadata
     script:
+        // Header schema for ${taxid}_metadata.tsv
+        def metadata_header = "assembly_accession\\ttaxid\\torganism_name\\tsource_database"
         """
-        # 1. Download dehydrated package (metadata + manifest only)
-        datasets download genome taxon ${taxid} \\
+        trap 'rm -f dl_err.txt' EXIT
+
+        # 1. Download dehydrated package (metadata + manifest only).
+        # NCBI's taxonomy can include taxa without assemblies,
+        # so catch and emit empty outputs instead of failing.
+        if ! datasets download genome taxon ${taxid} \\
             --assembly-source ${assembly_source} \\
             --include genome \\
             --no-progressbar \\
             --dehydrated \\
             ${extra_args} \\
-            --filename output.zip
+            --filename output.zip 2> dl_err.txt
+        then
+            cat dl_err.txt >&2
+            if grep -qE '^Error:.*no genome data is currently available for this taxon\\.\$' dl_err.txt; then
+                echo -e "${metadata_header}" > ${taxid}_metadata.tsv
+                echo "Taxon ${taxid} has no assemblies available; emitting empty outputs." >&2
+                exit 0
+            fi
+            exit 1
+        fi
+        cat dl_err.txt >&2
         unzip -o output.zip -d output/
 
         # 2. Rehydrate: download actual genome files with retry and exponential backoff
@@ -44,7 +60,7 @@ process DOWNLOAD_VIRAL_GENOMES {
             > raw_metadata.tsv
 
         # 4. Replace header with standardized column names
-        { echo -e "assembly_accession\\ttaxid\\torganism_name\\tsource_database"
+        { echo -e "${metadata_header}"
           tail -n +2 raw_metadata.tsv
         } > ${taxid}_metadata.tsv
 
