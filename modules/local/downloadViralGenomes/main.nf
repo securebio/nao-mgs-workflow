@@ -23,7 +23,10 @@ process DOWNLOAD_VIRAL_GENOMES {
         # post-call `cat dl_err.txt >&2` replays it for diagnostic visibility.
         # This defers stderr (vs. streaming live to .command.err) but the
         # `datasets download --dehydrated` step is short, so the trade-off
-        # is acceptable.
+        # is acceptable. The post-success replay is purely diagnostic and
+        # non-load-bearing: it surfaces any informational stderr but no
+        # downstream logic depends on it, so it is intentionally not covered
+        # by a dedicated success-path stderr test.
         if ! datasets download genome taxon ${taxid} \\
             --assembly-source ${assembly_source} \\
             --include genome \\
