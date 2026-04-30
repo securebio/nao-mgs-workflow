@@ -78,3 +78,10 @@ CVE-2025-69720 exp:2026-06-30
 # systemd: IPC API mishandling from unprivileged callers causing service freeze
 # Our containers don't run systemd services. Fix only in sid (260.1+).
 CVE-2026-29111 exp:2026-06-30
+
+# libgcrypt20: heap overflow / DoS via crafted ECDH ciphertext to gcry_pk_decrypt
+# (no Debian fix available as of 2026-04-29; fixed in upstream libgcrypt >= 1.12.2)
+# Our pipeline containers never decrypt attacker-controlled ECDH ciphertext.
+# Check for a Debian fix at:
+#   https://security-tracker.debian.org/tracker/CVE-2026-41989
+CVE-2026-41989 exp:2026-06-30
