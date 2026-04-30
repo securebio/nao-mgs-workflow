@@ -42,6 +42,25 @@ In cases where a module is a thin wrapper around a script in another language, c
 
 `tests/modules/local/fastqc/main.nf.test` is an example of bare-minimum tests for a process, and `tests/modules/local/vsearch/main.nf.test` is an example of really good, comprehensive testing!
 
+#### Stubbing containerized binaries
+
+When a process invokes a containerized CLI whose error path can't be reproduced reliably with live inputs (e.g. the NCBI `datasets` commands that depend on the live NCBI database state), you can stub the binary by mounting a script over its container path. The pattern:
+
+1. Place the stub script at `tests/modules/local/<process>/stub_bin/<binary>`, mark it executable, and exit with the same status codes / stderr signatures as the real binary for the cases under test.
+2. Add a config under `tests/configs/` that mounts the stub over the real binary path inside the container via `containerOptions`:
+
+   ```groovy
+   process {
+       withName: <PROCESS> {
+           containerOptions = "-v ${projectDir}/tests/modules/local/<process>/stub_bin/<binary>:<container-path>:ro"
+       }
+   }
+   ```
+
+3. Reference the config from the relevant test with `config "tests/configs/<name>.config"`.
+
+`tests/modules/local/downloadViralGenomes/stub_bin/datasets` plus `tests/configs/empty_taxon.config` are a working example. If a future container image moves the binary, the mount will silently fail to override it and the real binary will be invoked, so it's important to add a test that would catch this regression.
+
 ### Test datasets
 
 #### Current test data

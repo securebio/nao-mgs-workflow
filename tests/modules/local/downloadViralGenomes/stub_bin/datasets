@@ -1,0 +1,34 @@
+#!/bin/bash
+# Stub for testing the DOWNLOAD_VIRAL_GENOMES empty-taxon success path, since
+# reproducing the empty-taxon error ("no genome data is currently available
+# for this taxon.") with a real live taxid is unstable.
+
+# Echo argv to stderr so that changes to the `datasets` binary path are
+# visible in `.command.err` for debugging.
+echo "STUB_DATASETS_ARGV: $*" >&2
+
+taxid=""
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        taxon)
+            taxid="$2"
+            shift 2
+            ;;
+        *)
+            shift
+            ;;
+    esac
+done
+
+case "$taxid" in
+    taxid-with-no-assemblies)
+        echo "Error: The taxonomy ID 'taxid-with-no-assemblies' is valid for 'TestEmpty', but no genome data is currently available for this taxon." >&2
+        exit 1
+        ;;
+    *)
+        # Force an explicit branch decision for any new test taxid: silently
+        # falling through to the empty-taxon sentinel would mis-cover tests.
+        echo "stub: unrecognized taxid '$taxid' -- add an explicit case arm" >&2
+        exit 2
+        ;;
+esac

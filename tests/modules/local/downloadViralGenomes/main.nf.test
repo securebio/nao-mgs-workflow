@@ -31,4 +31,64 @@ nextflow_process {
         }
     }
 
+    test("Should fail on non-existent taxid") {
+        tag "expect_failed"
+        config "tests/configs/index.config"
+        when {
+            params {}
+            process {
+                """
+                input[0] = "99999999"
+                input[1] = "refseq"
+                input[2] = ""
+                input[3] = 5
+                """
+            }
+        }
+        then {
+            assert process.failed
+            // Confirm the failure was the non-existent-taxid branch, not an
+            // unrelated failure.
+            assert process.errorReport.contains("does not match any existing taxids")
+        }
+    }
+
+    test("Should emit empty outputs when taxon has no assemblies") {
+        tag "expect_success"
+        tag "empty_taxon"
+        // Uses a stubbed `datasets` (configured in empty_taxon.config) that
+        // emits the same stderr signature NCBI returns for a taxon with no
+        // linked assemblies. Avoids depending on a known-empty live taxid,
+        // which is unstable as NCBI propagates new taxonomy releases.
+        config "tests/configs/empty_taxon.config"
+        when {
+            params {}
+            process {
+                """
+                input[0] = "taxid-with-no-assemblies"
+                input[1] = "refseq"
+                input[2] = ""
+                input[3] = 5
+                """
+            }
+        }
+        then {
+            // The stub returns the empty-taxon error string unconditionally,
+            // so the only way `process.success` can be true is via the
+            // dispatch branch that matches the regex and exits 0. Combined
+            // with the header-only metadata assertion below, this pins the
+            // test to the empty-taxon code path: any unrelated regression
+            // that produced no genomes would either fail (different exit)
+            // or emit a non-header-only metadata file.
+            assert process.success
+            // genomes is declared optional; no files should be emitted
+            assert process.out.genomes.size() == 0
+            // metadata should be header-only (TableWrapper reports empty when
+            // there are no data rows, so check lines directly)
+            def meta_lines = path(process.out.metadata[0]).readLines()
+            assert meta_lines.size() == 1
+            assert meta_lines[0].split("\t").toList() == ["assembly_accession", "taxid", "organism_name", "source_database"]
+        }
+    }
+
 }

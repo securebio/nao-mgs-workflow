@@ -1,3 +1,12 @@
+# v3.2.1.4
+
+- Tolerate viral taxa with no linked NCBI assemblies in `DOWNLOAD_VIRAL_GENOMES`, emitting a header-only `${taxid}_metadata.tsv` and an empty `${taxid}_genomes/` (now declared `optional`).
+- Add CVE-2026-41989 (libgcrypt20) to `.trivyignore` (no fix currently available; expiry set in June 2026 to force review).
+- Add `--batch_job_role` parameter to allow Batch profiles to use an IAM job role instead of exported AWS credentials.
+- Prevent `MASK_FASTQ_READS` from running out of memory on merged ONT libraries larger than ~6 GB of gzipped FASTQ.
+    - Replace `label "large"` with a new `label "bbmask_resources"` whose `memory` directive is an input-size-aware closure.
+    - Define a generic `ResourceTierUtils` helper in `configs/resources.config` for the tier-selection logic.
+
 # v3.2.1.3
 
 ## New workflow outputs
