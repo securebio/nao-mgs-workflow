@@ -19,14 +19,6 @@ process DOWNLOAD_VIRAL_GENOMES {
         # 1. Download dehydrated package (metadata + manifest only).
         # NCBI's taxonomy can include taxa without assemblies,
         # so catch and emit empty outputs instead of failing.
-        # We capture stderr to grep for the empty-taxon signature; the
-        # post-call `cat dl_err.txt >&2` replays it for diagnostic visibility.
-        # This defers stderr (vs. streaming live to .command.err) but the
-        # `datasets download --dehydrated` step is short, so the trade-off
-        # is acceptable. The post-success replay is purely diagnostic and
-        # non-load-bearing: it surfaces any informational stderr but no
-        # downstream logic depends on it, so it is intentionally not covered
-        # by a dedicated success-path stderr test.
         if ! datasets download genome taxon ${taxid} \\
             --assembly-source ${assembly_source} \\
             --include genome \\
@@ -36,9 +28,6 @@ process DOWNLOAD_VIRAL_GENOMES {
             --filename output.zip 2> dl_err.txt
         then
             cat dl_err.txt >&2
-            # Anchored single-line match is intentional: it pins the dispatch
-            # to the exact `datasets` error string. If a future release wraps
-            # or splits the message, this regex must be revisited.
             if grep -qE '^Error:.*no genome data is currently available for this taxon\\.\$' dl_err.txt; then
                 echo -e "${metadata_header}" > ${taxid}_metadata.tsv
                 echo "Taxon ${taxid} has no assemblies available; emitting empty outputs." >&2
