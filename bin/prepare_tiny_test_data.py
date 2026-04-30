@@ -351,7 +351,7 @@ def upload_to_s3(local_file: Path, s3_uri: str) -> None:
     # Parse S3 URI
     if not s3_uri.startswith("s3://"):
         raise ValueError(f"Invalid S3 URI: {s3_uri}")
-    parts = s3_uri.lstrip("s3://").rstrip("/").split("/", 1)
+    parts = s3_uri.removeprefix("s3://").rstrip("/").split("/", 1)
     bucket = parts[0]
     key = parts[1] if len(parts) > 1 else local_file.name
     s3_client = boto3.client("s3")
