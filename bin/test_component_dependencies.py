@@ -1,9 +1,8 @@
 #! /usr/bin/env python3
 import argparse
-import subprocess
 import os
 import re
-import sys
+import subprocess
 
 
 def find_dependency(directory: str, component: str) -> set[str]:
@@ -31,8 +30,7 @@ def find_dependency(directory: str, component: str) -> set[str]:
             file = line.split(":", 1)[0]
             if "nf-test" in file:
                 continue
-            else:
-                file_paths.add(file)
+            file_paths.add(file)
 
     return file_paths
 
@@ -56,7 +54,7 @@ def identify_component_file(component: str) -> str | None:
 
 
 def get_subcomponents(component_path: str) -> tuple[set[str], set[str]]:
-    with open(component_path, "r") as f:
+    with open(component_path) as f:
         component_content = f.read()
 
     modules, workflows = set(), set()
@@ -95,21 +93,20 @@ def workflow_uses_subworkflow(workflow: str, subworkflow_path: str) -> bool:
     workflow_path = f"workflows/{workflow}"
     subworkflow_dir = subworkflow_path.replace("/main.nf", "")
 
-    with open(workflow_path, "r") as f:
+    with open(workflow_path) as f:
         workflow_content = f.read()
 
     # Use word boundaries to preempt substring matches
     if re.search(r"\b" + re.escape(subworkflow_dir) + r"\b", workflow_content):
         return True
-    else:
-        return False
+    return False
 
 
 def subworkflow_uses_subworkflow(subworkflow: str, dependent_subworkflow: str) -> bool:
     subworkflow_path = f"subworkflows/local/{subworkflow}/main.nf"
     dependent_subworkflow_dir = dependent_subworkflow.replace("/main.nf", "")
 
-    with open(subworkflow_path, "r") as f:
+    with open(subworkflow_path) as f:
         subworkflow_content = f.read()
 
     # Use word boundaries to preempt substring matches
@@ -117,17 +114,15 @@ def subworkflow_uses_subworkflow(subworkflow: str, dependent_subworkflow: str) -
         r"\b" + re.escape(dependent_subworkflow_dir) + r"\b", subworkflow_content
     ):
         return True
-    else:
-        return False
+    return False
 
 
 def get_workflow_test(workflow: str) -> str:
     workflow_path = f"workflows/{workflow}"
     if re.search(r"\b" + re.escape("run_dev_se") + r"\b", workflow_path):
         return "tests/workflows/run_dev.nf.test"
-    else:
-        base_name = os.path.basename(workflow_path).split(".")[0]
-        return f"tests/workflows/{base_name}.nf.test"
+    base_name = os.path.basename(workflow_path).split(".")[0]
+    return f"tests/workflows/{base_name}.nf.test"
 
 
 def parse_args() -> tuple[str, bool, bool]:
@@ -294,9 +289,9 @@ def main() -> None:
     cmd = ["nf-test", "test"] + sorted(tests_to_execute)
     if verbose:
         cmd.append("--verbose")
-        print(f"\nRunning test files with verbose output:")
+        print("\nRunning test files with verbose output:")
     else:
-        print(f"\nRunning test files:")
+        print("\nRunning test files:")
 
     for test in sorted(tests_to_execute):
         print(f"   • {test}")

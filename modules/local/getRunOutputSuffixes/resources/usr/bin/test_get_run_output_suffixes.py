@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 
-from unittest.mock import patch
-import pytest
-import get_run_output_suffixes
 from pathlib import Path
+from unittest.mock import patch
+
+import get_run_output_suffixes
+import pytest
 
 
 class TestGetRunOutputSuffixes:
@@ -118,14 +119,16 @@ class TestMain:
         assert captured.out == "bracken.tsv\nread_counts.tsv\n"
 
     def test_exits_on_missing_file(self, tmp_path: Path) -> None:
-        with patch(
-            "sys.argv",
-            [
-                "get_run_output_suffixes.py",
-                "--platform",
-                "illumina",
-                str(tmp_path / "nonexistent.toml"),
-            ],
+        with (
+            patch(
+                "sys.argv",
+                [
+                    "get_run_output_suffixes.py",
+                    "--platform",
+                    "illumina",
+                    str(tmp_path / "nonexistent.toml"),
+                ],
+            ),
+            pytest.raises(SystemExit),
         ):
-            with pytest.raises(SystemExit):
-                get_run_output_suffixes.main()
+            get_run_output_suffixes.main()

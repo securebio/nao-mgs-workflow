@@ -2,10 +2,9 @@
 
 from typing import Any
 
-import pytest
-
 import extract_versions
-from extract_versions import VersionInfo, get_nested_value, extract_version_info
+import pytest
+from extract_versions import VersionInfo, extract_version_info, get_nested_value
 
 
 class TestGetNestedValue:

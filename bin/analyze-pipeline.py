@@ -4,13 +4,13 @@
 # Imports
 # =============================================================================
 
+import argparse
 import os
 import re
 import sys
-import argparse
-from pathlib import Path
-from typing import IO, TextIO
 from dataclasses import dataclass, field
+from pathlib import Path
+from typing import TextIO
 
 # =============================================================================
 # Dataclasses
@@ -234,15 +234,14 @@ class NextflowAnalyzer:
         if process_name in self.standalone_processes:
             process = self.standalone_processes[process_name]
             return process, process.file_path
-        elif process_name in self._process_to_module_map:
+        if process_name in self._process_to_module_map:
             module_name = self._process_to_module_map[process_name]
             process = self.modules[module_name].processes[process_name]
             return process, self.modules[module_name].path
-        else:
-            # Process not found - should not happen in normal operation
-            raise KeyError(
-                f"Process '{process_name}' not found in standalone processes or modules"
-            )
+        # Process not found - should not happen in normal operation
+        raise KeyError(
+            f"Process '{process_name}' not found in standalone processes or modules"
+        )
 
 
 # =============================================================================

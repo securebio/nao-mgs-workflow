@@ -4,14 +4,13 @@ from pathlib import Path
 
 import pytest
 from create_empty_group_outputs import (
-    open_by_suffix,
+    create_empty_outputs,
     get_group_output_patterns,
     get_schema_name_from_pattern,
     load_schema_headers,
-    create_empty_outputs,
+    open_by_suffix,
     parse_args,
 )
-
 
 # =============================================================================
 # Test helpers

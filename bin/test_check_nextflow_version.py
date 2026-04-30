@@ -173,14 +173,14 @@ class TestGetLatestNonExcludedVersion:
             {"tag_name": "v25.10.2", "prerelease": False, "draft": False},
             {"tag_name": "v25.10.1", "prerelease": False, "draft": False},
         ]
-        with patch(
-            "urllib.request.urlopen",
-            return_value=self._mock_releases_response(releases_data),
+        with (
+            patch(
+                "urllib.request.urlopen",
+                return_value=self._mock_releases_response(releases_data),
+            ),
+            pytest.raises(ValueError, match="Could not find any non-excluded release"),
         ):
-            with pytest.raises(
-                ValueError, match="Could not find any non-excluded release"
-            ):
-                get_latest_non_excluded_version({"25.10.2", "25.10.1"})
+            get_latest_non_excluded_version({"25.10.2", "25.10.1"})
 
 
 class TestCompareVersions:
@@ -209,13 +209,14 @@ class TestMain:
         config = tmp_path / "profiles.config"
         config.write_text("manifest {\n    nextflowVersion = '!>=25.10.0'\n}")
 
-        with patch(
-            "urllib.request.urlopen", return_value=self._mock_api_response("25.10.0")
+        with (
+            patch(
+                "urllib.request.urlopen",
+                return_value=self._mock_api_response("25.10.0"),
+            ),
+            patch("sys.argv", ["check_nextflow_version.py", "--config", str(config)]),
         ):
-            with patch(
-                "sys.argv", ["check_nextflow_version.py", "--config", str(config)]
-            ):
-                main()
+            main()
 
         captured = capsys.readouterr()
         assert "Pinned Nextflow version: 25.10.0" in captured.out
@@ -226,16 +227,15 @@ class TestMain:
         config = tmp_path / "profiles.config"
         config.write_text("manifest {\n    nextflowVersion = '!>=25.10.0'\n}")
 
-        with patch(
-            "urllib.request.urlopen", return_value=self._mock_api_response("25.10.1")
+        with (
+            patch(
+                "urllib.request.urlopen",
+                return_value=self._mock_api_response("25.10.1"),
+            ),
+            patch("sys.argv", ["check_nextflow_version.py", "--config", str(config)]),
+            pytest.raises(ValueError, match="Version mismatch: 25.10.0 != 25.10.1"),
         ):
-            with patch(
-                "sys.argv", ["check_nextflow_version.py", "--config", str(config)]
-            ):
-                with pytest.raises(
-                    ValueError, match="Version mismatch: 25.10.0 != 25.10.1"
-                ):
-                    main()
+            main()
 
     def test_invalid_config(self, tmp_path: Path) -> None:
         config = tmp_path / "profiles.config"
@@ -286,26 +286,21 @@ class TestMain:
                 return mock_latest
             return mock_releases
 
-        with patch("urllib.request.urlopen", side_effect=mock_urlopen):
-            with patch(
-                "sys.argv", ["check_nextflow_version.py", "--config", str(config)]
-            ):
-                with patch("check_nextflow_version.EXCLUDED_VERSIONS", {"25.10.3"}):
-                    if should_match:
-                        main()
-                        captured = capsys.readouterr()
-                        assert (
-                            f"Pinned Nextflow version: {pinned_version}" in captured.out
-                        )
-                        assert "Latest Nextflow version: 25.10.3" in captured.out
-                        assert (
-                            "Latest version 25.10.3 is excluded (known issues)"
-                            in captured.out
-                        )
-                        assert "Latest non-excluded version: 25.10.2" in captured.out
-                        assert (
-                            "OK: Pinned version matches target release" in captured.out
-                        )
-                    else:
-                        with pytest.raises(ValueError, match=expected_error):
-                            main()
+        with (
+            patch("urllib.request.urlopen", side_effect=mock_urlopen),
+            patch("sys.argv", ["check_nextflow_version.py", "--config", str(config)]),
+            patch("check_nextflow_version.EXCLUDED_VERSIONS", {"25.10.3"}),
+        ):
+            if should_match:
+                main()
+                captured = capsys.readouterr()
+                assert f"Pinned Nextflow version: {pinned_version}" in captured.out
+                assert "Latest Nextflow version: 25.10.3" in captured.out
+                assert (
+                    "Latest version 25.10.3 is excluded (known issues)" in captured.out
+                )
+                assert "Latest non-excluded version: 25.10.2" in captured.out
+                assert "OK: Pinned version matches target release" in captured.out
+            else:
+                with pytest.raises(ValueError, match=expected_error):
+                    main()

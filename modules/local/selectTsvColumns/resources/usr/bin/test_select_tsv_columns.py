@@ -3,7 +3,6 @@
 from typing import Any
 
 import pytest
-
 import select_tsv_columns
 
 

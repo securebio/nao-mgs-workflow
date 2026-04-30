@@ -5,21 +5,22 @@
 # =======================================================================
 
 # Import libraries
-import pandas as pd
-from pathlib import Path
 import argparse
-from collections import defaultdict
-from typing import cast, override
 import logging
+from collections import defaultdict
+from datetime import UTC, datetime
 from logging import LogRecord
-from datetime import datetime, timezone
+from pathlib import Path
+from typing import cast, override
+
+import pandas as pd
 
 
 # Configure logging
 class UTCFormatter(logging.Formatter):
     @override
     def formatTime(self, record: LogRecord, datefmt: str | None = None) -> str:
-        dt = datetime.fromtimestamp(record.created, timezone.utc)
+        dt = datetime.fromtimestamp(record.created, UTC)
         return dt.strftime("%Y-%m-%d %H:%M:%S UTC")
 
 
@@ -106,7 +107,7 @@ def get_host_taxids(hosts: dict[str, str], nodes: pd.DataFrame) -> dict[str, set
     """
     logger.info("Generating host taxid dictionary from input TSV.")
     host_dict_out: dict[str, set[str]] = dict()
-    for k in hosts.keys():
+    for k in hosts:
         host_dict_out[k] = expand_taxid(hosts[k], nodes)
         n_desc = len(host_dict_out[k])
         logger.info(
@@ -164,8 +165,7 @@ def mark_direct_infections(
             # otherwise return 0
             if bool(virus_host_mapping[virus_taxid] & host_taxids):
                 return MATCH
-            else:
-                return INCONSISTENT
+            return INCONSISTENT
         return UNRESOLVED  # Indicates not in mapping; needs special handling downstream
 
     statuses = virus_taxids.apply(check_direct_infection)
@@ -321,21 +321,17 @@ def mark_ancestor_infections_single(
         if (child_statuses == UNRESOLVED).all():
             return set_checked(virus_taxid, virus_df)
         # Otherwise, if all children have the same status, inherit that status
-        elif (child_statuses == child_statuses.iloc[0]).all():
+        if (child_statuses == child_statuses.iloc[0]).all():
             return set_status(virus_taxid, virus_df, child_statuses.iloc[0])
         # If any child is marked UNCLEAR, mark this taxid as UNCLEAR
-        elif child_statuses.isin([UNCLEAR]).any():
-            return set_status(virus_taxid, virus_df, UNCLEAR)
-        # If there are both children marked [INCONSISTENT or MAYBE_INCONSISTENT] and marked [MATCH or CONSISTENT],
-        # mark this taxid as UNCLEAR
-        elif (
+        if child_statuses.isin([UNCLEAR]).any() or (
             child_statuses.isin([INCONSISTENT, MAYBE_INCONSISTENT]).any()
             and child_statuses.isin([MATCH, CONSISTENT]).any()
         ):
             return set_status(virus_taxid, virus_df, UNCLEAR)
         # If any child is marked [INCONSISTENT or MAYBE_INCONSISTENT], retain any existing mark of INCONSISTENT
         # on the parent node, otherwise mark MAYBE_INCONSISTENT
-        elif (child_statuses.isin([INCONSISTENT, MAYBE_INCONSISTENT])).any():
+        if (child_statuses.isin([INCONSISTENT, MAYBE_INCONSISTENT])).any():
             # If parent is marked INCONSISTENT, keep current status
             if virus_df.loc[virus_taxid]["status"] == INCONSISTENT:
                 return set_checked(virus_taxid, virus_df)
@@ -346,8 +342,7 @@ def mark_ancestor_infections_single(
             return set_status(virus_taxid, virus_df, MAYBE_INCONSISTENT)
         # Otherwise, mark as CONSISTENT
         # This covers all mixtures of MATCH, UNRESOLVED and CONSISTENT
-        else:
-            return set_status(virus_taxid, virus_df, CONSISTENT)
+        return set_status(virus_taxid, virus_df, CONSISTENT)
     # Otherwise, run this function for each unchecked child, then repeat
     children_unchecked = children.loc[~children["checked"]]
     for child in children_unchecked.index:
@@ -534,7 +529,7 @@ def annotate_virus_db(
     # Get viral taxonomic tree
     virus_tree = build_virus_tree(virus_db)
     # Add annotations for each host group
-    for k in host_mapping.keys():
+    for k in host_mapping:
         virus_db = annotate_virus_db_single(
             virus_db,
             k,

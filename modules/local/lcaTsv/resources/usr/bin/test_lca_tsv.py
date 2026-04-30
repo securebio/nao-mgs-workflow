@@ -4,13 +4,12 @@ Test module for lca_tsv.py
 
 import gzip
 import os
-import pytest
-import sys
 from pathlib import Path
 from typing import Any
 
 # Import the module being tested
 import lca_tsv
+import pytest
 
 
 class TestLcaTsv:

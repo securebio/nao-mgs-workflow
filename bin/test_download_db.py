@@ -8,20 +8,19 @@ Run with: pytest bin/test_download_db.py
 import fcntl
 import subprocess
 from collections.abc import Generator
+from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 import pytest
-from pathlib import Path
-from unittest.mock import patch, MagicMock
-
 from download_db import (
-    parse_source_path,
-    get_cache_name,
-    file_lock,
     configure_aws_s3_transfer,
-    sync_from_s3,
-    sync_from_local,
     download_database,
+    file_lock,
+    get_cache_name,
     main,
+    parse_source_path,
+    sync_from_local,
+    sync_from_s3,
 )
 
 

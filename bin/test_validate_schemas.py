@@ -6,7 +6,6 @@ import json
 from pathlib import Path
 
 import pytest
-
 from validate_schemas import (
     decompressed_path,
     find_data_files,

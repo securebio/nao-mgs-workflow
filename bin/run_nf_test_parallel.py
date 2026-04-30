@@ -15,15 +15,14 @@ the --num-workers flag, which handles sudo and environment variable passing.
 
 import argparse
 import logging
+import multiprocessing
 import os
 import re
 import subprocess
-from datetime import datetime, timezone
-from pathlib import Path
-from typing import List, Tuple, Optional
-import multiprocessing
-import time
 import sys
+import time
+from datetime import UTC, datetime
+from pathlib import Path
 
 ###########
 # LOGGING #
@@ -33,11 +32,9 @@ import sys
 class UTCFormatter(logging.Formatter):
     """Custom logging formatter that displays timestamps in UTC."""
 
-    def formatTime(
-        self, record: logging.LogRecord, datefmt: Optional[str] = None
-    ) -> str:
+    def formatTime(self, record: logging.LogRecord, datefmt: str | None = None) -> str:
         """Format log timestamps in UTC timezone."""
-        dt = datetime.fromtimestamp(record.created, timezone.utc)
+        dt = datetime.fromtimestamp(record.created, UTC)
         return dt.strftime("%Y-%m-%d %H:%M:%S UTC")
 
 
@@ -66,7 +63,7 @@ def strip_ansi_codes(text: str) -> str:
     return ansi_escape.sub("", text)
 
 
-def find_test_files(paths: List[str]) -> List[Path]:
+def find_test_files(paths: list[str]) -> list[Path]:
     """
     Find all *.nf.test files in the specified paths.
 
@@ -89,7 +86,7 @@ def find_test_files(paths: List[str]) -> List[Path]:
     return sorted(set(test_files))
 
 
-def divide_test_files(test_files: List[Path], n_workers: int) -> List[List[Path]]:
+def divide_test_files(test_files: list[Path], n_workers: int) -> list[list[Path]]:
     """
     Divide test files evenly among workers using round-robin distribution.
     Args:
@@ -106,7 +103,7 @@ def divide_test_files(test_files: List[Path], n_workers: int) -> List[List[Path]
     return worker_files
 
 
-def execute_subprocess(cmd: List[str]) -> Tuple[int, str, str]:
+def execute_subprocess(cmd: list[str]) -> tuple[int, str, str]:
     """
     Execute a subprocess and capture output.
     Args:
@@ -120,12 +117,12 @@ def execute_subprocess(cmd: List[str]) -> Tuple[int, str, str]:
 
 def run_nf_test_worker(
     worker_id: int,
-    test_files: List[Path],
+    test_files: list[Path],
     total_workers: int,
     debug: bool,
     ci: bool,
-    profile: Optional[str] = None,
-) -> Tuple[int, int, str, str, str]:
+    profile: str | None = None,
+) -> tuple[int, int, str, str, str]:
     """
     Run nf-test on a specific set of test files.
     Args:
@@ -168,7 +165,7 @@ def run_nf_test_worker(
     return (worker_id, exit_code, stdout, stderr, cmd_str)
 
 
-def extract_failures_from_output(output: str) -> List[str]:
+def extract_failures_from_output(output: str) -> list[str]:
     """
     Extract FAILED test names from test output.
     Args:
@@ -184,11 +181,11 @@ def extract_failures_from_output(output: str) -> List[str]:
 
 
 def write_test_log(
-    all_workers: List[Tuple[int, int, str, str, str]],
-    failed_workers: List[Tuple[int, int, str, str, str]],
+    all_workers: list[tuple[int, int, str, str, str]],
+    failed_workers: list[tuple[int, int, str, str, str]],
     n_workers: int,
     output_log: Path,
-    test_files: List[Path],
+    test_files: list[Path],
 ) -> None:
     """
     Write comprehensive test log with all results and failure summary.
@@ -202,13 +199,13 @@ def write_test_log(
     """
     with open(output_log, "w") as out:
         out.write("=" * 80 + "\n")
-        out.write(f"NF-TEST PARALLEL RESULTS\n")
+        out.write("NF-TEST PARALLEL RESULTS\n")
         out.write(f"Total workers: {n_workers}\n")
         out.write(f"Passed workers: {n_workers - len(failed_workers)}\n")
         out.write(f"Failed workers: {len(failed_workers)}\n")
         out.write(f"Working directory: {os.getcwd()}\n")
         out.write(
-            f"Completed at: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')}\n"
+            f"Completed at: {datetime.now(UTC).strftime('%Y-%m-%d %H:%M:%S UTC')}\n"
         )
         out.write("=" * 80 + "\n\n")
         out.write("=" * 80 + "\n")
@@ -223,7 +220,7 @@ def write_test_log(
             out.write(f"Worker {worker_id}/{n_workers}: {status}\n")
             out.write("=" * 80 + "\n\n")
             out.write("-" * 80 + "\n")
-            out.write(f"COMMAND STRING\n")
+            out.write("COMMAND STRING\n")
             out.write("-" * 80 + "\n\n")
             out.write(f"{cmd_str}\n\n")
             out.write("-" * 80 + "\n")
@@ -275,11 +272,11 @@ def update_plugins() -> None:
 
 def run_parallel_tests(
     n_workers: int,
-    test_paths: List[str],
+    test_paths: list[str],
     output_log: Path,
     debug: bool,
     ci: bool,
-    profile: Optional[str] = None,
+    profile: str | None = None,
 ) -> int:
     """
     Run nf-test in parallel by distributing test files across workers.
@@ -321,9 +318,8 @@ def run_parallel_tests(
         for worker_id, exit_code, _, _, _ in failed_workers:
             logger.error(f"\t- Worker {worker_id} failed with exit code {exit_code}")
         return 1
-    else:
-        logger.info(f"All {n_workers} workers completed successfully.")
-        return 0
+    logger.info(f"All {n_workers} workers completed successfully.")
+    return 0
 
 
 def parse_arguments() -> argparse.Namespace:
@@ -369,7 +365,7 @@ def parse_arguments() -> argparse.Namespace:
 
 def main() -> None:
     """Main entry point."""
-    logger.info(f"Initializing script.")
+    logger.info("Initializing script.")
     start_time = time.time()
     args = parse_arguments()
     logger.info(f"Arguments: {args}")

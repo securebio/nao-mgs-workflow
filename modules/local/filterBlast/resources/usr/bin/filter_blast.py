@@ -2,10 +2,9 @@
 
 # Import modules
 import argparse
-import time
 import datetime
 import gzip
-import os
+import time
 from typing import IO, cast
 
 
@@ -20,8 +19,7 @@ def open_by_suffix(filename: str, mode: str = "r", debug: bool = False) -> IO[st
         print_log(f"\tGZIP mode: {filename.endswith('.gz')}")
     if filename.endswith(".gz"):
         return cast(IO[str], gzip.open(filename, mode + "t"))
-    else:
-        return open(filename, mode)
+    return open(filename, mode)
 
 
 def write_line(line_list: list[str], output_file: IO[str]) -> None:
@@ -167,12 +165,12 @@ def main() -> None:
     print_log("Starting process.")
     start_time = time.time()
     # Print parameters
-    print_log("Input file: {}".format(input_path))
-    print_log("Output file: {}".format(output_path))
-    print_log("Maximum rank: {}".format(max_rank))
-    print_log("Minimum fraction: {}".format(min_frac))
-    print_log("Query index: {}".format(query_index))
-    print_log("Bitscore index: {}".format(bitscore_index))
+    print_log(f"Input file: {input_path}")
+    print_log(f"Output file: {output_path}")
+    print_log(f"Maximum rank: {max_rank}")
+    print_log(f"Minimum fraction: {min_frac}")
+    print_log(f"Query index: {query_index}")
+    print_log(f"Bitscore index: {bitscore_index}")
     # Run filtering function
     filter_blast(
         input_path, output_path, max_rank, min_frac, query_index, bitscore_index

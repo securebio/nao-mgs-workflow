@@ -2,10 +2,9 @@
 
 # Import modules
 import argparse
-import time
 import datetime
 import gzip
-import os
+import time
 from typing import IO, cast
 
 
@@ -20,8 +19,7 @@ def open_by_suffix(filename: str, mode: str = "r", debug: bool = False) -> IO[st
         print_log(f"\tGZIP mode: {filename.endswith('.gz')}")
     if filename.endswith(".gz"):
         return cast(IO[str], gzip.open(filename, mode + "t"))
-    else:
-        return open(filename, mode)
+    return open(filename, mode)
 
 
 def add_sample_column(
@@ -72,10 +70,10 @@ def main() -> None:
     print_log("Starting process.")
     start_time = time.time()
     # Print parameters
-    print_log("Input TSV file: {}".format(input_path))
-    print_log("Sample name: {}".format(sample_name))
-    print_log("Sample name column: {}".format(sample_column))
-    print_log("Output TSV file: {}".format(out_path))
+    print_log(f"Input TSV file: {input_path}")
+    print_log(f"Sample name: {sample_name}")
+    print_log(f"Sample name column: {sample_column}")
+    print_log(f"Output TSV file: {out_path}")
     # Run labeling function
     print_log("Adding sample name column to TSV...")
     add_sample_column(input_path, sample_name, sample_column, out_path)

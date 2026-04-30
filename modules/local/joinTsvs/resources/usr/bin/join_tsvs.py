@@ -13,11 +13,10 @@ side.
 
 # Import modules
 import argparse
-import time
 import gzip
-import os
 import logging
-from datetime import datetime, timezone
+import time
+from datetime import UTC, datetime
 from typing import IO, cast
 
 # =======================================================================
@@ -27,7 +26,7 @@ from typing import IO, cast
 
 class UTCFormatter(logging.Formatter):
     def formatTime(self, record: logging.LogRecord, datefmt: str | None = None) -> str:
-        dt = datetime.fromtimestamp(record.created, timezone.utc)
+        dt = datetime.fromtimestamp(record.created, UTC)
         return dt.strftime("%Y-%m-%d %H:%M:%S UTC")
 
 
@@ -72,8 +71,7 @@ def open_by_suffix(filename: str, mode: str = "r") -> IO[str]:
     logger.debug(f"GZIP mode: {filename.endswith('.gz')}")
     if filename.endswith(".gz"):
         return cast(IO[str], gzip.open(filename, mode + "t"))
-    else:
-        return open(filename, mode)
+    return open(filename, mode)
 
 
 # =======================================================================
@@ -300,7 +298,7 @@ def join_tsvs(
                 write_line(merged_row, output)
                 if id_1_curr != id_1_next and id_2_curr != id_2_next:
                     logger.debug(
-                        f"Neither current ID matches next ID; advancing both files."
+                        "Neither current ID matches next ID; advancing both files."
                     )
                     line_1_curr, row_1_curr, id_1_curr = (
                         line_1_next,
@@ -332,7 +330,7 @@ def join_tsvs(
                     )
                 elif id_1_curr != id_1_next:
                     logger.debug(
-                        f"Current ID from file 2 matches next ID; advancing file 2 only."
+                        "Current ID from file 2 matches next ID; advancing file 2 only."
                     )
                     line_2_curr, row_2_curr, id_2_curr = (
                         line_2_next,
@@ -350,7 +348,7 @@ def join_tsvs(
                     )
                 elif id_2_curr != id_2_next:
                     logger.debug(
-                        f"Current ID from file 1 matches next ID; advancing file 1 only."
+                        "Current ID from file 1 matches next ID; advancing file 1 only."
                     )
                     line_1_curr, row_1_curr, id_1_curr = (
                         line_1_next,
@@ -381,12 +379,12 @@ def join_tsvs(
                     msg = f"Strict join failed: ID {id_1_curr} missing from file 2."
                     logger.error(msg)
                     raise ValueError(msg)
-                elif join_type in ("left", "outer"):
+                if join_type in ("left", "outer"):
                     merged_row = fill_right(row_1_curr, placeholder_file2)
                     write_line(merged_row, output)
                 else:
-                    logger.debug(f"Skipping line.")
-                logger.debug(f"Advancing file 1.")
+                    logger.debug("Skipping line.")
+                logger.debug("Advancing file 1.")
                 line_1_curr, row_1_curr, id_1_curr = line_1_next, row_1_next, id_1_next
                 line_1_next, row_1_next, id_1_next = get_line_id(file_1, field_index_1)
                 logger.debug(
@@ -404,7 +402,7 @@ def join_tsvs(
                     msg = f"Strict join failed: ID {id_2_curr} missing from file 1."
                     logger.error(msg)
                     raise ValueError(msg)
-                elif join_type in ("right", "outer"):
+                if join_type in ("right", "outer"):
                     merged_row = fill_left(
                         placeholder_file1,
                         row_2_curr,
@@ -414,8 +412,8 @@ def join_tsvs(
                     )
                     write_line(merged_row, output)
                 else:
-                    logger.debug(f"Skipping line.")
-                logger.debug(f"Advancing file 2.")
+                    logger.debug("Skipping line.")
+                logger.debug("Advancing file 2.")
                 line_2_curr, row_2_curr, id_2_curr = line_2_next, row_2_next, id_2_next
                 line_2_next, row_2_next, id_2_next = get_line_id(file_2, field_index_2)
                 logger.debug(
@@ -433,12 +431,12 @@ def join_tsvs(
                 msg = f"Strict join failed: ID {id_1_curr} missing from file 2."
                 logger.error(msg)
                 raise ValueError(msg)
-            elif join_type in ("left", "outer"):
+            if join_type in ("left", "outer"):
                 merged_row = fill_right(row_1_curr, placeholder_file2)
                 write_line(merged_row, output)
             else:
-                logger.debug(f"Skipping line.")
-            logger.debug(f"Advancing file 1.")
+                logger.debug("Skipping line.")
+            logger.debug("Advancing file 1.")
             line_1_curr, row_1_curr, id_1_curr = line_1_next, row_1_next, id_1_next
             line_1_next, row_1_next, id_1_next = get_line_id(file_1, field_index_1)
             logger.debug(f"Updated current line from file 1: {row_1_curr}, {id_1_curr}")
@@ -452,7 +450,7 @@ def join_tsvs(
                 msg = f"Strict join failed: ID {id_2_curr} missing from file 1."
                 logger.error(msg)
                 raise ValueError(msg)
-            elif join_type in ("right", "outer"):
+            if join_type in ("right", "outer"):
                 merged_row = fill_left(
                     placeholder_file1,
                     row_2_curr,
@@ -462,8 +460,8 @@ def join_tsvs(
                 )
                 write_line(merged_row, output)
             else:
-                logger.debug(f"Skipping line.")
-            logger.debug(f"Advancing file 2.")
+                logger.debug("Skipping line.")
+            logger.debug("Advancing file 2.")
             line_2_curr, row_2_curr, id_2_curr = line_2_next, row_2_next, id_2_next
             line_2_next, row_2_next, id_2_next = get_line_id(file_2, field_index_2)
             logger.debug(f"Updated current line from file 2: {row_2_curr}, {id_2_curr}")

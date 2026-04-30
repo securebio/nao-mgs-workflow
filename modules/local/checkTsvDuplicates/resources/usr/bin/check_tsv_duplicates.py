@@ -10,12 +10,11 @@ If so, write the file to the output path. If not, throw an error.
 # Import modules
 # =======================================================================
 
-import logging
-from datetime import datetime, timezone
 import argparse
-import time
 import gzip
-import io
+import logging
+import time
+from datetime import UTC, datetime
 from typing import IO, cast
 
 # =======================================================================
@@ -25,7 +24,7 @@ from typing import IO, cast
 
 class UTCFormatter(logging.Formatter):
     def formatTime(self, record: logging.LogRecord, datefmt: str | None = None) -> str:
-        dt = datetime.fromtimestamp(record.created, timezone.utc)
+        dt = datetime.fromtimestamp(record.created, UTC)
         return dt.strftime("%Y-%m-%d %H:%M:%S UTC")
 
 
@@ -73,8 +72,7 @@ def open_by_suffix(filename: str, mode: str = "r") -> IO[str]:
     logger.debug(f"\tGZIP mode: {filename.endswith('.gz')}")
     if filename.lower().endswith(".gz"):
         return cast(IO[str], gzip.open(filename, mode + "t"))
-    else:
-        return open(filename, mode)
+    return open(filename, mode)
 
 
 # =======================================================================
@@ -148,7 +146,7 @@ def check_duplicates(input_path: str, output_path: str, field: str) -> None:
                 logger.error(msg)
                 raise ValueError(msg)
             # Check if field is duplicate with previous line
-            elif field_prev is not None and field_curr == field_prev:
+            if field_prev is not None and field_curr == field_prev:
                 msg = f"Duplicate value found in field {field}: {field_curr}"
                 logger.error(msg)
                 raise ValueError(msg)

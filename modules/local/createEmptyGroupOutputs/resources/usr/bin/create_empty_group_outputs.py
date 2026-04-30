@@ -15,12 +15,12 @@ table-schema exists for an output, the file includes a header row.
 import argparse
 import gzip
 import json
-from typing import IO, cast
 import logging
 import time
 import tomllib
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import IO, cast
 
 # =============================================================================
 # Logging
@@ -61,8 +61,7 @@ def open_by_suffix(filename: str | Path, mode: str = "r") -> IO[str]:
     filename_str = str(filename)
     if filename_str.endswith(".gz"):
         return cast(IO[str], gzip.open(filename_str, mode + "t"))
-    else:
-        return open(filename_str, mode)
+    return open(filename_str, mode)
 
 
 # =============================================================================

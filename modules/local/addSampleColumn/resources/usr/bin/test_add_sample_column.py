@@ -2,9 +2,8 @@
 
 from typing import Any
 
-import pytest
-
 import add_sample_column
+import pytest
 
 
 class TestAddSampleColumn:

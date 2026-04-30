@@ -27,13 +27,13 @@ SAM alignments based on normalized alignment scores, with special handling for
 paired reads and secondary alignments to different viral references.
 """
 
-import pytest
-import tempfile
 import os
 import sys
+import tempfile
 from pathlib import Path
 
-from filter_viral_sam import filter_viral_sam, SamAlignment
+import pytest
+from filter_viral_sam import SamAlignment, filter_viral_sam
 
 # Add the script directory to path so we can import the module
 script_dir = Path(__file__).parent
@@ -174,7 +174,7 @@ IIIIIIIIIIIIIIII"""
 
         filter_viral_sam(sam_file, filtered_file, output_file, 0.1)
 
-        with open(output_file, "r") as f:
+        with open(output_file) as f:
             output_lines = f.readlines()
 
         # Should have both pairs: filtered_read (kept) and read1 (passed score threshold)
@@ -214,7 +214,7 @@ IIIIIIIIIIIIIIII"""
         # Threshold 10 - read1 pair should pass, read2 pair should fail
         filter_viral_sam(sam_file, filtered_file, output_file, 10.0)
 
-        with open(output_file, "r") as f:
+        with open(output_file) as f:
             output_lines = f.readlines()
 
         # Should only have read1 pair (2 lines)
@@ -241,7 +241,7 @@ IIIIIIIIIIIIIIII"""
 
         filter_viral_sam(sam_file, filtered_file, output_file, 10.0)
 
-        with open(output_file, "r") as f:
+        with open(output_file) as f:
             output_lines = f.readlines()
 
         assert len(output_lines) == 2
@@ -266,7 +266,7 @@ IIIIIIIIIIIIIIII"""
 
         filter_viral_sam(sam_file, filtered_file, output_file, 10.0)
 
-        with open(output_file, "r") as f:
+        with open(output_file) as f:
             output_lines = f.readlines()
 
         assert len(output_lines) == 0
@@ -290,7 +290,7 @@ IIIIIIIIIIIIIIII"""
 
         filter_viral_sam(sam_file, filtered_file, output_file, 1.0)
 
-        with open(output_file, "r") as f:
+        with open(output_file) as f:
             output_lines = f.readlines()
 
         # Should have 2 lines: original read + created unmapped mate
@@ -333,7 +333,7 @@ IIIIIIIIIIIIIIII"""
         # Threshold that allows primary but not secondary chr2
         filter_viral_sam(sam_file, filtered_file, output_file, 17.0)
 
-        with open(output_file, "r") as f:
+        with open(output_file) as f:
             output_lines = f.readlines()
 
         # Should only have primary alignments (2 lines)
@@ -353,7 +353,7 @@ IIIIIIIIIIIIIIII"""
 
         filter_viral_sam(sam_file, filtered_file, output_file, 1.0)
 
-        with open(output_file, "r") as f:
+        with open(output_file) as f:
             output_lines = f.readlines()
 
         assert len(output_lines) == 0
@@ -379,7 +379,7 @@ IIIIIIIIIIIIIIII"""
 
         filter_viral_sam(sam_file, filtered_file, output_file, 1.0)
 
-        with open(output_file, "r") as f:
+        with open(output_file) as f:
             output_lines = f.readlines()
 
         # Should only have the read line, headers ignored
@@ -416,7 +416,7 @@ IIIIIIIIIIIIIIII"""
         # - Secondary chr3: scores ~9.0 and ~7.2 - chr3 pair fails (max < 15)
         filter_viral_sam(sam_file, filtered_file, output_file, 15.0)
 
-        with open(output_file, "r") as f:
+        with open(output_file) as f:
             output_lines = f.readlines()
 
         # Should have primary pair (2) + chr2 secondary pair (2) = 4 lines
@@ -458,7 +458,7 @@ IIIIIIIIIIIIIIII"""
 
         filter_viral_sam(sam_file, filtered_file, output_file, 10.0)
 
-        with open(output_file, "r") as f:
+        with open(output_file) as f:
             output_lines = f.readlines()
 
         # Should have primary UP + synthetic mate (2) + secondary UP + synthetic mate (2) = 4 lines
@@ -522,7 +522,7 @@ IIIIIIIIIIIIIIII"""
 
         filter_viral_sam(sam_file, filtered_file, output_file, 10.0)
 
-        with open(output_file, "r") as f:
+        with open(output_file) as f:
             output_lines = f.readlines()
 
         # Should have exactly 2 lines: the 2 original UP reads (no synthetic mates needed)
@@ -576,7 +576,7 @@ IIIIIIIIIIIIIIII"""
 
         filter_viral_sam(sam_file, filtered_file, output_file, 10.0)
 
-        with open(output_file, "r") as f:
+        with open(output_file) as f:
             output_lines = f.readlines()
 
         # Should have 4 lines: 2 primary reads + 1 secondary read + 1 synthetic mate for secondary
@@ -637,7 +637,7 @@ IIIIIIIIIIIIIIII"""
 
         filter_viral_sam(sam_file, filtered_file, output_file, 10.0)
 
-        with open(output_file, "r") as f:
+        with open(output_file) as f:
             output_lines = f.readlines()
 
         # Should have 6 lines: 1 primary + 1 synthetic mate + 2 secondary + 2 synthetic mates for secondary

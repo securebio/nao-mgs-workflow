@@ -10,16 +10,15 @@ Generate tiny Illumina and ONT test datasets from reference genomes using InSili
 import argparse
 import gzip
 import logging
+import shutil
 import subprocess
 import tempfile
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Optional, Tuple, List
+
 import boto3
-from botocore.exceptions import ClientError, NoCredentialsError
-import shutil
 from Bio import SeqIO
-import os
+from botocore.exceptions import ClientError, NoCredentialsError
 
 ###########
 # LOGGING #
@@ -29,11 +28,9 @@ import os
 class UTCFormatter(logging.Formatter):
     """Custom logging formatter that displays timestamps in UTC."""
 
-    def formatTime(
-        self, record: logging.LogRecord, datefmt: Optional[str] = None
-    ) -> str:
+    def formatTime(self, record: logging.LogRecord, datefmt: str | None = None) -> str:
         """Format log timestamps in UTC timezone."""
-        dt = datetime.fromtimestamp(record.created, timezone.utc)
+        dt = datetime.fromtimestamp(record.created, UTC)
         return dt.strftime("%Y-%m-%d %H:%M:%S UTC")
 
 
@@ -74,9 +71,9 @@ def generate_illumina(
     output_prefix: Path,
     n_read_pairs: int,
     seed: int,
-    fragment_length: Optional[int] = None,
+    fragment_length: int | None = None,
     model: str = "NovaSeq",
-) -> Tuple[Path, Path]:
+) -> tuple[Path, Path]:
     """
     Generate paired-end Illumina reads from a FASTA file using InSilicoSeq.
     Args:
@@ -234,7 +231,7 @@ def generate_ont(
     return fastq_file
 
 
-def concatenate_files(paths: List[Path], output: Path) -> None:
+def concatenate_files(paths: list[Path], output: Path) -> None:
     """
     Concatenate multiple files with matching extensions into a single file.
     Args:
@@ -296,8 +293,8 @@ def interleave_paired_reads(
     logger.info(f"Interleaving {r1_file.name} and {r2_file.name}...")
 
     with (
-        open(r1_file, "r") as f1,
-        open(r2_file, "r") as f2,
+        open(r1_file) as f1,
+        open(r2_file) as f2,
         open(output_file, "w") as out,
     ):
         r1_records = SeqIO.parse(f1, file_format)
@@ -321,9 +318,8 @@ def fastq_to_fasta(fastq_file: Path, fasta_file: Path) -> None:
         fasta_file (Path): Output FASTA file
     """
     logger.info(f"Converting {fastq_file.name} to FASTA...")
-    with open(fastq_file, "r") as f_in:
-        with open(fasta_file, "w") as f_out:
-            SeqIO.convert(f_in, "fastq", f_out, "fasta")
+    with open(fastq_file) as f_in, open(fasta_file, "w") as f_out:
+        SeqIO.convert(f_in, "fastq", f_out, "fasta")
     logger.info(f"Converted to {fasta_file.name}.")
 
 
@@ -340,9 +336,8 @@ def gzip_file(local_file: Path, gzip_file: Path) -> None:
         gzip_file (Path): Path to gzipped file
     """
     logger.info(f"Gzipping {local_file.name}...")
-    with open(local_file, "rb") as f_in:
-        with gzip.open(gzip_file, "wb") as f_out:
-            f_out.write(f_in.read())
+    with open(local_file, "rb") as f_in, gzip.open(gzip_file, "wb") as f_out:
+        f_out.write(f_in.read())
     logger.info(f"Gzipped {local_file.name} to {gzip_file.name}.")
 
 
@@ -379,7 +374,7 @@ def upload_to_s3(local_file: Path, s3_uri: str) -> None:
 
 def generate_illumina_data(
     fasta_viral: Path,
-    fasta_other: List[Path],
+    fasta_other: list[Path],
     read_pairs_per_genome: int,
     output_prefix_local: str,
     output_prefix_s3: str,
@@ -403,15 +398,13 @@ def generate_illumina_data(
         tmpdir = Path(tmpdir_str)
         r1_files = []
         r2_files = []
-        logger.info(f"Generating Illumina test data from each input file...")
+        logger.info("Generating Illumina test data from each input file...")
         for fasta in [fasta_viral] + fasta_other:
             prefix = tmpdir / f"{fasta.stem}"
             r1, r2 = generate_illumina(fasta, prefix, read_pairs_per_genome, seed)
             r1_files.append(r1)
             r2_files.append(r2)
-        logger.info(
-            f"Generating extra overlapping Illumina reads from viral genomes..."
-        )
+        logger.info("Generating extra overlapping Illumina reads from viral genomes...")
         # Create a modified copy of the viral FASTA to avoid duplicate read IDs
         viral_modified = tmpdir / "viral_overlap.fasta"
         modify_fasta_headers(fasta_viral, viral_modified, "_overlap")
@@ -421,25 +414,25 @@ def generate_illumina_data(
         )
         r1_files.append(r1)
         r2_files.append(r2)
-        logger.info(f"Concatenating all Illumina reads...")
+        logger.info("Concatenating all Illumina reads...")
         concat_r1_raw = tmpdir / "R1_raw.fastq"
         concat_r2_raw = tmpdir / "R2_raw.fastq"
         concatenate_files(r1_files, concat_r1_raw)
         concatenate_files(r2_files, concat_r2_raw)
-        logger.info(f"Fixing read IDs to use space-delimited format...")
+        logger.info("Fixing read IDs to use space-delimited format...")
         concat_r1 = tmpdir / "R1.fastq"
         concat_r2 = tmpdir / "R2.fastq"
         fix_fastq_read_ids(concat_r1_raw, concat_r1)
         fix_fastq_read_ids(concat_r2_raw, concat_r2)
-        logger.info(f"Generating gzipped copies of the concatenated Illumina reads...")
+        logger.info("Generating gzipped copies of the concatenated Illumina reads...")
         gzip_r1 = concat_r1.with_suffix(".gz")
         gzip_r2 = concat_r2.with_suffix(".gz")
         gzip_file(concat_r1, gzip_r1)
         gzip_file(concat_r2, gzip_r2)
-        logger.info(f"Uploading Illumina reads to S3...")
+        logger.info("Uploading Illumina reads to S3...")
         upload_to_s3(gzip_r1, output_prefix_s3 + "R1.fastq.gz")
         upload_to_s3(gzip_r2, output_prefix_s3 + "R2.fastq.gz")
-        logger.info(f"Creating unzipped local copies of the Illumina reads...")
+        logger.info("Creating unzipped local copies of the Illumina reads...")
         # Convert string prefix to Path - handle both directory paths and file prefixes
         output_prefix_path = Path(output_prefix_local)
         # Create parent directory
@@ -453,33 +446,33 @@ def generate_illumina_data(
         dest_r2 = Path(output_prefix_local + "R2.fastq")
         shutil.copy2(str(concat_r1), str(dest_r1))
         shutil.copy2(str(concat_r2), str(dest_r2))
-        logger.info(f"Converting Illumina FASTQs to FASTA format...")
+        logger.info("Converting Illumina FASTQs to FASTA format...")
         fasta_r1 = Path(output_prefix_local + "R1.fasta")
         fasta_r2 = Path(output_prefix_local + "R2.fasta")
         fastq_to_fasta(dest_r1, fasta_r1)
         fastq_to_fasta(dest_r2, fasta_r2)
 
-        logger.info(f"Creating interleaved FASTQ file...")
+        logger.info("Creating interleaved FASTQ file...")
         interleaved_fastq = tmpdir / "interleaved.fastq"
         interleave_paired_reads(concat_r1, concat_r2, interleaved_fastq, "fastq")
         dest_interleaved_fastq = Path(output_prefix_local + "interleaved.fastq")
         shutil.copy2(str(interleaved_fastq), str(dest_interleaved_fastq))
 
-        logger.info(f"Creating interleaved FASTA file...")
+        logger.info("Creating interleaved FASTA file...")
         interleaved_fasta = Path(output_prefix_local + "interleaved.fasta")
         interleave_paired_reads(fasta_r1, fasta_r2, interleaved_fasta, "fasta")
 
-        logger.info(f"Gzipping and uploading interleaved FASTQ...")
+        logger.info("Gzipping and uploading interleaved FASTQ...")
         gzip_interleaved = interleaved_fastq.with_suffix(".fastq.gz")
         gzip_file(interleaved_fastq, gzip_interleaved)
         upload_to_s3(gzip_interleaved, output_prefix_s3 + "interleaved.fastq.gz")
 
-        logger.info(f"Done.")
+        logger.info("Done.")
 
 
 def generate_ont_data(
     fasta_viral: Path,
-    fasta_other: List[Path],
+    fasta_other: list[Path],
     reads_per_genome: int,
     output_prefix_local: str,
     output_prefix_s3: str,
@@ -510,7 +503,7 @@ def generate_ont_data(
         logger.info("Downloading NanoSim model...")
         model_dir = download_nanosim_model(tmpdir, nanosim_model_url)
 
-        logger.info(f"Generating ONT reads from each input file...")
+        logger.info("Generating ONT reads from each input file...")
         # Use different seeds for each genome to ensure unique read IDs
 
         # Generate double reads from viral genome
@@ -530,18 +523,18 @@ def generate_ont_data(
             )
             fastq_files.append(fastq)
 
-        logger.info(f"Concatenating all ONT reads...")
+        logger.info("Concatenating all ONT reads...")
         concat_fastq = tmpdir / "ont.fastq"
         concatenate_files(fastq_files, concat_fastq)
 
-        logger.info(f"Generating gzipped copy of the concatenated ONT reads...")
+        logger.info("Generating gzipped copy of the concatenated ONT reads...")
         gzip_fastq = concat_fastq.with_suffix(".fastq.gz")
         gzip_file(concat_fastq, gzip_fastq)
 
-        logger.info(f"Uploading ONT reads to S3...")
+        logger.info("Uploading ONT reads to S3...")
         upload_to_s3(gzip_fastq, output_prefix_s3 + "ont.fastq.gz")
 
-        logger.info(f"Creating unzipped local copy of the ONT reads...")
+        logger.info("Creating unzipped local copy of the ONT reads...")
         # Convert string prefix to Path - handle both directory paths and file prefixes
         output_prefix_path = Path(output_prefix_local)
         # Create parent directory
@@ -554,11 +547,11 @@ def generate_ont_data(
         dest_fastq = Path(output_prefix_local + "ont.fastq")
         shutil.copy2(str(concat_fastq), str(dest_fastq))
 
-        logger.info(f"Converting ONT FASTQ to FASTA format...")
+        logger.info("Converting ONT FASTQ to FASTA format...")
         fasta_file = Path(output_prefix_local + "ont.fasta")
         fastq_to_fasta(dest_fastq, fasta_file)
 
-        logger.info(f"Done.")
+        logger.info("Done.")
 
 
 def parse_arguments() -> argparse.Namespace:

@@ -8,7 +8,6 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from botocore.exceptions import ClientError
-
 from chain_workflows import (
     create_launch_directories,
     execute_nextflow,

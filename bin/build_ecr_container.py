@@ -16,10 +16,9 @@ import logging
 import re
 import shutil
 import subprocess
-import sys
 import tempfile
 import tomllib
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -49,7 +48,7 @@ class UTCFormatter(logging.Formatter):
         Returns:
             Formatted timestamp string in UTC
         """
-        dt = datetime.fromtimestamp(record.created, timezone.utc)
+        dt = datetime.fromtimestamp(record.created, UTC)
         return dt.strftime("%Y-%m-%d %H:%M:%S UTC")
 
 
@@ -462,7 +461,7 @@ def build_and_push_container(
         )
 
         if image_exists:
-            logger.info(f"Image already exists in ECR, skipping build")
+            logger.info("Image already exists in ECR, skipping build")
             # Still update config in case it's outdated
             config_updated = update_containers_config(config_file, label, image_tag)
             if not config_updated:

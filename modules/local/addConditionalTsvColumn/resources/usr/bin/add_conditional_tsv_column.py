@@ -2,11 +2,11 @@
 
 import argparse
 import csv
-import time
 import datetime
 import gzip
-from typing import IO, Iterator, cast
-from collections.abc import Sequence
+import time
+from collections.abc import Iterator, Sequence
+from typing import IO, cast
 
 
 def print_log(message: str) -> None:
@@ -21,8 +21,7 @@ def open_by_suffix(filename: str, mode: str = "r", debug: bool = False) -> IO[st
         print_log(f"\tGZIP mode: {filename.endswith('.gz')}")
     if filename.endswith(".gz"):
         return cast(IO[str], gzip.open(filename, mode + "t", encoding="utf-8"))
-    else:
-        return open(filename, mode, encoding="utf-8")
+    return open(filename, mode, encoding="utf-8")
 
 
 def validate_columns(

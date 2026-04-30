@@ -11,14 +11,16 @@ add missing mates for unpaired reads.
 # Preamble
 # =======================================================================
 
-import math
-import logging
-import gzip
 import argparse
-from datetime import datetime, timezone
-from dataclasses import dataclass
-from typing import IO, Dict, Optional, Tuple, Iterator, cast
+import gzip
+import logging
+import math
 from collections import defaultdict
+from collections.abc import Iterator
+from dataclasses import dataclass
+from datetime import UTC, datetime
+from typing import IO, cast
+
 from Bio import SeqIO
 
 
@@ -42,7 +44,7 @@ class UTCFormatter(logging.Formatter):
         Returns:
             Formatted timestamp string in UTC
         """
-        dt = datetime.fromtimestamp(record.created, timezone.utc)
+        dt = datetime.fromtimestamp(record.created, UTC)
         return dt.strftime("%Y-%m-%d %H:%M:%S UTC")
 
 
@@ -100,8 +102,7 @@ def open_by_suffix(filename: str, mode: str = "r") -> IO[str]:
     """
     if filename.endswith(".gz"):
         return cast(IO[str], gzip.open(filename, mode + "t"))
-    else:
-        return open(filename, mode)
+    return open(filename, mode)
 
 
 # =======================================================================
@@ -126,9 +127,9 @@ class SamAlignment:
     tlen: int  # insert size
     seq: str  # sequence
     qual: str  # quality score for sequence
-    pair_status: Optional[str]  # pair status
-    alignment_score: Optional[int]  # alignment score
-    mate_alignment_score: Optional[int]  # alignment score of the mate
+    pair_status: str | None  # pair status
+    alignment_score: int | None  # alignment score
+    mate_alignment_score: int | None  # alignment score of the mate
     normalized_score: float | None  # normalized alignment score
     line: str  # original SAM line
     fields: list[str]
@@ -242,7 +243,7 @@ class SamAlignment:
 
 def group_unpaired_alignments(
     alignments: list[SamAlignment],
-) -> Dict[int, list[SamAlignment]]:
+) -> dict[int, list[SamAlignment]]:
     """
     Group unpaired (UP) alignments by position and mate information.
 
@@ -262,7 +263,7 @@ def group_unpaired_alignments(
     Returns:
         Dict[int, list[SamAlignment]]: Dictionary mapping group IDs to lists of alignments in each group
     """
-    by_group: Dict[int, list[SamAlignment]] = defaultdict(list)
+    by_group: dict[int, list[SamAlignment]] = defaultdict(list)
     pair_key_to_group: dict[tuple, int] = {}
     group_idx = 0
 
@@ -309,7 +310,7 @@ def group_unpaired_alignments(
 
 def group_other_alignments(
     alignments: list[SamAlignment],
-) -> Dict[int, list[SamAlignment]]:
+) -> dict[int, list[SamAlignment]]:
     """
     Group other alignments (CP/DP) by position, reference, and template length.
 
@@ -324,8 +325,8 @@ def group_other_alignments(
     Returns:
         Dict[int, list[SamAlignment]]: Dictionary mapping group IDs to lists of alignments in each group
     """
-    by_group: Dict[int, list[SamAlignment]] = defaultdict(list)
-    pair_key_to_group: Dict[tuple, int] = {}
+    by_group: dict[int, list[SamAlignment]] = defaultdict(list)
+    pair_key_to_group: dict[tuple, int] = {}
     group_idx = 0
 
     for alignment in alignments:
@@ -365,7 +366,7 @@ def group_other_alignments(
     # If there is more than one alignment pair, we select the first forward and reverse alignment pair
     # since there is little value in adding multiple alignment pairs that have the same
     # rname, rnext, pos_min, pos_max, tlen, and alignment_score/mate_alignment_score
-    filtered_groups: Dict[int, list[SamAlignment]] = {}
+    filtered_groups: dict[int, list[SamAlignment]] = {}
     for group_id, group_alignments in by_group.items():
         if len(group_alignments) != 2:
             read1 = [a for a in group_alignments if a.flag & 64]
@@ -384,7 +385,7 @@ def group_other_alignments(
 
 def group_secondary_alignments(
     alignments: list[SamAlignment],
-) -> Dict[int, list[SamAlignment]]:
+) -> dict[int, list[SamAlignment]]:
     """
     Group alignments by mate pairs using specialized functions based on pair status.
 
@@ -410,14 +411,13 @@ def group_secondary_alignments(
     )
     if pair_status == "UP":
         return group_unpaired_alignments(alignments)
-    else:
-        # Handle CP (Concordant Pair) and DP (Discordant Pair) reads
-        return group_other_alignments(alignments)
+    # Handle CP (Concordant Pair) and DP (Discordant Pair) reads
+    return group_other_alignments(alignments)
 
 
 def group_and_apply_score_filter(
     alignments: list[SamAlignment], threshold: float, secondary: bool = False
-) -> Dict[int, list[SamAlignment]]:
+) -> dict[int, list[SamAlignment]]:
     """
     Group alignments separately based on their alignment status (primary or secondary),
     then apply the score threshold to each group, based on the max of the bowtie2 length normalized score
@@ -452,22 +452,20 @@ def group_and_apply_score_filter(
             else:
                 logger.debug("Discarding group %s", group_id)
         return kept_groups
-    else:
-        # By default there is at most 1 primary alignment per read in a read pair
-        # (i.e. there is at most 1 group), so we can put all primary alignments
-        # into a single group, and apply the threshold to the whole group
-        max_score = max(
-            a.normalized_score for a in alignments if a.normalized_score is not None
-        )
-        if max_score >= threshold:
-            return {0: alignments}  # Single group for primary
-        else:
-            return {}
+    # By default there is at most 1 primary alignment per read in a read pair
+    # (i.e. there is at most 1 group), so we can put all primary alignments
+    # into a single group, and apply the threshold to the whole group
+    max_score = max(
+        a.normalized_score for a in alignments if a.normalized_score is not None
+    )
+    if max_score >= threshold:
+        return {0: alignments}  # Single group for primary
+    return {}
 
 
 def add_synthetic_mates_by_groups(
-    groups: Dict[int, list[SamAlignment]],
-) -> Dict[int, list[SamAlignment]]:
+    groups: dict[int, list[SamAlignment]],
+) -> dict[int, list[SamAlignment]]:
     """
     Add synthetic mate reads based on provided alignment groups.
 
@@ -602,7 +600,7 @@ def stream_filtered_fastq(fastq_file: str) -> Iterator[str]:
         raise
 
 
-def stream_sam_by_qname(sam_file: str) -> Iterator[Tuple[str, list[SamAlignment]]]:
+def stream_sam_by_qname(sam_file: str) -> Iterator[tuple[str, list[SamAlignment]]]:
     """
     Stream SAM file and yield groups of alignments by query name (also known as read id).
 

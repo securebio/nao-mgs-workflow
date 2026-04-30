@@ -75,7 +75,7 @@ def extract_changelog(
                     found_version = True
                     in_section = True
                     continue  # Skip the header line itself
-                elif in_section:
+                if in_section:
                     # Found the next version header, we're done
                     break
 

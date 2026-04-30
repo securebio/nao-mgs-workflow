@@ -29,7 +29,7 @@ import time
 import tomllib
 from collections.abc import Generator
 from contextlib import contextmanager
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from frictionless import Dialect, Resource, formats, system, validate
@@ -46,7 +46,7 @@ class UTCFormatter(logging.Formatter):
 
     def formatTime(self, record: logging.LogRecord, datefmt: str | None = None) -> str:
         """Format log timestamps in UTC timezone."""
-        dt = datetime.fromtimestamp(record.created, timezone.utc)
+        dt = datetime.fromtimestamp(record.created, UTC)
         return dt.strftime("%Y-%m-%d %H:%M:%S UTC")
 
 
@@ -357,9 +357,8 @@ def validate_outputs(
     if all_passed:
         logger.info("All validations passed.")
         return 0
-    else:
-        logger.error("Some validations failed.")
-        return 1
+    logger.error("Some validations failed.")
+    return 1
 
 
 def parse_arguments() -> argparse.Namespace:
