@@ -165,8 +165,7 @@ def parse_args() -> argparse.Namespace:
         default=True,
         help="Processed SAM file as containing paired read alignments (default: True).",
     )
-    args = parser.parse_args()
-    return args
+    return parser.parse_args()
 
 
 def read_genbank_metadata(path: str) -> dict[str, tuple[str, str]]:
@@ -178,13 +177,15 @@ def read_genbank_metadata(path: str) -> dict[str, tuple[str, str]]:
         dict[str, tuple[str, str]]: Dictionary mapping genome IDs to taxids.
     """
     meta_db = pd.read_csv(path, sep="\t", dtype=str)
-    gid_taxid_dict = {
+    return {
         genome_id: (taxid, species_taxid)
         for genome_id, taxid, species_taxid in zip(
-            meta_db["genome_id"], meta_db["taxid"], meta_db["species_taxid"]
+            meta_db["genome_id"],
+            meta_db["taxid"],
+            meta_db["species_taxid"],
+            strict=False,
         )
     }
-    return gid_taxid_dict
 
 
 def get_viral_taxids(path: str) -> set[str]:
@@ -420,8 +421,7 @@ def get_line(fields_dict: FieldDict, paired: bool) -> str:
     # Then convert dictionary into list of fields
     fields = [fields_dict[header] for header in headers]
     # Then join fields into line
-    line = join_line(fields)
-    return line
+    return join_line(fields)
 
 
 def get_line_from_single(read_dict: FieldDict, paired: bool) -> str:

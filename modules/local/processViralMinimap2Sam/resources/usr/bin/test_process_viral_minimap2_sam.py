@@ -257,7 +257,10 @@ class TestProcessSam:
         with gzip.open(out_path, "rt") as f:
             lines = f.readlines()
         header = lines[0].strip().split("\t")
-        rows = [dict(zip(header, line.strip().split("\t"))) for line in lines[1:]]
+        rows = [
+            dict(zip(header, line.strip().split("\t"), strict=False))
+            for line in lines[1:]
+        ]
 
         # 3 output rows: read_A x2 (multi-alignment hold), read_C x1; read_B skipped
         seq_ids = [r["seq_id"] for r in rows]
@@ -338,7 +341,10 @@ class TestProcessSam:
 
         assert len(lines) == 3  # header + 2 reads
         header = lines[0].strip().split("\t")
-        rows = [dict(zip(header, line.strip().split("\t"))) for line in lines[1:]]
+        rows = [
+            dict(zip(header, line.strip().split("\t"), strict=False))
+            for line in lines[1:]
+        ]
         assert rows[0]["seq_id"] == "read_A"
         assert rows[1]["seq_id"] == "read_C"
         # Verify clean seq/qual came from FASTQ, not SAM

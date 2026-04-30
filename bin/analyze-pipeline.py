@@ -143,7 +143,7 @@ class NextflowAnalyzer:
 
     def _analyze_dependencies(self) -> None:
         """Extract dependencies from workflows in pipeline."""
-        for workflow_name in self.workflows.keys():
+        for workflow_name in self.workflows:
             workflow = self.workflows[workflow_name]
             self.workflow_dependencies[workflow.name] = {
                 "modules": set(),
@@ -192,21 +192,17 @@ class NextflowAnalyzer:
         used_modules, used_processes, used_workflows = self._extract_dependencies(
             "main", set(), set(), set()
         )
-        unused_modules = {
-            name for name in self.modules.keys() if name not in used_modules
-        }
+        unused_modules = {name for name in self.modules if name not in used_modules}
         unused_workflows = {
-            name for name in self.workflows.keys() if name not in used_workflows
+            name for name in self.workflows if name not in used_workflows
         }
         unused_processes = {
-            name
-            for name in self.standalone_processes.keys()
-            if name not in used_processes
+            name for name in self.standalone_processes if name not in used_processes
         }
-        for module_name in self.modules.keys():
+        for module_name in self.modules:
             module = self.modules[module_name]
             unused_processes.update(
-                [name for name in module.processes.keys() if name not in used_processes]
+                [name for name in module.processes if name not in used_processes]
             )
         self.unused_components["modules"] = unused_modules
         self.unused_components["workflows"] = unused_workflows
@@ -326,7 +322,7 @@ def report_workflows(analyzer: NextflowAnalyzer, output_stream: TextIO) -> None:
         # Collate workflows that call this one
         called_by = [
             wf
-            for wf in analyzer.workflow_dependencies.keys()
+            for wf in analyzer.workflow_dependencies
             if name in analyzer.workflow_dependencies[wf]["workflows"]
         ]
         if called_by:
@@ -355,7 +351,7 @@ def report_modules(analyzer: NextflowAnalyzer, output_stream: TextIO) -> None:
         # Processes in module
         if module.processes:
             output_stream.write("Contains processes:\n")
-            for proc_name, process in sorted(module.processes.items()):
+            for proc_name, _process in sorted(module.processes.items()):
                 usage_status = (
                     " (UNUSED)"
                     if proc_name in analyzer.unused_components["processes"]
@@ -367,7 +363,7 @@ def report_modules(analyzer: NextflowAnalyzer, output_stream: TextIO) -> None:
         # Parent workflows
         called_by = [
             workflow
-            for workflow in analyzer.workflow_dependencies.keys()
+            for workflow in analyzer.workflow_dependencies
             if name in analyzer.workflow_dependencies[workflow]["modules"]
         ]
         if called_by:
@@ -398,7 +394,7 @@ def report_standalone_processes(
         # Parent workflows
         called_by = [
             workflow
-            for workflow in analyzer.workflow_dependencies.keys()
+            for workflow in analyzer.workflow_dependencies
             if name in analyzer.workflow_dependencies[workflow]["processes"]
         ]
         if called_by:

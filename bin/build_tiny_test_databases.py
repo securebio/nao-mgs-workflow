@@ -263,7 +263,7 @@ def build_blast_database(
     seq_id_to_taxid = {}
 
     with open(combined_fasta, "w") as outfile:
-        for filename, source, taxid in sequences:
+        for _filename, source, taxid in sequences:
             # Download or load the sequence
             if isinstance(source, Path):
                 with open_by_suffix(source) as f:
@@ -510,13 +510,13 @@ def run_build(args: argparse.Namespace) -> None:
             kraken_dir, blast_dir, args.taxonomy_nodes, args.taxonomy_names
         )
         logger.info("Step 5: Uploading to S3...")
-        kraken_url = upload_to_s3(
+        upload_to_s3(
             kraken_tarball, args.s3_bucket, f"{args.s3_prefix}/{kraken_tarball.name}"
         )
-        blast_url = upload_to_s3(
+        upload_to_s3(
             blast_tarball, args.s3_bucket, f"{args.s3_prefix}/{blast_tarball.name}"
         )
-        taxonomy_url = upload_to_s3(
+        upload_to_s3(
             taxonomy_zip, args.s3_bucket, f"{args.s3_prefix}/{taxonomy_zip.name}"
         )
 

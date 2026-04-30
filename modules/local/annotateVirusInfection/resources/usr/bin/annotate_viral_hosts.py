@@ -59,11 +59,10 @@ def get_virus_host_mapping(db_path: str) -> dict[str, set[str]]:
     logger.info("Importing Virus-Host-DB.")
     df = pd.read_csv(db_path, sep="\t", dtype=str)
     logger.info("Generating mapping from Virus-Host-DB.")
-    mapping = cast(
+    return cast(
         dict[str, set[str]],
         df.groupby("virus tax id")["host tax id"].apply(set).to_dict(),
     )
-    return mapping
 
 
 def expand_taxid(taxid: str, nodes: pd.DataFrame) -> set[str]:
@@ -106,7 +105,7 @@ def get_host_taxids(hosts: dict[str, str], nodes: pd.DataFrame) -> dict[str, set
             expand_taxid().
     """
     logger.info("Generating host taxid dictionary from input TSV.")
-    host_dict_out: dict[str, set[str]] = dict()
+    host_dict_out: dict[str, set[str]] = {}
     for k in hosts:
         host_dict_out[k] = expand_taxid(hosts[k], nodes)
         n_desc = len(host_dict_out[k])

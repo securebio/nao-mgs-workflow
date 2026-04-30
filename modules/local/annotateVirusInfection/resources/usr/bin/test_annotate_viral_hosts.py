@@ -50,7 +50,7 @@ State meanings:
 import itertools
 from collections.abc import Callable
 from pathlib import Path
-from typing import Protocol, TypeAlias
+from typing import Protocol
 
 import pandas as pd
 import pytest
@@ -78,8 +78,8 @@ from annotate_viral_hosts import (
 # Type definitions and constants
 # =======================================================================
 
-State: TypeAlias = int
-StateTuple: TypeAlias = tuple[State, ...]
+type State = int
+type StateTuple = tuple[State, ...]
 
 
 class DataFrameFactory(Protocol):

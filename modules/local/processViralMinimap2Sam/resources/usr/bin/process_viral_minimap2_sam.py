@@ -228,7 +228,10 @@ def main() -> None:
         genbank_metadata = {
             genome_id: [taxid, species_taxid]
             for genome_id, taxid, species_taxid in zip(
-                meta_db["genome_id"], meta_db["taxid"], meta_db["species_taxid"]
+                meta_db["genome_id"],
+                meta_db["taxid"],
+                meta_db["species_taxid"],
+                strict=False,
             )
         }
         virus_db = pd.read_csv(args.viral_db, sep="\t", dtype=str)

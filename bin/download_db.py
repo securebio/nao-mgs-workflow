@@ -72,7 +72,7 @@ def parse_source_path(path: str) -> tuple[str, bool]:
     # Collapse consecutive slashes
     normalized = re.sub(r"//+", "/", path)
     # Check if S3 path and restore proper s3:// prefix
-    if normalized.startswith("s3:/") or normalized.startswith("s3:"):
+    if normalized.startswith(("s3:/", "s3:")):
         path_without_prefix = re.sub(r"^s3:/*", "", normalized)
         return f"s3://{path_without_prefix}", True
     return normalized, False

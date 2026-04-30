@@ -28,15 +28,13 @@ def read_header(infile: IO[str]) -> list[str]:
     header_line = infile.readline()
     if not header_line or not header_line.strip():
         return []
-    header = header_line.strip().split("\t")
-    return header
+    return header_line.strip().split("\t")
 
 
 def map_headers(header: list[str], reference_header: list[str]) -> list[int]:
     """Generate mapping of columns in header to reference header."""
     header_mapping = {col: i for i, col in enumerate(header)}
-    reference_mapping = [header_mapping[col] for col in reference_header]
-    return reference_mapping
+    return [header_mapping[col] for col in reference_header]
 
 
 def check_headers(header: list[str], reference_header: list[str]) -> bool:

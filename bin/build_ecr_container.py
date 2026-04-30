@@ -209,7 +209,7 @@ def generate_dockerfile(spec_filename: str, pyproject_path: Path) -> str:
         str: Dockerfile text
     """
     base_image = get_base_image(pyproject_path)
-    dockerfile = f"""
+    return f"""
 FROM {base_image}
 USER root
 RUN apt-get update && apt-get install -y procps && rm -rf /var/lib/apt/lists/*
@@ -219,7 +219,6 @@ RUN micromamba install -y -n base -f /tmp/environment.yml && \\
     micromamba clean --all --yes
 ENV PATH=/opt/conda/bin:$PATH
 """
-    return dockerfile
 
 
 def build_docker_image_from_spec(
@@ -502,8 +501,7 @@ def parse_args() -> argparse.Namespace:
         default=Path("pyproject.toml"),
         help="Path to pyproject.toml for base image config (default: pyproject.toml)",
     )
-    args = parser.parse_args()
-    return args
+    return parser.parse_args()
 
 
 def main() -> None:

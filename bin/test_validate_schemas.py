@@ -240,7 +240,7 @@ class TestReorderedToSchema:
         data_file = tmp_path / "test.tsv"
         data_file.write_text("a\tb\ta\n1\t2\t3\n")
         with pytest.raises(ValueError, match="Duplicate columns"):
-            with reordered_to_schema(data_file, schema_path) as path:
+            with reordered_to_schema(data_file, schema_path):
                 pass
 
 

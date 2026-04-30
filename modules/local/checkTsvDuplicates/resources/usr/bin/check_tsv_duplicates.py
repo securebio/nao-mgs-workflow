@@ -112,9 +112,8 @@ def process_header(header_line: str, field: str) -> int:
     # Split header line into list of fields
     headers_in = header_line.split("\t")
     # Get index of selected field
-    index = get_header_index(headers_in, field)
+    return get_header_index(headers_in, field)
     # Return index
-    return index
 
 
 def check_duplicates(input_path: str, output_path: str, field: str) -> None:

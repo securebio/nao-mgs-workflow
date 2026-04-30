@@ -466,6 +466,7 @@ def join_tsvs(
             line_2_next, row_2_next, id_2_next = get_line_id(file_2, field_index_2)
             logger.debug(f"Updated current line from file 2: {row_2_curr}, {id_2_curr}")
             logger.debug(f"Updated next line from file 2: {row_2_next}, {id_2_next}")
+    return None
 
 
 # =======================================================================

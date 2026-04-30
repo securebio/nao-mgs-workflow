@@ -232,8 +232,7 @@ class SamAlignment:
         fields[6] = "="  # RNEXT = same chromosome as mate
         fields[7] = self.fields[3]  # PNEXT = mate's position
         mate_line = "\t".join(fields)
-        mate = SamAlignment.from_sam_line(mate_line)
-        return mate
+        return SamAlignment.from_sam_line(mate_line)
 
 
 # =======================================================================
@@ -407,7 +406,7 @@ def group_secondary_alignments(
     # Check that all secondary alignments have the same pair status
     assert all(a.pair_status == pair_status for a in alignments), (
         "All secondary alignments for a single read ID must share the same "
-        f"pair_status. Found: {set(a.pair_status for a in alignments)}"
+        f"pair_status. Found: { {a.pair_status for a in alignments} }"
     )
     if pair_status == "UP":
         return group_unpaired_alignments(alignments)
