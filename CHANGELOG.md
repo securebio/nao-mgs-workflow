@@ -1,3 +1,12 @@
+# v3.2.1.5-dev
+
+- Clean up Nextflow code to conform to strict syntax in preparation for adding `nextflow lint` to CI. No behavioral changes.
+    - Replace `env BAREWORD` with `env('STRING')` in process output declarations.
+    - Rename deprecated `Channel.X` factory calls to `channel.X`.
+    - Replace implicit `it` closure parameters with explicit named parameters.
+    - Convert top-level `def closure = { ... }` declarations to `def fn() { ... }` function declarations in `clusterViralAssignments` and `loadDownstreamData` subworkflows.
+    - Prefix unused parameters with `_` and remove an unused variable assignment in `workflows/run.nf`.
+
 # v3.2.1.4
 
 - Tolerate viral taxa with no linked NCBI assemblies in `DOWNLOAD_VIRAL_GENOMES`, emitting a header-only `${taxid}_metadata.tsv` and an empty `${taxid}_genomes/` (now declared `optional`).
