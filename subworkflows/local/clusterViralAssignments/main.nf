@@ -3,9 +3,9 @@ Cluster a channel of viral sequences with VSEARCH, process the output,
 and extract the representative sequences of the top N largest clusters.
 */
 
-def listFiles = { label, files ->
+def listFiles(label, files) {
     def file_list = files instanceof List ? files : [files]
-    [label, file_list]
+    return [label, file_list]
 }
 
 /***************************
@@ -47,16 +47,16 @@ workflow CLUSTER_VIRAL_ASSIGNMENTS {
             .map { sample, reads, ids ->
                 def reads_list = reads instanceof List ? reads : [reads]
                 def ids_list = ids instanceof List ? ids : [ids]
-                tuple(sample, reads_list.sort { it.name }, ids_list.sort { it.name })
+                tuple(sample, reads_list.sort { f -> f.name }, ids_list.sort { f -> f.name })
             }
         rep_fastq_ch = DOWNSAMPLE_FASTN_BY_ID(id_prep_ch).output
         rep_fasta_ch = CONVERT_FASTQ_FASTA(rep_fastq_ch).output
     emit:
-        tsv = labeled_cluster_ch.output.map(listFiles)
-        ids = cluster_info_ch.ids.map(listFiles)
-        fastq = rep_fastq_ch.map(listFiles)
-        fasta = rep_fasta_ch.map(listFiles)
-        test_merged = merge_ch.single_reads.map(listFiles)
-        test_cluster_reps = cluster_ch.reps.map(listFiles)
-        test_cluster_summ = cluster_ch.summary.map(listFiles)
+        tsv = labeled_cluster_ch.output.map { label, files -> listFiles(label, files) }
+        ids = cluster_info_ch.ids.map { label, files -> listFiles(label, files) }
+        fastq = rep_fastq_ch.map { label, files -> listFiles(label, files) }
+        fasta = rep_fasta_ch.map { label, files -> listFiles(label, files) }
+        test_merged = merge_ch.single_reads.map { label, files -> listFiles(label, files) }
+        test_cluster_reps = cluster_ch.reps.map { label, files -> listFiles(label, files) }
+        test_cluster_summ = cluster_ch.summary.map { label, files -> listFiles(label, files) }
 }

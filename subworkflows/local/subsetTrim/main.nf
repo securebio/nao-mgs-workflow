@@ -20,9 +20,9 @@ workflow SUBSET_TRIM {
         params_map // n_reads_profile, adapters, platform, random_seed
     main:
         // Split single-end value channel into two branches, one of which will be empty
-        single_end_check = single_end.branch{
-            single: it
-            paired: !it
+        single_end_check = single_end.branch{ v ->
+            single: v
+            paired: !v
         }
         // Forward reads into one of two channels based on endedness (the other will be empty)
         reads_ch_single = single_end_check.single.combine(reads_ch).map{it -> [it[1], it[2]] }
@@ -39,12 +39,12 @@ workflow SUBSET_TRIM {
             cleaned_ch = FILTLONG_STRINGENT(inter_ch, 100, 15000, 90)
             subset_reads = FILTLONG_LOOSE(inter_ch, 1, 500000, 0.01) // Very loose filtering just to avoid out-of-memory errors
         } else {
-            cleaned_ch = FASTP(inter_ch, params_map.adapters, single_end.map{!it})
+            cleaned_ch = FASTP(inter_ch, params_map.adapters, single_end.map { v -> !v })
             subset_reads = inter_ch 
         }
     emit:
         subset_reads
         trimmed_subset_reads = cleaned_ch.reads
-        fastp_json = params_map.platform == "ont" ? Channel.empty() : cleaned_ch.json
-        test_failed = params_map.platform == "ont" ? Channel.empty() : cleaned_ch.failed // TODO: Capture rejected ONT reads somehow
+        fastp_json = params_map.platform == "ont" ? channel.empty() : cleaned_ch.json
+        test_failed = params_map.platform == "ont" ? channel.empty() : cleaned_ch.failed // TODO: Capture rejected ONT reads somehow
 }

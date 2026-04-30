@@ -64,10 +64,10 @@ workflow INDEX {
         GET_KRAKEN_DB(params.kraken_db, "kraken_db", true)
         // Prepare results for publishing
         params_str = groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(params))
-        params_ch = Channel.of(params_str).collectFile(name: "index-params.json")
-        time_ch = Channel.of(start_time_str + "\n").collectFile(name: "time.txt")
+        params_ch = channel.of(params_str).collectFile(name: "index-params.json")
+        time_ch = channel.of(start_time_str + "\n").collectFile(name: "time.txt")
         pipeline_pyproject_path = file("${projectDir}/pyproject.toml")
-        pyproject_ch = COPY_PYPROJECT(Channel.fromPath(pipeline_pyproject_path), "pyproject.toml")
+        pyproject_ch = COPY_PYPROJECT(channel.fromPath(pipeline_pyproject_path), "pyproject.toml")
 
     emit:
         input_index = params_ch
@@ -93,5 +93,5 @@ workflow INDEX {
             MAKE_RIBO_INDEX.out.mm2,
             MAKE_CONTAMINANT_INDEX.out.mm2
         )
-        experimental_index = Channel.empty()
+        experimental_index = channel.empty()
 }

@@ -61,6 +61,6 @@ workflow CHECK_VERSION_COMPATIBILITY {
             EXTRACT_VERSIONS.out.index_min_pipeline
         )
     emit:
-        pipeline_pyproject_path = Channel.fromPath(pipeline_pyproject_path)
-        index_pyproject_path = Channel.fromPath(index_pyproject_path)
+        pipeline_pyproject_path = channel.fromPath(pipeline_pyproject_path)
+        index_pyproject_path = channel.fromPath(index_pyproject_path)
 }

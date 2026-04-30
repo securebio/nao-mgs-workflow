@@ -1,3 +1,11 @@
+// Helpers to resolve paths: absolute and S3 paths used as-is, relative paths resolved against input_base_dir
+def resolvePath(String path, input_base_dir) {
+    return (path.startsWith('s3://') || path.startsWith('/')) ? file(path) : file(input_base_dir).resolve(path)
+}
+def resolveDir(String dir, input_base_dir) {
+    return (dir.startsWith('s3://') || dir.startsWith('/')) ? dir : file(input_base_dir).resolve(dir).toString()
+}
+
 /***********
 | WORKFLOW |
 ***********/
@@ -18,15 +26,8 @@ workflow LOAD_DOWNSTREAM_DATA {
                 Found: ${headers.join(', ')}
                 Please ensure the input file has the correct columns in the specified order.""".stripIndent())
         }
-        // Helpers to resolve paths: absolute and S3 paths used as-is, relative paths resolved against input_base_dir
-        def resolvePath = { path ->
-            (path.startsWith('s3://') || path.startsWith('/')) ? file(path) : file(input_base_dir).resolve(path)
-        }
-        def resolveDir = { dir ->
-            (dir.startsWith('s3://') || dir.startsWith('/')) ? dir : file(input_base_dir).resolve(dir).toString()
-        }
         // Parse and validate input CSV rows
-        rows_ch = Channel.fromPath(input_file).splitCsv(header: true)
+        rows_ch = channel.fromPath(input_file).splitCsv(header: true)
             .map { row ->
                 if (!row.run_results_dir?.trim()) {
                     throw new Exception("Missing or empty 'run_results_dir' for label '${row.label}' in input file.")
@@ -38,11 +39,11 @@ workflow LOAD_DOWNSTREAM_DATA {
             }
         // Unique resolved run_results_dir per label
         run_dirs_ch = rows_ch
-            .map { row -> tuple(row.label, resolveDir(row.run_results_dir)) }
+            .map { row -> tuple(row.label, resolveDir(row.run_results_dir, input_base_dir)) }
             .unique()
         // Parse groups files to get (label, sample, group) tuples
         groups_ch = rows_ch
-            .map { row -> tuple(row.label, resolvePath(row.groups_tsv)) }
+            .map { row -> tuple(row.label, resolvePath(row.groups_tsv, input_base_dir)) }
             .flatMap { label, groups_file ->
                 groups_file.splitCsv(sep: '\t', header: true).collect { gRow ->
                     tuple(label, gRow.sample, gRow.group)

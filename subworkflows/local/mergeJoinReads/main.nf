@@ -29,9 +29,9 @@ workflow MERGE_JOIN_READS {
         single_end // Boolean channel: true if input reads are single-ended, false if interleaved
     main:
         // Split single-end value channel into two branches, one of which will be empty
-        single_end_check = single_end.branch{
-            single: it
-            paired: !it
+        single_end_check = single_end.branch{ v ->
+            single: v
+            paired: !v
         }
         // Forward reads into one of two channels based on endedness (the other will be empty)
         reads_ch_single = single_end_check.single.combine(reads_ch).map{it -> [it[1], it[2]] }
@@ -42,7 +42,7 @@ workflow MERGE_JOIN_READS {
         summarize_bbmerge_ch_paired = SUMMARIZE_BBMERGE(merged_ch.reads).summary
         // In single-end case, take unmodified reads
         single_read_ch_single = reads_ch_single
-        summarize_bbmerge_ch_single = Channel.empty()
+        summarize_bbmerge_ch_single = channel.empty()
         single_read_ch = single_read_ch_paired.mix(single_read_ch_single)
         summarize_bbmerge_ch = summarize_bbmerge_ch_paired.mix(summarize_bbmerge_ch_single)
     emit:

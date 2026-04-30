@@ -23,8 +23,8 @@ workflow EXTRACT_VIRAL_READS {
             hits_final = EXTRACT_VIRAL_READS_ONT.out.hits_final
             inter_lca = EXTRACT_VIRAL_READS_ONT.out.inter_lca
             inter_aligner = EXTRACT_VIRAL_READS_ONT.out.inter_minimap2
-            bbduk_match = Channel.empty()
-            bbduk_trimmed = Channel.empty()
+            bbduk_match = channel.empty()
+            bbduk_trimmed = channel.empty()
         } else {
             def short_params = params_map + [
                 aln_score_threshold: params_map.bt2_score_threshold,
