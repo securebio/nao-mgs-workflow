@@ -5,6 +5,7 @@ import pytest
 from pathlib import Path
 
 import sys
+
 sys.path.insert(0, str(Path(__file__).parent))
 from check_version import (
     validate_version,
@@ -14,23 +15,29 @@ from check_version import (
 
 
 class TestValidateVersion:
-    @pytest.mark.parametrize("version", [
-        "1.2.3.4",
-        "0.0.0.0",
-        "10.20.30.40",
-        "1.2.3.4-dev",
-    ])
+    @pytest.mark.parametrize(
+        "version",
+        [
+            "1.2.3.4",
+            "0.0.0.0",
+            "10.20.30.40",
+            "1.2.3.4-dev",
+        ],
+    )
     def test_valid(self, version: str) -> None:
         assert validate_version(version, "test") == version
 
-    @pytest.mark.parametrize("version", [
-        "",
-        "1.2.3",
-        "1.2.3.4.5",
-        "v1.2.3.4",
-        "1.2.3.4-beta",
-        "a.b.c.d",
-    ])
+    @pytest.mark.parametrize(
+        "version",
+        [
+            "",
+            "1.2.3",
+            "1.2.3.4.5",
+            "v1.2.3.4",
+            "1.2.3.4-beta",
+            "a.b.c.d",
+        ],
+    )
     def test_invalid(self, version: str) -> None:
         with pytest.raises(ValueError, match="Invalid version format"):
             validate_version(version, "test")
@@ -47,12 +54,17 @@ class TestGetPyprojectVersion:
         pyproject.write_text(f'[project]\nversion = "{version}"\n')
         assert get_pyproject_version(str(pyproject)) == version
 
-    @pytest.mark.parametrize("content,error", [
-        ('[project]\nname = "test"\n', KeyError),
-        ('[tool]\nname = "test"\n', KeyError),
-        ('[project]\nversion = "1.2.3"\n', ValueError),
-    ])
-    def test_invalid(self, tmp_path: Path, content: str, error: type[Exception]) -> None:
+    @pytest.mark.parametrize(
+        "content,error",
+        [
+            ('[project]\nname = "test"\n', KeyError),
+            ('[tool]\nname = "test"\n', KeyError),
+            ('[project]\nversion = "1.2.3"\n', ValueError),
+        ],
+    )
+    def test_invalid(
+        self, tmp_path: Path, content: str, error: type[Exception]
+    ) -> None:
         pyproject = tmp_path / "pyproject.toml"
         pyproject.write_text(content)
         with pytest.raises(error):
@@ -66,12 +78,15 @@ class TestGetChangelogVersion:
         changelog.write_text(f"# v{version}\n\n## Changes\n")
         assert get_changelog_version(str(changelog)) == version
 
-    @pytest.mark.parametrize("content,match", [
-        ("# 1.2.3.4\n", "must start with '# v'"),
-        ("v1.2.3.4\n", "must start with '# v'"),
-        ("", "must start with '# v'"),
-        ("# v1.2.3\n", "Invalid version format"),
-    ])
+    @pytest.mark.parametrize(
+        "content,match",
+        [
+            ("# 1.2.3.4\n", "must start with '# v'"),
+            ("v1.2.3.4\n", "must start with '# v'"),
+            ("", "must start with '# v'"),
+            ("# v1.2.3\n", "Invalid version format"),
+        ],
+    )
     def test_invalid(self, tmp_path: Path, content: str, match: str) -> None:
         changelog = tmp_path / "CHANGELOG.md"
         changelog.write_text(content)

@@ -98,7 +98,9 @@ def temp_file_helper() -> Generator[Any, None, None]:
         def __init__(self) -> None:
             self.temp_dir = tempfile.mkdtemp()
 
-        def create_tsv(self, filename: str, header: list[str], rows: list[list[str]]) -> str:
+        def create_tsv(
+            self, filename: str, header: list[str], rows: list[list[str]]
+        ) -> str:
             """Create a TSV file from header and rows."""
             filepath = os.path.join(self.temp_dir, filename)
             with open(filepath, "w") as f:

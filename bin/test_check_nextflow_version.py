@@ -43,7 +43,10 @@ class TestGetPinnedVersion:
         [
             ("manifest {\n    nextflowVersion = '!>=25.10.0'\n}", "25.10.0"),
             ('manifest {\n    nextflowVersion = "!>=1.0.0"\n}', "1.0.0"),
-            ("// Comment\nmanifest {\n    nextflowVersion = '!>=99.99.99'\n}\ndocker.enabled = true", "99.99.99"),
+            (
+                "// Comment\nmanifest {\n    nextflowVersion = '!>=99.99.99'\n}\ndocker.enabled = true",
+                "99.99.99",
+            ),
         ],
     )
     def test_valid(self, tmp_path: Path, content: str, expected: str) -> None:
@@ -69,7 +72,9 @@ class TestGetPinnedVersion:
 
 
 class TestGetLatestVersion:
-    @pytest.mark.parametrize("tag_name,expected", [("v25.10.0", "25.10.0"), ("25.10.0", "25.10.0")])
+    @pytest.mark.parametrize(
+        "tag_name,expected", [("v25.10.0", "25.10.0"), ("25.10.0", "25.10.0")]
+    )
     def test_valid(self, tag_name: str, expected: str) -> None:
         mock_response = MagicMock()
         mock_response.read.return_value = json.dumps({"tag_name": tag_name}).encode()
@@ -91,7 +96,9 @@ class TestGetLatestVersion:
 
 
 class TestGetLatestNonExcludedVersion:
-    def _mock_releases_response(self, releases_data: list[dict[str, object]]) -> MagicMock:
+    def _mock_releases_response(
+        self, releases_data: list[dict[str, object]]
+    ) -> MagicMock:
         """Create a mock response returning the given releases list."""
         mock_response = MagicMock()
         mock_response.read.return_value = json.dumps(releases_data).encode()
@@ -106,7 +113,10 @@ class TestGetLatestNonExcludedVersion:
             {"tag_name": "v25.10.2", "prerelease": False, "draft": False},
             {"tag_name": "v25.10.1", "prerelease": False, "draft": False},
         ]
-        with patch("urllib.request.urlopen", return_value=self._mock_releases_response(releases_data)):
+        with patch(
+            "urllib.request.urlopen",
+            return_value=self._mock_releases_response(releases_data),
+        ):
             result = get_latest_non_excluded_version({"25.10.3"})
             assert result == "25.10.2"
 
@@ -117,13 +127,15 @@ class TestGetLatestNonExcludedVersion:
             {"tag_name": "v25.10.2", "prerelease": False, "draft": False},
             {"tag_name": "v25.10.1", "prerelease": False, "draft": False},
         ]
-        with patch("urllib.request.urlopen", return_value=self._mock_releases_response(releases_data)):
+        with patch(
+            "urllib.request.urlopen",
+            return_value=self._mock_releases_response(releases_data),
+        ):
             result = get_latest_non_excluded_version({"25.10.3", "25.10.2"})
             assert result == "25.10.1"
 
     @pytest.mark.parametrize(
-        "prerelease,draft",
-        [(True, False), (False, True), (True, True)]
+        "prerelease,draft", [(True, False), (False, True), (True, True)]
     )
     def test_skips_prerelease_and_draft(self, prerelease: bool, draft: bool) -> None:
         """Test that prerelease and draft releases are skipped."""
@@ -131,17 +143,27 @@ class TestGetLatestNonExcludedVersion:
             {"tag_name": "v25.10.3", "prerelease": prerelease, "draft": draft},
             {"tag_name": "v25.10.2", "prerelease": False, "draft": False},
         ]
-        with patch("urllib.request.urlopen", return_value=self._mock_releases_response(releases_data)):
+        with patch(
+            "urllib.request.urlopen",
+            return_value=self._mock_releases_response(releases_data),
+        ):
             result = get_latest_non_excluded_version(set())
             assert result == "25.10.2"
 
     def test_skips_invalid_version_format(self) -> None:
         """Test that releases with invalid version formats are skipped."""
         releases_data = [
-            {"tag_name": "v25.10", "prerelease": False, "draft": False},  # Invalid: only 2 parts
+            {
+                "tag_name": "v25.10",
+                "prerelease": False,
+                "draft": False,
+            },  # Invalid: only 2 parts
             {"tag_name": "25.10.2", "prerelease": False, "draft": False},  # Valid
         ]
-        with patch("urllib.request.urlopen", return_value=self._mock_releases_response(releases_data)):
+        with patch(
+            "urllib.request.urlopen",
+            return_value=self._mock_releases_response(releases_data),
+        ):
             result = get_latest_non_excluded_version(set())
             assert result == "25.10.2"
 
@@ -151,8 +173,13 @@ class TestGetLatestNonExcludedVersion:
             {"tag_name": "v25.10.2", "prerelease": False, "draft": False},
             {"tag_name": "v25.10.1", "prerelease": False, "draft": False},
         ]
-        with patch("urllib.request.urlopen", return_value=self._mock_releases_response(releases_data)):
-            with pytest.raises(ValueError, match="Could not find any non-excluded release"):
+        with patch(
+            "urllib.request.urlopen",
+            return_value=self._mock_releases_response(releases_data),
+        ):
+            with pytest.raises(
+                ValueError, match="Could not find any non-excluded release"
+            ):
                 get_latest_non_excluded_version({"25.10.2", "25.10.1"})
 
 
@@ -169,17 +196,25 @@ class TestMain:
     def _mock_api_response(self, version: str) -> MagicMock:
         """Create a mock response returning the given version."""
         mock_response = MagicMock()
-        mock_response.read.return_value = json.dumps({"tag_name": f"v{version}"}).encode()
+        mock_response.read.return_value = json.dumps(
+            {"tag_name": f"v{version}"}
+        ).encode()
         mock_response.__enter__ = MagicMock(return_value=mock_response)
         mock_response.__exit__ = MagicMock(return_value=False)
         return mock_response
 
-    def test_versions_match(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    def test_versions_match(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
         config = tmp_path / "profiles.config"
         config.write_text("manifest {\n    nextflowVersion = '!>=25.10.0'\n}")
 
-        with patch("urllib.request.urlopen", return_value=self._mock_api_response("25.10.0")):
-            with patch("sys.argv", ["check_nextflow_version.py", "--config", str(config)]):
+        with patch(
+            "urllib.request.urlopen", return_value=self._mock_api_response("25.10.0")
+        ):
+            with patch(
+                "sys.argv", ["check_nextflow_version.py", "--config", str(config)]
+            ):
                 main()
 
         captured = capsys.readouterr()
@@ -191,9 +226,15 @@ class TestMain:
         config = tmp_path / "profiles.config"
         config.write_text("manifest {\n    nextflowVersion = '!>=25.10.0'\n}")
 
-        with patch("urllib.request.urlopen", return_value=self._mock_api_response("25.10.1")):
-            with patch("sys.argv", ["check_nextflow_version.py", "--config", str(config)]):
-                with pytest.raises(ValueError, match="Version mismatch: 25.10.0 != 25.10.1"):
+        with patch(
+            "urllib.request.urlopen", return_value=self._mock_api_response("25.10.1")
+        ):
+            with patch(
+                "sys.argv", ["check_nextflow_version.py", "--config", str(config)]
+            ):
+                with pytest.raises(
+                    ValueError, match="Version mismatch: 25.10.0 != 25.10.1"
+                ):
                     main()
 
     def test_invalid_config(self, tmp_path: Path) -> None:
@@ -208,13 +249,26 @@ class TestMain:
         "pinned_version,should_match,expected_error",
         [
             ("25.10.2", True, None),  # Pinned matches next available
-            ("25.10.0", False, "Version mismatch: 25.10.0 != 25.10.2"),  # Pinned doesn't match
-        ]
+            (
+                "25.10.0",
+                False,
+                "Version mismatch: 25.10.0 != 25.10.2",
+            ),  # Pinned doesn't match
+        ],
     )
-    def test_excluded_latest_version(self, tmp_path: Path, capsys: pytest.CaptureFixture[str], pinned_version: str, should_match: bool, expected_error: str | None) -> None:
+    def test_excluded_latest_version(
+        self,
+        tmp_path: Path,
+        capsys: pytest.CaptureFixture[str],
+        pinned_version: str,
+        should_match: bool,
+        expected_error: str | None,
+    ) -> None:
         """Test when latest version is excluded and script finds next available version."""
         config = tmp_path / "profiles.config"
-        config.write_text(f"manifest {{\n    nextflowVersion = '!>={pinned_version}'\n}}")
+        config.write_text(
+            f"manifest {{\n    nextflowVersion = '!>={pinned_version}'\n}}"
+        )
 
         mock_latest = self._mock_api_response("25.10.3")
 
@@ -233,16 +287,25 @@ class TestMain:
             return mock_releases
 
         with patch("urllib.request.urlopen", side_effect=mock_urlopen):
-            with patch("sys.argv", ["check_nextflow_version.py", "--config", str(config)]):
+            with patch(
+                "sys.argv", ["check_nextflow_version.py", "--config", str(config)]
+            ):
                 with patch("check_nextflow_version.EXCLUDED_VERSIONS", {"25.10.3"}):
                     if should_match:
                         main()
                         captured = capsys.readouterr()
-                        assert f"Pinned Nextflow version: {pinned_version}" in captured.out
+                        assert (
+                            f"Pinned Nextflow version: {pinned_version}" in captured.out
+                        )
                         assert "Latest Nextflow version: 25.10.3" in captured.out
-                        assert "Latest version 25.10.3 is excluded (known issues)" in captured.out
+                        assert (
+                            "Latest version 25.10.3 is excluded (known issues)"
+                            in captured.out
+                        )
                         assert "Latest non-excluded version: 25.10.2" in captured.out
-                        assert "OK: Pinned version matches target release" in captured.out
+                        assert (
+                            "OK: Pinned version matches target release" in captured.out
+                        )
                     else:
                         with pytest.raises(ValueError, match=expected_error):
                             main()

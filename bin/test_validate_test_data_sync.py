@@ -11,6 +11,7 @@ from validate_test_data_sync import (
     validate_snapshot,
 )
 
+
 def make_snapshot(content_map: dict[str, list[str]]) -> dict:
     """Helper to create snapshot structure from {name: [entries]} mapping."""
     return {
@@ -18,9 +19,11 @@ def make_snapshot(content_map: dict[str, list[str]]) -> dict:
         for name, entries in content_map.items()
     }
 
+
 ##################
 # parse_snapshot #
 ##################
+
 
 class TestParseSnapshot:
     @pytest.mark.parametrize(
@@ -44,7 +47,11 @@ class TestParseSnapshot:
             ),
             # Entries without :md5, are ignored
             (
-                ["file1.tsv.gz:md5,abc123", "not_an_md5_entry", "another:entry:without:md5"],
+                [
+                    "file1.tsv.gz:md5,abc123",
+                    "not_an_md5_entry",
+                    "another:entry:without:md5",
+                ],
                 {"file1.tsv": "abc123"},
             ),
             # Empty content
@@ -53,7 +60,10 @@ class TestParseSnapshot:
         ids=["single", "multiple", "extensions", "ignore_non_md5", "empty"],
     )
     def test_parses_content_entries(
-        self, tmp_path: Path, content_entries: list[str], expected_md5_map: dict[str, str]
+        self,
+        tmp_path: Path,
+        content_entries: list[str],
+        expected_md5_map: dict[str, str],
     ) -> None:
         snapshot = make_snapshot({"test_output": content_entries})
         snapshot_path = tmp_path / "test.snap"
@@ -63,10 +73,12 @@ class TestParseSnapshot:
 
     def test_parses_multiple_snapshot_names(self, tmp_path: Path) -> None:
         """Parametrized cases above use a single snapshot name; verify multiple names in one file."""
-        snapshot = make_snapshot({
-            "snapshot_one": ["file1.tsv.gz:md5,aaa111"],
-            "snapshot_two": ["file2.tsv.gz:md5,bbb222"],
-        })
+        snapshot = make_snapshot(
+            {
+                "snapshot_one": ["file1.tsv.gz:md5,aaa111"],
+                "snapshot_two": ["file2.tsv.gz:md5,bbb222"],
+            }
+        )
         snapshot_path = tmp_path / "test.snap"
         snapshot_path.write_text(json.dumps(snapshot))
         result = parse_snapshot(snapshot_path)
@@ -82,9 +94,11 @@ class TestParseSnapshot:
         result = parse_snapshot(snapshot_path)
         assert result == {"test_output": {}}
 
+
 ###############
 # compute_md5 #
 ###############
+
 
 class TestComputeMd5:
     @pytest.mark.parametrize(
@@ -101,6 +115,7 @@ class TestComputeMd5:
         test_file.write_bytes(content)
         expected_md5 = hashlib.md5(content).hexdigest()
         assert compute_md5(test_file) == expected_md5
+
 
 #####################
 # validate_snapshot #

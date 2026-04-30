@@ -1,8 +1,8 @@
 #!/usr/bin/env python
 
-#=============================================================================
+# =============================================================================
 # Imports
-#=============================================================================
+# =============================================================================
 
 import os
 import re
@@ -12,9 +12,10 @@ from pathlib import Path
 from typing import IO, TextIO
 from dataclasses import dataclass, field
 
-#=============================================================================
+# =============================================================================
 # Dataclasses
-#=============================================================================
+# =============================================================================
+
 
 @dataclass
 class Process:
@@ -24,11 +25,13 @@ class Process:
     module_name: str | None = None
     testing_only: bool = False
 
+
 @dataclass
 class Module:
     name: str
     path: Path
-    processes: dict[str, Process] = field(default_factory = dict)
+    processes: dict[str, Process] = field(default_factory=dict)
+
 
 @dataclass
 class Workflow:
@@ -36,12 +39,13 @@ class Workflow:
     file_path: Path
     is_anonymous: bool = False
 
-#=============================================================================
+
+# =============================================================================
 # Main class
-#=============================================================================
+# =============================================================================
+
 
 class NextflowAnalyzer:
-
     def __init__(self, pipeline_dir: str):
         # Directories
         self.pipeline_dir = Path(pipeline_dir)
@@ -70,23 +74,33 @@ class NextflowAnalyzer:
         # First check for main.nf in root directory
         main_nf = self.pipeline_dir / "main.nf"
         if main_nf.exists():
-            self.workflows["main"] = Workflow(name="main", file_path=main_nf, is_anonymous=True)
+            self.workflows["main"] = Workflow(
+                name="main", file_path=main_nf, is_anonymous=True
+            )
         # Scan workflows directory
         if self.workflow_dir.exists():
             for workflow_file in self.workflow_dir.rglob("*.nf"):
                 with open(workflow_file) as f:
                     content = f.read()
-                if re.search(r'workflow\s*{', content): # No anonymous workflows except main
-                    raise ValueError(f"Unexpected anonymous workflow in file: {workflow_file}")
-                workflow_matches = re.finditer(r'workflow\s+(\w+)\s*{', content)
+                if re.search(
+                    r"workflow\s*{", content
+                ):  # No anonymous workflows except main
+                    raise ValueError(
+                        f"Unexpected anonymous workflow in file: {workflow_file}"
+                    )
+                workflow_matches = re.finditer(r"workflow\s+(\w+)\s*{", content)
                 for match in workflow_matches:
                     workflow_name = match.group(1)
-                    self.workflows[workflow_name] = Workflow(name=workflow_name, file_path = workflow_file)
+                    self.workflows[workflow_name] = Workflow(
+                        name=workflow_name, file_path=workflow_file
+                    )
         # Scan subworkflows directory
         if self.subworkflow_dir.exists():
             for subworkflow_path in self.subworkflow_dir.glob("**/main.nf"):
                 subworkflow_name = subworkflow_path.parent.name
-                self.workflows[subworkflow_name] = Workflow(name=subworkflow_name, file_path = subworkflow_path)
+                self.workflows[subworkflow_name] = Workflow(
+                    name=subworkflow_name, file_path=subworkflow_path
+                )
         # Scan modules directory
         if self.module_dir.exists():
             for module_path in self.module_dir.glob("**/main.nf"):
@@ -95,12 +109,16 @@ class NextflowAnalyzer:
                 self._scan_file_for_processes(module_path, module_name)
         # Scan for standalone processes (excluding modules and workflows directories)
         for file_path in self.pipeline_dir.rglob("*.nf"):
-            if ("modules/local" not in str(file_path) and
-                "workflows" not in str(file_path) and
-                file_path != main_nf):
+            if (
+                "modules/local" not in str(file_path)
+                and "workflows" not in str(file_path)
+                and file_path != main_nf
+            ):
                 self._scan_file_for_processes(file_path)
 
-    def _scan_file_for_processes(self, file_path: Path, module_name: str | None = None) -> None:
+    def _scan_file_for_processes(
+        self, file_path: Path, module_name: str | None = None
+    ) -> None:
         """Scan a file for process definitions."""
         with open(file_path) as f:
             content = f.read()
@@ -108,12 +126,16 @@ class NextflowAnalyzer:
         has_testing_only = bool(re.search(r'label\s+"testing_only"', content))
 
         for line_num, line in enumerate(content.splitlines(), 1):
-            process_match = re.search(r'process\s+(\w+)\s*{', line)
+            process_match = re.search(r"process\s+(\w+)\s*{", line)
             if process_match:
                 process_name = process_match.group(1)
-                process = Process(name=process_name, file_path=file_path,
-                                  line_number=line_num, module_name=module_name,
-                                  testing_only=has_testing_only)
+                process = Process(
+                    name=process_name,
+                    file_path=file_path,
+                    line_number=line_num,
+                    module_name=module_name,
+                    testing_only=has_testing_only,
+                )
                 if module_name:
                     self.modules[module_name].processes[process_name] = process
                 else:
@@ -124,55 +146,87 @@ class NextflowAnalyzer:
         for workflow_name in self.workflows.keys():
             workflow = self.workflows[workflow_name]
             self.workflow_dependencies[workflow.name] = {
-                    "modules": set(),
-                    "processes": set(),
-                    "workflows": set()
-                    }
+                "modules": set(),
+                "processes": set(),
+                "workflows": set(),
+            }
             with open(workflow.file_path) as f:
                 content = f.read()
-                depend_matches = re.finditer(r'\s*include\s+{\s*(\S*).*}\s+from\s+[\'"](\S*)[\'"]\s*', content)
+                depend_matches = re.finditer(
+                    r'\s*include\s+{\s*(\S*).*}\s+from\s+[\'"](\S*)[\'"]\s*', content
+                )
                 for match in depend_matches:
                     item = match.group(1)
                     # Handle "FOO as BAR" - extract the original name before "as"
-                    original_name = item.split(' as ')[0].strip() if ' as ' in item else item
-                    full_path = match.group(2).rstrip('/')
+                    original_name = (
+                        item.split(" as ")[0].strip() if " as " in item else item
+                    )
+                    full_path = match.group(2).rstrip("/")
                     # Split into dirpath and parent
-                    parts = full_path.rsplit('/', 1)
+                    parts = full_path.rsplit("/", 1)
                     if len(parts) == 2:
                         dirpath, parent = parts
                     else:
-                        dirpath = ''
+                        dirpath = ""
                         parent = parts[0]
                     if re.search("/workflows", dirpath):
-                        self.workflow_dependencies[workflow_name]["workflows"].add(original_name)
+                        self.workflow_dependencies[workflow_name]["workflows"].add(
+                            original_name
+                        )
                     elif re.search("/subworkflows/local", dirpath):
-                        self.workflow_dependencies[workflow_name]["workflows"].add(parent)
+                        self.workflow_dependencies[workflow_name]["workflows"].add(
+                            parent
+                        )
                     elif re.search("/modules/local", dirpath):
                         self.workflow_dependencies[workflow_name]["modules"].add(parent)
-                        self.workflow_dependencies[workflow_name]["processes"].add(original_name)
+                        self.workflow_dependencies[workflow_name]["processes"].add(
+                            original_name
+                        )
                     else:
-                        self.workflow_dependencies[workflow_name]["processes"].add(original_name)
+                        self.workflow_dependencies[workflow_name]["processes"].add(
+                            original_name
+                        )
 
     def _find_unused_components(self) -> None:
         """Identify modules, processes and workflows that aren't called within the main workflow."""
-        used_modules, used_processes, used_workflows = self._extract_dependencies("main", set(), set(), set())
-        unused_modules   = {name for name in self.modules.keys() if name not in used_modules}
-        unused_workflows = {name for name in self.workflows.keys() if name not in used_workflows}
-        unused_processes = {name for name in self.standalone_processes.keys() if name not in used_processes}
+        used_modules, used_processes, used_workflows = self._extract_dependencies(
+            "main", set(), set(), set()
+        )
+        unused_modules = {
+            name for name in self.modules.keys() if name not in used_modules
+        }
+        unused_workflows = {
+            name for name in self.workflows.keys() if name not in used_workflows
+        }
+        unused_processes = {
+            name
+            for name in self.standalone_processes.keys()
+            if name not in used_processes
+        }
         for module_name in self.modules.keys():
             module = self.modules[module_name]
-            unused_processes.update([name for name in module.processes.keys() if name not in used_processes])
+            unused_processes.update(
+                [name for name in module.processes.keys() if name not in used_processes]
+            )
         self.unused_components["modules"] = unused_modules
         self.unused_components["workflows"] = unused_workflows
         self.unused_components["processes"] = unused_processes
 
-    def _extract_dependencies(self, workflow_name: str, modules: set[str], processes: set[str], workflows: set[str]) -> tuple[set[str], set[str], set[str]]:
+    def _extract_dependencies(
+        self,
+        workflow_name: str,
+        modules: set[str],
+        processes: set[str],
+        workflows: set[str],
+    ) -> tuple[set[str], set[str], set[str]]:
         workflows.add(workflow_name)
         processes.update(self.workflow_dependencies[workflow_name]["processes"])
         modules.update(self.workflow_dependencies[workflow_name]["modules"])
         dependent_workflows = self.workflow_dependencies[workflow_name]["workflows"]
         for dependent_workflow in dependent_workflows:
-            modules, processes, workflows = self._extract_dependencies(dependent_workflow, modules, processes, workflows)
+            modules, processes, workflows = self._extract_dependencies(
+                dependent_workflow, modules, processes, workflows
+            )
         return modules, processes, workflows
 
     def get_process_info(self, process_name: str) -> tuple[Process, Path]:
@@ -186,11 +240,14 @@ class NextflowAnalyzer:
             return process, self.modules[module_name].path
         else:
             # Process not found - should not happen in normal operation
-            raise KeyError(f"Process '{process_name}' not found in standalone processes or modules")
+            raise KeyError(
+                f"Process '{process_name}' not found in standalone processes or modules"
+            )
 
-#=============================================================================
+
+# =============================================================================
 # Report generation function
-#=============================================================================
+# =============================================================================
 
 
 def generate_nextflow_report(analyzer: NextflowAnalyzer, output_file: str) -> None:
@@ -223,6 +280,7 @@ def generate_nextflow_report(analyzer: NextflowAnalyzer, output_file: str) -> No
         # Unused components summary
         report_unused_components(analyzer, f)
 
+
 def report_workflows(analyzer: NextflowAnalyzer, output_stream: TextIO) -> None:
     """Write workflow section of Nextflow report."""
     output_stream.write("=================\n")
@@ -232,12 +290,16 @@ def report_workflows(analyzer: NextflowAnalyzer, output_stream: TextIO) -> None:
     workflow_order = []
     if "main" in analyzer.workflows:
         workflow_order.append("main")
-    workflow_order.extend(sorted(name for name in analyzer.workflows if name not in workflow_order))
+    workflow_order.extend(
+        sorted(name for name in analyzer.workflows if name not in workflow_order)
+    )
     for name in workflow_order:
         # Print basic workflow information
         workflow = analyzer.workflows[name]
         output_stream.write(f"Workflow: {name}\n")
-        output_stream.write(f"Location: {workflow.file_path.relative_to(analyzer.pipeline_dir)}\n")
+        output_stream.write(
+            f"Location: {workflow.file_path.relative_to(analyzer.pipeline_dir)}\n"
+        )
         # Print information about dependencies
         if name in analyzer.workflow_dependencies:
             deps = analyzer.workflow_dependencies[name]
@@ -264,9 +326,10 @@ def report_workflows(analyzer: NextflowAnalyzer, output_stream: TextIO) -> None:
                 output_stream.write("Uses no processes.\n")
         # Collate workflows that call this one
         called_by = [
-                wf for wf in analyzer.workflow_dependencies.keys()
-                if name in analyzer.workflow_dependencies[wf]["workflows"]
-                ]
+            wf
+            for wf in analyzer.workflow_dependencies.keys()
+            if name in analyzer.workflow_dependencies[wf]["workflows"]
+        ]
         if called_by:
             output_stream.write("Called by workflows:\n")
             for cb_name in sorted(called_by):
@@ -274,6 +337,7 @@ def report_workflows(analyzer: NextflowAnalyzer, output_stream: TextIO) -> None:
         elif name not in ["main"]:
             output_stream.write("Not called by any workflow.\n")
         output_stream.write("\n")
+
 
 def report_modules(analyzer: NextflowAnalyzer, output_stream: TextIO) -> None:
     """Write module section of Nextflow report."""
@@ -286,20 +350,27 @@ def report_modules(analyzer: NextflowAnalyzer, output_stream: TextIO) -> None:
         module = analyzer.modules[name]
         # Basic module information
         output_stream.write(f"Module: {name}\n")
-        output_stream.write(f"Location: {module.path.relative_to(analyzer.pipeline_dir)}\n")
+        output_stream.write(
+            f"Location: {module.path.relative_to(analyzer.pipeline_dir)}\n"
+        )
         # Processes in module
         if module.processes:
             output_stream.write("Contains processes:\n")
             for proc_name, process in sorted(module.processes.items()):
-                usage_status = " (UNUSED)" if proc_name in analyzer.unused_components['processes'] else ""
+                usage_status = (
+                    " (UNUSED)"
+                    if proc_name in analyzer.unused_components["processes"]
+                    else ""
+                )
                 output_stream.write(f"\t- {proc_name}{usage_status}\n")
         else:
             output_stream.write("Contains no processes.\n")
         # Parent workflows
         called_by = [
-            workflow for workflow in analyzer.workflow_dependencies.keys()
+            workflow
+            for workflow in analyzer.workflow_dependencies.keys()
             if name in analyzer.workflow_dependencies[workflow]["modules"]
-            ]
+        ]
         if called_by:
             output_stream.write("Used by workflows:\n")
             for workflow in sorted(called_by):
@@ -308,7 +379,10 @@ def report_modules(analyzer: NextflowAnalyzer, output_stream: TextIO) -> None:
             output_stream.write("Not used by any workflow.\n")
         output_stream.write("\n")
 
-def report_standalone_processes(analyzer: NextflowAnalyzer, output_stream: TextIO) -> None:
+
+def report_standalone_processes(
+    analyzer: NextflowAnalyzer, output_stream: TextIO
+) -> None:
     """Write standalone processes section of Nextflow report."""
     output_stream.write("============================\n")
     output_stream.write("=== Standalone Processes ===\n")
@@ -319,12 +393,15 @@ def report_standalone_processes(analyzer: NextflowAnalyzer, output_stream: TextI
         process = analyzer.standalone_processes[name]
         # Basic process information
         output_stream.write(f"Process: {name}\n")
-        output_stream.write(f"Location: {process.file_path.relative_to(analyzer.pipeline_dir)}\n")
+        output_stream.write(
+            f"Location: {process.file_path.relative_to(analyzer.pipeline_dir)}\n"
+        )
         # Parent workflows
         called_by = [
-            workflow for workflow in analyzer.workflow_dependencies.keys()
+            workflow
+            for workflow in analyzer.workflow_dependencies.keys()
             if name in analyzer.workflow_dependencies[workflow]["processes"]
-            ]
+        ]
         if called_by:
             output_stream.write("Used by workflows:\n")
             for workflow in sorted(called_by):
@@ -332,6 +409,7 @@ def report_standalone_processes(analyzer: NextflowAnalyzer, output_stream: TextI
         else:
             output_stream.write("Not used by any workflow.\n")
         output_stream.write("\n")
+
 
 def report_unused_components(analyzer: NextflowAnalyzer, output_stream: TextIO) -> None:
     """Write unused components section of Nextflow report."""
@@ -396,7 +474,9 @@ def report_unused_components(analyzer: NextflowAnalyzer, output_stream: TextIO) 
         output_stream.write("Unused processes:\n")
         for name in sorted(unused_processes_regular):
             _, path = analyzer.get_process_info(name)
-            output_stream.write(f"\t- {name} ({path.relative_to(analyzer.pipeline_dir)})\n")
+            output_stream.write(
+                f"\t- {name} ({path.relative_to(analyzer.pipeline_dir)})\n"
+            )
         output_stream.write("\n")
 
     # Report testing_only unused processes
@@ -404,27 +484,40 @@ def report_unused_components(analyzer: NextflowAnalyzer, output_stream: TextIO) 
         output_stream.write("Unused processes (testing only):\n")
         for name in sorted(unused_processes_testing):
             _, path = analyzer.get_process_info(name)
-            output_stream.write(f"\t- {name} ({path.relative_to(analyzer.pipeline_dir)})\n")
+            output_stream.write(
+                f"\t- {name} ({path.relative_to(analyzer.pipeline_dir)})\n"
+            )
         output_stream.write("\n")
 
     # Only report "no unused processes" if there are truly none
     if not unused_processes_regular and not unused_processes_testing:
         output_stream.write("No unused processes found.\n\n")
 
-#=============================================================================
+
+# =============================================================================
 # Run script
-#=============================================================================
+# =============================================================================
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description='Analyze Nextflow pipeline to find unused workflows, modules, and processes.',
-        formatter_class=argparse.RawDescriptionHelpFormatter
+        description="Analyze Nextflow pipeline to find unused workflows, modules, and processes.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    parser.add_argument("-d", "--pipeline_dir", default=os.getcwd(),
-                        help="Path to the Nextflow pipeline directory (default: current working directory)")
-    parser.add_argument("-o", "--output_path", default="pipeline_report.txt",
-                        help="Path to output file for detailed report (default: pipeline_report.txt)")
+    parser.add_argument(
+        "-d",
+        "--pipeline_dir",
+        default=os.getcwd(),
+        help="Path to the Nextflow pipeline directory (default: current working directory)",
+    )
+    parser.add_argument(
+        "-o",
+        "--output_path",
+        default="pipeline_report.txt",
+        help="Path to output file for detailed report (default: pipeline_report.txt)",
+    )
     return parser.parse_args()
+
 
 def main() -> None:
     # Parse arguments
@@ -439,6 +532,7 @@ def main() -> None:
     analyzer = NextflowAnalyzer(pipeline_dir)
     # Create report
     generate_nextflow_report(analyzer, output_path)
+
 
 if __name__ == "__main__":
     main()

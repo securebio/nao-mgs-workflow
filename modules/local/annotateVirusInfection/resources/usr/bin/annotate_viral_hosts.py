@@ -58,7 +58,10 @@ def get_virus_host_mapping(db_path: str) -> dict[str, set[str]]:
     logger.info("Importing Virus-Host-DB.")
     df = pd.read_csv(db_path, sep="\t", dtype=str)
     logger.info("Generating mapping from Virus-Host-DB.")
-    mapping = cast(dict[str, set[str]], df.groupby("virus tax id")["host tax id"].apply(set).to_dict())
+    mapping = cast(
+        dict[str, set[str]],
+        df.groupby("virus tax id")["host tax id"].apply(set).to_dict(),
+    )
     return mapping
 
 
@@ -589,7 +592,9 @@ def main() -> None:
     virus_host_mapping = get_virus_host_mapping(args.infection_db)
     hard_exclude_taxids = args.hard_exclude_taxids.split(" ")
     # Prepare dictionary of host taxids
-    host_dict_single = cast(dict[str, str], host_db.set_index("name")["taxid"].to_dict())
+    host_dict_single = cast(
+        dict[str, str], host_db.set_index("name")["taxid"].to_dict()
+    )
     host_dict_full = get_host_taxids(host_dict_single, nodes_db)
     # Add annotations
     logger.info("Initializing infection-state annotation.")

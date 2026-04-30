@@ -63,7 +63,14 @@ class TestCheckIndexAge:
         ],
         ids=["within-limit", "exactly-at-limit", "one-over", "well-over"],
     )
-    def test_age_check(self, index_date: date, max_age: int, today: date, expected_ok: bool, expected_days: int) -> None:
+    def test_age_check(
+        self,
+        index_date: date,
+        max_age: int,
+        today: date,
+        expected_ok: bool,
+        expected_days: int,
+    ) -> None:
         is_ok, age_days = check_index_age(index_date, max_age, today=today)
         assert is_ok is expected_ok
         assert age_days == expected_days
@@ -76,7 +83,9 @@ class TestCheckIndexAge:
 
 class TestFetchTimeTxtFromS3:
     @patch("check_index_age.boto3.client")
-    def test_parses_s3_uri_and_returns_content(self, mock_boto_client: MagicMock) -> None:
+    def test_parses_s3_uri_and_returns_content(
+        self, mock_boto_client: MagicMock
+    ) -> None:
         mock_body = MagicMock()
         mock_body.read.return_value = b"2025-01-15 14:30:00 UTC (+0000)\n"
         mock_client = mock_boto_client.return_value
@@ -99,7 +108,11 @@ class TestMain:
         )
 
     def test_passes_when_index_is_fresh(
-        self, mock_parse_args: MagicMock, mock_fetch: MagicMock, mock_date: MagicMock, tmp_path: Path
+        self,
+        mock_parse_args: MagicMock,
+        mock_fetch: MagicMock,
+        mock_date: MagicMock,
+        tmp_path: Path,
     ) -> None:
         pyproject = tmp_path / "pyproject.toml"
         pyproject.write_text("[tool.mgs-workflow]\nmax-stable-index-age-days = 90\n")
@@ -110,7 +123,11 @@ class TestMain:
         main()  # should not raise
 
     def test_raises_when_index_is_stale(
-        self, mock_parse_args: MagicMock, mock_fetch: MagicMock, mock_date: MagicMock, tmp_path: Path
+        self,
+        mock_parse_args: MagicMock,
+        mock_fetch: MagicMock,
+        mock_date: MagicMock,
+        tmp_path: Path,
     ) -> None:
         pyproject = tmp_path / "pyproject.toml"
         pyproject.write_text("[tool.mgs-workflow]\nmax-stable-index-age-days = 90\n")

@@ -4,9 +4,9 @@ Check that the pinned Nextflow version is the latest release by
 comparing against the latest release from GitHub.
 """
 
-#=============================================================================
+# =============================================================================
 # Imports
-#=============================================================================
+# =============================================================================
 
 import argparse
 import json
@@ -14,17 +14,15 @@ import re
 import urllib.request
 from pathlib import Path
 
-#=============================================================================
+# =============================================================================
 # Constants
-#=============================================================================
+# =============================================================================
 
 DEFAULT_CONFIG_PATH = Path(__file__).parent.parent / "configs" / "profiles.config"
 DEFAULT_GITHUB_API_URL = (
     "https://api.github.com/repos/nextflow-io/nextflow/releases/latest"
 )
-GITHUB_RELEASES_URL = (
-    "https://api.github.com/repos/nextflow-io/nextflow/releases"
-)
+GITHUB_RELEASES_URL = "https://api.github.com/repos/nextflow-io/nextflow/releases"
 
 # Known broken Nextflow versions that should be excluded from version checks.
 # Add versions here when they have critical bugs that affect the pipeline.
@@ -40,9 +38,10 @@ NEXTFLOW_VERSION_PATTERN = re.compile(
 # Pattern to validate semantic version (X.Y.Z)
 SEMVER_PATTERN = re.compile(r"^\d+\.\d+\.\d+$")
 
-#=============================================================================
+# =============================================================================
 # Helper functions
-#=============================================================================
+# =============================================================================
+
 
 def validate_semver(version: str, source: str) -> str:
     """
@@ -62,6 +61,7 @@ def validate_semver(version: str, source: str) -> str:
         )
     return version
 
+
 def get_pinned_version(config_path: Path) -> str:
     """
     Extract the pinned Nextflow version from a config file.
@@ -80,6 +80,7 @@ def get_pinned_version(config_path: Path) -> str:
             "Expected format: nextflowVersion = '!>=X.Y.Z'"
         )
     return validate_semver(match.group(1), str(config_path))
+
 
 def get_latest_version(api_url: str) -> str:
     """
@@ -129,9 +130,8 @@ def get_latest_non_excluded_version(excluded: set[str]) -> str:
         if version not in excluded:
             return version
 
-    raise ValueError(
-        f"Could not find any non-excluded release. Excluded: {excluded}"
-    )
+    raise ValueError(f"Could not find any non-excluded release. Excluded: {excluded}")
+
 
 def compare_versions(version1: str, version2: str) -> None:
     """
@@ -143,9 +143,8 @@ def compare_versions(version1: str, version2: str) -> None:
         version2 (str): The second version string to compare.
     """
     if version1 != version2:
-        raise ValueError(
-            f"Version mismatch: {version1} != {version2}"
-        )
+        raise ValueError(f"Version mismatch: {version1} != {version2}")
+
 
 def parse_args() -> argparse.Namespace:
     """
@@ -156,9 +155,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--api-url", default=DEFAULT_GITHUB_API_URL)
     return parser.parse_args()
 
-#=============================================================================
+
+# =============================================================================
 # Main function
-#=============================================================================
+# =============================================================================
+
 
 def main() -> None:
     """
@@ -179,6 +180,7 @@ def main() -> None:
 
     compare_versions(pinned, target)
     print("OK: Pinned version matches target release")
+
 
 if __name__ == "__main__":
     main()

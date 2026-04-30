@@ -20,7 +20,6 @@ def _read_lines(path: Path) -> list[str]:
 
 
 class TestSortSam:
-
     def test_empty_sam_header_only(self, tmp_path: Path) -> None:
         """Header-only SAM produces output with just headers."""
         inp = tmp_path / "input.sam.gz"
@@ -41,7 +40,9 @@ class TestSortSam:
         ],
         ids=["already_sorted", "reverse_sorted"],
     )
-    def test_sort_order(self, tmp_path: Path, order: list[str], expected: list[str]) -> None:
+    def test_sort_order(
+        self, tmp_path: Path, order: list[str], expected: list[str]
+    ) -> None:
         """Alignments are sorted by QNAME regardless of input order."""
         inp = tmp_path / "input.sam.gz"
         out = tmp_path / "sorted.sam"

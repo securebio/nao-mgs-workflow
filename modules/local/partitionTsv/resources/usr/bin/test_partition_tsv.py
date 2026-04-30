@@ -27,7 +27,9 @@ class TestPartitionTsv:
         input_content = "x\ty\tz\n0\t1\t2\n3\t4\t5\n"
         input_file = tsv_factory.create_plain("input.tsv", input_content)
 
-        with pytest.raises(ValueError, match="Required column is missing from header line: test"):
+        with pytest.raises(
+            ValueError, match="Required column is missing from header line: test"
+        ):
             partition_tsv.partition(input_file, "test")
 
     def test_unsorted_file_raises_error(self, tsv_factory: Any, tmp_path: Path) -> None:
@@ -41,7 +43,9 @@ class TestPartitionTsv:
         os.chdir(input_dir)
 
         try:
-            with pytest.raises(ValueError, match="Input file is not sorted by partition column"):
+            with pytest.raises(
+                ValueError, match="Input file is not sorted by partition column"
+            ):
                 partition_tsv.partition(os.path.basename(input_file), "x")
         finally:
             os.chdir(original_cwd)
@@ -107,7 +111,11 @@ class TestPartitionTsv:
             partition_files = sorted(glob.glob("partition_*_input.tsv"))
             assert len(partition_files) == 3
 
-            expected_files = ["partition_0_input.tsv", "partition_3_input.tsv", "partition_6_input.tsv"]
+            expected_files = [
+                "partition_0_input.tsv",
+                "partition_3_input.tsv",
+                "partition_6_input.tsv",
+            ]
             assert partition_files == expected_files
 
             # Check content of each partition

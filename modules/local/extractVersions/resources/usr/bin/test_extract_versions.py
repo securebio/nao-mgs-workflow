@@ -30,7 +30,9 @@ class TestGetNestedValue:
             "single_key",
         ],
     )
-    def test_get_nested_value(self, data: dict[str, Any], keys: tuple[str, ...], default: Any, expected: Any) -> None:
+    def test_get_nested_value(
+        self, data: dict[str, Any], keys: tuple[str, ...], default: Any, expected: Any
+    ) -> None:
         """Test retrieving nested values with various inputs."""
         assert get_nested_value(data, *keys, default=default) == expected
 
@@ -84,7 +86,9 @@ class TestExtractVersionInfo:
             "prerelease_tag",
         ],
     )
-    def test_extract_version_info(self, toml_data: dict[str, Any], expected: VersionInfo) -> None:
+    def test_extract_version_info(
+        self, toml_data: dict[str, Any], expected: VersionInfo
+    ) -> None:
         """Test extracting version info from various TOML structures."""
         assert extract_version_info(toml_data) == expected
 
@@ -111,18 +115,33 @@ class TestExtractVersionsIntegration:
             (
                 '[project]\nversion = "2.1.0"\n[tool.mgs-workflow]\npipeline-min-index-version = "1.0.0"',
                 '[project]\nversion = "1.5.0"\n[tool.mgs-workflow]\nindex-min-pipeline-version = "2.0.0"',
-                ["PIPELINE_VERSION=2.1.0", "INDEX_VERSION=1.5.0", "PIPELINE_MIN_INDEX=1.0.0", "INDEX_MIN_PIPELINE=2.0.0"],
+                [
+                    "PIPELINE_VERSION=2.1.0",
+                    "INDEX_VERSION=1.5.0",
+                    "PIPELINE_MIN_INDEX=1.0.0",
+                    "INDEX_MIN_PIPELINE=2.0.0",
+                ],
             ),
             (
                 '[project]\nversion = "1.0.0"',
                 '[project]\nversion = "0.9.0"',
-                ["PIPELINE_VERSION=1.0.0", "INDEX_VERSION=0.9.0", "PIPELINE_MIN_INDEX=", "INDEX_MIN_PIPELINE="],
+                [
+                    "PIPELINE_VERSION=1.0.0",
+                    "INDEX_VERSION=0.9.0",
+                    "PIPELINE_MIN_INDEX=",
+                    "INDEX_MIN_PIPELINE=",
+                ],
             ),
         ],
         ids=["with_optional_fields", "without_optional_fields"],
     )
     def test_extract_versions_output(
-        self, temp_file_helper: Any, capsys: pytest.CaptureFixture[str], pipeline_toml: str, index_toml: str, expected_lines: list[str]
+        self,
+        temp_file_helper: Any,
+        capsys: pytest.CaptureFixture[str],
+        pipeline_toml: str,
+        index_toml: str,
+        expected_lines: list[str],
     ) -> None:
         """Test extracting versions from TOML files."""
         pipeline_file = temp_file_helper.create_file("pipeline.toml", pipeline_toml)

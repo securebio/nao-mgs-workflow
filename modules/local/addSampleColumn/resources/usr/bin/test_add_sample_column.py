@@ -45,7 +45,9 @@ class TestAddSampleColumn:
         ["plain", "gzip"],
         ids=["plain_tsv", "gzipped_tsv"],
     )
-    def test_add_sample_column_file_formats(self, tsv_factory: Any, file_format: str) -> None:
+    def test_add_sample_column_file_formats(
+        self, tsv_factory: Any, file_format: str
+    ) -> None:
         """Test adding sample column with both plain and gzipped files."""
         input_content = "col1\tcol2\nval1\tval2\n"
         expected = "col1\tcol2\tsample\nval1\tval2\tsample_001\n"

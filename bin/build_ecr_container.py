@@ -32,6 +32,7 @@ from botocore.exceptions import ClientError
 # LOGGING #
 ###########
 
+
 class UTCFormatter(logging.Formatter):
     """
     Custom logging formatter that displays timestamps in UTC.
@@ -39,9 +40,7 @@ class UTCFormatter(logging.Formatter):
         Formatted log timestamps in UTC timezone
     """
 
-    def formatTime(
-        self, record: logging.LogRecord, datefmt: str | None = None
-    ) -> str:
+    def formatTime(self, record: logging.LogRecord, datefmt: str | None = None) -> str:
         """
         Format log timestamps in UTC timezone.
         Args:
@@ -52,6 +51,7 @@ class UTCFormatter(logging.Formatter):
         """
         dt = datetime.fromtimestamp(record.created, timezone.utc)
         return dt.strftime("%Y-%m-%d %H:%M:%S UTC")
+
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger()
@@ -64,6 +64,7 @@ logger.addHandler(handler)
 ##########################
 # SPEC PARSING FUNCTIONS #
 ##########################
+
 
 def read_container_spec(spec_file: Path) -> dict[str, Any]:
     """
@@ -83,6 +84,7 @@ def read_container_spec(spec_file: Path) -> dict[str, Any]:
         raise ValueError(msg)
     return spec  # type: ignore[no-any-return]
 
+
 def compute_spec_hash(spec: dict[str, Any], dockerfile_content: str) -> str:
     """
     Compute a hash of the container specification and Dockerfile for tagging.
@@ -100,9 +102,11 @@ def compute_spec_hash(spec: dict[str, Any], dockerfile_content: str) -> str:
     hash_obj = hashlib.sha256(content_str.encode())
     return hash_obj.hexdigest()[:16]
 
+
 #######################
 # ECR SETUP FUNCTIONS #
 #######################
+
 
 def check_image_exists(
     ecr_client: Any,
@@ -120,8 +124,7 @@ def check_image_exists(
     """
     try:
         ecr_client.describe_images(
-            repositoryName=repo_name,
-            imageIds=[{"imageTag": image_tag}]
+            repositoryName=repo_name, imageIds=[{"imageTag": image_tag}]
         )
         return True
     except ClientError as e:
@@ -129,6 +132,7 @@ def check_image_exists(
             return False
         # For other errors (like RepositoryNotFoundException), let it propagate
         raise
+
 
 def setup_ecr_repository(
     label: str,
@@ -157,9 +161,7 @@ def setup_ecr_repository(
         if e.response["Error"]["Code"] == "RepositoryNotFoundException":
             logger.info("ECR repository does not exist; creating")
             try:
-                response = ecr_client.create_repository(
-                    repositoryName=repo_name
-                )
+                response = ecr_client.create_repository(repositoryName=repo_name)
                 repo = response["repository"]
                 logger.info(f"Created repository: {repo['repositoryUri']}")
             except ClientError as create_error:
@@ -181,9 +183,11 @@ def setup_ecr_repository(
 
     return image_tag, image_tag_latest, registry_url, image_exists
 
+
 ################################
 # LOCAL DOCKER BUILD FUNCTIONS #
 ################################
+
 
 def get_base_image(pyproject_path: Path) -> str:
     """Read the container base image from pyproject.toml.
@@ -218,6 +222,7 @@ ENV PATH=/opt/conda/bin:$PATH
 """
     return dockerfile
 
+
 def build_docker_image_from_spec(
     spec_file: Path,
     image_tag: str,
@@ -238,7 +243,15 @@ def build_docker_image_from_spec(
     logger.info(f"Building Docker image: {image_tag}")
     try:
         subprocess.run(
-            ["docker", "build", "--platform", "linux/amd64", "-t", image_tag, str(build_dir)],
+            [
+                "docker",
+                "build",
+                "--platform",
+                "linux/amd64",
+                "-t",
+                image_tag,
+                str(build_dir),
+            ],
             check=True,
         )
         logger.info(f"Built image: {image_tag}")
@@ -246,6 +259,7 @@ def build_docker_image_from_spec(
         msg = f"Error building Docker image: {e}"
         logger.error(msg)
         raise RuntimeError(msg) from e
+
 
 def tag_docker_image(source_tag: str, target_tag: str) -> None:
     """Tag a Docker image with an additional tag.
@@ -265,7 +279,9 @@ def tag_docker_image(source_tag: str, target_tag: str) -> None:
         logger.error(msg)
         raise RuntimeError(msg) from e
 
-def build_container(spec_file: Path,
+
+def build_container(
+    spec_file: Path,
     image_tag: str,
     image_tag_latest: str,
     pyproject_path: Path = Path("pyproject.toml"),
@@ -282,16 +298,20 @@ def build_container(spec_file: Path,
     with tempfile.TemporaryDirectory() as tmpdir:
         build_dir = Path(tmpdir)
         try:
-            build_docker_image_from_spec(spec_file, image_tag, build_dir, pyproject_path)
+            build_docker_image_from_spec(
+                spec_file, image_tag, build_dir, pyproject_path
+            )
             tag_docker_image(image_tag, image_tag_latest)
         except Exception as e:
             msg = f"Error building container: {e}"
             logger.error(msg)
             raise RuntimeError(msg)
 
+
 ######################
 # ECR PUSH FUNCTIONS #
 ######################
+
 
 def docker_login_ecr(registry_url: str) -> None:
     """Authenticate Docker with ECR Public.
@@ -317,10 +337,17 @@ def docker_login_ecr(registry_url: str) -> None:
         )
         logger.info("Authenticated with ECR Public")
     except subprocess.CalledProcessError as e:
-        error_output = e.stderr.strip() if e.stderr else e.stdout.strip() if e.stdout else "No error output"
+        error_output = (
+            e.stderr.strip()
+            if e.stderr
+            else e.stdout.strip()
+            if e.stdout
+            else "No error output"
+        )
         msg = f"Error authenticating with ECR Public: {error_output}"
         logger.error(msg)
         raise RuntimeError(msg)
+
 
 def push_docker_image(image_tag: str) -> None:
     """Push a Docker image to ECR.
@@ -338,6 +365,7 @@ def push_docker_image(image_tag: str) -> None:
         msg = f"Error pushing Docker image: {e}"
         logger.error(msg)
         raise RuntimeError(msg)
+
 
 def push_to_ecr(
     image_tag: str,
@@ -360,9 +388,11 @@ def push_to_ecr(
         logger.error(msg)
         raise RuntimeError(msg)
 
+
 ###########################
 # CONFIG UPDATE FUNCTIONS #
 ###########################
+
 
 def update_containers_config(
     config_file: Path,
@@ -396,9 +426,11 @@ def update_containers_config(
     logger.info(f"Updated {config_file}")
     return True
 
+
 ######################
 # MAIN ORCHESTRATION #
 ######################
+
 
 def build_and_push_container(
     spec_file: Path,
@@ -445,15 +477,15 @@ def build_and_push_container(
         logger.error(f"Error: {e}")
         raise
 
+
 ###################
 # CLI ENTRY POINT #
 ###################
 
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=DESC)
-    parser.add_argument(
-        "spec_file", type=Path, help="Path to container spec YAML file"
-    )
+    parser.add_argument("spec_file", type=Path, help="Path to container spec YAML file")
     parser.add_argument(
         "--prefix",
         default="nao-mgs-workflow",
@@ -474,11 +506,11 @@ def parse_args() -> argparse.Namespace:
     args = parser.parse_args()
     return args
 
+
 def main() -> None:
     args = parse_args()
-    build_and_push_container(
-        args.spec_file, args.prefix, args.config, args.pyproject
-    )
+    build_and_push_container(args.spec_file, args.prefix, args.config, args.pyproject)
+
 
 if __name__ == "__main__":
     main()

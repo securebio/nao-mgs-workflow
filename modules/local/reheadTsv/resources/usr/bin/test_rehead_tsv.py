@@ -18,7 +18,9 @@ class TestReheadTsv:
         input_file = tsv_factory.create_plain("input.tsv", input_content)
         output_file = tsv_factory.get_path("output.tsv")
 
-        with pytest.raises(ValueError, match="Input field not found in file header: xyz"):
+        with pytest.raises(
+            ValueError, match="Input field not found in file header: xyz"
+        ):
             rehead_tsv.rename_columns(input_file, ["xyz"], ["abc"], output_file)
 
     def test_missing_later_input_field_raises_error(self, tsv_factory: Any) -> None:
@@ -27,8 +29,12 @@ class TestReheadTsv:
         input_file = tsv_factory.create_plain("input.tsv", input_content)
         output_file = tsv_factory.get_path("output.tsv")
 
-        with pytest.raises(ValueError, match="Input field not found in file header: xyz"):
-            rehead_tsv.rename_columns(input_file, ["x", "xyz"], ["a", "abc"], output_file)
+        with pytest.raises(
+            ValueError, match="Input field not found in file header: xyz"
+        ):
+            rehead_tsv.rename_columns(
+                input_file, ["x", "xyz"], ["a", "abc"], output_file
+            )
 
     def test_more_input_fields_than_output_raises_error(self, tsv_factory: Any) -> None:
         """Test that mismatched field list lengths raises ValueError."""
@@ -36,7 +42,9 @@ class TestReheadTsv:
         input_file = tsv_factory.create_plain("input.tsv", input_content)
         output_file = tsv_factory.get_path("output.tsv")
 
-        with pytest.raises(ValueError, match="Input and output field lists must be the same length"):
+        with pytest.raises(
+            ValueError, match="Input and output field lists must be the same length"
+        ):
             rehead_tsv.rename_columns(input_file, ["x", "y"], ["a"], output_file)
 
     def test_more_output_fields_than_input_raises_error(self, tsv_factory: Any) -> None:
@@ -45,7 +53,9 @@ class TestReheadTsv:
         input_file = tsv_factory.create_plain("input.tsv", input_content)
         output_file = tsv_factory.get_path("output.tsv")
 
-        with pytest.raises(ValueError, match="Input and output field lists must be the same length"):
+        with pytest.raises(
+            ValueError, match="Input and output field lists must be the same length"
+        ):
             rehead_tsv.rename_columns(input_file, ["x"], ["a", "b"], output_file)
 
     def test_no_change_when_headers_match_one_field(self, tsv_factory: Any) -> None:
@@ -59,7 +69,9 @@ class TestReheadTsv:
         result = tsv_factory.read_plain(output_file)
         assert result == input_content
 
-    def test_no_change_when_headers_match_multiple_fields(self, tsv_factory: Any) -> None:
+    def test_no_change_when_headers_match_multiple_fields(
+        self, tsv_factory: Any
+    ) -> None:
         """Test that output matches input when old and new headers are same (multiple fields)."""
         input_content = "x\ty\tz\n0\t1\t2\n3\t4\t5\n3\t5\t6\n6\t7\t8\n"
         input_file = tsv_factory.create_plain("input.tsv", input_content)

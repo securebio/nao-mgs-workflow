@@ -7,9 +7,9 @@ for each expected per-group output defined in pyproject.toml. When a
 table-schema exists for an output, the file includes a header row.
 """
 
-#=============================================================================
+# =============================================================================
 # Imports
-#=============================================================================
+# =============================================================================
 
 # Standard library imports
 import argparse
@@ -22,9 +22,10 @@ import tomllib
 from datetime import UTC, datetime
 from pathlib import Path
 
-#=============================================================================
+# =============================================================================
 # Logging
-#=============================================================================
+# =============================================================================
+
 
 class UTCFormatter(logging.Formatter):
     """Custom logging formatter that displays timestamps in UTC."""
@@ -34,6 +35,7 @@ class UTCFormatter(logging.Formatter):
         dt = datetime.fromtimestamp(record.created, UTC)
         return dt.strftime("%Y-%m-%d %H:%M:%S UTC")
 
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger()
 handler = logging.StreamHandler()
@@ -42,9 +44,10 @@ handler.setFormatter(formatter)
 logger.handlers.clear()
 logger.addHandler(handler)
 
-#=============================================================================
+# =============================================================================
 # File I/O helpers
-#=============================================================================
+# =============================================================================
+
 
 def open_by_suffix(filename: str | Path, mode: str = "r") -> IO[str]:
     """
@@ -61,9 +64,11 @@ def open_by_suffix(filename: str | Path, mode: str = "r") -> IO[str]:
     else:
         return open(filename_str, mode)
 
-#=============================================================================
+
+# =============================================================================
 # Core functions
-#=============================================================================
+# =============================================================================
+
 
 def get_group_output_patterns(pyproject_path: str, platform: str) -> list[str]:
     """
@@ -76,7 +81,11 @@ def get_group_output_patterns(pyproject_path: str, platform: str) -> list[str]:
     """
     with open(pyproject_path, "rb") as f:
         data = tomllib.load(f)
-    key = "expected-outputs-downstream-ont" if platform == "ont" else "expected-outputs-downstream"
+    key = (
+        "expected-outputs-downstream-ont"
+        if platform == "ont"
+        else "expected-outputs-downstream"
+    )
     outputs: list[str] = data.get("tool", {}).get("mgs-workflow", {}).get(key, [])
     patterns: list[str] = []
     for output in outputs:
@@ -160,7 +169,9 @@ def create_empty_outputs(
     created_files: list[str] = []
     for group in sorted(groups):
         if ".." in group or "/" in group:
-            raise ValueError(f"Invalid group name: '{group}' contains path traversal characters.")
+            raise ValueError(
+                f"Invalid group name: '{group}' contains path traversal characters."
+            )
         for pattern in patterns:
             filename = pattern.replace("{GROUP}", group)
             filepath = output_path / filename
@@ -172,9 +183,11 @@ def create_empty_outputs(
             logger.info(f"Created: {filepath}" + (" (with headers)" if headers else ""))
     return created_files
 
-#=============================================================================
+
+# =============================================================================
 # Argument parsing
-#=============================================================================
+# =============================================================================
+
 
 def parse_args() -> argparse.Namespace:
     """
@@ -215,9 +228,11 @@ def parse_args() -> argparse.Namespace:
     )
     return parser.parse_args()
 
-#=============================================================================
+
+# =============================================================================
 # Main
-#=============================================================================
+# =============================================================================
+
 
 def main() -> None:
     """Main entry point for the script."""
@@ -244,6 +259,7 @@ def main() -> None:
     end_time = time.time()
     logger.info(f"Total time elapsed: {end_time - start_time} seconds")
     logger.info("Script completed successfully.")
+
 
 if __name__ == "__main__":
     main()

@@ -75,7 +75,9 @@ def read_fastq_record(fh: Any) -> tuple[str, str, str] | None:
     return (read_id, seq, qual)
 
 
-def extract_viral_taxid(genome_id: str, genbank_metadata: dict[str, list[str]], viral_taxids: set[str]) -> str:
+def extract_viral_taxid(
+    genome_id: str, genbank_metadata: dict[str, list[str]], viral_taxids: set[str]
+) -> str:
     """Return taxid for a genome, preferring whichever of taxid/species_taxid is viral."""
     try:
         taxid, species_taxid = genbank_metadata[genome_id]
@@ -89,7 +91,11 @@ def extract_viral_taxid(genome_id: str, genbank_metadata: dict[str, list[str]], 
 
 
 def parse_sam_alignment(
-    read: Any, genbank_metadata: dict[str, list[str]], viral_taxids: set[str], clean_seq: str, clean_qual: str
+    read: Any,
+    genbank_metadata: dict[str, list[str]],
+    viral_taxids: set[str],
+    clean_seq: str,
+    clean_qual: str,
 ) -> dict[str, Any]:
     """Parse a Minimap2 SAM alignment into an output dict."""
     taxid = extract_viral_taxid(read.reference_name, genbank_metadata, viral_taxids)
@@ -123,13 +129,19 @@ def parse_sam_alignment(
         "classification": (
             "supplementary"
             if read.is_supplementary
-            else "secondary" if read.is_secondary else "primary"
+            else "secondary"
+            if read.is_secondary
+            else "primary"
         ),
     }
 
 
 def process_sam(
-    sam_file: str, out_file: str, genbank_metadata: dict[str, list[str]], viral_taxids: set[str], fastq_file: str
+    sam_file: str,
+    out_file: str,
+    genbank_metadata: dict[str, list[str]],
+    viral_taxids: set[str],
+    fastq_file: str,
 ) -> None:
     """Process a Minimap2 SAM file using streaming merge join with sorted FASTQ.
 
@@ -172,8 +184,7 @@ def process_sam(
                 )
             if num_reads == 0:
                 logger.warning(
-                    "Input SAM file is empty. "
-                    "Creating empty output with header only."
+                    "Input SAM file is empty. Creating empty output with header only."
                 )
 
 
