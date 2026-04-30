@@ -4,8 +4,9 @@
     - Replace `env BAREWORD` with `env('STRING')` in process output declarations.
     - Rename deprecated `Channel.X` factory calls to `channel.X`.
     - Replace implicit `it` closure parameters with explicit named parameters.
-    - Convert top-level `def closure = { ... }` declarations to `def fn() { ... }` function declarations in `clusterViralAssignments` and `loadDownstreamData` subworkflows.
-    - Prefix unused parameters with `_` and remove an unused variable assignment in `workflows/run.nf`.
+    - Restructure helper closures in `loadDownstreamData` and `clusterViralAssignments` to avoid top-level statements: in `loadDownstreamData`, convert the local `resolvePath`/`resolveDir` closures into top-level `def fn(...)` functions taking `input_base_dir` as an explicit parameter; in `clusterViralAssignments`, move the `listFiles` helper inside the workflow's `main:` block as a local closure.
+    - Drop the unused `start_time_str` parameter from `PREPARE_INPUT_LOGGING` (and its argument at the RUN call site); prefix the unused `sample` closure parameter in `splitViralTsvBySelectedTaxid` with `_`.
+    - Use `sentinel_ch.sentinel` rather than `WRITE_SENTINEL_RUN.out.sentinel` in `workflows/run.nf:54` so the assigned variable is referenced.
 
 # v3.2.1.4
 
