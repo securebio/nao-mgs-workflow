@@ -79,10 +79,9 @@ def extract_changelog(
                     # Found the next version header, we're done
                     break
 
-            if in_section:
-                # Collect non-empty lines from the target version section
-                if line.strip():
-                    content_lines.append(line)
+            # Collect non-empty lines from the target version section
+            if in_section and line.strip():
+                content_lines.append(line)
 
     if not found_version:
         raise ValueError(

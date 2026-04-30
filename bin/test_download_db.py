@@ -84,9 +84,11 @@ class TestFileLock:
         lock_file = tmp_path / "test.lock"
         with open(lock_file, "w") as f:
             fcntl.flock(f, fcntl.LOCK_EX)
-            with pytest.raises(TimeoutError, match="Timed out waiting for lock"):
-                with file_lock(lock_file, timeout_seconds=0.2):
-                    pass
+            with (
+                pytest.raises(TimeoutError, match="Timed out waiting for lock"),
+                file_lock(lock_file, timeout_seconds=0.2),
+            ):
+                pass
             # Lock is released when file is closed
 
 

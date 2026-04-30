@@ -238,7 +238,9 @@ def write_test_log(
             out.write("=" * 80 + "\n")
             out.write("FAILURE SUMMARY\n")
             out.write("=" * 80 + "\n\n")
-            for worker_id, exit_code, stdout, stderr, cmd_str in sorted(failed_workers):
+            for worker_id, exit_code, stdout, stderr, _cmd_str in sorted(
+                failed_workers
+            ):
                 out.write(f"Worker {worker_id} (exit code: {exit_code}):\n")
                 failures = extract_failures_from_output(stdout + "\n" + stderr)
                 if failures:
