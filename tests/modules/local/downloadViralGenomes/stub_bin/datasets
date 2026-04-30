@@ -3,7 +3,7 @@
 # reproducing the empty-taxon error ("no genome data is currently available
 # for this taxon.") with a real live taxid is unstable.
 
-# Echo argv to stderr changes to the `datasets` binary path are
+# Echo argv to stderr so that changes to the `datasets` binary path are
 # visible in `.command.err` for debugging.
 echo "STUB_DATASETS_ARGV: $*" >&2
 
@@ -25,7 +25,7 @@ case "$taxid" in
     *)
         # Force an explicit branch decision for any new test taxid: silently
         # falling through to the empty-taxon sentinel would mis-cover tests.
-        echo "stub: unrecognized taxid '$taxid' — add an explicit case arm" >&2
+        echo "stub: unrecognized taxid '$taxid' -- add an explicit case arm" >&2
         exit 2
         ;;
 esac

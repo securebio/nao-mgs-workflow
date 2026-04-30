@@ -14,6 +14,8 @@ process DOWNLOAD_VIRAL_GENOMES {
         // Header schema for ${taxid}_metadata.tsv
         def metadata_header = "assembly_accession\\ttaxid\\torganism_name\\tsource_database"
         """
+        trap 'rm -f dl_err.txt' EXIT
+
         # 1. Download dehydrated package (metadata + manifest only).
         # NCBI's taxonomy can include taxa without assemblies,
         # so catch and emit empty outputs instead of failing.
@@ -26,18 +28,17 @@ process DOWNLOAD_VIRAL_GENOMES {
             --filename output.zip 2> dl_err.txt
         then
             cat dl_err.txt >&2
+            # Anchored single-line match is intentional: it pins the dispatch
+            # to the exact `datasets` error string. If a future release wraps
+            # or splits the message, this regex must be revisited.
             if grep -qE '^Error:.*no genome data is currently available for this taxon\\.\$' dl_err.txt; then
-                mkdir -p ${taxid}_genomes
-                printf '${metadata_header}\\n' > ${taxid}_metadata.tsv
+                echo -e "${metadata_header}" > ${taxid}_metadata.tsv
                 echo "Taxon ${taxid} has no assemblies available; emitting empty outputs." >&2
-                rm -f dl_err.txt
                 exit 0
             fi
-            rm -f dl_err.txt
             exit 1
         fi
         cat dl_err.txt >&2
-        rm -f dl_err.txt
         unzip -o output.zip -d output/
 
         # 2. Rehydrate: download actual genome files with retry and exponential backoff
