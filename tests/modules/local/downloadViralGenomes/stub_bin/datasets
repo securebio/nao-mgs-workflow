@@ -2,11 +2,6 @@
 # Stub for testing the DOWNLOAD_VIRAL_GENOMES empty-taxon success path, since
 # reproducing the empty-taxon error ("no genome data is currently available
 # for this taxon.") with a real live taxid is unstable.
-#
-# Behavior is selected by the taxid argument:
-#   - 99999999 -> emits the empty-taxon "no genome data" error
-#                 NCBI returns when a taxon has no linked assemblies.
-#                 The module should handle this and emit empty outputs.
 
 # Echo argv to stderr changes to the `datasets` binary path are
 # visible in `.command.err` for debugging.
