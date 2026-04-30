@@ -229,14 +229,14 @@ def write_sam_headers(out_file: IO[str], paired: bool) -> None:
 def get_next_alignment(sam_file: IO[str]) -> str | None:
     """Iterate through SAM file lines until gets an alignment line, then returns."""
     while True:
-        l = next(sam_file, "EOF")  # Get next line
-        if not l:
+        line = next(sam_file, "EOF")  # Get next line
+        if not line:
             continue  # Skip empty lines
-        if l.startswith("@"):
+        if line.startswith("@"):
             continue  # Skip header lines
-        if l == "EOF":
+        if line == "EOF":
             return None
-        return l
+        return line
 
 
 # =======================================================================
