@@ -86,7 +86,7 @@ def extract_viral_taxid(
             return species_taxid
         return taxid
     except KeyError:
-        raise ValueError(f"No matching genome ID found: {genome_id}")
+        raise ValueError(f"No matching genome ID found: {genome_id}") from None
 
 
 def parse_sam_alignment(

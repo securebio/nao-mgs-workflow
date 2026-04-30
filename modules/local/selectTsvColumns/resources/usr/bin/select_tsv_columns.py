@@ -108,7 +108,7 @@ def get_header_index(headers: list[str], field: str, mode: str = "keep") -> int 
         msg = f"Field not found in header: {field}"
         if mode == "keep":
             logger.error(msg)
-            raise ValueError(msg)
+            raise ValueError(msg) from None
         logger.warning(msg)
         return None
 

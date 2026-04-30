@@ -98,7 +98,7 @@ def get_header_index(headers: list[str], field: str) -> int:
     try:
         return headers.index(field)
     except ValueError:
-        raise ValueError(f"Field not found in header: {field}")
+        raise ValueError(f"Field not found in header: {field}") from None
 
 
 def join_line(inputs: list[str]) -> str:

@@ -303,7 +303,7 @@ def build_container(
         except Exception as e:
             msg = f"Error building container: {e}"
             logger.error(msg)
-            raise RuntimeError(msg)
+            raise RuntimeError(msg) from e
 
 
 ######################
@@ -344,7 +344,7 @@ def docker_login_ecr(registry_url: str) -> None:
         )
         msg = f"Error authenticating with ECR Public: {error_output}"
         logger.error(msg)
-        raise RuntimeError(msg)
+        raise RuntimeError(msg) from e
 
 
 def push_docker_image(image_tag: str) -> None:
@@ -362,7 +362,7 @@ def push_docker_image(image_tag: str) -> None:
     except subprocess.CalledProcessError as e:
         msg = f"Error pushing Docker image: {e}"
         logger.error(msg)
-        raise RuntimeError(msg)
+        raise RuntimeError(msg) from e
 
 
 def push_to_ecr(
@@ -384,7 +384,7 @@ def push_to_ecr(
     except Exception as e:
         msg = f"Error pushing to ECR Public: {e}"
         logger.error(msg)
-        raise RuntimeError(msg)
+        raise RuntimeError(msg) from e
 
 
 ###########################

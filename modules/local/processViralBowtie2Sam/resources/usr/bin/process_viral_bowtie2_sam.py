@@ -349,7 +349,7 @@ def extract_viral_taxid(
     except KeyError:
         msg = f"No matching genome ID found: {genome_id}"
         logger.error(msg)
-        raise ValueError(msg)
+        raise ValueError(msg) from None
 
 
 def process_sam_alignment(
