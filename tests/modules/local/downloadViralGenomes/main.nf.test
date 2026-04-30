@@ -33,7 +33,6 @@ nextflow_process {
 
     test("Should fail on non-existent taxid") {
         tag "expect_failed"
-        tag "empty_taxon"
         config "tests/configs/index.config"
         when {
             params {}
