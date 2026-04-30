@@ -8,13 +8,16 @@
 echo "STUB_DATASETS_ARGV: $*" >&2
 
 taxid=""
-prev=""
-for arg in "$@"; do
-    if [ "$prev" = "taxon" ]; then
-        taxid="$arg"
-        break
-    fi
-    prev="$arg"
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        taxon)
+            taxid="$2"
+            shift 2
+            ;;
+        *)
+            shift
+            ;;
+    esac
 done
 
 case "$taxid" in

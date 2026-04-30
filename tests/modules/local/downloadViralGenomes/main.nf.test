@@ -73,6 +73,13 @@ nextflow_process {
             }
         }
         then {
+            // The stub returns the empty-taxon error string unconditionally,
+            // so the only way `process.success` can be true is via the
+            // dispatch branch that matches the regex and exits 0. Combined
+            // with the header-only metadata assertion below, this pins the
+            // test to the empty-taxon code path: any unrelated regression
+            // that produced no genomes would either fail (different exit)
+            // or emit a non-header-only metadata file.
             assert process.success
             // genomes is declared optional; no files should be emitted
             assert process.out.genomes.size() == 0

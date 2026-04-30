@@ -42,6 +42,25 @@ In cases where a module is a thin wrapper around a script in another language, c
 
 `tests/modules/local/fastqc/main.nf.test` is an example of bare-minimum tests for a process, and `tests/modules/local/vsearch/main.nf.test` is an example of really good, comprehensive testing!
 
+#### Stubbing containerized binaries
+
+When a process invokes a containerized CLI whose error path can't be reproduced reliably with live inputs (e.g. the NCBI `datasets` "no genome data" error, which depends on unstable taxonomy state), you can stub the binary by mounting a script over its container path. The pattern:
+
+1. Place the stub script at `tests/modules/local/<process>/stub_bin/<binary>`, mark it executable, and exit with the same status codes / stderr signatures as the real binary for the cases under test. Force an explicit default arm so an unrecognized input fails loudly instead of silently producing the stubbed behavior.
+2. Add a config under `tests/configs/` that mounts the stub over the real binary path inside the container via `containerOptions`:
+
+   ```groovy
+   process {
+       withName: <PROCESS> {
+           containerOptions = "-v ${projectDir}/tests/modules/local/<process>/stub_bin/<binary>:<container-path>:ro"
+       }
+   }
+   ```
+
+3. Reference the config from the relevant test with `config "tests/configs/<name>.config"`.
+
+`tests/modules/local/downloadViralGenomes/stub_bin/datasets` plus `tests/configs/empty_taxon.config` are a working example. Note the failure mode: if a future container image moves the binary, the mount silently misses and the real binary is invoked — document the expected container path in the config header so this is easy to diagnose.
+
 ### Test datasets
 
 #### Current test data
