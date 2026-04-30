@@ -1,8 +1,8 @@
 // Helpers to resolve paths: absolute and S3 paths used as-is, relative paths resolved against input_base_dir
-def resolvePath(String path, input_base_dir) {
+def resolvePath(path, input_base_dir) {
     return (path.startsWith('s3://') || path.startsWith('/')) ? file(path) : file(input_base_dir).resolve(path)
 }
-def resolveDir(String dir, input_base_dir) {
+def resolveDir(dir, input_base_dir) {
     return (dir.startsWith('s3://') || dir.startsWith('/')) ? dir : file(input_base_dir).resolve(dir).toString()
 }
 
