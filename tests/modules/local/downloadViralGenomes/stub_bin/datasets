@@ -1,12 +1,12 @@
 #!/bin/bash
-# Stub for testing DOWNLOAD_VIRAL_GENOMES failure paths. Behavior is selected
-# by the taxid argument so a single config can drive both happy- and
-# negative-failure tests:
-#   - 99999999 -> emits the "no genome data" sentinel NCBI returns when a
-#                 taxon has no linked assemblies. The module is expected to
-#                 handle this and emit empty outputs.
-#   - 88888888 -> emits a generic, non-sentinel error. The module is expected
-#                 to propagate this as a process failure.
+# Stub for testing the DOWNLOAD_VIRAL_GENOMES empty-taxon success path, since
+# reproducing the empty-taxon error ("no genome data is currently available
+# for this taxon.") with a real live taxid is unstable.
+#
+# Behavior is selected by the taxid argument:
+#   - 99999999 -> emits the empty-taxon "no genome data" error
+#                 NCBI returns when a taxon has no linked assemblies.
+#                 The module should handle this and emit empty outputs.
 
 # Echo argv to stderr changes to the `datasets` binary path are
 # visible in `.command.err` for debugging.
@@ -23,12 +23,8 @@ for arg in "$@"; do
 done
 
 case "$taxid" in
-    99999999)
-        echo "Error: The taxonomy ID 'TEST' is valid for 'TestEmpty', but no genome data is currently available for this taxon." >&2
-        exit 1
-        ;;
-    88888888)
-        echo "Error: connection timeout while contacting NCBI servers." >&2
+    taxid-with-no-assemblies)
+        echo "Error: The taxonomy ID 'taxid-with-no-assemblies' is valid for 'TestEmpty', but no genome data is currently available for this taxon." >&2
         exit 1
         ;;
     *)

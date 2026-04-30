@@ -31,13 +31,29 @@ nextflow_process {
         }
     }
 
-    // The two tests below share a stub `datasets` (see stub_bin/datasets) that
-    // selects its error message by the taxid it was invoked with:
-    //   - taxid 99999999 -> empty-taxon sentinel ("no genome data is currently
-    //                       available for this taxon.") that the module is
-    //                       expected to handle and then emit empty outputs for.
-    //   - taxid 88888888 -> generic "connection timeout" error that the module
-    //                       is expected to propagate as a failure.
+    test("Should fail on non-existent taxid") {
+        tag "expect_failed"
+        tag "empty_taxon"
+        config "tests/configs/index.config"
+        when {
+            params {}
+            process {
+                """
+                input[0] = "99999999"
+                input[1] = "refseq"
+                input[2] = ""
+                input[3] = 5
+                """
+            }
+        }
+        then {
+            assert process.failed
+            // Confirm the failure was the non-existent-taxid branch, not an
+            // unrelated failure.
+            assert process.errorReport.contains("does not match any existing taxids")
+        }
+    }
+
     test("Should emit empty outputs when taxon has no assemblies") {
         tag "expect_success"
         tag "empty_taxon"
@@ -50,7 +66,7 @@ nextflow_process {
             params {}
             process {
                 """
-                input[0] = "99999999"
+                input[0] = "taxid-with-no-assemblies"
                 input[1] = "refseq"
                 input[2] = ""
                 input[3] = 5
@@ -66,33 +82,6 @@ nextflow_process {
             def meta_lines = path(process.out.metadata[0]).readLines()
             assert meta_lines.size() == 1
             assert meta_lines[0].split("\t").toList() == ["assembly_accession", "taxid", "organism_name", "source_database"]
-        }
-    }
-
-    test("Should fail when datasets errors with a non-empty-taxon message") {
-        tag "expect_failed"
-        tag "empty_taxon"
-        // Same stubbed `datasets` as above, but invoked with a taxid that
-        // makes the stub emit a generic error instead of the empty-taxon
-        // sentinel. Guards against future loosening of the grep filter
-        // letting unrelated `datasets` failures slip through silently.
-        config "tests/configs/empty_taxon.config"
-        when {
-            params {}
-            process {
-                """
-                input[0] = "88888888"
-                input[1] = "refseq"
-                input[2] = ""
-                input[3] = 5
-                """
-            }
-        }
-        then {
-            assert process.failed
-            // Confirm the failure was the stub's generic-error branch, not an
-            // unrelated failure.
-            assert process.errorReport.contains("Error: connection timeout while contacting NCBI servers.")
         }
     }
 
