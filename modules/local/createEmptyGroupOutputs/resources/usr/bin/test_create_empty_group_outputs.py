@@ -13,11 +13,14 @@ from create_empty_group_outputs import (
 )
 
 
-#=============================================================================
+# =============================================================================
 # Test helpers
-#=============================================================================
+# =============================================================================
 
-def write_pyproject(path: Path, illumina_outputs: list[str], ont_outputs: list[str]) -> None:
+
+def write_pyproject(
+    path: Path, illumina_outputs: list[str], ont_outputs: list[str]
+) -> None:
     """Write a minimal pyproject.toml with expected outputs."""
     content = "[tool.mgs-workflow]\n"
     content += f"expected-outputs-downstream = {illumina_outputs!r}\n"
@@ -25,9 +28,10 @@ def write_pyproject(path: Path, illumina_outputs: list[str], ont_outputs: list[s
     path.write_text(content)
 
 
-#=============================================================================
+# =============================================================================
 # Tests for open_by_suffix
-#=============================================================================
+# =============================================================================
+
 
 class TestOpenBySuffix:
     """Tests for open_by_suffix function."""
@@ -45,63 +49,83 @@ class TestOpenBySuffix:
             assert f.read() == test_content
 
 
-#=============================================================================
+# =============================================================================
 # Tests for get_group_output_patterns
-#=============================================================================
+# =============================================================================
+
 
 class TestGetGroupOutputPatterns:
     """Tests for get_group_output_patterns function."""
 
-    @pytest.mark.parametrize("platform,illumina,ont,expected", [
-        # Illumina platform extracts illumina patterns
-        (
-            "illumina",
-            ["input/file.csv", "results/{GROUP}_clade.tsv.gz", "results/{GROUP}_dup.tsv.gz"],
-            ["results/{GROUP}_val.tsv.gz"],
-            ["{GROUP}_clade.tsv.gz", "{GROUP}_dup.tsv.gz"],
-        ),
-        # ONT platform extracts ont patterns
-        (
-            "ont",
-            ["results/{GROUP}_clade.tsv.gz"],
-            ["input/file.csv", "results/{GROUP}_val.tsv.gz"],
-            ["{GROUP}_val.tsv.gz"],
-        ),
-        # No {GROUP} patterns returns empty
-        (
-            "illumina",
-            ["input/file.csv", "results/output.tsv"],
-            ["input/file.csv"],
-            [],
-        ),
-    ])
-    def test_extracts_patterns(self, tmp_path: Path, platform: str, illumina: list[str], ont: list[str], expected: list[str]) -> None:
+    @pytest.mark.parametrize(
+        "platform,illumina,ont,expected",
+        [
+            # Illumina platform extracts illumina patterns
+            (
+                "illumina",
+                [
+                    "input/file.csv",
+                    "results/{GROUP}_clade.tsv.gz",
+                    "results/{GROUP}_dup.tsv.gz",
+                ],
+                ["results/{GROUP}_val.tsv.gz"],
+                ["{GROUP}_clade.tsv.gz", "{GROUP}_dup.tsv.gz"],
+            ),
+            # ONT platform extracts ont patterns
+            (
+                "ont",
+                ["results/{GROUP}_clade.tsv.gz"],
+                ["input/file.csv", "results/{GROUP}_val.tsv.gz"],
+                ["{GROUP}_val.tsv.gz"],
+            ),
+            # No {GROUP} patterns returns empty
+            (
+                "illumina",
+                ["input/file.csv", "results/output.tsv"],
+                ["input/file.csv"],
+                [],
+            ),
+        ],
+    )
+    def test_extracts_patterns(
+        self,
+        tmp_path: Path,
+        platform: str,
+        illumina: list[str],
+        ont: list[str],
+        expected: list[str],
+    ) -> None:
         """Test extraction of patterns containing {GROUP}."""
         pyproject_path = tmp_path / "pyproject.toml"
         write_pyproject(pyproject_path, illumina, ont)
         assert get_group_output_patterns(str(pyproject_path), platform) == expected
 
 
-#=============================================================================
+# =============================================================================
 # Tests for get_schema_name_from_pattern
-#=============================================================================
+# =============================================================================
+
 
 class TestGetSchemaNameFromPattern:
     """Tests for get_schema_name_from_pattern function."""
 
-    @pytest.mark.parametrize("pattern,expected", [
-        ("{GROUP}_duplicate_stats.tsv.gz", "duplicate_stats"),
-        ("{GROUP}_clade_counts.tsv.gz", "clade_counts"),
-        ("{GROUP}_validation_hits.tsv.gz", "validation_hits"),
-    ])
+    @pytest.mark.parametrize(
+        "pattern,expected",
+        [
+            ("{GROUP}_duplicate_stats.tsv.gz", "duplicate_stats"),
+            ("{GROUP}_clade_counts.tsv.gz", "clade_counts"),
+            ("{GROUP}_validation_hits.tsv.gz", "validation_hits"),
+        ],
+    )
     def test_extracts_schema_name(self, pattern: str, expected: str) -> None:
         """Test schema name extraction from various patterns."""
         assert get_schema_name_from_pattern(pattern) == expected
 
 
-#=============================================================================
+# =============================================================================
 # Tests for load_schema_headers
-#=============================================================================
+# =============================================================================
+
 
 class TestLoadSchemaHeaders:
     """Tests for load_schema_headers function."""
@@ -132,24 +156,30 @@ class TestLoadSchemaHeaders:
         assert result is None
 
 
-#=============================================================================
+# =============================================================================
 # Tests for create_empty_outputs
-#=============================================================================
+# =============================================================================
+
 
 class TestCreateEmptyOutputs:
     """Tests for create_empty_outputs function."""
 
-    @pytest.mark.parametrize("groups,patterns,expected_count", [
-        # Multiple groups and patterns
-        ({"g1", "g2"}, ["{GROUP}_a.tsv.gz", "{GROUP}_b.tsv.gz"], 4),
-        # Single group, single pattern
-        ({"g1"}, ["{GROUP}_a.tsv.gz"], 1),
-        # Empty groups
-        (set(), ["{GROUP}_a.tsv.gz"], 0),
-        # Empty patterns
-        ({"g1"}, [], 0),
-    ])
-    def test_creates_correct_number_of_files(self, tmp_path: Path, groups: set[str], patterns: list[str], expected_count: int) -> None:
+    @pytest.mark.parametrize(
+        "groups,patterns,expected_count",
+        [
+            # Multiple groups and patterns
+            ({"g1", "g2"}, ["{GROUP}_a.tsv.gz", "{GROUP}_b.tsv.gz"], 4),
+            # Single group, single pattern
+            ({"g1"}, ["{GROUP}_a.tsv.gz"], 1),
+            # Empty groups
+            (set(), ["{GROUP}_a.tsv.gz"], 0),
+            # Empty patterns
+            ({"g1"}, [], 0),
+        ],
+    )
+    def test_creates_correct_number_of_files(
+        self, tmp_path: Path, groups: set[str], patterns: list[str], expected_count: int
+    ) -> None:
         """Test that correct number of files are created."""
         output_dir = tmp_path / "output"
         created = create_empty_outputs(groups, patterns, str(output_dir))
@@ -173,9 +203,10 @@ class TestCreateEmptyOutputs:
         assert output_dir.exists()
 
 
-#=============================================================================
+# =============================================================================
 # Tests for parse_args
-#=============================================================================
+# =============================================================================
+
 
 class TestParseArgs:
     """Tests for parse_args function."""
@@ -203,7 +234,9 @@ class TestParseArgs:
         assert args.missing_groups == ""
 
     @pytest.mark.parametrize("platform", ["illumina", "ont"])
-    def test_parses_platform_option(self, monkeypatch: pytest.MonkeyPatch, platform: str) -> None:
+    def test_parses_platform_option(
+        self, monkeypatch: pytest.MonkeyPatch, platform: str
+    ) -> None:
         """Test parsing of --platform option."""
         monkeypatch.setattr(
             "sys.argv",
@@ -221,7 +254,9 @@ class TestParseArgs:
         args = parse_args()
         assert args.output_dir == "output/"
 
-    def test_parses_pattern_filter_option(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_parses_pattern_filter_option(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         """Test parsing of --pattern-filter option."""
         monkeypatch.setattr(
             "sys.argv",
@@ -231,18 +266,24 @@ class TestParseArgs:
         assert args.pattern_filter == "validation_hits"
 
 
-#=============================================================================
+# =============================================================================
 # Integration tests
-#=============================================================================
+# =============================================================================
+
 
 class TestIntegration:
     """Integration tests for the full workflow."""
 
-    @pytest.mark.parametrize("platform,expected_patterns", [
-        ("illumina", ["{GROUP}_clade.tsv.gz", "{GROUP}_dup.tsv.gz"]),
-        ("ont", ["{GROUP}_val.tsv.gz"]),
-    ])
-    def test_full_workflow(self, tmp_path: Path, platform: str, expected_patterns: list[str]) -> None:
+    @pytest.mark.parametrize(
+        "platform,expected_patterns",
+        [
+            ("illumina", ["{GROUP}_clade.tsv.gz", "{GROUP}_dup.tsv.gz"]),
+            ("ont", ["{GROUP}_val.tsv.gz"]),
+        ],
+    )
+    def test_full_workflow(
+        self, tmp_path: Path, platform: str, expected_patterns: list[str]
+    ) -> None:
         """Test the complete workflow from comma-separated groups to output files."""
         # Groups as comma-separated string (simulating Nextflow input)
         groups_str = "empty_g1,empty_g2"
@@ -252,7 +293,11 @@ class TestIntegration:
         pyproject_path = tmp_path / "pyproject.toml"
         write_pyproject(
             pyproject_path,
-            illumina_outputs=["input/f.csv", "results/{GROUP}_clade.tsv.gz", "results/{GROUP}_dup.tsv.gz"],
+            illumina_outputs=[
+                "input/f.csv",
+                "results/{GROUP}_clade.tsv.gz",
+                "results/{GROUP}_dup.tsv.gz",
+            ],
             ont_outputs=["input/f.csv", "results/{GROUP}_val.tsv.gz"],
         )
 

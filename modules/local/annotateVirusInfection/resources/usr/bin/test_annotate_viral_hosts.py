@@ -3,7 +3,7 @@
 Comprehensive test suite for the annotate_viral_hosts module.
 
 This file tests the viral host infection annotation pipeline, which determines
-whether viruses infect specific host taxa based on Virus-Host DB data and 
+whether viruses infect specific host taxa based on Virus-Host DB data and
 taxonomic relationships.
 
 Test Organization:
@@ -149,7 +149,7 @@ def generate_mixed_state_cases(
 
 
 def inconsistent_propagation_logic(_: StateTuple, initial_parent: State) -> State:
-    # We ignore children states because for this test case, all children are 
+    # We ignore children states because for this test case, all children are
     # UNRESOLVED, MAYBE_INCONSISTENT, or INCONSISTENT. In this scenario,
     # only the parent's initial state determines the outcome.
     if initial_parent == INCONSISTENT:
@@ -234,12 +234,12 @@ def dataframe_factory() -> DataFrameFactory:
 @pytest.fixture
 def host_taxonomy_nodes() -> pd.DataFrame:
     """Create a test NCBI nodes DataFrame for host taxonomy.
-    
+
     Structure:
     9606 (human)
     ├── 741158
     └── 63221
-    
+
     7742 (vertebrate)
     ├── 1476529
     ├── 7776
@@ -257,13 +257,15 @@ def host_taxonomy_nodes() -> pd.DataFrame:
     return pd.DataFrame(nodes_data)
 
 
-@pytest.fixture  
+@pytest.fixture
 def sample_virus_db() -> pd.DataFrame:
     """Create a sample virus database for testing."""
-    return pd.DataFrame({
-        "taxid": ["v1", "v2", "v3"],
-        "parent_taxid": ["0", "0", "0"],
-    })
+    return pd.DataFrame(
+        {
+            "taxid": ["v1", "v2", "v3"],
+            "parent_taxid": ["0", "0", "0"],
+        }
+    )
 
 
 @pytest.fixture
@@ -272,7 +274,7 @@ def sample_virus_tree() -> dict[str, set[str]]:
     return {
         "0": {"v1", "v2", "v3"},
         "v1": set(),
-        "v2": set(), 
+        "v2": set(),
         "v3": set(),
     }
 
@@ -284,6 +286,7 @@ def sample_virus_tree() -> dict[str, set[str]]:
 # =======================================================================
 # Tests for mark_ancestor_infections_single
 # =======================================================================
+
 
 class TestUniformChildStates:
     # Untested before: All combinations
@@ -459,6 +462,7 @@ class TestMixedStatePropagation:
 # Tests for mark_direct_infections
 # =======================================================================
 
+
 class TestMarkDirectInfections:
     """Test the mark_direct_infections function."""
 
@@ -472,10 +476,10 @@ class TestMarkDirectInfections:
             "virus2": {"host2", "host3"},  # Has matching hosts (host2, host3)
             "virus3": {"host4", "host5"},  # No matching hosts
         }
-        
+
         # Act
         result = mark_direct_infections(virus_taxids, host_taxids, virus_host_mapping)
-        
+
         # Assert
         assert result["virus1"] == MATCH
         assert result["virus2"] == MATCH
@@ -490,10 +494,10 @@ class TestMarkDirectInfections:
             "virus1": {"host1"},  # Has matching host
         }
         # virus2 and virus3 are not in mapping
-        
+
         # Act
         result = mark_direct_infections(virus_taxids, host_taxids, virus_host_mapping)
-        
+
         # Assert
         assert result["virus1"] == MATCH
         assert result["virus2"] == UNRESOLVED
@@ -505,10 +509,10 @@ class TestMarkDirectInfections:
         virus_taxids = pd.Series([], dtype=str)
         host_taxids = {"host1", "host2"}
         virus_host_mapping = {"virus1": {"host1"}}
-        
+
         # Act
         result = mark_direct_infections(virus_taxids, host_taxids, virus_host_mapping)
-        
+
         # Assert
         assert len(result) == 0
         assert isinstance(result, pd.Series)
@@ -522,10 +526,10 @@ class TestMarkDirectInfections:
             "virus1": {"host1", "host2"},
             "virus2": {"host3"},
         }
-        
+
         # Act
         result = mark_direct_infections(virus_taxids, host_taxids, virus_host_mapping)
-        
+
         # Assert
         # All viruses should be INCONSISTENT since no hosts match empty set
         assert result["virus1"] == INCONSISTENT
@@ -535,6 +539,7 @@ class TestMarkDirectInfections:
 # =======================================================================
 # Tests for expand_taxid
 # =======================================================================
+
 
 class TestExpandTaxid:
     """Test the expand_taxid function."""
@@ -549,10 +554,10 @@ class TestExpandTaxid:
             {"taxid": "4", "parent_taxid": "3"},  # Great-grandchild of 1
         ]
         nodes = pd.DataFrame(nodes_data)
-        
+
         # Act
         result = expand_taxid("1", nodes)
-        
+
         # Assert
         expected = {"1", "2", "3", "4"}
         assert result == expected
@@ -569,10 +574,10 @@ class TestExpandTaxid:
             {"taxid": "6", "parent_taxid": "3"},  # Another grandchild via second child
         ]
         nodes = pd.DataFrame(nodes_data)
-        
+
         # Act
         result = expand_taxid("1", nodes)
-        
+
         # Assert
         expected = {"1", "2", "3", "4", "5", "6"}
         assert result == expected
@@ -587,10 +592,10 @@ class TestExpandTaxid:
             {"taxid": "4", "parent_taxid": "2"},  # Leaf node
         ]
         nodes = pd.DataFrame(nodes_data)
-        
+
         # Act
         result = expand_taxid("4", nodes)  # Query leaf node
-        
+
         # Assert
         assert result == {"4"}
 
@@ -602,10 +607,10 @@ class TestExpandTaxid:
             {"taxid": "2", "parent_taxid": "1"},
         ]
         nodes = pd.DataFrame(nodes_data)
-        
+
         # Act
         result = expand_taxid("999", nodes)  # Non-existent taxid
-        
+
         # Assert
         assert result == {"999"}
 
@@ -627,11 +632,11 @@ class TestExpandTaxid:
             {"taxid": "211", "parent_taxid": "210"},
         ]
         nodes = pd.DataFrame(nodes_data)
-        
+
         # Act - Expand from different starting points
         result_root = expand_taxid("1", nodes)
         result_branch = expand_taxid("20", nodes)
-        
+
         # Assert
         expected_root = {"1", "10", "11", "12", "20", "21", "22", "210", "211"}
         expected_branch = {"20", "21", "22", "210", "211"}
@@ -642,6 +647,7 @@ class TestExpandTaxid:
 # =======================================================================
 # Tests for build_virus_tree
 # =======================================================================
+
 
 class TestBuildVirusTree:
     """Test the build_virus_tree function."""
@@ -657,13 +663,13 @@ class TestBuildVirusTree:
             {"taxid": "5", "parent_taxid": "2"},  # Another child of 2
         ]
         viral_taxa_df = pd.DataFrame(viral_taxa_data)
-        
+
         # Act
         result = build_virus_tree(viral_taxa_df)
-        
+
         # Assert
         expected = {
-            "0": {"1"},        # Parent 0 has child 1
+            "0": {"1"},  # Parent 0 has child 1
             "1": {"2", "3"},  # Parent 1 has children 2 and 3
             "2": {"4", "5"},  # Parent 2 has children 4 and 5
         }
@@ -671,7 +677,7 @@ class TestBuildVirusTree:
         for parent, children in expected.items():
             assert parent in result
             assert result[parent] == children
-        
+
         # Verify that nodes without children return empty sets
         assert result["3"] == set()
         assert result["4"] == set()
@@ -681,10 +687,10 @@ class TestBuildVirusTree:
         """Test that empty DataFrame returns empty defaultdict."""
         # Arrange
         viral_taxa_df = pd.DataFrame(columns=["taxid", "parent_taxid"])
-        
+
         # Act
         result = build_virus_tree(viral_taxa_df)
-        
+
         # Assert
         # Should be an empty defaultdict
         assert len(result) == 0
@@ -710,10 +716,10 @@ class TestBuildVirusTree:
             {"taxid": "213", "parent_taxid": "210"},
         ]
         viral_taxa_df = pd.DataFrame(viral_taxa_data)
-        
+
         # Act
         result = build_virus_tree(viral_taxa_df)
-        
+
         # Assert
         assert result["root"] == {"100", "200"}
         assert result["100"] == {"110", "120"}
@@ -733,56 +739,58 @@ class TestBuildVirusTree:
 # Tests for mark_descendant_infections
 # =======================================================================
 
+
 class TestMarkDescendantInfections:
     """Test mark_descendant_infections function.
-    
+
     This function propagates infection statuses from parent nodes to their descendants.
     The propagation follows a specific priority order:
     1. MATCH propagation (overrides everything)
     2. INCONSISTENT propagation (overrides everything except MATCH)
     3. CONSISTENT propagation (doesn't override MATCH)
     4. UNCLEAR propagation (only affects UNRESOLVED and MAYBE_INCONSISTENT)
-    
+
     After this function runs:
     - No nodes should have UNRESOLVED status
     - No nodes should have MAYBE_INCONSISTENT status
-    
+
     Valid Parent-Child State Combinations
     Based on the logic in the code, these are the valid parent-child combinations that can exist when mark_descendant_infections is called:
-    
+
     Parent: MATCH
     - Children can be: Any state
     - Note: MATCH parents are marked as "checked" early and skip mark_ancestor_infections_single
-    
+
     Parent: INCONSISTENT
     - If all children are INCONSISTENT: Parent inherits INCONSISTENT (uniform rule)
     - Otherwise: Children can be INCONSISTENT, MAYBE_INCONSISTENT, or UNRESOLVED
     - Cannot have: MATCH or CONSISTENT children (would make parent UNCLEAR instead)
-    
+
     Parent: UNCLEAR
     - Must have one of:
       - At least one UNCLEAR child, OR
       - Mix of (INCONSISTENT/MAYBE_INCONSISTENT) and (MATCH/CONSISTENT) children
     - Cannot have: All children with same state (would trigger uniform rule)
-    
+
     Parent: CONSISTENT
     - Children must be some mix of: MATCH, CONSISTENT, and/or UNRESOLVED only
     - Cannot have: INCONSISTENT, MAYBE_INCONSISTENT, or UNCLEAR children
     - Cannot have: All children with same state (would trigger uniform rule)
-    
+
     Parent: UNRESOLVED
     - If parent is UNRESOLVED after mark_ancestor_infections, children must all be UNRESOLVED
     - This follows from the logic: parent only stays UNRESOLVED if all children are UNRESOLVED
-    
+
     Parent: MAYBE_INCONSISTENT
     - Must have: At least one INCONSISTENT or MAYBE_INCONSISTENT child
     - Parent's original state was UNRESOLVED (before mark_ancestor_infections_single)
     - Cannot have: Only MATCH/CONSISTENT children (would make parent CONSISTENT)
     """
+
     @pytest.fixture
     def simple_tree(self) -> dict[str, set[str]]:
         """Create a simple tree structure for testing.
-        
+
         Structure:
         root
         ├── v1
@@ -799,11 +807,11 @@ class TestMarkDescendantInfections:
             "v12": set(),
             "v21": set(),
         }
-    
+
     @pytest.fixture
     def comprehensive_propagation_tree(self) -> dict[str, set[str]]:
         """Create a comprehensive tree for testing all propagation scenarios.
-        
+
         Structure:
         root (UNCLEAR)
         ├── child1 (MATCH)              # Tests MATCH propagation
@@ -819,7 +827,7 @@ class TestMarkDescendantInfections:
         │   └── child16 (MAYBE_INCONSISTENT) # Has children to test override
         │       ├── child161 (UNRESOLVED)
         │       └── child162 (INCONSISTENT)
-        ├── child2 (CONSISTENT)         # Tests CONSISTENT propagation  
+        ├── child2 (CONSISTENT)         # Tests CONSISTENT propagation
         │   ├── child21 (MATCH)
         │   └── child22 (UNRESOLVED)
         ├── child3 (MAYBE_INCONSISTENT) # Tests UNCLEAR propagation
@@ -834,7 +842,14 @@ class TestMarkDescendantInfections:
         """
         return {
             "root": {"child1", "child2", "child3", "child4"},
-            "child1": {"child11", "child12", "child13", "child14", "child15", "child16"},
+            "child1": {
+                "child11",
+                "child12",
+                "child13",
+                "child14",
+                "child15",
+                "child16",
+            },
             "child2": {"child21", "child22"},
             "child3": {"child31", "child32"},
             "child4": {"child41", "child42", "child43"},
@@ -860,11 +875,12 @@ class TestMarkDescendantInfections:
             "child431": set(),
             "child432": set(),
         }
-    
 
-    def test_all_propagation_scenarios(self, comprehensive_propagation_tree: dict[str, set[str]]) -> None:
+    def test_all_propagation_scenarios(
+        self, comprehensive_propagation_tree: dict[str, set[str]]
+    ) -> None:
         """Test all propagation scenarios in a single comprehensive test.
-        
+
         Initial state setup per the example:
         root (UNCLEAR/2)
         ├── child1 (MATCH/1)
@@ -892,7 +908,7 @@ class TestMarkDescendantInfections:
             └── child43 (MAYBE_INCONSISTENT/-2)
                 ├── child431 (INCONSISTENT/0)
                 └── child432 (UNRESOLVED/-1)
-        
+
         Expected after propagation:
         - All descendants of child1 become MATCH (MATCH overrides all)
         - Descendants of child2: child21 stays MATCH, child22 becomes CONSISTENT
@@ -900,42 +916,46 @@ class TestMarkDescendantInfections:
         - Descendants of child4 become INCONSISTENT
         """
         # Arrange
-        statuses = pd.Series({
-            "root": UNCLEAR,
-            "child1": MATCH,
-            "child11": UNRESOLVED,
-            "child12": INCONSISTENT,
-            "child13": MATCH,
-            "child14": CONSISTENT,
-            "child141": MATCH,
-            "child142": UNRESOLVED,
-            "child15": UNCLEAR,
-            "child151": MATCH,
-            "child152": INCONSISTENT,
-            "child16": MAYBE_INCONSISTENT,
-            "child161": UNRESOLVED,
-            "child162": INCONSISTENT,
-            "child2": CONSISTENT,
-            "child21": MATCH,
-            "child22": UNRESOLVED,
-            "child3": MAYBE_INCONSISTENT,
-            "child31": UNRESOLVED,
-            "child32": INCONSISTENT,
-            "child4": INCONSISTENT,
-            "child41": UNRESOLVED,
-            "child42": INCONSISTENT,
-            "child43": MAYBE_INCONSISTENT,
-            "child431": INCONSISTENT,
-            "child432": UNRESOLVED,
-        })
-        
+        statuses = pd.Series(
+            {
+                "root": UNCLEAR,
+                "child1": MATCH,
+                "child11": UNRESOLVED,
+                "child12": INCONSISTENT,
+                "child13": MATCH,
+                "child14": CONSISTENT,
+                "child141": MATCH,
+                "child142": UNRESOLVED,
+                "child15": UNCLEAR,
+                "child151": MATCH,
+                "child152": INCONSISTENT,
+                "child16": MAYBE_INCONSISTENT,
+                "child161": UNRESOLVED,
+                "child162": INCONSISTENT,
+                "child2": CONSISTENT,
+                "child21": MATCH,
+                "child22": UNRESOLVED,
+                "child3": MAYBE_INCONSISTENT,
+                "child31": UNRESOLVED,
+                "child32": INCONSISTENT,
+                "child4": INCONSISTENT,
+                "child41": UNRESOLVED,
+                "child42": INCONSISTENT,
+                "child43": MAYBE_INCONSISTENT,
+                "child431": INCONSISTENT,
+                "child432": UNRESOLVED,
+            }
+        )
+
         # Act
-        result = mark_descendant_infections(comprehensive_propagation_tree, statuses.copy())
-        
+        result = mark_descendant_infections(
+            comprehensive_propagation_tree, statuses.copy()
+        )
+
         # Assert
         # Root remains UNCLEAR
         assert result["root"] == UNCLEAR
-        
+
         # Test MATCH propagation (child1 and descendants)
         assert result["child1"] == MATCH
         assert result["child11"] == MATCH  # MATCH overrides UNRESOLVED
@@ -950,84 +970,104 @@ class TestMarkDescendantInfections:
         assert result["child16"] == MATCH  # MATCH overrides MAYBE_INCONSISTENT
         assert result["child161"] == MATCH  # Inherits MATCH from grandparent
         assert result["child162"] == MATCH  # MATCH overrides INCONSISTENT
-        
+
         # Test CONSISTENT propagation (child2 and descendants)
         assert result["child2"] == CONSISTENT
-        assert result["child21"] == MATCH      # MATCH is preserved (not overridden by CONSISTENT)
+        assert (
+            result["child21"] == MATCH
+        )  # MATCH is preserved (not overridden by CONSISTENT)
         assert result["child22"] == CONSISTENT  # Inherits CONSISTENT from parent
-        
+
         # Test UNCLEAR propagation to MAYBE_INCONSISTENT (child3 and descendants)
-        assert result["child3"] == UNCLEAR  # Changed from MAYBE_INCONSISTENT by UNCLEAR root
+        assert (
+            result["child3"] == UNCLEAR
+        )  # Changed from MAYBE_INCONSISTENT by UNCLEAR root
         assert result["child31"] == UNCLEAR  # Changed from UNRESOLVED by UNCLEAR parent
-        assert result["child32"] == INCONSISTENT  # INCONSISTENT is preserved (not overridden by UNCLEAR)
-        
+        assert (
+            result["child32"] == INCONSISTENT
+        )  # INCONSISTENT is preserved (not overridden by UNCLEAR)
+
         # Test INCONSISTENT propagation (child4 and descendants)
         assert result["child4"] == INCONSISTENT
         assert result["child41"] == INCONSISTENT  # Inherits from INCONSISTENT parent
         assert result["child42"] == INCONSISTENT  # Already INCONSISTENT, preserved
-        assert result["child43"] == INCONSISTENT  # INCONSISTENT overrides MAYBE_INCONSISTENT
+        assert (
+            result["child43"] == INCONSISTENT
+        )  # INCONSISTENT overrides MAYBE_INCONSISTENT
         assert result["child431"] == INCONSISTENT  # Already INCONSISTENT, preserved
         assert result["child432"] == INCONSISTENT  # INCONSISTENT overrides UNRESOLVED
-        
+
         # Verify no UNRESOLVED or MAYBE_INCONSISTENT states remain
         assert UNRESOLVED not in result.values
         assert MAYBE_INCONSISTENT not in result.values
 
-    def test_assertion_unresolved_remaining(self, simple_tree: dict[str, set[str]]) -> None:
+    def test_assertion_unresolved_remaining(
+        self, simple_tree: dict[str, set[str]]
+    ) -> None:
         """Test that assertion fires if UNRESOLVED remains (shouldn't happen in practice)."""
         # Arrange - Create a tree with an isolated UNRESOLVED node
         isolated_tree: dict[str, set[str]] = {"isolated": set()}
         statuses = pd.Series({"isolated": UNRESOLVED})
-        
+
         # Act & Assert
         with pytest.raises(AssertionError, match="Some taxids are still unresolved"):
             mark_descendant_infections(isolated_tree, statuses)
 
-    def test_assertion_maybe_inconsistent_remaining(self, simple_tree: dict[str, set[str]]) -> None:
+    def test_assertion_maybe_inconsistent_remaining(
+        self, simple_tree: dict[str, set[str]]
+    ) -> None:
         """Test that assertion fires if MAYBE_INCONSISTENT remains (shouldn't happen in practice)."""
         # Arrange - Create a tree with an isolated MAYBE_INCONSISTENT node
         isolated_tree: dict[str, set[str]] = {"isolated": set()}
         statuses = pd.Series({"isolated": MAYBE_INCONSISTENT})
-        
+
         # Act & Assert
-        with pytest.raises(AssertionError, match="Some taxids are still maybe inconsistent"):
+        with pytest.raises(
+            AssertionError, match="Some taxids are still maybe inconsistent"
+        ):
             mark_descendant_infections(isolated_tree, statuses)
 
     def test_assertion_consistent_with_inconsistent_descendant(self) -> None:
         """Test that assertion fires if CONSISTENT has INCONSISTENT descendants."""
         # Arrange - This shouldn't happen after mark_ancestor_infections
-        tree = {
-            "root": {"child"},
-            "child": set()
-        }
-        statuses = pd.Series({
-            "root": CONSISTENT,
-            "child": INCONSISTENT  # Invalid: CONSISTENT parent can't have INCONSISTENT child
-        })
-        
+        tree = {"root": {"child"}, "child": set()}
+        statuses = pd.Series(
+            {
+                "root": CONSISTENT,
+                "child": INCONSISTENT,  # Invalid: CONSISTENT parent can't have INCONSISTENT child
+            }
+        )
+
         # Act & Assert
-        with pytest.raises(AssertionError, match="Some taxids marked as CONSISTENT have descendants marked as INCONSISTENT or UNCLEAR"):
+        with pytest.raises(
+            AssertionError,
+            match="Some taxids marked as CONSISTENT have descendants marked as INCONSISTENT or UNCLEAR",
+        ):
             mark_descendant_infections(tree, statuses)
 
     def test_assertion_consistent_with_unclear_descendant(self) -> None:
         """Test that assertion fires if CONSISTENT has UNCLEAR descendants."""
         # Arrange
-        tree = {
-            "root": {"child"},
-            "child": set()
-        }
-        statuses = pd.Series({
-            "root": CONSISTENT,
-            "child": UNCLEAR  # Invalid: CONSISTENT parent can't have UNCLEAR child
-        })
-        
+        tree = {"root": {"child"}, "child": set()}
+        statuses = pd.Series(
+            {
+                "root": CONSISTENT,
+                "child": UNCLEAR,  # Invalid: CONSISTENT parent can't have UNCLEAR child
+            }
+        )
+
         # Act & Assert
-        with pytest.raises(AssertionError, match="Some taxids marked as CONSISTENT have descendants marked as INCONSISTENT or UNCLEAR"):
+        with pytest.raises(
+            AssertionError,
+            match="Some taxids marked as CONSISTENT have descendants marked as INCONSISTENT or UNCLEAR",
+        ):
             mark_descendant_infections(tree, statuses)
+
 
 # =======================================================================
 # Tests for add_descendants
 # =======================================================================
+
 
 class TestAddDescendants:
     """Test the add_descendants helper function."""
@@ -1046,10 +1086,10 @@ class TestAddDescendants:
             "8": set(),
         }
         taxids_start = {"1"}
-        
+
         # Act
         result = add_descendants(virus_tree, taxids_start)
-        
+
         # Assert
         expected = {"1", "2", "3", "4", "5", "6", "7", "8"}
         assert result == expected
@@ -1063,10 +1103,10 @@ class TestAddDescendants:
             "3": set(),
         }
         taxids_start = {"1", "2"}
-        
+
         # Act
         result = add_descendants(virus_tree, taxids_start)
-        
+
         # Assert
         assert result == taxids_start
 
@@ -1079,10 +1119,10 @@ class TestAddDescendants:
             "3": set(),
         }
         taxids_start: set[str] = set()
-        
+
         # Act
         result = add_descendants(virus_tree, taxids_start)
-        
+
         # Assert
         assert result == set()
 
@@ -1100,10 +1140,10 @@ class TestAddDescendants:
             "8": set(),
         }
         taxids_start = {"1", "6"}
-        
+
         # Act
         result = add_descendants(virus_tree, taxids_start)
-        
+
         # Assert
         expected = {"1", "2", "3", "4", "5", "6", "7", "8"}
         assert result == expected
@@ -1112,6 +1152,7 @@ class TestAddDescendants:
 # =======================================================================
 # Tests for exclude_infections
 # =======================================================================
+
 
 class TestExcludeInfections:
     """Test the exclude_infections function."""
@@ -1126,18 +1167,20 @@ class TestExcludeInfections:
             "4": set(),
             "5": set(),
         }
-        statuses = pd.Series({
-            "1": MATCH,
-            "2": MATCH,
-            "3": UNCLEAR,
-            "4": CONSISTENT,
-            "5": UNRESOLVED,
-        })
+        statuses = pd.Series(
+            {
+                "1": MATCH,
+                "2": MATCH,
+                "3": UNCLEAR,
+                "4": CONSISTENT,
+                "5": UNRESOLVED,
+            }
+        )
         exclude_taxids = ["2"]  # Should exclude 2, 4, and 5
-        
+
         # Act
         result = exclude_infections(virus_tree, statuses.copy(), exclude_taxids)
-        
+
         # Assert
         assert result["1"] == MATCH  # Not excluded
         assert result["2"] == INCONSISTENT  # Excluded
@@ -1153,16 +1196,18 @@ class TestExcludeInfections:
             "2": set(),
             "3": set(),
         }
-        statuses = pd.Series({
-            "1": MATCH,
-            "2": CONSISTENT,
-            "3": UNCLEAR,
-        })
+        statuses = pd.Series(
+            {
+                "1": MATCH,
+                "2": CONSISTENT,
+                "3": UNCLEAR,
+            }
+        )
         exclude_taxids: list[str] = []
 
         # Act
         result = exclude_infections(virus_tree, statuses.copy(), exclude_taxids)
-        
+
         # Assert
         pd.testing.assert_series_equal(result, statuses)
 
@@ -1176,18 +1221,20 @@ class TestExcludeInfections:
             "4": {"5"},
             "5": set(),
         }
-        statuses = pd.Series({
-            "1": MATCH,
-            "2": MATCH,
-            "3": MATCH,
-            "4": MATCH,
-            "5": MATCH,
-        })
+        statuses = pd.Series(
+            {
+                "1": MATCH,
+                "2": MATCH,
+                "3": MATCH,
+                "4": MATCH,
+                "5": MATCH,
+            }
+        )
         exclude_taxids = ["2"]
-        
+
         # Act
         result = exclude_infections(virus_tree, statuses.copy(), exclude_taxids)
-        
+
         # Assert
         assert result["1"] == MATCH  # Not excluded
         assert result["2"] == INCONSISTENT  # Excluded
@@ -1199,6 +1246,7 @@ class TestExcludeInfections:
 # =======================================================================
 # Tests for mark_ancestor_infections
 # =======================================================================
+
 
 class TestMarkAncestorInfections:
     """Test the mark_ancestor_infections wrapper function."""
@@ -1213,17 +1261,19 @@ class TestMarkAncestorInfections:
             "4": set(),
             "5": set(),
         }
-        statuses = pd.Series({
-            "1": UNRESOLVED,
-            "2": UNRESOLVED,
-            "3": MATCH,
-            "4": INCONSISTENT,
-            "5": MATCH,
-        })
-        
+        statuses = pd.Series(
+            {
+                "1": UNRESOLVED,
+                "2": UNRESOLVED,
+                "3": MATCH,
+                "4": INCONSISTENT,
+                "5": MATCH,
+            }
+        )
+
         # Act
         result = mark_ancestor_infections(virus_tree, statuses)
-        
+
         # Assert
         # All nodes should have been processed
         # Node 2 should be UNCLEAR (has both MATCH and INCONSISTENT children)
@@ -1243,16 +1293,18 @@ class TestMarkAncestorInfections:
             "3": set(),
             "4": set(),  # Isolated node
         }
-        statuses = pd.Series({
-            "1": MATCH,  # Should be preserved
-            "2": INCONSISTENT, # Childless, should be preserved
-            "3": UNRESOLVED, # Childless, should be preserved
-            "4": UNCLEAR,  # Childless, should be preserved
-        })
-        
+        statuses = pd.Series(
+            {
+                "1": MATCH,  # Should be preserved
+                "2": INCONSISTENT,  # Childless, should be preserved
+                "3": UNRESOLVED,  # Childless, should be preserved
+                "4": UNCLEAR,  # Childless, should be preserved
+            }
+        )
+
         # Act
         result = mark_ancestor_infections(virus_tree, statuses)
-        
+
         # Assert
         assert result["1"] == MATCH  # Preserved
         assert result["2"] == INCONSISTENT  # Preserved (childless)
@@ -1264,6 +1316,7 @@ class TestMarkAncestorInfections:
 # Tests for get_host_taxids
 # =======================================================================
 
+
 class TestGetHostTaxids:
     """Test the get_host_taxids function."""
 
@@ -1274,10 +1327,10 @@ class TestGetHostTaxids:
             "human": "9606",
             "vertebrate": "7742",
         }
-        
+
         # Act
         result = get_host_taxids(hosts, host_taxonomy_nodes)
-        
+
         # Assert
         assert result["human"] == {"9606", "741158", "63221"}
         assert result["vertebrate"] == {"7742", "1476529", "7776", "2662825"}
@@ -1287,10 +1340,10 @@ class TestGetHostTaxids:
         # Arrange
         hosts: dict[str, str] = {}
         nodes = pd.DataFrame()
-        
+
         # Act
         result = get_host_taxids(hosts, nodes)
-        
+
         # Assert
         assert result == {}
 
@@ -1299,25 +1352,20 @@ class TestGetHostTaxids:
 # Tests for get_virus_host_mapping
 # =======================================================================
 
+
 class TestGetVirusHostMapping:
     """Test the get_virus_host_mapping function."""
 
     def test_valid_tsv(self, tmp_path: Path) -> None:
         """Test reading valid TSV returns correct mapping."""
         # Arrange
-        tsv_content = (
-            "virus tax id\thost tax id\n"
-            "1\t100\n"
-            "1\t101\n"
-            "2\t200\n"
-            "3\t300"
-        )
+        tsv_content = "virus tax id\thost tax id\n1\t100\n1\t101\n2\t200\n3\t300"
         tsv_file = tmp_path / "virus_host.tsv"
         tsv_file.write_text(tsv_content)
-        
+
         # Act
         result = get_virus_host_mapping(str(tsv_file))
-        
+
         # Assert
         assert result["1"] == {"100", "101"}
         assert result["2"] == {"200"}
@@ -1326,19 +1374,13 @@ class TestGetVirusHostMapping:
     def test_duplicate_entries(self, tmp_path: Path) -> None:
         """Test that duplicate entries are handled correctly."""
         # Arrange
-        tsv_content = (
-            "virus tax id\thost tax id\n"
-            "1\t100\n"
-            "1\t100\n"
-            "1\t101\n"
-            "2\t200"
-        )
+        tsv_content = "virus tax id\thost tax id\n1\t100\n1\t100\n1\t101\n2\t200"
         tsv_file = tmp_path / "virus_host.tsv"
         tsv_file.write_text(tsv_content)
-        
+
         # Act
         result = get_virus_host_mapping(str(tsv_file))
-        
+
         # Assert
         assert result["1"] == {"100", "101"}  # Duplicates removed
         assert result["2"] == {"200"}
@@ -1349,10 +1391,10 @@ class TestGetVirusHostMapping:
         tsv_content = "virus tax id\thost tax id"  # Header only
         tsv_file = tmp_path / "virus_host.tsv"
         tsv_file.write_text(tsv_content)
-        
+
         # Act
         result = get_virus_host_mapping(str(tsv_file))
-        
+
         # Assert
         assert result == {}
 
@@ -1361,28 +1403,48 @@ class TestGetVirusHostMapping:
 # Tests for annotate_virus_db_single
 # =======================================================================
 
+
 class TestAnnotateVirusDbSingle:
     """Test the annotate_virus_db_single function."""
 
-    def test_column_naming(self, sample_virus_db: pd.DataFrame, sample_virus_tree: dict[str, set[str]], monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_column_naming(
+        self,
+        sample_virus_db: pd.DataFrame,
+        sample_virus_tree: dict[str, set[str]],
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
         """Test that infection status column is named correctly."""
+
         # Mock check_infection since it's a complex function with many dependencies
-        def mock_check_infection(virus_taxids: pd.Series, host_taxids: set[str], virus_tree: dict[str, set[str]], virus_host_mapping: dict[str, set[str]], hard_exclude: list[str]) -> pd.Series:  # type: ignore[type-arg]
+        def mock_check_infection(
+            virus_taxids: pd.Series,
+            host_taxids: set[str],
+            virus_tree: dict[str, set[str]],
+            virus_host_mapping: dict[str, set[str]],
+            hard_exclude: list[str],
+        ) -> pd.Series:  # type: ignore[type-arg]
             return pd.Series([MATCH, INCONSISTENT, UNCLEAR], index=virus_taxids)
-        
-        monkeypatch.setattr("annotate_viral_hosts.check_infection", mock_check_infection)
-        
+
+        monkeypatch.setattr(
+            "annotate_viral_hosts.check_infection", mock_check_infection
+        )
+
         # Arrange
         host_name = "human"
         host_taxids = {"9606"}
         virus_host_mapping: dict[str, set[str]] = {}
         hard_exclude: list[str] = []
-        
+
         # Act
         result = annotate_virus_db_single(
-            sample_virus_db, host_name, host_taxids, sample_virus_tree, virus_host_mapping, hard_exclude
+            sample_virus_db,
+            host_name,
+            host_taxids,
+            sample_virus_tree,
+            virus_host_mapping,
+            hard_exclude,
         )
-        
+
         # Assert
         assert "infection_status_human" in result.columns
         assert list(result["infection_status_human"]) == [MATCH, INCONSISTENT, UNCLEAR]

@@ -300,7 +300,9 @@ def group_unpaired_alignments(
     for group_id, group_alignments in by_group.items():
         if len(group_alignments) > 1:
             group_alignments.sort(key=lambda a: a.alignment_score or 0, reverse=True)
-            logger.debug(f"Group {group_id}: deduplicated {len(group_alignments)} to 1 alignment")
+            logger.debug(
+                f"Group {group_id}: deduplicated {len(group_alignments)} to 1 alignment"
+            )
         filtered_groups[group_id] = [group_alignments[0]]
     return filtered_groups
 
@@ -334,10 +336,23 @@ def group_other_alignments(
         pos_max = max(alignment.pos, alignment.pnext)
         abs_tlen = abs(alignment.tlen)
         # For paired alignments (CP/DP), both scores must be present
-        assert alignment.alignment_score is not None and alignment.mate_alignment_score is not None, \
+        assert (
+            alignment.alignment_score is not None
+            and alignment.mate_alignment_score is not None
+        ), (
             f"Paired alignment missing scores: AS={alignment.alignment_score}, YS={alignment.mate_alignment_score}"
-        score_key = tuple(sorted((alignment.alignment_score, alignment.mate_alignment_score)))
-        pair_key = (alignment.rname, alignment.rnext, pos_min, pos_max, abs_tlen, score_key)
+        )
+        score_key = tuple(
+            sorted((alignment.alignment_score, alignment.mate_alignment_score))
+        )
+        pair_key = (
+            alignment.rname,
+            alignment.rnext,
+            pos_min,
+            pos_max,
+            abs_tlen,
+            score_key,
+        )
         # If the key hasn't been seen before, then this alignment is put into a new group, and recieves a new group ID
         if pair_key not in pair_key_to_group:
             pair_key_to_group[pair_key] = group_idx
@@ -355,10 +370,13 @@ def group_other_alignments(
         if len(group_alignments) != 2:
             read1 = [a for a in group_alignments if a.flag & 64]
             read2 = [a for a in group_alignments if a.flag & 128]
-            assert len(read1) == len(read2), \
+            assert len(read1) == len(read2), (
                 f"Group {group_id}: unequal read1 ({len(read1)}) and read2 ({len(read2)}) alignments"
+            )
             filtered_groups[group_id] = [read1[0], read2[0]]
-            logger.debug(f"Group {group_id}: selected first read1 and read2 from {len(group_alignments)} alignments")
+            logger.debug(
+                f"Group {group_id}: selected first read1 and read2 from {len(group_alignments)} alignments"
+            )
         else:
             filtered_groups[group_id] = group_alignments
     return filtered_groups
@@ -475,7 +493,7 @@ def add_synthetic_mates_by_groups(
         if not (has_read1 and has_read2):
             for alignment in group_alignments:
                 # Only create synthetic mates for unpaired alignments
-                assert alignment.pair_status == "UP" 
+                assert alignment.pair_status == "UP"
                 if alignment.pair_status == "UP":
                     unmapped_mate = alignment.create_unmapped_mate()
                     group_result.append(unmapped_mate)
@@ -573,7 +591,7 @@ def stream_filtered_fastq(fastq_file: str) -> Iterator[str]:
                 if read_id != previous_read_id:
                     # Check if FASTQ file is sorted before yielding
                     if last_read_id is not None and read_id < last_read_id:
-                        msg = f"FASTQ file not sorted by read ID at {read_id}, after {last_read_id}" 
+                        msg = f"FASTQ file not sorted by read ID at {read_id}, after {last_read_id}"
                         logger.error(msg)
                         raise ValueError(msg)
                     yield read_id

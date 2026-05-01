@@ -18,7 +18,9 @@ class TestSortTsv:
         input_file = tsv_factory.create_plain("input.tsv", input_content)
         output_file = tsv_factory.get_path("output.tsv")
 
-        with pytest.raises(ValueError, match="Could not find sort field in input header"):
+        with pytest.raises(
+            ValueError, match="Could not find sort field in input header"
+        ):
             sort_tsv.sort_tsv_file(input_file, output_file, "a", memory_limit=1)
 
     def test_already_sorted_plaintext(self, tsv_factory: Any) -> None:

@@ -40,6 +40,7 @@ from jsonschema.validators import validator_for
 # LOGGING #
 ###########
 
+
 class UTCFormatter(logging.Formatter):
     """Custom logging formatter that displays timestamps in UTC."""
 
@@ -47,6 +48,7 @@ class UTCFormatter(logging.Formatter):
         """Format log timestamps in UTC timezone."""
         dt = datetime.fromtimestamp(record.created, timezone.utc)
         return dt.strftime("%Y-%m-%d %H:%M:%S UTC")
+
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger()
@@ -59,6 +61,7 @@ logger.addHandler(handler)
 ####################
 # HELPER FUNCTIONS #
 ####################
+
 
 def get_output_schema_names(pyproject_path: Path) -> set[str]:
     """
@@ -90,6 +93,7 @@ def get_output_schema_names(pyproject_path: Path) -> set[str]:
             schema_names.add(p.name)
     return schema_names
 
+
 def find_schema_for_file(
     data_file: Path,
     schema_dir: Path,
@@ -118,6 +122,7 @@ def find_schema_for_file(
                 return schema_path
     return None
 
+
 def find_data_files(output_dir: Path) -> list[Path]:
     """
     Find all files in results*/ subdirectories of the output directory.
@@ -131,6 +136,7 @@ def find_data_files(output_dir: Path) -> list[Path]:
         if results_dir.is_dir():
             files.extend(f for f in results_dir.iterdir() if f.is_file())
     return sorted(files)
+
 
 @contextmanager
 def decompressed_path(data_file: Path) -> Generator[Path, None, None]:
@@ -151,6 +157,7 @@ def decompressed_path(data_file: Path) -> Generator[Path, None, None]:
             shutil.copyfileobj(f_in, tmp)
         tmp.flush()
         yield Path(tmp.name)
+
 
 @contextmanager
 def reordered_to_schema(
@@ -176,10 +183,11 @@ def reordered_to_schema(
             data_fields = header_line.split("\t")
             if len(data_fields) != len(set(data_fields)):
                 dupes = [f for f in data_fields if data_fields.count(f) > 1]
-                raise ValueError(f"Duplicate columns in data file: {sorted(set(dupes))}")
-            needs_reorder = (
-                data_fields != schema_fields
-                and set(data_fields) == set(schema_fields)
+                raise ValueError(
+                    f"Duplicate columns in data file: {sorted(set(dupes))}"
+                )
+            needs_reorder = data_fields != schema_fields and set(data_fields) == set(
+                schema_fields
             )
     if not needs_reorder:
         yield data_path
@@ -187,7 +195,10 @@ def reordered_to_schema(
     with tempfile.NamedTemporaryFile(mode="w", suffix=".tsv", delete=True) as tmp:
         with open(data_path) as f:
             reader = csv.DictReader(
-                f, delimiter="\t", quoting=csv.QUOTE_NONE, quotechar=None,
+                f,
+                delimiter="\t",
+                quoting=csv.QUOTE_NONE,
+                quotechar=None,
             )
             tmp.write("\t".join(schema_fields) + "\n")
             for row in reader:
@@ -195,9 +206,11 @@ def reordered_to_schema(
         tmp.flush()
         yield Path(tmp.name)
 
+
 def _is_json_schema(schema: dict) -> bool:
     """Check whether a loaded schema dict is a JSON Schema (vs a table-schema)."""
     return "json-schema.org" in schema.get("$schema", "")
+
 
 def validate_json_file(data_file: Path, schema: dict) -> tuple[bool, list[str]]:
     """
@@ -226,9 +239,14 @@ def validate_json_file(data_file: Path, schema: dict) -> tuple[bool, list[str]]:
         return True, []
     messages = []
     for error in errors:
-        path = ".".join(str(p) for p in error.absolute_path) if error.absolute_path else "(root)"
+        path = (
+            ".".join(str(p) for p in error.absolute_path)
+            if error.absolute_path
+            else "(root)"
+        )
         messages.append(f"[{path}] {error.message}")
     return False, messages
+
 
 def validate_file(data_file: Path, schema_path: Path) -> tuple[bool, list[str]]:
     """
@@ -275,9 +293,11 @@ def validate_file(data_file: Path, schema_path: Path) -> tuple[bool, list[str]]:
                 errors.append(error.message)
     return False, errors
 
+
 ##############
 # MAIN LOGIC #
 ##############
+
 
 def validate_outputs(
     output_dir: Path,
@@ -341,6 +361,7 @@ def validate_outputs(
         logger.error("Some validations failed.")
         return 1
 
+
 def parse_arguments() -> argparse.Namespace:
     """Parse command-line arguments."""
     parser = argparse.ArgumentParser(
@@ -348,24 +369,28 @@ def parse_arguments() -> argparse.Namespace:
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument(
-        "-o", "--output-dir",
+        "-o",
+        "--output-dir",
         type=Path,
         help="Base output directory containing results*/ subdirectories",
         required=True,
     )
     parser.add_argument(
-        "-s", "--schema-dir",
+        "-s",
+        "--schema-dir",
         type=Path,
         default=Path(__file__).resolve().parent.parent / "schemas",
         help="Directory containing schema files (default: <repo>/schemas)",
     )
     parser.add_argument(
-        "-p", "--pyproject",
+        "-p",
+        "--pyproject",
         type=Path,
         default=Path(__file__).resolve().parent.parent / "pyproject.toml",
         help="Path to pyproject.toml for schema name lookup (default: <repo>/pyproject.toml)",
     )
     return parser.parse_args()
+
 
 def main() -> None:
     """Main entry point."""
@@ -377,6 +402,7 @@ def main() -> None:
     end_time = time.time()
     logger.info(f"Total time elapsed: {end_time - start_time:.2f} seconds")
     sys.exit(exit_code)
+
 
 if __name__ == "__main__":
     main()

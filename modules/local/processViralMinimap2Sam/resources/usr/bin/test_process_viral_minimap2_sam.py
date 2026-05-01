@@ -22,7 +22,6 @@ def ref_data() -> tuple[dict[str, list[str]], set[str]]:
 
 
 class TestReadFastqRecord:
-
     def test_basic_record(self) -> None:
         fh = io.StringIO("@readA\nACGT\n+\nFFFF\n")
         result = process_viral_minimap2_sam.read_fastq_record(fh)
@@ -55,7 +54,6 @@ class TestReadFastqRecord:
 
 
 class TestExtractViralTaxid:
-
     METADATA = {"g1": ["111", "222"]}
 
     @pytest.mark.parametrize(
@@ -85,7 +83,6 @@ class TestExtractViralTaxid:
 
 
 class TestParseSamAlignment:
-
     def _make_read(self, tmp_path: Path, sam_line: str) -> "Any":
         """Create a pysam AlignedSegment from a SAM text line."""
         import pysam
@@ -99,7 +96,9 @@ class TestParseSamAlignment:
         with pysam.AlignmentFile(str(sam_path), "r") as f:
             return next(iter(f))
 
-    def test_supplementary_classification(self, tmp_path: Path, ref_data: tuple[dict[str, list[str]], set[str]]) -> None:
+    def test_supplementary_classification(
+        self, tmp_path: Path, ref_data: tuple[dict[str, list[str]], set[str]]
+    ) -> None:
         """Flag 2048 produces classification 'supplementary'."""
         genbank_metadata, viral_taxids = ref_data
         read = self._make_read(
@@ -111,7 +110,9 @@ class TestParseSamAlignment:
         )
         assert result["classification"] == "supplementary"
 
-    def test_length_one_sequence(self, tmp_path: Path, ref_data: tuple[dict[str, list[str]], set[str]]) -> None:
+    def test_length_one_sequence(
+        self, tmp_path: Path, ref_data: tuple[dict[str, list[str]], set[str]]
+    ) -> None:
         """Length-1 sequence produces length_normalized_score of 0."""
         genbank_metadata, viral_taxids = ref_data
         read = self._make_read(
@@ -124,7 +125,9 @@ class TestParseSamAlignment:
         assert result["length_normalized_score"] == 0
         assert result["query_len"] == 1
 
-    def test_primary_forward_all_fields(self, tmp_path: Path, ref_data: tuple[dict[str, list[str]], set[str]]) -> None:
+    def test_primary_forward_all_fields(
+        self, tmp_path: Path, ref_data: tuple[dict[str, list[str]], set[str]]
+    ) -> None:
         """Primary forward-strand alignment populates all expected fields."""
         genbank_metadata, viral_taxids = ref_data
         read = self._make_read(
@@ -150,7 +153,9 @@ class TestParseSamAlignment:
         assert result["classification"] == "primary"
         assert result["length_normalized_score"] == pytest.approx(30 / math.log(8))
 
-    def test_reverse_complement(self, tmp_path: Path, ref_data: tuple[dict[str, list[str]], set[str]]) -> None:
+    def test_reverse_complement(
+        self, tmp_path: Path, ref_data: tuple[dict[str, list[str]], set[str]]
+    ) -> None:
         """Reverse-strand alignment (flag 16) reverse-complements seq and reverses qual."""
         genbank_metadata, viral_taxids = ref_data
         read = self._make_read(
@@ -169,13 +174,14 @@ class TestParseSamAlignment:
 
 
 class TestProcessSam:
-
-    def test_empty_sam_produces_header_only_output(self, tmp_path: Path, ref_data: tuple[dict[str, list[str]], set[str]]) -> None:
+    def test_empty_sam_produces_header_only_output(
+        self, tmp_path: Path, ref_data: tuple[dict[str, list[str]], set[str]]
+    ) -> None:
         """Empty SAM file produces output with header line only."""
         genbank_metadata, viral_taxids = ref_data
 
         sam_path = tmp_path / "empty.sam"
-        sam_path.write_text("@HD\tVN:1.6\tSO:queryname\n" "@SQ\tSN:genome1\tLN:10000\n")
+        sam_path.write_text("@HD\tVN:1.6\tSO:queryname\n@SQ\tSN:genome1\tLN:10000\n")
 
         fastq_path = tmp_path / "empty.fastq"
         fastq_path.write_text("")
@@ -189,7 +195,9 @@ class TestProcessSam:
             lines = f.readlines()
         assert len(lines) == 1  # Header only
 
-    def test_unmapped_reads_skipped(self, tmp_path: Path, ref_data: tuple[dict[str, list[str]], set[str]]) -> None:
+    def test_unmapped_reads_skipped(
+        self, tmp_path: Path, ref_data: tuple[dict[str, list[str]], set[str]]
+    ) -> None:
         """Unmapped reads (flag 4) are skipped in output."""
         genbank_metadata, viral_taxids = ref_data
 
@@ -218,7 +226,9 @@ class TestProcessSam:
         assert "read_mapped" in lines[1]
         assert "read_unmapped" not in "".join(lines)
 
-    def test_multi_alignment_and_fastq_superset(self, tmp_path: Path, ref_data: tuple[dict[str, list[str]], set[str]]) -> None:
+    def test_multi_alignment_and_fastq_superset(
+        self, tmp_path: Path, ref_data: tuple[dict[str, list[str]], set[str]]
+    ) -> None:
         """Merge join holds FASTQ position for multi-alignment reads and skips FASTQ-only reads."""
         genbank_metadata, viral_taxids = ref_data
 
@@ -247,7 +257,10 @@ class TestProcessSam:
         with gzip.open(out_path, "rt") as f:
             lines = f.readlines()
         header = lines[0].strip().split("\t")
-        rows = [dict(zip(header, line.strip().split("\t"), strict=True)) for line in lines[1:]]
+        rows = [
+            dict(zip(header, line.strip().split("\t"), strict=True))
+            for line in lines[1:]
+        ]
 
         # 3 output rows: read_A x2 (multi-alignment hold), read_C x1; read_B skipped
         seq_ids = [r["seq_id"] for r in rows]
@@ -261,7 +274,9 @@ class TestProcessSam:
         assert rows[2]["query_seq"] == "GTACGTACGT"
         assert rows[2]["query_rc"] == "True"
 
-    def test_sam_read_missing_from_fastq_raises_error(self, tmp_path: Path, ref_data: tuple[dict[str, list[str]], set[str]]) -> None:
+    def test_sam_read_missing_from_fastq_raises_error(
+        self, tmp_path: Path, ref_data: tuple[dict[str, list[str]], set[str]]
+    ) -> None:
         """Raises ValueError when SAM contains a read not in FASTQ."""
         genbank_metadata, viral_taxids = ref_data
 
@@ -273,7 +288,7 @@ class TestProcessSam:
         )
 
         fastq_path = tmp_path / "test.fastq"
-        fastq_path.write_text("@read_A\n" "ACGTACGTAC\n" "+\n" "FFFFFFFFFF\n")
+        fastq_path.write_text("@read_A\nACGTACGTAC\n+\nFFFFFFFFFF\n")
 
         out_path = str(tmp_path / "output.tsv.gz")
         with pytest.raises(ValueError, match="read_X"):
@@ -285,7 +300,9 @@ class TestProcessSam:
                 str(fastq_path),
             )
 
-    def test_unsorted_gzipped_inputs_via_sort_helpers(self, tmp_path: Path, ref_data: tuple[dict[str, list[str]], set[str]]) -> None:
+    def test_unsorted_gzipped_inputs_via_sort_helpers(
+        self, tmp_path: Path, ref_data: tuple[dict[str, list[str]], set[str]]
+    ) -> None:
         """Integration test: unsorted gzipped inputs are sorted then processed."""
         genbank_metadata, viral_taxids = ref_data
 
@@ -305,7 +322,7 @@ class TestProcessSam:
         # Unsorted gzipped FASTQ
         fastq_gz = tmp_path / "unsorted.fastq.gz"
         with gzip.open(str(fastq_gz), "wt") as f:
-            f.write("@read_C\nCCCCC\n+\nHHHHH\n" "@read_A\nAAAAA\n+\nFFFFF\n")
+            f.write("@read_C\nCCCCC\n+\nHHHHH\n@read_A\nAAAAA\n+\nFFFFF\n")
 
         # Sort
         sorted_sam = str(tmp_path / "sorted.sam")
@@ -324,7 +341,10 @@ class TestProcessSam:
 
         assert len(lines) == 3  # header + 2 reads
         header = lines[0].strip().split("\t")
-        rows = [dict(zip(header, line.strip().split("\t"), strict=True)) for line in lines[1:]]
+        rows = [
+            dict(zip(header, line.strip().split("\t"), strict=True))
+            for line in lines[1:]
+        ]
         assert rows[0]["seq_id"] == "read_A"
         assert rows[1]["seq_id"] == "read_C"
         # Verify clean seq/qual came from FASTQ, not SAM

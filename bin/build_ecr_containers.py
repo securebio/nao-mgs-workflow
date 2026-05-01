@@ -2,6 +2,7 @@
 """
 Rebuild all ECR containers from specs in containers/ directory.
 """
+
 import argparse
 import logging
 import sys

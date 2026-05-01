@@ -39,17 +39,18 @@ from filter_viral_sam import filter_viral_sam, SamAlignment
 script_dir = Path(__file__).parent
 sys.path.insert(0, str(script_dir))
 
+
 class TestSamAlignment:
     def test_parse_basic_sam_line(self) -> None:
         line = "read1\t99\tchr1\t100\t60\t50M\t=\t200\t150\tACGTACGT\tIIIIIIII\tAS:i:45\tYT:Z:CP"
         alignment = SamAlignment.from_sam_line(line)
 
-        assert alignment.qname == 'read1'
+        assert alignment.qname == "read1"
         assert alignment.flag == 99
-        assert alignment.rname == 'chr1'
+        assert alignment.rname == "chr1"
         assert alignment.pos == 100
         assert alignment.alignment_score == 45
-        assert alignment.pair_status == 'CP'
+        assert alignment.pair_status == "CP"
 
     def test_parse_missing_tags(self) -> None:
         line = "read1\t99\tchr1\t100\t60\t50M\t=\t200\t150\tACGTACGT\tIIIIIIII"
@@ -62,21 +63,36 @@ class TestSamAlignment:
         line = "read1\t99\tchr1\t100\t60\t50M\t=\t200\t150\tACGTACGT\tIIIIIIII\tAS:i:30\tYT:Z:UP"
         alignment = SamAlignment.from_sam_line(line)
 
-        assert alignment.pair_status == 'UP'
+        assert alignment.pair_status == "UP"
+
 
 class TestCalculateNormalizedScore:
     def test_normal_calculation(self) -> None:
         import math
-        line = "read1\t99\tchr1\t100\t60\t50M\t=\t200\t150\t" + "A" * 100 + "\t" + "I" * 100 + "\tAS:i:50"
+
+        line = (
+            "read1\t99\tchr1\t100\t60\t50M\t=\t200\t150\t"
+            + "A" * 100
+            + "\t"
+            + "I" * 100
+            + "\tAS:i:50"
+        )
         alignment = SamAlignment.from_sam_line(line)
         alignment.calculate_normalized_score()
         expected = 50 / math.log(100)
-        assert alignment.normalized_score is not None, "normalized_score should not be None"
+        assert alignment.normalized_score is not None, (
+            "normalized_score should not be None"
+        )
         assert expected is not None, "expected should not be None"
         assert abs(alignment.normalized_score - expected) < 1e-10
 
     def test_none_score(self) -> None:
-        line = "read1\t99\tchr1\t100\t60\t50M\t=\t200\t150\t" + "A" * 100 + "\t" + "I" * 100
+        line = (
+            "read1\t99\tchr1\t100\t60\t50M\t=\t200\t150\t"
+            + "A" * 100
+            + "\t"
+            + "I" * 100
+        )
         alignment = SamAlignment.from_sam_line(line)
         alignment.calculate_normalized_score()
         assert alignment.normalized_score == 0
@@ -86,6 +102,7 @@ class TestCalculateNormalizedScore:
         alignment = SamAlignment.from_sam_line(line)
         alignment.calculate_normalized_score()
         assert alignment.normalized_score == 0
+
 
 class TestCreateUnmappedMate:
     def test_create_mate_from_read1(self) -> None:
@@ -98,7 +115,7 @@ class TestCreateUnmappedMate:
         assert mate.flag & 128  # read2
         assert not (mate.flag & 64)  # not read1
         assert mate.flag & 4  # unmapped
-        assert mate.cigar == '*'
+        assert mate.cigar == "*"
 
     def test_create_mate_from_read2(self) -> None:
         line = "read1\t147\tchr1\t100\t60\t50M\t=\t200\t150\tACGTACGT\tIIIIIIII\tAS:i:45\tYT:Z:UP"
@@ -111,17 +128,19 @@ class TestCreateUnmappedMate:
         assert not (mate.flag & 128)  # not read2
         assert mate.flag & 4  # unmapped
 
+
 class TestFilterViralSam:
     def setup_method(self) -> None:
         self.temp_dir = tempfile.mkdtemp()
 
     def teardown_method(self) -> None:
         import shutil
+
         shutil.rmtree(self.temp_dir)
 
-    def create_temp_file(self, content: str, suffix: str = '.txt') -> str:
+    def create_temp_file(self, content: str, suffix: str = ".txt") -> str:
         fd, path = tempfile.mkstemp(dir=self.temp_dir, suffix=suffix)
-        with os.fdopen(fd, 'w') as f:
+        with os.fdopen(fd, "w") as f:
             f.write(content)
         return path
 
@@ -149,19 +168,19 @@ TGCATGCATGCATGCA
 +
 IIIIIIIIIIIIIIII"""
 
-        sam_file = self.create_temp_file(sam_content, '.sam')
-        filtered_file = self.create_temp_file(filtered_content, '.fastq')
-        output_file = os.path.join(self.temp_dir, 'output.sam')
+        sam_file = self.create_temp_file(sam_content, ".sam")
+        filtered_file = self.create_temp_file(filtered_content, ".fastq")
+        output_file = os.path.join(self.temp_dir, "output.sam")
 
         filter_viral_sam(sam_file, filtered_file, output_file, 0.1)
 
-        with open(output_file, 'r') as f:
+        with open(output_file, "r") as f:
             output_lines = f.readlines()
 
         # Should have both pairs: filtered_read (kept) and read1 (passed score threshold)
         assert len(output_lines) == 4
-        assert any('filtered_read' in line for line in output_lines)
-        assert any('read1' in line for line in output_lines)
+        assert any("filtered_read" in line for line in output_lines)
+        assert any("read1" in line for line in output_lines)
 
     def test_score_threshold_pair_logic(self) -> None:
 
@@ -188,20 +207,20 @@ TGCATGCATGCATGCA
 +
 IIIIIIIIIIIIIIII"""
 
-        sam_file = self.create_temp_file(sam_content, '.sam')
-        filtered_file = self.create_temp_file(filtered_content, '.fastq')
-        output_file = os.path.join(self.temp_dir, 'output.sam')
+        sam_file = self.create_temp_file(sam_content, ".sam")
+        filtered_file = self.create_temp_file(filtered_content, ".fastq")
+        output_file = os.path.join(self.temp_dir, "output.sam")
 
         # Threshold 10 - read1 pair should pass, read2 pair should fail
         filter_viral_sam(sam_file, filtered_file, output_file, 10.0)
 
-        with open(output_file, 'r') as f:
+        with open(output_file, "r") as f:
             output_lines = f.readlines()
 
         # Should only have read1 pair (2 lines)
         assert len(output_lines) == 2
-        assert all('read1' in line for line in output_lines)
-        assert not any('read2' in line for line in output_lines)
+        assert all("read1" in line for line in output_lines)
+        assert not any("read2" in line for line in output_lines)
 
     def test_single_read_above_threshold(self) -> None:
         # Single read above threshold should be kept
@@ -216,17 +235,17 @@ TGCATGCATGCATGCA
 +
 IIIIIIIIIIIIIIII"""
 
-        sam_file = self.create_temp_file(sam_content, '.sam')
-        filtered_file = self.create_temp_file(filtered_content, '.fastq')
-        output_file = os.path.join(self.temp_dir, 'output.sam')
+        sam_file = self.create_temp_file(sam_content, ".sam")
+        filtered_file = self.create_temp_file(filtered_content, ".fastq")
+        output_file = os.path.join(self.temp_dir, "output.sam")
 
         filter_viral_sam(sam_file, filtered_file, output_file, 10.0)
 
-        with open(output_file, 'r') as f:
+        with open(output_file, "r") as f:
             output_lines = f.readlines()
 
         assert len(output_lines) == 2
-        assert 'read1' in output_lines[0]
+        assert "read1" in output_lines[0]
 
     def test_single_read_below_threshold(self) -> None:
         # Single read below threshold should be filtered out
@@ -241,13 +260,13 @@ TGCATGCATGCATGCA
 +
 IIIIIIIIIIIIIIII"""
 
-        sam_file = self.create_temp_file(sam_content, '.sam')
-        filtered_file = self.create_temp_file(filtered_content, '.fastq')
-        output_file = os.path.join(self.temp_dir, 'output.sam')
+        sam_file = self.create_temp_file(sam_content, ".sam")
+        filtered_file = self.create_temp_file(filtered_content, ".fastq")
+        output_file = os.path.join(self.temp_dir, "output.sam")
 
         filter_viral_sam(sam_file, filtered_file, output_file, 10.0)
 
-        with open(output_file, 'r') as f:
+        with open(output_file, "r") as f:
             output_lines = f.readlines()
 
         assert len(output_lines) == 0
@@ -265,13 +284,13 @@ TGCATGCATGCATGCA
 +
 IIIIIIIIIIIIIIII"""
 
-        sam_file = self.create_temp_file(sam_content, '.sam')
-        filtered_file = self.create_temp_file(filtered_content, '.fastq')
-        output_file = os.path.join(self.temp_dir, 'output.sam')
+        sam_file = self.create_temp_file(sam_content, ".sam")
+        filtered_file = self.create_temp_file(filtered_content, ".fastq")
+        output_file = os.path.join(self.temp_dir, "output.sam")
 
         filter_viral_sam(sam_file, filtered_file, output_file, 1.0)
 
-        with open(output_file, 'r') as f:
+        with open(output_file, "r") as f:
             output_lines = f.readlines()
 
         # Should have 2 lines: original read + created unmapped mate
@@ -280,16 +299,16 @@ IIIIIIIIIIIIIIII"""
         print(output_lines)
 
         # Parse both lines
-        read1_line = [line for line in output_lines if '\t99\t' in line][0]
-        read2_line = [line for line in output_lines if '\t167\t' in line][0]
+        read1_line = [line for line in output_lines if "\t99\t" in line][0]
+        read2_line = [line for line in output_lines if "\t167\t" in line][0]
 
         read1_parsed = SamAlignment.from_sam_line(read1_line.strip())
-        assert not (read1_parsed.flag & 4)            # should be mapped
-        assert read1_parsed.cigar != '*'              # should not be unmapped
+        assert not (read1_parsed.flag & 4)  # should be mapped
+        assert read1_parsed.cigar != "*"  # should not be unmapped
 
         read2_parsed = SamAlignment.from_sam_line(read2_line.strip())
         assert read2_parsed.flag & 4  # unmapped
-        assert read2_parsed.cigar == '*'
+        assert read2_parsed.cigar == "*"
 
     def test_secondary_alignments_with_score_filtering(self) -> None:
         # Secondary alignments (flag >= 256) should be processed separately by reference
@@ -307,32 +326,34 @@ TGCATGCATGCATGCA
 +
 IIIIIIIIIIIIIIII"""
 
-        sam_file = self.create_temp_file(sam_content, '.sam')
-        filtered_file = self.create_temp_file(filtered_content, '.fastq')
-        output_file = os.path.join(self.temp_dir, 'output.sam')
+        sam_file = self.create_temp_file(sam_content, ".sam")
+        filtered_file = self.create_temp_file(filtered_content, ".fastq")
+        output_file = os.path.join(self.temp_dir, "output.sam")
 
         # Threshold that allows primary but not secondary chr2
         filter_viral_sam(sam_file, filtered_file, output_file, 17.0)
 
-        with open(output_file, 'r') as f:
+        with open(output_file, "r") as f:
             output_lines = f.readlines()
 
         # Should only have primary alignments (2 lines)
         assert len(output_lines) == 2
-        primary_flags = [SamAlignment.from_sam_line(line.strip()).flag for line in output_lines]
+        primary_flags = [
+            SamAlignment.from_sam_line(line.strip()).flag for line in output_lines
+        ]
         assert all(flag < 256 for flag in primary_flags)
 
     def test_empty_input(self) -> None:
         sam_content = ""
         filtered_content = ""
 
-        sam_file = self.create_temp_file(sam_content, '.sam')
-        filtered_file = self.create_temp_file(filtered_content, '.fastq')
-        output_file = os.path.join(self.temp_dir, 'output.sam')
+        sam_file = self.create_temp_file(sam_content, ".sam")
+        filtered_file = self.create_temp_file(filtered_content, ".fastq")
+        output_file = os.path.join(self.temp_dir, "output.sam")
 
         filter_viral_sam(sam_file, filtered_file, output_file, 1.0)
 
-        with open(output_file, 'r') as f:
+        with open(output_file, "r") as f:
             output_lines = f.readlines()
 
         assert len(output_lines) == 0
@@ -352,18 +373,18 @@ TGCATGCATGCATGCA
 +
 IIIIIIIIIIIIIIII"""
 
-        sam_file = self.create_temp_file(sam_content, '.sam')
-        filtered_file = self.create_temp_file(filtered_content, '.fastq')
-        output_file = os.path.join(self.temp_dir, 'output.sam')
+        sam_file = self.create_temp_file(sam_content, ".sam")
+        filtered_file = self.create_temp_file(filtered_content, ".fastq")
+        output_file = os.path.join(self.temp_dir, "output.sam")
 
         filter_viral_sam(sam_file, filtered_file, output_file, 1.0)
 
-        with open(output_file, 'r') as f:
+        with open(output_file, "r") as f:
             output_lines = f.readlines()
 
         # Should only have the read line, headers ignored
         assert len(output_lines) == 2
-        assert 'read1' in output_lines[0]
+        assert "read1" in output_lines[0]
         assert all("@" not in line for line in output_lines)
 
     def test_multiple_secondary_alignment_pairs(self) -> None:
@@ -385,9 +406,9 @@ TGCATGCATGCATGCA
 +
 IIIIIIIIIIIIIIII"""
 
-        sam_file = self.create_temp_file(sam_content, '.sam')
-        filtered_file = self.create_temp_file(filtered_content, '.fastq')
-        output_file = os.path.join(self.temp_dir, 'output.sam')
+        sam_file = self.create_temp_file(sam_content, ".sam")
+        filtered_file = self.create_temp_file(filtered_content, ".fastq")
+        output_file = os.path.join(self.temp_dir, "output.sam")
 
         # Threshold 15.0:
         # - Primary (chr1): scores ~18.0 and ~17.3 - both pass
@@ -395,17 +416,19 @@ IIIIIIIIIIIIIIII"""
         # - Secondary chr3: scores ~9.0 and ~7.2 - chr3 pair fails (max < 15)
         filter_viral_sam(sam_file, filtered_file, output_file, 15.0)
 
-        with open(output_file, 'r') as f:
+        with open(output_file, "r") as f:
             output_lines = f.readlines()
 
         # Should have primary pair (2) + chr2 secondary pair (2) = 4 lines
         assert len(output_lines) == 4
 
         # Check that we have the right references
-        references = [SamAlignment.from_sam_line(line.strip()).rname for line in output_lines]
-        assert 'chr1' in references  # Primary
-        assert 'chr2' in references  # Secondary that passed
-        assert 'chr3' not in references  # Secondary that failed
+        references = [
+            SamAlignment.from_sam_line(line.strip()).rname for line in output_lines
+        ]
+        assert "chr1" in references  # Primary
+        assert "chr2" in references  # Secondary that passed
+        assert "chr3" not in references  # Secondary that failed
 
         # Check flag distribution: 2 primary (< 256), 2 secondary (>= 256)
         flags = [SamAlignment.from_sam_line(line.strip()).flag for line in output_lines]
@@ -429,13 +452,13 @@ TGCATGCATGCATGCA
 +
 IIIIIIIIIIIIIIII"""
 
-        sam_file = self.create_temp_file(sam_content, '.sam')
-        filtered_file = self.create_temp_file(filtered_content, '.fastq')
-        output_file = os.path.join(self.temp_dir, 'output.sam')
+        sam_file = self.create_temp_file(sam_content, ".sam")
+        filtered_file = self.create_temp_file(filtered_content, ".fastq")
+        output_file = os.path.join(self.temp_dir, "output.sam")
 
         filter_viral_sam(sam_file, filtered_file, output_file, 10.0)
 
-        with open(output_file, 'r') as f:
+        with open(output_file, "r") as f:
             output_lines = f.readlines()
 
         # Should have primary UP + synthetic mate (2) + secondary UP + synthetic mate (2) = 4 lines
@@ -452,7 +475,7 @@ IIIIIIIIIIIIIIII"""
         assert len(secondary_alignments) == 2  # Secondary UP + synthetic mate
 
         # Check that secondary alignments include both mapped and unmapped
-        secondary_chr2 = [a for a in secondary_alignments if a.rname == 'chr2']
+        secondary_chr2 = [a for a in secondary_alignments if a.rname == "chr2"]
         assert len(secondary_chr2) == 2
 
         # One should be mapped (original UP), one should be unmapped (synthetic mate)
@@ -463,7 +486,7 @@ IIIIIIIIIIIIIIII"""
         assert len(unmapped_secondary) == 1
 
         # The unmapped one should have CIGAR '*'
-        assert unmapped_secondary[0].cigar == '*'
+        assert unmapped_secondary[0].cigar == "*"
 
         # Verify the synthetic mate has the correct flag structure
         # Original UP read was flag 355 (read1), synthetic mate should be read2 + unmapped
@@ -493,13 +516,13 @@ TGCATGCATGCATGCA
 +
 IIIIIIIIIIIIIIII"""
 
-        sam_file = self.create_temp_file(sam_content, '.sam')
-        filtered_file = self.create_temp_file(filtered_content, '.fastq')
-        output_file = os.path.join(self.temp_dir, 'output.sam')
+        sam_file = self.create_temp_file(sam_content, ".sam")
+        filtered_file = self.create_temp_file(filtered_content, ".fastq")
+        output_file = os.path.join(self.temp_dir, "output.sam")
 
         filter_viral_sam(sam_file, filtered_file, output_file, 10.0)
 
-        with open(output_file, 'r') as f:
+        with open(output_file, "r") as f:
             output_lines = f.readlines()
 
         # Should have exactly 2 lines: the 2 original UP reads (no synthetic mates needed)
@@ -513,8 +536,8 @@ IIIIIIIIIIIIIIII"""
 
         # Should have reads mapping to both chr1 and chr2
         references = [a.rname for a in alignments]
-        assert 'chr1' in references
-        assert 'chr2' in references
+        assert "chr1" in references
+        assert "chr2" in references
 
         # Verify flag-based ordering: read1 (flag 99 & 64) should come before read2 (flag 147 & 128)
         assert alignments[0].flag & 64  # First alignment is read1
@@ -524,13 +547,13 @@ IIIIIIIIIIIIIIII"""
 
         # Verify specific flag values and references
         assert alignments[0].flag == 99  # read1 flag
-        assert alignments[0].rname == 'chr1'
+        assert alignments[0].rname == "chr1"
         assert alignments[1].flag == 147  # read2 flag
-        assert alignments[1].rname == 'chr2'
+        assert alignments[1].rname == "chr2"
 
         # Both should be UP reads
-        assert alignments[0].pair_status == 'UP'
-        assert alignments[1].pair_status == 'UP'
+        assert alignments[0].pair_status == "UP"
+        assert alignments[1].pair_status == "UP"
 
     def test_primary_up_reads_different_references_with_secondary(self) -> None:
         # Test similar scenario as above but with a secondary read added
@@ -547,13 +570,13 @@ TGCATGCATGCATGCA
 +
 IIIIIIIIIIIIIIII"""
 
-        sam_file = self.create_temp_file(sam_content, '.sam')
-        filtered_file = self.create_temp_file(filtered_content, '.fastq')
-        output_file = os.path.join(self.temp_dir, 'output.sam')
+        sam_file = self.create_temp_file(sam_content, ".sam")
+        filtered_file = self.create_temp_file(filtered_content, ".fastq")
+        output_file = os.path.join(self.temp_dir, "output.sam")
 
         filter_viral_sam(sam_file, filtered_file, output_file, 10.0)
 
-        with open(output_file, 'r') as f:
+        with open(output_file, "r") as f:
             output_lines = f.readlines()
 
         # Should have 4 lines: 2 primary reads + 1 secondary read + 1 synthetic mate for secondary
@@ -572,12 +595,12 @@ IIIIIIIIIIIIIIII"""
 
         # Primary alignments should map to chr1 and chr3
         primary_refs = [a.rname for a in primary_alignments]
-        assert 'chr1' in primary_refs
-        assert 'chr3' in primary_refs
+        assert "chr1" in primary_refs
+        assert "chr3" in primary_refs
 
         # Secondary alignments should map to chr2
         secondary_refs = [a.rname for a in secondary_alignments]
-        assert all(ref == 'chr2' for ref in secondary_refs)
+        assert all(ref == "chr2" for ref in secondary_refs)
 
         # Check that secondary includes both mapped and unmapped (synthetic mate)
         secondary_mapped = [a for a in secondary_alignments if not (a.flag & 4)]
@@ -587,10 +610,10 @@ IIIIIIIIIIIIIIII"""
         assert len(secondary_unmapped) == 1  # Synthetic mate
 
         # Synthetic mate should have CIGAR '*'
-        assert secondary_unmapped[0].cigar == '*'
+        assert secondary_unmapped[0].cigar == "*"
 
         # All reads should have the same qname
-        assert all(a.qname == 'read1' for a in alignments)
+        assert all(a.qname == "read1" for a in alignments)
 
     def test_unpaired_read_secondary_alignments_same_rname(self) -> None:
         # Test unpaired read with one read mapped, other not mapped, but two secondary alignments with same rname and flag
@@ -608,13 +631,13 @@ TGCATGCATGCATGCA
 +
 IIIIIIIIIIIIIIII"""
 
-        sam_file = self.create_temp_file(sam_content, '.sam')
-        filtered_file = self.create_temp_file(filtered_content, '.fastq')
-        output_file = os.path.join(self.temp_dir, 'output.sam')
+        sam_file = self.create_temp_file(sam_content, ".sam")
+        filtered_file = self.create_temp_file(filtered_content, ".fastq")
+        output_file = os.path.join(self.temp_dir, "output.sam")
 
         filter_viral_sam(sam_file, filtered_file, output_file, 10.0)
 
-        with open(output_file, 'r') as f:
+        with open(output_file, "r") as f:
             output_lines = f.readlines()
 
         # Should have 6 lines: 1 primary + 1 synthetic mate + 2 secondary + 2 synthetic mates for secondary
@@ -637,11 +660,11 @@ IIIIIIIIIIIIIIII"""
 
         assert len(primary_mapped) == 1
         assert len(primary_unmapped) == 1
-        assert primary_mapped[0].rname == 'chr1'
-        assert primary_unmapped[0].cigar == '*'
+        assert primary_mapped[0].rname == "chr1"
+        assert primary_unmapped[0].cigar == "*"
 
         # Secondary alignments: should all map to chr2
-        assert all(a.rname == 'chr2' for a in secondary_alignments)
+        assert all(a.rname == "chr2" for a in secondary_alignments)
 
         # Should have 2 mapped (original reads) and 2 unmapped (synthetic mates)
         secondary_mapped = [a for a in secondary_alignments if not (a.flag & 4)]
@@ -651,20 +674,20 @@ IIIIIIIIIIIIIIII"""
         assert len(secondary_unmapped) == 2  # Two synthetic mates
 
         # Both original secondary reads should be UP reads with flag 355
-        assert all(a.pair_status == 'UP' for a in secondary_mapped)
+        assert all(a.pair_status == "UP" for a in secondary_mapped)
         assert all(a.flag == 355 for a in secondary_mapped)
 
         # Both synthetic mates should have CIGAR '*' and be unmapped
-        assert all(a.cigar == '*' for a in secondary_unmapped)
+        assert all(a.cigar == "*" for a in secondary_unmapped)
 
         # All reads should have the same qname
-        assert all(a.qname == 'read1' for a in alignments)
+        assert all(a.qname == "read1" for a in alignments)
 
     @pytest.mark.parametrize(
         "score1,score2,expected_cigar",
         [
             (100, 100, "1S49M"),  # Same scores: keep first alignment
-            (100, 90, "1S49M"),   # First has higher score: keep first
+            (100, 90, "1S49M"),  # First has higher score: keep first
             (90, 100, "10S40M"),  # Second has higher score: keep second
         ],
     )
@@ -687,9 +710,9 @@ TGCATGCATGCATGCATGCATGCATGCATGCA
 +
 IIIIIIIIIIIIIIIIIIIIIIIIIIIIIIII"""
 
-        sam_file = self.create_temp_file(sam_content, '.sam')
-        filtered_file = self.create_temp_file(filtered_content, '.fastq')
-        output_file = os.path.join(self.temp_dir, 'output.sam')
+        sam_file = self.create_temp_file(sam_content, ".sam")
+        filtered_file = self.create_temp_file(filtered_content, ".fastq")
+        output_file = os.path.join(self.temp_dir, "output.sam")
 
         filter_viral_sam(sam_file, filtered_file, output_file, 10.0)
 
@@ -705,7 +728,7 @@ IIIIIIIIIIIIIIIIIIIIIIIIIIIIIIII"""
             curr_is_read1 = bool(alignments[i].flag & 64)
             next_is_read1 = bool(alignments[i + 1].flag & 64)
             assert curr_is_read1 != next_is_read1, (
-                f"Consecutive alignments at positions {i} and {i+1} are both "
+                f"Consecutive alignments at positions {i} and {i + 1} are both "
                 f"{'read1' if curr_is_read1 else 'read2'}: "
                 f"flags {alignments[i].flag} and {alignments[i + 1].flag}"
             )
@@ -727,8 +750,12 @@ IIIIIIIIIIIIIIIIIIIIIIIIIIIIIIII"""
         # Verify secondary has one read1 and one read2
         secondary_read1 = [a for a in secondary_alignments if a.flag & 64]
         secondary_read2 = [a for a in secondary_alignments if a.flag & 128]
-        assert len(secondary_read1) == 1, f"Expected 1 secondary read1, got {len(secondary_read1)}"
-        assert len(secondary_read2) == 1, f"Expected 1 secondary read2, got {len(secondary_read2)}"
+        assert len(secondary_read1) == 1, (
+            f"Expected 1 secondary read1, got {len(secondary_read1)}"
+        )
+        assert len(secondary_read2) == 1, (
+            f"Expected 1 secondary read2, got {len(secondary_read2)}"
+        )
 
         # Verify the correct alignment was kept based on score
         assert secondary_read1[0].cigar == expected_cigar, (
@@ -745,6 +772,7 @@ class TestGrouping:
 
         # Arrange
         from filter_viral_sam import group_other_alignments
+
         alignments: list[SamAlignment] = []
         # Secondary pair 1: TLEN ±147, AS:45/42
         # Note: forward and reverse reads have different CIGARs
@@ -765,21 +793,28 @@ class TestGrouping:
         assert len(groups) == 3, f"Expected 3 groups, got {len(groups)}"
         # Each group should contain exactly 2 alignments (paired reads)
         for group_id, group_alignments in groups.items():
-            assert len(group_alignments) == 2, f"Group {group_id} should have 2 alignments, got {len(group_alignments)}"
+            assert len(group_alignments) == 2, (
+                f"Group {group_id} should have 2 alignments, got {len(group_alignments)}"
+            )
             # Each group should have one read1 (flag 339) and one read2 (flag 403)
             flags = sorted([a.flag for a in group_alignments])
-            assert flags == [339, 403], f"Group {group_id} should have flags [339, 403], got {flags}"
+            assert flags == [339, 403], (
+                f"Group {group_id} should have flags [339, 403], got {flags}"
+            )
             # Verify that AS and YS scores map correctly between mates
             # The AS score of read1 should equal the YS score of read2, and vice versa
             read1 = [a for a in group_alignments if a.flag == 339][0]
             read2 = [a for a in group_alignments if a.flag == 403][0]
-            assert read1.alignment_score == read2.mate_alignment_score, \
+            assert read1.alignment_score == read2.mate_alignment_score, (
                 f"Group {group_id}: read1 AS ({read1.alignment_score}) != read2 YS ({read2.mate_alignment_score})"
-            assert read2.alignment_score == read1.mate_alignment_score, \
+            )
+            assert read2.alignment_score == read1.mate_alignment_score, (
                 f"Group {group_id}: read2 AS ({read2.alignment_score}) != read1 YS ({read1.mate_alignment_score})"
+            )
             # Each group should have matching abs(TLEN) values
             tlens = [abs(a.tlen) for a in group_alignments]
             assert tlens[0] == tlens[1], f"Group {group_id} abs(TLEN) mismatch: {tlens}"
 
-if __name__ == '__main__':
-    pytest.main([__file__, '-v'])
+
+if __name__ == "__main__":
+    pytest.main([__file__, "-v"])

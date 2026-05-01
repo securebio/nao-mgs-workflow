@@ -12,6 +12,7 @@ import subprocess
 
 # Import functions from the script
 import sys
+
 sys.path.insert(0, str(Path(__file__).parent))
 from run_nf_test_parallel import (
     find_test_files,
@@ -25,12 +26,13 @@ from run_nf_test_parallel import (
     write_test_log,
 )
 
+
 class TestStripAnsiCodes:
     """Test ANSI escape code removal."""
 
     def test_strip_complex_codes(self) -> None:
         """Test removal of complex ANSI sequences."""
-        text = "\x1B[1;32;40mBold green on black\x1B[0m"
+        text = "\x1b[1;32;40mBold green on black\x1b[0m"
         assert strip_ansi_codes(text) == "Bold green on black"
 
     def test_no_ansi_codes(self) -> None:
@@ -40,8 +42,9 @@ class TestStripAnsiCodes:
 
     def test_multiple_codes(self) -> None:
         """Test text with multiple ANSI codes."""
-        text = "\x1B[31mRed\x1B[0m and \x1B[32mGreen\x1B[0m"
+        text = "\x1b[31mRed\x1b[0m and \x1b[32mGreen\x1b[0m"
         assert strip_ansi_codes(text) == "Red and Green"
+
 
 class TestFindTestFiles:
     """Test finding *.nf.test files."""
@@ -61,7 +64,7 @@ class TestFindTestFiles:
         (tmp_path / "other.txt").touch()
         result = find_test_files([str(tmp_path)])
         assert len(result) == 2
-        assert all(f.name.endswith('.nf.test') for f in result)
+        assert all(f.name.endswith(".nf.test") for f in result)
 
     def test_find_files_recursively(self, tmp_path: Path) -> None:
         """Test recursive search in nested directories."""
@@ -98,15 +101,30 @@ class TestFindTestFiles:
         names = [f.name for f in result]
         assert names == sorted(names)
 
+
 class TestDivideTestFiles:
     """Test dividing test files among workers."""
 
-    @pytest.mark.parametrize("n_files,n_workers", [
-        (6, 3), (9, 3), (4, 2), (8, 4),  # Even distribution
-        (5, 3), (7, 3), (10, 4), (11, 5),  # Uneven distribution
-        (2, 5), (1, 3), (3, 10),  # More workers than files
-        (0, 3), (5, 1), (1, 1), (100, 7),  # Edge cases
-    ])
+    @pytest.mark.parametrize(
+        "n_files,n_workers",
+        [
+            (6, 3),
+            (9, 3),
+            (4, 2),
+            (8, 4),  # Even distribution
+            (5, 3),
+            (7, 3),
+            (10, 4),
+            (11, 5),  # Uneven distribution
+            (2, 5),
+            (1, 3),
+            (3, 10),  # More workers than files
+            (0, 3),
+            (5, 1),
+            (1, 1),
+            (100, 7),  # Edge cases
+        ],
+    )
     def test_divide_distribution(self, n_files: int, n_workers: int) -> None:
         """Test file distribution with various combinations."""
         files = [Path(f"test{i}.nf.test") for i in range(n_files)]
@@ -122,10 +140,11 @@ class TestDivideTestFiles:
         assert len(all_assigned_files) == n_files
         assert set(all_assigned_files) == set(files)
 
+
 class TestExecuteSubprocess:
     """Test subprocess execution wrapper."""
 
-    @patch('run_nf_test_parallel.subprocess.run')
+    @patch("run_nf_test_parallel.subprocess.run")
     def test_execute_subprocess(self, mock_run: MagicMock) -> None:
         """Test that execute_subprocess correctly wraps subprocess.run."""
         mock_result = MagicMock()
@@ -137,7 +156,10 @@ class TestExecuteSubprocess:
         assert exit_code == mock_result.returncode
         assert stdout == mock_result.stdout
         assert stderr == mock_result.stderr
-        mock_run.assert_called_once_with(["test", "command"], capture_output=True, text=True)
+        mock_run.assert_called_once_with(
+            ["test", "command"], capture_output=True, text=True
+        )
+
 
 class TestRunNfTestWorker:
     """Test nf-test worker function."""
@@ -145,11 +167,7 @@ class TestRunNfTestWorker:
     def test_worker_with_no_files(self) -> None:
         """Test worker with no assigned test files."""
         worker_id, exit_code, stdout, stderr, cmd_str = run_nf_test_worker(
-            worker_id=1,
-            test_files=[],
-            total_workers=3,
-            debug=False,
-            ci=False
+            worker_id=1, test_files=[], total_workers=3, debug=False, ci=False
         )
         assert worker_id == 1
         assert exit_code == 0
@@ -157,72 +175,99 @@ class TestRunNfTestWorker:
         assert stderr == ""
         assert cmd_str == ""
 
-    @pytest.mark.parametrize("test_files,expected_exit,mock_stdout,mock_stderr", [
-        ([Path("test1.nf.test")], 0, "Test passed\n", ""),
-        ([Path("test1.nf.test"), Path("test2.nf.test"), Path("test3.nf.test")], 0, "All tests passed\n", ""),
-        ([Path("failing_test.nf.test")], 1, "FAILED (1.0s)\n", "Error message"),
-    ])
-    @patch('run_nf_test_parallel.execute_subprocess')
-    def test_worker_with_files(self, mock_execute: MagicMock, test_files: list[Path], expected_exit: int, mock_stdout: str, mock_stderr: str) -> None:
+    @pytest.mark.parametrize(
+        "test_files,expected_exit,mock_stdout,mock_stderr",
+        [
+            ([Path("test1.nf.test")], 0, "Test passed\n", ""),
+            (
+                [Path("test1.nf.test"), Path("test2.nf.test"), Path("test3.nf.test")],
+                0,
+                "All tests passed\n",
+                "",
+            ),
+            ([Path("failing_test.nf.test")], 1, "FAILED (1.0s)\n", "Error message"),
+        ],
+    )
+    @patch("run_nf_test_parallel.execute_subprocess")
+    def test_worker_with_files(
+        self,
+        mock_execute: MagicMock,
+        test_files: list[Path],
+        expected_exit: int,
+        mock_stdout: str,
+        mock_stderr: str,
+    ) -> None:
         """Test worker with various file configurations and outcomes."""
         mock_execute.return_value = (expected_exit, mock_stdout, mock_stderr)
         worker_id, exit_code, stdout, stderr, cmd_str = run_nf_test_worker(
-            worker_id=1,
-            test_files=test_files,
-            total_workers=2,
-            debug=False,
-            ci=False
+            worker_id=1, test_files=test_files, total_workers=2, debug=False, ci=False
         )
         assert worker_id == 1
         assert exit_code == expected_exit
         assert stdout == mock_stdout
         assert stderr == mock_stderr
-        exp_call_args = ["nf-test", "test"] + [str(test_file) for test_file in test_files]
+        exp_call_args = ["nf-test", "test"] + [
+            str(test_file) for test_file in test_files
+        ]
         assert cmd_str == " ".join(exp_call_args)
         mock_execute.assert_called_once()
         assert mock_execute.call_args[0][0] == exp_call_args
 
-    @pytest.mark.parametrize("debug,ci,expected_flags", [
-        (True, False, ["--debug", "--verbose"]),
-        (False, True, ["--ci"]),
-        (True, True, ["--debug", "--verbose", "--ci"]),
-    ])
-    @patch('run_nf_test_parallel.execute_subprocess')
-    def test_worker_with_flags(self, mock_execute: MagicMock, debug: bool, ci: bool, expected_flags: list[str]) -> None:
+    @pytest.mark.parametrize(
+        "debug,ci,expected_flags",
+        [
+            (True, False, ["--debug", "--verbose"]),
+            (False, True, ["--ci"]),
+            (True, True, ["--debug", "--verbose", "--ci"]),
+        ],
+    )
+    @patch("run_nf_test_parallel.execute_subprocess")
+    def test_worker_with_flags(
+        self, mock_execute: MagicMock, debug: bool, ci: bool, expected_flags: list[str]
+    ) -> None:
         """Test worker with debug and CI mode flags."""
         mock_execute.return_value = (0, "test1", "test2")
         test_files = [Path("test1.nf.test"), Path("test2.nf.test")]
         worker_id, exit_code, stdout, stderr, cmd_str = run_nf_test_worker(
-            worker_id=1,
-            test_files=test_files,
-            total_workers=2,
-            debug=debug,
-            ci=ci
+            worker_id=1, test_files=test_files, total_workers=2, debug=debug, ci=ci
         )
         assert worker_id == 1
         assert exit_code == 0
         assert stdout == "test1"
         assert stderr == "test2"
-        exp_call_args = ["nf-test", "test"] + expected_flags + [str(test_file) for test_file in test_files]
+        exp_call_args = (
+            ["nf-test", "test"]
+            + expected_flags
+            + [str(test_file) for test_file in test_files]
+        )
         assert cmd_str == " ".join(exp_call_args)
         mock_execute.assert_called_once()
         assert mock_execute.call_args[0][0] == exp_call_args
+
 
 class TestExtractFailuresFromOutput:
     """Test extracting FAILED test names from output."""
 
     def test_extract_failures(self) -> None:
         """Test extracting failures from output."""
-        lines = ["Test 1", "FAILED (1.0s)", "Test 2", "PASSED (0.5s)", "Test 3", "FAILED (2.0s)"]
+        lines = [
+            "Test 1",
+            "FAILED (1.0s)",
+            "Test 2",
+            "PASSED (0.5s)",
+            "Test 3",
+            "FAILED (2.0s)",
+        ]
         input = "\n".join(lines)
         exp_result = [line for line in lines if "FAILED" in line]
         result = extract_failures_from_output(input)
         assert result == exp_result
 
+
 class TestUpdatePlugins:
     """Test nf-test plugin update function."""
 
-    @patch('run_nf_test_parallel.subprocess.run')
+    @patch("run_nf_test_parallel.subprocess.run")
     def test_update_plugins_success(self, mock_run: MagicMock) -> None:
         """Test successful plugin update."""
         mock_result = MagicMock()
@@ -231,13 +276,10 @@ class TestUpdatePlugins:
         mock_run.return_value = mock_result
         update_plugins()
         mock_run.assert_called_once_with(
-            ["nf-test", "update-plugins"],
-            capture_output=True,
-            text=True,
-            timeout=120
+            ["nf-test", "update-plugins"], capture_output=True, text=True, timeout=120
         )
 
-    @patch('run_nf_test_parallel.subprocess.run')
+    @patch("run_nf_test_parallel.subprocess.run")
     def test_update_plugins_failure(self, mock_run: MagicMock) -> None:
         """Test plugin update with non-zero exit code."""
         mock_result = MagicMock()
@@ -247,35 +289,54 @@ class TestUpdatePlugins:
         with pytest.raises(RuntimeError, match="Failed to update plugins"):
             update_plugins()
 
-    @patch('run_nf_test_parallel.subprocess.run')
+    @patch("run_nf_test_parallel.subprocess.run")
     def test_update_plugins_timeout(self, mock_run: MagicMock) -> None:
         """Test plugin update timeout."""
         mock_run.side_effect = subprocess.TimeoutExpired(cmd="nf-test", timeout=120)
-        with pytest.raises(RuntimeError, match="Plugin update timed out after 120 seconds"):
+        with pytest.raises(
+            RuntimeError, match="Plugin update timed out after 120 seconds"
+        ):
             update_plugins()
+
 
 class TestRunParallelTests:
     """Test parallel test execution orchestration."""
 
-    @patch('run_nf_test_parallel.write_test_log')
-    @patch('run_nf_test_parallel.multiprocessing.Pool')
-    @patch('run_nf_test_parallel.divide_test_files')
-    @patch('run_nf_test_parallel.update_plugins')
-    @patch('run_nf_test_parallel.find_test_files')
-    def test_run_parallel_tests_no_files(self, mock_find: MagicMock, mock_update: MagicMock, mock_divide: MagicMock, mock_pool: MagicMock, mock_write: MagicMock) -> None:
+    @patch("run_nf_test_parallel.write_test_log")
+    @patch("run_nf_test_parallel.multiprocessing.Pool")
+    @patch("run_nf_test_parallel.divide_test_files")
+    @patch("run_nf_test_parallel.update_plugins")
+    @patch("run_nf_test_parallel.find_test_files")
+    def test_run_parallel_tests_no_files(
+        self,
+        mock_find: MagicMock,
+        mock_update: MagicMock,
+        mock_divide: MagicMock,
+        mock_pool: MagicMock,
+        mock_write: MagicMock,
+    ) -> None:
         """Test when no test files are found."""
         mock_find.return_value = []
         with pytest.raises(RuntimeError, match="No test files found"):
-            run_parallel_tests(2, ["tests"], Path("test-logs.txt"), debug=False, ci=False)
+            run_parallel_tests(
+                2, ["tests"], Path("test-logs.txt"), debug=False, ci=False
+            )
         mock_find.assert_called_once_with(["tests"])
         mock_update.assert_not_called()
 
-    @patch('run_nf_test_parallel.write_test_log')
-    @patch('run_nf_test_parallel.multiprocessing.Pool')
-    @patch('run_nf_test_parallel.divide_test_files')
-    @patch('run_nf_test_parallel.update_plugins')
-    @patch('run_nf_test_parallel.find_test_files')
-    def test_run_parallel_tests_success(self, mock_find: MagicMock, mock_update: MagicMock, mock_divide: MagicMock, mock_pool: MagicMock, mock_write: MagicMock) -> None:
+    @patch("run_nf_test_parallel.write_test_log")
+    @patch("run_nf_test_parallel.multiprocessing.Pool")
+    @patch("run_nf_test_parallel.divide_test_files")
+    @patch("run_nf_test_parallel.update_plugins")
+    @patch("run_nf_test_parallel.find_test_files")
+    def test_run_parallel_tests_success(
+        self,
+        mock_find: MagicMock,
+        mock_update: MagicMock,
+        mock_divide: MagicMock,
+        mock_pool: MagicMock,
+        mock_write: MagicMock,
+    ) -> None:
         """Test successful parallel execution."""
         test_files = [Path("test1.nf.test"), Path("test2.nf.test")]
         mock_find.return_value = test_files
@@ -286,19 +347,28 @@ class TestRunParallelTests:
             (1, 0, "stdout1", "stderr1", "cmd1"),
             (2, 0, "stdout2", "stderr2", "cmd2"),
         ]
-        exit_code = run_parallel_tests(2, ["tests"], Path("test-logs.txt"), debug=False, ci=False)
+        exit_code = run_parallel_tests(
+            2, ["tests"], Path("test-logs.txt"), debug=False, ci=False
+        )
         assert exit_code == 0
         mock_find.assert_called_once_with(["tests"])
         mock_update.assert_called_once()
         mock_divide.assert_called_once_with(test_files, 2)
         mock_write.assert_called_once()
 
-    @patch('run_nf_test_parallel.write_test_log')
-    @patch('run_nf_test_parallel.multiprocessing.Pool')
-    @patch('run_nf_test_parallel.divide_test_files')
-    @patch('run_nf_test_parallel.update_plugins')
-    @patch('run_nf_test_parallel.find_test_files')
-    def test_run_parallel_tests_with_failures(self, mock_find: MagicMock, mock_update: MagicMock, mock_divide: MagicMock, mock_pool: MagicMock, mock_write: MagicMock) -> None:
+    @patch("run_nf_test_parallel.write_test_log")
+    @patch("run_nf_test_parallel.multiprocessing.Pool")
+    @patch("run_nf_test_parallel.divide_test_files")
+    @patch("run_nf_test_parallel.update_plugins")
+    @patch("run_nf_test_parallel.find_test_files")
+    def test_run_parallel_tests_with_failures(
+        self,
+        mock_find: MagicMock,
+        mock_update: MagicMock,
+        mock_divide: MagicMock,
+        mock_pool: MagicMock,
+        mock_write: MagicMock,
+    ) -> None:
         """Test parallel execution with some worker failures."""
         test_files = [Path("test1.nf.test"), Path("test2.nf.test")]
         mock_find.return_value = test_files
@@ -309,16 +379,25 @@ class TestRunParallelTests:
             (1, 0, "stdout1", "stderr1", "cmd1"),
             (2, 1, "stdout2", "stderr2", "cmd2"),
         ]
-        exit_code = run_parallel_tests(2, ["tests"], Path("test-logs.txt"), debug=False, ci=False)
+        exit_code = run_parallel_tests(
+            2, ["tests"], Path("test-logs.txt"), debug=False, ci=False
+        )
         assert exit_code == 1
         mock_write.assert_called_once()
 
-    @patch('run_nf_test_parallel.write_test_log')
-    @patch('run_nf_test_parallel.multiprocessing.Pool')
-    @patch('run_nf_test_parallel.divide_test_files')
-    @patch('run_nf_test_parallel.update_plugins')
-    @patch('run_nf_test_parallel.find_test_files')
-    def test_run_parallel_tests_adjusts_workers(self, mock_find: MagicMock, mock_update: MagicMock, mock_divide: MagicMock, mock_pool: MagicMock, mock_write: MagicMock) -> None:
+    @patch("run_nf_test_parallel.write_test_log")
+    @patch("run_nf_test_parallel.multiprocessing.Pool")
+    @patch("run_nf_test_parallel.divide_test_files")
+    @patch("run_nf_test_parallel.update_plugins")
+    @patch("run_nf_test_parallel.find_test_files")
+    def test_run_parallel_tests_adjusts_workers(
+        self,
+        mock_find: MagicMock,
+        mock_update: MagicMock,
+        mock_divide: MagicMock,
+        mock_pool: MagicMock,
+        mock_write: MagicMock,
+    ) -> None:
         """Test that number of workers is reduced when it exceeds number of test files."""
         test_files = [Path("test1.nf.test"), Path("test2.nf.test")]
         mock_find.return_value = test_files
@@ -329,16 +408,25 @@ class TestRunParallelTests:
             (1, 0, "stdout1", "stderr1", "cmd1"),
             (2, 0, "stdout2", "stderr2", "cmd2"),
         ]
-        exit_code = run_parallel_tests(5, ["tests"], Path("test-logs.txt"), debug=False, ci=False)
+        exit_code = run_parallel_tests(
+            5, ["tests"], Path("test-logs.txt"), debug=False, ci=False
+        )
         assert exit_code == 0
         mock_divide.assert_called_once_with(test_files, 2)
 
-    @patch('run_nf_test_parallel.write_test_log')
-    @patch('run_nf_test_parallel.multiprocessing.Pool')
-    @patch('run_nf_test_parallel.divide_test_files')
-    @patch('run_nf_test_parallel.update_plugins')
-    @patch('run_nf_test_parallel.find_test_files')
-    def test_run_parallel_tests_passes_ci_flag(self, mock_find: MagicMock, mock_update: MagicMock, mock_divide: MagicMock, mock_pool: MagicMock, mock_write: MagicMock) -> None:
+    @patch("run_nf_test_parallel.write_test_log")
+    @patch("run_nf_test_parallel.multiprocessing.Pool")
+    @patch("run_nf_test_parallel.divide_test_files")
+    @patch("run_nf_test_parallel.update_plugins")
+    @patch("run_nf_test_parallel.find_test_files")
+    def test_run_parallel_tests_passes_ci_flag(
+        self,
+        mock_find: MagicMock,
+        mock_update: MagicMock,
+        mock_divide: MagicMock,
+        mock_pool: MagicMock,
+        mock_write: MagicMock,
+    ) -> None:
         """Test that CI flag is passed through to workers."""
         test_files = [Path("test1.nf.test"), Path("test2.nf.test")]
         mock_find.return_value = test_files
@@ -349,7 +437,9 @@ class TestRunParallelTests:
             (1, 0, "stdout1", "stderr1", "cmd1"),
             (2, 0, "stdout2", "stderr2", "cmd2"),
         ]
-        exit_code = run_parallel_tests(2, ["tests"], Path("test-logs.txt"), debug=False, ci=True)
+        exit_code = run_parallel_tests(
+            2, ["tests"], Path("test-logs.txt"), debug=False, ci=True
+        )
         assert exit_code == 0
         # Verify starmap was called with worker args that include ci=True
         starmap_call_args = mock_pool_instance.starmap.call_args[0]

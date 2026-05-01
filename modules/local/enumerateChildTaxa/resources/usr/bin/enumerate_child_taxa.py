@@ -9,9 +9,13 @@ import logging
 import time
 from datetime import UTC, datetime
 
+
 class UTCFormatter(logging.Formatter):
     def formatTime(self, record: logging.LogRecord, datefmt: str | None = None) -> str:
-        return datetime.fromtimestamp(record.created, UTC).strftime("%Y-%m-%d %H:%M:%S UTC")
+        return datetime.fromtimestamp(record.created, UTC).strftime(
+            "%Y-%m-%d %H:%M:%S UTC"
+        )
+
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger()
@@ -19,6 +23,7 @@ handler = logging.StreamHandler()
 handler.setFormatter(UTCFormatter("[%(asctime)s] %(message)s"))
 logger.handlers.clear()
 logger.addHandler(handler)
+
 
 def enumerate_children(nodes_path: str, parent_taxid: str) -> list[str]:
     """Find direct child taxids of a given parent in nodes.dmp.
@@ -41,12 +46,16 @@ def enumerate_children(nodes_path: str, parent_taxid: str) -> list[str]:
         children = [parent_taxid]
     return children
 
+
 def parse_arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("nodes_dmp", help="Path to NCBI taxonomy nodes.dmp file.")
     parser.add_argument("parent_taxid", help="Parent taxid to find children for.")
-    parser.add_argument("output", help="Output file path for child taxids (one per line).")
+    parser.add_argument(
+        "output", help="Output file path for child taxids (one per line)."
+    )
     return parser.parse_args()
+
 
 def main() -> None:
     start_time = time.time()
@@ -58,6 +67,7 @@ def main() -> None:
         for taxid in children:
             f.write(taxid + "\n")
     logger.info("Total time elapsed: %.2f seconds", time.time() - start_time)
+
 
 if __name__ == "__main__":
     main()

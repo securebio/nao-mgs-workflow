@@ -215,7 +215,9 @@ def stream_and_filter_tsv(
     """
     logger.info("Initializing streaming TSV reader and writer")
     reader = csv.reader(input_file, delimiter="\t", quotechar=None)
-    writer = csv.writer(output_file, delimiter="\t", lineterminator="\n", quotechar=None)
+    writer = csv.writer(
+        output_file, delimiter="\t", lineterminator="\n", quotechar=None
+    )
     # Read and validate header
     try:
         header = next(reader)
@@ -242,7 +244,9 @@ def stream_and_filter_tsv(
         try:
             # Validate row
             if len(row) != len(header):
-                raise ValueError(f"Row has {len(row)} columns but header has {len(header)} columns")
+                raise ValueError(
+                    f"Row has {len(row)} columns but header has {len(header)} columns"
+                )
             cell_value = row[column_index]
             converted_cell_value = convert_value(cell_value)
             matches = converted_cell_value == filter_value

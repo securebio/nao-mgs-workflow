@@ -7,25 +7,30 @@ import datetime
 import gzip
 from typing import IO, cast
 
+
 def print_log(message: str) -> None:
     print("[", datetime.datetime.now(), "]  ", message, sep="")
+
 
 def open_by_suffix(filename: str, mode: str = "r", debug: bool = False) -> IO[str]:
     if debug:
         print_log(f"\tOpening file object: {filename}")
         print_log(f"\tOpening mode: {mode}")
         print_log(f"\tGZIP mode: {filename.endswith('.gz')}")
-    if filename.endswith('.gz'):
-        return cast(IO[str], gzip.open(filename, mode + 't'))
+    if filename.endswith(".gz"):
+        return cast(IO[str], gzip.open(filename, mode + "t"))
     else:
         return open(filename, mode)
 
-def extract_viral_hit(fields: list[str], indices: dict[str, int], single: bool, drop_unpaired: bool) -> str | None:
+
+def extract_viral_hit(
+    fields: list[str], indices: dict[str, int], single: bool, drop_unpaired: bool
+) -> str | None:
     """Convert a single TSV line to a FASTQ entry, handling missing mates (if not single-end)."""
     # Extract fields
     seq_id = fields[indices["seq_id"]]
     query_seq_fwd = fields[indices["query_seq"]]
-    query_qual_fwd = fields[indices["query_qual"]]        
+    query_qual_fwd = fields[indices["query_qual"]]
     if not single:
         query_seq_rev = fields[indices["query_seq_rev"]]
         query_qual_rev = fields[indices["query_qual_rev"]]
@@ -47,7 +52,7 @@ def extract_viral_hit(fields: list[str], indices: dict[str, int], single: bool, 
     else:
         fastq_entry_rev = f"@{seq_id} 2\n{query_seq_rev}\n+\n{query_qual_rev}\n"
         return fastq_entry_fwd + fastq_entry_rev
-        
+
 
 def extract_viral_hits(input_path: str, out_path: str, drop_unpaired: bool) -> None:
     """Extract viral sequences from TSV file and write to FASTQ file."""
@@ -77,12 +82,23 @@ def extract_viral_hits(input_path: str, out_path: str, drop_unpaired: bool) -> N
             if fastq_entry:
                 outf.write(fastq_entry)
 
+
 def main() -> None:
     # Parse arguments
-    parser = argparse.ArgumentParser(description="Extract viral hits from a TSV to FASTQ file.")
+    parser = argparse.ArgumentParser(
+        description="Extract viral hits from a TSV to FASTQ file."
+    )
     parser.add_argument("--input", "-i", required=True, help="Path to input TSV file.")
-    parser.add_argument("--output", "-o", required=True, help="Path to output FASTQ file.")
-    parser.add_argument("--drop_unpaired", "-d", default=False, action="store_true", help="Drop unpaired reads. (Default: False)")
+    parser.add_argument(
+        "--output", "-o", required=True, help="Path to output FASTQ file."
+    )
+    parser.add_argument(
+        "--drop_unpaired",
+        "-d",
+        default=False,
+        action="store_true",
+        help="Drop unpaired reads. (Default: False)",
+    )
     args = parser.parse_args()
     input_path = args.input
     out_path = args.output
@@ -101,6 +117,7 @@ def main() -> None:
     # Finish time tracking
     end_time = time.time()
     print_log("Total time elapsed: %.2f seconds" % (end_time - start_time))
+
 
 if __name__ == "__main__":
     main()

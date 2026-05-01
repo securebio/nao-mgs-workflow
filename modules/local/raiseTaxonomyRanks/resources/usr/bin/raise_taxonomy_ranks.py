@@ -1,8 +1,8 @@
 #!/usr/bin/env python
 
-#=======================================================================
+# =======================================================================
 # Preamble
-#=======================================================================
+# =======================================================================
 
 # Import libraries
 import pandas as pd
@@ -11,30 +11,48 @@ from collections import defaultdict
 import logging
 from datetime import datetime, timezone
 
+
 # Configure logging
 class UTCFormatter(logging.Formatter):
     def formatTime(self, record: logging.LogRecord, datefmt: str | None = None) -> str:
         dt = datetime.fromtimestamp(record.created, timezone.utc)
-        return dt.strftime('%Y-%m-%d %H:%M:%S UTC')
+        return dt.strftime("%Y-%m-%d %H:%M:%S UTC")
+
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger()
 handler = logging.StreamHandler()
-formatter = UTCFormatter('[%(asctime)s] %(message)s')
+formatter = UTCFormatter("[%(asctime)s] %(message)s")
 handler.setFormatter(formatter)
 logger.handlers.clear()
 logger.addHandler(handler)
 
 # Define constants
-RANKS = ["subspecies", "species", "subgenus", "genus", "subfamily", "family",
-         "suborder", "order", "class", "subphylum", "phylum", "kingdom",
-         "superkingdom", "acellular root"]
+RANKS = [
+    "subspecies",
+    "species",
+    "subgenus",
+    "genus",
+    "subfamily",
+    "family",
+    "suborder",
+    "order",
+    "class",
+    "subphylum",
+    "phylum",
+    "kingdom",
+    "superkingdom",
+    "acellular root",
+]
 
-#=======================================================================
+# =======================================================================
 # Auxiliary functions
-#=======================================================================
+# =======================================================================
 
-def raise_rank_single(taxids: pd.Series, target_rank: str,
-                      db: pd.DataFrame) -> tuple[pd.Series, bool]:
+
+def raise_rank_single(
+    taxids: pd.Series, target_rank: str, db: pd.DataFrame
+) -> tuple[pd.Series, bool]:
     """
     Given a Series of taxids and a target rank, perform a single
     rank-raise operation. Taxids below the target rank are replaced
@@ -53,7 +71,7 @@ def raise_rank_single(taxids: pd.Series, target_rank: str,
     # Get assigned ranks for each taxid
     ranks = db.loc[taxids, "rank"]
     # If all ranks are equal to or above target rank, return unmodified
-    ranks_above = RANKS[RANKS.index(target_rank):]
+    ranks_above = RANKS[RANKS.index(target_rank) :]
     if ranks.isin(ranks_above).all():
         return taxids, False
     # Otherwise, return the parent taxid for each taxid below target
@@ -62,8 +80,8 @@ def raise_rank_single(taxids: pd.Series, target_rank: str,
     taxids_out = taxids.where(ranks.isin(ranks_above), parent_taxids)
     return taxids_out, True
 
-def raise_rank(taxids: pd.Series, target_rank: str,
-               db: pd.DataFrame) -> pd.Series:
+
+def raise_rank(taxids: pd.Series, target_rank: str, db: pd.DataFrame) -> pd.Series:
     """
     Given a Series of taxids and a target rank, traverse the taxid
     hierarchy to find the corresponding taxids at the target rank.
@@ -86,10 +104,11 @@ def raise_rank(taxids: pd.Series, target_rank: str,
     while iter_next:
         taxids, iter_next = raise_rank_single(taxids, target_rank, db)
     # Replace taxids above the target rank with pd.NA
-    ranks_high = RANKS[RANKS.index(target_rank)+1:]
+    ranks_high = RANKS[RANKS.index(target_rank) + 1 :]
     ranks = db.loc[taxids, "rank"]
     taxids_out = taxids.where(~ranks.isin(ranks_high), pd.NA)  # type: ignore[call-overload]
     return taxids_out  # type: ignore[no-any-return]
+
 
 def raise_rank_db(db: pd.DataFrame, target_rank: str) -> pd.DataFrame:
     """
@@ -108,6 +127,7 @@ def raise_rank_db(db: pd.DataFrame, target_rank: str) -> pd.DataFrame:
     db[new_col_name] = new_col_values
     return db
 
+
 def raise_ranks_db(db: pd.DataFrame, target_ranks: list[str]) -> pd.DataFrame:
     """
     Given a DataFrame of taxids and their parent taxids, add columns
@@ -124,18 +144,26 @@ def raise_ranks_db(db: pd.DataFrame, target_ranks: list[str]) -> pd.DataFrame:
         db = raise_rank_db(db, target_rank)
     return db
 
-#=======================================================================
+
+# =======================================================================
 # Main function
-#=======================================================================
+# =======================================================================
+
 
 def main() -> None:
     logger.info("Initializing script.")
     # Define argument parsing
-    desc = "Given a TSV of taxids and their parent taxids, add columns " \
-           "containing the corresponding taxids at each target taxonomic rank."
+    desc = (
+        "Given a TSV of taxids and their parent taxids, add columns "
+        "containing the corresponding taxids at each target taxonomic rank."
+    )
     parser = argparse.ArgumentParser(description=desc)
-    parser.add_argument("taxonomy_db", help="Path to TSV of taxids, parent taxids and ranks.")
-    parser.add_argument("target_ranks", help="Space-delimited list of target ranks to raise to.")
+    parser.add_argument(
+        "taxonomy_db", help="Path to TSV of taxids, parent taxids and ranks."
+    )
+    parser.add_argument(
+        "target_ranks", help="Space-delimited list of target ranks to raise to."
+    )
     parser.add_argument("output_db", help="Path to output TSV.")
     args = parser.parse_args()
     # Import TSV and set taxids as index (while keeping taxid column)
@@ -159,9 +187,9 @@ def main() -> None:
     logger.info(f"Columns: {taxonomy_db.columns.tolist()}")
     # Write output
     logger.info("Writing output.")
-    taxonomy_db.to_csv(args.output_db, sep="\t", index=False,
-                       na_rep="NA", header=True)
+    taxonomy_db.to_csv(args.output_db, sep="\t", index=False, na_rep="NA", header=True)
     logger.info("Script complete.")
+
 
 if __name__ == "__main__":
     main()

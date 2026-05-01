@@ -39,18 +39,14 @@ class TestComputeTaxidDistance:
     @pytest.fixture
     def truncated_nodes_db(self, tsv_factory: Any) -> str:
         """Create a truncated taxonomy nodes database (missing root)."""
-        content = (
-            "9000\t|\t9999\n"
-            "9001\t|\t9000\n"
-        )
+        content = "9000\t|\t9999\n9001\t|\t9000\n"
         result: str = tsv_factory.create_plain("nodes_truncated.dmp", content)
         return result
 
     def test_missing_taxid_field(self, tsv_factory: Any, test_nodes_db: str) -> None:
         """Test that missing taxid field raises ValueError."""
         input_file = tsv_factory.create_plain(
-            "input.tsv",
-            "x\ty\tz\n0\t1\t2\n3\t4\t5\n"
+            "input.tsv", "x\ty\tz\n0\t1\t2\n3\t4\t5\n"
         )
         output_file = tsv_factory.get_path("output.tsv")
 
@@ -58,75 +54,72 @@ class TestComputeTaxidDistance:
             "taxid_1": "x",
             "taxid_2": "a",  # Field 'a' doesn't exist
             "distance_1": "distance_1",
-            "distance_2": "distance_2"
+            "distance_2": "distance_2",
         }
 
         child_to_parent, _ = compute_taxid_distance.parse_nodes_db(test_nodes_db)
 
         with pytest.raises(ValueError, match="Field not found in header: a"):
             compute_taxid_distance.process_input_to_output(
-                input_file,
-                output_file,
-                field_names,
-                child_to_parent
+                input_file, output_file, field_names, child_to_parent
             )
 
-    def test_distance_field_1_already_exists(self, tsv_factory: Any, test_nodes_db: str) -> None:
+    def test_distance_field_1_already_exists(
+        self, tsv_factory: Any, test_nodes_db: str
+    ) -> None:
         """Test that existing distance field 1 raises ValueError."""
-        input_file = tsv_factory.create_plain(
-            "input.tsv",
-            "x\ty\tz\tw\n0\t1\t2\t3\n"
-        )
+        input_file = tsv_factory.create_plain("input.tsv", "x\ty\tz\tw\n0\t1\t2\t3\n")
         output_file = tsv_factory.get_path("output.tsv")
 
         field_names = {
             "taxid_1": "x",
             "taxid_2": "y",
             "distance_1": "z",  # Field 'z' already exists
-            "distance_2": "w"
+            "distance_2": "w",
         }
 
         child_to_parent, _ = compute_taxid_distance.parse_nodes_db(test_nodes_db)
 
-        with pytest.raises(ValueError, match="Distance field already present in input header"):
+        with pytest.raises(
+            ValueError, match="Distance field already present in input header"
+        ):
             compute_taxid_distance.process_input_to_output(
-                input_file,
-                output_file,
-                field_names,
-                child_to_parent
+                input_file, output_file, field_names, child_to_parent
             )
 
-    def test_distance_field_2_already_exists(self, tsv_factory: Any, test_nodes_db: str) -> None:
+    def test_distance_field_2_already_exists(
+        self, tsv_factory: Any, test_nodes_db: str
+    ) -> None:
         """Test that existing distance field 2 raises ValueError."""
-        input_file = tsv_factory.create_plain(
-            "input.tsv",
-            "x\ty\tz\tw\n0\t1\t2\t3\n"
-        )
+        input_file = tsv_factory.create_plain("input.tsv", "x\ty\tz\tw\n0\t1\t2\t3\n")
         output_file = tsv_factory.get_path("output.tsv")
 
         field_names = {
             "taxid_1": "x",
             "taxid_2": "y",
             "distance_1": "w",
-            "distance_2": "z"  # Field 'z' already exists
+            "distance_2": "z",  # Field 'z' already exists
         }
 
         child_to_parent, _ = compute_taxid_distance.parse_nodes_db(test_nodes_db)
 
-        with pytest.raises(ValueError, match="Distance field already present in input header"):
+        with pytest.raises(
+            ValueError, match="Distance field already present in input header"
+        ):
             compute_taxid_distance.process_input_to_output(
-                input_file,
-                output_file,
-                field_names,
-                child_to_parent
+                input_file, output_file, field_names, child_to_parent
             )
 
-    def test_missing_root_in_taxonomy_db(self, tsv_factory: Any, truncated_nodes_db: str) -> None:
+    def test_missing_root_in_taxonomy_db(
+        self, tsv_factory: Any, truncated_nodes_db: str
+    ) -> None:
         """Test that missing root in taxonomy DB raises AssertionError."""
         with pytest.raises(AssertionError, match="Taxonomy DB does not contain root"):
             compute_taxid_distance.parse_nodes_db(truncated_nodes_db)
 
-    def test_empty_input_file_no_header(self, tsv_factory: Any, test_nodes_db: str) -> None:
+    def test_empty_input_file_no_header(
+        self, tsv_factory: Any, test_nodes_db: str
+    ) -> None:
         """Test that empty input file (no header) raises ValueError."""
         input_file = tsv_factory.create_plain("input.tsv", "")
         output_file = tsv_factory.get_path("output.tsv")
@@ -135,41 +128,34 @@ class TestComputeTaxidDistance:
             "taxid_1": "x",
             "taxid_2": "a",
             "distance_1": "distance_1",
-            "distance_2": "distance_2"
+            "distance_2": "distance_2",
         }
 
         child_to_parent, _ = compute_taxid_distance.parse_nodes_db(test_nodes_db)
 
-        with pytest.raises(ValueError, match="Header line is empty: no fields to parse"):
+        with pytest.raises(
+            ValueError, match="Header line is empty: no fields to parse"
+        ):
             compute_taxid_distance.process_input_to_output(
-                input_file,
-                output_file,
-                field_names,
-                child_to_parent
+                input_file, output_file, field_names, child_to_parent
             )
 
     def test_header_only_input(self, tsv_factory: Any, test_nodes_db: str) -> None:
         """Test that input file with header only produces header-only output."""
-        input_file = tsv_factory.create_plain(
-            "input.tsv",
-            "x\ty\n"
-        )
+        input_file = tsv_factory.create_plain("input.tsv", "x\ty\n")
         output_file = tsv_factory.get_path("output.tsv")
 
         field_names = {
             "taxid_1": "x",
             "taxid_2": "y",
             "distance_1": "distance_1",
-            "distance_2": "distance_2"
+            "distance_2": "distance_2",
         }
 
         child_to_parent, _ = compute_taxid_distance.parse_nodes_db(test_nodes_db)
 
         compute_taxid_distance.process_input_to_output(
-            input_file,
-            output_file,
-            field_names,
-            child_to_parent
+            input_file, output_file, field_names, child_to_parent
         )
 
         result = tsv_factory.read_plain(output_file)
@@ -220,16 +206,13 @@ class TestComputeTaxidDistance:
             "taxid_1": "taxid1",
             "taxid_2": "taxid2",
             "distance_1": "distance_1",
-            "distance_2": "distance_2"
+            "distance_2": "distance_2",
         }
 
         child_to_parent, _ = compute_taxid_distance.parse_nodes_db(test_nodes_db)
 
         compute_taxid_distance.process_input_to_output(
-            input_file,
-            output_file,
-            field_names,
-            child_to_parent
+            input_file, output_file, field_names, child_to_parent
         )
 
         result = tsv_factory.read_plain(output_file)

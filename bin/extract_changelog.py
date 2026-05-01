@@ -1,18 +1,18 @@
 #!/usr/bin/env python3
 """Extract changelog section for a specific version from CHANGELOG.md."""
 
-#=============================================================================
+# =============================================================================
 # Imports
-#=============================================================================
+# =============================================================================
 
 import argparse
 import re
 import sys
 from pathlib import Path
 
-#=============================================================================
+# =============================================================================
 # Constants
-#=============================================================================
+# =============================================================================
 
 DEFAULT_CHANGELOG_PATH = Path("CHANGELOG.md")
 
@@ -20,9 +20,10 @@ DEFAULT_CHANGELOG_PATH = Path("CHANGELOG.md")
 # Also tolerates no space after # (e.g., "#v1.2.3.4")
 VERSION_HEADER_PATTERN = re.compile(r"^#\s*v?(\d+\.\d+\.\d+\.\d+(?:-dev)?)$")
 
-#=============================================================================
+# =============================================================================
 # Helper functions
-#=============================================================================
+# =============================================================================
+
 
 def parse_version_header(line: str) -> str | None:
     """
@@ -40,7 +41,9 @@ def parse_version_header(line: str) -> str | None:
     return None
 
 
-def extract_changelog(version: str, changelog_path: Path = DEFAULT_CHANGELOG_PATH) -> str:
+def extract_changelog(
+    version: str, changelog_path: Path = DEFAULT_CHANGELOG_PATH
+) -> str:
     """
     Extract the changelog content for a specific version by streaming the file.
 
@@ -86,11 +89,13 @@ def extract_changelog(version: str, changelog_path: Path = DEFAULT_CHANGELOG_PAT
             f"Version {version} not found in {changelog_path}. "
             f"Expected header format: '# v{version}' or '# {version}'"
         )
-    
+
     # Raise an error if the content is empty / contains only whitespace
     has_content = any(line.strip() for line in content_lines)
     if not has_content:
-        raise ValueError(f"Version {version} found in {changelog_path.name} but contains no content")
+        raise ValueError(
+            f"Version {version} found in {changelog_path.name} but contains no content"
+        )
 
     return "".join(content_lines)
 
@@ -123,9 +128,11 @@ Examples:
 
     return parser.parse_args()
 
-#=============================================================================
+
+# =============================================================================
 # Main function
-#=============================================================================
+# =============================================================================
+
 
 def main() -> None:
     """

@@ -8,9 +8,9 @@ for which one taxid is an ancestor of the other will be given a distance of 0
 in the corresponding distance column.
 """
 
-#=======================================================================
+# =======================================================================
 # Import libraries
-#=======================================================================
+# =======================================================================
 
 import logging
 import argparse
@@ -21,31 +21,35 @@ from dataclasses import dataclass
 from collections import defaultdict
 from typing import IO, TextIO, cast
 
-#=======================================================================
+# =======================================================================
 # Configure logging
-#=======================================================================
+# =======================================================================
+
 
 class UTCFormatter(logging.Formatter):
     def formatTime(self, record: logging.LogRecord, datefmt: str | None = None) -> str:
         dt = datetime.fromtimestamp(record.created, timezone.utc)
-        return dt.strftime('%Y-%m-%d %H:%M:%S UTC')
+        return dt.strftime("%Y-%m-%d %H:%M:%S UTC")
+
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger()
 handler = logging.StreamHandler()
-formatter = UTCFormatter('[%(asctime)s] %(message)s')
+formatter = UTCFormatter("[%(asctime)s] %(message)s")
 handler.setFormatter(formatter)
 logger.handlers.clear()
 logger.addHandler(handler)
 
-#=======================================================================
+# =======================================================================
 # Define constants
-#=======================================================================
+# =======================================================================
 
 TAXID_ROOT = 1
 
-#=======================================================================
+# =======================================================================
 # I/O functions
-#=======================================================================
+# =======================================================================
+
 
 def parse_args() -> argparse.Namespace:
     """Parse command-line arguments."""
@@ -54,25 +58,42 @@ def parse_args() -> argparse.Namespace:
     # Add arguments
     parser.add_argument("--input", "-i", help="Path to input TSV.")
     parser.add_argument("--output", "-o", help="Path to output TSV.")
-    parser.add_argument("--taxid-field-1", "-t1", help="Column header for first input taxid field.")
-    parser.add_argument("--taxid-field-2", "-t2", help="Column header for second input taxid field.")
-    parser.add_argument("--distance-field-1", "-d1", help="Column header for first output distance field.")
-    parser.add_argument("--distance-field-2", "-d2", help="Column header for second output distance field.")
-    parser.add_argument("--nodes-db", "-n", help="Path to taxonomy nodes DB (raw NCBI nodes.dmp file).")
+    parser.add_argument(
+        "--taxid-field-1", "-t1", help="Column header for first input taxid field."
+    )
+    parser.add_argument(
+        "--taxid-field-2", "-t2", help="Column header for second input taxid field."
+    )
+    parser.add_argument(
+        "--distance-field-1",
+        "-d1",
+        help="Column header for first output distance field.",
+    )
+    parser.add_argument(
+        "--distance-field-2",
+        "-d2",
+        help="Column header for second output distance field.",
+    )
+    parser.add_argument(
+        "--nodes-db", "-n", help="Path to taxonomy nodes DB (raw NCBI nodes.dmp file)."
+    )
     # Return parsed arguments
     return parser.parse_args()
+
 
 def open_by_suffix(filename: str, mode: str = "r", debug: bool = False) -> IO[str]:
     """Parse the suffix of a filename to determine the right open method
     to use, then open the file. Can handle .gz and uncompressed files."""
-    if filename.endswith('.gz'):
-        return cast(IO[str], gzip.open(filename, mode + 't'))
+    if filename.endswith(".gz"):
+        return cast(IO[str], gzip.open(filename, mode + "t"))
     else:
         return open(filename, mode)
 
-#=======================================================================
+
+# =======================================================================
 # TSV processing functions
-#=======================================================================
+# =======================================================================
+
 
 def get_header_index(headers: list[str], field: str) -> int:
     """Get the index of a field in a header line."""
@@ -80,12 +101,16 @@ def get_header_index(headers: list[str], field: str) -> int:
         return headers.index(field)
     except ValueError as e:
         raise ValueError(f"Field not found in header: {field}") from e
-    
+
+
 def join_line(inputs: list[str]) -> str:
     """Join a list of strings with tabs followed by a newline."""
     return "\t".join(inputs) + "\n"
 
-def parse_header(header_line: str, fields: list[str]) -> tuple[list[str], dict[str, int]]:
+
+def parse_header(
+    header_line: str, fields: list[str]
+) -> tuple[list[str], dict[str, int]]:
     """
     Parse a TSV header line into a list of fields, and compute the
     indices of a set of expected fields.
@@ -112,19 +137,21 @@ def parse_header(header_line: str, fields: list[str]) -> tuple[list[str], dict[s
     # Return fields and indices
     return header_fields, indices
 
-#=======================================================================
-# Taxonomy functions
-#=======================================================================
 
-def parse_taxid(taxid_str: str) -> int|None:
+# =======================================================================
+# Taxonomy functions
+# =======================================================================
+
+
+def parse_taxid(taxid_str: str) -> int | None:
     """Parse a taxid string into an integer."""
     try:
         return int(taxid_str)
     except ValueError:
         return None
 
-def parse_nodes_db(path: str
-                      ) -> tuple[dict[int, int], dict[int, set[int]]]:
+
+def parse_nodes_db(path: str) -> tuple[dict[int, int], dict[int, set[int]]]:
     """
     Parse taxonomy DB into two dictionaries: one mapping each taxid
     to its parent taxid, and one mapping each taxid to its children taxids.
@@ -147,18 +174,24 @@ def parse_nodes_db(path: str
             child_to_parent[taxid] = parent_taxid
             parent_to_children[parent_taxid].add(taxid)
     # Check that DB contains root as the topmost taxid
-    assert TAXID_ROOT in child_to_parent and TAXID_ROOT in parent_to_children, \
+    assert TAXID_ROOT in child_to_parent and TAXID_ROOT in parent_to_children, (
         "Taxonomy DB does not contain root."
-    assert child_to_parent[TAXID_ROOT] == TAXID_ROOT, "Root taxid has a parent." # NCBI file has root as a child of itself
-    assert TAXID_ROOT in parent_to_children[TAXID_ROOT], "Root taxid must be its own child."
+    )
+    assert child_to_parent[TAXID_ROOT] == TAXID_ROOT, (
+        "Root taxid has a parent."
+    )  # NCBI file has root as a child of itself
+    assert TAXID_ROOT in parent_to_children[TAXID_ROOT], (
+        "Root taxid must be its own child."
+    )
     # Return dictionaries
     return child_to_parent, parent_to_children
 
+
 def path_to_root(
-        taxid: int,
-        child_to_parent: dict[int, int],
-        path_cache: dict[int, list[int]],
-        ) -> tuple[list[int], dict[int, list[int]]]:
+    taxid: int,
+    child_to_parent: dict[int, int],
+    path_cache: dict[int, list[int]],
+) -> tuple[list[int], dict[int, list[int]]]:
     """
     Find the path from a taxid to the root of the taxonomy tree.
     Args:
@@ -175,7 +208,9 @@ def path_to_root(
     assert isinstance(taxid, int), "Taxid must be an integer."
     # If path is already cached, return it
     if taxid in path_cache:
-        logger.debug(f"Path to root for target taxid {taxid} already cached: {path_cache[taxid]}")
+        logger.debug(
+            f"Path to root for target taxid {taxid} already cached: {path_cache[taxid]}"
+        )
         return path_cache[taxid], path_cache
     # Initialize path
     path: list[int] = [taxid]
@@ -189,12 +224,16 @@ def path_to_root(
             parent = child_to_parent[path[-1]]
             # Should not encounter loops before reaching the root
             if parent == path[-1]:
-                msg = f"Taxid {taxid} has a self-loop in the child_to_parent dictionary."
+                msg = (
+                    f"Taxid {taxid} has a self-loop in the child_to_parent dictionary."
+                )
                 logger.error(msg)
                 raise ValueError(msg)
             # Check if path for parent is already cached
             if parent in path_cache:
-                logger.debug(f"Path to root for ancestor taxid {parent} already cached: {path_cache[parent]}")
+                logger.debug(
+                    f"Path to root for ancestor taxid {parent} already cached: {path_cache[parent]}"
+                )
                 path.extend(path_cache[parent])
             # Otherwise, add parent to path
             else:
@@ -210,10 +249,11 @@ def path_to_root(
     logger.debug(f"Path to root for target taxid {taxid}: {path}")
     return path, path_cache
 
+
 def compute_lca(
-        path_1: list[int],
-        path_2: list[int],
-        ) -> int | None:
+    path_1: list[int],
+    path_2: list[int],
+) -> int | None:
     """
     Given paths to root for two taxids, compute the lowest common ancestor.
     Paths are lists of taxids starting with the target taxid and ending with
@@ -231,12 +271,13 @@ def compute_lca(
     else:
         return None
 
+
 def compute_taxonomic_distance(
-        taxid_1: int | None,
-        taxid_2: int | None,
-        child_to_parent: dict[int, int],
-        path_cache: dict[int, list[int]],
-        ) -> tuple[int|None, int|None, dict[int, list[int]]]:
+    taxid_1: int | None,
+    taxid_2: int | None,
+    child_to_parent: dict[int, int],
+    path_cache: dict[int, list[int]],
+) -> tuple[int | None, int | None, dict[int, list[int]]]:
     """
     Compute the taxonomic distance between two taxids as a pair of integers
     specifying the distance between each taxid and their lowest common ancestor.
@@ -263,27 +304,35 @@ def compute_taxonomic_distance(
     # Compute LCA
     lca = compute_lca(path_1, path_2)
     if lca is None:
-        logger.debug(f"No LCA found for taxids {taxid_1} and {taxid_2}; returning None.")
+        logger.debug(
+            f"No LCA found for taxids {taxid_1} and {taxid_2}; returning None."
+        )
         return None, None, path_cache
     logger.debug(f"LCA of taxids {taxid_1} and {taxid_2}: {lca}")
     # Compute taxonomic distance to LCA
     distance_1 = path_1.index(lca)
-    logger.debug(f"Taxonomic distance between taxid {taxid_1} and LCA {lca}: {distance_1}")
+    logger.debug(
+        f"Taxonomic distance between taxid {taxid_1} and LCA {lca}: {distance_1}"
+    )
     distance_2 = path_2.index(lca)
-    logger.debug(f"Taxonomic distance between taxid {taxid_2} and LCA {lca}: {distance_2}")
+    logger.debug(
+        f"Taxonomic distance between taxid {taxid_2} and LCA {lca}: {distance_2}"
+    )
     # Return distances and path cache
     return distance_1, distance_2, path_cache
 
-#=======================================================================
+
+# =======================================================================
 # Functions for processing input and output
-#=======================================================================
+# =======================================================================
+
 
 def process_input_to_output(
-        input_path: str,
-        output_path: str,
-        field_names: dict[str, str],
-        child_to_parent: dict[int, int],
-        ) -> None:
+    input_path: str,
+    output_path: str,
+    field_names: dict[str, str],
+    child_to_parent: dict[int, int],
+) -> None:
     """
     Iterate linewise over input TSV, computing the taxonomic distance
     between the two taxids for each group of entries and writing the result
@@ -317,7 +366,10 @@ def process_input_to_output(
         indices[field_names["distance_2"]] = len(header_fields) + 1
         logger.info(f"Indices of target fields: {indices}")
         # Write output header
-        header_fields_out = header_fields + [field_names["distance_1"], field_names["distance_2"]]
+        header_fields_out = header_fields + [
+            field_names["distance_1"],
+            field_names["distance_2"],
+        ]
         outf.write(join_line(header_fields_out))
         # Process rest of input file
         path_cache: dict[int, list[int]] = {}
@@ -325,14 +377,15 @@ def process_input_to_output(
         for line in inf:
             # If line is empty, break
             if not line.strip():
-                break 
+                break
             # Parse line into fields and extract taxids (parsing non-integer strings as None)
             fields = line.strip().split("\t")
             taxid_1 = parse_taxid(fields[indices[field_names["taxid_1"]]])
             taxid_2 = parse_taxid(fields[indices[field_names["taxid_2"]]])
             # Compute taxonomic distance
             distance_1, distance_2, path_cache = compute_taxonomic_distance(
-                taxid_1, taxid_2, child_to_parent, path_cache)
+                taxid_1, taxid_2, child_to_parent, path_cache
+            )
             # Write output line
             distance_out_1 = str(distance_1) if distance_1 is not None else "NA"
             distance_out_2 = str(distance_2) if distance_2 is not None else "NA"
@@ -342,9 +395,11 @@ def process_input_to_output(
             n_entries += 1
         logger.info(f"Processed {n_entries} entries.")
 
-#=======================================================================
+
+# =======================================================================
 # Main function
-#=======================================================================
+# =======================================================================
+
 
 def main() -> None:
     logger.info("Initializing script.")
@@ -359,10 +414,12 @@ def main() -> None:
     logger.info(f"Parsed taxonomy information for {len(child_to_parent)} taxids.")
     logger.debug(f"Child-to-parent dictionary: {child_to_parent}")
     # Prepare fields dict
-    fields = {"taxid_1": args.taxid_field_1,
-              "taxid_2": args.taxid_field_2,
-              "distance_1": args.distance_field_1,
-              "distance_2": args.distance_field_2}
+    fields = {
+        "taxid_1": args.taxid_field_1,
+        "taxid_2": args.taxid_field_2,
+        "distance_1": args.distance_field_1,
+        "distance_2": args.distance_field_2,
+    }
     logger.info(f"Fields: {fields}")
     # Parse input TSV and compute taxonomic distances
     logger.info("Parsing input TSV and computing taxonomic distances.")
@@ -371,6 +428,7 @@ def main() -> None:
     logger.info("Script completed successfully.")
     end_time = time.time()
     logger.info(f"Total time elapsed: {end_time - start_time} seconds")
+
 
 if __name__ == "__main__":
     main()

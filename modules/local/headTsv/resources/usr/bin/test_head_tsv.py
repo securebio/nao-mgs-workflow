@@ -32,7 +32,11 @@ class TestAddHeaderLine:
         ids=["basic_functionality", "empty_file", "single_column"],
     )
     def test_add_header_success_cases(
-        self, tsv_factory: Any, input_content: str, header_fields: list[str], expected_output: str
+        self,
+        tsv_factory: Any,
+        input_content: str,
+        header_fields: list[str],
+        expected_output: str,
     ) -> None:
         """Test adding headers to various TSV file formats."""
         input_file = tsv_factory.create_plain("input.tsv", input_content)

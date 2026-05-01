@@ -7,20 +7,25 @@ import datetime
 import gzip
 from typing import IO, cast
 
+
 def print_log(message: str) -> None:
     print("[", datetime.datetime.now(), "]  ", message, sep="")
+
 
 def open_by_suffix(filename: str, mode: str = "r", debug: bool = False) -> IO[str]:
     if debug:
         print_log(f"\tOpening file object: {filename}")
         print_log(f"\tOpening mode: {mode}")
         print_log(f"\tGZIP mode: {filename.endswith('.gz')}")
-    if filename.endswith('.gz'):
-        return cast(IO[str], gzip.open(filename, mode + 't'))
+    if filename.endswith(".gz"):
+        return cast(IO[str], gzip.open(filename, mode + "t"))
     else:
         return open(filename, mode)
 
-def add_column(input_path: str, column_name: str, column_value: str, out_path: str) -> None:
+
+def add_column(
+    input_path: str, column_name: str, column_value: str, out_path: str
+) -> None:
     """Add one or more columns to a TSV file with a fixed value.
 
     The column_name argument can be a single name or a comma-separated list
@@ -47,11 +52,16 @@ def add_column(input_path: str, column_name: str, column_value: str, out_path: s
                 continue
             outf.write(line.rstrip("\r\n") + suffix + "\n")
 
+
 def main() -> None:
     # Parse arguments
-    parser = argparse.ArgumentParser(description="Add column to TSV file with specified name and value.")
+    parser = argparse.ArgumentParser(
+        description="Add column to TSV file with specified name and value."
+    )
     parser.add_argument("input_path", help="Path to input TSV file.")
-    parser.add_argument("column_name", help="Name of the column to add (comma-separated for multiple).")
+    parser.add_argument(
+        "column_name", help="Name of the column to add (comma-separated for multiple)."
+    )
     parser.add_argument("column_value", help="Value for the new column.")
     parser.add_argument("output_file", help="Path to output TSV.")
     args = parser.parse_args()
@@ -74,6 +84,7 @@ def main() -> None:
     # Finish time tracking
     end_time = time.time()
     print_log("Total time elapsed: %.2f seconds" % (end_time - start_time))
+
 
 if __name__ == "__main__":
     main()

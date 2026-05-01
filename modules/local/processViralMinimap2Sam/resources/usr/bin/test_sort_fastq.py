@@ -17,12 +17,13 @@ def _read_lines(path: Path) -> list[str]:
         return f.readlines()
 
 
-def _make_fastq_record(read_id: str, seq: str = "ACGTACGT", qual: str = "IIIIIIII") -> str:
+def _make_fastq_record(
+    read_id: str, seq: str = "ACGTACGT", qual: str = "IIIIIIII"
+) -> str:
     return f"@{read_id}\n{seq}\n+\n{qual}\n"
 
 
 class TestSortFastq:
-
     def test_empty_fastq(self, tmp_path: Path) -> None:
         """Empty FASTQ produces empty output."""
         inp = tmp_path / "input.fastq.gz"
@@ -42,7 +43,9 @@ class TestSortFastq:
         ],
         ids=["already_sorted", "reverse_sorted"],
     )
-    def test_sort_order(self, tmp_path: Path, order: list[str], expected: list[str]) -> None:
+    def test_sort_order(
+        self, tmp_path: Path, order: list[str], expected: list[str]
+    ) -> None:
         """Reads are sorted by read ID regardless of input order."""
         inp = tmp_path / "input.fastq.gz"
         out = tmp_path / "sorted.fastq"
