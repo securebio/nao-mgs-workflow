@@ -1,3 +1,7 @@
+# v3.2.1.5-dev
+
+- Add CVE-2026-4878 (libcap2) to `.trivyignore`; no Debian fix available and not exercised by our pipeline.
+
 # v3.2.1.4
 
 - Tolerate viral taxa with no linked NCBI assemblies in `DOWNLOAD_VIRAL_GENOMES`, emitting a header-only `${taxid}_metadata.tsv` and an empty `${taxid}_genomes/` (now declared `optional`).

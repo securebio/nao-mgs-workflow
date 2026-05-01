@@ -85,3 +85,12 @@ CVE-2026-29111 exp:2026-06-30
 # Check for a Debian fix at:
 #   https://security-tracker.debian.org/tracker/CVE-2026-41989
 CVE-2026-41989 exp:2026-06-30
+
+# libcap2: TOCTOU race in cap_set_file() allowing local privilege escalation
+# (no Debian fix available as of 2026-05-01). Exploitation requires a local
+# unprivileged user with write access to a parent directory of a setcap target;
+# our pipeline containers run a single non-interactive job with no other local
+# users, so the practical attack surface is nil.
+# Check for a Debian fix at:
+#   https://security-tracker.debian.org/tracker/CVE-2026-4878
+CVE-2026-4878 exp:2026-06-30
