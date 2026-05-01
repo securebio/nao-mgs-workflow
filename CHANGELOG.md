@@ -10,6 +10,7 @@
     - Use `sentinel_ch.sentinel` rather than `WRITE_SENTINEL_RUN.out.sentinel` in `workflows/run.nf:54` so the assigned variable is referenced.
 - Configure Ruff and apply behaviour-changing Ruff fixes in preparation for adding Ruff to CI.
 - Apply the broader mechanical Ruff sweep across the Python codebase (`ruff format` + `ruff check --fix`/`--unsafe-fixes` autofixes plus a few small manual cleanups). No behavioural changes.
+- Add Ruff CI gate (`.github/workflows/ruff.yml`) running `ruff check .` and `ruff format --check .` on PRs, and document the new gate in `CLAUDE.md`, `docs/ci.md`, and `docs/developer.md` (#752).
 
 # v3.2.1.4
 

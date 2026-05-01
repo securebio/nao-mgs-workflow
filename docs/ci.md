@@ -69,6 +69,10 @@ Runs our entire pytest suite across `bin`, `modules`, and `post-processing/tests
 
 Runs `mypy` on all Python code in `bin/` and `modules/local/`. Uses `dorny/paths-filter` to trivially succeed when no Python files have changed.
 
+### Ruff lint and format check (`ruff.yml`)
+
+Runs `ruff check .` (lint) and `ruff format --check .` (formatting verification) on the whole repo, using the `[tool.ruff]` configuration in `pyproject.toml`. Both checks are read-only — CI never auto-fixes; contributors must run `ruff check --fix .` and `ruff format .` locally and commit the results. Uses `dorny/paths-filter` to trivially succeed when no Python files, `pyproject.toml`, or the workflow itself have changed.
+
 ### Rust tools (`rust-tools.yml`)
 
 Runs Rust unit tests and builds the `nao-rust-tools` container when Rust source files change. This workflow runs on all PRs but uses `dorny/paths-filter` to trivially succeed (~10 seconds) when no Rust files have changed. When Rust files are modified, it runs `cargo test` and builds the container. On push to `dev` or `main`, it also pushes the container to ECR.

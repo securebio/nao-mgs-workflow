@@ -61,7 +61,7 @@ These guidelines represent best practices to implement in new code, though some 
 - Python style: 
     - Loosely follow PEP 8 conventions.
     - Type hints are encouraged. When used, prefer Python 3.12+ native syntax (e.g. `list[str]`, `str | None`) over imports from the `typing` module.
-    - Linting is encouraged using `ruff`. Type checking with `mypy` is enforced in CI (see `.github/workflows/mypy.yml`).
+    - Linting and formatting are enforced via `ruff` in CI (see `.github/workflows/ruff.yml`); CI runs `ruff check .` and `ruff format --check .` and never auto-fixes — run `ruff check --fix .` and `ruff format .` locally and commit the results. Type checking with `mypy` is enforced in CI (see `.github/workflows/mypy.yml`).
     - Formatting applied (including in nested directories) will follow the configuration in `pyproject.toml`.
     - After making any formatting changes, carefully review the diff to ensure no unintended modifications were introduced that could affect functionality.
 
