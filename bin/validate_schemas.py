@@ -266,16 +266,18 @@ def validate_file(data_file: Path, schema_path: Path) -> tuple[bool, list[str]]:
         return validate_json_file(data_file, schema)
     # Table-schema path: reordered_to_schema and frictionless expect a file path,
     # so the schema is re-read from disk by those functions (intentional).
-    with decompressed_path(data_file) as uncompressed:
-        with reordered_to_schema(uncompressed, schema_path) as file_to_validate:
-            dialect = Dialect(controls=[formats.CsvControl(delimiter="\t")])
-            resource = Resource(
-                path=str(file_to_validate),
-                schema=str(schema_path),
-                dialect=dialect,
-            )
-            with system.use_context(trusted=True):
-                report = validate(resource)
+    with (
+        decompressed_path(data_file) as uncompressed,
+        reordered_to_schema(uncompressed, schema_path) as file_to_validate,
+    ):
+        dialect = Dialect(controls=[formats.CsvControl(delimiter="\t")])
+        resource = Resource(
+            path=str(file_to_validate),
+            schema=str(schema_path),
+            dialect=dialect,
+        )
+        with system.use_context(trusted=True):
+            report = validate(resource)
     if report.valid:
         return True, []
     errors = []

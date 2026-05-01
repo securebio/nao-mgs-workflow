@@ -90,9 +90,11 @@ class TestGetLatestVersion:
         mock_response.__enter__ = MagicMock(return_value=mock_response)
         mock_response.__exit__ = MagicMock(return_value=False)
 
-        with patch("urllib.request.urlopen", return_value=mock_response):
-            with pytest.raises(ValueError, match="Invalid version format"):
-                get_latest_version("https://api.example.com")
+        with (
+            patch("urllib.request.urlopen", return_value=mock_response),
+            pytest.raises(ValueError, match="Invalid version format"),
+        ):
+            get_latest_version("https://api.example.com")
 
 
 class TestGetLatestNonExcludedVersion:
@@ -241,9 +243,11 @@ class TestMain:
         config = tmp_path / "profiles.config"
         config.write_text("manifest {}")
 
-        with patch("sys.argv", ["check_nextflow_version.py", "--config", str(config)]):
-            with pytest.raises(ValueError, match="Could not find nextflowVersion"):
-                main()
+        with (
+            patch("sys.argv", ["check_nextflow_version.py", "--config", str(config)]),
+            pytest.raises(ValueError, match="Could not find nextflowVersion"),
+        ):
+            main()
 
     @pytest.mark.parametrize(
         "pinned_version,should_match,expected_error",
