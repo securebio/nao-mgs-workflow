@@ -183,7 +183,7 @@ def read_genbank_metadata(path: str) -> dict[str, tuple[str, str]]:
             meta_db["genome_id"],
             meta_db["taxid"],
             meta_db["species_taxid"],
-            strict=False,
+            strict=True,
         )
     }
 

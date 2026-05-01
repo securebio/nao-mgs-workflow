@@ -258,7 +258,7 @@ class TestProcessSam:
             lines = f.readlines()
         header = lines[0].strip().split("\t")
         rows = [
-            dict(zip(header, line.strip().split("\t"), strict=False))
+            dict(zip(header, line.strip().split("\t"), strict=True))
             for line in lines[1:]
         ]
 
@@ -342,7 +342,7 @@ class TestProcessSam:
         assert len(lines) == 3  # header + 2 reads
         header = lines[0].strip().split("\t")
         rows = [
-            dict(zip(header, line.strip().split("\t"), strict=False))
+            dict(zip(header, line.strip().split("\t"), strict=True))
             for line in lines[1:]
         ]
         assert rows[0]["seq_id"] == "read_A"
