@@ -13,6 +13,7 @@
     - Fix all ten `B904` violations by chaining (`raise ... from e`, 4 cases in ECR build error paths) or suppressing (`raise ... from None`, 6 cases in generic-sentinel wrappers) exceptions raised in `except` blocks. This slightly changes the formatting of tracebacks when these errors are raised.
     - Restructure `open_by_suffix` to silence `SIM115`, rename ambiguous loop var `l` to `line` (`E741`), and apply mechanical cleanups for nested `with`/`if` blocks and unused loop variables.
     - Fix a latent bug in `bin/prepare_tiny_test_data.py`: `s3_uri.lstrip("s3://")` (which treats the argument as a character set) replaced with `removeprefix("s3://")` (`B005`).
+    - Switch all `zip(..., strict=False)` calls (added by the `B905` autofix to preserve historical behaviour) to `strict=True` after auditing each site. All eight call sites zip iterables that are guaranteed equal-length by construction (paired R1/R2 FASTQ records, columns of a single DataFrame, statically-equal lists, etc.), so this converts a silent-truncation failure mode into a loud `ValueError` if the invariant ever drifts.
 
 # v3.2.1.4
 
