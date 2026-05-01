@@ -101,11 +101,11 @@ def file_lock(lock_file: Path, timeout_seconds: float | None = None) -> Generato
                 try:
                     fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
                     break
-                except BlockingIOError:
+                except BlockingIOError as e:
                     if time.time() - start_time >= timeout_seconds:
                         raise TimeoutError(
                             f"Timed out waiting for lock after {timeout_seconds} seconds"
-                        ) from None
+                        ) from e
                     time.sleep(0.1)
         else:
             fcntl.flock(f, fcntl.LOCK_EX)

@@ -84,8 +84,8 @@ def extract_viral_taxid(genome_id: str, genbank_metadata: dict[str, list[str]], 
         if species_taxid in viral_taxids:
             return species_taxid
         return taxid
-    except KeyError:
-        raise ValueError(f"No matching genome ID found: {genome_id}") from None
+    except KeyError as e:
+        raise ValueError(f"No matching genome ID found: {genome_id}") from e
 
 
 def parse_sam_alignment(
