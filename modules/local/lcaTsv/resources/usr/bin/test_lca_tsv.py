@@ -137,7 +137,7 @@ class TestLcaTsv:
         unclassified_taxids_descendants = lca_tsv.get_descendants(
             unclassified_taxids, parent_to_children
         )
-        artificial_taxids = lca_tsv.get_descendants(set([8000]), parent_to_children)
+        artificial_taxids = lca_tsv.get_descendants({8000}, parent_to_children)
 
         return {
             "child_to_parent": child_to_parent,
@@ -434,10 +434,6 @@ class TestLcaTsv:
         self, tsv_factory: Any, toy_taxonomy_dir: str, tmp_path: Path
     ) -> None:
         """Test that missing root in taxonomy DB raises assertion error."""
-        input_content = "seq_id\ttaxid\ttest_score\nA\t9001\t100\n"
-        input_file = tsv_factory.create_plain("input.tsv", input_content)
-        output_file = str(tmp_path / "output.tsv.gz")
-
         # Use truncated nodes DB that's missing root
         truncated_nodes_db = os.path.join(toy_taxonomy_dir, "test-nodes-truncated.dmp")
 

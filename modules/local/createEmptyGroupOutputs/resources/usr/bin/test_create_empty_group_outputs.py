@@ -286,7 +286,7 @@ class TestIntegration:
         """Test the complete workflow from comma-separated groups to output files."""
         # Groups as comma-separated string (simulating Nextflow input)
         groups_str = "empty_g1,empty_g2"
-        groups = set(g.strip() for g in groups_str.split(",") if g.strip())
+        groups = {g.strip() for g in groups_str.split(",") if g.strip()}
 
         # Create pyproject.toml
         pyproject_path = tmp_path / "pyproject.toml"

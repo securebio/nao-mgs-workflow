@@ -343,11 +343,13 @@ def summarize_subgroup(
         subgroup.taxids, subgroup.taxids_classified, is_top_taxid, strict=True
     )
     for taxid, classified, is_top in taxids_lca_zip:
-        if top_taxid_classified and classified:
+        if (
+            top_taxid_classified
+            and classified
+            or not top_taxid_classified
+            and (classified or is_top)
+        ):
             taxids_lca.add(taxid)
-        elif not top_taxid_classified:
-            if classified or is_top:
-                taxids_lca.add(taxid)
     lca, path_cache = find_lca_set(taxids_lca, child_to_parent, path_cache)
     # Return summarized statistics
     subgroup.summary = {
@@ -955,7 +957,7 @@ def main() -> None:
     )
     # Get set of artificial taxids
     logger.info("Getting set of artificial taxids.")
-    artificial_taxids = get_descendants(set([int(args.artificial)]), parent_to_children)
+    artificial_taxids = get_descendants({int(args.artificial)}, parent_to_children)
     logger.info(f"Found {len(artificial_taxids)} artificial taxids.")
     # Parse input TSV and write LCA information to output TSV
     logger.info("Parsing input TSV.")

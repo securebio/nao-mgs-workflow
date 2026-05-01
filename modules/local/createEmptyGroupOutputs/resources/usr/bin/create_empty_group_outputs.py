@@ -240,7 +240,7 @@ def main() -> None:
     args = parse_args()
     logger.info(f"Arguments: {args}")
     # Parse comma-separated groups
-    groups = set(g.strip() for g in args.missing_groups.split(",") if g.strip())
+    groups = {g.strip() for g in args.missing_groups.split(",") if g.strip()}
     if not groups:
         logger.info("No missing groups provided, nothing to create")
         return

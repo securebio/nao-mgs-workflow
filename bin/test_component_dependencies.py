@@ -97,9 +97,7 @@ def workflow_uses_subworkflow(workflow: str, subworkflow_path: str) -> bool:
         workflow_content = f.read()
 
     # Use word boundaries to preempt substring matches
-    if re.search(r"\b" + re.escape(subworkflow_dir) + r"\b", workflow_content):
-        return True
-    return False
+    return bool(re.search(r"\b" + re.escape(subworkflow_dir) + r"\b", workflow_content))
 
 
 def subworkflow_uses_subworkflow(subworkflow: str, dependent_subworkflow: str) -> bool:
@@ -110,11 +108,11 @@ def subworkflow_uses_subworkflow(subworkflow: str, dependent_subworkflow: str) -
         subworkflow_content = f.read()
 
     # Use word boundaries to preempt substring matches
-    if re.search(
-        r"\b" + re.escape(dependent_subworkflow_dir) + r"\b", subworkflow_content
-    ):
-        return True
-    return False
+    return bool(
+        re.search(
+            r"\b" + re.escape(dependent_subworkflow_dir) + r"\b", subworkflow_content
+        )
+    )
 
 
 def get_workflow_test(workflow: str) -> str:
@@ -297,7 +295,7 @@ def main() -> None:
         print(f"   • {test}")
     print("-" * 72)
 
-    result = subprocess.run(cmd)
+    subprocess.run(cmd)
 
 
 if __name__ == "__main__":

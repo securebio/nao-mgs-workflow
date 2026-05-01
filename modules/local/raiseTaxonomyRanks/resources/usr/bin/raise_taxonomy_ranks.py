@@ -106,8 +106,7 @@ def raise_rank(taxids: pd.Series, target_rank: str, db: pd.DataFrame) -> pd.Seri
     # Replace taxids above the target rank with pd.NA
     ranks_high = RANKS[RANKS.index(target_rank) + 1 :]
     ranks = db.loc[taxids, "rank"]
-    taxids_out = taxids.where(~ranks.isin(ranks_high), pd.NA)  # type: ignore[call-overload]
-    return taxids_out  # type: ignore[no-any-return]
+    return taxids.where(~ranks.isin(ranks_high), pd.NA)  # type: ignore[call-overload]
 
 
 def raise_rank_db(db: pd.DataFrame, target_rank: str) -> pd.DataFrame:
