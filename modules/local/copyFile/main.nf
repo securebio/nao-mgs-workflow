@@ -20,6 +20,7 @@ process COPY_FILE {
 process COPY_FILE_BARE {
     label "single"
     label "coreutils"
+    tag "id=util"
     input:
         path(file)
         val(outname)
