@@ -8,6 +8,7 @@
     - Drop the unused `start_time_str` parameter from `PREPARE_INPUT_LOGGING` (and its argument at the RUN call site); prefix the unused `sample` closure parameter in `splitViralTsvBySelectedTaxid` with `_`.
     - Use `sentinel_ch.sentinel` rather than `WRITE_SENTINEL_RUN.out.sentinel` in `workflows/run.nf:54` so the assigned variable is referenced.
 - Configure Ruff and apply behaviour-changing Ruff fixes in preparation for adding Ruff to CI.
+- Apply the broader mechanical Ruff sweep across the Python codebase (`ruff format` + `ruff check --fix`/`--unsafe-fixes` autofixes plus a few small manual cleanups). No behavioural changes.
 
 # v3.2.1.4
 
