@@ -343,11 +343,8 @@ def summarize_subgroup(
         subgroup.taxids, subgroup.taxids_classified, is_top_taxid, strict=True
     )
     for taxid, classified, is_top in taxids_lca_zip:
-        if (
-            top_taxid_classified
-            and classified
-            or not top_taxid_classified
-            and (classified or is_top)
+        if (top_taxid_classified and classified) or (
+            not top_taxid_classified and (classified or is_top)
         ):
             taxids_lca.add(taxid)
     lca, path_cache = find_lca_set(taxids_lca, child_to_parent, path_cache)

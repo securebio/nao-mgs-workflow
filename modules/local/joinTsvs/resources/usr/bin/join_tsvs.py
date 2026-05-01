@@ -250,7 +250,7 @@ def join_tsvs(
         is_empty_2 = not header_line_2
         # Handle empty file cases if needed
         if is_empty_1 or is_empty_2:
-            return handle_empty_files(
+            handle_empty_files(
                 file_1,
                 file_2,
                 is_empty_1,
@@ -260,6 +260,7 @@ def join_tsvs(
                 header_line_2,
                 output,
             )
+            return
         # Otherwise, process normally
         header_1 = header_line_1.split("\t")
         header_2 = header_line_2.split("\t")
@@ -466,7 +467,6 @@ def join_tsvs(
             line_2_next, row_2_next, id_2_next = get_line_id(file_2, field_index_2)
             logger.debug(f"Updated current line from file 2: {row_2_curr}, {id_2_curr}")
             logger.debug(f"Updated next line from file 2: {row_2_next}, {id_2_next}")
-    return None
 
 
 # =======================================================================
