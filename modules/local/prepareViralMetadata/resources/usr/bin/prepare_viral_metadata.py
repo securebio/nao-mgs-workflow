@@ -34,8 +34,9 @@ logger.addHandler(handler)
 
 def open_by_suffix(path: str, mode: str = "r") -> IO[str]:
     """Open a file, transparently handling .gz compression."""
-    f = gzip.open(path, mode + "t") if path.endswith(".gz") else open(path, mode)
-    return cast(IO[str], f)
+    if path.endswith(".gz"):
+        return cast(IO[str], gzip.open(path, mode + "t"))
+    return cast(IO[str], open(path, mode))
 
 
 def build_species_taxid_map(virus_db_path: str) -> dict[str, str]:
