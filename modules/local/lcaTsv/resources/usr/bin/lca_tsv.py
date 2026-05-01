@@ -307,7 +307,7 @@ def summarize_subgroup(
     # If top taxid is classified, exclude all unclassified taxids
     # Otherwise, exclude unclassified taxids that are not joint top in score
     taxids_lca = set()
-    taxids_lca_zip = zip(subgroup.taxids, subgroup.taxids_classified, is_top_taxid)
+    taxids_lca_zip = zip(subgroup.taxids, subgroup.taxids_classified, is_top_taxid, strict=True)
     for taxid, classified, is_top in taxids_lca_zip:
         if top_taxid_classified and classified:
             taxids_lca.add(taxid)

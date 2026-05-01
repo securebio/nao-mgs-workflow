@@ -131,7 +131,7 @@ def read_genbank_metadata(path: str) -> dict[str, tuple[str, str]]:
     gid_taxid_dict = {genome_id: (taxid, species_taxid)
                       for genome_id, taxid, species_taxid in
                       zip(meta_db["genome_id"],meta_db["taxid"],
-                          meta_db["species_taxid"])}
+                          meta_db["species_taxid"], strict=True)}
     return gid_taxid_dict
 
 def get_viral_taxids(path: str) -> set[str]:

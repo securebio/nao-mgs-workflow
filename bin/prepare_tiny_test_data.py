@@ -257,7 +257,7 @@ def interleave_paired_reads(r1_file: Path, r2_file: Path, output_file: Path, fil
         r2_records = SeqIO.parse(f2, file_format)
 
         interleaved_records = []
-        for rec1, rec2 in zip(r1_records, r2_records):
+        for rec1, rec2 in zip(r1_records, r2_records, strict=True):
             interleaved_records.append(rec1)
             interleaved_records.append(rec2)
 
