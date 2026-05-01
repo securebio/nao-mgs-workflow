@@ -80,6 +80,9 @@ exclude = [
     "__pycache__",
     "build",
     "dist",
+    ".venv",
+    "tmp",
+    "post-processing/deps",
 ]
 
 # Target Python version
