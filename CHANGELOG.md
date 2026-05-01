@@ -7,10 +7,7 @@
     - Restructure helper closures in `loadDownstreamData` and `clusterViralAssignments` to avoid top-level statements: in `loadDownstreamData`, convert the local `resolvePath`/`resolveDir` closures into top-level `def fn(...)` functions taking `input_base_dir` as an explicit parameter; in `clusterViralAssignments`, move the `listFiles` helper inside the workflow's `main:` block as a local closure.
     - Drop the unused `start_time_str` parameter from `PREPARE_INPUT_LOGGING` (and its argument at the RUN call site); prefix the unused `sample` closure parameter in `splitViralTsvBySelectedTaxid` with `_`.
     - Use `sentinel_ch.sentinel` rather than `WRITE_SENTINEL_RUN.out.sentinel` in `workflows/run.nf:54` so the assigned variable is referenced.
-- Configure Ruff and apply behaviour-changing Ruff fixes in preparation for adding Ruff to CI (a separate, mostly mechanical sweep follows in a follow-up PR). Configure `[tool.ruff]` for compatibility with `ruff format` (drop `COM` from `lint.select`, expand exclude list) and document the formatter in `docs/developer.md`. Three small behaviour changes worth flagging:
-    - Latent `B005` bug fix in `bin/prepare_tiny_test_data.py::upload_to_s3`: `s3_uri.lstrip("s3://")` was a character-set strip rather than a prefix strip, mangling bucket names whose first character was in `{s, 3, :, /}`. Replaced with `removeprefix("s3://")`. New `bin/test_prepare_tiny_test_data.py` covers the regression.
-    - All ten `B904` raises in `except` blocks now chain the original exception via `from e`, slightly changing traceback formatting on those error paths.
-    - All eight bare `zip()` calls switched to `strict=True`. Each site's equal-length invariant holds by construction, so this turns a silent-truncation failure mode into a loud `ValueError` if the invariant ever breaks.
+- Configure Ruff and apply behaviour-changing Ruff fixes in preparation for adding Ruff to CI.
 
 # v3.2.1.4
 
