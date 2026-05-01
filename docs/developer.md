@@ -138,6 +138,7 @@ You can run Python tools directly without installing them first:
 ```bash
 uv run pytest           # Run tests
 uv run ruff check .     # Lint code
+uv run ruff format .    # Auto-format code
 uv run mypy .           # Type checking
 ```
 
@@ -145,8 +146,9 @@ Alternatively, you can sync the environment once and then use the tools directly
 ```bash
 uv sync                 # Install all dependencies from pyproject.toml
 source .venv/bin/activate
-pytest                  
+pytest
 ruff check .
+ruff format .
 mypy .
 ```
 
