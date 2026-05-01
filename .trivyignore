@@ -85,3 +85,11 @@ CVE-2026-29111 exp:2026-06-30
 # Check for a Debian fix at:
 #   https://security-tracker.debian.org/tracker/CVE-2026-41989
 CVE-2026-41989 exp:2026-06-30
+
+# libcap2: TOCTOU race in cap_set_file() allowing local privilege escalation
+# (Debian status: affected, no fix available as of 2026-05-01)
+# Our pipeline containers run single-tenant Nextflow workloads — there is no
+# unprivileged user with write access to a parent directory of a setcap target,
+# which is the precondition for exploiting this race. Check for a Debian fix at:
+#   https://security-tracker.debian.org/tracker/CVE-2026-4878
+CVE-2026-4878 exp:2026-06-30
