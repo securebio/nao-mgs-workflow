@@ -32,6 +32,11 @@ These guidelines represent best practices to implement in new code, though some 
         - When a process's peak memory scales strongly with input size, the label's `memory` directive may be a closure over the process inputs — e.g. `memory = { ResourceTierUtils.pickMemoryTier(reads, ...) }`. See `bbmask_resources` and `ResourceTierUtils` in `configs/resources.config` for an example.
     - All processes should have a label specifying the Docker container to use (e.g. `label "BBTools"`). Containers are then specified in `configs/containers.config`.
     - Any processes that are used only for testing should have `label "testing"`.
+    - All processes should have a `tag` directive that identifies the task in the Nextflow trace. Tags use a `key=value` format with `,` as the separator between components, and `id` is always the first key:
+        - **Per-task processes** (one task per labeled input) use `tag "id=${sample}"` — substitute `${group}` or `${label}` to match the local input variable name.
+        - **Index-only single-shot processes** (one task per pipeline run, building or fetching index data) use `tag "id=index"`.
+        - **Index fan-out processes** (one task per item being fetched or built into the index, e.g. `BOWTIE2_INDEX`, `MINIMAP2_INDEX`, `DOWNLOAD_VIRAL_GENOMES`, `WGET`, `GET_TARBALL`, `DOWNLOAD_GENOME`) use a compound tag like `tag "id=index,name=${var}"`.
+        - **Workflow-level singletons** (sentinels, version checks, input logging) use `tag "id=util"`.
     - All processes should emit their input (for testing validation); use `ln -s` to link the input to the output.
     - Most processes have two output channels, `input` and `output`. If a process emits multiple types of output, use meaningful emit names describing the output types (e.g. `match`, `nomatch`, and `log` from `process BBDUK`).
     - Most, but not all, processes are *labeled* (input is a tuple of a sample name and file path). If input is labeled, output should also be labeled.
