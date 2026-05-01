@@ -1,5 +1,6 @@
 # v3.2.1.5-dev
 
+- Replace the `enumerateChildTaxa` module with `partitionTaxonSubtree`, which recursively partitions a taxon's subtree top-down and emits subtree-root taxids whose subtree sizes are at or below a configurable threshold. This avoids `DOWNLOAD_VIRAL_GENOMES` failures on taxa with very large dehydrated zips (notably Riboviria, taxid 2559587), by sharding such taxa into smaller download units. Adds a new `params.virus_taxid_max_partition_size` parameter (default 50000), threaded through `workflows/index.nf` and the `makeVirusGenomeDB` subworkflow.
 - Add CVE-2026-4878 (libcap2) and CVE-2026-33845 (libgnutls30) to `.trivyignore`; no Debian fix available for either, and neither is exercised by our pipeline.
 
 # v3.2.1.4

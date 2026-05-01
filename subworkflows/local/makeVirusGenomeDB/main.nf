@@ -2,7 +2,7 @@
 | MODULES AND SUBWORKFLOWS |
 ***************************/
 
-include { ENUMERATE_CHILD_TAXA } from "../../../modules/local/enumerateChildTaxa"
+include { PARTITION_TAXON_SUBTREE } from "../../../modules/local/partitionTaxonSubtree"
 include { DOWNLOAD_VIRAL_GENOMES } from "../../../modules/local/downloadViralGenomes"
 include { CONCATENATE_TSVS } from "../../../modules/local/concatenateTsvs"
 include { PREPARE_VIRAL_METADATA } from "../../../modules/local/prepareViralMetadata"
@@ -18,9 +18,10 @@ include { MASK_GENOME_FASTA } from "../../../modules/local/maskGenomeFasta"
 
 workflow MAKE_VIRUS_GENOME_DB {
     take:
-        virus_taxid // Taxid to enumerate child taxa for parallel genome downloads
+        virus_taxid // Root taxid for parallel genome downloads
         assembly_source // Assembly source: "genbank", "refseq", or "all"
         datasets_extra_args // Additional arguments passed to `datasets download genome taxon`
+        max_partition_size // Max subtree size (taxa count) per download shard
         virus_db // TSV giving taxonomic structure and host infection status of virus taxids
         taxonomy_nodes // NCBI taxonomy nodes.dmp file
         other_params // Map containing:
@@ -31,11 +32,11 @@ workflow MAKE_VIRUS_GENOME_DB {
                      // - entropy: entropy cutoff for bbduk filtering of low-complexity regions
                      // - polyx_len: minimum length of polyX runs to filter out with bbduk
     main:
-        // 1. Enumerate child taxa for parallel download
-        child_ch = ENUMERATE_CHILD_TAXA(taxonomy_nodes, virus_taxid)
-        child_taxids_ch = child_ch.taxids
+        // 1. Partition the taxonomic subtree into download shards
+        segment_ch = PARTITION_TAXON_SUBTREE(taxonomy_nodes, virus_taxid, max_partition_size)
+        child_taxids_ch = segment_ch.taxids
             .splitText().map { it.trim() }.filter { it }
-        // 2. Download genomes per child taxon in parallel
+        // 2. Download genomes per shard in parallel
         download_ch = DOWNLOAD_VIRAL_GENOMES(child_taxids_ch, assembly_source, datasets_extra_args, 5)
         // 3. Merge per-taxon metadata using existing CONCATENATE_TSVS
         concat_ch = CONCATENATE_TSVS(
