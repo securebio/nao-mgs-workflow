@@ -1,11 +1,11 @@
 #!/usr/bin/env python
 
-import pytest
 import gzip
 from pathlib import Path
 from typing import Any
 
 import join_tsvs
+import pytest
 
 
 class TestJoinTsvs:

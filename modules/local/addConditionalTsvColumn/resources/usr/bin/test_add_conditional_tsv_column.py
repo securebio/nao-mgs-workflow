@@ -2,9 +2,8 @@
 
 from typing import Any
 
-import pytest
-
 import add_conditional_tsv_column
+import pytest
 
 
 class TestAddConditionalColumn:

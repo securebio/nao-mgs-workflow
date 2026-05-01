@@ -2,10 +2,9 @@
 
 # Import modules
 import argparse
-import time
 import datetime
 import gzip
-import os
+import time
 from typing import IO, cast
 
 
@@ -20,8 +19,7 @@ def open_by_suffix(filename: str, mode: str = "r", debug: bool = False) -> IO[st
         print_log(f"\tGZIP mode: {filename.endswith('.gz')}")
     if filename.endswith(".gz"):
         return cast(IO[str], gzip.open(filename, mode + "t"))
-    else:
-        return open(filename, mode)
+    return open(filename, mode)
 
 
 def read_header(infile: IO[str]) -> list[str]:
@@ -48,7 +46,7 @@ def check_headers(header: list[str], reference_header: list[str]) -> bool:
     header_difference = hset ^ rset
     if not header_difference:
         return True
-    msg = f"Headers do not match:"
+    msg = "Headers do not match:"
     if rset - hset:
         msg += f"\n\tMissing fields: {rset - hset}"
     if hset - rset:
@@ -94,7 +92,7 @@ def concatenate_tsvs(input_files: list[str], out_path: str) -> None:
             return
 
         # Parse remaining files (after the first valid file) and write to output
-        print_log(f"\tProcessing other files:")
+        print_log("\tProcessing other files:")
         for input_path in input_files[first_valid_index + 1 :]:
             try:
                 with open_by_suffix(input_path) as inf:
@@ -143,7 +141,7 @@ def main() -> None:
     print_log("Starting process.")
     start_time = time.time()
     # Print parameters
-    print_log("Output TSV file: {}".format(out_path))
+    print_log(f"Output TSV file: {out_path}")
     print_log("Input TSV files:")
     for input_path in input_files:
         print_log(f"\t{input_path}")

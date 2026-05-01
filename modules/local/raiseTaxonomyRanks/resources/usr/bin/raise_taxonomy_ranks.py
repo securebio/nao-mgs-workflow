@@ -5,17 +5,17 @@
 # =======================================================================
 
 # Import libraries
-import pandas as pd
 import argparse
-from collections import defaultdict
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
+
+import pandas as pd
 
 
 # Configure logging
 class UTCFormatter(logging.Formatter):
     def formatTime(self, record: logging.LogRecord, datefmt: str | None = None) -> str:
-        dt = datetime.fromtimestamp(record.created, timezone.utc)
+        dt = datetime.fromtimestamp(record.created, UTC)
         return dt.strftime("%Y-%m-%d %H:%M:%S UTC")
 
 

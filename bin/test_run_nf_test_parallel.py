@@ -5,25 +5,25 @@ Unit tests for run-nf-test-parallel.py
 Run with: pytest bin/test_run-nf-test-parallel.py
 """
 
-import pytest
-from pathlib import Path
-from unittest.mock import patch, MagicMock
 import subprocess
 
 # Import functions from the script
 import sys
+from pathlib import Path
+from unittest.mock import MagicMock, patch
+
+import pytest
 
 sys.path.insert(0, str(Path(__file__).parent))
 from run_nf_test_parallel import (
-    find_test_files,
     divide_test_files,
-    extract_failures_from_output,
-    strip_ansi_codes,
     execute_subprocess,
+    extract_failures_from_output,
+    find_test_files,
     run_nf_test_worker,
-    update_plugins,
     run_parallel_tests,
-    write_test_log,
+    strip_ansi_codes,
+    update_plugins,
 )
 
 

@@ -11,12 +11,11 @@ return a new TSV containing either:
 # Import modules
 # =======================================================================
 
-import logging
-from datetime import datetime, timezone
 import argparse
-import time
 import gzip
-import io
+import logging
+import time
+from datetime import UTC, datetime
 from typing import IO, cast
 
 # =======================================================================
@@ -26,7 +25,7 @@ from typing import IO, cast
 
 class UTCFormatter(logging.Formatter):
     def formatTime(self, record: logging.LogRecord, datefmt: str | None = None) -> str:
-        dt = datetime.fromtimestamp(record.created, timezone.utc)
+        dt = datetime.fromtimestamp(record.created, UTC)
         return dt.strftime("%Y-%m-%d %H:%M:%S UTC")
 
 
@@ -83,8 +82,7 @@ def open_by_suffix(filename: str, mode: str = "r") -> IO[str]:
     logger.debug(f"\tGZIP mode: {filename.endswith('.gz')}")
     if filename.endswith(".gz"):
         return cast(IO[str], gzip.open(filename, mode + "t"))
-    else:
-        return open(filename, mode)
+    return open(filename, mode)
 
 
 # =======================================================================
@@ -111,9 +109,8 @@ def get_header_index(headers: list[str], field: str, mode: str = "keep") -> int 
         if mode == "keep":
             logger.error(msg)
             raise ValueError(msg) from e
-        else:
-            logger.warning(msg)
-            return None
+        logger.warning(msg)
+        return None
 
 
 def join_line(inputs: list[str]) -> str:

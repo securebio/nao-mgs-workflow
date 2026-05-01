@@ -2,13 +2,12 @@
 
 # Import modules
 import argparse
-import time
 import datetime
 import gzip
-from Bio import SeqIO
-from Bio import Seq
-import os
+import time
 from typing import IO, cast
+
+from Bio import Seq, SeqIO
 
 
 def print_log(message: str) -> None:
@@ -22,8 +21,7 @@ def open_by_suffix(filename: str, mode: str = "r", debug: bool = False) -> IO[st
         print_log(f"\tGZIP mode: {filename.endswith('.gz')}")
     if filename.endswith(".gz"):
         return cast(IO[str], gzip.open(filename, mode + "t"))
-    else:
-        return open(filename, mode)
+    return open(filename, mode)
 
 
 def join_paired_reads(
@@ -60,7 +58,7 @@ def join_paired_reads(
         for fwd, rev in r:
             if debug:
                 nread += 1
-                print_log("\t\tRead {}".format(nread))
+                print_log(f"\t\tRead {nread}")
             # Read in forward and reverse reads and generate joined sequence
             s1, q1 = str(fwd.seq), fwd.letter_annotations["phred_quality"]
             s2, q2 = (
@@ -121,10 +119,10 @@ def main() -> None:
     print_log("Starting process.")
     start_time = time.time()
     # Print parameters
-    print_log("Input reads file (interleaved): {}".format(reads_path))
-    print_log("Output reads file: {}".format(out_path))
-    print_log("Joining string: {}".format(gap))
-    print_log("Debug mode: {}".format(debug))
+    print_log(f"Input reads file (interleaved): {reads_path}")
+    print_log(f"Output reads file: {out_path}")
+    print_log(f"Joining string: {gap}")
+    print_log(f"Debug mode: {debug}")
     # Run joining function
     print_log("Joining reads...")
     join_paired_reads(

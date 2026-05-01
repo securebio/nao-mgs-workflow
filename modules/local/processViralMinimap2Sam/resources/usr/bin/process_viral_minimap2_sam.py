@@ -5,15 +5,14 @@ import gzip
 import logging
 import math
 import sys
-from typing import Any
 import tempfile
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
+from typing import Any
 
 import pandas as pd
 import pysam
 from Bio.Seq import Seq
-
 from sort_fastq import sort_fastq
 from sort_sam import sort_sam
 
@@ -23,7 +22,7 @@ class UTCFormatter(logging.Formatter):
 
     def formatTime(self, record: logging.LogRecord, datefmt: str | None = None) -> str:
         """Format log timestamps in UTC timezone."""
-        dt = datetime.fromtimestamp(record.created, timezone.utc)
+        dt = datetime.fromtimestamp(record.created, UTC)
         return dt.strftime("%Y-%m-%d %H:%M:%S UTC")
 
 

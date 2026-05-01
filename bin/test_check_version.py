@@ -1,16 +1,16 @@
 #!/usr/bin/env python3
 """Unit tests for check_version.py"""
 
-import pytest
+import sys
 from pathlib import Path
 
-import sys
+import pytest
 
 sys.path.insert(0, str(Path(__file__).parent))
 from check_version import (
-    validate_version,
-    get_pyproject_version,
     get_changelog_version,
+    get_pyproject_version,
+    validate_version,
 )
 
 

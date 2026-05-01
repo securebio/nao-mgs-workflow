@@ -1,9 +1,7 @@
 #!/usr/bin/env python
 
-from pathlib import Path
-
-import pytest
 import gzip
+from pathlib import Path
 
 import process_viral_bowtie2_sam
 

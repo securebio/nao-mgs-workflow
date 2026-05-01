@@ -2,14 +2,13 @@
 
 # TODO: Add unit tests for individual functions in a future pass
 
+import glob
+import os
 from pathlib import Path
 from typing import Any
 
-import pytest
-import os
-import glob
-
 import partition_tsv
+import pytest
 
 
 class TestPartitionTsv:
@@ -88,7 +87,7 @@ class TestPartitionTsv:
             assert partition_files[0] == "partition_3_input.tsv"
 
             # Check that output matches input
-            with open(partition_files[0], "r") as f:
+            with open(partition_files[0]) as f:
                 content = f.read()
             assert content == input_content
         finally:
@@ -119,15 +118,15 @@ class TestPartitionTsv:
             assert partition_files == expected_files
 
             # Check content of each partition
-            with open("partition_0_input.tsv", "r") as f:
+            with open("partition_0_input.tsv") as f:
                 content_0 = f.read()
             assert content_0 == "x\ty\tz\n0\t1\t2\n"
 
-            with open("partition_3_input.tsv", "r") as f:
+            with open("partition_3_input.tsv") as f:
                 content_3 = f.read()
             assert content_3 == "x\ty\tz\n3\t4\t5\n3\t5\t6\n"
 
-            with open("partition_6_input.tsv", "r") as f:
+            with open("partition_6_input.tsv") as f:
                 content_6 = f.read()
             assert content_6 == "x\ty\tz\n6\t7\t8\n"
         finally:

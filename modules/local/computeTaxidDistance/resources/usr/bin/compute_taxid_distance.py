@@ -12,14 +12,13 @@ in the corresponding distance column.
 # Import libraries
 # =======================================================================
 
-import logging
 import argparse
-from datetime import datetime, timezone
-import time
 import gzip
-from dataclasses import dataclass
+import logging
+import time
 from collections import defaultdict
-from typing import IO, TextIO, cast
+from datetime import UTC, datetime
+from typing import IO, cast
 
 # =======================================================================
 # Configure logging
@@ -28,7 +27,7 @@ from typing import IO, TextIO, cast
 
 class UTCFormatter(logging.Formatter):
     def formatTime(self, record: logging.LogRecord, datefmt: str | None = None) -> str:
-        dt = datetime.fromtimestamp(record.created, timezone.utc)
+        dt = datetime.fromtimestamp(record.created, UTC)
         return dt.strftime("%Y-%m-%d %H:%M:%S UTC")
 
 
@@ -86,8 +85,7 @@ def open_by_suffix(filename: str, mode: str = "r", debug: bool = False) -> IO[st
     to use, then open the file. Can handle .gz and uncompressed files."""
     if filename.endswith(".gz"):
         return cast(IO[str], gzip.open(filename, mode + "t"))
-    else:
-        return open(filename, mode)
+    return open(filename, mode)
 
 
 # =======================================================================

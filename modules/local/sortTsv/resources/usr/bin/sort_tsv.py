@@ -8,19 +8,18 @@ Sort a TSV file by a specific column header using GNU sort.
 # Import modules
 # =======================================================================
 
-import os
-import sys
-import gzip
 import argparse
-import subprocess
+import gzip
 import logging
-from datetime import datetime, timezone
-import time
-import tempfile
-import io
-from typing import IO, cast
-import shutil
 import math
+import os
+import shutil
+import subprocess
+import sys
+import tempfile
+import time
+from datetime import UTC, datetime
+from typing import IO, cast
 
 # =======================================================================
 # Configure logging
@@ -29,7 +28,7 @@ import math
 
 class UTCFormatter(logging.Formatter):
     def formatTime(self, record: logging.LogRecord, datefmt: str | None = None) -> str:
-        dt = datetime.fromtimestamp(record.created, timezone.utc)
+        dt = datetime.fromtimestamp(record.created, UTC)
         return dt.strftime("%Y-%m-%d %H:%M:%S UTC")
 
 
@@ -77,8 +76,7 @@ def open_by_suffix(filename: str, mode: str = "r") -> IO[str]:
     logger.debug(f"GZIP mode: {filename.endswith('.gz')}")
     if filename.endswith(".gz"):
         return cast(IO[str], gzip.open(filename, mode + "t"))
-    else:
-        return open(filename, mode)
+    return open(filename, mode)
 
 
 def process_header(header_line: str, sort_field: str) -> int | None:
@@ -92,7 +90,7 @@ def process_header(header_line: str, sort_field: str) -> int | None:
     """
     # Check if file is empty (no header)
     if not header_line:
-        logger.warning(f"Input file is empty. Creating empty output file.")
+        logger.warning("Input file is empty. Creating empty output file.")
         return None
     # Split the header line into fields
     header_fields = header_line.split("\t")
@@ -145,8 +143,8 @@ def sort_tsv_file(
         col_index = process_header(header, sort_field)
         if col_index is None:  # If no header, write empty output file
             return
-        else:  # Otherwise, write header to output
-            outfile.write(header + "\n")
+        # Otherwise, write header to output
+        outfile.write(header + "\n")
         # Check if there are any data rows by reading the first data line
         first_data_line = infile.readline().strip()
         if not first_data_line:  # If no data rows, stop here
@@ -238,5 +236,5 @@ def main() -> None:
 if __name__ == "__main__":
     try:
         main()
-    except Exception as e:
+    except Exception:
         sys.exit(1)

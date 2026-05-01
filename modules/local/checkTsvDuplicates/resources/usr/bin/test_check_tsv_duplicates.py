@@ -2,9 +2,8 @@
 
 from typing import Any
 
-import pytest
-
 import check_tsv_duplicates
+import pytest
 
 
 class TestCheckDuplicates:

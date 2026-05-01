@@ -2,9 +2,8 @@
 
 from typing import Any
 
-import pytest
-
 import add_fixed_column
+import pytest
 
 
 class TestAddColumn:

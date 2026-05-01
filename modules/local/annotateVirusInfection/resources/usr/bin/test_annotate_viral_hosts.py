@@ -47,31 +47,31 @@ State meanings:
 # Preamble
 # =======================================================================
 
-from pathlib import Path
-
-import pytest
-import pandas as pd
 import itertools
-from typing import Callable, TypeAlias, Protocol
+from collections.abc import Callable
+from pathlib import Path
+from typing import Protocol, TypeAlias
 
+import pandas as pd
+import pytest
 from annotate_viral_hosts import (
-    mark_ancestor_infections_single,
-    mark_direct_infections,
-    expand_taxid,
-    build_virus_tree,
-    mark_descendant_infections,
-    add_descendants,
-    exclude_infections,
-    mark_ancestor_infections,
-    get_host_taxids,
-    get_virus_host_mapping,
-    annotate_virus_db_single,
+    CONSISTENT,
     INCONSISTENT,
     MATCH,
-    UNCLEAR,
-    CONSISTENT,
-    UNRESOLVED,
     MAYBE_INCONSISTENT,
+    UNCLEAR,
+    UNRESOLVED,
+    add_descendants,
+    annotate_virus_db_single,
+    build_virus_tree,
+    exclude_infections,
+    expand_taxid,
+    get_host_taxids,
+    get_virus_host_mapping,
+    mark_ancestor_infections,
+    mark_ancestor_infections_single,
+    mark_descendant_infections,
+    mark_direct_infections,
 )
 
 # =======================================================================
@@ -176,8 +176,7 @@ def generate_test_id(params: tuple) -> str:
     if len(params) == 5:
         c1, c2, c3, initial_p, expected_p = params
         return f"children({c1},{c2},{c3})-init({initial_p})-expect({expected_p})"
-    else:
-        return str(params)
+    return str(params)
 
 
 # =======================================================================

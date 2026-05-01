@@ -2,9 +2,8 @@
 
 from typing import Any
 
-import pytest
-
 import head_tsv
+import pytest
 
 
 class TestAddHeaderLine:

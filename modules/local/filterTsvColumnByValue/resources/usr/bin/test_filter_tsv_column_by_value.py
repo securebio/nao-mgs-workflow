@@ -2,12 +2,11 @@
 
 # TODO: Add unit tests for individual functions in a future pass
 
+import logging
 from typing import Any
 
-import pytest
-import logging
-
 import filter_tsv_column_by_value
+import pytest
 
 
 class TestFilterTsvColumnByValue:
@@ -21,7 +20,7 @@ class TestFilterTsvColumnByValue:
         # Mock logger
         logger = logging.getLogger()
 
-        with open(input_file, "r") as inf, open(output_file, "w") as outf:
+        with open(input_file) as inf, open(output_file, "w") as outf:
             filter_tsv_column_by_value.stream_and_filter_tsv(
                 inf,
                 outf,
@@ -42,7 +41,7 @@ class TestFilterTsvColumnByValue:
 
         logger = logging.getLogger()
 
-        with open(input_file, "r") as inf, open(output_file, "w") as outf:
+        with open(input_file) as inf, open(output_file, "w") as outf:
             filter_tsv_column_by_value.stream_and_filter_tsv(
                 inf, outf, "x", "test_value", keep_matching=True, logger=logger
             )
@@ -58,18 +57,21 @@ class TestFilterTsvColumnByValue:
 
         logger = logging.getLogger()
 
-        with pytest.raises(
-            ValueError, match="Column 'nonexistent_column' not found in header"
+        with (
+            pytest.raises(
+                ValueError, match="Column 'nonexistent_column' not found in header"
+            ),
+            open(input_file) as inf,
+            open(output_file, "w") as outf,
         ):
-            with open(input_file, "r") as inf, open(output_file, "w") as outf:
-                filter_tsv_column_by_value.stream_and_filter_tsv(
-                    inf,
-                    outf,
-                    "nonexistent_column",
-                    "false",
-                    keep_matching=True,
-                    logger=logger,
-                )
+            filter_tsv_column_by_value.stream_and_filter_tsv(
+                inf,
+                outf,
+                "nonexistent_column",
+                "false",
+                keep_matching=True,
+                logger=logger,
+            )
 
     def test_filter_keep_no_rows(self, tsv_factory: Any) -> None:
         """Test filtering that removes all rows (keep_matching=True, no matching values)."""
@@ -79,7 +81,7 @@ class TestFilterTsvColumnByValue:
 
         logger = logging.getLogger()
 
-        with open(input_file, "r") as inf, open(output_file, "w") as outf:
+        with open(input_file) as inf, open(output_file, "w") as outf:
             filter_tsv_column_by_value.stream_and_filter_tsv(
                 inf,
                 outf,
@@ -104,7 +106,7 @@ class TestFilterTsvColumnByValue:
 
         logger = logging.getLogger()
 
-        with open(input_file, "r") as inf, open(output_file, "w") as outf:
+        with open(input_file) as inf, open(output_file, "w") as outf:
             filter_tsv_column_by_value.stream_and_filter_tsv(
                 inf,
                 outf,
@@ -130,7 +132,7 @@ class TestFilterTsvColumnByValue:
 
         logger = logging.getLogger()
 
-        with open(input_file, "r") as inf, open(output_file, "w") as outf:
+        with open(input_file) as inf, open(output_file, "w") as outf:
             filter_tsv_column_by_value.stream_and_filter_tsv(
                 inf,
                 outf,
@@ -161,7 +163,7 @@ class TestFilterTsvColumnByValue:
         input_file = tsv_factory.create_plain("input.tsv", input_content)
         output_file = tsv_factory.get_path("output.tsv")
         logger = logging.getLogger()
-        with open(input_file, "r") as inf, open(output_file, "w") as outf:
+        with open(input_file) as inf, open(output_file, "w") as outf:
             filter_tsv_column_by_value.stream_and_filter_tsv(
                 inf, outf, "x", '"0"', keep_matching=True, logger=logger
             )

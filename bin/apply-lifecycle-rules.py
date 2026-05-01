@@ -2,15 +2,16 @@
 
 import argparse
 import json
-import boto3
 import sys
 from typing import Any
+
+import boto3
 from botocore.exceptions import ClientError
 
 
 def load_lifecycle_config(config_path: str) -> dict[str, Any]:
     try:
-        with open(config_path, "r") as f:
+        with open(config_path) as f:
             result: dict[str, Any] = json.load(f)
             return result
     except json.JSONDecodeError:

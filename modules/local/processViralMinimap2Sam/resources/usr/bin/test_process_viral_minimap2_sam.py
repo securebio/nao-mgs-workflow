@@ -6,8 +6,8 @@ import math
 from pathlib import Path
 from typing import Any
 
-import pytest
 import process_viral_minimap2_sam
+import pytest
 
 
 @pytest.fixture
@@ -306,8 +306,8 @@ class TestProcessSam:
         """Integration test: unsorted gzipped inputs are sorted then processed."""
         genbank_metadata, viral_taxids = ref_data
 
-        from sort_sam import sort_sam
         from sort_fastq import sort_fastq
+        from sort_sam import sort_sam
 
         # Unsorted gzipped SAM
         sam_gz = tmp_path / "unsorted.sam.gz"

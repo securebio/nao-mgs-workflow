@@ -2,10 +2,9 @@
 
 # Import modules
 import argparse
-import time
 import datetime
 import gzip
-import os
+import time
 from typing import IO, cast
 
 
@@ -20,8 +19,7 @@ def open_by_suffix(filename: str, mode: str = "r", debug: bool = False) -> IO[st
         print_log(f"\tGZIP mode: {filename.endswith('.gz')}")
     if filename.endswith(".gz"):
         return cast(IO[str], gzip.open(filename, mode + "t"))
-    else:
-        return open(filename, mode)
+    return open(filename, mode)
 
 
 def read_line(file: IO[str]) -> list[str] | None:
@@ -94,8 +92,8 @@ def main() -> None:
     print_log("Starting process.")
     start_time = time.time()
     # Print parameters
-    print_log("Input TSV file: {}".format(input_path))
-    print_log("Partition column header: {}".format(column))
+    print_log(f"Input TSV file: {input_path}")
+    print_log(f"Partition column header: {column}")
     # Run labeling function
     print_log("Partitioning TSV file...")
     partition(input_path, column)

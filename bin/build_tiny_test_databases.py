@@ -11,13 +11,14 @@ import argparse
 import gzip
 import logging
 import re
+import shutil
 import subprocess
 import tempfile
-import shutil
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import IO
 from urllib.request import urlopen
+
 import boto3
 
 ###########
@@ -30,7 +31,7 @@ class UTCFormatter(logging.Formatter):
 
     def formatTime(self, record: logging.LogRecord, datefmt: str | None = None) -> str:
         """Format log timestamps in UTC timezone."""
-        dt = datetime.fromtimestamp(record.created, timezone.utc)
+        dt = datetime.fromtimestamp(record.created, UTC)
         return dt.strftime("%Y-%m-%d %H:%M:%S UTC")
 
 
@@ -128,8 +129,7 @@ def open_by_suffix(filename: str | Path, mode: str = "r") -> IO[str]:
     filename_str = str(filename)
     if filename_str.endswith(".gz"):
         return gzip.open(filename_str, mode + "t")  # type: ignore[return-value]
-    else:
-        return open(filename_str, mode)
+    return open(filename_str, mode)
 
 
 def add_sequence_to_kraken_library(fasta_path: Path, db_path: Path) -> None:

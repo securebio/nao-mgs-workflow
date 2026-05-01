@@ -32,7 +32,7 @@ import subprocess
 import time
 from collections.abc import Generator
 from contextlib import contextmanager
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 ###########
@@ -44,7 +44,7 @@ class UTCFormatter(logging.Formatter):
     """Custom logging formatter that displays timestamps in UTC."""
 
     def formatTime(self, record: logging.LogRecord, datefmt: str | None = None) -> str:
-        dt = datetime.fromtimestamp(record.created, timezone.utc)
+        dt = datetime.fromtimestamp(record.created, UTC)
         return dt.strftime("%Y-%m-%d %H:%M:%S UTC")
 
 

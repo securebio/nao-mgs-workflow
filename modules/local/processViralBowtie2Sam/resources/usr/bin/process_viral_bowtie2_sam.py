@@ -9,18 +9,19 @@ Given a sorted Bowtie2 SAM file, extract information about the alignments and wr
 # =======================================================================
 
 # Import modules
-import logging
-from datetime import datetime, timezone
-import sys
-import re
 import argparse
-import pandas as pd
-import time
 import gzip
+import logging
 import math
+import re
+import sys
+import time
+from collections.abc import Sequence
+from datetime import UTC, datetime
+from typing import IO, cast
+
+import pandas as pd
 from Bio import Seq
-import io
-from typing import IO, Sequence, cast
 
 # Type alias for SAM field dictionaries that contain mixed value types
 type FieldValue = str | int | bool | float | None
@@ -93,7 +94,7 @@ SAM_HEADERS_UNPAIRED = [
 
 class UTCFormatter(logging.Formatter):
     def formatTime(self, record: logging.LogRecord, datefmt: str | None = None) -> str:
-        dt = datetime.fromtimestamp(record.created, timezone.utc)
+        dt = datetime.fromtimestamp(record.created, UTC)
         return dt.strftime("%Y-%m-%d %H:%M:%S UTC")
 
 
@@ -124,8 +125,7 @@ def open_by_suffix(filename: str, mode: str = "r") -> IO[str]:
     logger.debug(f"\tGZIP mode: {filename.endswith('.gz')}")
     if filename.endswith(".gz"):
         return cast(IO[str], gzip.open(filename, mode + "t"))
-    else:
-        return open(filename, mode)
+    return open(filename, mode)
 
 
 def parse_args() -> argparse.Namespace:
@@ -225,7 +225,7 @@ def write_sam_headers(out_file: IO[str], paired: bool) -> None:
     header_line = join_line(headers)
     logger.debug(f"Writing header line: {header_line}")
     out_file.write(header_line)
-    return None
+    return
 
 
 def get_next_alignment(sam_file: IO[str]) -> str | None:
@@ -307,7 +307,7 @@ def extract_option(
         return default
     assert len(fields) == 1, f"Multiple fields found for {query_value}: {fields}"
     field = fields[0]
-    pattern = "{}:.:(.*)".format(query_value)
+    pattern = f"{query_value}:.:(.*)"
     out_value: str = re.findall(pattern, field)[0]
     return out_value
 
@@ -349,7 +349,7 @@ def extract_viral_taxid(
             return species_taxid
         return taxid
     except KeyError as e:
-        msg = "No matching genome ID found: {}".format(genome_id)
+        msg = f"No matching genome ID found: {genome_id}"
         logger.error(msg)
         raise ValueError(msg) from e
 
@@ -670,9 +670,9 @@ def check_pair_status(line_dict: FieldDict, paired: bool) -> None:
     pair_status = line_dict["pair_status"]
     if pair_status not in ["UU", "UP", "CP", "DP"]:
         raise ValueError(f"Invalid pair status: {line_dict['seq_id']}, {pair_status}")
-    elif paired and pair_status == "UU":
+    if paired and pair_status == "UU":
         raise ValueError(f"Unpaired read in paired SAM file: {line_dict['seq_id']}")
-    elif not paired and pair_status != "UU":
+    if not paired and pair_status != "UU":
         raise ValueError(f"Paired read in unpaired SAM file: {line_dict['seq_id']}")
 
 

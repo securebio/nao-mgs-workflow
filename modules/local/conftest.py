@@ -118,12 +118,12 @@ def temp_file_helper() -> Generator[Any, None, None]:
 
         def read_file(self, filepath: str) -> str:
             """Read content from a file."""
-            with open(filepath, "r") as f:
+            with open(filepath) as f:
                 return f.read()
 
         def read_tsv_lines(self, filepath: str) -> list[str]:
             """Read TSV file and return lines as a list."""
-            with open(filepath, "r") as f:
+            with open(filepath) as f:
                 return [line.strip() for line in f if line.strip()]
 
         def get_path(self, filename: str) -> str:

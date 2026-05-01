@@ -5,9 +5,8 @@
 
 from typing import Any
 
-import pytest
-
 import compute_taxid_distance
+import pytest
 
 
 class TestComputeTaxidDistance:

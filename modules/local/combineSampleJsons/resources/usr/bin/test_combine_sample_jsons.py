@@ -4,9 +4,8 @@ import json
 from pathlib import Path
 from unittest.mock import patch
 
-import pytest
-
 import combine_sample_jsons
+import pytest
 
 
 class TestExtractSampleName:
