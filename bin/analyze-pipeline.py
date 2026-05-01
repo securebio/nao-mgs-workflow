@@ -143,8 +143,7 @@ class NextflowAnalyzer:
 
     def _analyze_dependencies(self) -> None:
         """Extract dependencies from workflows in pipeline."""
-        for workflow_name in self.workflows:
-            workflow = self.workflows[workflow_name]
+        for workflow_name, workflow in self.workflows.items():
             self.workflow_dependencies[workflow.name] = {
                 "modules": set(),
                 "processes": set(),
@@ -199,8 +198,7 @@ class NextflowAnalyzer:
         unused_processes = {
             name for name in self.standalone_processes if name not in used_processes
         }
-        for module_name in self.modules:
-            module = self.modules[module_name]
+        for module in self.modules.values():
             unused_processes.update(
                 [name for name in module.processes if name not in used_processes]
             )
