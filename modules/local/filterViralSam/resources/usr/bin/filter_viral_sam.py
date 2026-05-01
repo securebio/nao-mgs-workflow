@@ -404,9 +404,10 @@ def group_secondary_alignments(
     # Check pair status - all secondary alignments within a read id must have the same pair status
     pair_status = alignments[0].pair_status
     # Check that all secondary alignments have the same pair status
+    pair_statuses = {a.pair_status for a in alignments}
     assert all(a.pair_status == pair_status for a in alignments), (
         "All secondary alignments for a single read ID must share the same "
-        f"pair_status. Found: { {a.pair_status for a in alignments} }"
+        f"pair_status. Found: {pair_statuses}"
     )
     if pair_status == "UP":
         return group_unpaired_alignments(alignments)
