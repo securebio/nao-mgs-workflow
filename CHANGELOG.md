@@ -1,6 +1,6 @@
 # v3.2.1.5-dev
 
-- Add `tag "id=<value>"` directives to nearly all `modules/local/` processes for per-task attribution in trace files and Nextflow logs.
+- Add `tag "id=<value>"` directives to all `modules/local/` processes for per-task attribution in trace files and Nextflow logs.
     - Per-task processes use `id=${sample/group/label}`; index work uses `id=index` (with optional `,name=<x>` for fan-outs); workflow-level singletons use `id=util`.
     - Drop `env` from `trace.fields` in both logging configs (env values contain literal newlines that break TSV parsing).
     - Add an `assertTraceTagsValid` helper to RUN and DOWNSTREAM workflow tests asserting every trace row has a well-formed `id=...` tag.
