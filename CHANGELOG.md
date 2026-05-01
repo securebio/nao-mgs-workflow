@@ -1,5 +1,6 @@
 # v3.2.1.5-dev
 
+- Add CVE-2026-4878 (libcap2 TOCTOU in `cap_set_file()`) to `.trivyignore` (no Debian fix currently available; expiry set in June 2026 to force review).
 - Clean up Nextflow code to conform to strict syntax in preparation for adding `nextflow lint` to CI. No behavioral changes.
     - Replace `env BAREWORD` with `env('STRING')` in process output declarations.
     - Rename deprecated `Channel.X` factory calls to `channel.X`.
