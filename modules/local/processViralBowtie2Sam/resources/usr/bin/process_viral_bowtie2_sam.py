@@ -283,7 +283,7 @@ def extract_viral_taxid(genome_id: str,
     except KeyError:
         msg = "No matching genome ID found: {}".format(genome_id)
         logger.error(msg)
-        raise ValueError(msg)
+        raise ValueError(msg) from None
 
 def process_sam_alignment(sam_line: str,
                           genbank_metadata: dict[str, tuple[str, str]],

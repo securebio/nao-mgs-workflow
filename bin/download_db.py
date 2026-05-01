@@ -105,7 +105,7 @@ def file_lock(lock_file: Path, timeout_seconds: float | None = None) -> Generato
                     if time.time() - start_time >= timeout_seconds:
                         raise TimeoutError(
                             f"Timed out waiting for lock after {timeout_seconds} seconds"
-                        )
+                        ) from None
                     time.sleep(0.1)
         else:
             fcntl.flock(f, fcntl.LOCK_EX)
