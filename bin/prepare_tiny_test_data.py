@@ -295,6 +295,25 @@ def gzip_file(local_file: Path, gzip_file: Path) -> None:
             f_out.write(f_in.read())
     logger.info(f"Gzipped {local_file.name} to {gzip_file.name}.")
 
+def parse_s3_uri(s3_uri: str, default_key: str) -> Tuple[str, str]:
+    """
+    Parse an `s3://bucket/key` URI into its (bucket, key) parts.
+    If the URI has no key portion, returns ``default_key`` as the key.
+    Args:
+        s3_uri (str): Full S3 URI (must start with `s3://`).
+        default_key (str): Key to use when the URI omits one.
+    Returns:
+        Tuple[str, str]: (bucket, key)
+    Raises:
+        ValueError: If ``s3_uri`` does not start with `s3://`.
+    """
+    if not s3_uri.startswith("s3://"):
+        raise ValueError(f"Invalid S3 URI: {s3_uri}")
+    parts = s3_uri.removeprefix("s3://").rstrip("/").split("/", 1)
+    bucket = parts[0]
+    key = parts[1] if len(parts) > 1 else default_key
+    return bucket, key
+
 def upload_to_s3(local_file: Path, s3_uri: str) -> None:
     """
     Upload a file to S3.
@@ -302,12 +321,7 @@ def upload_to_s3(local_file: Path, s3_uri: str) -> None:
         local_file (Path): Path to local file to upload
         s3_uri (str): Full S3 URI (e.g., s3://bucket/key)
     """
-    # Parse S3 URI
-    if not s3_uri.startswith("s3://"):
-        raise ValueError(f"Invalid S3 URI: {s3_uri}")
-    parts = s3_uri.lstrip("s3://").rstrip("/").split("/", 1)
-    bucket = parts[0]
-    key = parts[1] if len(parts) > 1 else local_file.name
+    bucket, key = parse_s3_uri(s3_uri, default_key=local_file.name)
     s3_client = boto3.client('s3')
     try:
         logger.info(f"Uploading {local_file.name} to {s3_uri}...")
