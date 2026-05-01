@@ -2,6 +2,7 @@ process DOWNLOAD_BLAST_DB {
     label "BLAST"
     label "xsmall"
     errorStrategy "terminate"
+    tag "id=index"
     input:
         val(db)
     output:

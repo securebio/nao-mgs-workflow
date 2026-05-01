@@ -2,6 +2,7 @@
 process FASTP {
     label "small"
     label "fastp"
+    tag "id=${sample}"
     input:
         tuple val(sample), path(reads)
         path(adapters)

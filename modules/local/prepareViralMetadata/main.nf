@@ -2,6 +2,7 @@
 process PREPARE_VIRAL_METADATA {
     label "python"
     label "single_cpu_16GB_memory"
+    tag "id=index"
     input:
         path(merged_metadata)
         path(virus_db)

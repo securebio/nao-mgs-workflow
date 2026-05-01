@@ -3,6 +3,7 @@
 process CONVERT_FASTQ_FASTA {
     label "single"
     label "seqtk"
+    tag "id=${sample}"
     input:
         tuple val(sample), path(fastqs)
     output:

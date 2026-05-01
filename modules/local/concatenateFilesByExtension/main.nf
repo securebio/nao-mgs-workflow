@@ -6,6 +6,7 @@ then concatenate them into a single file with the same extension.
 process CONCATENATE_FILES_BY_EXTENSION {
     label "single"
     label "coreutils"
+    tag "id=${label}"
     input:
         tuple val(label), path(files)
         val(name)

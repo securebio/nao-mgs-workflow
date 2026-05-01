@@ -19,6 +19,7 @@ process CONCATENATE_TSVS {
 process CONCATENATE_TSVS_LABELED {
     label "python"
     label "single"
+    tag "id=${label}"
     input:
         tuple val(label), path(tsvs)
         val(name)

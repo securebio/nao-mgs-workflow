@@ -3,6 +3,7 @@
 process INTERLEAVE_FASTQ {
     label "single"
     label "coreutils_gzip_gawk"
+    tag "id=${sample}"
     input:
         tuple val(sample), path(reads)
     output:

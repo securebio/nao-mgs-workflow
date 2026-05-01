@@ -2,6 +2,7 @@
 process ADD_GENBANK_GENOME_IDS {
     label "biopython"
     label "single"
+    tag "id=index"
     input:
         path(genbank_metadata)
         path(genbank_genomes)

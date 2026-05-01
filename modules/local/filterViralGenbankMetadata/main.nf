@@ -2,6 +2,7 @@
 process FILTER_VIRAL_GENBANK_METADATA {
     label "single"
     label "pandas"
+    tag "id=index"
     input:
         path(metadata_db)
         path(virus_db)

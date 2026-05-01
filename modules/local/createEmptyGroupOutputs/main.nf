@@ -2,6 +2,7 @@
 process CREATE_EMPTY_GROUP_OUTPUTS {
     label "python"
     label "single"
+    tag "id=util"
     input:
         val(missing_groups)
         path(pyproject_toml)

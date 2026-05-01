@@ -2,6 +2,7 @@
 process CONCATENATE_GENOME_FASTA {
     label "single"
     label "seqtk"
+    tag "id=index"
     input:
         path(genome_dir)
         path(path_file)

@@ -2,6 +2,7 @@
 process SORT_FASTQ {
     label "coreutils"
     label "single"
+    tag "id=${sample}"
     input:
         tuple val(sample), path(fastq) // Interleaved or single-end
     output:

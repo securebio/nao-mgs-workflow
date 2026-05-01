@@ -3,6 +3,7 @@
 process JOIN_FASTQ {
     label "biopython"
     label "single"
+    tag "id=${sample}"
     input:
         tuple val(sample), path(reads) // Merged single reads, then unmerged interleaved
         val(debug)
@@ -32,6 +33,7 @@ process JOIN_FASTQ {
 process JOIN_FASTQ_LIST {
     label "biopython"
     label "single"
+    tag "id=${sample}"
     input:
         tuple val(sample), path(merged_reads), path(unmerged_reads)
         val(debug)

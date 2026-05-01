@@ -2,6 +2,7 @@
 process GET_RUN_OUTPUT_SUFFIXES {
     label "python"
     label "single"
+    tag "id=util"
     input:
         path(pyproject)
         val(platform)

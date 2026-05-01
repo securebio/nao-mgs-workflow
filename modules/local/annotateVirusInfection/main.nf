@@ -2,6 +2,7 @@
 process ANNOTATE_VIRUS_INFECTION {
     label "single"
     label "pandas"
+    tag "id=index"
     input:
         path(virus_db)
         path(host_db)

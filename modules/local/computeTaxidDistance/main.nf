@@ -14,6 +14,7 @@ The input map process_params should specify the following fields:
 process COMPUTE_TAXID_DISTANCE {
     label "python"
     label "single"
+    tag "id=${sample}"
     input:
         tuple val(sample), path(tsv) // Sorted TSV with two taxid columns
         val(process_params) // Map specifying input taxid fields and output distance fields

@@ -2,6 +2,7 @@
 process BBDUK {
     label "small"
     label "BBTools"
+    tag "id=${sample}"
     input:
         tuple val(sample), path(reads) // Interleaved or single-end
         path(contaminant_ref)
@@ -31,6 +32,7 @@ process BBDUK {
 process BBDUK_HITS_INTERLEAVE {
     label "small"
     label "BBTools"
+    tag "id=${sample}"
     input:
         tuple val(sample), path(reads)
         path(contaminant_ref)

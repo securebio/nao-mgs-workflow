@@ -2,6 +2,7 @@
 process ADD_SAMPLE_COLUMN {
     label "python"
     label "single"
+    tag "id=${sample}"
     input:
         tuple val(sample), path(tsv)
         val(sample_column)
@@ -21,6 +22,7 @@ process ADD_SAMPLE_COLUMN {
 process ADD_SAMPLE_COLUMN_LIST {
     label "python"
     label "single"
+    tag "id=${group}"
     input:
         tuple val(group), path(tsvs)
         val(sample_column)

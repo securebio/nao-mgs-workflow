@@ -1,6 +1,7 @@
 process EXTRACT_VIRAL_HITS_TO_FASTQ_NOREF_LABELED_LIST {
     label "python"
     label "single"
+    tag "id=${sample}"
     input:
         tuple val(sample), path(tsvs)
         val(drop_unpaired)

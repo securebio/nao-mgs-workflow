@@ -2,6 +2,7 @@
 process DOWNLOAD_GENOME {
     label "BBTools"
     label "single"
+    tag "id=index,name=${name}"
     input:
         tuple val(genome_url), val(name)
     output:

@@ -2,6 +2,7 @@
 process FILTER_VIRAL_SAM {
     label "biopython"
     label "single"
+    tag "id=${sample}"
     input:
         tuple val(sample), path(sam), path(contaminant_free_reads)
         val(score_threshold)

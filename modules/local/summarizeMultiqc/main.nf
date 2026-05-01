@@ -2,6 +2,7 @@
 process SUMMARIZE_MULTIQC {
     label "rpkg"
     label "single"
+    tag "id=${sample},stage=${stage}"
     input:
         tuple val(stage), val(sample), path(multiqc_data)
         val(single_end)

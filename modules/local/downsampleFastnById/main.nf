@@ -2,6 +2,7 @@
 process DOWNSAMPLE_FASTN_BY_ID_LIST {
     label "seqkit"
     label "single"
+    tag "id=${sample}"
     input:
         tuple val(sample), path(fastn), path(ids)
     output:

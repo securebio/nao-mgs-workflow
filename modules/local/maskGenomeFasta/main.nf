@@ -2,6 +2,7 @@
 process MASK_GENOME_FASTA {
     label "large"
     label "BBTools"
+    tag "id=index"
     input:
         path(filtered_genomes)
         path(adapters)

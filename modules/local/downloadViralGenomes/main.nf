@@ -2,6 +2,7 @@
 process DOWNLOAD_VIRAL_GENOMES {
     label "ncbi_datasets"
     label "large"
+    tag "id=index,name=${taxid}"
     input:
         val(taxid)
         val(assembly_source)

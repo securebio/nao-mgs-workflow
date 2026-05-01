@@ -2,6 +2,7 @@
 process COMBINE_SAMPLE_JSONS {
     label "python"
     label "single"
+    tag "id=${group}"
     input:
         tuple val(group), path(json_files)
         val(suffix)
