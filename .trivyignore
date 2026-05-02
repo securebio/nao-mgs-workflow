@@ -92,3 +92,12 @@ CVE-2026-41989 exp:2026-06-30
 # Check for a Debian fix at:
 #   https://security-tracker.debian.org/tracker/CVE-2026-4878
 CVE-2026-4878 exp:2026-06-30
+
+# libgnutls30: DoS / out-of-bounds read in DTLS handshake fragment reassembly
+# (fixed upstream in GnuTLS 3.8.13; Debian bookworm still ships 3.7.9 with no
+# backport as of 2026-05-02). DTLS-only — TLS over TCP does not exercise the
+# vulnerable reassembly path. Our containers do not run DTLS endpoints; they
+# only make outbound HTTPS-over-TCP calls, so the affected code is unreachable.
+# Check for a Debian fix at:
+#   https://security-tracker.debian.org/tracker/CVE-2026-33845
+CVE-2026-33845 exp:2026-06-30

@@ -1,6 +1,6 @@
 # v3.2.1.5-dev
 
-- Add CVE-2026-4878 (libcap2) to `.trivyignore`; no Debian fix available and not exercised by our pipeline.
+- Add CVE-2026-4878 (libcap2) and CVE-2026-33845 (libgnutls30) to `.trivyignore`; no Debian fix available for either, and neither is exercised by our pipeline.
 
 # v3.2.1.4
 
