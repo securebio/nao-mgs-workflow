@@ -1,3 +1,7 @@
+# v3.2.1.5-dev
+
+- Reserve CPUs for streaming pipeline processes in BBDuk to prevent thread thrashing, and add a new `medium` resource label (12 CPU, 24 GB).
+
 # v3.2.1.4
 
 - Tolerate viral taxa with no linked NCBI assemblies in `DOWNLOAD_VIRAL_GENOMES`, emitting a header-only `${taxid}_metadata.tsv` and an empty `${taxid}_genomes/` (now declared `optional`).

@@ -12,6 +12,8 @@ process BBDUK {
         tuple val(sample), path("${sample}_${params_map.suffix}_bbduk.stats.txt"), emit: log
         tuple val(sample), path("input_${reads}"), emit: input
     script:
+        // Reserve CPUs for the streaming pipeline (zcat) to avoid thrashing
+        def threads = Math.max(1, task.cpus - 2)
         def extractCmd = reads.toString().endsWith(".gz") ? "zcat" : "cat"
         def op = "${sample}_${params_map.suffix}_bbduk_nomatch.fastq.gz"
         def of = "${sample}_${params_map.suffix}_bbduk_match.fastq.gz"
@@ -19,7 +21,7 @@ process BBDUK {
         def ref = "${contaminant_ref}"
         def il = params_map.interleaved ? 't' : 'f'
         def io = "in=stdin.fastq ref=${ref} out=${op} outm=${of} stats=${stats} interleaved=${il}"
-        def par = "minkmerfraction=${params_map.min_kmer_fraction} k=${params_map.k} t=${task.cpus} -Xmx${task.memory.toGiga()}g"
+        def par = "minkmerfraction=${params_map.min_kmer_fraction} k=${params_map.k} t=${threads} -Xmx${task.memory.toGiga()}g"
         """
         ${extractCmd} ${reads} | bbduk.sh ${io} ${par}
         ln -s ${reads} input_${reads}
@@ -29,7 +31,7 @@ process BBDUK {
 // Streamed version of BBDUK_HITS that returns an interleaved file
 // Uses minkmerhits instead of minkmerfraction
 process BBDUK_HITS_INTERLEAVE {
-    label "small"
+    label "medium"
     label "BBTools"
     input:
         tuple val(sample), path(reads)
@@ -41,6 +43,8 @@ process BBDUK_HITS_INTERLEAVE {
         tuple val(sample), path("${sample}_${params_map.suffix}_bbduk_fail.fastq.gz"), emit: fail
         tuple val(sample), path("${sample}_${params_map.suffix}_bbduk.stats.txt"), emit: log
     script:
+        // Reserve CPUs for the streaming pipeline (2x zcat, paste/tr) to avoid thrashing
+        def threads = Math.max(1, task.cpus - 4)
         def extractCmd = reads.toString().endsWith(".gz") ? "zcat" : "cat"
         def in1 = "${reads[0]}"
         def in2 = "${reads[1]}"
@@ -49,7 +53,7 @@ process BBDUK_HITS_INTERLEAVE {
         def stats = "${sample}_${params_map.suffix}_bbduk.stats.txt"
         def ref = "${contaminant_ref}"
         def io = "in=stdin.fastq ref=${ref} out=${op} outm=${of} stats=${stats}"
-        def par = "minkmerhits=${params_map.min_kmer_hits} k=${params_map.k} interleaved=t t=${task.cpus} -Xmx${task.memory.toGiga()}g"
+        def par = "minkmerhits=${params_map.min_kmer_hits} k=${params_map.k} interleaved=t t=${threads} -Xmx${task.memory.toGiga()}g"
         """
         # Execute
         paste <(${extractCmd} ${in1} | paste - - - - ) <(${extractCmd} ${in2} | paste - - - -) | tr "\t" "\n" | bbduk.sh ${io} ${par}
