@@ -1,6 +1,6 @@
 // Streamed version (interleaved or single-end input and output)
 process BBDUK {
-    label "medium"
+    label "small"
     label "BBTools"
     input:
         tuple val(sample), path(reads) // Interleaved or single-end
@@ -44,7 +44,7 @@ process BBDUK_HITS_INTERLEAVE {
         tuple val(sample), path("${sample}_${params_map.suffix}_bbduk.stats.txt"), emit: log
     script:
         // Reserve CPUs for the streaming pipeline (2x zcat, paste/tr) to avoid thrashing
-        def threads = Math.max(1, task.cpus - 3)
+        def threads = Math.max(1, task.cpus - 4)
         def extractCmd = reads.toString().endsWith(".gz") ? "zcat" : "cat"
         def in1 = "${reads[0]}"
         def in2 = "${reads[1]}"
