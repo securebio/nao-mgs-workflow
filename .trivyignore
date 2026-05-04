@@ -86,9 +86,11 @@ CVE-2026-29111 exp:2026-06-30
 #   https://security-tracker.debian.org/tracker/CVE-2026-41989
 CVE-2026-41989 exp:2026-06-30
 
-# libcap2: setcap (cap_set_file) exploit usable by non-root users. Not
-# applicable to our containers, which run as root and do not call this
-# library. (No Debian fix available as of 2026-05-01.)
+# libcap2: setcap (cap_set_file) exploit usable by non-root users.
+# (No Debian fix available as of 2026-05-01.) Our pipeline containers do
+# not invoke setcap/cap_set_file, so we do not call the affected code;
+# additionally, they run as root, which puts them outside the non-root
+# threat model of this CVE.
 # Check for a Debian fix at:
 #   https://security-tracker.debian.org/tracker/CVE-2026-4878
 CVE-2026-4878 exp:2026-06-30
