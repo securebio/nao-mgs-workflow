@@ -10,8 +10,8 @@ nextflow_process {
     test("Drops duplicate-name sequences and keeps first occurrence") {
         // Fixtures contain three FASTA files exercising the three relevant
         // cases for `seqkit rmdup --by-name`:
-        //   - same name + different sequence (SHARED_NAME_DIFF_SEQ): drop later
-        //   - same name + identical sequence (SHARED_NAME_SAME_SEQ): drop later
+        //   - same name + different sequence (SHARED_NAME_DIFF_SEQ): keep first occurrence
+        //   - same name + identical sequence (SHARED_NAME_SAME_SEQ): keep first occurrence
         //   - different names + identical sequence (DIFF_NAME_SAME_SEQ_A/B): keep both
         tag "expect_success"
         when {
@@ -25,8 +25,6 @@ nextflow_process {
         }
         then {
             assert process.success
-            // Sorted for stable comparison; .fasta map iteration order is not
-            // guaranteed to match concatenation order.
             def fasta = path(process.out[0][0]).fasta
             assert fasta.keySet().sort() == [
                 "DIFF_NAME_SAME_SEQ_A",
@@ -37,8 +35,8 @@ nextflow_process {
                 "UNIQUE_B",
                 "UNIQUE_C",
             ]
-            // `--by-name` keeps the first occurrence: for SHARED_NAME_DIFF_SEQ,
-            // that's GCA_002's body ("AAAAAAAA"), not GCA_003's ("TTTTAAAA").
+            // `--by-name` keeps the first occurrence from GCA_002.fna
+            // and drop the duplicate from GCA_003.fna
             assert fasta["SHARED_NAME_DIFF_SEQ"] == "AAAAAAAA"
         }
     }
