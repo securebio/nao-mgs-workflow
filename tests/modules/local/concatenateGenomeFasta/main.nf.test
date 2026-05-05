@@ -1,0 +1,64 @@
+nextflow_process {
+
+    name "Test process CONCATENATE_GENOME_FASTA"
+    script "modules/local/concatenateGenomeFasta/main.nf"
+    process "CONCATENATE_GENOME_FASTA"
+    config "tests/configs/index.config"
+    tag "module"
+    tag "concatenate_genome_fasta"
+
+    test("Drops duplicate-name sequences and keeps first occurrence") {
+        // Input fixtures contain three FASTA files with two intentional
+        // duplicates by name across files (`SHARED_NAME_DIFF_SEQ` carries
+        // different sequences in GCA_002 vs GCA_003; `SHARED_NAME_SAME_SEQ`
+        // carries identical sequences). `seqkit rmdup --by-name` keeps the
+        // first occurrence and writes the dropped IDs to
+        // `genomes-duplicates.tsv`, which the script cats to stdout.
+        tag "expect_success"
+        when {
+            params {}
+            process {
+                """
+                input[0] = file("${projectDir}/test-data/concatenateGenomeFasta/genomes")
+                input[1] = file("${projectDir}/test-data/concatenateGenomeFasta/paths.csv")
+                """
+            }
+        }
+        then {
+            assert process.success
+            // Exact list of sequence headers in the deduplicated output
+            // (sorted for stable comparison; the .fasta map's iteration
+            // order is not guaranteed to match concatenation order).
+            def fasta = path(process.out[0][0]).fasta
+            assert fasta.keySet().sort() == [
+                "SHARED_NAME_DIFF_SEQ",
+                "SHARED_NAME_SAME_SEQ",
+                "UNIQUE_A",
+                "UNIQUE_B",
+                "UNIQUE_C",
+            ]
+            // `seqkit rmdup --by-name` keeps the first occurrence: for
+            // SHARED_NAME_DIFF_SEQ, that's the body from GCA_002 ("AAAAAAAA"),
+            // not from GCA_003 ("TTTTAAAA").
+            assert fasta["SHARED_NAME_DIFF_SEQ"] == "AAAAAAAA"
+        }
+    }
+
+    test("No duplicates: input passes through unchanged") {
+        tag "expect_success"
+        when {
+            params {}
+            process {
+                """
+                input[0] = file("${projectDir}/test-data/concatenateGenomeFasta/genomes")
+                input[1] = file("${projectDir}/test-data/concatenateGenomeFasta/paths_unique_only.csv")
+                """
+            }
+        }
+        then {
+            assert process.success
+            assert path(process.out[0][0]).fasta.keySet().toList() == ["UNIQUE_A"]
+        }
+    }
+
+}

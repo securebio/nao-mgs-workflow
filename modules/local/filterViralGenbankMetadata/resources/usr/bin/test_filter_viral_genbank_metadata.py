@@ -1,7 +1,8 @@
 """Tests for filter-viral-genbank-metadata.py.
 
-Invoked via subprocess because the script's filename uses hyphens
-(`filter-viral-genbank-metadata.py`), which can't be imported directly.
+The script is invoked via subprocess because its hyphenated filename
+isn't importable. The test focuses on the new `assembly_status='previous'`
+drop and the pre-existing host-taxa screen.
 """
 
 import csv
@@ -12,119 +13,44 @@ from pathlib import Path
 import pytest
 
 SCRIPT = Path(__file__).parent / "filter-viral-genbank-metadata.py"
-
-META_HEADER = [
-    "assembly_accession",
-    "taxid",
-    "organism_name",
-    "source_database",
-    "assembly_status",
-    "species_taxid",
-    "local_filename",
-]
-DB_HEADER = [
-    "taxid",
-    "infection_status_human",
-    "infection_status_vertebrate",
-]
+META_COLS = "assembly_accession\ttaxid\torganism_name\tsource_database\tassembly_status\tspecies_taxid\tlocal_filename"
+# Two vertebrate-infecting virus taxids (1, 2) and one non-infecting (3).
+VIRUS_DB = "taxid\tinfection_status_human\tinfection_status_vertebrate\n1\t1\t1\n2\t0\t1\n3\t0\t0\n"
 
 
-def _write_tsv(path: Path, header: list[str], rows: list[list[str]]) -> Path:
-    with open(path, "w", newline="") as f:
-        w = csv.writer(f, delimiter="\t")
-        w.writerow(header)
-        w.writerows(rows)
-    return path
+def _row(acc: str, taxid: str, status: str) -> str:
+    return f"{acc}\t{taxid}\tOrg\tGenBank\t{status}\t{taxid}\tncbi_genomes/{acc}.fna.gz"
 
 
-def _run(tmp_path: Path, meta: Path, db: Path, host_taxa: str) -> dict[str, Path]:
+def _run_filter(tmp_path: Path, meta_rows: list[str]) -> set[str]:
+    """Run the filter script and return the set of surviving accessions."""
+    meta = tmp_path / "meta.tsv"
+    meta.write_text(META_COLS + "\n" + "\n".join(meta_rows) + "\n")
+    db = tmp_path / "db.tsv"
+    db.write_text(VIRUS_DB)
     out_db = tmp_path / "filtered.tsv.gz"
-    out_acc = tmp_path / "accessions.csv"
-    out_paths = tmp_path / "paths.csv"
     subprocess.run(
-        [
-            "python3",
-            str(SCRIPT),
-            str(meta),
-            str(db),
-            host_taxa,
-            str(out_db),
-            str(out_acc),
-            str(out_paths),
-        ],
+        ["python3", str(SCRIPT), str(meta), str(db), "vertebrate",
+         str(out_db), str(tmp_path / "acc.csv"), str(tmp_path / "paths.csv")],
         check=True,
     )
-    return {"db": out_db, "accessions": out_acc, "paths": out_paths}
+    with gzip.open(out_db, "rt") as f:
+        return {r["assembly_accession"] for r in csv.DictReader(f, delimiter="\t")}
 
 
-def _read_gz_tsv(path: Path) -> list[dict[str, str]]:
-    with gzip.open(path, "rt") as f:
-        return list(csv.DictReader(f, delimiter="\t"))
-
-
-@pytest.fixture()
-def virus_db(tmp_path: Path) -> Path:
-    """Two host-vertebrate-positive virus taxids (1, 2) and one negative (3)."""
-    return _write_tsv(
-        tmp_path / "db.tsv",
-        DB_HEADER,
-        [
-            ["1", "1", "1"],
-            ["2", "0", "1"],
-            ["3", "0", "0"],
-        ],
-    )
-
-
-def _row(acc: str, taxid: str, status: str) -> list[str]:
-    """Build a metadata row for a host-vertebrate-positive taxid (1 or 2)."""
-    return [acc, taxid, "Org", "GenBank", status, taxid, f"ncbi_genomes/{acc}.fna.gz"]
-
-
-class TestFilter:
-    """End-to-end filter behavior: drop assembly_status='previous' AND drop
-    rows whose taxid does not pass the host-taxa screen."""
-
-    @pytest.mark.parametrize(
-        ("input_rows", "expected_accessions"),
-        [
-            # mixed: previous dropped, current kept across two assemblies
-            (
-                [
-                    _row("GCA_001.1", "1", "previous"),
-                    _row("GCA_001.2", "1", "current"),
-                    _row("GCA_002.1", "2", "current"),
-                    _row("GCF_002.1", "2", "current"),
-                ],
-                {"GCA_001.2", "GCA_002.1", "GCF_002.1"},
-            ),
-            # all-previous: empty output
-            (
-                [
-                    _row("GCA_001.1", "1", "previous"),
-                    _row("GCA_001.2", "1", "previous"),
-                ],
-                set(),
-            ),
-            # host-taxa filter: taxid 3 is not vertebrate-infecting per the DB
-            # fixture, so it must be dropped even with assembly_status=current
-            (
-                [
-                    _row("GCA_001.1", "1", "current"),
-                    _row("GCA_X.1", "3", "current"),
-                ],
-                {"GCA_001.1"},
-            ),
-        ],
-        ids=["drops-previous-keeps-current", "all-previous", "host-taxa-screen"],
-    )
-    def test_filter(
-        self,
-        tmp_path: Path,
-        virus_db: Path,
-        input_rows: list[list[str]],
-        expected_accessions: set[str],
-    ) -> None:
-        meta = _write_tsv(tmp_path / "meta.tsv", META_HEADER, input_rows)
-        rows = _read_gz_tsv(_run(tmp_path, meta, virus_db, "vertebrate")["db"])
-        assert {r["assembly_accession"] for r in rows} == expected_accessions
+@pytest.mark.parametrize(("input_rows", "expected"), [
+    # `previous` dropped, `current` kept across both assemblies.
+    ([_row("GCA_001.1", "1", "previous"),
+      _row("GCA_001.2", "1", "current"),
+      _row("GCA_002.1", "2", "current")],
+     {"GCA_001.2", "GCA_002.1"}),
+    # All `previous` -> empty output.
+    ([_row("GCA_001.1", "1", "previous")], set()),
+    # Host-taxa screen: taxid 3 is non-vertebrate per VIRUS_DB, dropped
+    # even with assembly_status='current'.
+    ([_row("GCA_001.1", "1", "current"),
+      _row("GCA_X.1", "3", "current")],
+     {"GCA_001.1"}),
+], ids=["drops-previous", "all-previous", "host-taxa-screen"])
+def test_filter(tmp_path: Path, input_rows: list[str], expected: set[str]) -> None:
+    assert _run_filter(tmp_path, input_rows) == expected
