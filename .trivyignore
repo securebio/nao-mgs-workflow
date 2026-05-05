@@ -13,6 +13,12 @@ CVE-2026-0861 exp:2026-06-30
 # No fix available until Polars releases a build with quinn-proto >= 0.11.14
 CVE-2026-31812 exp:2026-06-30
 
+# rustls-webpki Rust crate embedded in compiled Polars .so (multiqc dependency):
+# DoS via panic on malformed CRL BIT STRING. Multiqc does not perform CRL
+# validation against attacker-controlled inputs.
+# No fix available until Polars releases a build with rustls-webpki >= 0.103.13.
+GHSA-82j2-j2ch-gfr8 exp:2026-06-30
+
 # linux-pam: directory traversal (no Debian fix available as of 2026-03-14)
 CVE-2025-6020 exp:2026-06-30
 
@@ -62,9 +68,12 @@ CVE-2026-32283 exp:2026-06-30
 # ── Pillow in multiqc container (transitive dependency via matplotlib) ──
 # multiqc 1.33 (latest on bioconda) pulls Pillow 12.1.1; fix requires >= 12.2.0.
 # We cannot pin Pillow independently in the conda environment spec.
-# The vulnerability is a FITS GZIP decompression bomb — not a realistic attack
-# vector since multiqc only processes pipeline QC data, not untrusted FITS images.
+# Neither vulnerability is a realistic attack vector since multiqc only
+# processes pipeline QC data, not untrusted images.
+# FITS GZIP decompression bomb (HIGH)
 CVE-2026-40192 exp:2026-06-30
+# OOB write via integer overflow in PSD tile extents (HIGH)
+CVE-2026-42311 exp:2026-06-30
 
 # ── Debian bookworm base image: no fixes available ──
 # glibc: DoS via iconv() with specific character set conversions (fix_deferred)
