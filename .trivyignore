@@ -101,3 +101,11 @@ CVE-2026-4878 exp:2026-06-30
 # Check for a Debian fix at:
 #   https://security-tracker.debian.org/tracker/CVE-2026-33845
 CVE-2026-33845 exp:2026-06-30
+
+# libgnutls30: heap buffer overflow / DoS in DTLS handshake fragment reassembly
+# via inconsistent message_length across fragments.
+# (No Debian fix available as of 2026-05-05.) Our pipeline containers do not
+# run DTLS, only HTTPS, so we do not call the affected code.
+# Check for a Debian fix at:
+#   https://security-tracker.debian.org/tracker/CVE-2026-33846
+CVE-2026-33846 exp:2026-06-30
