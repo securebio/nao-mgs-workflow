@@ -5,4 +5,3 @@ channels:
   - bioconda
 dependencies:
   - bioconda::seqtk=1.5
-  - bioconda::seqkit=2.13.0

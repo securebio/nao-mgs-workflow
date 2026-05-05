@@ -1,7 +1,7 @@
 // Concatenate downloaded genomes from ncbi-genome-download according to a file of genome IDs
 process CONCATENATE_GENOME_FASTA {
     label "single"
-    label "seqtk"
+    label "seqkit"
     input:
         path(genome_dir)
         path(path_file)
