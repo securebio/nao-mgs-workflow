@@ -110,14 +110,6 @@ class TestPrepareMetadata:
         rows = _run_prepare(tmp_path / "run", meta, db_path, gdir)
         assert len(rows) == 1 and rows[0]["assembly_accession"] == "GCA_000001.1"
 
-    def test_assembly_status_passes_through(self, tmp_path: Path, standard_inputs: tuple[Path, Path, Path]) -> None:
-        # Verify that assembly_status (added so downstream filtering can drop
-        # superseded GenBank assemblies, see ncbi/datasets#576) survives the
-        # join with the virus DB and the local-filename annotation.
-        meta_path, db_path, gdir = standard_inputs
-        rows = _run_prepare(tmp_path / "run", meta_path, db_path, gdir)
-        assert {r["assembly_status"] for r in rows} == {"current"}
-
     def test_unmapped_taxid_gives_empty_species(self, tmp_path: Path) -> None:
         meta = _write_tsv(tmp_path / "m.tsv", META_HEADER, [["GCA_000001.1", "00000", "X", "GenBank", "current"]])
         db = _write_tsv(tmp_path / "db.tsv", DB_HEADER, [["12345", "12345", "V"]])

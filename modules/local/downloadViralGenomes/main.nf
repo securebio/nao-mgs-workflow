@@ -54,9 +54,10 @@ process DOWNLOAD_VIRAL_GENOMES {
         done
 
         # 3. Convert assembly report to TSV with standardized column names.
-        # `assminfo-status` is included so downstream filtering can drop
-        # superseded assemblies (`previous`); the datasets taxon-query
-        # `--assembly-version` filter does not (NCBI ncbi/datasets#576).
+        # `assminfo-status` is included so downstream filtering in
+        # filterViralGenbankMetadata can drop non-current assemblies
+        # `datasets` `--assembly-version` arg does not work currently,
+        # see ncbi/datasets#576 for bug report
         dataformat tsv genome \\
             --inputfile output/ncbi_dataset/data/assembly_data_report.jsonl \\
             --fields accession,organism-tax-id,organism-name,source_database,assminfo-status \\
