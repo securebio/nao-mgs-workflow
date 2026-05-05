@@ -71,13 +71,15 @@ def main() -> None:
         (meta_db["taxid"].isin(virus_taxids))
         | (meta_db["species_taxid"].isin(virus_taxids))
     ]
-    # Remove non-current assemblies since they contain duplicate sequence IDs
+    # Keep only `current` assemblies. Other statuses ('previous', 'replaced',
+    # 'suppressed', etc., per NCBI's datasets OpenAPI enum) can introduce
+    # duplicate sequence IDs alongside the live record.
     before = len(meta_db_filtered)
     meta_db_filtered = meta_db_filtered.loc[
-        meta_db_filtered["assembly_status"] != "previous"
+        meta_db_filtered["assembly_status"] == "current"
     ]
     logger.info(
-        "Dropped %d superseded assemblies (assembly_status='previous').",
+        "Dropped %d non-current assemblies.",
         before - len(meta_db_filtered),
     )
     # Write output

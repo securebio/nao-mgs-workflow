@@ -53,8 +53,16 @@ class TestFilterViralGenbankMetadata:
                 ],
                 {"GCA_001.1"},
             ),
+            (
+                [
+                    _meta_row("GCA_001.1", "1", "replaced"),
+                    _meta_row("GCA_001.2", "1", "current"),
+                    _meta_row("GCA_002.1", "2", "suppressed"),
+                ],
+                {"GCA_001.2"},
+            ),
         ],
-        ids=["drops_previous", "all_previous", "host_taxa_screen"],
+        ids=["drops_previous", "all_previous", "host_taxa_screen", "drops_other_non_current"],
     )
     def test_filter(self, tsv_factory: Any, meta_rows: list[str], expected_accessions: set[str]) -> None:
         """Test that filter drops superseded assemblies and rows failing host-taxa screen."""
