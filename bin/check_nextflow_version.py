@@ -1,12 +1,7 @@
 #!/usr/bin/env python3
 """
-Check that the pinned Nextflow version is current.
-
-Compares the version pinned in configs/profiles.config against the highest
-semver-sorted Nextflow release on GitHub, after filtering out prereleases,
-drafts, and any versions listed in .nextflowignore. Versions in .nextflowignore
-may be permanent or carry an `exp:YYYY-MM-DD` expiration after which the
-ignore lapses (with a warning).
+Check the pinned Nextflow version against the highest non-ignored upstream
+release.
 """
 
 #=============================================================================
@@ -218,7 +213,12 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", type=Path, default=DEFAULT_CONFIG_PATH)
     parser.add_argument("--ignore-file", type=Path, default=DEFAULT_IGNORE_PATH)
-    parser.add_argument("--releases-url", default=DEFAULT_RELEASES_URL)
+    parser.add_argument(
+        "--releases-url",
+        default=DEFAULT_RELEASES_URL,
+        help="Nextflow releases endpoint (override is intended for tests; "
+        "production runs should use the default).",
+    )
     return parser.parse_args()
 
 #=============================================================================

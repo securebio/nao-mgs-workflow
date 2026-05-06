@@ -218,6 +218,11 @@ class TestSelectTargetVersion:
         with pytest.raises(ValueError, match="No eligible Nextflow release"):
             select_target_version(["25.10.5"], {"25.10.5"})
 
+    def test_raises_when_no_releases(self) -> None:
+        # Empty input should produce a distinct error from the all-ignored case.
+        with pytest.raises(ValueError, match="No Nextflow release candidates supplied"):
+            select_target_version([], set())
+
 
 class TestCheckPinnedAgainstTarget:
     """Strict equality: pinned must equal target. Pinning above target is
