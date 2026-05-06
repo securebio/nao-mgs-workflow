@@ -1,6 +1,8 @@
 # v3.2.1.5-dev
 
 - Add CVE-2026-4878 (libcap2) and CVE-2026-33845 (libgnutls30) to `.trivyignore`; no Debian fix available for either, and neither is exercised by our pipeline.
+- Replace the hardcoded `EXCLUDED_VERSIONS` constant in `bin/check_nextflow_version.py` with a `.nextflowignore` config file supporting permanent and time-limited (`exp:YYYY-MM-DD`) ignores; switch target selection to highest-semver-among-non-ignored. Ignore `26.04.0` until 2026-06-01 to suppress the upgrade until nf-test 0.9.6 ships.
+- Bump pinned Nextflow version from `25.10.4` to `25.10.5`.
 
 # v3.2.1.4
 
