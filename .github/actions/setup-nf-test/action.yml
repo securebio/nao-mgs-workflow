@@ -80,6 +80,8 @@ runs:
 
     - name: Setup nf-test
       uses: nf-core/setup-nf-test@v1
+      with:
+        version: '0.9.5'
 
     - name: Clean nf-test directory
       shell: bash
