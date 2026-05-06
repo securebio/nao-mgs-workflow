@@ -35,8 +35,8 @@ nextflow_process {
                 "UNIQUE_B",
                 "UNIQUE_C",
             ]
-            // `--by-name` keeps the first occurrence from GCA_002.fna
-            // and drop the duplicate from GCA_003.fna
+            // `--by-name` keeps the first occurrence from GCA_002.fna.gz
+            // and drop the duplicate from GCA_003.fna.gz
             assert fasta["SHARED_NAME_DIFF_SEQ"] == "AAAAAAAA"
         }
     }
