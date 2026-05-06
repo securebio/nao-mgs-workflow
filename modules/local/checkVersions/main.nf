@@ -44,6 +44,7 @@ def isVersionLess(version1, version2) {
 
 process CHECK_VERSIONS {
     executor 'local'
+    tag "id=util"
     input:
         val pipeline_version
         val index_version

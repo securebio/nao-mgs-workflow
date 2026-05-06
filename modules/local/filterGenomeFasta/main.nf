@@ -2,6 +2,7 @@
 process FILTER_GENOME_FASTA {
     label "seqtk"
     label "single"
+    tag "id=index"
     input:
         path(collated_genomes)
         path(patterns_exclude)

@@ -1,3 +1,25 @@
+// Verify the trace has a tag column populated with id=... values on every row.
+// nf-test overrides trace.file via -with-trace=meta/trace.csv, so the trace lands
+// at ${launchDir}/meta/trace.csv during tests (not the logging/ path used in production).
+def assertTraceTagsValid = { launchDir ->
+    def trace = new File("${launchDir}/meta/trace.csv")
+    assert trace.exists() : "trace not found at ${trace}"
+    def lines = trace.text.split("\n").findAll { it.trim() }
+    def header = lines[0].split("\t")
+    def tagIdx = header.findIndexOf { it == "tag" }
+    assert tagIdx >= 0 : "tag column missing from trace header"
+    def malformed = lines.drop(1).findAll { line ->
+        def tagValue = line.split("\t")[tagIdx]
+        def parts = tagValue.split(",")
+        // Every part must be `key=value` with a non-empty key (no `=`), and a value whose first
+        // character is neither `=` nor whitespace and which contains no further `=`; the first
+        // part's key must be `id`. (`,` is excluded by the prior split on `,`.)
+        !(parts[0] ==~ /id=[^=\s][^=]*/) ||
+            parts.any { !(it ==~ /[^=]+=[^=\s][^=]*/) }
+    }
+    assert malformed.isEmpty() : "Found ${malformed.size()} trace rows with malformed tag: ${malformed.take(3)}"
+}
+
 nextflow_pipeline {
 
     name "Test workflow INDEX"
@@ -10,6 +32,7 @@ nextflow_pipeline {
         tag "main_index"
         then {
             assert workflow.success
+            assertTraceTagsValid("${launchDir}")
         }
     }
 }

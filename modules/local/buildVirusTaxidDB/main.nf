@@ -2,6 +2,7 @@
 process BUILD_VIRUS_TAXID_DB {
     label "single"
     label "rpkg"
+    tag "id=index"
     input:
         path(taxonomy_nodes)
         path(taxonomy_names)

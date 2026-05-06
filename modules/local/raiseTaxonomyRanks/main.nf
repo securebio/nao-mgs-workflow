@@ -2,6 +2,7 @@
 process RAISE_TAXONOMY_RANKS {
     label "single"
     label "pandas"
+    tag "id=index"
     input:
         path(taxonomy_db)
         val(target_ranks)

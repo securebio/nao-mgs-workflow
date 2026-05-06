@@ -3,6 +3,7 @@
 process FILTER_TSV_COLUMN_BY_VALUE {
     label "python"
     label "single"
+    tag "id=${sample}"
     input:
         tuple val(sample), path(input_tsv)
         val(column_name)

@@ -2,6 +2,7 @@
 process MARK_ALIGNMENT_DUPLICATES {
     label "large"
     label "rust_tools"
+    tag "id=${sample}"
     input:
         tuple val(sample), path(tsv)
         val(fuzzy_match)

@@ -2,6 +2,7 @@
 process ENUMERATE_CHILD_TAXA {
     label "python"
     label "single"
+    tag "id=index"
     input:
         path(nodes_dmp)
         val(parent_taxid)

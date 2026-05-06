@@ -2,6 +2,7 @@
 process JOIN_TSVS {
     label "python"
     label "single"
+    tag "id=${sample}"
     input:
         tuple val(sample), path(tsv1), path(tsv2)
         val(join_field)

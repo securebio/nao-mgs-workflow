@@ -3,6 +3,7 @@ process REPLACE_STRING {
     label "single"
     label "coreutils"
     label "testing_only" // Process is currently only used for testing
+    tag "id=${label}"
     input:
         tuple val(label), path(file)
         val(outname)
@@ -23,6 +24,7 @@ process REPLACE_STRING_IN_COMPRESSED_FILE {
     label "single"
     label "coreutils"
     label "testing_only" // Process is currently only used for testing
+    tag "id=${label}"
     input:
         tuple val(label), path(file)
         val(outname)

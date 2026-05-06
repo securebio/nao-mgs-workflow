@@ -3,6 +3,7 @@
 process MASK_FASTQ_READS {
     label "BBTools"
     label "bbmask_resources"
+    tag "id=${sample}"
     input:
         tuple val(sample), path(reads)
         val(window_size)

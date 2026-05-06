@@ -2,6 +2,7 @@
 process BLASTN {
     label "BLAST"
     label "blast_resources"
+    tag "id=${sample}"
     input:
         tuple val(sample), path(fasta) // Gzipped or plaintext interleaved or single-end FASTA
         val(blast_db_dir)

@@ -4,7 +4,7 @@
 
 include { ENUMERATE_CHILD_TAXA } from "../../../modules/local/enumerateChildTaxa"
 include { DOWNLOAD_VIRAL_GENOMES } from "../../../modules/local/downloadViralGenomes"
-include { CONCATENATE_TSVS } from "../../../modules/local/concatenateTsvs"
+include { CONCATENATE_TSVS_LABELED } from "../../../modules/local/concatenateTsvs"
 include { PREPARE_VIRAL_METADATA } from "../../../modules/local/prepareViralMetadata"
 include { FILTER_VIRAL_GENBANK_METADATA } from "../../../modules/local/filterViralGenbankMetadata"
 include { ADD_GENBANK_GENOME_IDS } from "../../../modules/local/addGenbankGenomeIDs"
@@ -37,14 +37,16 @@ workflow MAKE_VIRUS_GENOME_DB {
             .splitText().map { it.trim() }.filter { it }
         // 2. Download genomes per child taxon in parallel
         download_ch = DOWNLOAD_VIRAL_GENOMES(child_taxids_ch, assembly_source, datasets_extra_args, 5)
-        // 3. Merge per-taxon metadata using existing CONCATENATE_TSVS
-        concat_ch = CONCATENATE_TSVS(
-            download_ch.metadata.collect(),
+        // 3. Merge per-taxon metadata using CONCATENATE_TSVS_LABELED
+        concat_ch = CONCATENATE_TSVS_LABELED(
+            download_ch.metadata.collect().map { files -> ["index", files] },
             "ncbi-viral-metadata-raw"
         )
         // 4. Prepare final metadata (add species_taxid, local_filename)
         prepare_ch = PREPARE_VIRAL_METADATA(
-            concat_ch.output, virus_db, download_ch.genomes.collect()
+            concat_ch.output.map { _label, file -> file },
+            virus_db,
+            download_ch.genomes.collect()
         )
         // 5. Filter genome metadata by taxid to identify genomes to retain
         meta_ch = FILTER_VIRAL_GENBANK_METADATA(prepare_ch.metadata, virus_db, other_params.host_taxa_screen, "virus-genome")
