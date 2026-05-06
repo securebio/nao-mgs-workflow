@@ -19,6 +19,7 @@ dependencies = [
     # merged and we've updated post-processing/nao-dedup/ to depend on the
     # no-python version.
     "networkx",
+    "packaging>=24.0",
     "pandas>=2.3.2",
     "pysam>=0.23.3",
     "pytest>=8.4.2",
