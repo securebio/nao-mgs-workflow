@@ -8,6 +8,7 @@ isn't importable.
 
 import gzip
 import subprocess
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -70,7 +71,7 @@ class TestFilterViralGenbankMetadata:
         db_file = tsv_factory.create_plain("db.tsv", VIRUS_DB)
         out_db = tsv_factory.get_path("filtered.tsv.gz")
         subprocess.run(
-            ["python3", str(SCRIPT), meta_file, db_file, "vertebrate",
+            [sys.executable, str(SCRIPT), meta_file, db_file, "vertebrate",
              out_db, tsv_factory.get_path("acc.csv"), tsv_factory.get_path("paths.csv")],
             check=True,
         )

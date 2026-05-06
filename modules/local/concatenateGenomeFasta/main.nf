@@ -12,6 +12,10 @@ process CONCATENATE_GENOME_FASTA {
         # Diagnostics
         echo "Genome directory contains" \$(ls ${genome_dir} | wc -l) "files, beginning with:"
         ls -1 ${genome_dir} | head
+        if [[ ! -s ${path_file} ]]; then
+            echo "No matching files found!"
+            exit 1
+        fi
         echo "Filepath file contains" \$(cat ${path_file} | wc -l) "paths, beginning with:"
         head ${path_file}
         # Concatenate files listed by paths, then deduplicate by sequence ID.
@@ -19,10 +23,6 @@ process CONCATENATE_GENOME_FASTA {
         # rejects the resulting duplicate `@SQ` headers.
         # Upstream filtering in FILTER_VIRAL_GENBANK_METADATA to drop non-current
         # assemblies handles the common case; this guards against remaining duplicates
-        if [[ ! -s ${path_file} ]]; then
-            echo "No matching files found!"
-            exit 1
-        fi
         xargs cat < ${path_file} \\
             | seqkit rmdup --by-name --threads ${task.cpus} \\
                 -D genomes-duplicates.tsv -o genomes.fasta.gz
@@ -30,5 +30,6 @@ process CONCATENATE_GENOME_FASTA {
             echo "Duplicate sequence IDs removed:"
             cat genomes-duplicates.tsv
         fi
+        echo "Output file contains" \$(zcat genomes.fasta.gz | grep -c '^>') "sequences."
         """
 }

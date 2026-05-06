@@ -54,6 +54,11 @@ def main() -> None:
     # Keep only `current` assemblies. Other statuses ('previous', 'replaced',
     # 'suppressed', etc., per NCBI's datasets OpenAPI enum) can introduce
     # duplicate sequence IDs alongside the live record.
+    if "assembly_status" not in meta_db_filtered.columns:
+        raise KeyError(
+            "Input metadata is missing the 'assembly_status' column required to "
+            "drop non-current assemblies; check the upstream DOWNLOAD_VIRAL_GENOMES schema."
+        )
     before = len(meta_db_filtered)
     meta_db_filtered = meta_db_filtered.loc[meta_db_filtered["assembly_status"] == "current"]
     logger.info("Dropped %d non-current assemblies.", before - len(meta_db_filtered))
