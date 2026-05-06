@@ -10,8 +10,10 @@ CVE-2023-45853 exp:2026-06-30
 CVE-2026-0861 exp:2026-06-30
 
 # ── Rust crates embedded in compiled Polars .so (multiqc dependency) ──
-# quinn-proto: no fix available until Polars releases a build with
-# quinn-proto >= 0.11.14
+# Multiqc invokes Polars only for reading local Parquet/CSV files; it does not
+# exercise the QUIC/TLS networking code paths that contain these vulnerabilities.
+# quinn-proto: QUIC protocol DoS. Multiqc does not open QUIC connections.
+# No fix available until Polars releases a build with quinn-proto >= 0.11.14.
 CVE-2026-31812 exp:2026-06-30
 # rustls-webpki: DoS via panic on malformed CRL BIT STRING. Multiqc does not
 # perform CRL validation against attacker-controlled inputs. No fix available
