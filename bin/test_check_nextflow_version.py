@@ -148,7 +148,7 @@ class TestParseNextflowignore:
 
     def test_invalid_calendar_date_raises(self, tmp_path: Path) -> None:
         # Regex accepts YYYY-MM-DD; date.fromisoformat catches impossible dates.
-        path = self._write(tmp_path, "25.10.3 exp:2026-13-40\n")
+        path = self._write(tmp_path, "25.10.3 exp:2026-02-30\n")
         with pytest.raises(ValueError, match="Invalid expiration date"):
             parse_nextflowignore(path)
 

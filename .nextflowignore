@@ -6,9 +6,10 @@
 #     <X.Y.Z>                    -> permanent ignore
 #     <X.Y.Z> exp:YYYY-MM-DD     -> ignore until YYYY-MM-DD, then warn-and-unignore
 #
-# Lines beginning with '#' and blank lines are ignored. Entries with a past `exp:`
-# date print a warning and are treated as absent, so stale temporary ignores
-# cannot accumulate silently.
+# Lines beginning with '#' and blank lines are ignored; trailing `# ...`
+# comments on entry lines are also stripped. Entries with a past `exp:` date
+# print a warning and are treated as absent, so stale temporary ignores cannot
+# accumulate silently.
 #
 # When the highest-semver upstream Nextflow release matches an active entry,
 # the version check falls back to the next-highest non-ignored release.
