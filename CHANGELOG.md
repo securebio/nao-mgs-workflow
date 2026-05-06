@@ -6,6 +6,7 @@
     - Add an `assertTraceTagsValid` helper to INDEX, RUN and DOWNSTREAM workflow tests asserting every trace row has a well-formed `id=...` tag (rejects empty, whitespace-only, or non-`key=value` components).
 - Remove unused `CONCATENATE_FILES` module.
 - Drop the unlabeled `CONCATENATE_TSVS` process; migrate `subworkflows/local/makeVirusGenomeDB` to the existing `CONCATENATE_TSVS_LABELED`.
+- Add CVE-2026-4878 (libcap2) and CVE-2026-33845 (libgnutls30) to `.trivyignore`; no Debian fix available for either, and neither is exercised by our pipeline.
 
 # v3.2.1.4
 
