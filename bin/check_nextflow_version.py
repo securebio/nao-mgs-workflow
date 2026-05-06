@@ -183,6 +183,8 @@ def select_target_version(releases: list[str], ignored: set[str]) -> str:
     """
     eligible = [v for v in releases if v not in ignored]
     if not eligible:
+        if not releases:
+            raise ValueError("No Nextflow release candidates supplied.")
         raise ValueError(
             f"No eligible Nextflow release: all {len(releases)} candidates "
             f"are in the ignore set ({sorted(ignored)}).",

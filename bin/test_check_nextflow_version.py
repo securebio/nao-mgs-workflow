@@ -73,6 +73,11 @@ class TestParseNextflowignore:
     """parse_nextflowignore covers permanent entries, expirable entries with
     active and past dates, comments, and various malformed inputs."""
 
+    # Symbolic reference date for date-relative tests; entry exp values are
+    # chosen so "active" vs "expired" reads from the constant alone, without
+    # having to remember the actual calendar date.
+    TODAY = date(2030, 6, 15)
+
     def _write(self, tmp_path: Path, body: str) -> Path:
         path = tmp_path / ".nextflowignore"
         path.write_text(body)
@@ -94,22 +99,22 @@ class TestParseNextflowignore:
         assert parse_nextflowignore(path) == {"25.10.3"}
 
     def test_active_expirable_entry(self, tmp_path: Path) -> None:
-        path = self._write(tmp_path, "26.04.0 exp:2030-01-01\n")
-        assert parse_nextflowignore(path, today=date(2026, 5, 6)) == {"26.04.0"}
+        path = self._write(tmp_path, "26.04.0 exp:2031-01-01\n")
+        assert parse_nextflowignore(path, today=self.TODAY) == {"26.04.0"}
 
     def test_expired_entry_dropped_with_warning(
         self, tmp_path: Path, capsys: pytest.CaptureFixture[str],
     ) -> None:
         path = self._write(tmp_path, "26.04.0 exp:2025-01-01\n")
-        assert parse_nextflowignore(path, today=date(2026, 5, 6)) == set()
+        assert parse_nextflowignore(path, today=self.TODAY) == set()
         stderr = capsys.readouterr().err
         assert "expired on 2025-01-01" in stderr
         assert "26.04.0" in stderr
 
     def test_expiration_today_still_active(self, tmp_path: Path) -> None:
         # Entry expiring today is still active; only past dates lapse.
-        path = self._write(tmp_path, "26.04.0 exp:2026-05-06\n")
-        assert parse_nextflowignore(path, today=date(2026, 5, 6)) == {"26.04.0"}
+        path = self._write(tmp_path, f"26.04.0 exp:{self.TODAY.isoformat()}\n")
+        assert parse_nextflowignore(path, today=self.TODAY) == {"26.04.0"}
 
     def test_inline_trailing_comment(self, tmp_path: Path) -> None:
         path = self._write(tmp_path, "25.10.3  # broken on AWS Batch\n")
@@ -122,11 +127,11 @@ class TestParseNextflowignore:
             "# Block comment\n"
             "\n"
             "25.10.3\n"
-            "26.04.0 exp:2030-01-01\n"
+            "26.04.0 exp:2031-01-01\n"
             "24.99.99 exp:2020-01-01  # long expired\n"
         )
         path = self._write(tmp_path, body)
-        active = parse_nextflowignore(path, today=date(2026, 5, 6))
+        active = parse_nextflowignore(path, today=self.TODAY)
         assert active == {"25.10.3", "26.04.0"}
         assert "24.99.99" in capsys.readouterr().err
 
