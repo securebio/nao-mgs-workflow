@@ -110,7 +110,7 @@ def parse_nextflowignore(
     """
     if not ignore_path.exists():
         return set()
-    today = today or date.today()
+    today = today if today is not None else date.today()
     active: set[str] = set()
     for line_number, raw in enumerate(ignore_path.read_text().splitlines(), 1):
         line = raw.split("#", 1)[0].strip()
@@ -119,7 +119,7 @@ def parse_nextflowignore(
         match = IGNORE_ENTRY_PATTERN.match(line)
         if not match:
             raise ValueError(
-                f"Malformed entry in {ignore_path}:{line_number}: {raw!r}. "
+                f"Malformed entry in {ignore_path}:{line_number}: {line!r}. "
                 "Expected '<X.Y.Z>' or '<X.Y.Z> exp:YYYY-MM-DD'.",
             )
         version = match.group("version")
