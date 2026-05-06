@@ -3,6 +3,7 @@
 - Bump minimum Nextflow version from 25.10.4 to 26.04.0.
     - Pin nf-test to 0.9.5 (was implicit 0.9.3 from `nf-core/setup-nf-test@v1` default). Nf-test 0.9.4 added strict-syntax support for the auto-generated test wrappers, which Nextflow 26.04.0's strict parser requires (older versions emit `WORKFLOW(*input)` splats that 26.04.0 rejects).
     - Bump `nft-fastq` plugin from `0.0.1` to `0.1.0` in `nf-test.config`. The `0.0.1` jar is binary-incompatible with nf-test 0.9.5's bundled Groovy: its concrete `ExtensionMethodCache` doesn't implement `getDisablePropertyName()`, which 0.9.5's `AbstractExtensionMethodCache` declares abstract, throwing `AbstractMethodError` at plugin load.
+    - Change `aws.client.socketTimeout` in `configs/profiles.config` from `0` (legacy "infinite") to `3600000` ms (1 h). Nextflow 26.04.0 ([nextflow-io/nextflow#7024](https://github.com/nextflow-io/nextflow/pull/7024)) repurposed this key to also feed `S3CrtConnectionHealthConfiguration.minimumThroughputTimeout`, which the AWS SDK rejects when zero, aborting every S3 staging task with `minimumThroughputTimeout must be positive`.
 - Clean up Nextflow code to conform to strict syntax in preparation for adding `nextflow lint` to CI. No behavioral changes.
     - Replace `env BAREWORD` with `env('STRING')` in process output declarations.
     - Rename deprecated `Channel.X` factory calls to `channel.X`.
