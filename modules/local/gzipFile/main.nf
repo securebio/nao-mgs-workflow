@@ -19,7 +19,7 @@ process GZIP_FILE_BARE {
     label "coreutils"
     label "testing_only" // Process is currently only used for testing
     input:
-        tuple path(file)
+        path(file)
     output:
         path("${file}.gz")
     script:
