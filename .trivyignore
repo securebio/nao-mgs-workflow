@@ -18,6 +18,7 @@ CVE-2026-31812 exp:2026-06-30
 # rustls-webpki: DoS via panic on malformed CRL BIT STRING. Multiqc does not
 # perform CRL validation against attacker-controlled inputs. No fix available
 # until Polars releases a build with rustls-webpki >= 0.103.13.
+# Identified by GHSA (no assigned CVE as of 2026-05-06).
 GHSA-82j2-j2ch-gfr8 exp:2026-06-30
 
 # linux-pam: directory traversal (no Debian fix available as of 2026-03-14)
