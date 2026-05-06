@@ -3,7 +3,6 @@
 process COUNT_READS_PER_CLADE {
     label "python"
     label "single"
-
     tag "id=${sample}"
     input:
     // (sample name, read table tsv)

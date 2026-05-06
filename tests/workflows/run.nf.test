@@ -57,10 +57,10 @@ def assertTraceTagsValid = { launchDir ->
     def malformed = lines.drop(1).findAll { line ->
         def tagValue = line.split("\t")[tagIdx]
         def parts = tagValue.split(",")
-        // Every part must be a non-empty key=value pair, and the first must be id=...
-        !parts[0].startsWith("id=") ||
-            parts[0].length() <= 3 ||
-            parts.any { !it.contains("=") || it.endsWith("=") }
+        // Every part must be `key=value` with non-empty key and a value whose first character
+        // is non-whitespace; the first part's key must be `id`.
+        !(parts[0] ==~ /id=\S.*/) ||
+            parts.any { !(it ==~ /[^=]+=\S.*/) }
     }
     assert malformed.isEmpty() : "Found ${malformed.size()} trace rows with malformed tag: ${malformed.take(3)}"
 }
