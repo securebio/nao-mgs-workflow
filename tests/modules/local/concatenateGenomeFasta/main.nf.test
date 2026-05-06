@@ -7,18 +7,25 @@ nextflow_process {
     tag "module"
     tag "concatenate_genome_fasta"
 
+    // Load shared helper functions
+    def shell = new GroovyShell()
+    def helpers = shell.parse(new File("tests/helpers/FileHelpers.groovy"))
+
     test("Drops duplicate-name sequences and keeps first occurrence") {
         // Fixtures contain three FASTA files exercising the three relevant
         // cases for `seqkit rmdup --by-name`:
         //   - same name + different sequence (SHARED_NAME_DIFF_SEQ): keep first occurrence
         //   - same name + identical sequence (SHARED_NAME_SAME_SEQ): keep first occurrence
         //   - different names + identical sequence (DIFF_NAME_SAME_SEQ_A/B): keep both
+        // The committed fixtures are plain `.fna` for legibility; gzipFixtureDir
+        // produces a temp dir of `.fna.gz` copies so the process consumes the
+        // production .gz form.
         tag "expect_success"
         when {
             params {}
             process {
                 """
-                input[0] = file("${projectDir}/test-data/concatenateGenomeFasta/genomes")
+                input[0] = file("${helpers.gzipFixtureDir("${projectDir}/test-data/concatenateGenomeFasta/genomes")}")
                 input[1] = file("${projectDir}/test-data/concatenateGenomeFasta/paths.csv")
                 """
             }
@@ -35,8 +42,8 @@ nextflow_process {
                 "UNIQUE_B",
                 "UNIQUE_C",
             ]
-            // `--by-name` keeps the first occurrence from GCA_002.fna.gz
-            // and drop the duplicate from GCA_003.fna.gz
+            // `--by-name` keeps the first occurrence (from GCA_002.fna.gz, which
+            // paths.csv lists before GCA_003.fna.gz) and drops the duplicate.
             assert fasta["SHARED_NAME_DIFF_SEQ"] == "AAAAAAAA"
         }
     }

@@ -23,7 +23,7 @@ process CONCATENATE_GENOME_FASTA {
         # `bowtie2-build` accepts duplicate `>name` records but `samtools view`
         # rejects the resulting duplicate `@SQ` headers.
         # Upstream filtering in FILTER_VIRAL_GENBANK_METADATA to drop non-current
-        # assemblies handles the common case; this guards against remaining duplicates
+        # assemblies handles the common case; this guards against remaining duplicates.
         xargs cat < ${path_file} \\
             | seqkit rmdup --by-name --threads ${task.cpus} \\
                 -D genomes-duplicates.tsv -o genomes.fasta.gz
