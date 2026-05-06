@@ -79,3 +79,20 @@ class TestFilterViralGenbankMetadata:
             lines = f.read().splitlines()
         accessions = {line.split("\t")[0] for line in lines[1:]}
         assert accessions == expected_accessions
+
+    def test_missing_assembly_status_column_raises(self, tsv_factory: Any) -> None:
+        """Test that the script exits non-zero when the upstream metadata is
+        missing the `assembly_status` column the schema-guard requires."""
+        header_no_status = "assembly_accession\ttaxid\torganism_name\tsource_database\tspecies_taxid\tlocal_filename\n"
+        row = "GCA_001.1\t1\tOrg\tGenBank\t1\tncbi_genomes/GCA_001.1.fna.gz\n"
+        meta_file = tsv_factory.create_plain("meta.tsv", header_no_status + row)
+        db_file = tsv_factory.create_plain("db.tsv", VIRUS_DB)
+        result = subprocess.run(
+            [sys.executable, str(SCRIPT), meta_file, db_file, "vertebrate",
+             tsv_factory.get_path("filtered.tsv.gz"),
+             tsv_factory.get_path("acc.csv"), tsv_factory.get_path("paths.csv")],
+            capture_output=True,
+            text=True,
+        )
+        assert result.returncode != 0
+        assert "assembly_status" in result.stderr

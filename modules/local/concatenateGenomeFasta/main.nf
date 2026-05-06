@@ -9,6 +9,7 @@ process CONCATENATE_GENOME_FASTA {
         path("genomes.fasta.gz")
     script:
         """
+        set -euo pipefail
         # Diagnostics
         echo "Genome directory contains" \$(ls ${genome_dir} | wc -l) "files, beginning with:"
         ls -1 ${genome_dir} | head
