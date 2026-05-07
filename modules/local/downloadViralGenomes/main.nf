@@ -8,7 +8,15 @@ process DOWNLOAD_VIRAL_GENOMES {
         val(extra_args)
         val(max_attempts)
     output:
-        path("${taxid}_genomes/*.fna.gz"), optional: true, emit: genomes
+        // Emit the genomes directory as a single path rather than the glob
+        // `${taxid}_genomes/*.fna.gz`. The glob form makes Nextflow's
+        // generated `.command.run` stage-out wrapper run a shell glob via
+        // `ls ...`, which exceeds ARG_MAX once a shard has more than ~10k
+        // files (e.g. Riboviria's 198k). Staging out one directory entry
+        // sidesteps that. Downstream PREPARE_VIRAL_METADATA recursively
+        // globs the staged directories, so the flatten-via-channel pattern
+        // is preserved.
+        path("${taxid}_genomes"), optional: true, emit: genomes
         path("${taxid}_metadata.tsv"), emit: metadata
     script:
         // Header schema for ${taxid}_metadata.tsv

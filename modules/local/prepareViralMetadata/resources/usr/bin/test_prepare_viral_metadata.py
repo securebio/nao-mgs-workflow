@@ -5,7 +5,11 @@ import gzip
 from pathlib import Path
 
 import pytest
-from prepare_viral_metadata import build_species_taxid_map, match_genomes_to_accessions, prepare_metadata
+from prepare_viral_metadata import (
+    build_species_taxid_map,
+    match_genomes_to_accessions,
+    prepare_metadata,
+)
 
 ACCS = ["GCA_000001.1", "GCA_000002.1", "GCA_000003.1"]
 META_HEADER = ["assembly_accession", "taxid", "organism_name", "source_database", "assembly_status"]
@@ -76,7 +80,48 @@ class TestMatchGenomesToAccessions:
     ], ids=["all_match", "partial_match", "empty_dir", "empty_accessions"])
     def test_match(self, tmp_path: Path, accessions: list[str],
                    dir_contents: list[str], expected: dict[str, str]) -> None:
-        assert match_genomes_to_accessions(_make_genome_dir(tmp_path, dir_contents), accessions) == expected
+        result = match_genomes_to_accessions(_make_genome_dir(tmp_path, dir_contents), accessions)
+        # Compare by filename so the test stays decoupled from the absolute path.
+        assert {acc: p.name for acc, p in result.items()} == expected
+
+    def test_match_recurses_into_subdirs(self, tmp_path: Path) -> None:
+        """Production layout: DOWNLOAD_VIRAL_GENOMES emits one
+        `${taxid}_genomes` directory per upstream task. Nextflow stages all
+        of them under the consumer's working dir, so PREPARE has to walk
+        nested subdirs to find the .fna.gz files."""
+        for taxid_dir, accs in [("12333_genomes", ["GCA_000001.1", "GCA_000002.1"]),
+                                 ("2731341_genomes", ["GCA_000003.1"])]:
+            d = tmp_path / taxid_dir
+            d.mkdir()
+            for acc in accs:
+                (d / f"{acc}_genomic.fna.gz").write_bytes(b"dummy")
+        result = match_genomes_to_accessions(tmp_path, ["GCA_000001.1", "GCA_000002.1", "GCA_000003.1"])
+        assert {acc: p.name for acc, p in result.items()} == {
+            "GCA_000001.1": "GCA_000001.1_genomic.fna.gz",
+            "GCA_000002.1": "GCA_000002.1_genomic.fna.gz",
+            "GCA_000003.1": "GCA_000003.1_genomic.fna.gz",
+        }
+        # Each match retains its full nested location.
+        assert result["GCA_000001.1"].parent.name == "12333_genomes"
+        assert result["GCA_000003.1"].parent.name == "2731341_genomes"
+
+    def test_match_follows_directory_symlinks(self, tmp_path: Path) -> None:
+        """Nextflow's stage-in creates a directory *symlink* (not a copy) for
+        each upstream output directory. `Path.rglob` does not descend into
+        symlinked directories in Python <3.13, so the implementation has to
+        opt into symlink following — exercise that here so we don't regress."""
+        # Real upstream task workdir holding the .fna.gz file.
+        upstream = tmp_path / "upstream" / "2847173_genomes"
+        upstream.mkdir(parents=True)
+        (upstream / "GCA_000001.1_genomic.fna.gz").write_bytes(b"dummy")
+        # Consumer workdir with a directory symlink (mirroring nxf_stage's `ln -s`).
+        consumer = tmp_path / "consumer"
+        consumer.mkdir()
+        (consumer / "2847173_genomes").symlink_to(upstream)
+        result = match_genomes_to_accessions(consumer, ["GCA_000001.1"])
+        assert {acc: p.name for acc, p in result.items()} == {
+            "GCA_000001.1": "GCA_000001.1_genomic.fna.gz",
+        }
 
 class TestPrepareMetadata:
     def test_standard_output(self, tmp_path: Path, standard_inputs: tuple[Path, Path, Path]) -> None:

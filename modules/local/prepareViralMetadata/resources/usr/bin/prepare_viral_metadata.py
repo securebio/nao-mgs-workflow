@@ -16,6 +16,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import IO, cast
 
+
 class UTCFormatter(logging.Formatter):
     def formatTime(self, record: logging.LogRecord, datefmt: str | None = None) -> str:
         return datetime.fromtimestamp(record.created, UTC).strftime("%Y-%m-%d %H:%M:%S UTC")
@@ -46,20 +47,32 @@ def build_species_taxid_map(virus_db_path: str) -> dict[str, str]:
 
 ACCESSION_RE = re.compile(r"^(GC[AF]_\d+\.\d+)")
 
-def match_genomes_to_accessions(genome_dir: Path, accessions: list[str]) -> dict[str, str]:
+def match_genomes_to_accessions(genome_dir: Path, accessions: list[str]) -> dict[str, Path]:
     """Match genome .fna.gz files to assembly accessions by filename prefix.
+
+    Walks `genome_dir` recursively so callers can pass either a flat directory
+    or a parent containing one subdirectory per upstream task (the layout we
+    get when DOWNLOAD_VIRAL_GENOMES emits its `${taxid}_genomes` directory and
+    Nextflow stages each as a directory symlink under the consumer's working dir).
+    Uses `os.walk(followlinks=True)` because `Path.rglob` does not descend into
+    symlinked subtrees in Python <3.13 (the `recurse_symlinks` keyword argument
+    was added in 3.13; we support 3.12+).
+
     Args:
-        genome_dir: Directory containing genome .fna.gz files.
+        genome_dir: Directory (possibly nested) containing genome .fna.gz files.
         accessions: List of assembly accessions to match.
     Returns:
-        Dictionary mapping assembly accession to genome filename.
+        Dictionary mapping assembly accession to the matched .fna.gz Path.
     """
     acc_set = set(accessions)
-    result = {}
-    for f in sorted(genome_dir.glob("*.fna.gz")):
-        m = ACCESSION_RE.match(f.name)
-        if m and m.group(1) in acc_set and m.group(1) not in result:
-            result[m.group(1)] = f.name
+    result: dict[str, Path] = {}
+    for root, _, files in os.walk(genome_dir, followlinks=True):
+        for fname in sorted(files):
+            if not fname.endswith(".fna.gz"):
+                continue
+            m = ACCESSION_RE.match(fname)
+            if m and m.group(1) in acc_set and m.group(1) not in result:
+                result[m.group(1)] = Path(root) / fname
     return result
 
 def prepare_metadata(
@@ -92,9 +105,11 @@ def prepare_metadata(
     accessions = sorted({r["assembly_accession"] for r in rows})
     acc_to_file = match_genomes_to_accessions(genome_dir, accessions)
     logger.info("Matched %d/%d accessions to genome files", len(acc_to_file), len(accessions))
-    # Symlink matched genomes into output directory
-    for filename in acc_to_file.values():
-        os.symlink(os.path.abspath(genome_dir / filename), output_dir / filename)
+    # Symlink matched genomes into a flat output directory. The source paths
+    # may be nested (e.g. `12333_genomes/GCA_xxx.fna.gz`) but the symlink
+    # target is the leaf filename only, so downstream sees a flat layout.
+    for filepath in acc_to_file.values():
+        os.symlink(os.path.abspath(filepath), output_dir / filepath.name)
     n_written = 0
     with open(output_metadata_path, "w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=out_fields, delimiter="\t")
@@ -103,7 +118,7 @@ def prepare_metadata(
             if row["assembly_accession"] not in acc_to_file:
                 continue
             row["species_taxid"] = taxid_to_species.get(row["taxid"], "")
-            row["local_filename"] = f"{output_genomes_dir}/{acc_to_file[row['assembly_accession']]}"
+            row["local_filename"] = f"{output_genomes_dir}/{acc_to_file[row['assembly_accession']].name}"
             writer.writerow(row)
             n_written += 1
     logger.info("Wrote %d rows (dropped %d unmatched)", n_written, len(rows) - n_written)

@@ -28,8 +28,12 @@ nextflow_process {
             assert meta.rowCount >= 1
             // assembly_status should be populated for every row
             assert meta.columns["assembly_status"].every { it && it != "null" }
-            // At least one genome file should be downloaded
-            assert process.out.genomes[0].size() >= 1
+            // The genomes output is a directory containing the downloaded
+            // .fna.gz files (one path per emit, not a glob — see module).
+            def genomes_dir = file(process.out.genomes[0])
+            assert genomes_dir.exists()
+            assert genomes_dir.isDirectory()
+            assert genomes_dir.list().findAll { it.endsWith('.fna.gz') }.size() >= 1
         }
     }
 
