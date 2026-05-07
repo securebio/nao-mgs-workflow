@@ -68,9 +68,18 @@ process DOWNLOAD_VIRAL_GENOMES {
           tail -n +2 raw_metadata.tsv
         } > ${taxid}_metadata.tsv
 
-        # 5. Collect genome FASTAs into genomes/ directory
+        # 5. Collect genome FASTAs into genomes/ directory.
+        # Use a single batched `xargs mv` instead of `find -exec mv {} \\;`
+        # (one fork+exec per file). On Fusion, the per-file form was the
+        # second slow phase identified in COMP-1680 — each `mv` becomes an
+        # S3 CopyObject + DeleteObject through Fusion's rename path,
+        # taking ~317 files/min for the 198k-assembly Riboviria shard.
+        # Combined with the `scratch '/scratch'` directive (set in
+        # configs/profiles.config for Batch profiles), this keeps the
+        # entire rename storm on local disk.
         mkdir -p ${taxid}_genomes
-        find output/ncbi_dataset/data -name '*.fna.gz' -exec mv {} ${taxid}_genomes/ \\;
+        find output/ncbi_dataset/data -name '*.fna.gz' -print0 \\
+            | xargs -0 -r mv -t ${taxid}_genomes/
         rm -rf output/ output.zip raw_metadata.tsv
         echo "Downloaded \$((  \$(wc -l < ${taxid}_metadata.tsv) - 1  )) assemblies for taxid ${taxid}"
         """
