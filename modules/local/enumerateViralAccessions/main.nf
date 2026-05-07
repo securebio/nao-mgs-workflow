@@ -13,10 +13,6 @@ process ENUMERATE_VIRAL_ACCESSIONS {
     output:
         path("metadata.tsv"), emit: metadata
     script:
-        // Header schema matches the previous DOWNLOAD_VIRAL_GENOMES.metadata
-        // output so downstream consumers (FILTER_VIRAL_GENBANK_METADATA,
-        // PREPARE_VIRAL_METADATA) can be reused without changes.
-        def metadata_header = "assembly_accession\\ttaxid\\torganism_name\\tsource_database\\tassembly_status"
         """
         # 1. Enumerate all assemblies under ${taxid} via `datasets summary`.
         # Unlike the per-child download module, no empty-taxon fallback is needed:
@@ -28,20 +24,18 @@ process ENUMERATE_VIRAL_ACCESSIONS {
             ${extra_args} \\
             > assembly_data_report.jsonl
 
-        # 2. Convert to TSV with the same column set DOWNLOAD_VIRAL_GENOMES used.
+        # 2. Convert to TSV; rewrite the header to standardized column names
+        # so downstream consumers (FILTER_VIRAL_GENBANK_METADATA,
+        # PREPARE_VIRAL_METADATA) can be reused without changes.
         # `assminfo-status` is included so FILTER_VIRAL_GENBANK_METADATA can drop
         # non-current assemblies (the `datasets` `--assembly-version` arg is
         # broken; see ncbi/datasets#576).
         dataformat tsv genome \\
             --inputfile assembly_data_report.jsonl \\
             --fields accession,organism-tax-id,organism-name,source_database,assminfo-status \\
-            > raw_metadata.tsv
-
-        # 3. Replace header with standardized column names.
-        { echo -e "${metadata_header}"
-          tail -n +2 raw_metadata.tsv
-        } > metadata.tsv
-        rm -f assembly_data_report.jsonl raw_metadata.tsv
+            | { printf 'assembly_accession\\ttaxid\\torganism_name\\tsource_database\\tassembly_status\\n'; tail -n +2; } \\
+            > metadata.tsv
+        rm -f assembly_data_report.jsonl
         echo "Enumerated \$((  \$(wc -l < metadata.tsv) - 1  )) assemblies for taxid ${taxid}"
         """
 }

@@ -89,37 +89,37 @@ class TestFilterMetadata:
 
 
 class TestWriteAccessionChunks:
-    def test_exact_chunk_boundary(self, tmp_path: Path) -> None:
-        """Splits exactly at chunk_size with zero-padded indices."""
-        accs = pd.Series([f"GCA_{i:03d}" for i in range(6)])
-        n = write_accession_chunks(accs, tmp_path, 2)
-        assert n == 3
-        assert sorted(p.name for p in tmp_path.iterdir()) == [
-            "chunk_0001.txt", "chunk_0002.txt", "chunk_0003.txt",
-        ]
-        assert (tmp_path / "chunk_0001.txt").read_text() == "GCA_000\nGCA_001\n"
-        assert (tmp_path / "chunk_0003.txt").read_text() == "GCA_004\nGCA_005\n"
-
-    def test_partial_final_chunk(self, tmp_path: Path) -> None:
-        """Final chunk holds the remainder when count doesn't divide evenly."""
-        accs = pd.Series([f"GCA_{i:03d}" for i in range(5)])
-        n = write_accession_chunks(accs, tmp_path, 2)
-        assert n == 3
-        assert (tmp_path / "chunk_0003.txt").read_text() == "GCA_004\n"
-
-    def test_chunk_size_one(self, tmp_path: Path) -> None:
-        """chunk_size=1 produces one file per accession (used by run-test config)."""
-        accs = pd.Series(["GCA_A", "GCA_B"])
-        n = write_accession_chunks(accs, tmp_path, 1)
-        assert n == 2
-        assert (tmp_path / "chunk_0001.txt").read_text() == "GCA_A\n"
-        assert (tmp_path / "chunk_0002.txt").read_text() == "GCA_B\n"
-
-    def test_empty_input_writes_empty_chunk(self, tmp_path: Path) -> None:
-        """Empty filter result writes one empty chunk so downstream channel is non-empty."""
-        n = write_accession_chunks(pd.Series([], dtype=str), tmp_path, 10)
-        assert n == 1
-        assert (tmp_path / "chunk_0001.txt").read_text() == ""
+    @pytest.mark.parametrize(
+        ("accessions", "chunk_size", "expected_chunks"),
+        [
+            # Exactly divides — every chunk full, zero-padded indices.
+            ([f"GCA_{i:03d}" for i in range(6)], 2, {
+                "chunk_0001.txt": "GCA_000\nGCA_001\n",
+                "chunk_0002.txt": "GCA_002\nGCA_003\n",
+                "chunk_0003.txt": "GCA_004\nGCA_005\n",
+            }),
+            # Doesn't divide evenly — final chunk holds the remainder.
+            ([f"GCA_{i:03d}" for i in range(5)], 2, {
+                "chunk_0001.txt": "GCA_000\nGCA_001\n",
+                "chunk_0002.txt": "GCA_002\nGCA_003\n",
+                "chunk_0003.txt": "GCA_004\n",
+            }),
+            # chunk_size=1 — one file per accession (used by run-test config).
+            (["GCA_A", "GCA_B"], 1, {
+                "chunk_0001.txt": "GCA_A\n",
+                "chunk_0002.txt": "GCA_B\n",
+            }),
+            # Empty input — single empty chunk so downstream channel is non-empty.
+            ([], 10, {"chunk_0001.txt": ""}),
+        ],
+        ids=["exact_boundary", "partial_final_chunk", "size_one", "empty_input"],
+    )
+    def test_chunking(self, tmp_path: Path, accessions: list[str],
+                      chunk_size: int, expected_chunks: dict[str, str]) -> None:
+        n = write_accession_chunks(pd.Series(accessions, dtype=str), tmp_path, chunk_size)
+        assert n == len(expected_chunks)
+        actual = {p.name: p.read_text() for p in tmp_path.iterdir()}
+        assert actual == expected_chunks
 
     def test_invalid_chunk_size_raises(self, tmp_path: Path) -> None:
         with pytest.raises(ValueError, match="chunk_size must be >= 1"):

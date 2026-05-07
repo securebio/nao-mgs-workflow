@@ -6,10 +6,13 @@ nextflow_process {
     tag "module"
     tag "download_viral_genomes"
 
-    // HDV refseq assembly accession used by the success test below. NCBI
-    // assembly accessions are stable, but if NCBI ever bumps this to a new
-    // version, regenerate the fixture by re-running ENUMERATE_VIRAL_ACCESSIONS
-    // on taxid 2847173 (Hepatitis D virus 1) and taking the first row.
+    // test_chunk.txt holds the accession(s) that ENUMERATE_VIRAL_ACCESSIONS
+    // returns for taxid 2847173 (Hepatitis D virus 1) with the test config's
+    // filters (`--assembly-source refseq --assembly-level complete`).
+    // Currently a single row: GCF_018547865.1. NCBI assembly accessions are
+    // stable, but if NCBI ever republishes HDV at a different version,
+    // regenerate this fixture by running ENUMERATE_VIRAL_ACCESSIONS on
+    // taxid 2847173 with the same filters and copying the accession column.
 
     test("Should download genomes for an accession chunk (HDV)") {
         tag "expect_success"
