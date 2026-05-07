@@ -39,7 +39,8 @@ workflow INDEX {
         MAKE_VIRUS_GENOME_DB(
             params.download_virus_taxid ?: params.virus_taxid,
             params.assembly_source, params.datasets_extra_args,
-            MAKE_VIRUS_TAXONOMY_DB.out.db, MAKE_VIRUS_TAXONOMY_DB.out.nodes,
+            params.viral_accession_chunk_size,
+            MAKE_VIRUS_TAXONOMY_DB.out.db,
             virus_genome_params
         )
         // Download ribosomal references

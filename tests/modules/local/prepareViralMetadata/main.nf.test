@@ -37,6 +37,11 @@ nextflow_process {
             assert "local_filename" in meta.columnNames
             assert meta.rowCount == 1
             assert path(process.out.genomes[0]).exists()
+            // paths output mirrors the metadata's local_filename column,
+            // one path per kept assembly (consumed by CONCATENATE_GENOME_FASTA).
+            def path_lines = path(process.out.paths[0]).readLines()
+            assert path_lines.size() == 1
+            assert path_lines[0] == meta.columns["local_filename"][0]
         }
     }
 
