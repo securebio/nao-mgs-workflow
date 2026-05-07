@@ -1,12 +1,14 @@
 // Download viral genomes for a chunk of pre-filtered assembly accessions
 // using NCBI datasets CLI. Replaces the previous per-child-taxon download:
 // chunking caps the per-task wallclock (was ~11h on the Riboviria shard) and
-// the `scratch '/scratch'` directive avoids Fusion metadata corruption during
-// rehydrate's `.fna.temp` rename storm (see COMP-1680).
+// — on Batch profiles, where `aws.batch.volumes` mounts `/scratch` from the
+// host — the `scratch '/scratch'` directive (configured in
+// `configs/profiles.config`, not here, so local/CI runs don't try to use a
+// nonexistent path) avoids Fusion metadata corruption during rehydrate's
+// `.fna.temp` rename storm (see COMP-1680).
 process DOWNLOAD_VIRAL_GENOMES {
     label "ncbi_datasets"
     label "large"
-    scratch '/scratch'
     input:
         path(accession_chunk)
         val(assembly_source)
