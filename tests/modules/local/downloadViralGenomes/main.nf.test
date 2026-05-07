@@ -6,35 +6,19 @@ nextflow_process {
     tag "module"
     tag "download_viral_genomes"
 
+    // HDV refseq assembly accession used by the success test below. NCBI
+    // assembly accessions are stable, but if NCBI ever bumps this to a new
+    // version, regenerate the fixture by re-running ENUMERATE_VIRAL_ACCESSIONS
+    // on taxid 2847173 (Hepatitis D virus 1) and taking the first row.
+
     test("Should download genomes for an accession chunk (HDV)") {
         tag "expect_success"
         config "tests/configs/index.config"
-        // Generate the chunk file dynamically: enumerate HDV (taxid 2847173)
-        // then take the first kept accession. Avoids hardcoding a refseq
-        // assembly accession that could go stale as NCBI republishes.
-        setup {
-            run("ENUMERATE_VIRAL_ACCESSIONS") {
-                script "modules/local/enumerateViralAccessions/main.nf"
-                process {
-                    """
-                    input[0] = "2847173"
-                    input[1] = "refseq"
-                    input[2] = "--assembly-level complete"
-                    """
-                }
-            }
-        }
         when {
             params {}
             process {
                 """
-                // Build a one-accession chunk file from the enumerated metadata.
-                def meta_lines = file(ENUMERATE_VIRAL_ACCESSIONS.out.metadata.get(0)).readLines()
-                assert meta_lines.size() >= 2 : "ENUMERATE_VIRAL_ACCESSIONS yielded no rows"
-                def first_acc = meta_lines[1].split("\\t")[0]
-                def chunk = file("\${workDir}/chunk_0001.txt")
-                chunk.text = first_acc + "\\n"
-                input[0] = chunk
+                input[0] = file("${projectDir}/tests/modules/local/downloadViralGenomes/test_chunk.txt")
                 input[1] = "refseq"
                 input[2] = "--assembly-level complete"
                 input[3] = 5
@@ -43,8 +27,9 @@ nextflow_process {
         }
         then {
             assert process.success
-            // One accession in -> exactly one .fna.gz out (count check is in the module).
-            assert process.out.genomes[0].size() == 1
+            // One accession in -> exactly one .fna.gz out (count guard is in the module).
+            assert process.out.genomes.size() == 1
+            assert process.out.genomes[0].toString().endsWith('.fna.gz')
         }
     }
 
@@ -55,9 +40,7 @@ nextflow_process {
             params {}
             process {
                 """
-                def chunk = file("\${workDir}/bad_chunk.txt")
-                chunk.text = "GCF_999999999.9\\n"
-                input[0] = chunk
+                input[0] = file("${projectDir}/tests/modules/local/downloadViralGenomes/test_chunk_bad.txt")
                 input[1] = "refseq"
                 input[2] = ""
                 input[3] = 5
