@@ -109,13 +109,19 @@ class TestMatchGenomesToAccessions:
         """When the same accession appears under multiple `${taxid}_genomes/`
         subdirs (e.g. an assembly attached to multiple child taxa), the
         chosen symlink target must be deterministic. Pin the contract:
-        first match in lexicographically-sorted directory order wins."""
-        for taxid_dir in ["b_genomes", "a_genomes", "c_genomes"]:
+        first match in lexicographically-sorted directory order wins.
+
+        Use numeric-taxid dir names where lex order differs from numeric
+        order to document the lex-vs-numeric ordering pitfall: lexicographic
+        order is `100_genomes` < `50_genomes` < `9_genomes`, while numeric
+        order is `9` < `50` < `100`. The implementation sorts as strings,
+        so the `100_genomes` dir wins."""
+        for taxid_dir in ["50_genomes", "9_genomes", "100_genomes"]:
             d = tmp_path / taxid_dir
             d.mkdir()
             (d / "GCA_000001.1_genomic.fna.gz").write_bytes(b"dummy")
         result = match_genomes_to_accessions(tmp_path, ["GCA_000001.1"])
-        assert result["GCA_000001.1"].parent.name == "a_genomes"
+        assert result["GCA_000001.1"].parent.name == "100_genomes"
 
     def test_match_follows_directory_symlinks(self, tmp_path: Path) -> None:
         """Nextflow's stage-in creates a directory *symlink* (not a copy) for

@@ -16,7 +16,6 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import IO, cast
 
-
 class UTCFormatter(logging.Formatter):
     def formatTime(self, record: logging.LogRecord, datefmt: str | None = None) -> str:
         return datetime.fromtimestamp(record.created, UTC).strftime("%Y-%m-%d %H:%M:%S UTC")
@@ -99,7 +98,6 @@ def prepare_metadata(
         rows = list(reader)
     logger.info("Read %d metadata rows", len(rows))
     genomes_root, output_dir = Path(genomes_dir), Path(output_genomes_dir)
-    output_dir.mkdir(parents=True, exist_ok=True)
     out_fields = list(in_fields) + ["species_taxid", "local_filename"]
     if not rows:
         logger.info("No metadata rows to process. Writing header-only output file.")
@@ -110,6 +108,10 @@ def prepare_metadata(
     accessions = sorted({r["assembly_accession"] for r in rows})
     acc_to_file = match_genomes_to_accessions(genomes_root, accessions)
     logger.info("Matched %d/%d accessions to genome files", len(acc_to_file), len(accessions))
+    # Create the output dir AFTER the walk so it isn't traversed when
+    # `genomes_root` is the consumer task workdir (i.e. `.`) and `output_dir`
+    # would otherwise be a subdirectory of the walk root.
+    output_dir.mkdir(parents=True, exist_ok=True)
     # Symlink matched genomes into a flat output directory. Source paths
     # may be nested (e.g. `12333_genomes/GCA_xxx.fna.gz`) but the symlink
     # target is the leaf filename only, so consumers see a flat layout.

@@ -33,7 +33,13 @@ nextflow_process {
             def genomes_dir = file(process.out.genomes[0])
             assert genomes_dir.exists()
             assert genomes_dir.isDirectory()
-            assert genomes_dir.list().findAll { it.endsWith('.fna.gz') }.size() >= 1
+            // HDV (taxid 2847173) returns multiple complete-level RefSeq
+            // assemblies, so this exercises the multi-file `xargs -0 ... mv -t`
+            // path. Pin fna count == metadata row count to catch regressions
+            // that lose files during the batched move.
+            def fna_count = genomes_dir.list().findAll { it.endsWith('.fna.gz') }.size()
+            assert fna_count > 1
+            assert fna_count == meta.rowCount
         }
     }
 
