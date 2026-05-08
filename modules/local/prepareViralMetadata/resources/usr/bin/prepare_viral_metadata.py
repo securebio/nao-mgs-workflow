@@ -64,7 +64,14 @@ def match_genomes_to_accessions(genomes_root: Path, accessions: list[str]) -> di
     """
     acc_set = set(accessions)
     result: dict[str, Path] = {}
-    for root, _, files in os.walk(genomes_root, followlinks=True):
+    # Sort `dirs` and `files` so the first-match-wins behavior is
+    # reproducible across runs and platforms. `os.walk`'s default order
+    # depends on `os.scandir`, which is not guaranteed to be sorted; if
+    # the same accession appears under two `${taxid}_genomes/` subdirs
+    # (e.g. an assembly attached to multiple child taxa) the chosen
+    # symlink target would otherwise vary across runs.
+    for root, dirs, files in os.walk(genomes_root, followlinks=True):
+        dirs.sort()
         for fname in sorted(files):
             if not fname.endswith(".fna.gz"):
                 continue
