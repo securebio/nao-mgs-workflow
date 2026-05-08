@@ -47,23 +47,24 @@ def build_species_taxid_map(virus_db_path: str) -> dict[str, str]:
 
 ACCESSION_RE = re.compile(r"^(GC[AF]_\d+\.\d+)")
 
-def match_genomes_to_accessions(genome_dir: Path, accessions: list[str]) -> dict[str, Path]:
+def match_genomes_to_accessions(genomes_root: Path, accessions: list[str]) -> dict[str, Path]:
     """Match genome .fna.gz files to assembly accessions by filename prefix.
 
-    Walks `genome_dir` recursively, following symlinks.
+    Walks `genomes_root` recursively, following symlinks.
     Necessary since DOWNLOAD_VIRAL_GENOMES emits a separate subdirectory per
     process, then Nextflow stages each as a directory symlink in the working dir.
     `Path.rglob` does not descend into symlinked subtrees in Python <3.13.
 
     Args:
-        genome_dir: Directory (possibly nested) containing genome .fna.gz files.
+        genomes_root: Staging root (possibly nested) containing one or more
+            `${taxid}_genomes/` subdirs with the .fna.gz files.
         accessions: List of assembly accessions to match.
     Returns:
         Dictionary mapping assembly accession to the matched .fna.gz Path.
     """
     acc_set = set(accessions)
     result: dict[str, Path] = {}
-    for root, _, files in os.walk(genome_dir, followlinks=True):
+    for root, _, files in os.walk(genomes_root, followlinks=True):
         for fname in sorted(files):
             if not fname.endswith(".fna.gz"):
                 continue
@@ -90,7 +91,7 @@ def prepare_metadata(
         in_fields = reader.fieldnames or []
         rows = list(reader)
     logger.info("Read %d metadata rows", len(rows))
-    genome_dir, output_dir = Path(genomes_dir), Path(output_genomes_dir)
+    genomes_root, output_dir = Path(genomes_dir), Path(output_genomes_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     out_fields = list(in_fields) + ["species_taxid", "local_filename"]
     if not rows:
@@ -100,7 +101,7 @@ def prepare_metadata(
             writer.writeheader()
         return
     accessions = sorted({r["assembly_accession"] for r in rows})
-    acc_to_file = match_genomes_to_accessions(genome_dir, accessions)
+    acc_to_file = match_genomes_to_accessions(genomes_root, accessions)
     logger.info("Matched %d/%d accessions to genome files", len(acc_to_file), len(accessions))
     # Symlink matched genomes into a flat output directory. Source paths
     # may be nested (e.g. `12333_genomes/GCA_xxx.fna.gz`) but the symlink

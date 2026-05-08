@@ -168,3 +168,41 @@ class TestPrepareMetadata:
             w.writerows(META_ROWS)
         rows = _run_prepare(tmp_path / "run", meta_gz, db_path, gdir)
         assert len(rows) == 3
+
+    def test_nested_per_taxid_subdirs(self, tmp_path: Path) -> None:
+        """End-to-end run with the production nested layout: each upstream
+        DOWNLOAD_VIRAL_GENOMES task stages a `${taxid}_genomes/` subdir under
+        the consumer working dir. Verifies that `local_filename` uses the
+        leaf basename and that output symlinks resolve, even when source
+        basenames collide across taxid dirs."""
+        meta_path = _write_tsv(tmp_path / "meta.tsv", META_HEADER, [
+            ["GCA_000001.1", "12345", "Virus A", "GenBank", "current"],
+            ["GCA_000002.1", "67890", "Virus B", "GenBank", "current"],
+            ["GCA_000003.1", "99999", "Virus C", "RefSeq", "current"],
+        ])
+        db_path = _write_tsv(tmp_path / "db.tsv", DB_HEADER, DB_ROWS)
+        # Nested layout: two taxid dirs, each holding a subset of genomes.
+        # The two taxid dirs each contain a file with the same basename
+        # `extra.fna.gz` (not in the accession set) to confirm collisions
+        # in non-matched files don't break matching.
+        staging = tmp_path / "staging"
+        for taxid_dir, accs in [("12333_genomes", ["GCA_000001.1", "GCA_000002.1"]),
+                                 ("2731341_genomes", ["GCA_000003.1"])]:
+            d = staging / taxid_dir
+            d.mkdir(parents=True)
+            for acc in accs:
+                (d / f"{acc}_genomic.fna.gz").write_bytes(b"dummy")
+            (d / "extra.fna.gz").write_bytes(b"unrelated")
+        out_meta = str(tmp_path / "out.tsv")
+        out_genomes = str(tmp_path / "ncbi_genomes")
+        prepare_metadata(str(meta_path), str(db_path), str(staging), out_meta, out_genomes)
+        rows = _read_tsv(Path(out_meta))
+        assert len(rows) == 3
+        # local_filename must be the leaf basename under the flat output dir.
+        for row in rows:
+            expected_leaf = f"{row['assembly_accession']}_genomic.fna.gz"
+            assert row["local_filename"] == f"{out_genomes}/{expected_leaf}"
+        # All output symlinks must resolve to a real file.
+        symlinks = sorted(Path(out_genomes).glob("*.fna.gz"))
+        assert len(symlinks) == 3
+        assert all(s.is_symlink() and s.resolve().exists() for s in symlinks)

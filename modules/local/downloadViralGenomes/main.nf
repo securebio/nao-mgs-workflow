@@ -11,7 +11,11 @@ process DOWNLOAD_VIRAL_GENOMES {
     output:
         // Emit the genomes directory as a single path rather than a glob
         // since the glob makes Nextflow crash when staging out more than
-        // 10k files from the local scratch directory.
+        // 10k files from the local scratch directory. The directory may be
+        // empty (e.g. rehydration succeeded but produced no `.fna.gz`);
+        // PREPARE_VIRAL_METADATA walks staged dirs and is robust to empties.
+        // `optional: true` covers the early-exit "no genome data" branch
+        // below, which exits before the directory is created.
         path("${taxid}_genomes"), optional: true, emit: genomes
         path("${taxid}_metadata.tsv"), emit: metadata
     script:
