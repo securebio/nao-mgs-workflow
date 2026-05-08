@@ -1,4 +1,5 @@
 // Download viral genomes for a single taxon using NCBI datasets CLI
+// Uses a local scratch directory on Batch profiles as defined in configs/profiles.config
 process DOWNLOAD_VIRAL_GENOMES {
     label "ncbi_datasets"
     label "large"
@@ -8,14 +9,9 @@ process DOWNLOAD_VIRAL_GENOMES {
         val(extra_args)
         val(max_attempts)
     output:
-        // Emit the genomes directory as a single path rather than the glob
-        // `${taxid}_genomes/*.fna.gz`. The glob form makes Nextflow's
-        // generated `.command.run` stage-out wrapper run a shell glob via
-        // `ls ...`, which exceeds ARG_MAX once a shard has more than ~10k
-        // files (e.g. Riboviria's 198k). Staging out one directory entry
-        // sidesteps that. Downstream PREPARE_VIRAL_METADATA recursively
-        // globs the staged directories, so the flatten-via-channel pattern
-        // is preserved.
+        // Emit the genomes directory as a single path rather than a glob
+        // since the glob makes Nextflow crash when staging out more than
+        // 10k files from the local scratch directory.
         path("${taxid}_genomes"), optional: true, emit: genomes
         path("${taxid}_metadata.tsv"), emit: metadata
     script:
@@ -76,15 +72,7 @@ process DOWNLOAD_VIRAL_GENOMES {
           tail -n +2 raw_metadata.tsv
         } > ${taxid}_metadata.tsv
 
-        # 5. Collect genome FASTAs into genomes/ directory.
-        # Use a single batched `xargs mv` instead of `find -exec mv {} \\;`
-        # (one fork+exec per file). On Fusion, the per-file form was the
-        # second slow phase identified in COMP-1680 — each `mv` becomes an
-        # S3 CopyObject + DeleteObject through Fusion's rename path,
-        # taking ~317 files/min for the 198k-assembly Riboviria shard.
-        # Combined with the `scratch '/scratch'` directive (set in
-        # configs/profiles.config for Batch profiles), this keeps the
-        # entire rename storm on local disk.
+        # 5. Collect genome FASTAs into genomes/ directory
         mkdir -p ${taxid}_genomes
         find output/ncbi_dataset/data -name '*.fna.gz' -print0 \\
             | xargs -0 -r mv -t ${taxid}_genomes/

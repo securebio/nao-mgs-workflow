@@ -107,9 +107,7 @@ class TestMatchGenomesToAccessions:
 
     def test_match_follows_directory_symlinks(self, tmp_path: Path) -> None:
         """Nextflow's stage-in creates a directory *symlink* (not a copy) for
-        each upstream output directory. `Path.rglob` does not descend into
-        symlinked directories in Python <3.13, so the implementation has to
-        opt into symlink following — exercise that here so we don't regress."""
+        each upstream output directory, so check implementation handles this."""
         # Real upstream task workdir holding the .fna.gz file.
         upstream = tmp_path / "upstream" / "2847173_genomes"
         upstream.mkdir(parents=True)

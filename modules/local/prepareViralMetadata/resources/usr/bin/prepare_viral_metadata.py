@@ -50,13 +50,10 @@ ACCESSION_RE = re.compile(r"^(GC[AF]_\d+\.\d+)")
 def match_genomes_to_accessions(genome_dir: Path, accessions: list[str]) -> dict[str, Path]:
     """Match genome .fna.gz files to assembly accessions by filename prefix.
 
-    Walks `genome_dir` recursively so callers can pass either a flat directory
-    or a parent containing one subdirectory per upstream task (the layout we
-    get when DOWNLOAD_VIRAL_GENOMES emits its `${taxid}_genomes` directory and
-    Nextflow stages each as a directory symlink under the consumer's working dir).
-    Uses `os.walk(followlinks=True)` because `Path.rglob` does not descend into
-    symlinked subtrees in Python <3.13 (the `recurse_symlinks` keyword argument
-    was added in 3.13; we support 3.12+).
+    Walks `genome_dir` recursively, following symlinks.
+    Necessary since DOWNLOAD_VIRAL_GENOMES emits a separate subdirectory per
+    process, then Nextflow stages each as a directory symlink in the working dir.
+    `Path.rglob` does not descend into symlinked subtrees in Python <3.13.
 
     Args:
         genome_dir: Directory (possibly nested) containing genome .fna.gz files.
@@ -105,9 +102,9 @@ def prepare_metadata(
     accessions = sorted({r["assembly_accession"] for r in rows})
     acc_to_file = match_genomes_to_accessions(genome_dir, accessions)
     logger.info("Matched %d/%d accessions to genome files", len(acc_to_file), len(accessions))
-    # Symlink matched genomes into a flat output directory. The source paths
+    # Symlink matched genomes into a flat output directory. Source paths
     # may be nested (e.g. `12333_genomes/GCA_xxx.fna.gz`) but the symlink
-    # target is the leaf filename only, so downstream sees a flat layout.
+    # target is the leaf filename only, so consumers see a flat layout.
     for filepath in acc_to_file.values():
         os.symlink(os.path.abspath(filepath), output_dir / filepath.name)
     n_written = 0
