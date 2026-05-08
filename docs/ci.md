@@ -87,6 +87,13 @@ These checks run unconditionally (no path filtering) to ensure version consisten
 | `check-nextflow-version.yml` | Runs `bin/check_nextflow_version.py` to ensure Nextflow version is current | all |
 | `check-changelog.yml` | Requires `CHANGELOG.md` update if non-documentation files changed | `dev`, `ci-test` only |
 
+The Nextflow version check compares the version pinned in `configs/profiles.config` against the highest-semver Nextflow release on GitHub, after filtering out any releases listed in `.nextflowignore` at the repo root. To suppress a specific upstream release (for example, a broken release we never want to pin to, or a major bump we are deferring until tooling catches up), add an entry to `.nextflowignore`:
+
+- `<X.Y.Z>` — permanent ignore.
+- `<X.Y.Z> exp:YYYY-MM-DD` — ignore until `YYYY-MM-DD`, after which the entry expires; expired entries print a warning to stderr and are treated as absent, so stale temporary ignores cannot accumulate silently.
+
+Lines beginning with `#` and blank lines are ignored; trailing `# ...` comments on entry lines are also stripped. The pinned version must equal the latest eligible release exactly: if the highest-semver upstream release is currently ignored, the check falls back to the next-highest non-ignored release. A mismatch typically means either `configs/profiles.config` needs to be bumped, or the new release needs an entry in `.nextflowignore` with a justification.
+
 ## Release tests
 
 These tests run on PRs to `main`, `stable`, and `ci-test`. They are slower or more expensive than development tests and are not required for merging to `dev`, but must pass before merging to `main`.

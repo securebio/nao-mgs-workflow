@@ -1,5 +1,7 @@
 # v3.2.1.5-dev
 
+- Replace the hardcoded `EXCLUDED_VERSIONS` constant in `bin/check_nextflow_version.py` with a `.nextflowignore` config file supporting permanent and time-limited (`exp:YYYY-MM-DD`) ignores; switch target selection to highest-semver-among-non-ignored. Ignore `26.04.0` until 2026-06-01.
+- Bump pinned Nextflow version from `25.10.4` to `25.10.5`.
 - Fix `samtools view` failure on duplicate sequence IDs in the concatenated viral genome FASTA produced by `CONCATENATE_GENOME_FASTA`. NCBI `datasets` sometimes returns superseded ("previous") assembly versions alongside current ones, causing duplicate accessions.
     - `DOWNLOAD_VIRAL_GENOMES` now emits an `assembly_status` column in the per-taxid metadata TSV (via `dataformat tsv genome --fields ...assminfo-status`), which `PREPARE_VIRAL_METADATA` flows through to `FILTER_VIRAL_GENBANK_METADATA`, which keeps only rows with `assembly_status == 'current'` (dropping `previous`, `replaced`, `suppressed`, etc.).
     - `CONCATENATE_GENOME_FASTA` now runs `seqkit rmdup --by-name` after concatenation as a defense-in-depth check. Switched the process from the `seqtk` container to the existing `seqkit` container (no `seqtk` invocation in the script).

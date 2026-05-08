@@ -1,4 +1,5 @@
 .nextflow*
+!.nextflowignore
 work/*
 output/*
 *.swp
