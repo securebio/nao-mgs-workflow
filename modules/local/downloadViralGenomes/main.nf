@@ -12,7 +12,7 @@ process DOWNLOAD_VIRAL_GENOMES {
         path("${taxid}_metadata.tsv"), emit: metadata
     script:
         // Header schema for ${taxid}_metadata.tsv
-        def metadata_header = "assembly_accession\\ttaxid\\torganism_name\\tsource_database"
+        def metadata_header = "assembly_accession\\ttaxid\\torganism_name\\tsource_database\\tassembly_status"
         """
         trap 'rm -f dl_err.txt' EXIT
 
@@ -53,10 +53,14 @@ process DOWNLOAD_VIRAL_GENOMES {
             BACKOFF=\$((BACKOFF * 2))
         done
 
-        # 3. Convert assembly report to TSV with standardized column names
+        # 3. Convert assembly report to TSV with standardized column names.
+        # `assminfo-status` is included so downstream filtering in
+        # filterViralGenbankMetadata can drop non-current assemblies
+        # `datasets` `--assembly-version` arg does not work currently,
+        # see ncbi/datasets#576 for bug report
         dataformat tsv genome \\
             --inputfile output/ncbi_dataset/data/assembly_data_report.jsonl \\
-            --fields accession,organism-tax-id,organism-name,source_database \\
+            --fields accession,organism-tax-id,organism-name,source_database,assminfo-status \\
             > raw_metadata.tsv
 
         # 4. Replace header with standardized column names
