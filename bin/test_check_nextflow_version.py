@@ -86,21 +86,34 @@ class TestParseNextflowignore:
     def test_missing_file_returns_empty(self, tmp_path: Path) -> None:
         assert parse_nextflowignore(tmp_path / "nope") == set()
 
-    def test_empty_file_returns_empty(self, tmp_path: Path) -> None:
-        path = self._write(tmp_path, "")
-        assert parse_nextflowignore(path) == set()
-
-    def test_only_comments_and_blanks(self, tmp_path: Path) -> None:
-        path = self._write(tmp_path, "# header\n\n   # indented comment\n\n")
-        assert parse_nextflowignore(path) == set()
-
-    def test_permanent_entry(self, tmp_path: Path) -> None:
-        path = self._write(tmp_path, "25.10.3\n")
-        assert parse_nextflowignore(path) == {"25.10.3"}
-
-    def test_active_expirable_entry(self, tmp_path: Path) -> None:
-        path = self._write(tmp_path, "26.04.0 exp:2031-01-01\n")
-        assert parse_nextflowignore(path, today=self.TODAY) == {"26.04.0"}
+    @pytest.mark.parametrize(
+        "body,expected",
+        [
+            pytest.param("", set(), id="empty_file"),
+            pytest.param(
+                "# header\n\n   # indented comment\n\n", set(),
+                id="only_comments_and_blanks",
+            ),
+            pytest.param("25.10.3\n", {"25.10.3"}, id="permanent"),
+            pytest.param(
+                "26.04.0 exp:2031-01-01\n", {"26.04.0"},
+                id="active_expirable",
+            ),
+            pytest.param(
+                f"26.04.0 exp:{TODAY.isoformat()}\n", {"26.04.0"},
+                id="expiring_today_still_active",
+            ),
+            pytest.param(
+                "25.10.3  # broken on AWS Batch\n", {"25.10.3"},
+                id="trailing_comment",
+            ),
+        ],
+    )
+    def test_returns_currently_ignored_set(
+        self, tmp_path: Path, body: str, expected: set[str],
+    ) -> None:
+        path = self._write(tmp_path, body)
+        assert parse_nextflowignore(path, today=self.TODAY) == expected
 
     def test_expired_entry_dropped_with_warning(
         self, tmp_path: Path, capsys: pytest.CaptureFixture[str],
@@ -110,15 +123,6 @@ class TestParseNextflowignore:
         stderr = capsys.readouterr().err
         assert "expired on 2025-01-01" in stderr
         assert "26.04.0" in stderr
-
-    def test_expiration_today_still_active(self, tmp_path: Path) -> None:
-        # Entry expiring today is still active; only past dates lapse.
-        path = self._write(tmp_path, f"26.04.0 exp:{self.TODAY.isoformat()}\n")
-        assert parse_nextflowignore(path, today=self.TODAY) == {"26.04.0"}
-
-    def test_inline_trailing_comment(self, tmp_path: Path) -> None:
-        path = self._write(tmp_path, "25.10.3  # broken on AWS Batch\n")
-        assert parse_nextflowignore(path) == {"25.10.3"}
 
     def test_mixed_entries(
         self, tmp_path: Path, capsys: pytest.CaptureFixture[str],
@@ -200,19 +204,25 @@ class TestFetchReleases:
 
 
 class TestSelectTargetVersion:
-    def test_picks_highest_semver_not_chronological(self) -> None:
-        # 25.10.5 ships chronologically after 26.04.0 (LTS backport patch);
-        # semver-max must still pick 26.04.0.
-        releases = ["25.10.5", "26.04.0", "25.10.4"]
-        assert select_target_version(releases, set()) == "26.04.0"
+    # 25.10.5 ships chronologically after 26.04.0 (LTS backport patch),
+    # so the chrono-vs-semver distinction is the no-ignore case below.
+    RELEASES = ["25.10.5", "26.04.0", "25.10.4"]
 
-    def test_excludes_ignored(self) -> None:
-        releases = ["25.10.5", "26.04.0", "25.10.4"]
-        assert select_target_version(releases, {"26.04.0"}) == "25.10.5"
-
-    def test_excludes_multiple_ignored(self) -> None:
-        releases = ["25.10.5", "26.04.0", "25.10.4"]
-        assert select_target_version(releases, {"26.04.0", "25.10.5"}) == "25.10.4"
+    @pytest.mark.parametrize(
+        "ignored,expected",
+        [
+            pytest.param(set(), "26.04.0", id="highest_semver_wins_over_chrono"),
+            pytest.param({"26.04.0"}, "25.10.5", id="single_ignored_excluded"),
+            pytest.param(
+                {"26.04.0", "25.10.5"}, "25.10.4",
+                id="multiple_ignored_excluded",
+            ),
+        ],
+    )
+    def test_returns_highest_semver_non_ignored(
+        self, ignored: set[str], expected: str,
+    ) -> None:
+        assert select_target_version(self.RELEASES, ignored) == expected
 
     def test_raises_when_all_ignored(self) -> None:
         with pytest.raises(ValueError, match="No eligible Nextflow release"):
@@ -309,56 +319,51 @@ class TestMain:
         ):
             main()
 
-    def test_ignored_target_falls_back_to_next(
-        self, tmp_path: Path, capsys: pytest.CaptureFixture[str],
+    @pytest.mark.parametrize(
+        "pinned,ignore_body,releases,expected_latest_eligible",
+        [
+            pytest.param(
+                "25.10.5", "26.04.0 exp:2030-01-01\n",
+                ["26.04.0", "25.10.5", "25.10.4"], "25.10.5",
+                id="ignored_target_falls_back_to_next",
+            ),
+            pytest.param(
+                "26.04.0", None,
+                # API order is chronological: 25.10.5 ships after 26.04.0.
+                ["25.10.5", "26.04.0", "25.10.4"], "26.04.0",
+                id="pinned_above_chronologically_later_lts_patch",
+            ),
+            pytest.param(
+                "25.10.4", "25.10.3\n",
+                ["25.10.4", "25.10.3"], "25.10.4",
+                id="permanent_ignore_persists",
+            ),
+        ],
+    )
+    def test_main_happy_path(
+        self,
+        tmp_path: Path,
+        capsys: pytest.CaptureFixture[str],
+        pinned: str,
+        ignore_body: str | None,
+        releases: list[str],
+        expected_latest_eligible: str,
     ) -> None:
-        # 26.04.0 is ignored; target should fall back to 25.10.5.
-        config = self._write_config(tmp_path, "25.10.5")
+        config = self._write_config(tmp_path, pinned)
         ignore_file = tmp_path / ".nextflowignore"
-        ignore_file.write_text("26.04.0 exp:2030-01-01\n")
+        if ignore_body is not None:
+            ignore_file.write_text(ignore_body)
         with patch(
             "urllib.request.urlopen",
-            return_value=self._mock_releases(["26.04.0", "25.10.5", "25.10.4"]),
+            return_value=self._mock_releases(releases),
         ), patch("sys.argv", self._argv(config, ignore_file)):
             main()
         captured = capsys.readouterr()
-        assert "Currently ignored versions: ['26.04.0']" in captured.out
-        assert "Latest eligible Nextflow version: 25.10.5" in captured.out
+        assert (
+            f"Latest eligible Nextflow version: {expected_latest_eligible}"
+            in captured.out
+        )
         assert "OK: Pinned version is current" in captured.out
-
-    def test_pinned_above_chronologically_later_lts_patch(
-        self, tmp_path: Path, capsys: pytest.CaptureFixture[str],
-    ) -> None:
-        # Pinned 26.04.0; 25.10.5 is the chronologically-latest release but a
-        # lower semver. With no ignore file, target = max-semver = 26.04.0,
-        # so the pin matches and we do not fail.
-        config = self._write_config(tmp_path, "26.04.0")
-        ignore_file = tmp_path / ".nextflowignore"
-        with patch(
-            "urllib.request.urlopen",
-            # API order matches "most-recently-released first": 25.10.5 ships
-            # after 26.04.0 chronologically.
-            return_value=self._mock_releases(["25.10.5", "26.04.0", "25.10.4"]),
-        ), patch("sys.argv", self._argv(config, ignore_file)):
-            main()
-        captured = capsys.readouterr()
-        assert "Latest eligible Nextflow version: 26.04.0" in captured.out
-        assert "OK: Pinned version is current" in captured.out
-
-    def test_permanent_ignore_persists(
-        self, tmp_path: Path, capsys: pytest.CaptureFixture[str],
-    ) -> None:
-        # 25.10.3 is permanently ignored. Even without an exp: date, it stays
-        # filtered out so we will never accidentally select it as target.
-        config = self._write_config(tmp_path, "25.10.4")
-        ignore_file = tmp_path / ".nextflowignore"
-        ignore_file.write_text("25.10.3\n")
-        with patch(
-            "urllib.request.urlopen",
-            return_value=self._mock_releases(["25.10.4", "25.10.3"]),
-        ), patch("sys.argv", self._argv(config, ignore_file)):
-            main()
-        assert "Latest eligible Nextflow version: 25.10.4" in capsys.readouterr().out
 
     def test_expired_ignore_warns_and_lapses(
         self, tmp_path: Path, capsys: pytest.CaptureFixture[str],
