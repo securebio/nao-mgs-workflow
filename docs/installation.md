@@ -37,11 +37,6 @@ aws_access_key_id = <ACCESS_KEY_ID>
 aws_secret_access_key = <SECRET_ACCESS_KEY>
 ```
 
-Then, export the keys as environment variables before running nextflow:
-```
-eval "$(aws configure export-credentials --format env)"
-```
-
 Next, you need to make sure your user is configured to use Docker. To do this, create the `docker` user group and add your current user to it:
 
 ```
@@ -89,9 +84,10 @@ If possible, we recommend validating the pipeline's basic functionality in your 
 > [!TIP]
 > We recommend running the test suite on an `m5.xlarge`, to most closely match the conditions under which our CI/CD tests run with Github Actions. However, any Linux machine with sufficient resources should work.
 
-To run the tests, clone this repository onto your machine, navigate to the repo directory, and run
+To run the tests, clone this repository onto your machine, navigate to the repo directory, export your AWS credentials so the tests can read S3-hosted test data, and run `nf-test test`:
 
 ```bash
+eval "$(aws configure export-credentials --format env)"
 nf-test test
 ```
 
