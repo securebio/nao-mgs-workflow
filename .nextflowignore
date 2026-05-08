@@ -1,0 +1,22 @@
+# Nextflow version ignore file — suppress specific Nextflow releases from the
+# version-currency check enforced by .github/workflows/check-nextflow-version.yml
+# (which runs bin/check_nextflow_version.py).
+#
+# Format (one entry per line):
+#     <X.Y.Z>                    -> permanent ignore
+#     <X.Y.Z> exp:YYYY-MM-DD     -> ignore until YYYY-MM-DD, then warn-and-unignore
+#
+# Lines beginning with '#' and blank lines are ignored; trailing `# ...`
+# comments on entry lines are also stripped. Entries with a past `exp:` date
+# print a warning and are treated as absent, so stale temporary ignores cannot
+# accumulate silently.
+#
+# If the highest-semver upstream release is ignored here, the check falls
+# back to the next-highest non-ignored release.
+
+# Broken release: AWS Batch job submission issues. Permanently excluded; this
+# version was superseded almost immediately and we will never pin to it.
+25.10.3
+
+# Defer 26.04.0; revisit on expiry.
+26.04.0 exp:2026-06-01
