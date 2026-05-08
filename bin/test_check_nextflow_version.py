@@ -233,19 +233,19 @@ class TestCheckPinnedAgainstTarget:
         check_pinned_against_target("26.04.0", "26.04.0")
 
     @pytest.mark.parametrize(
-        "pinned,target",
+        "pinned,latest_eligible",
         [
-            ("25.10.4", "25.10.5"),  # below target — needs a bump
-            ("26.04.0", "25.10.5"),  # above target — likely stale ignore on 26.04.0
+            ("25.10.4", "25.10.5"),  # below — needs a bump
+            ("26.04.0", "25.10.5"),  # above — likely stale ignore on 26.04.0
             ("99.99.99", "25.10.5"),  # not a real release — typo
         ],
     )
-    def test_mismatch_fails(self, pinned: str, target: str) -> None:
+    def test_mismatch_fails(self, pinned: str, latest_eligible: str) -> None:
         with pytest.raises(
             ValueError,
-            match=f"Version mismatch: pinned {pinned} != target {target}",
+            match=f"Version mismatch: pinned {pinned} != latest eligible {latest_eligible}",
         ):
-            check_pinned_against_target(pinned, target)
+            check_pinned_against_target(pinned, latest_eligible)
 
 
 class TestMain:
@@ -286,7 +286,7 @@ class TestMain:
             main()
         captured = capsys.readouterr()
         assert "Pinned Nextflow version: 25.10.5" in captured.out
-        assert "Target Nextflow version: 25.10.5" in captured.out
+        assert "Latest eligible Nextflow version: 25.10.5" in captured.out
         assert "OK: Pinned version is current" in captured.out
 
     def test_versions_mismatch(self, tmp_path: Path) -> None:
@@ -296,7 +296,7 @@ class TestMain:
             "urllib.request.urlopen",
             return_value=self._mock_releases(["25.10.5", "25.10.4"]),
         ), patch("sys.argv", self._argv(config, ignore_file)), pytest.raises(
-            ValueError, match="Version mismatch: pinned 25.10.4 != target 25.10.5",
+            ValueError, match="Version mismatch: pinned 25.10.4 != latest eligible 25.10.5",
         ):
             main()
 
@@ -322,8 +322,8 @@ class TestMain:
         ), patch("sys.argv", self._argv(config, ignore_file)):
             main()
         captured = capsys.readouterr()
-        assert "Ignored versions (active): ['26.04.0']" in captured.out
-        assert "Target Nextflow version: 25.10.5" in captured.out
+        assert "Currently ignored versions: ['26.04.0']" in captured.out
+        assert "Latest eligible Nextflow version: 25.10.5" in captured.out
         assert "OK: Pinned version is current" in captured.out
 
     def test_pinned_above_chronologically_later_lts_patch(
@@ -342,7 +342,7 @@ class TestMain:
         ), patch("sys.argv", self._argv(config, ignore_file)):
             main()
         captured = capsys.readouterr()
-        assert "Target Nextflow version: 26.04.0" in captured.out
+        assert "Latest eligible Nextflow version: 26.04.0" in captured.out
         assert "OK: Pinned version is current" in captured.out
 
     def test_permanent_ignore_persists(
@@ -358,7 +358,7 @@ class TestMain:
             return_value=self._mock_releases(["25.10.4", "25.10.3"]),
         ), patch("sys.argv", self._argv(config, ignore_file)):
             main()
-        assert "Target Nextflow version: 25.10.4" in capsys.readouterr().out
+        assert "Latest eligible Nextflow version: 25.10.4" in capsys.readouterr().out
 
     def test_expired_ignore_warns_and_lapses(
         self, tmp_path: Path, capsys: pytest.CaptureFixture[str],
@@ -372,7 +372,7 @@ class TestMain:
             "urllib.request.urlopen",
             return_value=self._mock_releases(["26.04.0", "25.10.4"]),
         ), patch("sys.argv", self._argv(config, ignore_file)), pytest.raises(
-            ValueError, match="Version mismatch: pinned 25.10.4 != target 26.04.0",
+            ValueError, match="Version mismatch: pinned 25.10.4 != latest eligible 26.04.0",
         ):
             main()
         captured = capsys.readouterr()
@@ -387,6 +387,6 @@ class TestMain:
             "urllib.request.urlopen",
             return_value=self._mock_releases(["25.10.5", "25.10.4"]),
         ), patch("sys.argv", self._argv(config, ignore_file)), pytest.raises(
-            ValueError, match="Version mismatch: pinned 25.10.99 != target 25.10.5",
+            ValueError, match="Version mismatch: pinned 25.10.99 != latest eligible 25.10.5",
         ):
             main()

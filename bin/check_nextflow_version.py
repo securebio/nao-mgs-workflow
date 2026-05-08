@@ -106,7 +106,7 @@ def parse_nextflowignore(
     if not ignore_path.exists():
         return set()
     today = today if today is not None else date.today()
-    active: set[str] = set()
+    currently_ignored: set[str] = set()
     for line_number, raw in enumerate(ignore_path.read_text().splitlines(), 1):
         line = raw.split("#", 1)[0].strip()
         if not line:
@@ -120,7 +120,7 @@ def parse_nextflowignore(
         version = match.group("version")
         exp_str = match.group("exp")
         if exp_str is None:
-            active.add(version)
+            currently_ignored.add(version)
             continue
         try:
             exp_date = date.fromisoformat(exp_str)
@@ -137,8 +137,8 @@ def parse_nextflowignore(
                 file=sys.stderr,
             )
             continue
-        active.add(version)
-    return active
+        currently_ignored.add(version)
+    return currently_ignored
 
 def fetch_releases(api_url: str) -> list[str]:
     """
@@ -186,24 +186,26 @@ def select_target_version(releases: list[str], ignored: set[str]) -> str:
         )
     return max(eligible, key=Version)
 
-def check_pinned_against_target(pinned: str, target: str) -> None:
+def check_pinned_against_target(pinned: str, latest_eligible: str) -> None:
     """
-    Verify that the pinned version equals the target.
+    Verify that the pinned version equals the latest eligible release.
 
-    Strict equality is intentional: if `pinned` differs from the highest
-    non-ignored release we either need to bump the pin or add a justification
-    to .nextflowignore. A mismatch where `pinned` is *higher* than `target`
-    typically indicates a stale ignore entry for the version we are pinned to.
+    Strict equality is intentional: if `pinned` differs from the latest
+    eligible release we either need to bump the pin or add a justification
+    to .nextflowignore. A mismatch where `pinned` is *higher* than the
+    latest eligible release typically indicates a stale ignore entry for
+    the version we are pinned to.
 
     Args:
         pinned (str): The pinned Nextflow version from profiles.config.
-        target (str): The selected target version (highest non-ignored).
+        latest_eligible (str): The selected target — the highest-semver
+            release not currently ignored.
     """
-    if pinned != target:
+    if pinned != latest_eligible:
         raise ValueError(
-            f"Version mismatch: pinned {pinned} != target {target}. "
-            "Bump configs/profiles.config to match, or add an entry to "
-            ".nextflowignore with a justification.",
+            f"Version mismatch: pinned {pinned} != latest eligible "
+            f"{latest_eligible}. Bump configs/profiles.config to match, or "
+            "add an entry to .nextflowignore with a justification.",
         )
 
 def parse_args() -> argparse.Namespace:
@@ -235,13 +237,13 @@ def main() -> None:
 
     ignored = parse_nextflowignore(args.ignore_file)
     if ignored:
-        print(f"Ignored versions (active): {sorted(ignored)}")
+        print(f"Currently ignored versions: {sorted(ignored)}")
 
     releases = fetch_releases(args.releases_url)
-    target = select_target_version(releases, ignored)
-    print(f"Target Nextflow version: {target}")
+    latest_eligible = select_target_version(releases, ignored)
+    print(f"Latest eligible Nextflow version: {latest_eligible}")
 
-    check_pinned_against_target(pinned, target)
+    check_pinned_against_target(pinned, latest_eligible)
     print("OK: Pinned version is current")
 
 if __name__ == "__main__":

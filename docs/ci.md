@@ -92,7 +92,7 @@ The Nextflow version check compares the version pinned in `configs/profiles.conf
 - `<X.Y.Z>` — permanent ignore.
 - `<X.Y.Z> exp:YYYY-MM-DD` — ignore until `YYYY-MM-DD`, after which the entry expires; expired entries print a warning to stderr and are treated as absent, so stale temporary ignores cannot accumulate silently.
 
-Lines beginning with `#` and blank lines are ignored; trailing `# ...` comments on entry lines are also stripped. The pinned version must equal the selected target exactly: if the highest-semver upstream release is in the ignore set, the check falls back to the next-highest non-ignored release. A mismatch typically means either `configs/profiles.config` needs to be bumped, or the new release needs an entry in `.nextflowignore` with a justification.
+Lines beginning with `#` and blank lines are ignored; trailing `# ...` comments on entry lines are also stripped. The pinned version must equal the latest eligible release exactly: if the highest-semver upstream release is currently ignored, the check falls back to the next-highest non-ignored release. A mismatch typically means either `configs/profiles.config` needs to be bumped, or the new release needs an entry in `.nextflowignore` with a justification.
 
 ## Release tests
 

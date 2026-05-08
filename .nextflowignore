@@ -11,14 +11,12 @@
 # print a warning and are treated as absent, so stale temporary ignores cannot
 # accumulate silently.
 #
-# When the highest-semver upstream Nextflow release matches an active entry,
-# the version check falls back to the next-highest non-ignored release.
+# If the highest-semver upstream release is ignored here, the check falls
+# back to the next-highest non-ignored release.
 
 # Broken release: AWS Batch job submission issues. Permanently excluded; this
 # version was superseded almost immediately and we will never pin to it.
 25.10.3
 
-# nf-test 0.9.6 (compatible with Nextflow 26.04.x) is not yet released. Once
-# nf-test ships a compatible version we expect to bump to 26.04.x; until then
-# this ignore lets us stay on the 25.10 LTS line. Revisit on expiry.
+# Defer 26.04.0; revisit on expiry.
 26.04.0 exp:2026-06-01
