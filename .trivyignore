@@ -116,3 +116,11 @@ CVE-2026-33845 exp:2026-06-30
 # Check for a Debian fix at:
 #   https://security-tracker.debian.org/tracker/CVE-2026-33846
 CVE-2026-33846 exp:2026-06-30
+
+# libgnutls30: case-sensitive comparison in X.509 nameConstraints allows
+# for bypass of excluded/permitted certificate authority constraints
+# Our containers fetch resources over HTTPS from public endpoints, do not
+# use custom or constrained CA, and do not use gnutls
+# Check for a Debian fix at:
+#   https://security-tracker.debian.org/tracker/CVE-2026-3833
+CVE-2026-3833 exp:2026-06-30

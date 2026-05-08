@@ -3,7 +3,7 @@
 - Fix `samtools view` failure on duplicate sequence IDs in the concatenated viral genome FASTA produced by `CONCATENATE_GENOME_FASTA`. NCBI `datasets` sometimes returns superseded ("previous") assembly versions alongside current ones, causing duplicate accessions.
     - `DOWNLOAD_VIRAL_GENOMES` now emits an `assembly_status` column in the per-taxid metadata TSV (via `dataformat tsv genome --fields ...assminfo-status`), which `PREPARE_VIRAL_METADATA` flows through to `FILTER_VIRAL_GENBANK_METADATA`, which keeps only rows with `assembly_status == 'current'` (dropping `previous`, `replaced`, `suppressed`, etc.).
     - `CONCATENATE_GENOME_FASTA` now runs `seqkit rmdup --by-name` after concatenation as a defense-in-depth check. Switched the process from the `seqtk` container to the existing `seqkit` container (no `seqtk` invocation in the script).
-- Add CVE-2026-4878 (libcap2), CVE-2026-33845 (libgnutls30), CVE-2026-33846 (libgnutls30), CVE-2026-42311 (Pillow in multiqc), and GHSA-82j2-j2ch-gfr8 (rustls-webpki embedded in Polars in multiqc) to `.trivyignore`; no fix currently available for any, and none is exercised by our pipeline.
+- Add CVE-2026-4878 (libcap2), CVE-2026-33845 (libgnutls30), CVE-2026-33846 (libgnutls30), CVE-2026-3833 (libgnutls30), CVE-2026-42311 (Pillow in multiqc), and GHSA-82j2-j2ch-gfr8 (rustls-webpki embedded in Polars in multiqc) to `.trivyignore`; no fix currently available for any, and none is exercised by our pipeline.
 
 # v3.2.1.4
 
