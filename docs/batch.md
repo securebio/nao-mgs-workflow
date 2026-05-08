@@ -114,5 +114,5 @@ Finally, you need to use all the infrastructure you've just set up to actually r
 
 In the `standard`, `batch`, and `test_run` profiles, Batch containers obtain AWS credentials via one of two mechanisms:
 
-- **EC2 instance role** (default): containers inherit credentials from the instance profile on the Batch compute environment. Step 3 above configures this with `AmazonS3FullAccess`, which is sufficient.
+- **EC2 instance role** (default): containers inherit credentials from the instance profile on the Batch compute environment. Step 1 above requires `AmazonS3FullAccess` on this role, which is sufficient.
 - **Job role** (optional): pass `--batch_job_role <ARN>` to attach a specific IAM role to each Batch job via `aws.batch.jobRole`. The role's trust policy must allow `ecs-tasks.amazonaws.com` to assume it, and the IAM principal launching Nextflow must have `iam:PassRole` for the role. Use this when you want to scope container permissions narrower than the instance role provides.
