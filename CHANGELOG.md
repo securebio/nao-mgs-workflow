@@ -1,7 +1,7 @@
 # v3.2.1.5-dev
 
 - Speed up `DOWNLOAD_VIRAL_GENOMES` by using local `/scratch` directory and batching genome `mv` command.
-    - **Module interface change**: `DOWNLOAD_VIRAL_GENOMES.genomes` now emits a single `${taxid}_genomes/` directory path instead of a channel of per-file `*.fna.gz` paths. `PREPARE_VIRAL_METADATA` walks staged directories recursively to recover the matching genome files. External consumers depending on the previous per-file emit shape will need to update.
+    - `DOWNLOAD_VIRAL_GENOMES.genomes` now emits a single `${taxid}_genomes/` directory path instead of a channel of per-file `*.fna.gz` paths.
 - Add 5 Go stdlib v1.23.4 CVEs (CVE-2026-33811, -33814, -39820, -39836, -42499) in `ncbi_datasets` container to `.trivyignore`. No fix until NCBI rebuilds with Go >= 1.25.10.
 - Combine `SUBSET_READS_PAIRED_TARGET` with the previously-separate `INTERLEAVE_FASTQ` step into a single FIFO-based process that reads each input once and emits interleaved output via `seqtk mergepe`; plumb in the upstream `COUNT_READS` TSV so the in-process read-counting pass is eliminated; use pigz for parallel (de)compression and bump `SUBSET_READS_*` from `single` to `xsmall`. Adds `pigz=2.8` to the `seqtk` container.
 - Replace single-threaded gzip/zcat with pigz across `EXTRACT_VIRAL_READS_SHORT` modules (`BBDUK`, `BBDUK_HITS_INTERLEAVE`, `BOWTIE2`, `FASTP`, `SORT_FASTQ`, `SORT_FILE`); adds `pigz=2.8` to `bbtools`, `bowtie2_samtools`, `fastp`, and `coreutils` containers.

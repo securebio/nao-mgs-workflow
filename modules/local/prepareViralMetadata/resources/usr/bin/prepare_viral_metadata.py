@@ -64,11 +64,7 @@ def match_genomes_to_accessions(genomes_root: Path, accessions: list[str]) -> di
     acc_set = set(accessions)
     result: dict[str, Path] = {}
     # Sort `dirs` and `files` so the first-match-wins behavior is
-    # reproducible across runs and platforms. `os.walk`'s default order
-    # depends on `os.scandir`, which is not guaranteed to be sorted; if
-    # the same accession appears under two `${taxid}_genomes/` subdirs
-    # (e.g. an assembly attached to multiple child taxa) the chosen
-    # symlink target would otherwise vary across runs.
+    # reproducible across runs and platforms.
     for root, dirs, files in os.walk(genomes_root, followlinks=True):
         dirs.sort()
         for fname in sorted(files):
@@ -108,9 +104,7 @@ def prepare_metadata(
     accessions = sorted({r["assembly_accession"] for r in rows})
     acc_to_file = match_genomes_to_accessions(genomes_root, accessions)
     logger.info("Matched %d/%d accessions to genome files", len(acc_to_file), len(accessions))
-    # Create the output dir AFTER the walk so it isn't traversed when
-    # `genomes_root` is the consumer task workdir (i.e. `.`) and `output_dir`
-    # would otherwise be a subdirectory of the walk root.
+    # Create the output dir AFTER the walk so it isn't traversed mistakenly
     output_dir.mkdir(parents=True, exist_ok=True)
     # Symlink matched genomes into a flat output directory. Source paths
     # may be nested (e.g. `12333_genomes/GCA_xxx.fna.gz`) but the symlink

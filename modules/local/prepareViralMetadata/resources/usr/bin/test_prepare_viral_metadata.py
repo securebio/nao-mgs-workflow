@@ -106,16 +106,7 @@ class TestMatchGenomesToAccessions:
         assert result["GCA_000003.1"].parent.name == "2731341_genomes"
 
     def test_match_picks_lexicographically_first_taxid_dir(self, tmp_path: Path) -> None:
-        """When the same accession appears under multiple `${taxid}_genomes/`
-        subdirs (e.g. an assembly attached to multiple child taxa), the
-        chosen symlink target must be deterministic. Pin the contract:
-        first match in lexicographically-sorted directory order wins.
-
-        Use numeric-taxid dir names where lex order differs from numeric
-        order to document the lex-vs-numeric ordering pitfall: lexicographic
-        order is `100_genomes` < `50_genomes` < `9_genomes`, while numeric
-        order is `9` < `50` < `100`. The implementation sorts as strings,
-        so the `100_genomes` dir wins."""
+        """Tests chosen symlink is deterministic."""
         for taxid_dir in ["50_genomes", "9_genomes", "100_genomes"]:
             d = tmp_path / taxid_dir
             d.mkdir()
