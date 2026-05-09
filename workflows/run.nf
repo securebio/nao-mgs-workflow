@@ -46,8 +46,8 @@ workflow RUN {
         input_run = input_log_ch.input_run
         logging_run = input_log_ch.logging_run
         intermediates_run = viral_ch.inter_lca.mix(viral_ch.inter_aligner)
-        reads_raw_viral = viral_ch.bbduk_match
-        reads_trimmed_viral = viral_ch.bbduk_trimmed
+        reads_raw_viral = viral_ch.kmer_match
+        reads_trimmed_viral = viral_ch.kmer_trimmed
         qc_results_run = qc_results_ch
         other_results_run = other_results_ch
         experimental_run = Channel.empty()

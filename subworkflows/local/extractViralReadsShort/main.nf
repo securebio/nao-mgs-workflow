@@ -3,7 +3,7 @@
 | MODULES AND SUBWORKFLOWS |
 ***************************/
 
-include { BBDUK_HITS_INTERLEAVE as BBDUK_HITS } from "../../../modules/local/bbduk"
+include { NUCLEAZE } from "../../../modules/local/nucleaze"
 include { FASTP } from "../../../modules/local/fastp"
 include { BOWTIE2 as BOWTIE2_VIRUS } from "../../../modules/local/bowtie2"
 include { BOWTIE2 as BOWTIE2_HUMAN } from "../../../modules/local/bowtie2"
@@ -25,10 +25,10 @@ workflow EXTRACT_VIRAL_READS_SHORT {
     take:
         reads_ch
         ref_dir
-        params_map // aln_score_threshold, adapters, min_kmer_hits, k, bbduk_suffix, taxid_artificial
+        params_map // aln_score_threshold, adapters, minhits, k, kmer_suffix, taxid_artificial
     main:
         // Get reference paths
-        viral_genome_path = "${ref_dir}/results/virus-genomes-masked.fasta.gz"
+        viral_kmer_index_path = "${ref_dir}/results/virus-genomes-masked.nucleaze.bin"
         genome_meta_path = "${ref_dir}/results/virus-genome-metadata-gid.tsv.gz"
         bt2_virus_index_path = "${ref_dir}/results/bt2-virus-index"
         bt2_human_index_path = "${ref_dir}/results/bt2-human-index"
@@ -47,11 +47,15 @@ workflow EXTRACT_VIRAL_READS_SHORT {
                                "best_alignment_score", "best_alignment_score_rev",
                                "edit_distance", "edit_distance_rev", "ref_start", 
                                "ref_start_rev", "query_rc", "query_rc_rev", "pair_status"]
-         // 1. Run initial screen against viral genomes with BBDuk
-        bbduk_params = params_map
-        bbduk_ch = BBDUK_HITS(reads_ch, viral_genome_path, bbduk_params)
+         // 1. Run initial k-mer screen against viral genomes with nucleaze
+        nucleaze_params = [
+            k: params_map.k,
+            minhits: params_map.minhits,
+            suffix: params_map.kmer_suffix
+        ]
+        kmer_ch = NUCLEAZE(reads_ch, viral_kmer_index_path, nucleaze_params)
         // 2. Carry out adapter removal with FASTP
-        fastp_ch = FASTP(bbduk_ch.fail, params_map.adapters, true)
+        fastp_ch = FASTP(kmer_ch.match, params_map.adapters, true)
         // 3. Run Bowtie2 against a viral database and process output
         def bowtie_base_params = [
             remove_sq: true,
@@ -98,8 +102,8 @@ workflow EXTRACT_VIRAL_READS_SHORT {
         // 10. Rename virus hits to clean file name
         renamed_hits_ch = RENAME_VIRUS_HITS(processed_ch.viral_hits_tsv, "virus_hits.tsv.gz")
     emit:
-        bbduk_match = bbduk_ch.fail
-        bbduk_trimmed = fastp_ch.reads
+        kmer_match = kmer_ch.match
+        kmer_trimmed = fastp_ch.reads
         hits_final = renamed_hits_ch
         inter_lca = processed_ch.lca_tsv
         inter_bowtie = processed_ch.aligner_tsv

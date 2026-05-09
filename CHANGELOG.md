@@ -1,5 +1,9 @@
 # v3.2.1.5-dev
 
+- Replace the BBDuk-based viral k-mer pre-screen in `EXTRACT_VIRAL_READS_SHORT` with [Nucleaze](https://github.com/jackdougle/nucleaze), which consumes a pre-built binary k-mer index now produced by INDEX. RUN snapshots are byte-identical to the BBDuk implementation; the change is purely a performance/I-O improvement (the k-mer index is built once at INDEX time and reused across runs). The BBDuk-based ribosomal screen in `PROFILE` is unchanged — Nucleaze does not yet support a fraction-based threshold equivalent to BBDuk's `minkmerfraction`. Bumps `pipeline-min-index-version` to `3.2.1.5`: pipelines on this version require an index containing `virus-genomes-masked.nucleaze.bin`.
+    - INDEX: `MAKE_VIRUS_INDEX` now also runs `NUCLEAZE_INDEX`, publishing `virus-genomes-masked.nucleaze.bin` next to the masked viral FASTA.
+    - RUN: `EXTRACT_VIRAL_READS_SHORT` swaps `BBDUK_HITS_INTERLEAVE` for `NUCLEAZE`. The unused `BBDUK_HITS_INTERLEAVE` process and its `tests/modules/local/bbduk/bbduk_hits.nf.test` are removed.
+    - Internal renames (no user-facing impact): `bbduk_match`/`bbduk_trimmed` → `kmer_match`/`kmer_trimmed` on the `EXTRACT_VIRAL_READS_SHORT` / `EXTRACT_VIRAL_READS` emit channels; `min_kmer_hits`/`bbduk_suffix` → `minhits`/`kmer_suffix` on the params map.
 - Default `fusion.exportStorageCredentials = false` in the `standard`, `batch`, and `test_run` profiles. Users who pass `--batch_job_role <ARN>` see no change. Users running on AWS Batch without a job role now rely on the EC2 instance role for S3 access. The `ec2_s3` profile is unchanged.
 - Replace the hardcoded `EXCLUDED_VERSIONS` constant in `bin/check_nextflow_version.py` with a `.nextflowignore` config file supporting permanent and time-limited (`exp:YYYY-MM-DD`) ignores; switch target selection to highest-semver-among-non-ignored. Ignore `26.04.0` until 2026-06-01.
 - Bump pinned Nextflow version from `25.10.4` to `25.10.5`.

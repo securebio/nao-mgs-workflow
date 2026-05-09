@@ -1,0 +1,140 @@
+nextflow_process {
+
+    name "Test process NUCLEAZE"
+    script "modules/local/nucleaze/main.nf"
+    process "NUCLEAZE"
+    config "tests/configs/run.config"
+    tag "module"
+    tag "nucleaze"
+
+    test("Should run without failures and conserve reads") {
+        tag "expect_success"
+        tag "paired_end"
+        when {
+            params {
+                params_map = [
+                    k: "24",
+                    minhits: "1",
+                    suffix: "viral"
+                ]
+            }
+            process {
+                '''
+                input[0] = Channel.of(["test", ["${projectDir}/test-data/tiny-index/reads/R1.fastq", "${projectDir}/test-data/tiny-index/reads/R2.fastq"]])
+                input[1] = "${projectDir}/test-data/tiny-index/output/results/virus-genomes-masked.nucleaze.bin"
+                input[2] = params.params_map
+                '''
+            }
+        }
+        then {
+            // Should run without failures
+            assert process.success
+            // Output should be valid interleaved FASTQ
+            def fastq_match = path(process.out.match[0][1]).fastq
+            def fastq_nomatch = path(process.out.nomatch[0][1]).fastq
+            def ids_match = fastq_match.readNames
+            def ids_nomatch = fastq_nomatch.readNames
+            assert ids_match.size() % 2 == 0
+            assert ids_nomatch.size() % 2 == 0
+            // Both match and nomatch should have > 0 reads
+            assert ids_nomatch.size() > 0
+            assert ids_match.size() > 0
+            // Should conserve reads between input and output
+            def fastq_in_r1 = path(process.out.input[0][1][0]).fastq
+            def fastq_in_r2 = path(process.out.input[0][1][1]).fastq
+            def ids_in_r1 = fastq_in_r1.readNames
+            def ids_in_r2 = fastq_in_r2.readNames
+            assert ids_in_r1.size() + ids_in_r2.size() == ids_nomatch.size() + ids_match.size()
+            // Reads should be disjoint between match and nomatch
+            for (i in ids_in_r1) {
+                if (i in ids_match) {
+                    assert !(i in ids_nomatch)
+                } else {
+                    assert i in ids_nomatch
+                }
+            }
+            for (i in ids_in_r2) {
+                if (i in ids_match) {
+                    assert !(i in ids_nomatch)
+                } else {
+                    assert i in ids_nomatch
+                }
+            }
+            // Stats log should exist
+            def stats = path(process.out.log[0][1])
+            assert stats.exists()
+        }
+    }
+
+    test("Should handle both-empty input files") {
+        tag "empty_input"
+        tag "expect_success"
+        tag "paired_end"
+        when {
+            params {
+                params_map = [
+                    k: "24",
+                    minhits: "1",
+                    suffix: "viral"
+                ]
+            }
+            process {
+                '''
+                input[0] = Channel.of(["gold_standard", ["s3://nao-testing/toy-data/empty_1.fastq", "s3://nao-testing/toy-data/empty_2.fastq"]])
+                input[1] = "${projectDir}/test-data/tiny-index/output/results/virus-genomes-masked.nucleaze.bin"
+                input[2] = params.params_map
+                '''
+            }
+        }
+        then {
+            assert process.success
+            // Match and nomatch should both be empty
+            def fastq_match = path(process.out.match[0][1]).fastq
+            def fastq_nomatch = path(process.out.nomatch[0][1]).fastq
+            assert fastq_match.readNames.size() == 0
+            assert fastq_nomatch.readNames.size() == 0
+            // Stats file should still exist and contain the empty-input sentinel
+            def stats = path(process.out.log[0][1])
+            assert stats.exists()
+            assert stats.text.contains("No data - empty input files")
+            // Symlinked inputs should still be emitted by the unconditional post-guard step
+            assert process.out.input[0][1].size() == 2
+        }
+    }
+
+    test("Should have no matches when minhits is unreachable") {
+        tag "expect_success"
+        tag "paired_end"
+        when {
+            params {
+                params_map = [
+                    k: "24",
+                    minhits: "255",
+                    suffix: "viral"
+                ]
+            }
+            process {
+                '''
+                input[0] = Channel.of(["test", ["${projectDir}/test-data/tiny-index/reads/R1.fastq", "${projectDir}/test-data/tiny-index/reads/R2.fastq"]])
+                input[1] = "${projectDir}/test-data/tiny-index/output/results/virus-genomes-masked.nucleaze.bin"
+                input[2] = params.params_map
+                '''
+            }
+        }
+        then {
+            assert process.success
+            // All reads should be nomatch (minhits too high for any match)
+            def fastq_nomatch = path(process.out.nomatch[0][1]).fastq
+            def ids_nomatch = fastq_nomatch.readNames
+            assert ids_nomatch.size() > 0
+            // Match should be empty — no reads meet the minhits threshold
+            def fastq_match = path(process.out.match[0][1]).fastq
+            def ids_match = fastq_match.readNames
+            assert ids_match.size() == 0
+            // Read conservation: all input reads end up in nomatch
+            def fastq_in_r1 = path(process.out.input[0][1][0]).fastq
+            def fastq_in_r2 = path(process.out.input[0][1][1]).fastq
+            assert fastq_in_r1.readNames.size() + fastq_in_r2.readNames.size() == ids_nomatch.size()
+        }
+    }
+}
