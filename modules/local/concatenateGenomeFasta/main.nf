@@ -1,6 +1,6 @@
 // Concatenate downloaded genomes from ncbi-genome-download according to a file of genome IDs
 process CONCATENATE_GENOME_FASTA {
-    label "single"
+    label "single_cpu_16GB_memory"
     label "seqkit"
     input:
         path(genome_dir)
@@ -10,9 +10,9 @@ process CONCATENATE_GENOME_FASTA {
     script:
         """
         set -euo pipefail
-        # Diagnostics
-        echo "Genome directory contains" \$(ls ${genome_dir} | wc -l) "files, beginning with:"
-        ls -1 ${genome_dir} | head
+        # Diagnostics.
+        # `|| true` prevents SIGPIPE in cases where directory size exceeds kernel pipe buffer
+        ls -1 ${genome_dir} | head || true
         if [[ ! -s ${path_file} ]]; then
             echo "No matching files found!"
             exit 1
