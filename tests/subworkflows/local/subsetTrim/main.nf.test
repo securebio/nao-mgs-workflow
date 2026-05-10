@@ -19,6 +19,17 @@ nextflow_workflow {
         config "tests/configs/run.config"
         tag "paired_end"
         tag "expect_success"
+        setup {
+            run("COUNT_READS") {
+                script "modules/local/countReads/main.nf"
+                process {
+                    '''
+                    input[0] = Channel.of(["test", ["${projectDir}/test-data/tiny-index/reads/R1.fastq", "${projectDir}/test-data/tiny-index/reads/R2.fastq"]])
+                    input[1] = false
+                    '''
+                }
+            }
+        }
         when {
             params {
                 n_reads = 25
@@ -32,7 +43,7 @@ nextflow_workflow {
                     random_seed: ""
                 ]
                 input[0] = Channel.of(["test", ["${projectDir}/test-data/tiny-index/reads/R1.fastq", "${projectDir}/test-data/tiny-index/reads/R2.fastq"]])
-                input[1] = Channel.of(["test", "${projectDir}/test-data/tiny-index/reads/paired_counts.tsv"])
+                input[1] = COUNT_READS.out.output
                 input[2] = Channel.of(false)
                 input[3] = subset_trim_params
                 '''
@@ -88,6 +99,17 @@ nextflow_workflow {
         tag "single_end"
         tag "expect_success"
         tag "ont"
+        setup {
+            run("COUNT_READS") {
+                script "modules/local/countReads/main.nf"
+                process {
+                    '''
+                    input[0] = Channel.of(["test", "${projectDir}/test-data/tiny-index/reads/ont.fastq"])
+                    input[1] = true
+                    '''
+                }
+            }
+        }
         when {
             params {
                 n_reads = 25
@@ -101,7 +123,7 @@ nextflow_workflow {
                     random_seed: ""
                 ]
                 input[0] = Channel.of(["test", "${projectDir}/test-data/tiny-index/reads/ont.fastq"])
-                input[1] = Channel.of(["test", "${projectDir}/test-data/tiny-index/reads/single_counts.tsv"])
+                input[1] = COUNT_READS.out.output
                 input[2] = Channel.of(true)
                 input[3] = subset_trim_params
                 '''
@@ -139,12 +161,23 @@ nextflow_workflow {
         config "tests/configs/run.config"
         tag "empty_input"
         tag "expect_success"
+        setup {
+            run("COUNT_READS") {
+                script "modules/local/countReads/main.nf"
+                process {
+                    '''
+                    input[0] = Channel.of("empty_sample").combine(Channel.of("${projectDir}/test-data/toy-data/empty_file.txt"))
+                    input[1] = true
+                    '''
+                }
+            }
+        }
         when {
             params {
                 n_reads = 100
             }
             workflow {
-                """
+                '''
                 def subset_trim_params = [
                     n_reads_profile: params.n_reads,
                     adapters: params.adapters,
@@ -152,10 +185,10 @@ nextflow_workflow {
                     random_seed: ""
                 ]
                 input[0] = Channel.of("empty_sample").combine(Channel.of("${projectDir}/test-data/toy-data/empty_file.txt"))
-                input[1] = Channel.of(["empty_sample", "${projectDir}/test-data/toy-data/empty_counts.tsv"])
+                input[1] = COUNT_READS.out.output
                 input[2] = Channel.of(true)
                 input[3] = subset_trim_params
-                """
+                '''
             }
         }
         then {

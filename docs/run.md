@@ -14,6 +14,7 @@ flowchart LR
 A(Raw reads) --> B[LOAD_SAMPLESHEET]
 B --> C[COUNT_TOTAL_READS] & E[SUBSET_TRIM]
 B --> D[EXTRACT_VIRAL_READS]
+C --> E
 E --> I(Subset reads)
 E --> J(Subset trimmed reads)
 J --> G[RUN_QC] & H[PROFILE]
@@ -59,7 +60,7 @@ To perform these functions, the workflow runs a series of subworkflows responsib
 This subworkflow loads the samplesheet and creates a channel containing the samplesheet data, in the structure expected by the pipeline. It also derives the endedness for the pipeline run (single- vs paired-end) from the structure of the samplesheet, and checks that the specified sequencing platform is (a) valid and (b) compatible with the specified endedness. (No diagram is provided for this subworkflow.)
 
 ### Subset and trim reads (SUBSET_TRIM)
-This subworkflow uses [Seqtk](https://github.com/lh3/seqtk) to randomly subsample the input reads to a target number[^target] (default 1 million read pairs per sample) to save time and compute on downstream steps while still providing a reliable statistical picture of the overall sample. Following downsampling, read pairs are combined into a single interleaved file, which then undergoes adapter trimming and quality screening with [FASTP](https://github.com/OpenGene/fastp).
+This subworkflow uses [Seqtk](https://github.com/lh3/seqtk) to randomly subsample the input reads to a target number[^target] (default 1 million read pairs per sample) to save time and compute on downstream steps while still providing a reliable statistical picture of the overall sample. For paired-end input, R1 and R2 are sampled in parallel and merged into a single interleaved output in the same step (via `seqtk mergepe`); the read count required to compute the sampling fraction is provided by the upstream `COUNT_READS` task. The interleaved subset reads then undergo adapter trimming and quality screening with [FASTP](https://github.com/OpenGene/fastp).
 
 [^target]: More precisely, the subworkflow uses the total read count and target read number to calculate a fraction *p* of the input reads that should be retained, then keeps each read from the input data with probability *p*. Since each read is kept or discarded independently of the others, the final read count will not exactly match the target number; however, it will be very close for sufficiently large input files.
 
@@ -70,14 +71,15 @@ config:
   layout: horizontal
 ---
 flowchart LR
-A(Raw paired reads) --> B[Interleave reads]
-B --> C[Subset with Seqtk]
-C --> D[Trim with FASTP]
-C --> E(Subset reads)
-D --> F(Subset trimmed reads)
+A(Raw paired reads) --> B[Subset and interleave with Seqtk]
+G(Read count from COUNT_READS) --> B
+B --> C[Trim with FASTP]
+B --> D(Subset reads)
+C --> E(Subset trimmed reads)
 style A fill:#fff,stroke:#000
+style G fill:#fff,stroke:#000
+style D fill:#000,color:#fff,stroke:#000
 style E fill:#000,color:#fff,stroke:#000
-style F fill:#000,color:#fff,stroke:#000
 ```
 
 ## Helper subworkflows

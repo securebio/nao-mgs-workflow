@@ -9,13 +9,22 @@ nextflow_process {
 
     test("Should pass through all reads when target is greater than total"){
         tag "expect_success"
+        setup {
+            run("COUNT_READS") {
+                script "modules/local/countReads/main.nf"
+                process {
+                    '''
+                    input[0] = Channel.of(["test", ["${projectDir}/test-data/tiny-index/reads/R1.fastq", "${projectDir}/test-data/tiny-index/reads/R2.fastq"]])
+                    input[1] = false
+                    '''
+                }
+            }
+        }
         when {
             params {}
             process {
                 '''
-                input[0] = Channel.of(["test",
-                    ["${projectDir}/test-data/tiny-index/reads/R1.fastq", "${projectDir}/test-data/tiny-index/reads/R2.fastq"],
-                    "${projectDir}/test-data/tiny-index/reads/paired_counts.tsv"])
+                input[0] = Channel.of(["test", ["${projectDir}/test-data/tiny-index/reads/R1.fastq", "${projectDir}/test-data/tiny-index/reads/R2.fastq"]]).join(COUNT_READS.out.output)
                 input[1] = 100
                 input[2] = 42 // Arbitrary seed value
                 '''
@@ -41,15 +50,24 @@ nextflow_process {
 
     test("Should subset and interleave when target is less than total") {
         tag "expect_success"
+        setup {
+            run("COUNT_READS") {
+                script "modules/local/countReads/main.nf"
+                process {
+                    '''
+                    input[0] = Channel.of(["test", ["${projectDir}/test-data/tiny-index/reads/R1.fastq", "${projectDir}/test-data/tiny-index/reads/R2.fastq"]])
+                    input[1] = false
+                    '''
+                }
+            }
+        }
         when {
             params {
                 readTarget = 10
             }
             process {
                 '''
-                input[0] = Channel.of(["test",
-                    ["${projectDir}/test-data/tiny-index/reads/R1.fastq", "${projectDir}/test-data/tiny-index/reads/R2.fastq"],
-                    "${projectDir}/test-data/tiny-index/reads/paired_counts.tsv"])
+                input[0] = Channel.of(["test", ["${projectDir}/test-data/tiny-index/reads/R1.fastq", "${projectDir}/test-data/tiny-index/reads/R2.fastq"]]).join(COUNT_READS.out.output)
                 input[1] = params.readTarget
                 input[2] = 42 // Arbitrary seed value
                 '''

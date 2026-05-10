@@ -28,10 +28,6 @@ workflow SUBSET_TRIM {
         reads_with_counts = reads_ch.join(counts_ch) // [sample, reads, counts_tsv]
         reads_paired = single_end_check.paired.combine(reads_with_counts).map{ [it[1], it[2], it[3]] }
         reads_single = single_end_check.single.combine(reads_with_counts).map{ [it[1], it[2], it[3]] }
-        // Subset reads. SUBSET_PAIRED emits interleaved output directly (subsumes
-        // the legacy INTERLEAVE_FASTQ step that previously ran here); SUBSET_SINGLE
-        // is already a single stream. INTERLEAVE_FASTQ remains in the codebase as a
-        // test-setup helper used by other module tests.
         subset_ch_single = SUBSET_SINGLE(reads_single, params_map.n_reads_profile, params_map.random_seed).output
         subset_ch_paired = SUBSET_PAIRED(reads_paired, params_map.n_reads_profile, params_map.random_seed).output
         inter_ch = subset_ch_single.mix(subset_ch_paired)
