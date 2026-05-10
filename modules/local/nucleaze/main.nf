@@ -15,8 +15,8 @@ process NUCLEAZE {
     script:
         def r1 = reads[0]
         def r2 = reads[1]
-        def nomatch_out = "${sample}_${params_map.suffix}_nucleaze_nomatch.fastq"
-        def match_out = "${sample}_${params_map.suffix}_nucleaze_match.fastq"
+        def nomatch_out = "${sample}_${params_map.suffix}_nucleaze_nomatch.fastq.gz"
+        def match_out = "${sample}_${params_map.suffix}_nucleaze_match.fastq.gz"
         def stats = "${sample}_${params_map.suffix}_nucleaze.stats.txt"
         def r1ExtractCmd = r1.toString().endsWith(".gz") ? "zcat" : "cat"
         def r2ExtractCmd = r2.toString().endsWith(".gz") ? "zcat" : "cat"
@@ -29,22 +29,37 @@ process NUCLEAZE {
         r2_first=\$(${r2ExtractCmd} ${r2} | head -c 1 || true)
         if [[ -z "\${r1_first}" && -z "\${r2_first}" ]]; then
             >&2 echo "Warning: Both input read files are empty. Creating empty output files."
-            gzip -c < /dev/null > ${nomatch_out}.gz
-            gzip -c < /dev/null > ${match_out}.gz
+            gzip -c < /dev/null > ${nomatch_out}
+            gzip -c < /dev/null > ${match_out}
             echo "No data - empty input files" > ${stats}
         else
+            # Stream nucleaze's outputs straight into pigz workers via named FIFOs,
+            # so the heavy nomatch FASTQ never lands uncompressed on disk and
+            # compression overlaps fully with screening.
+            #   - pigz -1 (fast level) keeps up with nucleaze's output rate; default
+            #     -6 back-pressures nucleaze and inflates its processing time ~3x.
+            #   - Named FIFOs + `wait \$PID` are required (rather than bash
+            #     `>(pigz ...)` process substitution): `>(...)` does not expose its
+            #     subshell PID, so the script can exit before pigz drains the pipe
+            #     and silently truncate the gzip trailer.
+            tmpdir=\$(mktemp -d)
+            trap 'rm -rf "\${tmpdir}"' EXIT
+            mkfifo "\${tmpdir}/match.fifo" "\${tmpdir}/nomatch.fifo"
+            pigz -p ${task.cpus} -1 < "\${tmpdir}/match.fifo"   > ${match_out}   & PIGZ_M=\$!
+            pigz -p ${task.cpus} -1 < "\${tmpdir}/nomatch.fifo" > ${nomatch_out} & PIGZ_U=\$!
             nucleaze \
                 --binref ${index} \
                 --in ${r1} \
                 --in2 ${r2} \
-                --outu ${nomatch_out} \
-                --outm ${match_out} \
+                --outm "\${tmpdir}/match.fifo" \
+                --outu "\${tmpdir}/nomatch.fifo" \
                 --k ${params_map.k} \
                 --minhits ${params_map.minhits} \
                 --canonical \
                 --threads ${task.cpus} \
                 2>&1 | tee ${stats}
-            gzip ${nomatch_out} ${match_out}
+            wait "\${PIGZ_M}"
+            wait "\${PIGZ_U}"
         fi
         # Symlink inputs so they are captured as process outputs for read-conservation checks
         ln -s ${r1} input_${r1}
