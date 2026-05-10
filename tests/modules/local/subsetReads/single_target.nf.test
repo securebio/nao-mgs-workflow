@@ -13,7 +13,9 @@ nextflow_process {
             params {}
             process {
                 '''
-                input[0] = Channel.of(["test", "${projectDir}/test-data/tiny-index/reads/R1.fastq"])
+                input[0] = Channel.of(["test",
+                    "${projectDir}/test-data/tiny-index/reads/R1.fastq",
+                    "${projectDir}/test-data/tiny-index/reads/single_counts.tsv"])
                 input[1] = 100
                 input[2] = 42 // Arbitrary seed value
                 '''
@@ -21,7 +23,7 @@ nextflow_process {
         }
         then {
             assert process.success
-            assert path(process.out.input[0][1]).md5 == path(process.out.output[0][1]).md5
+            // Passthrough preserves the input byte-for-byte
             assert path(process.out.input[0][1]).md5 == path(process.out.output[0][1]).md5
         }
     }
@@ -34,7 +36,9 @@ nextflow_process {
             }
             process {
                 '''
-                input[0] = Channel.of(["test", "${projectDir}/test-data/tiny-index/reads/R1.fastq"])
+                input[0] = Channel.of(["test",
+                    "${projectDir}/test-data/tiny-index/reads/R1.fastq",
+                    "${projectDir}/test-data/tiny-index/reads/single_counts.tsv"])
                 input[1] = params.readTarget
                 input[2] = 42 // Arbitrary seed value
                 '''

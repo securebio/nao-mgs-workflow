@@ -96,6 +96,15 @@ When asked to resolve merge conflicts:
 2. **Wait for user approval** before resolving.
 3. When the chosen resolution is to take one side of a conflict entirely (for a given file or the whole merge), prefer git-native resolution commands (e.g., `git checkout --ours <file>` or `git checkout --theirs <file>`) over manually rewriting affected files.
 
+## Benchmarking
+
+See `docs/benchmarking.md` for the metric definitions and reporting conventions used in performance PRs. **Two metrics**, both derived from each task's `trace.tsv` row:
+
+- **runtime** = `complete − start` (slot wall time; container provisioning + command + teardown)
+- **cpu-hours** = `realtime × cpus / 3600` (excludes container overhead — tracks the underlying compute change)
+
+Do not substitute `realtime × %cpu / 100` (actual CPU consumed) or `(complete − start) × cpus` (folds container overhead into compute billing) for cpu-hours. Both are wrong by this project's convention. The doc has parsing snippets (the `realtime` column is `"1m 37s"`-style strings, not floats), output-equality-verification recipes, and the framing to use when changes preserve read content but reorder streams.
+
 ## Testing
 
 See `docs/testing.md` for comprehensive testing guidelines. Key commands:

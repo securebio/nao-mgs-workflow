@@ -32,8 +32,9 @@ nextflow_workflow {
                     random_seed: ""
                 ]
                 input[0] = Channel.of(["test", ["${projectDir}/test-data/tiny-index/reads/R1.fastq", "${projectDir}/test-data/tiny-index/reads/R2.fastq"]])
-                input[1] = Channel.of(false)
-                input[2] = subset_trim_params
+                input[1] = Channel.of(["test", "${projectDir}/test-data/tiny-index/reads/paired_counts.tsv"])
+                input[2] = Channel.of(false)
+                input[3] = subset_trim_params
                 '''
             }
         }
@@ -100,8 +101,9 @@ nextflow_workflow {
                     random_seed: ""
                 ]
                 input[0] = Channel.of(["test", "${projectDir}/test-data/tiny-index/reads/ont.fastq"])
-                input[1] = Channel.of(true)
-                input[2] = subset_trim_params
+                input[1] = Channel.of(["test", "${projectDir}/test-data/tiny-index/reads/single_counts.tsv"])
+                input[2] = Channel.of(true)
+                input[3] = subset_trim_params
                 '''
             }
         }
@@ -150,8 +152,9 @@ nextflow_workflow {
                     random_seed: ""
                 ]
                 input[0] = Channel.of("empty_sample").combine(Channel.of("${projectDir}/test-data/toy-data/empty_file.txt"))
-                input[1] = Channel.of(true)
-                input[2] = subset_trim_params
+                input[1] = Channel.of(["empty_sample", "${projectDir}/test-data/toy-data/empty_counts.tsv"])
+                input[2] = Channel.of(true)
+                input[3] = subset_trim_params
                 """
             }
         }
