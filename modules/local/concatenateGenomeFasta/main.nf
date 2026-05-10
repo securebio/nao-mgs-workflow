@@ -10,7 +10,7 @@ process CONCATENATE_GENOME_FASTA {
     script:
         """
         set -euo pipefail
-        # Diagnostics.
+        # Diagnostics
         # `|| true` prevents SIGPIPE in cases where directory size exceeds kernel pipe buffer
         ls -1 ${genome_dir} | head || true
         if [[ ! -s ${path_file} ]]; then
