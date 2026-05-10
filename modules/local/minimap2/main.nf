@@ -62,7 +62,10 @@ process MINIMAP2 {
         """
 }
 
-// Run minimap2 in non-streamed mode on a single input FASTQ file and partition reads based on alignment status
+// Run minimap2 in non-streamed mode on a single input FASTQ file and partition reads based on alignment status.
+// Uses --split-prefix because the index may be split across chunks; minimap2 still
+// streams the merged SAM to stdout, so we can partition it on the fly with `tee`
+// instead of writing a temporary SAM file and re-reading it three times.
 process MINIMAP2_NON_STREAMED {
     label "max"
     label "minimap2_samtools"
@@ -84,30 +87,20 @@ process MINIMAP2_NON_STREAMED {
         def in2 = "${sample}_${suffix}_minimap2_in.fastq.gz"
         """
         set -euo pipefail
-        # Run pipeline
-        # Outputs a SAM file for all reads, which is then partitioned based on alignment status
+        # Outputs a SAM stream that is partitioned on the fly into three files:
         #   - First branch (samtools view -u -f 4 -) filters SAM to unaligned reads and saves FASTQ
         #   - Second branch (samtools view -u -F 4 -) filters SAM to aligned reads and saves FASTQ
         #   - Third branch (samtools view -h -F 4 -) also filters SAM to aligned reads and saves SAM
-        minimap2 -a ${params_map.alignment_params} ${idx} ${reads} --split-prefix "mm2_split_" > complete_sam.sam
-
-        # Filter SAM to unaligned reads and save FASTQ
-        samtools view -u -f 4 complete_sam.sam \\
-            | samtools fastq - | gzip -c > ${un}
-
-        # Filter SAM to aligned reads and save FASTQ
-        samtools view -u -F 4 complete_sam.sam \\
-            | samtools fastq - | gzip -c > ${al}
-
-        # Filter SAM to aligned reads and save SAM
-        samtools view -h -F 4 complete_sam.sam \\
+        minimap2 -a ${params_map.alignment_params} -t ${task.cpus} ${idx} ${reads} --split-prefix "mm2_split_" \\
+            | tee \\
+                >(samtools view -u -f 4 - \\
+                    | samtools fastq - | gzip -c > ${un}) \\
+                >(samtools view -u -F 4 - \\
+                    | samtools fastq - | gzip -c > ${al}) \\
+            | samtools view -h -F 4 - \\
             ${ params_map.remove_sq ? "| grep -v '^@SQ'" : "" } | gzip -c > ${sam}
-
-        # Remove temporary files
-        rm complete_sam.sam
 
         # Link input to output for testing
         ln -s ${reads} ${in2}
-
         """
 }
