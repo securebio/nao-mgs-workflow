@@ -37,6 +37,8 @@ EOF
 2. **Changes list**: Bulleted list of specific changes with their justifications
 3. **Footer**: Always include the "Generated with Claude Code" attribution
 
+**Worked examples** of well-structured PR descriptions for this repo live in `.claude/pr-examples/`. Refer to them when drafting — particularly for changes with backwards-compatibility or performance implications, where the structure of the body is doing real work.
+
 **Before creating the PR:**
 - Run the **pr-preflight** agent to check branch readiness (version bump, changelog, lint, schemas)
 - Check whether your changes require documentation updates. If you modified behavior, added features, or changed workflows, update the relevant docs (e.g. `docs/`, `CLAUDE.md`) in the same PR — don't leave documentation for a follow-up. Use the **update-docs** agent to identify and edit affected doc files.
