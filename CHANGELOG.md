@@ -1,5 +1,6 @@
 # v3.2.1.5-dev
 
+- `SUBSET_TRIM`: replace the paired-end `SUBSET_PAIRED` -> `INTERLEAVE_FASTQ` pair with a single combined `SUBSET_AND_INTERLEAVE_PAIRED_TARGET` process. seqtk is seeded identically on R1 and R2 (so the two streams remain pair-aligned) and piped through process-substitution `paste` directly into the interleaver, skipping the intermediate `subset_R{1,2}.fastq.gz` write/read round-trip and saving one gzip + one zcat per sample. The original `SUBSET_READS_PAIRED_TARGET` and `INTERLEAVE_FASTQ` modules remain available; only the workflow wiring changes.
 - Add `.claude/pr-examples/` directory containing worked examples of well-structured PR descriptions for this repo, and a `CLAUDE.md` reference pointing contributors at it.
 - Default `fusion.exportStorageCredentials = false` in the `standard`, `batch`, and `test_run` profiles. Users who pass `--batch_job_role <ARN>` see no change. Users running on AWS Batch without a job role now rely on the EC2 instance role for S3 access. The `ec2_s3` profile is unchanged.
 - Replace the hardcoded `EXCLUDED_VERSIONS` constant in `bin/check_nextflow_version.py` with a `.nextflowignore` config file supporting permanent and time-limited (`exp:YYYY-MM-DD`) ignores; switch target selection to highest-semver-among-non-ignored. Ignore `26.04.0` until 2026-06-01.
