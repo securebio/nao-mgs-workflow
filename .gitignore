@@ -29,6 +29,7 @@ package.json
 
 .claude/*
 !.claude/agents
+!.claude/pr-examples
 .review-loop/
 uv.lock
 tmp/**
