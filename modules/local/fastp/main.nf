@@ -30,17 +30,20 @@ process FASTP {
         def par = "--cut_front --cut_tail --correction --detect_adapter_for_pe --trim_poly_x --cut_mean_quality 20 --average_qual 20 --qualified_quality_phred 20 --verbose --dont_eval_duplication --thread ${task.cpus} --low_complexity_filter"
         def of_trimmed = of - ~/.gz$/
         def op_trimmed = op - ~/.gz$/
+        // pigz at level 1 (fast) is fast enough not to back-pressure fastp;
+        // default -6 is markedly slower than fastp can produce. Same pattern as
+        // the streamed MINIMAP2 module and NUCLEAZE.
         """
         # Execute
-        ${extractCmd} ${reads} | fastp ${io} ${par} | gzip -c > ${op}
+        ${extractCmd} ${reads} | fastp ${io} ${par} | pigz -p ${task.cpus} -1 -c > ${op}
         # Handle empty output (fastp doesn't handle gzipping empty output properly)
         if [[ ! -s ${of} ]]; then
             mv ${of} ${of_trimmed}
-            gzip ${of_trimmed}
+            pigz -p ${task.cpus} ${of_trimmed}
         fi
         if [[ ! -s ${op} ]]; then
             mv ${op} ${op_trimmed}
-            gzip ${op_trimmed}
+            pigz -p ${task.cpus} ${op_trimmed}
         fi
         # Link input to output for testing
         ln -s ${reads} ${sample}_fastp_in.fastq.gz
