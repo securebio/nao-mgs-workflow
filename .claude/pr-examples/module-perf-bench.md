@@ -4,6 +4,15 @@ The Illumina viral-extraction subworkflow has five processes whose read or write
 
 This PR does **not** attempt to improve performance in the Python scripts called by the subworkflow (e.g. `processViralBowtie2Sam`, `filterViralSam`, `lcaTsv`); these call `gzip.open()` internally and require a different approach to parallelization, which will be addressed in a future PR.
 
+# Backwards compatibility
+
+Pipeline outputs preserve read content but not stream order. Verified on the 19-sample cohort by sorting reads before hashing:
+
+- Exact-count results (`virus_hits.tsv.gz`, `read_counts.tsv`, kraken taxon classifications, `n_minimizers_total`) — byte-identical between dev and PR across all 19 samples.
+- Order-sensitive estimators show sub-1 % variance on a minority of samples: FastQC's `percent_duplicates` (sampled from the first ~100 k reads) and Kraken's `n_minimizers_distinct` (HyperLogLog sketch).
+
+The reordering originates at FASTP. In dev, FASTP's writer thread is back-pressured by single-thread gzip and per-worker output drains in input order. With pigz, the writer no longer gates, and FASTP's worker threads interleave into the output stream non-deterministically. The set of reads is identical between dev and PR; only the cross-thread merge order changes.
+
 # Benchmarking
 
 Full-cohort `chain_workflows.py` runs of the **Illumina_100M benchmark** (19 samples) on AWS Batch, comparing `dev` baseline vs this PR. Two metrics throughout, taken from each task's `trace.tsv` row:
