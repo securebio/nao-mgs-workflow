@@ -109,8 +109,14 @@ def prepare_metadata(
     # Symlink matched genomes into a flat output directory. Source paths
     # may be nested (e.g. `12333_genomes/GCA_xxx.fna.gz`) but the symlink
     # target is the leaf filename only, so consumers see a flat layout.
+    # Use `realpath` (not `abspath`) so the symlink target is the fully-
+    # resolved upstream path, bypassing Nextflow's stage-in directory
+    # symlinks. On Fusion-mounted work dirs, creating a symlink whose
+    # target traverses another directory symlink is ~700x slower
+    # (~7/sec vs ~5000/sec) than creating one with a fully-resolved
+    # target — observed empirically against the cd-index reference run.
     for filepath in acc_to_file.values():
-        os.symlink(os.path.abspath(filepath), output_dir / filepath.name)
+        os.symlink(os.path.realpath(filepath), output_dir / filepath.name)
     n_written = 0
     with open(output_metadata_path, "w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=out_fields, delimiter="\t")
