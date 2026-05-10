@@ -20,7 +20,7 @@ process FASTP {
         * Base correction in overlapping paired-end reads;
         * Filter low complexity reads.
         */
-        def extractCmd = reads.toString().endsWith(".gz") ? "zcat" : "cat"
+        def extractCmd = reads.toString().endsWith(".gz") ? "pigz -dc -p ${task.cpus}" : "cat"
         def op = "${sample}_fastp.fastq.gz"
         def of = "${sample}_fastp_failed.fastq.gz"
         def oj = "${sample}_fastp.json"
@@ -32,15 +32,18 @@ process FASTP {
         def op_trimmed = op - ~/.gz$/
         """
         # Execute
-        ${extractCmd} ${reads} | fastp ${io} ${par} | gzip -c > ${op}
+        # pigz -1 (fast) is fast enough not to back-pressure fastp through the
+        # output pipe; default level -6 is markedly slower than fastp can
+        # produce. Same pattern as the streamed MINIMAP2 module and NUCLEAZE.
+        ${extractCmd} ${reads} | fastp ${io} ${par} | pigz -p ${task.cpus} -1 -c > ${op}
         # Handle empty output (fastp doesn't handle gzipping empty output properly)
         if [[ ! -s ${of} ]]; then
             mv ${of} ${of_trimmed}
-            gzip ${of_trimmed}
+            pigz -p ${task.cpus} ${of_trimmed}
         fi
         if [[ ! -s ${op} ]]; then
             mv ${op} ${op_trimmed}
-            gzip ${op_trimmed}
+            pigz -p ${task.cpus} ${op_trimmed}
         fi
         # Link input to output for testing
         ln -s ${reads} ${sample}_fastp_in.fastq.gz
