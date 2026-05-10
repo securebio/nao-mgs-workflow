@@ -1,11 +1,6 @@
 # v3.2.1.5-dev
 
-- Replace single-threaded gzip / zcat with pigz across the `EXTRACT_VIRAL_READS_SHORT` subworkflow's compression hot paths:
-    - `BBDUK` and `BBDUK_HITS_INTERLEAVE`: pass `pigz=t unpigz=t` to `bbduk.sh` so its built-in compression wrapper shells out to pigz (parallel, scaled by `t=${task.cpus}`) instead of the internal single-threaded gzip; swap the upstream `zcat` for `pigz -dc -p ${task.cpus}` so input decompression isn't the new bottleneck.
-    - `BOWTIE2`: replace the three `tee`-fanned `gzip -c` writers (mapped FASTQ, unmapped FASTQ, mapped SAM) with `pigz -p ${task.cpus} -1 -c`, and swap the input-side `zcat` for `pigz -dc -p ${task.cpus}`.
-    - `FASTP`: replace the streamed-output `gzip -c`, the empty-output gzip fixups, and the input `zcat` with their pigz equivalents. Same shape as PR #772 (now superseded).
-    - `SORT_FASTQ` and `SORT_FILE`: mechanical swap to `pigz -p ${task.cpus}` / `pigz -dc -p ${task.cpus}`. Still `single`-tier (one CPU), so no immediate perf benefit; included for consistency so the next CPU-allocation bump is a one-line change.
-    - Adds `pigz=2.8` to `containers/bbtools.yml`, `bowtie2_samtools.yml`, `fastp.yml`, and `coreutils.yml`. Container hashes will need to be rebuilt by a maintainer (`bin/build_ecr_container.py`).
+- Replace single-threaded gzip/zcat with pigz across `EXTRACT_VIRAL_READS_SHORT` modules (`BBDUK`, `BBDUK_HITS_INTERLEAVE`, `BOWTIE2`, `FASTP`, `SORT_FASTQ`, `SORT_FILE`); adds `pigz=2.8` to `bbtools`, `bowtie2_samtools`, `fastp`, and `coreutils` containers.
 - Add CVE-2026-42010 and CVE-2026-42011 (libgnutls30 TLS-PSK vulnerabilities) to `.trivyignore`. No Debian fix available as of 2026-05-10; our containers don't negotiate TLS-PSK so the practical exposure is nil.
 - Extract the chained `chain_workflows.py` invocation shared by both benchmark workflows into a reusable composite action at `.github/actions/run-benchmark/`, and add a manual `benchmark-on-demand.yml` workflow (`workflow_dispatch` only) that calls the action with a `dataset:` choice input. The PR-triggered `benchmark-illumina-100M.yml` and `benchmark-ont-100k.yml` are simplified to thin callers of the same action; their behavior on PRs to `main`/`stable` is unchanged. Per-run `--base-dir` is now keyed by `${{ github.run_id }}` so manual triggers and auto-on-PR runs don't clobber each other's S3 outputs.
 - Add `.claude/pr-examples/` directory containing worked examples of well-structured PR descriptions for this repo, and a `CLAUDE.md` reference pointing contributors at it.
