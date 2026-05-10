@@ -48,15 +48,17 @@ process MINIMAP2 {
         #   - First branch (samtools view -u -f 4 -) filters SAM to unaligned reads and saves FASTQ
         #   - Second branch (samtools view -u -F 4 -) filters SAM to aligned reads and saves FASTQ
         #   - Third branch (samtools view -h -F 4 -) also filters SAM to aligned reads and saves SAM
+        # pigz -1 (fast level) keeps up with minimap2's output rate; default -6
+        # back-pressures the alignment. See modules/local/nucleaze for the same pattern.
         ${extractCmd} ${reads} \
-            | minimap2 -a ${params_map.alignment_params} \${idx_local_path}/mm2_index.mmi /dev/fd/0 \
+            | minimap2 -a ${params_map.alignment_params} -t ${task.cpus} \${idx_local_path}/mm2_index.mmi /dev/fd/0 \
             | tee \
                 >(samtools view -u -f 4 - \
-                    | samtools fastq - | gzip -c > ${un}) \
+                    | samtools fastq - | pigz -p ${task.cpus} -1 -c > ${un}) \
                 >(samtools view -u -F 4 - \
-                    | samtools fastq - | gzip -c > ${al}) \
+                    | samtools fastq - | pigz -p ${task.cpus} -1 -c > ${al}) \
             | samtools view -h -F 4 - \
-            ${ params_map.remove_sq ? "| grep -v '^@SQ'" : "" } | gzip -c > ${sam}
+            ${ params_map.remove_sq ? "| grep -v '^@SQ'" : "" } | pigz -p ${task.cpus} -1 -c > ${sam}
         # Link input to output for testing
         ln -s ${reads} input_${reads}
         """
