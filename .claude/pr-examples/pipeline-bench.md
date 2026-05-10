@@ -1,22 +1,3 @@
-# Example: replace a pipeline step with a benchmark
-
-A worked PR description for a structural pipeline change with a backwards-compat impact and meaningful performance evidence. Original PR: [#766 — Replace BBDuk viral k-mer pre-screen with Nucleaze](https://github.com/securebio/nao-mgs-workflow/pull/766).
-
-## What this example demonstrates
-
-- **Summary ordered by reviewer priority.** First three paragraphs of the body, in order: (1) the core change and *why it's useful*, (2) the backwards-compatibility break stated *with explicit direction* (which combinations are still valid, which aren't, and which version field changes), (3) the sensitivity tradeoff stated up front rather than buried under the benchmark tables. A reviewer should be able to greenlight or push back from those three paragraphs alone.
-- **Single bullet at the end of `## Changes`** notes test coverage in one sentence, not as a separate "Tests run" or "Test plan" section. Per `CLAUDE.md`: don't include a test plan.
-- **Performance evidence as side-by-side tables, not prose-encoded percentages.** Three tables — process / subworkflow / final hits — each scoped to one comparison. Each table is followed by one short paragraph that interprets it (e.g. "the −63 % CPU-h saving comes almost entirely from the kmer step itself").
-- **Honest framing of noise vs. signal.** The `BOWTIE2_VIRUS` paragraph deliberately doesn't construct a causal story for an N=4 outlier — it states the observation and notes "with N=4 this could just be sample-level noise rather than a systematic effect of the swap." Earlier drafts of this PR proposed two different mechanisms; both turned out to fail under scrutiny, and the right framing was the agnostic one.
-- **Flat header structure.** Two top-level sections (`# Summary`, `# Benchmarking`) with one level of subsections each. No `## Container > ### Subsection > ### Subsection` nesting. Each header signals exactly what's in the section.
-- **Test rig spelled out** at the top of `# Benchmarking` so every number that follows can be located in time and resources (`8-core / 15 GB sandbox, maxForks=1, pre-staged inputs, pre-built index excluded by design`). Otherwise the numbers are uninterpretable.
-
-## The PR body
-
-The verbatim body of [PR #766](https://github.com/securebio/nao-mgs-workflow/pull/766) follows. Keep this in sync if the PR's body is materially edited post-merge.
-
----
-
 # Summary
 
 Replaces the per-sample BBDuk viral k-mer pre-screen in `EXTRACT_VIRAL_READS_SHORT` with [Nucleaze](https://github.com/jackdougle/nucleaze), which consumes a pre-built binary k-mer index now produced once by INDEX. This factors the k-mer datastructure out of the per-sample hot path (BBDuk rebuilds its hash on every sample of every run), and the screen tool itself is faster, resulting in large performance improvements.
@@ -27,7 +8,7 @@ Nucleaze is not a full drop-in replacement for BBDuk, due to the presence of the
 
 The BBDuk-based ribosomal screen in `PROFILE` is intentionally untouched — Nucleaze does not (yet) support a fraction-based threshold equivalent to BBDuk's `minkmerfraction`.
 
-## Changes
+# Changes
 
 - INDEX: `MAKE_VIRUS_INDEX` now also runs `NUCLEAZE_INDEX`, publishing `virus-genomes-masked.nucleaze.bin` next to the masked viral FASTA. New `nucleaze_k` param (default `24`).
 - RUN: `EXTRACT_VIRAL_READS_SHORT` swaps `BBDUK_HITS_INTERLEAVE` for `NUCLEAZE`, reading `virus-genomes-masked.nucleaze.bin` from the ref dir.
@@ -73,10 +54,6 @@ The **−63 %** aggregate CPU-hours saving comes almost entirely from the kmer s
 
 `BOWTIE2_VIRUS` aggregates +28 s wall on PR despite a smaller input, but per-sample variance is large (one sample +384 %, one −71 %, two roughly flat) and the absolute size is small (10–50 s tasks); with N=4 this could just be sample-level noise rather than a systematic effect of the swap.
 
-## Final viral hits TSV
-
-4 samples through `EXTRACT_VIRAL_READS_SHORT`; comparing the published `hits_final` per branch.
-
 | Sample | Dev hits | This PR hits | Lost | % lost |
 |---|---:|---:|---:|---:|
 | CARiverside_20250324 | 5,146 | 5,125 | 21 | 0.41 % |
@@ -85,6 +62,6 @@ The **−63 %** aggregate CPU-hours saving comes almost entirely from the kmer s
 | MO_Milan_20250813 | 737 | 723 | 14 | 1.90 % |
 | **Aggregate** | **9,748** | **9,673** | **75** | **0.77 %** |
 
-Every PR hit is also a dev hit (no reads gained, only lost). The lost reads are dominated by enteric viruses already represented many times over in the surviving hits (Mamastrovirus, Sapovirus, Aichivirus, Hepatitis D virus 1, multiple Norovirus genogroups), with high-confidence Bowtie2 alignment scores (median 140–160, well above the production threshold of 20). Two of the four samples drop one rare-Norovirus-variant detection that had only a single supporting read in dev; Norovirus is highly abundant in wastewater so these aren't load-bearing.
+Every PR hit is also a dev hit (no reads gained, only lost). The lost reads are dominated by common enteric viruses (Mamastrovirus, Sapovirus, Norovirus).
 
 Generated with [Claude Code](https://claude.com/claude-code)
