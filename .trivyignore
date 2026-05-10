@@ -124,3 +124,17 @@ CVE-2026-33846 exp:2026-06-30
 # Check for a Debian fix at:
 #   https://security-tracker.debian.org/tracker/CVE-2026-3833
 CVE-2026-3833 exp:2026-06-30
+
+# libgnutls30: TLS-PSK identity confusion / authentication bypass.
+# (No Debian fix available as of 2026-05-10.) Our pipeline containers do not
+# negotiate TLS-PSK with anything; they pull HTTPS from public endpoints with
+# standard X.509 auth.
+# Check for a Debian fix at:
+#   https://security-tracker.debian.org/tracker/CVE-2026-42010
+CVE-2026-42010 exp:2026-06-30
+
+# libgnutls30: DoS in TLS-PSK handshake matching-companion processing.
+# (No Debian fix available as of 2026-05-10.) Same rationale as CVE-2026-42010.
+# Check for a Debian fix at:
+#   https://security-tracker.debian.org/tracker/CVE-2026-42011
+CVE-2026-42011 exp:2026-06-30

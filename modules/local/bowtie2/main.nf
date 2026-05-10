@@ -39,24 +39,24 @@ process BOWTIE2 {
         #   - Third branch (samtools view -h -G ${unmapped_flag}) also filters SAM to mapped reads,
         #       optionally removes SQ header lines, then saves SAM
         # Debug statements allow saving of additional SAM files at different steps in the pipeline.
-        zcat ${reads_interleaved} \\
+        pigz -dc -p ${task.cpus} ${reads_interleaved} \\
             | bowtie2 ${par} \${io} \\
             | tee \\
                 ${ params_map.debug ? ">(gzip -c > test_all.sam.gz)" : "" } \\
                 >(samtools view -u -f ${unmapped_flag} - \\
-                    ${ params_map.debug ? "| tee >(samtools view -h - | gzip -c > test_unmapped.sam.gz)" : "" } \\
+                    ${ params_map.debug ? "| tee >(samtools view -h - | pigz -p ${task.cpus} -1 -c > test_unmapped.sam.gz)" : "" } \\
                     | samtools fastq -1 /dev/stdout -2 /dev/stdout \\
                         -0 /dev/stdout -s /dev/stdout -N - \\
                     | sed '1~4 s/\\/\\([12]\\)\$/ \\1/' \\
-                    | gzip -c > ${un}) \\
+                    | pigz -p ${task.cpus} -1 -c > ${un}) \\
                 >(samtools view -u -G ${unmapped_flag} - \\
-                    ${ params_map.debug ? "| tee >(samtools view -h - | gzip -c > test_mapped.sam.gz)" : "" } \\
+                    ${ params_map.debug ? "| tee >(samtools view -h - | pigz -p ${task.cpus} -1 -c > test_mapped.sam.gz)" : "" } \\
                     | samtools fastq -1 /dev/stdout -2 /dev/stdout \\
                         -0 /dev/stdout -s /dev/stdout -N - \\
                     | sed '1~4 s/\\/\\([12]\\)\$/ \\1/' \\
-                    | gzip -c > ${al}) \\
+                    | pigz -p ${task.cpus} -1 -c > ${al}) \\
             | samtools view -h -G ${unmapped_flag} - \\
-            ${ params_map.remove_sq ? "| grep -v '^@SQ'" : "" } | gzip -c > ${sam}
+            ${ params_map.remove_sq ? "| grep -v '^@SQ'" : "" } | pigz -p ${task.cpus} -1 -c > ${sam}
         # Move input files for testing
         ln -s ${reads_interleaved} ${in2}
         """

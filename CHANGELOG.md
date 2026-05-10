@@ -1,5 +1,7 @@
 # v3.2.1.5-dev
 
+- Replace single-threaded gzip/zcat with pigz across `EXTRACT_VIRAL_READS_SHORT` modules (`BBDUK`, `BBDUK_HITS_INTERLEAVE`, `BOWTIE2`, `FASTP`, `SORT_FASTQ`, `SORT_FILE`); adds `pigz=2.8` to `bbtools`, `bowtie2_samtools`, `fastp`, and `coreutils` containers.
+- Add CVE-2026-42010 and CVE-2026-42011 (libgnutls30 TLS-PSK vulnerabilities) to `.trivyignore`. No Debian fix available as of 2026-05-10; our containers don't negotiate TLS-PSK so the practical exposure is nil.
 - Extract the chained `chain_workflows.py` invocation shared by both benchmark workflows into a reusable composite action at `.github/actions/run-benchmark/`, and add a manual `benchmark-on-demand.yml` workflow (`workflow_dispatch` only) that calls the action with a `dataset:` choice input. The PR-triggered `benchmark-illumina-100M.yml` and `benchmark-ont-100k.yml` are simplified to thin callers of the same action; their behavior on PRs to `main`/`stable` is unchanged. Per-run `--base-dir` is now keyed by `${{ github.run_id }}` so manual triggers and auto-on-PR runs don't clobber each other's S3 outputs.
 - Add `.claude/pr-examples/` directory containing worked examples of well-structured PR descriptions for this repo, and a `CLAUDE.md` reference pointing contributors at it.
 - Default `fusion.exportStorageCredentials = false` in the `standard`, `batch`, and `test_run` profiles. Users who pass `--batch_job_role <ARN>` see no change. Users running on AWS Batch without a job role now rely on the EC2 instance role for S3 access. The `ec2_s3` profile is unchanged.
