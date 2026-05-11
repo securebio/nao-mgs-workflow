@@ -9,13 +9,8 @@ description: Benchmark performance changes in the `securebio/nao-mgs-workflow` p
 
 Two modes, picked by what you're measuring:
 
-- **Module-level (Mode A)** — local Nextflow on the sandbox, single `process` in isolation, many samples cheap. Use when the perf claim is about a single module *and* the module is fast enough that running it tens or hundreds of times locally is cheap. Useful for resource tiering, peak-RSS bounds, and comparing one tool against another at module scope.
-- **Workflow-level (Mode B)** — full pipeline run on AWS Batch via `bin/chain_workflows.py`. Use when the change spans multiple processes, when the module under test is too slow to iterate on locally, or when you want headline cohort numbers + per-process breakdowns. Slice the resulting trace by `process` to get module- *and* subworkflow-level info from the same run.
-
-**Two things we deliberately don't do:**
-
-- **Tool-level cache-warm microbenches** (`time tool args input`, no Nextflow). They look precise but the numbers don't survive contact with Batch's I/O latency — cache-warm 8× speedups have evaporated to flat in past PRs. If the tool will run in a Nextflow process in production, measure it inside a Nextflow process.
-- **Subworkflow-isolation runs.** A full workflow trace already gives you per-process numbers; isolating a subworkflow just to bench it is redundant work that often misses cohort-scale behavior. If you want subworkflow numbers, run Mode B and slice the trace.
+- **Module-level (Mode A)** — local Nextflow on the sandbox, a single `process` in isolation, many samples cheap. Use when the perf claim is about a single module *and* the module is fast enough that running it tens or hundreds of times locally is cheap. The Nextflow + Docker wrapper matches the production execution environment (container start, real I/O patterns), so per-task numbers transfer to where the module will actually run. Useful for resource tiering, peak-RSS bounds, and head-to-head tool comparison at module scope.
+- **Workflow-level (Mode B)** — full pipeline run on AWS Batch via `bin/chain_workflows.py`. Use when the change spans multiple processes, when the module under test is too slow for many-sample local iteration, or when you want headline cohort numbers. The resulting trace, sliced by `process` or grouped by subworkflow prefix (e.g. `EXTRACT_VIRAL_READS:*`), gives module- and subworkflow-level numbers from the same run.
 
 ## Required reading (both modes)
 
