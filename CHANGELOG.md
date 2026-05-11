@@ -1,3 +1,7 @@
+# v3.2.2.0-dev
+
+- Add `-X 850` to all short-read bowtie2 invocations (viral and contaminant filtering) so that concordantly paired inserts up to 850 bp are detected, up from the bowtie2 default of 500 bp. This is needed for the NEB library prep kit, which produces longer inserts.
+
 # v3.2.1.5
 
 ## Performance
