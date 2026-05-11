@@ -1,0 +1,34 @@
+nextflow_process {
+
+    name "Test process ADD_GENBANK_GENOME_IDS"
+    script "modules/local/addGenbankGenomeIDs/main.nf"
+    process "ADD_GENBANK_GENOME_IDS"
+    config "tests/configs/index.config"
+    tag "module"
+    tag "add_genbank_genome_ids"
+
+    test("Expands metadata: one row per (assembly, sequence) with parsed genome_id") {
+        tag "expect_success"
+        // Fixtures: GCA_A has 2 sequences (SEG_A1, SEG_A2), GCA_B has 1
+        // (SEG_B1). Two metadata rows in, four rows out.
+        when {
+            params {}
+            process {
+                """
+                input[0] = file("${projectDir}/test-data/addGenbankGenomeIDs/metadata.tsv")
+                input[1] = file("${projectDir}/test-data/addGenbankGenomeIDs/genomes")
+                input[2] = "virus-genome"
+                """
+            }
+        }
+        then {
+            assert process.success
+            def out = path(process.out[0][0]).csv(sep: "\t", decompress: true)
+            assert out.columnNames == ["assembly_accession", "taxid", "local_filename", "genome_id"]
+            assert out.rowCount == 3
+            assert out.columns["assembly_accession"] == ["GCA_A.1", "GCA_A.1", "GCA_B.1"]
+            assert out.columns["genome_id"] == ["SEG_A1", "SEG_A2", "SEG_B1"]
+        }
+    }
+
+}
