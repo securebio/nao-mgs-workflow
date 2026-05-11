@@ -17,7 +17,7 @@
             "tt1_qc_quality_sequence_stats_cleaned.tsv.gz:md5,3c72d4b3fde2506db5bd7b373e309b1d",
             "tt1_qc_quality_sequence_stats_raw.tsv.gz:md5,e97cdb22fecd620d22689c0acb9a96a8",
             "tt1_read_counts.tsv.gz:md5,c9ee6bf4ad94ce7fbc24bd4a2d8bee00",
-            "tt1_validation_hits.tsv.gz:md5,b87355953f53421c9fdd6e8c3f13b181"
+            "tt1_validation_hits.tsv.gz:md5,b67b59c42a67c0f228b8ef43155330cf"
         ],
         "meta": {
             "nf-test": "0.9.3",
