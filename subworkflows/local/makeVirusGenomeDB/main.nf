@@ -19,7 +19,8 @@ workflow MAKE_VIRUS_GENOME_DB {
     take:
         virus_taxid // Top-level taxid to enumerate viral assemblies for
         assembly_source // Assembly source: "genbank", "refseq", or "all"
-        datasets_extra_args // Additional arguments passed to `datasets` CLI
+        datasets_summary_extra_args // Additional args passed to `datasets summary genome taxon` in ENUMERATE
+        datasets_download_extra_args // Additional args passed to `datasets download genome accession` in DOWNLOAD
         chunk_size // Max accessions per parallel download chunk
         virus_db // TSV giving taxonomic structure and host infection status of virus taxids
         other_params // Map containing:
@@ -32,7 +33,7 @@ workflow MAKE_VIRUS_GENOME_DB {
     main:
         // 1. Enumerate every assembly under the viral root in a single
         //    `datasets summary` call. No genome data is fetched here.
-        enum_ch = ENUMERATE_VIRAL_ACCESSIONS(virus_taxid, assembly_source, datasets_extra_args)
+        enum_ch = ENUMERATE_VIRAL_ACCESSIONS(virus_taxid, assembly_source, datasets_summary_extra_args)
         // 2. Filter accessions by host infection status and assembly status
         //    (hard-excluded taxids are already absent from virus_db's
         //    infection_status_* columns), then chunk the kept accessions.
@@ -44,7 +45,7 @@ workflow MAKE_VIRUS_GENOME_DB {
         //    list of chunk files into one channel emission per chunk so
         //    Nextflow can fan out tasks. Runs on /scratch (see module).
         chunk_ch = filter_ch.accession_chunks.flatten()
-        download_ch = DOWNLOAD_VIRAL_GENOMES(chunk_ch, assembly_source, datasets_extra_args, 5)
+        download_ch = DOWNLOAD_VIRAL_GENOMES(chunk_ch, assembly_source, datasets_download_extra_args, 5)
         // 4. Match downloaded files to filtered metadata, populate
         //    species_taxid + local_filename, and emit symlinked dir + paths.
         prepare_ch = PREPARE_VIRAL_METADATA(

@@ -38,7 +38,9 @@ workflow INDEX {
         virus_genome_params.putAll([k: "20", hdist: "3", entropy: "0.5", polyx_len: "10"])
         MAKE_VIRUS_GENOME_DB(
             params.download_virus_taxid ?: params.virus_taxid,
-            params.assembly_source, params.datasets_extra_args,
+            params.assembly_source,
+            params.datasets_summary_extra_args,
+            params.datasets_download_extra_args,
             params.viral_accession_chunk_size,
             MAKE_VIRUS_TAXONOMY_DB.out.db,
             virus_genome_params
