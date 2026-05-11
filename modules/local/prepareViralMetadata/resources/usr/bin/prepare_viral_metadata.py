@@ -16,6 +16,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import IO, cast
 
+
 class UTCFormatter(logging.Formatter):
     def formatTime(self, record: logging.LogRecord, datefmt: str | None = None) -> str:
         return datetime.fromtimestamp(record.created, UTC).strftime("%Y-%m-%d %H:%M:%S UTC")
@@ -64,7 +65,7 @@ def match_genomes_to_accessions(genome_dir: Path, accessions: list[str]) -> dict
 
 def prepare_metadata(
     merged_metadata_path: str, virus_db_path: str, genomes_dir: str,
-    output_metadata_path: str, output_genomes_dir: str,
+    output_metadata_path: str, output_genomes_dir: str, output_paths_path: str,
 ) -> None:
     """Read metadata + virus DB, add species_taxid and local_filename, symlink genomes.
     Args:
@@ -73,6 +74,9 @@ def prepare_metadata(
         genomes_dir: Directory containing downloaded genome .fna.gz files.
         output_metadata_path: Output path for prepared metadata TSV.
         output_genomes_dir: Output directory for symlinked genome files.
+        output_paths_path: Output path for newline-delimited list of
+            symlinked genome file paths (consumed by CONCATENATE_GENOME_FASTA;
+            mirrors the column order of `output_metadata_path`).
     """
     taxid_to_species = build_species_taxid_map(virus_db_path)
     with open_by_suffix(merged_metadata_path) as f:
@@ -88,6 +92,7 @@ def prepare_metadata(
         with open(output_metadata_path, "w", newline="") as f:
             writer = csv.DictWriter(f, fieldnames=out_fields, delimiter="\t")
             writer.writeheader()
+        Path(output_paths_path).write_text("")
         return
     accessions = sorted({r["assembly_accession"] for r in rows})
     acc_to_file = match_genomes_to_accessions(genome_dir, accessions)
@@ -96,7 +101,7 @@ def prepare_metadata(
     for filename in acc_to_file.values():
         os.symlink(os.path.abspath(genome_dir / filename), output_dir / filename)
     n_written = 0
-    with open(output_metadata_path, "w", newline="") as f:
+    with open(output_metadata_path, "w", newline="") as f, open(output_paths_path, "w") as paths_f:
         writer = csv.DictWriter(f, fieldnames=out_fields, delimiter="\t")
         writer.writeheader()
         for row in rows:
@@ -105,6 +110,7 @@ def prepare_metadata(
             row["species_taxid"] = taxid_to_species.get(row["taxid"], "")
             row["local_filename"] = f"{output_genomes_dir}/{acc_to_file[row['assembly_accession']]}"
             writer.writerow(row)
+            paths_f.write(f"{row['local_filename']}\n")
             n_written += 1
     logger.info("Wrote %d rows (dropped %d unmatched)", n_written, len(rows) - n_written)
 
@@ -115,6 +121,7 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument("genomes_dir", help="Directory containing .fna.gz files.")
     parser.add_argument("output_metadata", help="Output path for prepared metadata TSV.")
     parser.add_argument("output_genomes_dir", help="Output directory for genome files.")
+    parser.add_argument("output_paths", help="Output path for list of symlinked genome file paths.")
     return parser.parse_args()
 
 def main() -> None:
@@ -122,7 +129,7 @@ def main() -> None:
     logger.info("Starting prepare_viral_metadata.")
     args = parse_arguments()
     prepare_metadata(args.merged_metadata, args.virus_db, args.genomes_dir,
-                     args.output_metadata, args.output_genomes_dir)
+                     args.output_metadata, args.output_genomes_dir, args.output_paths)
     logger.info("Total time elapsed: %.2f seconds", time.time() - start_time)
 
 if __name__ == "__main__":

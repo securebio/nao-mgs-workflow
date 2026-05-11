@@ -10,6 +10,37 @@ nextflow_pipeline {
         tag "main_index"
         then {
             assert workflow.success
+
+            // === MAKE_VIRUS_GENOME_DB outputs ===
+            // Assertions are structural — no specific accessions or row counts —
+            // so the test stays green if NCBI republishes HDV. The test config
+            // picks HDV (taxid 2847173) with `--assembly-source all`, which
+            // returns ≥2 assemblies (refseq + genbank versions). Combined with
+            // chunk_size=1, that's ≥2 chunks → ≥2 parallel DOWNLOAD tasks →
+            // PREPARE.collect() must aggregate across chunks. A row count ≥2 is
+            // sufficient evidence that the chunk fan-out path executed correctly.
+            def metadata = path("${launchDir}/output/results/virus-genome-metadata-gid.tsv.gz").csv(sep: "\t", decompress: true)
+            def expectedCols = ["assembly_accession", "taxid", "organism_name", "source_database",
+                                "assembly_status", "species_taxid", "local_filename", "genome_id"]
+            assert metadata.columnNames == expectedCols : "Unexpected columns: ${metadata.columnNames}"
+            assert metadata.rowCount >= 2 :
+                "Expected ≥2 metadata rows to prove chunk fan-out (got ${metadata.rowCount}). " +
+                "If NCBI now publishes only one HDV assembly, broaden download_virus_taxid in the test config."
+            assert metadata.columns["assembly_accession"].toSet().size() == metadata.rowCount :
+                "Each row should have a distinct assembly_accession (one row per assembly × sequence; " +
+                "HDV is single-segment, so unique-accession count equals row count)"
+            assert metadata.columns["assembly_status"].every { it == "current" } :
+                "All rows should have assembly_status='current' after FILTER"
+            assert metadata.columns["genome_id"].every { it } :
+                "Every row should have a genome_id from ADD_GENBANK_GENOME_IDS"
+
+            // Masked FASTA: should exist and contain at least one sequence.
+            // (refseq+genbank versions of the same HDV genome share sequence IDs,
+            // so seqkit rmdup --by-name in CONCATENATE_GENOME_FASTA collapses them
+            // to a single sequence in the final masked FASTA.)
+            def fastaLines = path("${launchDir}/output/results/virus-genomes-masked.fasta.gz").linesGzip
+            assert fastaLines.any { it.startsWith(">") } :
+                "Masked FASTA should contain at least one sequence header"
         }
     }
 }
