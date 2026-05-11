@@ -25,9 +25,8 @@ CVE-2025-68973 exp:2026-06-30
 
 # ── Go stdlib v1.23.4 in ncbi-datasets-cli (ncbi_datasets container) ──
 # The NCBI datasets/dataformat binaries are pre-compiled Go executables distributed
-# via conda-forge. They ship Go stdlib v1.23.4; fixes require Go >= 1.24.6+.
+# via conda-forge. They ship Go stdlib v1.23.4; fixes require Go >= 1.25.10+.
 # We cannot rebuild these — only NCBI can, by updating their Go toolchain.
-# As of 2026-03-25, conda-forge ncbi-datasets-cli 18.21.0 is the latest version.
 #
 # Risk assessment: these binaries run in an isolated container that only downloads
 # genome metadata from NCBI's API and writes local files. They do not serve TLS,
