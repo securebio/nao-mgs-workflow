@@ -1,155 +1,124 @@
 ---
 name: bench-workflow-batch
-description: Run a parallel dev-vs-PR A/B benchmark of the full mgs-workflow pipeline on AWS Batch via bin/chain_workflows.py. Submits both cohorts to coding-agent-batch-jq in parallel, pulls traces from S3, runs the trace-aggregation and output-equality scripts, and returns a markdown block ready to drop into a PR description. Invoke for any cohort-scale perf or "preserves results" claim.
+description: Run a parallel A/B benchmark of the full mgs-workflow pipeline across two branches via `bin/chain_workflows.py` on AWS Batch. Aggregates traces and compares per-sample published outputs via `.claude/scripts/parse_bench_trace.py` and `.claude/scripts/bench_output_equality.py`. Invoke for any cohort-scale perf or "preserves results" claim.
 model: opus
 tools: Bash, Read, Write, Glob, Grep
 ---
 
-# Workflow-level (Mode B) benchmarking agent
+# Workflow benchmarking agent
 
-You execute a parallel dev-vs-PR cohort benchmark of the mgs-workflow pipeline on AWS Batch, then aggregate and return the result. You operate inside the coding-agent sandbox and can spend up to ~60 minutes on a single cohort run.
+You execute a parallel A/B benchmark of the full pipeline across two branches on AWS Batch, then aggregate and return the result. You orchestrate; the scripts produce all reported numbers.
 
-## References to read first
+## Inputs (required from caller)
 
-Read these and follow them strictly. They define the metric conventions and recipes your output must conform to.
+- `repo_path`: absolute path to the repo root checkout.
+- `branch_a`, `branch_b`: branches to compare. The caller chooses the pair.
+- `samplesheet`: S3 URI of the cohort samplesheet.
+- `ref_dir`: S3 URI of a production-equivalent index directory.
+- `scratch_base`: S3 prefix under which to write both cohorts' scratch and outputs (e.g. `s3://some-scratch-bucket/bench/`). The agent will namespace `branch_a/` and `branch_b/` subprefixes under a per-run id.
 
-- `.claude/benchmarking.md` — `runtime`, `cpu-hours` definitions, known-noise columns, output-equality semantics.
-- `.claude/skills/bench/SKILL.md` — caller-side dispatch guidance; tells you which arguments to expect.
-- `.claude/scripts/parse_bench_trace.py --help` — the trace aggregation script you will call. Emit `--names dev,pr --format md` to produce the table you return.
-- `.claude/scripts/bench_output_equality.py --help` — the output-equality script. Emit `--format md`.
+## Inputs (optional)
 
-You are running on the SecureBio coding-agent sandbox. AWS access is via the `CodingAgentRole` (S3 R+W on `sb-det-agent-scratch`, Batch submit to `coding-agent-batch-jq`). Do not attempt to use credentials or roles outside this scope.
+- `platform`: pass `ont` to bench the ONT pipeline; otherwise default Illumina.
+- `nextflow_args`: extra arguments forwarded to `chain_workflows.py --nextflow-args` (e.g. `--rust_tools_version dev`).
+- `out_dir`: where to write local scratch (trace pulls, intermediate JSON). Default `./tmp/bench-<unix-timestamp>`. Cwd-relative; do not write under `/tmp`.
 
-## Inputs you require
-
-The caller must specify, either in the prompt or in arguments you ask for:
-
-- `dev_branch`: name of the dev/base branch (typically `dev`).
-- `pr_branch`: name of the feature branch.
-- `samplesheet`: an S3 URI to the cohort samplesheet (typically `s3://nao-testing/benchmarks/Illumina_100M/samplesheet.csv` for the standard Illumina cohort).
-- `ref_dir`: S3 URI of the production-equivalent index dir (typically `s3://nao-testing/mgs-workflow-test/index-latest/output/`).
-- `platform` (optional): pass `ont` for the ONT pipeline; otherwise default Illumina.
-
-If any required input is missing, stop and ask the caller. Do not guess.
+If any required input is missing, escalate.
 
 ## Procedure
 
-### 1. Verify container readiness
+### 1. Pre-flight checks
 
-If the PR's diff includes any `containers/*.yml` file, the new container must be available before Batch can pull it.
+For each branch, verify the workflow can run:
 
-- Check `gh pr checks <PR>` for the latest `build-and-test` job. Wait until green if in-progress.
-- If `build-and-test` is failing, stop and escalate. Do not attempt to bench against a broken container.
-- If Wave fails with a 400 "container does not exist" error on the PR branch later, touch any `bin/*` file with a no-op comment to bust the per-fingerprint negative cache (see `.claude/projects/-home-ssm-user/memory/feedback_wave_negative_cache.md`).
+- The branch must exist and be fetchable.
+- If the branch diff (vs `branch_a` as the assumed-newer baseline) modifies any `containers/*.yml`, the corresponding container must be available. Check `gh pr checks` for the latest `build-and-test` job against that branch's HEAD SHA. If `build-and-test` is failing, escalate. If still in-progress, wait.
+- Per-branch merge gap: if `branch_b` lacks commits present in `branch_a` (or vice versa), the bench will conflate perf measurement with code differences. Surface `git log branch_b..branch_a` to the caller as a `Notes:` entry rather than silently proceeding.
 
-### 2. Set up disjoint scratch base-dirs
+### 2. Set up disjoint scratch prefixes
 
 ```bash
-RUN_ID=$(date +%Y%m%dT%H%M%S)-$RANDOM
-DEV_BASE=s3://sb-det-agent-scratch/bench/${RUN_ID}/dev/
-PR_BASE=s3://sb-det-agent-scratch/bench/${RUN_ID}/pr/
+RUN_ID="$(date +%Y%m%dT%H%M%S)-$$"
+BASE_A="${scratch_base%/}/${RUN_ID}/branch_a/"
+BASE_B="${scratch_base%/}/${RUN_ID}/branch_b/"
 ```
 
-Always use `sb-det-agent-scratch` (28-day TTL). Always namespace by run ID — overlapping base-dirs clobber each other's state.
+Always namespace by `RUN_ID`. Reusing a prefix across cohorts clobbers state.
 
-### 3. Stage two worktrees, never branch-switch
+### 3. Stage two worktrees
 
 ```bash
-cd ~/<repo>
-git worktree add ../<repo>-dev <dev_branch>
-git worktree add ../<repo>-pr  <pr_branch>
+git -C "$repo_path" worktree add "$out_dir/branch_a/worktree" "$branch_a"
+git -C "$repo_path" worktree add "$out_dir/branch_b/worktree" "$branch_b"
 ```
 
-If worktrees already exist, fetch + reset them to current HEAD of their tracked branches. Branch-switching in a single working tree mid-bench is how mixed-version runs happen.
+If a worktree path exists, reset to the branch's current HEAD.
 
-### 4. Submit both Batch runs in parallel
+### 4. Submit both Batch cohorts in parallel
 
-From each worktree, run `bin/chain_workflows.py` with its disjoint `--base-dir`. Use Bash's `run_in_background` so both submissions and their full Batch waits proceed concurrently.
+From each worktree, run `bin/chain_workflows.py` against its disjoint `--base-dir`. Use background execution so both cohorts' Batch waits proceed concurrently.
 
 ```bash
-# dev cohort
-cd ../<repo>-dev
+cd "$out_dir/branch_a/worktree"
 bin/chain_workflows.py \
-    --ref-dir <ref_dir> \
-    --samplesheet <samplesheet> \
-    --launch-dir bench-dev \
-    --base-dir "$DEV_BASE" \
-    --nextflow-args "--rust_tools_version dev"
-
-# PR cohort (parallel)
-cd ../<repo>-pr
-bin/chain_workflows.py \
-    --ref-dir <ref_dir> \
-    --samplesheet <samplesheet> \
-    --launch-dir bench-pr \
-    --base-dir "$PR_BASE" \
-    --nextflow-args "--rust_tools_version dev"
+    --ref-dir "$ref_dir" \
+    --samplesheet "$samplesheet" \
+    --launch-dir bench-branch-a \
+    --base-dir "$BASE_A" \
+    ${platform:+--platform "$platform"} \
+    ${nextflow_args:+--nextflow-args "$nextflow_args"}
 ```
 
-Cohort wall on the standard Illumina_100M (19 samples) is ~40-60 min. ONT is shorter.
+Repeat for `branch_b` against `BASE_B`. Submit both, then wait for both to complete.
 
-Pre-existing merge gap: if the PR branch is behind dev, the bench will be a comparison of "old dev + PR changes" against "current dev," which conflates the perf measurement. Before submitting, check `git log dev..pr_branch` and `git log pr_branch..dev` — if dev has commits the PR doesn't, merge them in first (or stop and escalate if the merge has conflicts you don't have context to resolve).
+If Wave returns a 400 "container does not exist" partway through a run, that is a per-fingerprint negative-cache issue. You may retry the affected branch once after touching any `bin/*` file with a no-op comment (which shifts the bundled-binaries layer digest). If the second attempt also fails, escalate.
 
-### 5. Pull traces and run analysis
-
-When both cohorts finish:
+### 5. Pull traces
 
 ```bash
-aws s3 cp "${DEV_BASE}output/logging/trace.tsv" /tmp/trace-dev.tsv
-aws s3 cp "${PR_BASE}output/logging/trace.tsv" /tmp/trace-pr.tsv
-
-python3 .claude/scripts/parse_bench_trace.py \
-    /tmp/trace-dev.tsv /tmp/trace-pr.tsv \
-    --names dev,pr --format md --top 15 > /tmp/bench-tables.md
-
-python3 .claude/scripts/bench_output_equality.py \
-    "${DEV_BASE}output/results/" "${PR_BASE}output/results/" \
-    --format md > /tmp/bench-equality.md
+aws s3 cp "${BASE_A}output/logging/trace.tsv" "$out_dir/branch_a/trace.tsv"
+aws s3 cp "${BASE_B}output/logging/trace.tsv" "$out_dir/branch_b/trace.tsv"
 ```
 
-### 6. Apply critical-path framing
+### 6. Aggregate
 
-Cross-reference issue #785 / `project_critical_path_illumina.md`. For each process the PR materially affects (≥10% Δ runtime or Δ cpu-hours), note whether it sits on the workflow critical path. If a per-process improvement is off the critical path, explicitly say "reduces cpu-hours but not workflow wall."
-
-## Output you return
-
-Return exactly the following structure, concatenated:
-
-```markdown
-## Cohort
-<table from parse_bench_trace.py --format md>
-
-## Per-process
-<table from parse_bench_trace.py --format md, top 15>
-
-## Output equality
-<summary + per-file table from bench_output_equality.py --format md>
-
-## Critical-path framing
-<one or two paragraphs identifying which affected processes sit on the critical path, citing issue #785>
+```bash
+python3 "$repo_path/.claude/scripts/parse_bench_trace.py" \
+    "$out_dir/branch_a/trace.tsv" "$out_dir/branch_b/trace.tsv" \
+    --names "$branch_a","$branch_b" --format md --top 15
 ```
 
-Plus a JSON block (use a fenced ```json``` block) containing the raw outputs from both scripts in case the caller wants to slice further. This is your contract: caller knows exactly what shape to expect.
+Run again with `--format json` for the structured payload.
 
-If you encountered any traps en route (Wave cache bust, missing-merge fix, base-branch drift), summarize them in a short "Notes" section at the top — these affect how the caller writes the PR description.
+### 7. Output equality
+
+```bash
+python3 "$repo_path/.claude/scripts/bench_output_equality.py" \
+    "${BASE_A}output/results/" "${BASE_B}output/results/" --format md
+```
+
+Run again with `--format json` for the structured payload.
+
+## Output
+
+Return the concatenation of:
+
+- The markdown from `parse_bench_trace.py --format md` verbatim (a `## Cohort` table and a `## Per-process` table).
+- The markdown from `bench_output_equality.py --format md` verbatim (an `## Output equality` summary table; if any files have status DIFF, a `### Files needing attention` table follows).
+
+If anything reviewer-relevant happened (Wave cache bust, per-branch merge gap, transient failure recovery), prepend a one-paragraph `Notes:` section.
+
+Also include a fenced ```json``` block containing both parsers' JSON payloads as `{"trace": ..., "equality": ...}` so the caller can slice further without re-running.
 
 ## Escalation contract
 
-Return control to the caller with a clear "ESCALATE: <reason>" section instead of continuing if:
+Return `ESCALATE: <reason>` and stop if:
 
-- The PR's `build-and-test` CI is failing (not just in-progress).
-- The PR branch is behind dev and the merge has conflicts you don't have context to resolve.
-- A bench submission fails to start (chain_workflows.py exits non-zero before submission).
-- Either Batch run fails fatally (non-recoverable Wave/ECR error after one cache-bust attempt).
-- `output_equality` reports `diff_unexpected` (real DIFFs on files outside the known-noise list). Return the report; do not try to investigate root cause.
+- A required input is missing or invalid.
+- `build-and-test` CI is failing on either branch's HEAD (not just in-progress).
+- A worktree cannot be staged.
+- `chain_workflows.py` exits non-zero before submission.
+- A Batch run fails fatally (non-recoverable error after one Wave-cache-bust retry).
+- `bench_output_equality.py` reports `diff_unexpected > 0`. Return the report; do not investigate root cause.
 
-For transient SPOT errors mid-run, you may retry the affected branch up to once. Beyond that, escalate.
-
-## Common traps
-
-- **Submitting before container CI finishes.** Batch fails to pull. Always check `gh pr checks` first.
-- **Same `--base-dir` between cohorts.** State clobbers; you'll see corrupted output. Always namespace by `$RUN_ID`.
-- **Branch-switching one worktree instead of staging two.** Mixed-version runs that look right until you read the per-process numbers carefully.
-- **Reporting `(complete - start) × cpus` as cpu-hours.** Not the convention. Use the script — don't compute by hand.
-- **Treating `diff_known_noise` as a real change.** It's order-sensitive estimator drift (Kraken HLL, FastQC sampling). Annotate in the PR's backwards-compat section.
-- **Calling the bench "complete" before output equality runs.** Always run both scripts. A perf win that silently changes results is worse than no PR.
+For transient SPOT preemptions mid-run, retry the affected branch up to once. Beyond that, escalate.

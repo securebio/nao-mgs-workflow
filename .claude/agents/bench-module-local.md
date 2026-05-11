@@ -1,156 +1,86 @@
 ---
 name: bench-module-local
-description: Run a parallel dev-vs-PR A/B benchmark of a single Nextflow process on the local sandbox via Docker. Uses two worktrees + a thin per-worktree entrypoint that invokes only the module under test, with maxForks=1 for clean per-task wall numbers. Returns a markdown table block ready to drop into a PR description. Invoke when a perf claim is scoped to one module and the module is fast enough to iterate locally on many samples.
+description: Run an A/B benchmark of a single Nextflow process across two branches via local Docker. Uses two git worktrees and a caller-provided thin entrypoint plus the shared bench config at `.claude/scripts/bench_module.config`, then aggregates traces into a comparison table via `.claude/scripts/parse_bench_trace.py`. Invoke when a perf claim is scoped to one module.
 model: opus
 tools: Bash, Read, Write, Glob, Grep
 ---
 
-# Module-level (Mode A) benchmarking agent
+# Module benchmarking agent
 
-You execute a parallel dev-vs-PR local benchmark of a single Nextflow process on the sandbox, then aggregate and return the result. You operate inside the coding-agent sandbox (8 vCPU, ~15 GB RAM, 180 GB free `/`, 7.7 GB tmpfs `/tmp`).
+You execute a parallel A/B benchmark of a single Nextflow process across two branches and return a comparison table. You orchestrate; you do not compute metrics inline — `.claude/scripts/parse_bench_trace.py` produces all reported numbers.
 
-## References to read first
+## Inputs (required from caller)
 
-- `.claude/benchmarking.md` — `runtime`, `cpu-hours` definitions. Your output must conform.
-- `.claude/skills/bench/SKILL.md` — caller-side dispatch guidance.
-- `.claude/scripts/parse_bench_trace.py --help` — trace aggregation. Emit `--names dev,pr --format md`.
+- `repo_path`: absolute path to the repo root checkout.
+- `branch_a`, `branch_b`: branches to compare. The caller chooses the pair; you do not.
+- `entrypoint`: path to a `.nf` file that imports the module under test and runs it on a samplesheet via `Channel.fromPath(params.samplesheet).splitCsv(...)`. Module signatures vary, so the caller writes this — do not generate it.
+- `samplesheet`: path to a samplesheet.csv. Treat as read-only. If the samplesheet references files that must be staged locally, the caller pre-stages them and supplies a samplesheet pointing at local paths.
 
-You are running on the SecureBio coding-agent sandbox. Docker is available via `sg docker -c "..."` (the SSM session doesn't load supplementary groups, so plain `docker` fails).
+## Inputs (optional)
 
-## Inputs you require
+- `out_dir`: where to write bench scratch and outputs (default: `./tmp/bench-<unix-timestamp>`). Use cwd-relative paths; do not write under `/tmp`.
+- `extra_config`: path to an additional Nextflow `-c` config that gets appended after the shared bench config. Use to override resource tiers or anything else the calling environment requires.
 
-- `dev_branch`, `pr_branch`: branches to compare.
-- `module`: the Nextflow include path of the process to bench, e.g. `modules/local/countReads`.
-- `samplesheet`: local or S3 path. If S3, pre-stage to `~/<bench-name>/reads/` first; both branches must read from the same local copy.
-- `n_samples` (optional, default 4): how many samples to run per cohort. Pick enough to give stable per-task statistics; small enough that the bench finishes in minutes.
-
-If any required input is missing, stop and ask.
+If any required input is missing or invalid, escalate.
 
 ## Procedure
 
-### 1. Stage two worktrees
+1. Verify the environment: `docker info` returns success. If not, escalate.
 
-```bash
-cd ~/<repo>
-git worktree add ../<repo>-dev <dev_branch>
-git worktree add ../<repo>-pr  <pr_branch>
-```
+2. Create `out_dir`. Under it, create `branch_a/` and `branch_b/` subdirectories.
 
-Never branch-switch a single working tree mid-bench.
+3. For each branch, stage a git worktree:
 
-### 2. Pre-stage inputs to local disk
+   ```bash
+   git -C "$repo_path" worktree add "$out_dir/<branch>/worktree" "<branch>"
+   ```
 
-If the samplesheet is S3, copy referenced FASTQ files to `~/<bench-name>/reads/` and rewrite the samplesheet to point at local paths. Both branches read the same files — keeps S3 transfer out of the timing.
+   If the worktree path already exists, reset its branch to current HEAD (`git -C "$out_dir/<branch>/worktree" reset --hard "origin/<branch>"`).
 
-Use `/home/ssm-user/` paths, **not** `/tmp` — `/tmp` is tmpfs (~7.7 GB) and small benches can fill it.
+4. For each branch's worktree, copy the entrypoint and the shared bench config into the worktree root:
 
-### 3. Write a thin bench entrypoint per worktree
+   ```bash
+   cp "$entrypoint" "$out_dir/<branch>/worktree/bench-module.nf"
+   cp "$repo_path/.claude/scripts/bench_module.config" "$out_dir/<branch>/worktree/bench_module.config"
+   ```
 
-Each worktree gets a `bench-module.nf` that imports only the module under test and runs it on the samplesheet. Example for `COUNT_READS`:
+5. For each branch's worktree, run Nextflow:
 
-```groovy
-include { COUNT_READS } from "./modules/local/countReads"
+   ```bash
+   cd "$out_dir/<branch>/worktree"
+   nextflow run bench-module.nf \
+       -c bench_module.config ${extra_config:+-c "$extra_config"} \
+       --samplesheet "$samplesheet" \
+       --out_dir "$out_dir/<branch>" \
+       -work-dir "$out_dir/<branch>/work"
+   ```
 
-workflow {
-    samples = Channel.fromPath(params.samplesheet)
-        .splitCsv(header: true)
-        .map { row -> tuple(row.sample, [file(row.fastq_1), file(row.fastq_2)]) }
-    COUNT_READS(samples, false)
-}
-```
+   Pin `NXF_VER` to the value in `$repo_path/configs/profiles.config` if a `nextflowVersion` line is present there. Run the two branches sequentially unless you have explicit reason to believe parallel execution is safe in the calling environment.
 
-`include "./modules/..."` resolves against `projectDir`, so each worktree gets its own version.
+6. Aggregate the two traces:
 
-### 4. Write a bench config
+   ```bash
+   python3 "$repo_path/.claude/scripts/parse_bench_trace.py" \
+       "$out_dir/branch_a/trace.tsv" "$out_dir/branch_b/trace.tsv" \
+       --names "$branch_a","$branch_b" --format md
+   ```
 
-Critical: `process.maxForks = 1` is mandatory if you care about per-sample wall. Without it, sibling tasks contend for 8 cores and per-sample wall becomes noisy.
+   And again with `--format json` for the structured payload.
 
-```groovy
-docker.enabled = true
-wave.enabled = false
-process.executor = 'local'
-process.maxForks = 1
-nextflow.enable.moduleBinaries = true
-includeConfig "${projectDir}/configs/containers.config"
+## Output
 
-// Scale tiers to sandbox memory. Production tiers exceed 15 GB.
-process {
-    withLabel: small               { cpus = 8; memory = 14.GB }
-    withLabel: large               { cpus = 8; memory = 14.GB }
-    withLabel: max                 { cpus = 8; memory = 14.GB }
-    withLabel: xsmall              { cpus = 1; memory = 4.GB  }
-    withLabel: single              { cpus = 1; memory = 4.GB  }
-    withLabel: single_cpu_16GB_memory { cpus = 1; memory = 14.GB }
-    withLabel: single_cpu_32GB_memory { cpus = 1; memory = 14.GB }
-}
+Return the markdown emitted by `parse_bench_trace.py --format md` verbatim. It contains a `## Cohort` table and a `## Per-process` table that match the schema in `.claude/benchmarking.md`.
 
-trace {
-    enabled = true
-    file = "${params.out_dir}/trace.tsv"
-    sep = '\t'
-    fields = "task_id,hash,native_id,process,tag,name,status,exit,cpus,submit,start,complete,duration,realtime,%cpu,memory,%mem,vmem,rss,peak_rss,read_bytes,write_bytes"
-    overwrite = true
-}
-```
+If anything reviewer-relevant happened en route — a worktree had to be reset, an `extra_config` was required, a branch had unexpected uncommitted changes — prepend a one-paragraph `Notes:` section.
 
-### 5. Run both cohorts
-
-Pin Nextflow to the version in `configs/profiles.config`:
-
-```bash
-NXF_VER=$(grep -E "^\s*nextflowVersion" configs/profiles.config | grep -oE "[0-9.]+")
-
-sg docker -c "NXF_VER=$NXF_VER nextflow run bench-module.nf -c bench.config \
-    --samplesheet samplesheet.csv --out_dir out-dev/ -work-dir work-dev/"
-
-sg docker -c "NXF_VER=$NXF_VER nextflow run bench-module.nf -c bench.config \
-    --samplesheet samplesheet.csv --out_dir out-pr/ -work-dir work-pr/"
-```
-
-These can run sequentially (a fast module's iteration loop fits easily in serial time) or in parallel — but only if you're sure both can fit in 8 cores at `maxForks=1` simultaneously without contending.
-
-### 6. Parse and emit
-
-```bash
-python3 .claude/scripts/parse_bench_trace.py \
-    out-dev/trace.tsv out-pr/trace.tsv \
-    --names dev,pr --format md --top 5
-```
-
-(Mode A typically has only one process in the trace, but `--top 5` is harmless.)
-
-## Output you return
-
-Return:
-
-```markdown
-## Cohort
-<cohort table from parse_bench_trace.py>
-
-## Per-process
-<process table>
-
-## Setup notes
-<any non-default decisions you made: file-size cohort selected, n_samples, container-tag override, etc.>
-```
-
-Plus a fenced ```json``` block with the raw parser output.
-
-If the local cohort produced surprising numbers (e.g. one task an outlier), flag it but do not investigate root cause — the caller will direct further work.
+Also include a fenced ```json``` block containing the JSON payload from the second `parse_bench_trace.py` invocation, so the caller can slice further without re-running.
 
 ## Escalation contract
 
-Return "ESCALATE: <reason>" without continuing if:
+Return `ESCALATE: <reason>` and stop, without producing partial output, if:
 
-- A required input is ambiguous or missing.
-- Docker / `sg docker` doesn't work (likely a sandbox provisioning issue, not a bench problem).
-- The bench cohort fails to complete on either branch (Nextflow exits non-zero on a non-recoverable error).
-- The module under test isn't where the caller said it would be (don't guess at module paths).
-
-## Common traps
-
-- **Missing `maxForks=1`.** Per-sample wall becomes noisy. cpu-hours is still reliable, but lead-with-wall PRs need this.
-- **Forgetting resource-tier overrides.** Production tiers (e.g. 16 cpu / 32 GB on `large`) exceed sandbox memory; Nextflow rejects pre-flight.
-- **Using `/tmp` instead of `/home/ssm-user/`.** Disk fills up.
-- **Mid-bench code edits.** Touching the module under test mid-bench contaminates the comparison; re-run the affected branch from scratch.
-- **Reporting cache-warm `time tool args` numbers** (see `feedback_no_tool_microbenches.md`) — these are not module-level numbers and they mislead. If the caller asks for "tool-level numbers" specifically, push back; the right measurement is inside a Nextflow process.
+- A required input is missing or invalid.
+- `docker info` fails (the calling environment lacks Docker access).
+- A worktree cannot be created (uncommitted local changes blocking, branch does not exist, etc.).
+- Nextflow exits non-zero with a non-recoverable error on either branch.
+- The trace.tsv produced by either run has zero `COMPLETED` rows.
