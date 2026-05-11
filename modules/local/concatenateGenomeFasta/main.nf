@@ -1,7 +1,9 @@
-// Concatenate downloaded genomes from ncbi-genome-download according to a file of genome IDs
+// Concatenate downloaded genomes from ncbi-genome-download according to a file of genome IDs.
+// Uses a local scratch directory on Batch profiles as defined in configs/profiles.config.
 process CONCATENATE_GENOME_FASTA {
-    label "single"
+    label "xsmall"
     label "seqkit"
+    label "use_scratch"
     input:
         path(genome_dir)
         path(path_file)
@@ -20,14 +22,18 @@ process CONCATENATE_GENOME_FASTA {
         fi
         echo "Filepath file contains" \$(cat ${path_file} | wc -l) "paths, beginning with:"
         head ${path_file}
-        # Concatenate files listed by paths, then deduplicate by sequence ID.
-        # `bowtie2-build` accepts duplicate `>name` records but `samtools view`
-        # rejects the resulting duplicate `@SQ` headers.
-        # Upstream filtering in FILTER_VIRAL_GENBANK_METADATA to drop non-current
-        # assemblies handles the common case; this guards against remaining duplicates.
-        xargs cat < ${path_file} \\
+        # Parallel-fetch all .fna.gz files into a local staging dir, then
+        # serial-cat through seqkit. Serial cat over Fusion-mounted source is
+        # bottlenecked on per-file S3 GET latency × N files; `xargs -P` cuts
+        # wall time ~13x on production-sized shards. `-P 4*cpus` because
+        # fetches are I/O-bound (sleeping on socket reads).
+        mkdir -p staged
+        xargs -P \$(( ${task.cpus} * 4 )) -n 100 -a ${path_file} cp -t staged/
+        find staged -name '*.fna.gz' -print0 \\
+            | xargs -0 cat \\
             | seqkit rmdup --by-name --threads ${task.cpus} \\
                 -D genomes-duplicates.tsv -o genomes.fasta.gz
+        rm -rf staged
         if [[ -s genomes-duplicates.tsv ]]; then
             echo "Duplicate sequence IDs removed:"
             cat genomes-duplicates.tsv
