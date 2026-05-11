@@ -23,9 +23,10 @@ CVE-2025-6020 exp:2026-06-30
 # GnuPG gpgv: information disclosure / potential code execution (no Debian fix available as of 2026-03-14)
 CVE-2025-68973 exp:2026-06-30
 
-# ── Go stdlib v1.23.4 in ncbi-datasets-cli (ncbi_datasets container) ──
+# ── Go stdlib v1.23.4 in ncbi-datasets-cli 18.21.0 (ncbi_datasets container) ──
 # The NCBI datasets/dataformat binaries are pre-compiled Go executables distributed
-# via conda-forge. They ship Go stdlib v1.23.4; fixes require Go >= 1.25.10+.
+# via conda-forge. They ship Go stdlib v1.23.4.
+# Go ~= 1.25.10 or ~= 1.26.3 is required to address all vulnerabilities.
 # We cannot rebuild these — only NCBI can, by updating their Go toolchain.
 #
 # Risk assessment: these binaries run in an isolated container that only downloads
@@ -34,8 +35,7 @@ CVE-2025-68973 exp:2026-06-30
 # surface for these CVEs is minimal in our pipeline context.
 #
 # TODO: Remove these ignores when a newer ncbi-datasets-cli is available on
-# conda-forge built with Go >= 1.25.10 (or >= 1.26.3 from the 1.26.x line,
-# which also contains fixes for these CVEs). Check with:
+# conda-forge built with Go ~= 1.25.10 or ~= 1.26.3. Check with:
 #   conda search -c conda-forge ncbi-datasets-cli
 #   strings $(conda run -n <env> which datasets) | grep '^go1\.'
 # As of 2026-05-11, 18.25.1 still ships Go 1.23.4.
