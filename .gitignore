@@ -30,6 +30,7 @@ package.json
 .claude/*
 !.claude/agents
 !.claude/pr-examples
+!.claude/scripts
 !.claude/skills
 .review-loop/
 uv.lock
