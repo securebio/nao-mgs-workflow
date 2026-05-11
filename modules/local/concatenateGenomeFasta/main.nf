@@ -25,11 +25,13 @@ process CONCATENATE_GENOME_FASTA {
         # serial-cat through seqkit. Serial cat over Fusion-mounted source is
         # bottlenecked on per-file S3 GET latency × N files; `xargs -P` cuts
         # wall time ~13x on production-sized shards. `-P 4*cpus` because
-        # fetches are I/O-bound (sleeping on socket reads).
+        # fetches are I/O-bound (sleeping on socket reads). Phase 2 cats in
+        # path-file order (not filesystem order) so `seqkit rmdup --by-name`
+        # first-occurrence behavior is stable across runs.
         mkdir -p staged
         xargs -P \$(( ${task.cpus} * 4 )) -n 100 -a ${path_file} cp -t staged/
-        find staged -name '*.fna.gz' -print0 \\
-            | xargs -0 cat \\
+        awk -F/ '{print "staged/" \$NF}' ${path_file} \\
+            | xargs cat \\
             | seqkit rmdup --by-name --threads ${task.cpus} \\
                 -D genomes-duplicates.tsv -o genomes.fasta.gz
         rm -rf staged
