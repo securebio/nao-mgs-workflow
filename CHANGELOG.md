@@ -1,5 +1,6 @@
 # v3.2.2.0-dev
 
+- Speed up `ADD_GENBANK_GENOME_IDS` by parallel-fetching staged genomes with `xargs -P` and bumping label from `single` to `xsmall`. Inline Python is refactored into a dedicated `add_genbank_genome_ids.py` script (with pytest coverage).
 - Speed up `DOWNLOAD_VIRAL_GENOMES` by staging on local scratch and replacing per-file `find -exec mv` with batched `xargs mv`. Introduce a `use_scratch` label with a per-profile process selector in `configs/profiles.config` that enables scratch directories for profiles with Fusion enabled.
 - Rework `MAKE_VIRUS_GENOME_DB` to enumerate viral accessions up-front, filter by host-infection and assembly status, then fan out chunks to `DOWNLOAD_VIRAL_GENOMES` to evenly parallelize across the taxonomic tree.
     - Replace `datasets_extra_args` with more specific `datasets_summary_extra_args` and `datasets_download_extra_args` parameters for `INDEX` workflow.
