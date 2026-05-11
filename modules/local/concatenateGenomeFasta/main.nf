@@ -12,7 +12,8 @@ process CONCATENATE_GENOME_FASTA {
         set -euo pipefail
         # Diagnostics
         echo "Genome directory contains" \$(ls ${genome_dir} | wc -l) "files, beginning with:"
-        ls -1 ${genome_dir} | head
+        # `|| true` prevents SIGPIPE in cases where directory size exceeds kernel pipe buffer
+        ls -1 ${genome_dir} | head || true
         if [[ ! -s ${path_file} ]]; then
             echo "No matching files found!"
             exit 1

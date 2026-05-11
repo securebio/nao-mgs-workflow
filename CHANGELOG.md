@@ -1,5 +1,6 @@
 # v3.2.1.5-dev
 
+- Fix `CONCATENATE_GENOME_FASTA` `SIGPIPE` on large genome directories.
 - Add 5 Go stdlib v1.23.4 CVEs (CVE-2026-33811, -33814, -39820, -39836, -42499) in `ncbi_datasets` container to `.trivyignore`. No fix until NCBI rebuilds with Go ~= 1.25.10 or ~= 1.26.3.
 - Combine `SUBSET_READS_PAIRED_TARGET` with the previously-separate `INTERLEAVE_FASTQ` step into a single FIFO-based process that reads each input once and emits interleaved output via `seqtk mergepe`; plumb in the upstream `COUNT_READS` TSV so the in-process read-counting pass is eliminated; use pigz for parallel (de)compression and bump `SUBSET_READS_*` from `single` to `xsmall`. Adds `pigz=2.8` to the `seqtk` container.
 - Replace single-threaded gzip/zcat with pigz across `EXTRACT_VIRAL_READS_SHORT` modules (`BBDUK`, `BBDUK_HITS_INTERLEAVE`, `BOWTIE2`, `FASTP`, `SORT_FASTQ`, `SORT_FILE`); adds `pigz=2.8` to `bbtools`, `bowtie2_samtools`, `fastp`, and `coreutils` containers.
