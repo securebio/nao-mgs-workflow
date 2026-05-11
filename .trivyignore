@@ -34,7 +34,8 @@ CVE-2025-68973 exp:2026-06-30
 # surface for these CVEs is minimal in our pipeline context.
 #
 # TODO: Remove these ignores when a newer ncbi-datasets-cli is available on
-# conda-forge built with Go >= 1.25.10 (or 1.26.3). Check with:
+# conda-forge built with Go >= 1.25.10 (or >= 1.26.3 from the 1.26.x line,
+# which also contains fixes for these CVEs). Check with:
 #   conda search -c conda-forge ncbi-datasets-cli
 #   strings $(conda run -n <env> which datasets) | grep '^go1\.'
 # As of 2026-05-11, 18.25.1 still ships Go 1.23.4.
