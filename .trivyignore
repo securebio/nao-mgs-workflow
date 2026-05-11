@@ -23,7 +23,7 @@ CVE-2025-6020 exp:2026-06-30
 # GnuPG gpgv: information disclosure / potential code execution (no Debian fix available as of 2026-03-14)
 CVE-2025-68973 exp:2026-06-30
 
-# ── Go stdlib v1.23.4 in ncbi-datasets-cli 18.21.0 (ncbi_datasets container) ──
+# ── Go stdlib v1.23.4 in ncbi-datasets-cli (ncbi_datasets container) ──
 # The NCBI datasets/dataformat binaries are pre-compiled Go executables distributed
 # via conda-forge. They ship Go stdlib v1.23.4.
 # Go ~= 1.25.10 or ~= 1.26.3 is required to address all vulnerabilities.
