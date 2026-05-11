@@ -1,5 +1,6 @@
 # v3.2.1.5-dev
 
+- Fix `CONCATENATE_GENOME_FASTA` `SIGPIPE` on large genome directories by adding `|| true` escape path to `head` call.
 - Swap `zcat` for `rapidgzip --count-lines` in `COUNT_READS` for faster gzip inflate (~3-4× faster per byte than zcat at single-thread); allocation stays at `single` (1 cpu). Adds `rapidgzip=0.15.2` to the `coreutils_gzip_gawk` container. Out-of-scope swap of pigz→rapidgzip on the other decompression hot paths is tracked in #776.
 - Combine `SUBSET_READS_PAIRED_TARGET` with the previously-separate `INTERLEAVE_FASTQ` step into a single FIFO-based process that reads each input once and emits interleaved output via `seqtk mergepe`; plumb in the upstream `COUNT_READS` TSV so the in-process read-counting pass is eliminated; use pigz for parallel (de)compression and bump `SUBSET_READS_*` from `single` to `xsmall`. Adds `pigz=2.8` to the `seqtk` container.
 - Replace single-threaded gzip/zcat with pigz across `EXTRACT_VIRAL_READS_SHORT` modules (`BBDUK`, `BBDUK_HITS_INTERLEAVE`, `BOWTIE2`, `FASTP`, `SORT_FASTQ`, `SORT_FILE`); adds `pigz=2.8` to `bbtools`, `bowtie2_samtools`, `fastp`, and `coreutils` containers.
