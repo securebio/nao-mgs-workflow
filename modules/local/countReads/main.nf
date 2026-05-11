@@ -1,6 +1,6 @@
 process COUNT_READS {
     label "coreutils_gzip_gawk"
-    label "count_reads_resources"
+    label "single"
     input:
         tuple val(sample), path(reads)
         val(single_end)
