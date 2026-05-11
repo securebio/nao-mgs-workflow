@@ -1,7 +1,7 @@
 # v3.2.1.5-dev
 
-- Fix `CONCATENATE_GENOME_FASTA` `SIGPIPE` on large genome directories.
-- Add 5 Go stdlib v1.23.4 CVEs (CVE-2026-33811, -33814, -39820, -39836, -42499) in `ncbi_datasets` container to `.trivyignore`. No fix until NCBI rebuilds with Go ~= 1.25.10 or ~= 1.26.3.
+- Fix `CONCATENATE_GENOME_FASTA` `SIGPIPE` on large genome directories by adding `|| true` escape path to `head` call.
+- Swap `zcat` for `rapidgzip --count-lines` in `COUNT_READS` for faster gzip inflate (~3-4× faster per byte than zcat at single-thread); allocation stays at `single` (1 cpu). Adds `rapidgzip=0.15.2` to the `coreutils_gzip_gawk` container. Out-of-scope swap of pigz→rapidgzip on the other decompression hot paths is tracked in #776.
 - Combine `SUBSET_READS_PAIRED_TARGET` with the previously-separate `INTERLEAVE_FASTQ` step into a single FIFO-based process that reads each input once and emits interleaved output via `seqtk mergepe`; plumb in the upstream `COUNT_READS` TSV so the in-process read-counting pass is eliminated; use pigz for parallel (de)compression and bump `SUBSET_READS_*` from `single` to `xsmall`. Adds `pigz=2.8` to the `seqtk` container.
 - Replace single-threaded gzip/zcat with pigz across `EXTRACT_VIRAL_READS_SHORT` modules (`BBDUK`, `BBDUK_HITS_INTERLEAVE`, `BOWTIE2`, `FASTP`, `SORT_FASTQ`, `SORT_FILE`); adds `pigz=2.8` to `bbtools`, `bowtie2_samtools`, `fastp`, and `coreutils` containers.
 - Add CVE-2026-42010 and CVE-2026-42011 (libgnutls30 TLS-PSK vulnerabilities) to `.trivyignore`. No Debian fix available as of 2026-05-10; our containers don't negotiate TLS-PSK so the practical exposure is nil.
@@ -14,6 +14,7 @@
     - `DOWNLOAD_VIRAL_GENOMES` now emits an `assembly_status` column in the per-taxid metadata TSV (via `dataformat tsv genome --fields ...assminfo-status`), which `PREPARE_VIRAL_METADATA` flows through to `FILTER_VIRAL_GENBANK_METADATA`, which keeps only rows with `assembly_status == 'current'` (dropping `previous`, `replaced`, `suppressed`, etc.).
     - `CONCATENATE_GENOME_FASTA` now runs `seqkit rmdup --by-name` after concatenation as a defense-in-depth check. Switched the process from the `seqtk` container to the existing `seqkit` container (no `seqtk` invocation in the script).
 - Add CVE-2026-4878 (libcap2), CVE-2026-33845 (libgnutls30), CVE-2026-33846 (libgnutls30), CVE-2026-3833 (libgnutls30), CVE-2026-42311 (Pillow in multiqc), and GHSA-82j2-j2ch-gfr8 (rustls-webpki embedded in Polars in multiqc) to `.trivyignore`; no fix currently available for any, and none is exercised by our pipeline.
+- Add 5 Go stdlib v1.23.4 CVEs (CVE-2026-33811, -33814, -39820, -39836, -42499) in `ncbi_datasets` container to `.trivyignore`. No fix until NCBI rebuilds with Go ~= 1.25.10 or ~= 1.26.3.
 
 # v3.2.1.4
 
