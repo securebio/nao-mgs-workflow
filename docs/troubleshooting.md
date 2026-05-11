@@ -48,3 +48,6 @@ If you still keep running into this issue, you may consider contacting Seqera fo
 - This generally causes no problems, but is something to be aware of:
      - The default `/scratch/` directory on AWS EC2 instances works fine in our experience, but if you are seeing `/scratch` directory permissions or space issues, you may have to customize the `/scratch/` directory with a UserData script in your EC2 launch template.
      - To turn off caching, you can always remove the `aws.batch.volumes = ['/scratch:/scratch']` line from the relevant profile.
+
+## Scratch directories
+- Some processes (currently `DOWNLOAD_VIRAL_GENOMES`) also use [`/scratch`](https://docs.seqera.io/nextflow/reference/process#scratch) as a per-task working directory via `process { withName: ... { scratch = '/scratch' } }` in `configs/profiles.config`. With this directive, the per-task working dir lives on the instance EBS volume rather than on Fusion/S3 for the duration of the task. SecureBio's standard Batch launch templates are sized for this; if you run on a custom launch template with a small root volume and hit `/scratch` permission or space issues, remove the `process { withName: <process> { scratch = '/scratch' } }` line for the affected process (this trades the speedup for slower Fusion-backed I/O).
