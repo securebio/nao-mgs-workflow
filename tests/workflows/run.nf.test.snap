@@ -15,13 +15,13 @@
             "tiny_test_qc_quality_sequence_stats_cleaned.tsv.gz:md5,3d75e2d8664540c1128e0a4e05e00cda",
             "tiny_test_qc_quality_sequence_stats_raw.tsv.gz:md5,008202868ef01468cc04cfb6c570d7ca",
             "tiny_test_read_counts.tsv:md5,c00f00d8a47a87731a969636e6043b15",
-            "tiny_test_virus_hits.tsv.gz:md5,08ef9710c114d575feb0fe0184fa7e8b"
+            "tiny_test_virus_hits.tsv.gz:md5,c4c8be0c7c3296fe6613b1c52813bd87"
         ],
         "meta": {
             "nf-test": "0.9.3",
-            "nextflow": "25.10.4"
+            "nextflow": "25.10.5"
         },
-        "timestamp": "2026-03-14T18:57:19.262741322"
+        "timestamp": "2026-05-11T15:55:59.073566"
     },
     "run_output_ont": {
         "content": [
