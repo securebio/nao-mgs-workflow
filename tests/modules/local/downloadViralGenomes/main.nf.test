@@ -51,8 +51,11 @@ nextflow_process {
         }
         then {
             assert process.success
-            assert process.out.genomes.size() == 2
-            assert process.out.genomes.every { it.toString().endsWith('.fna.gz') }
+            // Multi-match glob emit: process.out.genomes == [[Path, Path]] (one channel
+            // emission containing the list of matches). Single-match emit flattens to
+            // [Path], hence the difference from the single-accession test above.
+            assert process.out.genomes[0].size() == 2
+            assert process.out.genomes[0].every { it.toString().endsWith('.fna.gz') }
         }
     }
 
