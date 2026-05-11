@@ -353,6 +353,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
-# bin/ digest bump: forces a different layer hash so Wave skips its cached failure.
-# Remove once the upstream cache evicts.
