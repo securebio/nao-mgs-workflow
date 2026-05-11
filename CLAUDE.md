@@ -96,6 +96,10 @@ When asked to resolve merge conflicts:
 2. **Wait for user approval** before resolving.
 3. When the chosen resolution is to take one side of a conflict entirely (for a given file or the whole merge), prefer git-native resolution commands (e.g., `git checkout --ours <file>` or `git checkout --theirs <file>`) over manually rewriting affected files.
 
+## Benchmarking conventions (agent-specific)
+
+See `.claude/benchmarking.md` for metric definitions and reporting conventions to use in performance PRs. Always report **two metrics** in cohort tables: `runtime` (= `complete − start`, slot wall) and `cpu-hours` (= `realtime × cpus / 3600`). Don't substitute `realtime × %cpu / 100` or `(complete − start) × cpus` for cpu-hours.
+
 ## Testing
 
 See `docs/testing.md` for comprehensive testing guidelines. Key commands:
