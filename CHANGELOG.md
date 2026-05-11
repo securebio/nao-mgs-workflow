@@ -13,6 +13,7 @@
     - `DOWNLOAD_VIRAL_GENOMES` now emits an `assembly_status` column in the per-taxid metadata TSV (via `dataformat tsv genome --fields ...assminfo-status`), which `PREPARE_VIRAL_METADATA` flows through to `FILTER_VIRAL_GENBANK_METADATA`, which keeps only rows with `assembly_status == 'current'` (dropping `previous`, `replaced`, `suppressed`, etc.).
     - `CONCATENATE_GENOME_FASTA` now runs `seqkit rmdup --by-name` after concatenation as a defense-in-depth check. Switched the process from the `seqtk` container to the existing `seqkit` container (no `seqtk` invocation in the script).
 - Add CVE-2026-4878 (libcap2), CVE-2026-33845 (libgnutls30), CVE-2026-33846 (libgnutls30), CVE-2026-3833 (libgnutls30), CVE-2026-42311 (Pillow in multiqc), and GHSA-82j2-j2ch-gfr8 (rustls-webpki embedded in Polars in multiqc) to `.trivyignore`; no fix currently available for any, and none is exercised by our pipeline.
+- Add 5 Go stdlib v1.23.4 CVEs (CVE-2026-33811, -33814, -39820, -39836, -42499) in `ncbi_datasets` container to `.trivyignore`. No fix until NCBI rebuilds with Go ~= 1.25.10 or ~= 1.26.3.
 
 # v3.2.1.4
 
