@@ -23,7 +23,24 @@ The `Trivy Container Vulnerability Scan` CI job fails when any container image r
 
 - `local_scan`: if `true`, additionally run Trivy locally against the PR's containers (useful when CI is broken or you want to scan against a `.trivyignore` you haven't pushed yet). Requires `trivy` binary + Docker.
 
+## Branching: triage work goes in its own PR, not the failing PR
+
+**Default: branch off `dev` and open a new PR for the triage**, separate from whatever PR's CI surfaced the failure. The common case is global-state CVEs (libcap2, libgnutls30, Go-stdlib, etc.) that affect every container scan regardless of which PR is in flight — those have no causal relationship to the perf change / feature work on the failing PR, and piling security patches onto an unrelated PR conflates two reviewer concerns. Use the failing PR's CI output as the *input* to the triage; deliver the fix as a separate change.
+
+There's one exception: if the failing PR itself introduced the CVE (e.g. a new container yml in the PR added a vulnerable dep), the fix belongs inline on that PR. Decide by looking at the diff — if the failing CVE traces to a package whose version pin is in the PR's diff, it's PR-local; otherwise it's a separate-PR triage.
+
+When in doubt, ask the user before stacking.
+
 ## Procedure
+
+### Step 0 — Branch
+
+```bash
+git fetch origin dev --quiet
+git checkout -b coding-agent/trivy-triage-YYYY-MM-DD origin/dev
+```
+
+(Or, if Step 1's CVE-source analysis later confirms the CVE is PR-local, switch to the failing PR's branch instead.)
 
 ### Step 1 — Fetch the scan results
 
@@ -120,9 +137,9 @@ Choose `exp:` (expiry) ~6-12 weeks out — the entry will need re-evaluation onc
 
 If multiple related CVEs share an assessment (e.g. several Go-stdlib CVEs in the same statically-linked binary), group them under one comment block.
 
-### Step 5 — Generate the PR-description block
+### Step 5 — Generate the PR description
 
-Append the following block to the PR's description, under a `# Trivy triage` heading. This is what the reviewer audits:
+Use the following block as the body of the *new* triage PR (per the branching note above; the only exception is the PR-local-CVE case, where you instead append the block under a `# Trivy triage` heading on the original PR). This is what the reviewer audits:
 
 ```markdown
 # Trivy triage
