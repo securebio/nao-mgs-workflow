@@ -2,7 +2,7 @@
     "run_output_shortread": {
         "content": [
             "tiny_test_bracken.tsv.gz:md5,7fbf9af7ae2074266d5f0be4f1b2a184",
-            "tiny_test_fastp.json:md5,7ed2724f532e12b3e120502e57001b3a",
+            "tiny_test_fastp.json:md5,75a3980b12d51defa22f85d078c3bbad",
             "tiny_test_kraken.tsv.gz:md5,b92e96228ff584c883f74b6f6e855a60",
             "tiny_test_qc_adapter_stats_cleaned.tsv.gz:md5,d15e65d588573c8ccb2687414e37f905",
             "tiny_test_qc_adapter_stats_raw.tsv.gz:md5,d15e65d588573c8ccb2687414e37f905",
