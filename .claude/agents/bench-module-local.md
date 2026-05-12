@@ -91,24 +91,15 @@ include { TARGET_MODULE }   from "<module-include-path>"
 // + any upstream module include if needed
 
 workflow {
-    sheet = LOAD_SAMPLESHEET(params.samplesheet, params.platform ?: "illumina", false)
-    // Construct each required input by shape:
-    //   - identity from sheet for samplesheet-shape inputs
-    //   - inline seqtk for interleaving
-    //   - params from config for static asset paths and val params
-    //   - one upstream process invocation if a per-sample derived path is needed
+    sheet = LOAD_SAMPLESHEET(params.samplesheet, params.platform, false)
+    // Construct each required input per the table above.
     TARGET_MODULE(/* the shape-matched inputs, in order */)
 }
 ```
 
 If you include an upstream Nextflow process, match the production call's argument list — pull `params.*` values from the same config-include files the production wiring uses.
 
-**Signature-shortest vs production-fidelity trade-off.** When the input shape can be produced either by a short inline transformation (e.g. `seqtk mergepe` of paired samplesheet reads → interleaved fastq) *or* by reproducing the production upstream chain, prefer the inline transformation when input *content* characteristics don't drive the target module's performance, and the production chain when they do. Examples:
-
-- FASTP, BBDUK on reads, SUBSET_PAIRED, INTERLEAVE: read shape is what matters; signature-shortest inline is the right call.
-- BOWTIE2: alignment hit rate (a content property — reads being viral-enriched, adapter-trimmed) materially affects runtime. Reproducing the production upstream chain gives more transferable numbers, despite the upstream-Δ confound.
-
-Whichever you pick, name the construction strategy in your `Notes:` so the caller can judge whether the bench's content is representative for their use case.
+Always name your construction strategy in `Notes:` so the caller knows whether the bench's content is representative for their perf claim. The signature-shortest path doesn't transfer well when input *content* drives the target's behavior (BOWTIE2 alignment rate, BBMASK kmer-hit density, etc.) — in those cases reproduce the production upstream chain instead, and acknowledge the upstream-Δ confound.
 
 ### 5. Detect Docker
 
