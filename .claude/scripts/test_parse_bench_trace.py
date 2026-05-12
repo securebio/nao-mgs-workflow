@@ -241,7 +241,7 @@ def test_render_markdown_compare(tmp_path: Path) -> None:
     assert "## Cohort" in md
     assert "## Per-process" in md
     assert "| FOO |" in md
-    assert "dev runtime" in md and "PR runtime" in md and "Δ cpu-h" in md
+    assert "dev runtime" in md and "pr runtime" in md and "Δ cpu-h" in md
 
 
 def test_render_markdown_single(tmp_path: Path) -> None:

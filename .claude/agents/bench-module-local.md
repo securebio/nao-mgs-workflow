@@ -15,17 +15,19 @@ The question you answer: **does branch B perform differently from branch A on th
 
 - `repo_path`: absolute path to the repo root.
 - `branch_a`, `branch_b`: branches to compare.
-- `module`: Nextflow include path of the module under test (e.g. `./modules/local/countReads`).
+- `process_name`: name of the Nextflow `process` under test (e.g. `COUNT_READS`, `BBDUK_HITS_INTERLEAVE`). Multiple processes can share a file (e.g. `BBDUK` and `BBDUK_HITS_INTERLEAVE` both live in `modules/local/bbduk/main.nf`), so the name disambiguates.
 - `samplesheet`: path to a samplesheet of raw input reads (read-only). The samplesheet is the canonical starting point for any input construction.
 
 ## Procedure
 
-### 1. Parse the module's input signature
+### 1. Locate the module and parse its input signature
 
-Read `<repo_path>/<module>/main.nf`. Find the `process` block. Parse its `input:` declaration. For each input position, identify:
+Grep `^process <process_name> ` under `<repo_path>/modules/local/` to find the defining file. Read it. Parse the `input:` declaration. For each position, identify:
 
 - Whether it's a `val`, `path`, or `tuple` (and if tuple, the shape).
 - Semantic role inferable from name or usage: sample id, reads channel, count file, reference index, params val, etc.
+
+The Nextflow include path is the directory containing the file, e.g. `./modules/local/bbduk` for `modules/local/bbduk/main.nf` (multi-process files are common — only inspect the named target).
 
 ### 2. For each input position, pick the shortest construction from available data
 
@@ -84,6 +86,13 @@ workflow {
 
 If you include an upstream Nextflow process, match the production call's argument list — pull `params.*` values from the same config-include files the production wiring uses.
 
+**Signature-shortest vs production-fidelity trade-off.** When the input shape can be produced either by a short inline transformation (e.g. `seqtk mergepe` of paired samplesheet reads → interleaved fastq) *or* by reproducing the production upstream chain, prefer the inline transformation when input *content* characteristics don't drive the target module's performance, and the production chain when they do. Examples:
+
+- FASTP, BBDUK on reads, SUBSET_PAIRED, INTERLEAVE: read shape is what matters; signature-shortest inline is the right call.
+- BOWTIE2: alignment hit rate (a content property — reads being viral-enriched, adapter-trimmed) materially affects runtime. Reproducing the production upstream chain gives more transferable numbers, despite the upstream-Δ confound.
+
+Whichever you pick, name the construction strategy in your `Notes:` so the caller can judge whether the bench's content is representative for their use case.
+
 ### 5. Detect Docker
 
 ```bash
@@ -99,26 +108,38 @@ fi
 
 ### 6. Stage two fresh worktrees
 
+`OUT_DIR` must be an **absolute** path (Nextflow's trace path is evaluated post-`cd`, so a relative `./tmp/...` puts the trace inside the worktree instead of the bench dir). The suffix must be uniquely random (timestamp+PID collides between concurrent agent invocations sharing a clock-second).
+
 ```bash
-OUT_DIR="./tmp/bench-module-$(date +%Y%m%dT%H%M%S)-$$"
-mkdir -p "$OUT_DIR"
-git -C "$repo_path" worktree add "$OUT_DIR/branch_a/worktree" "$branch_a"
-git -C "$repo_path" worktree add "$OUT_DIR/branch_b/worktree" "$branch_b"
+OUT_DIR="$(mktemp -d "$PWD/tmp/bench-module-XXXXXXXX")"
+git -C "$repo_path" worktree add --detach "$OUT_DIR/branch_a/worktree" "$branch_a"
+git -C "$repo_path" worktree add --detach "$OUT_DIR/branch_b/worktree" "$branch_b"
 ```
+
+`--detach` is required when the branch is already checked out elsewhere (e.g. the user has `dev` open in another worktree). The bench needs a read-only snapshot of the branch tip; detaching avoids the "branch already used" error.
 
 If either worktree path already exists, escalate.
 
+Write the generated `bench-module.nf` **directly** into each worktree (e.g. via `Write` tool to `$OUT_DIR/branch_a/worktree/bench-module.nf`). Do *not* stage it at a shared `tmp/` path first — parallel agent invocations have clobbered each other this way.
+
 ### 7. Run Nextflow on each branch (sequentially)
 
-Copy the generated bench entrypoint and `.claude/agents/bench-module-local.config` into each worktree, then:
+Copy `.claude/agents/bench-module-local.config` into each worktree (the entrypoint is already there from step 6). The shared config includes `containers.config`, `resources.config`, and `run.config` so labeled tiers resolve and `params.*` defaults are loaded — you don't need to pass adapters/genome paths at the CLI unless overriding.
+
+**Host-capacity check.** Before running, compare host RAM (`free -g`) against the largest tier any process in the entrypoint requires. If a tier exceeds host RAM (common: production `small`=16GB on a 15GB sandbox), write a small override config into the worktree that caps tiers to host capacity, and pass it as an extra `-c` flag. Don't escalate — this is expected on resource-constrained hosts.
 
 ```bash
-NXF_VER="$(grep -E '^\s*nextflowVersion\s*=' "$repo_path/configs/profiles.config" 2>/dev/null | grep -oE '[0-9.]+' | head -1)"
+NXF_VER="$(grep -E '^\s*nextflowVersion\s*=' "$repo_path/configs/profiles.config" 2>/dev/null | grep -oE '[0-9.]+(\.[0-9]+)*' | head -1)"
 
+**Pass `-profile ec2_local` to the run.** The repo's `configs/profiles.config` defines a `standard` profile that sets `process.executor = "awsbatch"`. Nextflow auto-activates `standard` when no `-profile` is given, which clobbers the bench config's local-executor intent. `-profile ec2_local` is a no-op profile (other than disabling wave/fusion + mounting AWS creds) whose presence suppresses the auto-activated `standard`.
+
+```bash
 for BR in branch_a branch_b; do
     cd "$OUT_DIR/$BR/worktree"
     CMD="NXF_VER=$NXF_VER nextflow run bench-module.nf \
+        -profile ec2_local \
         -c bench_module.config \
+        ${HOST_OVERRIDES:+-c $HOST_OVERRIDES} \
         --samplesheet $samplesheet \
         --out_dir $OUT_DIR/$BR \
         -work-dir $OUT_DIR/$BR/work"

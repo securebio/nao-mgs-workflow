@@ -22,35 +22,13 @@ also emits a side-by-side comparison block.
 import argparse
 import csv
 import json
-import logging
 import re
 import sys
-import time
 from collections import defaultdict
 from collections.abc import Iterable
-from datetime import UTC, datetime
+from datetime import datetime
 from pathlib import Path
 from typing import TypedDict
-
-###########
-# LOGGING #
-###########
-
-
-class UTCFormatter(logging.Formatter):
-    """Custom logging formatter that displays timestamps in UTC."""
-
-    def formatTime(self, record: logging.LogRecord, datefmt: str | None = None) -> str:
-        """Format log timestamps in UTC timezone."""
-        dt = datetime.fromtimestamp(record.created, UTC)
-        return dt.strftime("%Y-%m-%d %H:%M:%S UTC")
-
-
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger()
-handler = logging.StreamHandler(sys.stderr)
-handler.setFormatter(UTCFormatter("%(asctime)s [%(levelname)s] %(message)s"))
-logger.handlers = [handler]
 
 
 ###############
@@ -365,6 +343,17 @@ def fmt_pct(pct: float | None) -> str:
     return f"{pct:+.1f}%"
 
 
+def fmt_cpu_h(cpu_h: float) -> str:
+    """Format cpu-hours with adaptive precision (small values keep 4 sig figs)."""
+    if cpu_h == 0:
+        return "0"
+    if cpu_h >= 0.1:
+        return f"{cpu_h:.2f}"
+    if cpu_h >= 0.001:
+        return f"{cpu_h:.4f}"
+    return f"{cpu_h:.2e}"
+
+
 def render_markdown(payload: Payload, top: int | None = None) -> str:
     """Render the JSON payload as markdown tables.
 
@@ -376,10 +365,15 @@ def render_markdown(payload: Payload, top: int | None = None) -> str:
     if "compare" in payload:
         cmp = payload["compare"]
         cohort = cmp["cohort"]
+        # Trace names are passed through from `--names` into traces[].name; use
+        # them as the column labels so the table reflects the actual branches.
+        names_list = [entry["name"] for entry in payload["traces"]]
+        a_name = names_list[0] if names_list else "a"
+        b_name = names_list[1] if len(names_list) > 1 else "b"
         lines += [
             "## Cohort",
             "",
-            "| Scope | dev | PR | Δ |",
+            f"| Scope | {a_name} | {b_name} | Δ |",
             "|---|---:|---:|---:|",
             (
                 f"| Wall | {fmt_duration(cohort['dev_wall_s'])} "
@@ -387,14 +381,17 @@ def render_markdown(payload: Payload, top: int | None = None) -> str:
                 f"| {fmt_pct(cohort['delta_wall']['pct'])} |"
             ),
             (
-                f"| Σ cpu-hours | {cohort['dev_total_cpu_h']:.2f} "
-                f"| {cohort['pr_total_cpu_h']:.2f} "
+                f"| Σ cpu-hours | {fmt_cpu_h(cohort['dev_total_cpu_h'])} "
+                f"| {fmt_cpu_h(cohort['pr_total_cpu_h'])} "
                 f"| {fmt_pct(cohort['delta_total_cpu_h']['pct'])} |"
             ),
             "",
             "## Per-process",
             "",
-            "| Process | dev runtime | PR runtime | Δ runtime | dev cpu-h | PR cpu-h | Δ cpu-h |",
+            (
+                f"| Process | {a_name} runtime | {b_name} runtime | Δ runtime "
+                f"| {a_name} cpu-h | {b_name} cpu-h | Δ cpu-h |"
+            ),
             "|---|---:|---:|---:|---:|---:|---:|",
         ]
         procs = sorted(
@@ -410,8 +407,8 @@ def render_markdown(payload: Payload, top: int | None = None) -> str:
                 f"| {fmt_duration(p['dev_runtime_s'])} "
                 f"| {fmt_duration(p['pr_runtime_s'])} "
                 f"| {fmt_pct(p['delta_runtime']['pct'])} "
-                f"| {p['dev_cpu_h']:.2f} "
-                f"| {p['pr_cpu_h']:.2f} "
+                f"| {fmt_cpu_h(p['dev_cpu_h'])} "
+                f"| {fmt_cpu_h(p['pr_cpu_h'])} "
                 f"| {fmt_pct(p['delta_cpu_h']['pct'])} |"
             )
         return "\n".join(lines) + "\n"
@@ -430,7 +427,7 @@ def render_markdown(payload: Payload, top: int | None = None) -> str:
             "| Metric | Value |",
             "|---|---:|",
             f"| Cohort wall | {fmt_duration(trace_cohort['wall_s'])} |",
-            f"| Σ cpu-hours | {trace_cohort['total_cpu_h']:.2f} |",
+            f"| Σ cpu-hours | {fmt_cpu_h(trace_cohort['total_cpu_h'])} |",
             f"| Tasks completed | {trace_cohort['n_tasks_completed']} |",
             "",
             "| Process | n | Σ runtime | Σ cpu-h | max task runtime |",
@@ -440,7 +437,7 @@ def render_markdown(payload: Payload, top: int | None = None) -> str:
             lines.append(
                 f"| {ps['process']} | {ps['n']} "
                 f"| {fmt_duration(ps['sum_runtime_s'])} "
-                f"| {ps['sum_cpu_h']:.2f} "
+                f"| {fmt_cpu_h(ps['sum_cpu_h'])} "
                 f"| {fmt_duration(ps['max_runtime_s'])} |"
             )
         lines.append("")
@@ -479,7 +476,6 @@ def parse_arguments(argv: Iterable[str] | None = None) -> argparse.Namespace:
 
 def main() -> None:
     """Aggregate trace(s), emit JSON to stdout (and markdown to a file if `--md` given)."""
-    t0 = time.monotonic()
     args = parse_arguments()
     if len(args.traces) > 2:
         raise ValueError("at most two traces supported (single or dev/PR pair).")
@@ -500,8 +496,6 @@ def main() -> None:
     sys.stdout.write("\n")
     if args.md is not None:
         args.md.write_text(render_markdown(payload, top=args.top))
-
-    logger.info("parse_bench_trace done in %.2fs", time.monotonic() - t0)
 
 
 if __name__ == "__main__":
