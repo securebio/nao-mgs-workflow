@@ -72,6 +72,26 @@ When the user asks you to handle PR review comments:
 
 When working on changes to an existing PR branch, proactively check CI status with `gh pr checks` to identify test failures, timeouts, or version-check errors. Don't wait for the user to point out failures — catch and address them as part of your workflow. Use the **ci-debugger** agent to diagnose failures.
 
+### Rebuilding containers from `containers/*.yml` changes
+
+When you edit a `containers/<name>.yml` spec — typically to address a CVE or to add a tool to an image — the running pipeline doesn't pick up the change until the corresponding image is rebuilt and pushed to ECR with a new content-hash tag, and `configs/containers.config` is updated to point at that tag. The agent role on the sandbox is ECR pull-only and cannot push directly. Instead, trigger the `build-containers.yml` workflow via the GitHub App's `actions:write`:
+
+```bash
+gh workflow run build-containers.yml --ref <branch>
+# (or with explicit specs:)
+gh workflow run build-containers.yml --ref <branch> -f containers=multiqc,bbtools
+```
+
+Default behavior is to build only specs that differ from `origin/dev`. When the workflow completes, download the updated `configs/containers.config` and commit it to the branch:
+
+```bash
+gh run download <run-id> -n containers-config-update -D /tmp/cfg
+cp /tmp/cfg/containers.config configs/containers.config
+git add configs/containers.config && git commit -m "..." && git push
+```
+
+The workflow runs in ~5-15 min depending on cache state. It does not commit the config update itself because the default `GITHUB_TOKEN` lacks push permission on `coding-agent/*` branches; the dispatching agent commits it.
+
 ### GitHub Actions Workflows
 
 When writing or modifying GitHub Actions workflows:
