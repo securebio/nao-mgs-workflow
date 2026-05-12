@@ -47,8 +47,9 @@ git checkout -b coding-agent/trivy-triage-YYYY-MM-DD origin/dev
 From the latest `scan-containers` run on the PR:
 
 ```bash
-# Find the most recent run ID for the PR's HEAD SHA.
-gh run list --workflow=trivy-scan.yml --branch <pr-branch> --limit 1 --json databaseId,headSha,conclusion
+# Resolve the PR's branch from the PR number, then find the latest run ID.
+BRANCH=$(gh pr view <pr_number> --json headRefName -q .headRefName)
+gh run list --workflow=trivy-scan.yml --branch "$BRANCH" --limit 1 --json databaseId,headSha,conclusion
 # Then download the trivy-scan-results artifact:
 gh run download <RUN_ID> -n trivy-scan-results -D /tmp/trivy
 ```
@@ -84,7 +85,9 @@ Cross-reference each `VulnerabilityID` against `.trivyignore` and drop any that 
 - What component of the package is affected? (a specific function, a config option, a code path)
 - What does an attacker need to trigger it? (network access, local user, malformed input, specific config)
 
-**3b. Identify the affected package's role in our containers.** Which container(s) include it? Is it pulled in directly (in the container's conda env / apt install) or transitively (as a dep of something else)? Use `bin/scan_containers.py`'s output or rerun trivy on a single container to confirm.
+**3b. Identify the affected package's role in our containers.** Which container(s) include it? Is it pulled in directly (in the container's conda env / apt install) or transitively (as a dep of something else)?
+
+The Trivy JSON's `Results[].Vulnerabilities[].PkgPath` is the most useful forensic field here — e.g. `opt/conda/lib/python3.13/site-packages/urllib3-...` tells you immediately whether the package is in a conda env (and which one), inside a wheel (and which dep installed it), or system-level. Use that plus `bin/scan_containers.py`'s output to confirm.
 
 **3c. Assess whether the pipeline uses the vulnerable functionality.** This is the key step. *Don't write off the risk based on "the container is isolated" — that's the easy way out.* Instead, name what the pipeline actually does with this package:
 
@@ -98,7 +101,14 @@ Write this down concretely — "BBDuk in the BBTools container parses FASTQ via 
 
 - **Distro update:** Is the package newer in the container's base distro? `apt-cache policy <pkg>` inside the container, or check the Debian/Alpine security tracker.
 - **Base-image bump:** Is there a newer base image (e.g. Debian bookworm → trixie) where the package is patched? Often this is the right answer when "no fix in our current Debian version" is reported.
-- **Upstream conda package:** If the package comes from conda-forge / bioconda, `conda search -c <channel> <pkg>` to see available versions.
+- **Upstream conda package:** If the package comes from conda-forge / bioconda, `conda search -c <channel> <pkg>` shows available versions. When `conda` isn't installed locally, the anaconda.org REST API is the agent-friendly fallback for checking version availability *and* — critically — what each version's deps pin. The "fix exists upstream but a feedstock pins it out of reach" pattern is common (urllib3 inside awscli, quinn-proto inside Polars, etc.). Recipe to check pinned deps for a specific version:
+
+  ```bash
+  curl -s "https://api.anaconda.org/release/conda-forge/<pkg>/<version>" |
+    jq '.distributions[0].attrs.depends[] | select(test("<dep_pattern>"))'
+  ```
+
+  If that returns a pin like `urllib3<=2.6.3`, the fix is blocked upstream until the feedstock relaxes the cap.
 - **Upstream tool update:** Some CVEs trace to a tool (e.g. multiqc) shipping a vulnerable dep. Check the tool's changelog for a release that bumps the dep.
 - **Workaround at config level:** Occasionally a CVE only affects a specific config option you can disable.
 
@@ -123,6 +133,8 @@ Patterns that **do not** justify ignoring on their own:
 
 **4a. Patch.** Edit the container yml (under `containers/`) to bump the dep, base image, or upstream tool. Run `bin/scan_containers.py` locally if you can to verify the fix takes. Commit the change with the CVE ID in the message.
 
+**Patch + image-rebuild gap.** A yml change doesn't itself clear the CVE on `scan-containers` — that CI step scans the *published* image tag referenced in `configs/containers.config`, and the new yml only takes effect when a maintainer rebuilds and re-pins the tag. The agent role here is ECR pull-only and cannot push. So a Patch outcome typically still needs a `.trivyignore` entry covering the rebuild gap, and the PR description's Deployment Notes (see Step 5) must call out the dependency on a follow-on rebuild. Don't quietly leave the CVE unaddressed expecting CI to fix itself.
+
 **4b. Add to `.trivyignore`.** Format follows the existing entries:
 
 ```
@@ -134,6 +146,8 @@ CVE-XXXX-XXXXX exp:YYYY-MM-DD
 ```
 
 Choose `exp:` (expiry) ~6-12 weeks out — the entry will need re-evaluation once that hits. Pick a date that aligns with when you reasonably expect a fix (upstream release cadence + buffer). Don't set expiries more than a year out; if the assessment is "this will never have a fix," that's an escalation, not an ignore.
+
+The existing `.trivyignore` skews toward a single batch re-eval date (e.g. `2026-06-30`) used across many entries. Per-entry dates tied to a specific release cadence are more useful when the trigger is well-defined (e.g. "awscli feedstock relaxes urllib3 cap"); batch dates are reasonable when the trigger is opaque and re-eval is best done as a periodic chore. Either pattern is acceptable; pick the one that gives the next triage agent the most useful signal.
 
 If multiple related CVEs share an assessment (e.g. several Go-stdlib CVEs in the same statically-linked binary), group them under one comment block.
 
@@ -162,6 +176,22 @@ Each is triaged below.
 ```
 
 Surface every finding here, including ones you patched. The reviewer should see the assessment, not just the diff.
+
+**Deployment notes** (add this section when the merge doesn't fully clear the CVE on its own):
+
+```markdown
+## Deployment notes
+
+Merging this PR <does / does not> clear the failing `scan-containers` CI on
+its own. <Explain: the yml change takes effect only on the next image
+rebuild, so the `.trivyignore` entry covers the rebuild gap; or, the patch
+took effect on the existing pinned tag so the entry is unnecessary; etc.>
+
+Action required after merge: <e.g. "maintainer to rebuild the multiqc image
+and re-pin in configs/containers.config" — or "none">.
+```
+
+**Versioning / CHANGELOG.** Per `docs/versioning.md`, a Trivy-only PR is typically a point bump under the in-flight `-dev` version with a single CHANGELOG line summarizing the disposition (patched vs ignored, which packages, which re-eval trigger). The `version-bump` agent referenced in `CLAUDE.md` is the canonical authority — defer to it if uncertain.
 
 ### Step 6 — Verify before push
 
