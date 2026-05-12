@@ -100,6 +100,10 @@ When asked to resolve merge conflicts:
 
 See `.claude/benchmarking.md` for metric definitions and reporting conventions to use in performance PRs. Always report **two metrics** in cohort tables: `runtime` (= `complete − start`, slot wall) and `cpu-hours` (= `realtime × cpus / 3600`). Don't substitute `realtime × %cpu / 100` or `(complete − start) × cpus` for cpu-hours.
 
+### Entry point: the `bench` skill
+
+The **`bench`** skill (`.claude/skills/bench/`) is the canonical entry point for benchmarking a perf PR. It routes to the appropriate underlying tool(s) based on the perf claim and walks through composing the bench section of the PR description in the structure of `.claude/pr-examples/pipeline-bench.md`. Use this when starting a perf PR's bench writeup from scratch.
+
 ### Module-level local A/B benches
 
 For perf claims scoped to a single Nextflow process, the **`bench-module-local`** subagent (`.claude/agents/bench-module-local.md`) runs an A/B comparison via local Docker: it inspects the module's `input:` declaration, generates a thin entrypoint that produces matching-shape inputs from a samplesheet (identity, inline interleave, or upstream chain when content matters), runs both branches in parallel git worktrees, and aggregates traces into the canonical PR-table format via **`.claude/scripts/parse_bench_trace.py`**. The `bench-module` skill (`.claude/skills/bench-module/`) is a thin dispatcher around the agent. See `.claude/pr-examples/pipeline-bench.md` for the writeup format.
