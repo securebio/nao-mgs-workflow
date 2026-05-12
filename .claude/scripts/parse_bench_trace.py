@@ -482,6 +482,11 @@ def main() -> None:
     names = args.names.split(",") if args.names else [p.stem for p in args.traces]
     if len(names) != len(args.traces):
         raise ValueError(f"--names count ({len(names)}) must match trace count ({len(args.traces)}).")
+    # Duplicate names produce ambiguous column headers in the markdown render
+    # (e.g. `dev,dev` from a sanity-check run). Suffix duplicates with `_a`,
+    # `_b`, ...
+    if len(names) > 1 and len(set(names)) < len(names):
+        names = [f"{n}_{chr(ord('a') + i)}" for i, n in enumerate(names)]
 
     aggregations = [aggregate_trace(p) for p in args.traces]
     traces: list[TraceEntry] = [

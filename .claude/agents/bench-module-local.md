@@ -61,7 +61,10 @@ For each input position, match by signature shape and pick the cheapest transfor
 | Other `val(<param>)` whose default comes from `params.*` | Read the production config to find the value; pass via `--param_name value` or hardcode in a `params {}` block in the bench config. |
 | `path(<reference_asset>)` (genome FASTA, BT2 index, etc.) | From `params.*` in the production config. The calling environment is responsible for having the asset accessible at that path. |
 | `path(<per-sample-derived>)` produceable inline (small count TSV, simple lookup) | Compute inline (a small `process` invoked in the entrypoint, or an `exec:` block). |
-| `path(<per-sample-derived>)` requiring upstream Nextflow processes to produce (e.g. SAM from BOWTIE2, TSV from LCA_TSV) | Include the necessary upstream invocations in the bench entrypoint. There's no hard cap — see "Decide whether to proceed" below. |
+| `path(<per-sample-derived>)` whose production producer is far upstream (e.g. SAM from BOWTIE2, TSV from LCA_TSV) but whose **format** the target only consumes structurally | **Synthesize** an input of the right shape inside a bench-only `MAKE_<TARGET>_INPUT` process. Generate enough rows / records to make the target's per-row work measurable. Note in `Notes:` that the input is synthetic; callers will read this and judge whether content matters for their perf claim. |
+| `path(<per-sample-derived>)` requiring the actual production content (e.g. BOWTIE2 against viral index, where alignment-rate drives runtime) | Include the necessary upstream invocations in the bench entrypoint. There's no hard cap — see "Decide whether to proceed" below. |
+
+**Before committing to a construction**, check `tests/modules/local/<modulename>/main.nf.test` (and similarly under `tests/subworkflows/`) — the repo's nf-tests often already specify a minimal viable input chain for the target. Lifting their setup saves you from rediscovering the right wiring.
 
 ### 3. Decide whether to proceed
 
