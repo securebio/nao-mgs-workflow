@@ -34,4 +34,4 @@ jobs:
       - name: Run mypy
         if: steps.filter.outputs.python == 'true'
         run: |
-          python -m mypy bin/ modules/local/
+          python -m mypy bin/ modules/local/ .claude/scripts/
