@@ -20,7 +20,7 @@ If you're updating the version mid-stream (a PR that promotes the `-dev` from on
 
 ## Inputs
 
-- `user_handle` (optional): the GitHub handle for the branch name (`release/<user_handle>/<version>`). If omitted, derive via `gh api user --jq .login` — including for releases authored from this environment, where the handle is the coding-agent service account. The convention is "who pushed the release branch"; for agent-authored releases that's `coding-agent` (or however the service account renders).
+- `user_handle` (optional): the GitHub handle for the branch name (`release/<user_handle>/<version>`). If omitted, default to `coding-agent` when running as the `securebio-coding-agent` App (you can detect this by checking whether `git config user.email` ends in `securebio-coding-agent`); for human-authored releases, derive via `gh api user --jq .login`. Note: `gh api user` returns 403 when authenticated as a GitHub App, so don't fall back to it from agent contexts — hardcode `coding-agent`. The convention is "who pushed the release branch".
 - `bump_override` (optional): one of `major`, `schema`, `results`, `point` to force a specific bump level. If omitted, classify per Step 2 below and pick the largest. When the agent's classification disagrees with the user-provided override, surface the disagreement before applying.
 
 ## Procedure
@@ -40,7 +40,7 @@ Read `docs/versioning.md` first (the four-number scheme: Major / Schema / Result
 | Level | Trigger criteria — examples |
 |---|---|
 | **Major** (1st number) | Substantial pipeline rework requiring major downstream code changes. Almost never in a normal release. |
-| **Schema** (2nd number) | Renames or removes files from `[tool.mgs-workflow] expected-outputs-*` in `pyproject.toml`, OR changes to `schemas/*.schema.json` beyond `title` / `description` fields. Use `git diff <last-release>..origin/dev -- pyproject.toml schemas/` to spot these. |
+| **Schema** (2nd number) | Renames or removes files from `[tool.mgs-workflow] expected-outputs-*` in `pyproject.toml`, OR changes to `schemas/*.schema.json` beyond `title` / `description` fields. Use `git diff <last-release-tag>..origin/dev -- pyproject.toml schemas/` to spot these. **Tags are unprefixed** (`3.2.1.4`, not `v3.2.1.4`) even though `CHANGELOG.md` headings carry the `v` prefix — `git tag -l "3.*" | tail` to find the most recent. |
 | **Results** (3rd number) | Results no longer comparable to previous versions — e.g. swapping an aligner, changing a threshold that affects which reads pass a filter, changing read content semantics. The bullet itself usually flags this ("Replace BBDuk with Nucleaze; the match-count drop varies per sample"). |
 | **Point** (4th number) | Everything else: bugfixes, perf (results-preserving), CI / tooling / docs, off-by-default options, *additions* to `expected-outputs-*` lists, schema `title`/`description` updates. |
 
@@ -81,12 +81,14 @@ Read v3.2.1.0 and v3.2.1.3 in `CHANGELOG.md` as exemplars of the target structur
 
 Don't reach for a subheader for a single bullet — flat list is fine when the release is small (e.g. v3.2.1.4 is unsubheadered, six bullets). The 3.2.1.3 / 3.2.1.0 pattern is for releases with enough volume that grouping helps the reader.
 
+**Rule of thumb for `##` grouping:** use subheaders only when (a) total bullets ≥ 8, AND (b) at least one prospective section would hold ≥ 3 bullets. Below that, a flat list reads better than near-empty sections.
+
 **Bullet rewriting.** For each raw bullet:
 
 - Start with a verb: `Add ...`, `Fix ...`, `Replace ...`, `Update ...`, `Switch ...`, `Bump ...`, `Remove ...`.
 - Lead with the user-facing outcome. Implementation details, file paths, function names go after the outcome or in a sub-bullet.
-- Add `(#NNN)` when there's a clear single PR behind the change. Trace via `git log <last-release>..origin/dev --oneline` to find the merge SHA and PR number for each bullet.
-- Consolidate small follow-up PRs into the bullet for the parent change rather than listing them separately.
+- Add `(#NNN)` when there's a clear single PR behind the change. Trace via `git log <last-release-tag>..origin/dev --oneline` (unprefixed tag, e.g. `3.2.1.4..origin/dev`) to find the merge SHA and PR number for each bullet.
+- Consolidate small follow-up PRs into the bullet for the parent change. When two or more PRs implement the same logical change (e.g. a config change in one PR and its companion stub/registration in another), list them together as `(#NNN, #MMM)` on a single bullet rather than fragmenting into separate bullets. When a single PR introduces a primary change plus mechanism worth surfacing, use indented sub-bullets under the parent bullet to describe the mechanism.
 - Cut implementation churn that doesn't survive the release: e.g. a `-dev` bullet describing a refactor of a function that was itself replaced before the release is just noise.
 - Indent sub-bullets at 4 spaces (the repo's existing convention).
 
@@ -103,19 +105,35 @@ Don't lose information that affects users. A bullet that documents a behavior ch
 
 ```bash
 git fetch origin dev --quiet
-HANDLE="<user_handle>"   # gh api user --jq .login if unset
+HANDLE="<user_handle>"   # see Inputs; default 'coding-agent' from agent context
 VERSION="<X.Y.Z.W>"      # from Step 3
-git checkout -b "release/${HANDLE}/${VERSION}" origin/dev
+
+# Branch name: documented convention is release/<handle>/<version>.
+# Exception: when pushing as the securebio-coding-agent GitHub App, the
+# org-wide ruleset only permits writes to coding-agent/* — fall back to
+# coding-agent/release-<version>. Maintainer renames on merge if desired.
+if [ "$HANDLE" = "coding-agent" ]; then
+  BRANCH="coding-agent/release-${VERSION}"
+else
+  BRANCH="release/${HANDLE}/${VERSION}"
+fi
+
+git checkout -b "$BRANCH" origin/dev
 git add CHANGELOG.md pyproject.toml
 git commit -m "Prepare ${VERSION} for release"
-git push -u origin "release/${HANDLE}/${VERSION}"
+git push -u origin "$BRANCH"
 
 gh pr create --base dev --draft \
   --title "Prepare ${VERSION} for release" \
-  --body "<release-PR-body>"
+  --body "$(cat <<'EOF'
+...release PR body...
+EOF
+)"
 ```
 
-PR body shape: a one-paragraph summary naming the bump level and what's driving it (e.g. "Point release: CI/tooling additions plus several perf improvements; no result-comparability changes per the assessment in Step 2"), then the rewritten CHANGELOG block lifted verbatim. The PR diff is the changelog rewrite + version bump; the body explains the bump classification and any judgment calls.
+PR body shape: a one-paragraph summary naming the bump level and what's driving it (e.g. "Point release: CI/tooling additions plus several perf improvements; no result-comparability changes per the assessment in Step 2"), then the rewritten CHANGELOG block lifted verbatim. The PR diff is the changelog rewrite + version bump; the body explains the bump classification and any judgment calls. If the branch is the `coding-agent/release-<version>` fallback, mention the ruleset reason in the body so the maintainer knows why the path doesn't match the documented convention.
+
+Follow the repo's standard PR body convention (HEREDOC, "Generated with Claude Code" footer for agent-authored PRs) — see `CLAUDE.md` § "Creating Pull Requests" for the canonical template.
 
 **Stop after opening the draft PR.** Don't squash, merge, or open downstream PRs. The maintainer reviews this draft, marks ready-for-review when satisfied, and (per `docs/developer.md` step 3.1) squash-merges it into dev themselves. The next-stage dev → main release PR is also a separate maintainer step.
 
