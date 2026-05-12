@@ -18,6 +18,10 @@
 # version was superseded almost immediately and we will never pin to it.
 25.10.3
 
+# Skipped in bioconda — our conda-based provisioning automations cannot
+# install this version. Permanent ignore; remove only if bioconda backfills it.
+25.10.5
+
 # Defer 26.04.x; revisit on expiry.
 26.04.0 exp:2026-06-01
 26.04.1 exp:2026-06-01
