@@ -110,10 +110,11 @@ VERSION="<X.Y.Z.W>"      # from Step 3
 
 # Branch name: documented convention is release/<handle>/<version>.
 # Exception: when pushing as the securebio-coding-agent GitHub App, the
-# org-wide ruleset only permits writes to coding-agent/* — fall back to
-# coding-agent/release-<version>. Maintainer renames on merge if desired.
+# org-wide ruleset only permits writes to coding-agent/* — push to
+# coding-agent/release/<version> instead. `bin/check_version.py`
+# recognizes both prefixes as release branches.
 if [ "$HANDLE" = "coding-agent" ]; then
-  BRANCH="coding-agent/release-${VERSION}"
+  BRANCH="coding-agent/release/${VERSION}"
 else
   BRANCH="release/${HANDLE}/${VERSION}"
 fi
@@ -131,7 +132,7 @@ EOF
 )"
 ```
 
-PR body shape: a one-paragraph summary naming the bump level and what's driving it (e.g. "Point release: CI/tooling additions plus several perf improvements; no result-comparability changes per the assessment in Step 2"), then the rewritten CHANGELOG block lifted verbatim. The PR diff is the changelog rewrite + version bump; the body explains the bump classification and any judgment calls. If the branch is the `coding-agent/release-<version>` fallback, mention the ruleset reason in the body so the maintainer knows why the path doesn't match the documented convention.
+PR body shape: a one-paragraph summary naming the bump level and what's driving it (e.g. "Point release: CI/tooling additions plus several perf improvements; no result-comparability changes per the assessment in Step 2"), then the rewritten CHANGELOG block lifted verbatim. The PR diff is the changelog rewrite + version bump; the body explains the bump classification and any judgment calls. If the branch is the `coding-agent/release/<version>` form, mention the ruleset reason in the body so the maintainer knows why the path doesn't match the documented convention.
 
 Follow the repo's standard PR body convention (HEREDOC, "Generated with Claude Code" footer for agent-authored PRs) — see `CLAUDE.md` § "Creating Pull Requests" for the canonical template.
 
