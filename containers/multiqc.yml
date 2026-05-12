@@ -5,3 +5,7 @@ channels:
   - bioconda
 dependencies:
   - bioconda::multiqc=1.33
+  # urllib3 pin forces CVE-2026-44431 / CVE-2026-44432 fix (>=2.7.0).
+  # urllib3 is a transitive dep here via `requests`, which permits
+  # urllib3<3, so the explicit pin solves cleanly.
+  - conda-forge::urllib3>=2.7.0

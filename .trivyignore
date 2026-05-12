@@ -148,3 +148,36 @@ CVE-2026-42010 exp:2026-06-30
 # Check for a Debian fix at:
 #   https://security-tracker.debian.org/tracker/CVE-2026-42011
 CVE-2026-42011 exp:2026-06-30
+
+# ── urllib3 2.6.3 in awscli=2.34.9 (blast, bowtie2_samtools, kraken2,
+#    minimap2_samtools containers) plus multiqc until its image rebuilds ──
+# urllib3 >= 2.7.0 (released 2026-05-07) fixes both CVEs. For multiqc
+# we pin `urllib3>=2.7.0` directly in containers/multiqc.yml; this
+# resolves the CVE once the multiqc Wave/ECR image is rebuilt (the new
+# tag will replace the current 84d4c0737019222e in containers.config).
+# For the four awscli-bearing containers, the conda-forge awscli
+# feedstock — across all 2.34.x releases through the current latest
+# 2.34.37 — pins `urllib3 >=1.25.4,<=2.6.3`, so the conda solver cannot
+# pull a fixed urllib3 alongside awscli. The fix is blocked on the
+# awscli-feedstock maintainer relaxing that upper bound. We use
+# `aws s3 sync` (via bin/download_db.py) to pull reference databases
+# from NAO S3 buckets — a trusted endpoint that does not issue
+# cross-origin redirects to attacker-controlled hosts (44431) and does
+# not serve Brotli-encoded responses (44432), so neither vulnerable code
+# path is reached in practice. Re-eval when the conda-forge awscli
+# feedstock relaxes its urllib3 cap; check with:
+#   curl -s 'https://api.anaconda.org/release/conda-forge/awscli/<latest>' \
+#     | jq '.distributions[].attrs.depends[] | select(test("urllib"))'
+#
+# CVE-2026-44431: sensitive headers (Authorization/Cookie/Proxy-Authorization)
+# forwarded across cross-origin redirects via the low-level API
+# ProxyManager.connection_from_url().urlopen(assert_same_host=False).
+# Our pipeline does not use this low-level API; `aws s3 sync` issues
+# requests against S3 endpoints under our control, and multiqc does not
+# make redirected HTTP fetches in our usage (we run it on local QC files).
+CVE-2026-44431 exp:2026-07-15
+# CVE-2026-44432: decompression-bomb safeguards bypassed in the streaming
+# API for Brotli-encoded responses and for HTTPResponse.drain_conn().
+# S3 GetObject does not serve Brotli, and multiqc does not stream
+# attacker-controlled Brotli responses in our pipeline usage.
+CVE-2026-44432 exp:2026-07-15
