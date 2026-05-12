@@ -1,0 +1,137 @@
+name: Build containers (on-demand)
+
+# Triggered manually via `gh workflow run build-containers.yml --ref <branch>`,
+# typically by the coding-agent GitHub App after it edits a `containers/*.yml`
+# spec and needs the resulting image pushed to ECR before its PR's CI can pass
+# `scan-containers` against the new image. The agent role on the sandbox is
+# ECR pull-only — this workflow uses the CI's existing OIDC role (which has
+# ECR push) to do the push the agent cannot.
+#
+# The workflow does not commit the resulting `configs/containers.config`
+# update back to the branch (that requires write to coding-agent/* refs, which
+# the default GITHUB_TOKEN lacks). Instead it uploads the updated config as an
+# artifact; the dispatching agent downloads the artifact and commits it
+# locally as part of its PR.
+
+on:
+  workflow_dispatch:
+    inputs:
+      containers:
+        description: >
+          Containers to build. Either a comma-separated list of spec names
+          (e.g. "multiqc,bbtools" — no `.yml` suffix), "all" for every spec
+          under `containers/`, or "changed" (default) to build only the specs
+          whose `containers/<name>.yml` differs from origin/dev.
+        required: false
+        default: "changed"
+        type: string
+
+permissions:
+  id-token: write   # OIDC for AWS role assumption
+  contents: read
+
+concurrency:
+  # Serialize per-branch dispatches so two parallel agent invocations against
+  # the same branch don't race on Dockerfile generation / ECR pushes.
+  group: build-containers-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # workflow_dispatch sets `github.ref` to the dispatched branch;
+          # actions/checkout uses that by default. We need depth > 1 so the
+          # "changed" mode can diff against origin/dev.
+          fetch-depth: 0
+
+      - name: Setup Python environment
+        uses: ./.github/actions/setup-python
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
+          aws-region: us-east-1
+
+      - name: Login to ECR Public
+        run: |
+          aws ecr-public get-login-password --region us-east-1 \
+            | docker login --username AWS --password-stdin public.ecr.aws
+
+      - name: Determine spec files to build
+        id: determine
+        env:
+          INPUT: ${{ inputs.containers }}
+        run: |
+          set -euo pipefail
+          case "$INPUT" in
+            all)
+              MAPFILE=$(ls containers/*.yml)
+              ;;
+            changed)
+              git fetch origin dev
+              MAPFILE=$(git diff --name-only origin/dev -- 'containers/*.yml' || true)
+              ;;
+            *)
+              # Comma-separated names; convert to spec paths.
+              MAPFILE=$(echo "$INPUT" | tr ',' '\n' | sed 's|^|containers/|; s|$|.yml|')
+              ;;
+          esac
+          # Validate each spec exists and emit one path per line.
+          : > specs.txt
+          if [ -n "$MAPFILE" ]; then
+            echo "$MAPFILE" | while read -r path; do
+              [ -z "$path" ] && continue
+              if [ ! -f "$path" ]; then
+                echo "::error::spec not found: $path"
+                exit 1
+              fi
+              echo "$path" >> specs.txt
+            done
+          fi
+          echo "## Specs to build" >> $GITHUB_STEP_SUMMARY
+          if [ -s specs.txt ]; then
+            sed 's|^|- |' specs.txt >> $GITHUB_STEP_SUMMARY
+          else
+            echo "_(none — nothing to build)_" >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Build and push each spec
+        id: build
+        run: |
+          set -euo pipefail
+          if [ ! -s specs.txt ]; then
+            echo "No specs to build; exiting cleanly."
+            exit 0
+          fi
+          while read -r spec; do
+            echo "::group::Building $spec"
+            python bin/build_ecr_container.py "$spec"
+            echo "::endgroup::"
+          done < specs.txt
+
+      - name: Diff configs/containers.config
+        run: |
+          if git diff --quiet configs/containers.config; then
+            echo "_(no changes to configs/containers.config — every built image was a cache hit on its content hash)_" >> $GITHUB_STEP_SUMMARY
+          else
+            {
+              echo "## configs/containers.config diff"
+              echo '```diff'
+              git diff configs/containers.config
+              echo '```'
+            } >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Upload updated containers.config
+        uses: actions/upload-artifact@v4
+        with:
+          name: containers-config-update
+          path: configs/containers.config
+          if-no-files-found: error
+          retention-days: 7
