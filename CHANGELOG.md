@@ -1,5 +1,7 @@
 # v3.2.1.5-dev
 
+- Register `.github/workflows/build-containers.yml` as a no-op stub. GitHub's `workflow_dispatch` API requires the workflow file to exist on the default branch (this repo's: main) before any branch can dispatch it, even when the dispatch targets a non-default ref. The stub gets to main via the next dev→main release cut; once there, any branch whose copy of this file has a real implementation can be dispatched via `gh workflow run build-containers.yml --ref <branch>`. Companion PR #792 carries the real build-and-push implementation.
+- Defer Nextflow 26.04.1 in `.nextflowignore` (same expiry as the existing 26.04.0 defer, 2026-06-01).
 - Fix `CONCATENATE_GENOME_FASTA` `SIGPIPE` on large genome directories by adding `|| true` escape path to `head` call.
 - Swap `zcat` for `rapidgzip --count-lines` in `COUNT_READS` for faster gzip inflate (~3-4× faster per byte than zcat at single-thread); allocation stays at `single` (1 cpu). Adds `rapidgzip=0.15.2` to the `coreutils_gzip_gawk` container. Out-of-scope swap of pigz→rapidgzip on the other decompression hot paths is tracked in #776.
 - Combine `SUBSET_READS_PAIRED_TARGET` with the previously-separate `INTERLEAVE_FASTQ` step into a single FIFO-based process that reads each input once and emits interleaved output via `seqtk mergepe`; plumb in the upstream `COUNT_READS` TSV so the in-process read-counting pass is eliminated; use pigz for parallel (de)compression and bump `SUBSET_READS_*` from `single` to `xsmall`. Adds `pigz=2.8` to the `seqtk` container.

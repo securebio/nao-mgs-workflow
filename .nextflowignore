@@ -18,5 +18,6 @@
 # version was superseded almost immediately and we will never pin to it.
 25.10.3
 
-# Defer 26.04.0; revisit on expiry.
+# Defer 26.04.x; revisit on expiry.
 26.04.0 exp:2026-06-01
+26.04.1 exp:2026-06-01
