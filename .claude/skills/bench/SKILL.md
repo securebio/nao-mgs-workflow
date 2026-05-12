@@ -59,7 +59,7 @@ Start with **setup** in prose: cohort name, sample count, host configuration, wh
 
 Then per-scope tables, ordered narrow → broad:
 
-1. **Per-process** (from `parse_bench_trace.py`'s output) — the table the perf claim is *about*. Lift verbatim from the script's markdown output. Trim to processes the PR actually affects, plus immediate upstream context if the bench included an upstream chain.
+1. **Per-process** (from `parse_bench_trace.py`'s output) — the table the perf claim is *about*. Lift verbatim from the script's markdown output. For a single-process PR, trim to that process plus any immediate upstream context. For a bundled multi-PR cohort comparison, take the top ~12 rows by `max(branch_cpu_h)` — that surfaces every meaningful effect without burying the reader in single-cpu-second rows.
 2. **Per-subworkflow / per-cohort** — when the change might affect multiple processes, add the broader aggregation. The `bench-workflow` trace gives this directly when sliced by subworkflow prefix (e.g. `RUN:EXTRACT_VIRAL_READS_SHORT:*`).
 
 After each table, write a short interpretation paragraph. Reviewer's eye lands on a table; the paragraph tells them what to make of it. Useful patterns from #774:
@@ -82,11 +82,14 @@ The scripts (`parse_bench_trace.py`, `bench_output_equality.py`) emit tables and
 
 A perf PR's bench table almost always has at least one row trending the "wrong" way. Before writing a regression into the prose, run this checklist:
 
-1. **Per-task spread.** Pull `max_realtime_s` vs `sum_realtime_s/n` from the trace JSON. If `max ≫ mean`, the regression is a single slow task dragging the aggregate (typical signature: cold container pull, slow SPOT node, noisy neighbor). Sum cpu-h on Batch is contention-immune in aggregate but a single slow task still bumps the total.
+1. **Per-task spread.** Pull `max_realtime_s` vs `sum_realtime_s/n` from the trace JSON (see "JSON role keys" in the Notes section below for the column conventions). If `max ≫ mean`, the regression is a single slow task dragging the aggregate (typical signature: cold container pull, slow SPOT node, noisy neighbor). Sum cpu-h on Batch is contention-immune in aggregate but a single slow task still bumps the total.
 2. **Did the branch actually touch this process?** `git log <main>..<branch> -- modules/local/<process>` and `git log <main>..<branch> -- subworkflows/local/...`. If neither shows changes, the regression is unrelated to the bench's target.
-3. **Critical-path impact?** A regression off the critical path (per #785) costs cpu-hours but not workflow wall — significantly weakens the reviewer concern.
+3. **Correlated outliers across related processes?** If two or more related processes (e.g. KRAKEN_RIBO and KRAKEN_NORIBO, or BOWTIE2_HUMAN and BOWTIE2_OTHER) show correlated single-task outliers on the same cohort, suspect a shared host/preemption event affecting one sample, not two independent regressions.
+4. **Critical-path impact?** A regression off the critical path (per #785) costs cpu-hours but not workflow wall — significantly weakens the reviewer concern.
 
-If all three say "noise," frame the row in prose as a single-task outlier or scheduling artifact, not a code regression. If any say "real," investigate further before pushing the bench; a real regression in a perf PR is reviewer-blocking.
+If all four say "noise," frame the row in prose as a single-task outlier or scheduling artifact, not a code regression. If any say "real," investigate further before pushing the bench; a real regression in a perf PR is reviewer-blocking.
+
+**A common subtlety**: a process whose source code the PR didn't touch can still shift materially if an upstream PR change altered its input shape (e.g. SUBSET_PAIRED's FIFO merge in #775 changes the input pipeline FASTP sees, so SUBSET_TRIM:FASTP can shift even though FASTP itself wasn't modified). Attribute carefully: in the prose, name the upstream PR as the cause and the downstream process as the locus of the savings.
 
 ## Notes on the script outputs
 
