@@ -75,7 +75,10 @@ def main() -> int:
     if args.base_branch:
         is_dev_version = pyproject_version.endswith("-dev")
         is_release_branch = (
-            args.head_branch and args.head_branch.startswith("release/")
+            args.head_branch and (
+                args.head_branch.startswith("release/")
+                or args.head_branch.startswith("coding-agent/release/")
+            )
         )
 
         print(f"Base branch: {args.base_branch}")

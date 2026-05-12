@@ -3,19 +3,20 @@
 
 import json
 import sys
+from datetime import date
 from pathlib import Path
-from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 sys.path.insert(0, str(Path(__file__).parent))
 from check_nextflow_version import (
-    compare_versions,
-    get_latest_non_excluded_version,
-    get_latest_version,
+    check_pinned_against_target,
+    fetch_releases,
     get_pinned_version,
     main,
+    parse_nextflowignore,
+    select_target_version,
     validate_semver,
 )
 
@@ -26,7 +27,7 @@ class TestValidateSemver:
         assert validate_semver(version, "test") == version
 
     @pytest.mark.parametrize(
-        "version", ["", "1.2", "1.2.3.4", "v1.2.3", "1.2.3-dev", "a.b.c"]
+        "version", ["", "1.2", "1.2.3.4", "v1.2.3", "1.2.3-dev", "a.b.c"],
     )
     def test_invalid(self, version: str) -> None:
         with pytest.raises(ValueError, match="Invalid version format"):
@@ -68,181 +69,329 @@ class TestGetPinnedVersion:
             get_pinned_version(config)
 
 
-class TestGetLatestVersion:
-    @pytest.mark.parametrize("tag_name,expected", [("v25.10.0", "25.10.0"), ("25.10.0", "25.10.0")])
-    def test_valid(self, tag_name: str, expected: str) -> None:
-        mock_response = MagicMock()
-        mock_response.read.return_value = json.dumps({"tag_name": tag_name}).encode()
-        mock_response.__enter__ = MagicMock(return_value=mock_response)
-        mock_response.__exit__ = MagicMock(return_value=False)
+class TestParseNextflowignore:
+    """parse_nextflowignore covers permanent entries, expirable entries with
+    active and past dates, comments, and various malformed inputs."""
 
-        with patch("urllib.request.urlopen", return_value=mock_response):
-            assert get_latest_version("https://api.example.com") == expected
+    # Symbolic reference date for date-relative tests; entry exp values are
+    # chosen so "active" vs "expired" reads from the constant alone, without
+    # having to remember the actual calendar date.
+    TODAY = date(2030, 6, 15)
 
-    def test_invalid_version_format(self) -> None:
-        mock_response = MagicMock()
-        mock_response.read.return_value = json.dumps({"tag_name": "v1.2"}).encode()
-        mock_response.__enter__ = MagicMock(return_value=mock_response)
-        mock_response.__exit__ = MagicMock(return_value=False)
+    def _write(self, tmp_path: Path, body: str) -> Path:
+        path = tmp_path / ".nextflowignore"
+        path.write_text(body)
+        return path
 
-        with patch("urllib.request.urlopen", return_value=mock_response):
-            with pytest.raises(ValueError, match="Invalid version format"):
-                get_latest_version("https://api.example.com")
+    def test_missing_file_returns_empty(self, tmp_path: Path) -> None:
+        assert parse_nextflowignore(tmp_path / "nope") == set()
+
+    @pytest.mark.parametrize(
+        "body,expected",
+        [
+            pytest.param("", set(), id="empty_file"),
+            pytest.param(
+                "# header\n\n   # indented comment\n\n", set(),
+                id="only_comments_and_blanks",
+            ),
+            pytest.param("25.10.3\n", {"25.10.3"}, id="permanent"),
+            pytest.param(
+                "26.04.0 exp:2031-01-01\n", {"26.04.0"},
+                id="active_expirable",
+            ),
+            pytest.param(
+                f"26.04.0 exp:{TODAY.isoformat()}\n", {"26.04.0"},
+                id="expiring_today_still_active",
+            ),
+            pytest.param(
+                "25.10.3  # broken on AWS Batch\n", {"25.10.3"},
+                id="trailing_comment",
+            ),
+        ],
+    )
+    def test_returns_currently_ignored_set(
+        self, tmp_path: Path, body: str, expected: set[str],
+    ) -> None:
+        path = self._write(tmp_path, body)
+        assert parse_nextflowignore(path, today=self.TODAY) == expected
+
+    def test_expired_entry_dropped_with_warning(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        path = self._write(tmp_path, "26.04.0 exp:2025-01-01\n")
+        assert parse_nextflowignore(path, today=self.TODAY) == set()
+        stderr = capsys.readouterr().err
+        assert "expired on 2025-01-01" in stderr
+        assert "26.04.0" in stderr
+
+    def test_mixed_entries(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        body = (
+            "# Block comment\n"
+            "\n"
+            "25.10.3\n"
+            "26.04.0 exp:2031-01-01\n"
+            "24.99.99 exp:2020-01-01  # long expired\n"
+        )
+        path = self._write(tmp_path, body)
+        active = parse_nextflowignore(path, today=self.TODAY)
+        assert active == {"25.10.3", "26.04.0"}
+        assert "24.99.99" in capsys.readouterr().err
+
+    @pytest.mark.parametrize(
+        "line",
+        [
+            "not_a_version",
+            "25.10",
+            "25.10.3 expires:2030-01-01",  # wrong keyword
+            "25.10.3 exp:30-01-01",  # not YYYY-MM-DD
+            "25.10.3 exp:2030/01/01",  # wrong separator
+            "25.10.3 trailing junk",
+        ],
+    )
+    def test_malformed_entries_raise(self, tmp_path: Path, line: str) -> None:
+        path = self._write(tmp_path, line + "\n")
+        with pytest.raises(ValueError, match="Malformed entry"):
+            parse_nextflowignore(path)
+
+    def test_invalid_calendar_date_raises(self, tmp_path: Path) -> None:
+        # Regex accepts YYYY-MM-DD; date.fromisoformat catches impossible dates.
+        path = self._write(tmp_path, "25.10.3 exp:2026-02-30\n")
+        with pytest.raises(ValueError, match="Invalid expiration date"):
+            parse_nextflowignore(path)
+
+    def test_error_message_includes_line_number(self, tmp_path: Path) -> None:
+        path = self._write(tmp_path, "# c1\n# c2\nnonsense\n")
+        with pytest.raises(ValueError, match=":3:"):
+            parse_nextflowignore(path)
 
 
-class TestGetLatestNonExcludedVersion:
-    def _mock_releases_response(self, releases_data: list[dict[str, object]]) -> MagicMock:
-        """Create a mock response returning the given releases list."""
+class TestFetchReleases:
+    def _mock(self, releases_data: list[dict[str, object]]) -> MagicMock:
         mock_response = MagicMock()
         mock_response.read.return_value = json.dumps(releases_data).encode()
         mock_response.__enter__ = MagicMock(return_value=mock_response)
         mock_response.__exit__ = MagicMock(return_value=False)
         return mock_response
 
-    def test_skips_excluded_versions(self) -> None:
-        """Test that excluded versions are skipped and next available is returned."""
+    def test_returns_versions_in_api_order(self) -> None:
         releases_data = [
-            {"tag_name": "v25.10.3", "prerelease": False, "draft": False},
-            {"tag_name": "v25.10.2", "prerelease": False, "draft": False},
-            {"tag_name": "v25.10.1", "prerelease": False, "draft": False},
+            {"tag_name": "v25.10.5", "prerelease": False, "draft": False},
+            {"tag_name": "26.04.0", "prerelease": False, "draft": False},
+            {"tag_name": "v25.10.4", "prerelease": False, "draft": False},
         ]
-        with patch("urllib.request.urlopen", return_value=self._mock_releases_response(releases_data)):
-            result = get_latest_non_excluded_version({"25.10.3"})
-            assert result == "25.10.2"
+        with patch("urllib.request.urlopen", return_value=self._mock(releases_data)):
+            assert fetch_releases("https://example.com") == ["25.10.5", "26.04.0", "25.10.4"]
 
-    def test_skips_multiple_excluded_versions(self) -> None:
-        """Test that multiple excluded versions are skipped."""
+    @pytest.mark.parametrize("prerelease,draft", [(True, False), (False, True), (True, True)])
+    def test_skips_prerelease_and_draft(self, prerelease: bool, draft: bool) -> None:
         releases_data = [
-            {"tag_name": "v25.10.3", "prerelease": False, "draft": False},
-            {"tag_name": "v25.10.2", "prerelease": False, "draft": False},
-            {"tag_name": "v25.10.1", "prerelease": False, "draft": False},
+            {"tag_name": "v25.10.5", "prerelease": prerelease, "draft": draft},
+            {"tag_name": "v25.10.4", "prerelease": False, "draft": False},
         ]
-        with patch("urllib.request.urlopen", return_value=self._mock_releases_response(releases_data)):
-            result = get_latest_non_excluded_version({"25.10.3", "25.10.2"})
-            assert result == "25.10.1"
+        with patch("urllib.request.urlopen", return_value=self._mock(releases_data)):
+            assert fetch_releases("https://example.com") == ["25.10.4"]
+
+    def test_skips_invalid_semver_tags(self) -> None:
+        releases_data = [
+            {"tag_name": "v25.10", "prerelease": False, "draft": False},
+            {"tag_name": "edge", "prerelease": False, "draft": False},
+            {"tag_name": "v25.10.4", "prerelease": False, "draft": False},
+        ]
+        with patch("urllib.request.urlopen", return_value=self._mock(releases_data)):
+            assert fetch_releases("https://example.com") == ["25.10.4"]
+
+
+class TestSelectTargetVersion:
+    # 25.10.5 ships chronologically after 26.04.0 (LTS backport patch),
+    # so the chrono-vs-semver distinction is the no-ignore case below.
+    RELEASES = ["25.10.5", "26.04.0", "25.10.4"]
 
     @pytest.mark.parametrize(
-        "prerelease,draft",
-        [(True, False), (False, True), (True, True)]
+        "ignored,expected",
+        [
+            pytest.param(set(), "26.04.0", id="highest_semver_wins_over_chrono"),
+            pytest.param({"26.04.0"}, "25.10.5", id="single_ignored_excluded"),
+            pytest.param(
+                {"26.04.0", "25.10.5"}, "25.10.4",
+                id="multiple_ignored_excluded",
+            ),
+        ],
     )
-    def test_skips_prerelease_and_draft(self, prerelease: bool, draft: bool) -> None:
-        """Test that prerelease and draft releases are skipped."""
-        releases_data = [
-            {"tag_name": "v25.10.3", "prerelease": prerelease, "draft": draft},
-            {"tag_name": "v25.10.2", "prerelease": False, "draft": False},
-        ]
-        with patch("urllib.request.urlopen", return_value=self._mock_releases_response(releases_data)):
-            result = get_latest_non_excluded_version(set())
-            assert result == "25.10.2"
+    def test_returns_highest_semver_non_ignored(
+        self, ignored: set[str], expected: str,
+    ) -> None:
+        assert select_target_version(self.RELEASES, ignored) == expected
 
-    def test_skips_invalid_version_format(self) -> None:
-        """Test that releases with invalid version formats are skipped."""
-        releases_data = [
-            {"tag_name": "v25.10", "prerelease": False, "draft": False},  # Invalid: only 2 parts
-            {"tag_name": "25.10.2", "prerelease": False, "draft": False},  # Valid
-        ]
-        with patch("urllib.request.urlopen", return_value=self._mock_releases_response(releases_data)):
-            result = get_latest_non_excluded_version(set())
-            assert result == "25.10.2"
+    def test_raises_when_all_ignored(self) -> None:
+        with pytest.raises(ValueError, match="No eligible Nextflow release"):
+            select_target_version(["25.10.5"], {"25.10.5"})
 
-    def test_raises_when_all_excluded(self) -> None:
-        """Test that an error is raised when all releases are excluded."""
-        releases_data = [
-            {"tag_name": "v25.10.2", "prerelease": False, "draft": False},
-            {"tag_name": "v25.10.1", "prerelease": False, "draft": False},
-        ]
-        with patch("urllib.request.urlopen", return_value=self._mock_releases_response(releases_data)):
-            with pytest.raises(ValueError, match="Could not find any non-excluded release"):
-                get_latest_non_excluded_version({"25.10.2", "25.10.1"})
+    def test_raises_when_no_releases(self) -> None:
+        # Empty input should produce a distinct error from the all-ignored case.
+        with pytest.raises(ValueError, match="No Nextflow release candidates supplied"):
+            select_target_version([], set())
 
 
-class TestCompareVersions:
-    def test_matching_versions(self) -> None:
-        compare_versions("25.10.0", "25.10.0")
+class TestCheckPinnedAgainstTarget:
+    """Strict equality: pinned must equal target. Pinning above target is
+    treated as a mismatch (typically a stale-ignore signal); below as needing
+    a bump."""
 
-    def test_mismatched_versions(self) -> None:
-        with pytest.raises(ValueError, match="Version mismatch: 25.10.0 != 25.10.1"):
-            compare_versions("25.10.0", "25.10.1")
+    def test_pinned_equals_target(self) -> None:
+        check_pinned_against_target("26.04.0", "26.04.0")
+
+    @pytest.mark.parametrize(
+        "pinned,latest_eligible",
+        [
+            ("25.10.4", "25.10.5"),  # below — needs a bump
+            ("26.04.0", "25.10.5"),  # above — likely stale ignore on 26.04.0
+            ("99.99.99", "25.10.5"),  # not a real release — typo
+        ],
+    )
+    def test_mismatch_fails(self, pinned: str, latest_eligible: str) -> None:
+        with pytest.raises(
+            ValueError,
+            match=f"Version mismatch: pinned {pinned} != latest eligible {latest_eligible}",
+        ):
+            check_pinned_against_target(pinned, latest_eligible)
 
 
 class TestMain:
-    def _mock_api_response(self, version: str) -> MagicMock:
-        """Create a mock response returning the given version."""
+    """End-to-end main() tests with mocked urlopen and tmp config + ignore file."""
+
+    def _mock_releases(self, tags: list[str]) -> MagicMock:
+        releases_data = [
+            {"tag_name": f"v{tag}", "prerelease": False, "draft": False}
+            for tag in tags
+        ]
         mock_response = MagicMock()
-        mock_response.read.return_value = json.dumps({"tag_name": f"v{version}"}).encode()
+        mock_response.read.return_value = json.dumps(releases_data).encode()
         mock_response.__enter__ = MagicMock(return_value=mock_response)
         mock_response.__exit__ = MagicMock(return_value=False)
         return mock_response
 
-    def test_versions_match(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    def _write_config(self, tmp_path: Path, pinned: str) -> Path:
         config = tmp_path / "profiles.config"
-        config.write_text("manifest {\n    nextflowVersion = '!>=25.10.0'\n}")
+        config.write_text(f"manifest {{\n    nextflowVersion = '!>={pinned}'\n}}")
+        return config
 
-        with patch("urllib.request.urlopen", return_value=self._mock_api_response("25.10.0")):
-            with patch("sys.argv", ["check_nextflow_version.py", "--config", str(config)]):
-                main()
+    def _argv(self, config: Path, ignore_file: Path) -> list[str]:
+        return [
+            "check_nextflow_version.py",
+            "--config", str(config),
+            "--ignore-file", str(ignore_file),
+        ]
 
+    def test_versions_match(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        config = self._write_config(tmp_path, "25.10.5")
+        ignore_file = tmp_path / ".nextflowignore"  # missing -> empty ignore set
+        with patch(
+            "urllib.request.urlopen",
+            return_value=self._mock_releases(["25.10.5", "25.10.4"]),
+        ), patch("sys.argv", self._argv(config, ignore_file)):
+            main()
         captured = capsys.readouterr()
-        assert "Pinned Nextflow version: 25.10.0" in captured.out
-        assert "Latest Nextflow version: 25.10.0" in captured.out
-        assert "OK: Pinned version matches target release" in captured.out
+        assert "Pinned Nextflow version: 25.10.5" in captured.out
+        assert "Latest eligible Nextflow version: 25.10.5" in captured.out
+        assert "OK: Pinned version is current" in captured.out
 
     def test_versions_mismatch(self, tmp_path: Path) -> None:
-        config = tmp_path / "profiles.config"
-        config.write_text("manifest {\n    nextflowVersion = '!>=25.10.0'\n}")
-
-        with patch("urllib.request.urlopen", return_value=self._mock_api_response("25.10.1")):
-            with patch("sys.argv", ["check_nextflow_version.py", "--config", str(config)]):
-                with pytest.raises(ValueError, match="Version mismatch: 25.10.0 != 25.10.1"):
-                    main()
+        config = self._write_config(tmp_path, "25.10.4")
+        ignore_file = tmp_path / ".nextflowignore"
+        with patch(
+            "urllib.request.urlopen",
+            return_value=self._mock_releases(["25.10.5", "25.10.4"]),
+        ), patch("sys.argv", self._argv(config, ignore_file)), pytest.raises(
+            ValueError, match="Version mismatch: pinned 25.10.4 != latest eligible 25.10.5",
+        ):
+            main()
 
     def test_invalid_config(self, tmp_path: Path) -> None:
         config = tmp_path / "profiles.config"
         config.write_text("manifest {}")
-
-        with patch("sys.argv", ["check_nextflow_version.py", "--config", str(config)]):
-            with pytest.raises(ValueError, match="Could not find nextflowVersion"):
-                main()
+        ignore_file = tmp_path / ".nextflowignore"
+        with patch("sys.argv", self._argv(config, ignore_file)), pytest.raises(
+            ValueError, match="Could not find nextflowVersion",
+        ):
+            main()
 
     @pytest.mark.parametrize(
-        "pinned_version,should_match,expected_error",
+        "pinned,ignore_body,releases,expected_latest_eligible",
         [
-            ("25.10.2", True, None),  # Pinned matches next available
-            ("25.10.0", False, "Version mismatch: 25.10.0 != 25.10.2"),  # Pinned doesn't match
-        ]
+            pytest.param(
+                "25.10.5", "26.04.0 exp:2030-01-01\n",
+                ["26.04.0", "25.10.5", "25.10.4"], "25.10.5",
+                id="ignored_target_falls_back_to_next",
+            ),
+            pytest.param(
+                "26.04.0", None,
+                # API order is chronological: 25.10.5 ships after 26.04.0.
+                ["25.10.5", "26.04.0", "25.10.4"], "26.04.0",
+                id="pinned_above_chronologically_later_lts_patch",
+            ),
+            pytest.param(
+                "25.10.4", "25.10.3\n",
+                ["25.10.4", "25.10.3"], "25.10.4",
+                id="permanent_ignore_persists",
+            ),
+        ],
     )
-    def test_excluded_latest_version(self, tmp_path: Path, capsys: pytest.CaptureFixture[str], pinned_version: str, should_match: bool, expected_error: str | None) -> None:
-        """Test when latest version is excluded and script finds next available version."""
-        config = tmp_path / "profiles.config"
-        config.write_text(f"manifest {{\n    nextflowVersion = '!>={pinned_version}'\n}}")
+    def test_main_happy_path(
+        self,
+        tmp_path: Path,
+        capsys: pytest.CaptureFixture[str],
+        pinned: str,
+        ignore_body: str | None,
+        releases: list[str],
+        expected_latest_eligible: str,
+    ) -> None:
+        config = self._write_config(tmp_path, pinned)
+        ignore_file = tmp_path / ".nextflowignore"
+        if ignore_body is not None:
+            ignore_file.write_text(ignore_body)
+        with patch(
+            "urllib.request.urlopen",
+            return_value=self._mock_releases(releases),
+        ), patch("sys.argv", self._argv(config, ignore_file)):
+            main()
+        captured = capsys.readouterr()
+        assert (
+            f"Latest eligible Nextflow version: {expected_latest_eligible}"
+            in captured.out
+        )
+        assert "OK: Pinned version is current" in captured.out
 
-        mock_latest = self._mock_api_response("25.10.3")
+    def test_expired_ignore_warns_and_lapses(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        # An expired ignore lapses, so the version becomes target-eligible
+        # again. We expect a stderr warning AND a now-failing version check.
+        config = self._write_config(tmp_path, "25.10.4")
+        ignore_file = tmp_path / ".nextflowignore"
+        ignore_file.write_text("26.04.0 exp:2020-01-01\n")
+        with patch(
+            "urllib.request.urlopen",
+            return_value=self._mock_releases(["26.04.0", "25.10.4"]),
+        ), patch("sys.argv", self._argv(config, ignore_file)), pytest.raises(
+            ValueError, match="Version mismatch: pinned 25.10.4 != latest eligible 26.04.0",
+        ):
+            main()
+        captured = capsys.readouterr()
+        assert "expired on 2020-01-01" in captured.err
 
-        mock_releases = MagicMock()
-        releases_data = [
-            {"tag_name": "v25.10.3", "prerelease": False, "draft": False},
-            {"tag_name": "v25.10.2", "prerelease": False, "draft": False},
-        ]
-        mock_releases.read.return_value = json.dumps(releases_data).encode()
-        mock_releases.__enter__ = MagicMock(return_value=mock_releases)
-        mock_releases.__exit__ = MagicMock(return_value=False)
-
-        def mock_urlopen(request: Any, timeout: Any = None) -> MagicMock:
-            if "releases/latest" in request.full_url:
-                return mock_latest
-            return mock_releases
-
-        with patch("urllib.request.urlopen", side_effect=mock_urlopen):
-            with patch("sys.argv", ["check_nextflow_version.py", "--config", str(config)]):
-                with patch("check_nextflow_version.EXCLUDED_VERSIONS", {"25.10.3"}):
-                    if should_match:
-                        main()
-                        captured = capsys.readouterr()
-                        assert f"Pinned Nextflow version: {pinned_version}" in captured.out
-                        assert "Latest Nextflow version: 25.10.3" in captured.out
-                        assert "Latest version 25.10.3 is excluded (known issues)" in captured.out
-                        assert "Latest non-excluded version: 25.10.2" in captured.out
-                        assert "OK: Pinned version matches target release" in captured.out
-                    else:
-                        with pytest.raises(ValueError, match=expected_error):
-                            main()
+    def test_pinned_typo_detected(self, tmp_path: Path) -> None:
+        # A pin that is not a real release surfaces as a generic mismatch
+        # against the actual target.
+        config = self._write_config(tmp_path, "25.10.99")
+        ignore_file = tmp_path / ".nextflowignore"
+        with patch(
+            "urllib.request.urlopen",
+            return_value=self._mock_releases(["25.10.5", "25.10.4"]),
+        ), patch("sys.argv", self._argv(config, ignore_file)), pytest.raises(
+            ValueError, match="Version mismatch: pinned 25.10.99 != latest eligible 25.10.5",
+        ):
+            main()

@@ -6,4 +6,5 @@ channels:
 dependencies:
   - bioconda::bbmap=39.01
   - conda-forge::gzip=1.14
+  - conda-forge::pigz=2.8
   - conda-forge::wget=1.21.4

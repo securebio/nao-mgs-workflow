@@ -1,0 +1,74 @@
+name: Benchmark (on-demand)
+
+# Manually triggered benchmark for any branch (typically draft PRs to dev,
+# where the auto-on-PR benchmark workflows don't fire). Usage:
+#
+#   gh workflow run benchmark-on-demand.yml --ref <branch> -f dataset=illumina-100M
+#   gh workflow run benchmark-on-demand.yml --ref <branch> -f dataset=ont-100k
+#
+# After the run, fetch the trace from
+#   s3://nao-testing-scratch/mgs-workflow-test/<bench-name>/<run-id>/output/logging/trace_*.tsv
+on:
+  workflow_dispatch:
+    inputs:
+      dataset:
+        description: 'Benchmark cohort to run'
+        required: true
+        type: choice
+        options:
+          - illumina-100M
+          - ont-100k
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  # Each manual invocation gets its own group so simultaneous triggers
+  # (different branches, different datasets) don't cancel each other.
+  group: benchmark-on-demand-${{ github.run_id }}
+  cancel-in-progress: false
+
+jobs:
+  benchmark:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Resolve dataset config
+        id: config
+        env:
+          DATASET: ${{ inputs.dataset }}
+        run: |
+          set -euo pipefail
+          case "$DATASET" in
+            illumina-100M)
+              echo "samplesheet=s3://nao-testing/benchmarks/Illumina_100M/metadata/samplesheet.csv" >> "$GITHUB_OUTPUT"
+              echo "launch-dir=test_run_benchmark_100M" >> "$GITHUB_OUTPUT"
+              echo "bench-name=benchmark-illumina-100M" >> "$GITHUB_OUTPUT"
+              echo "platform=" >> "$GITHUB_OUTPUT"
+              ;;
+            ont-100k)
+              echo "samplesheet=s3://nao-testing/benchmarks/ONT_100k/metadata/samplesheet.csv" >> "$GITHUB_OUTPUT"
+              echo "launch-dir=test_run_benchmark_ont_100k" >> "$GITHUB_OUTPUT"
+              echo "bench-name=benchmark-ont-100k" >> "$GITHUB_OUTPUT"
+              echo "platform=ont" >> "$GITHUB_OUTPUT"
+              ;;
+            *)
+              echo "Unknown dataset: $DATASET" >&2
+              exit 1
+              ;;
+          esac
+
+      - name: Run benchmark
+        uses: ./.github/actions/run-benchmark
+        with:
+          samplesheet: ${{ steps.config.outputs.samplesheet }}
+          launch-dir: ${{ steps.config.outputs.launch-dir }}
+          bench-name: ${{ steps.config.outputs.bench-name }}
+          platform: ${{ steps.config.outputs.platform }}
+          rust-version: dev
+          aws-role-arn: ${{ secrets.AWS_OIDC_ROLE_ARN }}
+          tower-token: ${{ secrets.TOWER_ACCESS_TOKEN }}

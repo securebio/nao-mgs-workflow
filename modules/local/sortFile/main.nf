@@ -16,7 +16,7 @@ process SORT_FILE {
         """
         set -euo pipefail
         # Run command
-        zcat ${file} | sort ${sort_string} | gzip > ${out}
+        pigz -dc -p ${task.cpus} ${file} | sort ${sort_string} | pigz -p ${task.cpus} > ${out}
         # Link input to output for testing
         ln -s ${file} ${in_file}
         """

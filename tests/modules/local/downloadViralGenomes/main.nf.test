@@ -24,8 +24,10 @@ nextflow_process {
             assert process.success
             // metadata.tsv should have the expected header columns
             def meta = path(process.out.metadata[0]).csv(sep: "\t")
-            assert meta.columnNames == ["assembly_accession", "taxid", "organism_name", "source_database"]
+            assert meta.columnNames == ["assembly_accession", "taxid", "organism_name", "source_database", "assembly_status"]
             assert meta.rowCount >= 1
+            // assembly_status should be populated for every row
+            assert meta.columns["assembly_status"].every { it && it != "null" }
             // At least one genome file should be downloaded
             assert process.out.genomes[0].size() >= 1
         }
@@ -87,7 +89,7 @@ nextflow_process {
             // there are no data rows, so check lines directly)
             def meta_lines = path(process.out.metadata[0]).readLines()
             assert meta_lines.size() == 1
-            assert meta_lines[0].split("\t").toList() == ["assembly_accession", "taxid", "organism_name", "source_database"]
+            assert meta_lines[0].split("\t").toList() == ["assembly_accession", "taxid", "organism_name", "source_database", "assembly_status"]
         }
     }
 
