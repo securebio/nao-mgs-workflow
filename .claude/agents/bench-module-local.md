@@ -77,7 +77,7 @@ For modules with inputs that cannot be supplied from `LOAD_SAMPLESHEET` alone (e
 ### 5. Copy the shared bench config and run Nextflow
 
 ```bash
-cp "$repo_path/.claude/scripts/bench_module.config" "$out_dir/worktree/bench_module.config"
+cp "$repo_path/.claude/agents/bench-module-local.config" "$out_dir/worktree/bench_module.config"
 
 # Pin NXF_VER if the repo specifies a version.
 NXF_VER="$(grep -E '^\s*nextflowVersion\s*=' "$repo_path/configs/profiles.config" 2>/dev/null | grep -oE '[0-9.]+' | head -1)"
