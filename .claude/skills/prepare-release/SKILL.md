@@ -132,9 +132,14 @@ EOF
 )"
 ```
 
-PR body shape: a one-paragraph summary naming the bump level and what's driving it (e.g. "Point release: CI/tooling additions plus several perf improvements; no result-comparability changes per the assessment in Step 2"), then the rewritten CHANGELOG block lifted verbatim. The PR diff is the changelog rewrite + version bump; the body explains the bump classification and any judgment calls. If the branch is the `coding-agent/release/<version>` form, mention the ruleset reason in the body so the maintainer knows why the path doesn't match the documented convention.
+**PR body shape.** Past release PRs (#701, #707, #733, #746) ship with **empty bodies** — the CHANGELOG diff says everything. Follow that default. Do **not** paste the rewritten CHANGELOG into the body; it duplicates the diff.
 
-Follow the repo's standard PR body convention (HEREDOC, "Generated with Claude Code" footer for agent-authored PRs) — see `CLAUDE.md` § "Creating Pull Requests" for the canonical template.
+Include body content only when there's something the diff doesn't carry:
+
+- A bump classification that required judgment (Schema-vs-Point edge case, INDEX-only changes treated as Point, etc.) — flag for maintainer review in 2-3 lines.
+- A branch-name divergence from the documented convention (e.g. the `coding-agent/release/<version>` form) — one sentence noting the ruleset reason so the maintainer knows why the path doesn't match.
+
+If neither applies, leave the body empty (`gh pr create ... --body ""`). When body content is needed, append the `Generated with Claude Code` footer per `CLAUDE.md` § "Creating Pull Requests"; otherwise skip it.
 
 **Stop after opening the draft PR.** Don't squash, merge, or open downstream PRs. The maintainer reviews this draft, marks ready-for-review when satisfied, and (per `docs/developer.md` step 3.1) squash-merges it into dev themselves. The next-stage dev → main release PR is also a separate maintainer step.
 
