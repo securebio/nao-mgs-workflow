@@ -50,39 +50,62 @@ git -C "$repo_path" worktree add --detach "$OUT_DIR/worktree" "$branch"
 
 `--detach` is required when the branch is already checked out elsewhere (e.g. `dev` is open in another worktree). If the worktree path already exists, escalate.
 
-### 4. Submit the Batch cohort
+### 4. Submit the Batch cohort and poll until complete
 
-This is the long-running step (30-60 min cohort wall). The `Bash` tool's max foreground timeout is 10 minutes — a foreground call to `chain_workflows.py` will time out before the cohort finishes. **You must use `run_in_background=true`** so the bash command runs asynchronously; the harness resumes your context with a completion notification when the background process exits.
+This is the long-running step (30-60 min cohort wall). Two patterns for handling the wait have both failed in dogfooding:
+
+- **Don't use `run_in_background=true` for chain_workflows.py.** Subagents don't reliably receive the "bash completed" notification the way the main agent does; the subagent's turn ends as soon as it has no pending work, and the notification is delivered to nothing.
+- **Don't run chain_workflows.py in the foreground.** The Bash tool's max timeout is 10 minutes; the cohort wall is 30-60 minutes.
+
+The reliable pattern is **detach + poll**:
+
+1. **Detach** chain_workflows.py via `nohup ... &` so it survives the bash shell exiting. Capture its PID to a file. The bash call returns immediately.
+2. **Poll** by calling Bash repeatedly. Each call sleeps a few minutes (within the 10-min Bash timeout) and checks whether the PID is still alive. When it exits, capture the exit code.
+3. Each Bash call is a separate tool use; you control the loop by deciding whether to dispatch another poll after each one.
 
 Two known environment-specific overrides are required on the sandbox:
 
-- `NXF_VER=25.10.5` — `configs/profiles.config` pins Nextflow ≥ 25.10.5, but the system default may be newer (26.04+) whose v2 parser rejects `configs/resources.config`'s `import nextflow.util.MemoryUnit`. Forcing the matched version avoids the parse failure.
+- `NXF_VER=25.10.5` — `configs/profiles.config` pins Nextflow ≥ 25.10.5, but the system default may be newer (26.04+) whose v2 parser rejects `configs/resources.config`'s `import nextflow.util.MemoryUnit`.
 - `process.queue` + `batch_job_role` override — the `test_run` / `standard` profiles default to a queue the sandbox `CodingAgentRole` cannot submit to. Override to `coding-agent-batch-jq` with `CodingAgentBatchJobRole`.
 
-Concrete invocation — a single Bash tool call with `run_in_background=true`:
+**Call 1: detach the chain.** A single Bash call (default foreground, runs in <5s):
 
 ```bash
-cd "$OUT_DIR/worktree" && \
-NXF_VER=25.10.5 \
-bin/chain_workflows.py \
+cd "$OUT_DIR/worktree"
+nohup env NXF_VER=25.10.5 bin/chain_workflows.py \
     --ref-dir "$ref_dir" \
     --samplesheet "$samplesheet" \
     --launch-dir "bench-${branch//\//-}" \
     --base-dir "$COHORT_BASE" \
     --nextflow-args "-process.queue=coding-agent-batch-jq --batch_job_role=arn:aws:iam::058264081542:role/CodingAgentBatchJobRole ${nextflow_args:-}" \
     ${platform:+--platform "$platform"} \
-    > "$OUT_DIR/chain.log" 2>&1
+    > "$OUT_DIR/chain.log" 2>&1 &
+echo $! > "$OUT_DIR/chain.pid"
+disown
+echo "Detached chain_workflows.py PID=$(cat $OUT_DIR/chain.pid)"
 ```
 
-When you invoke this with `run_in_background=true`:
+**Calls 2..N: poll.** Repeat the same Bash call until the chain exits. Each iteration sleeps 5 minutes inside Bash, then checks the PID. Use `timeout=600000` (10 min) on the Bash tool to allow the 5-min sleep with margin:
 
-- The Bash tool returns immediately with a shell ID.
-- Your turn pauses until the harness wakes you with a completion notification.
-- Do **not** declare "I'll wait passively" or otherwise return control voluntarily. Issue the background Bash call as your last tool call before the wait, and the harness will resume you when it exits.
+```bash
+PID=$(cat "$OUT_DIR/chain.pid")
+sleep 300
+if kill -0 "$PID" 2>/dev/null; then
+    echo "STILL_RUNNING"
+    tail -3 "$OUT_DIR/chain.log" 2>/dev/null
+else
+    # Process has exited; check exit code by waiting (returns immediately).
+    wait "$PID" 2>/dev/null
+    echo "EXITED with status $?"
+    tail -10 "$OUT_DIR/chain.log"
+fi
+```
 
-When the notification arrives, check the exit status. Non-zero exit → escalate with the error from `chain.log`. Zero exit → proceed to step 5.
+Loop pattern: if stdout shows `STILL_RUNNING`, dispatch the next poll. If it shows `EXITED with status 0`, proceed to step 5. If non-zero exit, escalate with the chain.log tail.
 
-If Wave returns a 400 "container does not exist" partway through, that is a per-fingerprint negative-cache issue. Retry once after touching any `bin/*` file with a no-op comment (this shifts the bundled-binaries layer digest), again with `run_in_background=true`. If the retry also fails, escalate.
+Cohorts of ~38 samples on Illumina_100M typically need 6-12 poll iterations.
+
+If Wave returns a 400 "container does not exist" partway through, that's a per-fingerprint negative-cache issue. After confirming the failure, touch any `bin/*` file with a no-op comment to shift the bundled-binaries layer digest, and re-detach via the call-1 pattern. You may retry once; further failures → escalate.
 
 For transient SPOT preemptions, retry the run up to once. Beyond that, escalate.
 
