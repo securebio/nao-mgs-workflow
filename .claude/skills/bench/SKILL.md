@@ -7,11 +7,11 @@ description: Benchmark performance or "preserves results" claims in the `secureb
 
 Pick the mode that matches what you're measuring, then invoke the corresponding agent or skill:
 
-- **`bench-module-local`** (agent) — A/B benchmark of a single Nextflow process via local Docker. The agent inspects the module's input signature, finds its production call site, traces the upstream chain, assembles a thin entrypoint that reproduces the relevant dataflow slice, and runs both branches. Use when the perf claim is scoped to one module *and* the upstream chain producing its inputs is shallow (≤ 3 processes). The agent will escalate if the chain is too deep.
+- **`bench-module-local`** (agent) — A/B benchmark of a single Nextflow process via local Docker. The agent inspects the module's input signature, picks the shortest construction path that produces matching-shape inputs from the samplesheet (identity, inline transformation, or upstream Nextflow processes as needed), and runs both branches. Use when the perf claim is scoped to one module and its inputs can be reproduced locally from raw reads.
 
-- **`bench-workflow`** (skill) — full-pipeline A/B benchmark on AWS Batch. Fans out one `bench-workflow-batch` agent per branch in parallel, then aggregates. Use when the change spans multiple processes, when the upstream chain for the target module is too deep for local iteration, or when you want cohort-scale numbers + output equality. The trace, sliced by process, also gives module-level numbers as a byproduct.
+- **`bench-workflow`** (skill) — full-pipeline A/B benchmark on AWS Batch. Fans out one `bench-workflow-batch` agent per branch in parallel, then aggregates. Use when the change spans multiple processes, when local construction would effectively reimplement most of the pipeline, or when you want cohort-scale numbers + output equality. The trace, sliced by process, also gives module-level numbers as a byproduct.
 
-If you're unsure or `bench-module-local` escalates with "chain too deep," fall through to `bench-workflow`.
+If you're unsure or `bench-module-local` escalates, fall through to `bench-workflow`.
 
 ## Invoking `bench-module-local`
 

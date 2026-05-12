@@ -46,10 +46,12 @@ Each agent returns `trace_path:` and `results_prefix:` lines plus an optional `N
 ```bash
 python3 "$repo_path/.claude/scripts/parse_bench_trace.py" \
     <trace_path_a> <trace_path_b> [...] \
-    --names "<branch_a>,<branch_b>[,...]" --format md --top 15
+    --names "<branch_a>,<branch_b>[,...]" --top 15 \
+    --md <run_dir>/trace-comparison.md \
+    > <run_dir>/trace-comparison.json
 ```
 
-The script produces `## Cohort` and `## Per-process` tables with Δ columns when exactly two traces are passed.
+The script writes the markdown tables (`## Cohort` and `## Per-process` with Δ columns when exactly two traces are passed) to the `--md` path and emits the JSON payload to stdout.
 
 ### 3. Output equality (pairwise)
 
@@ -57,7 +59,9 @@ For exactly two branches:
 
 ```bash
 python3 "$repo_path/.claude/scripts/bench_output_equality.py" \
-    <results_prefix_a> <results_prefix_b> --format md
+    <results_prefix_a> <results_prefix_b> \
+    --md <run_dir>/output-equality.md \
+    > <run_dir>/output-equality.json
 ```
 
 For more than two branches, run the equality check on each pair you want to compare (typically each non-baseline branch against the baseline).

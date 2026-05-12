@@ -13,8 +13,9 @@ percent_duplicates) whose DIFFs are order-sensitive estimator drift, not real
 result changes — so PR-description writeups can distinguish results-preserving
 PRs that happen to perturb read order from PRs that actually change content.
 
-Output is JSON on stdout, intended for consumption by the bench subagents.
-Pass `--format md` for a markdown summary.
+JSON always goes to stdout. Pass `--md FILE` to also write a markdown
+summary to that path — emitting both formats in one invocation (useful
+for the bench subagents that need both).
 """
 
 ###########
@@ -31,6 +32,7 @@ import time
 from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any, TypedDict
 from urllib.parse import urlparse
 
@@ -317,13 +319,16 @@ def parse_arguments(argv: Iterable[str] | None = None) -> argparse.Namespace:
     parser.add_argument("dev_prefix", type=str, help="s3:// URI of the dev cohort results prefix")
     parser.add_argument("pr_prefix", type=str, help="s3:// URI of the PR cohort results prefix")
     parser.add_argument(
-        "--format", choices=("json", "md"), default="json", help="Output format (default: json)."
+        "--md",
+        type=Path,
+        default=None,
+        help="If set, write a markdown summary to this path. JSON always goes to stdout.",
     )
     return parser.parse_args(list(argv) if argv is not None else None)
 
 
 def main() -> None:
-    """Compare two S3 result prefixes, emit JSON or markdown."""
+    """Compare two S3 result prefixes, emit JSON to stdout (and markdown to a file if `--md` given)."""
     t0 = time.monotonic()
     args = parse_arguments()
     dev = S3Uri.parse(args.dev_prefix)
@@ -331,11 +336,10 @@ def main() -> None:
     s3_client = boto3.client("s3")
     report = compare_prefixes(s3_client, dev, pr)
 
-    if args.format == "json":
-        json.dump(report, sys.stdout, indent=2)
-        sys.stdout.write("\n")
-    else:
-        sys.stdout.write(render_markdown(report))
+    json.dump(report, sys.stdout, indent=2)
+    sys.stdout.write("\n")
+    if args.md is not None:
+        args.md.write_text(render_markdown(report))
 
     s = report["summary"]
     logger.info(

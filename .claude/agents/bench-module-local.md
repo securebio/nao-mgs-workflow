@@ -1,6 +1,6 @@
 ---
 name: bench-module-local
-description: A/B benchmark a single Nextflow process across two branches via local Docker. Inspects the module's input signature, picks the shortest construction path that produces matching-shape inputs from the samplesheet (identity, in-line transformation, or at most one upstream Nextflow process), assembles a thin entrypoint, runs both branches in worktrees, and returns a comparison table. Invoke when a perf claim is scoped to one module whose inputs can be cheaply constructed from raw reads.
+description: A/B benchmark a single Nextflow process across two branches via local Docker. Inspects the module's input signature, picks the shortest construction path that produces matching-shape inputs from the samplesheet (identity, inline transformation, or upstream Nextflow processes as needed), assembles a thin entrypoint, runs both branches in worktrees, and returns a comparison table. Invoke when a perf claim is scoped to one module and its input shape can be reproduced locally from raw reads.
 model: opus
 tools: Bash, Read, Write, Glob, Grep
 ---
@@ -45,17 +45,20 @@ For each input position, match by signature shape and pick the cheapest transfor
 | Other `val(<param>)` whose default comes from `params.*` | Read the production config to find the value; pass via `--param_name value` or hardcode in a `params {}` block in the bench config. |
 | `path(<reference_asset>)` (genome FASTA, BT2 index, etc.) | From `params.*` in the production config. The calling environment is responsible for having the asset accessible at that path. |
 | `path(<per-sample-derived>)` produceable inline (small count TSV, simple lookup) | Compute inline (a small `process` invoked in the entrypoint, or an `exec:` block). |
-| `path(<per-sample-derived>)` requiring one upstream module to produce (e.g. SAM from BOWTIE2) | Include exactly one upstream `process` invocation in the bench entrypoint. |
-| `path(<per-sample-derived>)` requiring two or more upstream Nextflow processes | Escalate — the bench cost approaches a full pipeline run; recommend `bench-workflow-batch`. |
+| `path(<per-sample-derived>)` requiring upstream Nextflow processes to produce (e.g. SAM from BOWTIE2, TSV from LCA_TSV) | Include the necessary upstream invocations in the bench entrypoint. There's no hard cap — see "Decide whether to proceed" below. |
 
 ### 3. Decide whether to proceed
 
-- Count the number of upstream Nextflow processes you'd include in the entrypoint (not counting inline `exec:` blocks or tiny transformation processes).
-- If the count is **0 or 1**, proceed.
-- If **2 or more**, escalate with `ESCALATE: input construction requires <n> upstream Nextflow processes; use bench-workflow-batch instead`.
-- If any input position has a construction path you can't unambiguously determine (e.g. exotic channel transformations in the production code that don't map to a clean signature shape), escalate with a clear description.
+Try to build the construction even when it requires multiple upstream Nextflow processes. There's no hard process-count cap — escalate only when the construction is clearly the wrong tool, namely:
 
-Caveat to note in `Notes:` (not an escalation): if you do include an upstream process in the bench entrypoint, both branches will run their own version of that upstream process. If the PR being benchmarked also modifies the upstream, the Δ for the target module is confounded with the Δ for the upstream. Surface this in `Notes:` whenever there's an upstream process in the chain.
+- The chain is effectively the entire production pipeline (you'd be reimplementing the workflow in your bench entrypoint).
+- The chain includes the *target module itself* as a dependency (recursive — can't bench what you need to run to produce its own input).
+- Any input position has a construction path you can't unambiguously determine (e.g. complex `.combine`/`.branch`/`.multiMap` transformations in production with closures that don't statically resolve).
+- Resource demands of the upstream chain at production tier exceed what's reasonable for a local Nextflow run on the calling host.
+
+A rough heuristic: if a hand-coded bench entrypoint for this module would be much longer than the production subworkflow it sits in, you're past the bench-module-local sweet spot and `bench-workflow-batch` is probably the better tool. But default to attempting the bench unless you have a concrete reason not to.
+
+Caveat to note in `Notes:` (not an escalation): if your construction includes upstream processes, both branches will run their own version of each. If the PR being benchmarked also modifies any upstream you're running, the target's Δ is confounded with the upstream's Δ. Surface this whenever there's an upstream process in your chain.
 
 ### 4. Assemble the bench entrypoint
 
@@ -134,10 +137,8 @@ Confirm `$OUT_DIR/<branch>/trace.tsv` exists for both branches with at least one
 ```bash
 python3 "$repo_path/.claude/scripts/parse_bench_trace.py" \
     "$OUT_DIR/branch_a/trace.tsv" "$OUT_DIR/branch_b/trace.tsv" \
-    --names "$branch_a,$branch_b" --format md > "$OUT_DIR/summary.md"
-python3 "$repo_path/.claude/scripts/parse_bench_trace.py" \
-    "$OUT_DIR/branch_a/trace.tsv" "$OUT_DIR/branch_b/trace.tsv" \
-    --names "$branch_a,$branch_b" --format json > "$OUT_DIR/summary.json"
+    --names "$branch_a,$branch_b" --md "$OUT_DIR/summary.md" \
+    > "$OUT_DIR/summary.json"
 ```
 
 ## Output
@@ -154,8 +155,9 @@ Return:
 Return `ESCALATE: <reason>` and stop if any of:
 
 - A required input is missing or invalid.
-- Producing inputs of the required shape needs 2+ upstream Nextflow processes.
+- The construction would effectively reimplement the entire production pipeline, or it depends on the target module itself.
 - An input position has a construction path you can't unambiguously determine.
+- The upstream chain's resource demands exceed what the calling host can run.
 - Neither plain `docker info` nor `sg docker -c "docker info"` succeeds.
 - A worktree path already exists.
 - Nextflow exits non-zero on either branch.

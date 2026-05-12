@@ -7,8 +7,9 @@ Metrics follow `.claude/benchmarking.md`:
     runtime    = complete - start (slot wall, seconds)
     cpu-hours  = realtime × cpus / 3600
 
-Output is JSON on stdout, intended for consumption by the bench subagents.
-Pass `--format md` to emit a markdown table instead.
+JSON always goes to stdout. Pass `--md FILE` to also write a rendered
+markdown table to that path — emitting both formats in one invocation
+(useful for the bench subagents that need both).
 
 With one trace: per-process aggregate. With two traces and `--names dev,pr`,
 also emits a side-by-side comparison block.
@@ -462,10 +463,10 @@ def parse_arguments(argv: Iterable[str] | None = None) -> argparse.Namespace:
         help='Comma-separated trace labels (e.g. "dev,pr"). Two names → emit comparison block.',
     )
     parser.add_argument(
-        "--format",
-        choices=("json", "md"),
-        default="json",
-        help="Output format (default: json).",
+        "--md",
+        type=Path,
+        default=None,
+        help="If set, render a markdown table to this path. JSON always goes to stdout.",
     )
     parser.add_argument(
         "--top",
@@ -477,7 +478,7 @@ def parse_arguments(argv: Iterable[str] | None = None) -> argparse.Namespace:
 
 
 def main() -> None:
-    """Aggregate trace(s), emit JSON or markdown."""
+    """Aggregate trace(s), emit JSON to stdout (and markdown to a file if `--md` given)."""
     t0 = time.monotonic()
     args = parse_arguments()
     if len(args.traces) > 2:
@@ -495,11 +496,10 @@ def main() -> None:
     if len(aggregations) == 2:
         payload["compare"] = compare(aggregations[0], aggregations[1])
 
-    if args.format == "json":
-        json.dump(payload, sys.stdout, indent=2)
-        sys.stdout.write("\n")
-    else:
-        sys.stdout.write(render_markdown(payload, top=args.top))
+    json.dump(payload, sys.stdout, indent=2)
+    sys.stdout.write("\n")
+    if args.md is not None:
+        args.md.write_text(render_markdown(payload, top=args.top))
 
     logger.info("parse_bench_trace done in %.2fs", time.monotonic() - t0)
 
