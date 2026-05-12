@@ -1,22 +1,30 @@
-# v3.2.1.5-dev
+# v3.2.1.5
 
-- Register `.github/workflows/build-containers.yml` as a no-op stub. GitHub's `workflow_dispatch` API requires the workflow file to exist on the default branch (this repo's: main) before any branch can dispatch it, even when the dispatch targets a non-default ref. The stub gets to main via the next dev→main release cut; once there, any branch whose copy of this file has a real implementation can be dispatched via `gh workflow run build-containers.yml --ref <branch>`. Companion PR #792 carries the real build-and-push implementation.
-- Defer Nextflow 26.04.1 in `.nextflowignore` (same expiry as the existing 26.04.0 defer, 2026-06-01).
-- Fix `CONCATENATE_GENOME_FASTA` `SIGPIPE` on large genome directories by adding `|| true` escape path to `head` call.
-- Swap `zcat` for `rapidgzip --count-lines` in `COUNT_READS` for faster gzip inflate (~3-4× faster per byte than zcat at single-thread); allocation stays at `single` (1 cpu). Adds `rapidgzip=0.15.2` to the `coreutils_gzip_gawk` container. Out-of-scope swap of pigz→rapidgzip on the other decompression hot paths is tracked in #776.
-- Combine `SUBSET_READS_PAIRED_TARGET` with the previously-separate `INTERLEAVE_FASTQ` step into a single FIFO-based process that reads each input once and emits interleaved output via `seqtk mergepe`; plumb in the upstream `COUNT_READS` TSV so the in-process read-counting pass is eliminated; use pigz for parallel (de)compression and bump `SUBSET_READS_*` from `single` to `xsmall`. Adds `pigz=2.8` to the `seqtk` container.
-- Replace single-threaded gzip/zcat with pigz across `EXTRACT_VIRAL_READS_SHORT` modules (`BBDUK`, `BBDUK_HITS_INTERLEAVE`, `BOWTIE2`, `FASTP`, `SORT_FASTQ`, `SORT_FILE`); adds `pigz=2.8` to `bbtools`, `bowtie2_samtools`, `fastp`, and `coreutils` containers.
-- Add CVE-2026-42010 and CVE-2026-42011 (libgnutls30 TLS-PSK vulnerabilities) to `.trivyignore`. No Debian fix available as of 2026-05-10; our containers don't negotiate TLS-PSK so the practical exposure is nil.
-- Extract the chained `chain_workflows.py` invocation shared by both benchmark workflows into a reusable composite action at `.github/actions/run-benchmark/`, and add a manual `benchmark-on-demand.yml` workflow (`workflow_dispatch` only) that calls the action with a `dataset:` choice input. The PR-triggered `benchmark-illumina-100M.yml` and `benchmark-ont-100k.yml` are simplified to thin callers of the same action; their behavior on PRs to `main`/`stable` is unchanged. Per-run `--base-dir` is now keyed by `${{ github.run_id }}` so manual triggers and auto-on-PR runs don't clobber each other's S3 outputs.
-- Add `.claude/pr-examples/` directory containing worked examples of well-structured PR descriptions for this repo, and a `CLAUDE.md` reference pointing contributors at it.
-- Default `fusion.exportStorageCredentials = false` in the `standard`, `batch`, and `test_run` profiles. Users who pass `--batch_job_role <ARN>` see no change. Users running on AWS Batch without a job role now rely on the EC2 instance role for S3 access. The `ec2_s3` profile is unchanged.
-- Replace the hardcoded `EXCLUDED_VERSIONS` constant in `bin/check_nextflow_version.py` with a `.nextflowignore` config file supporting permanent and time-limited (`exp:YYYY-MM-DD`) ignores; switch target selection to highest-semver-among-non-ignored. Ignore `26.04.0` until 2026-06-01.
-- Bump pinned Nextflow version from `25.10.4` to `25.10.5`.
-- Fix `samtools view` failure on duplicate sequence IDs in the concatenated viral genome FASTA produced by `CONCATENATE_GENOME_FASTA`. NCBI `datasets` sometimes returns superseded ("previous") assembly versions alongside current ones, causing duplicate accessions.
-    - `DOWNLOAD_VIRAL_GENOMES` now emits an `assembly_status` column in the per-taxid metadata TSV (via `dataformat tsv genome --fields ...assminfo-status`), which `PREPARE_VIRAL_METADATA` flows through to `FILTER_VIRAL_GENBANK_METADATA`, which keeps only rows with `assembly_status == 'current'` (dropping `previous`, `replaced`, `suppressed`, etc.).
-    - `CONCATENATE_GENOME_FASTA` now runs `seqkit rmdup --by-name` after concatenation as a defense-in-depth check. Switched the process from the `seqtk` container to the existing `seqkit` container (no `seqtk` invocation in the script).
-- Add CVE-2026-4878 (libcap2), CVE-2026-33845 (libgnutls30), CVE-2026-33846 (libgnutls30), CVE-2026-3833 (libgnutls30), CVE-2026-42311 (Pillow in multiqc), and GHSA-82j2-j2ch-gfr8 (rustls-webpki embedded in Polars in multiqc) to `.trivyignore`; no fix currently available for any, and none is exercised by our pipeline.
-- Add 5 Go stdlib v1.23.4 CVEs (CVE-2026-33811, -33814, -39820, -39836, -42499) in `ncbi_datasets` container to `.trivyignore`. No fix until NCBI rebuilds with Go ~= 1.25.10 or ~= 1.26.3.
+## Performance
+
+- Speed up `COUNT_READS` by switching gzip inflate from `zcat` to `rapidgzip --count-lines` (~3-4× faster per byte at single-thread); allocation stays at `single`. Adds `rapidgzip=0.15.2` to the `coreutils_gzip_gawk` container (#777).
+- Fuse `SUBSET_READS_PAIRED_TARGET` and the previously-separate `INTERLEAVE_FASTQ` step into a single FIFO-based process that reads each input once and emits interleaved output via `seqtk mergepe`, using `COUNT_READS` TSV inputs to eliminate the in-process read-counting pass; switch to pigz for parallel (de)compression and bump `SUBSET_READS_*` from `single` to `xsmall`. Adds `pigz=2.8` to the `seqtk` container (#775).
+- Replace single-threaded gzip/zcat with pigz across `EXTRACT_VIRAL_READS_SHORT` modules (`BBDUK`, `BBDUK_HITS_INTERLEAVE`, `BOWTIE2`, `FASTP`, `SORT_FASTQ`, `SORT_FILE`); adds `pigz=2.8` to `bbtools`, `bowtie2_samtools`, `fastp`, and `coreutils` containers (#774).
+
+## Bugfixes
+
+- Fix `samtools view` failure on duplicate sequence IDs in the concatenated viral genome FASTA produced by `CONCATENATE_GENOME_FASTA`, which arose when NCBI `datasets` returned superseded ("previous") assemblies alongside current ones (#758).
+    - `DOWNLOAD_VIRAL_GENOMES` now emits an `assembly_status` column in the per-taxid metadata TSV, which `PREPARE_VIRAL_METADATA` flows through to `FILTER_VIRAL_GENBANK_METADATA`; only rows with `assembly_status == 'current'` are kept.
+    - `CONCATENATE_GENOME_FASTA` now runs `seqkit rmdup --by-name` after concatenation as a defense-in-depth check, and is moved to the existing `seqkit` container.
+- Fix `CONCATENATE_GENOME_FASTA` `SIGPIPE` failures on large genome directories by adding a `|| true` escape path to the `head` call (#779).
+
+## Cleanup and best practice
+
+- Default `fusion.exportStorageCredentials = false` in the `standard`, `batch`, and `test_run` profiles. Users who pass `--batch_job_role <ARN>` see no change; users running on AWS Batch without a job role now rely on the EC2 instance role for S3 access. The `ec2_s3` profile is unchanged (#764).
+- Extract the chained `chain_workflows.py` invocation shared by both benchmark workflows into a reusable composite action at `.github/actions/run-benchmark/`, and add a manual `benchmark-on-demand.yml` workflow (`workflow_dispatch` only) that calls the action with a `dataset:` choice input. PR-triggered `benchmark-illumina-100M.yml` and `benchmark-ont-100k.yml` become thin callers of the same action; per-run `--base-dir` is now keyed by `${{ github.run_id }}` so manual and auto-on-PR runs don't clobber each other's S3 outputs (#773).
+- Replace the hardcoded `EXCLUDED_VERSIONS` constant in `bin/check_nextflow_version.py` with a `.nextflowignore` config file supporting permanent and time-limited (`exp:YYYY-MM-DD`) ignores, and switch target selection to highest-semver-among-non-ignored. Bump pinned Nextflow from `25.10.4` to `25.10.5`, and defer `26.04.0` and `26.04.1` until 2026-06-01 (#760, #793).
+- Register `.github/workflows/build-containers.yml` as a no-op stub so that, once it reaches main via the next release, any branch with a real implementation can be dispatched via `gh workflow run build-containers.yml --ref <branch>`. Companion PR #792 carries the real build-and-push implementation (#793).
+- Add CVE-2026-4878 (libcap2), CVE-2026-33845/33846/3833 (libgnutls30), CVE-2026-42010/42011 (libgnutls30 TLS-PSK), CVE-2026-42311 (Pillow in multiqc), and GHSA-82j2-j2ch-gfr8 (rustls-webpki in multiqc) to `.trivyignore`; no fix is currently available for any, and none is exercised by our pipeline (#755, #759, #762).
+- Add 5 Go stdlib v1.23.4 CVEs (CVE-2026-33811, -33814, -39820, -39836, -42499) in the `ncbi_datasets` container to `.trivyignore`. No fix until NCBI rebuilds with Go ~= 1.25.10 or ~= 1.26.3 (#778).
+
+## Coding agents
+
+- Add `.claude/pr-examples/` containing worked examples of well-structured PR descriptions for this repo, and a `CLAUDE.md` reference pointing contributors at it (#767).
 
 # v3.2.1.4
 
