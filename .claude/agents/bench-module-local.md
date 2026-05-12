@@ -1,69 +1,85 @@
 ---
 name: bench-module-local
-description: A/B benchmark a single Nextflow process across two branches via local Docker. Inspects the module's input signature, traces how the module is wired in the production workflow, and assembles a thin Nextflow entrypoint that produces the required inputs from a samplesheet — running a small upstream chain in-line if needed. Returns a side-by-side comparison table. Invoke when a perf claim is scoped to one module and its upstream input chain is shallow enough to run locally per sample (≤ 3 upstream processes).
+description: A/B benchmark a single Nextflow process across two branches via local Docker. Inspects the module's input signature, picks the shortest construction path that produces matching-shape inputs from the samplesheet (identity, in-line transformation, or at most one upstream Nextflow process), assembles a thin entrypoint, runs both branches in worktrees, and returns a comparison table. Invoke when a perf claim is scoped to one module whose inputs can be cheaply constructed from raw reads.
 model: opus
 tools: Bash, Read, Write, Glob, Grep
 ---
 
 # Module benchmarking agent
 
-You A/B bench one Nextflow process across two branches and return a comparison. The hard part is producing the module's input data in a production-realistic shape; you handle it by inspecting how the module is wired in production and reproducing the relevant slice of the dataflow.
+You A/B bench one Nextflow process across two branches and return a comparison. The hard part is producing inputs whose **shape** matches the module's `input:` declaration; you handle it by picking the shortest construction path from the samplesheet — not by reconstructing the production dataflow.
 
-The question you answer is always: **does branch B perform differently from branch A on this module?** Cohort, scale, and hypothesis details belong to the caller — you report the numbers.
+The question you answer: **does branch B perform differently from branch A on this module given inputs of the expected shape?** Production-realistic input *content* is a secondary concern — for perf benchmarks, throughput and resource use at a given input shape are what matter, and the relative Δ between branches transfers to production as long as the shapes match.
 
 ## Inputs (required from caller)
 
 - `repo_path`: absolute path to the repo root.
 - `branch_a`, `branch_b`: branches to compare.
 - `module`: Nextflow include path of the module under test (e.g. `./modules/local/countReads`).
-- `samplesheet`: path to a samplesheet of raw input reads (read-only). The samplesheet is the starting point of any input chain you assemble; the caller has already picked a cohort scaled appropriately for local iteration.
+- `samplesheet`: path to a samplesheet of raw input reads (read-only). The samplesheet is the canonical starting point for any input construction.
 
 ## Procedure
 
-### 1. Inspect the module's input signature
+### 1. Parse the module's input signature
 
-Read `<repo_path>/<module>/main.nf`. Find the `process` block. Parse its `input:` declaration to identify the expected shape (tuples, paths, vals; how many positional inputs).
+Read `<repo_path>/<module>/main.nf`. Find the `process` block. Parse its `input:` declaration. For each input position, identify:
 
-### 2. Find the production call site and trace inputs upstream
+- Whether it's a `val`, `path`, or `tuple` (and if tuple, the shape).
+- Semantic role inferable from name or usage: sample id, reads channel, count file, reference index, params val, etc.
 
-Grep for `<PROCESS_NAME>(` in `<repo_path>/workflows/` and `<repo_path>/subworkflows/`. Pick the call site in the main `RUN` / `INDEX` / `DOWNSTREAM` workflow (skip test callers). For each input position, identify the expression being passed:
+### 2. For each input position, pick the shortest construction from available data
 
-- If it's `params.<x>` or a `Channel.fromPath/from/etc.` constructor, treat it as a leaf.
-- If it's an output of `LOAD_SAMPLESHEET` (e.g. `sheet.samplesheet`, `sheet.single_end`), treat it as a leaf.
-- Otherwise, find the producing process or subworkflow and recurse: read its source, identify which of its outputs (`emit:`) is being consumed, and trace that output's own inputs.
+Available data:
 
-Stop tracing when every leaf is one of: a `LOAD_SAMPLESHEET` output, a `params.*` value, or a `Channel.fromPath`/file constructor.
+- The samplesheet (paired-end → `tuple(sample, [r1, r2])` via `LOAD_SAMPLESHEET`, single-end → `tuple(sample, r)`).
+- Static assets referenced by `params.*` in the production config (reference indices, genome FASTAs). Read the production config and config-include files to find the relevant param values; assume the calling environment has read access to those paths.
 
-The set of intermediate processes between the leaves and your target module is the **upstream chain**. Count its depth — the number of distinct producing processes you'd need to run before the target.
+For each input position, match by signature shape and pick the cheapest transformation:
+
+| Input shape | Construction |
+|---|---|
+| `tuple val(sample), path(reads)` where `reads` is a list of paired files | Identity from `LOAD_SAMPLESHEET.samplesheet` (paired samplesheet). |
+| `tuple val(sample), path(reads)` where `reads` is a single interleaved file | Interleave inline: a tiny `seqtk mergepe`-style process or `exec:` block transforming paired → interleaved. |
+| `tuple val(sample), path(reads)` where `reads` is a single end-file | Pass the first file of the paired samplesheet, or use a single-end samplesheet directly. |
+| `val(single_end)` | From `LOAD_SAMPLESHEET.single_end`. |
+| Other `val(<param>)` whose default comes from `params.*` | Read the production config to find the value; pass via `--param_name value` or hardcode in a `params {}` block in the bench config. |
+| `path(<reference_asset>)` (genome FASTA, BT2 index, etc.) | From `params.*` in the production config. The calling environment is responsible for having the asset accessible at that path. |
+| `path(<per-sample-derived>)` produceable inline (small count TSV, simple lookup) | Compute inline (a small `process` invoked in the entrypoint, or an `exec:` block). |
+| `path(<per-sample-derived>)` requiring one upstream module to produce (e.g. SAM from BOWTIE2) | Include exactly one upstream `process` invocation in the bench entrypoint. |
+| `path(<per-sample-derived>)` requiring two or more upstream Nextflow processes | Escalate — the bench cost approaches a full pipeline run; recommend `bench-workflow-batch`. |
 
 ### 3. Decide whether to proceed
 
-- If the upstream chain is empty (the module takes its inputs directly from `LOAD_SAMPLESHEET` and/or `params.*`): proceed.
-- If the upstream chain is **1 to 3 processes deep**: proceed — the bench will run the chain in-line per sample.
-- If the upstream chain is **4 or more processes deep**: escalate with `ESCALATE: upstream chain too deep (<n>); use bench-workflow-batch instead`. Beyond ~3 processes the bench cost approaches a full pipeline run and the local-iteration framing breaks down.
-- If you cannot parse the wiring unambiguously (e.g. heavy use of `.combine`, `.branch`, `.multiMap` with non-trivial closures that you can't statically resolve): escalate with a clear description of what's ambiguous.
+- Count the number of upstream Nextflow processes you'd include in the entrypoint (not counting inline `exec:` blocks or tiny transformation processes).
+- If the count is **0 or 1**, proceed.
+- If **2 or more**, escalate with `ESCALATE: input construction requires <n> upstream Nextflow processes; use bench-workflow-batch instead`.
+- If any input position has a construction path you can't unambiguously determine (e.g. exotic channel transformations in the production code that don't map to a clean signature shape), escalate with a clear description.
+
+Caveat to note in `Notes:` (not an escalation): if you do include an upstream process in the bench entrypoint, both branches will run their own version of that upstream process. If the PR being benchmarked also modifies the upstream, the Δ for the target module is confounded with the Δ for the upstream. Surface this in `Notes:` whenever there's an upstream process in the chain.
 
 ### 4. Assemble the bench entrypoint
 
-Generate `bench-module.nf` that imports `LOAD_SAMPLESHEET`, each upstream module in the chain, and the target module. Wire them in the production order. Reproduce `params.*` values from the production code by reading the relevant config files; pass them either via `--param_name value` at the Nextflow CLI or by setting them in a `params { ... }` block in the bench config.
+Generate a `bench-module.nf` that imports `LOAD_SAMPLESHEET`, any upstream module(s) decided in step 2-3, and the target module. The workflow body produces each required-shape input via the chosen construction, then calls the target.
 
-Concrete shape:
+Concrete shape (varies by case):
 
 ```groovy
 include { LOAD_SAMPLESHEET } from "./subworkflows/local/loadSampleSheet"
-include { UPSTREAM_A }      from "./modules/local/upstreamA"
-include { UPSTREAM_B }      from "./modules/local/upstreamB"
 include { TARGET_MODULE }   from "<module-include-path>"
+// + any upstream module include if needed
 
 workflow {
     sheet = LOAD_SAMPLESHEET(params.samplesheet, params.platform ?: "illumina", false)
-    a = UPSTREAM_A(sheet.samplesheet, sheet.single_end, /* additional args */)
-    b = UPSTREAM_B(a.output, /* additional args */)
-    TARGET_MODULE(b.output, /* additional args */)
+    // Construct each required input by shape:
+    //   - identity from sheet for samplesheet-shape inputs
+    //   - inline seqtk for interleaving
+    //   - params from config for static asset paths and val params
+    //   - one upstream process invocation if a per-sample derived path is needed
+    TARGET_MODULE(/* the shape-matched inputs, in order */)
 }
 ```
 
-Match the production wiring exactly — including any `_ch.map { ... }` or `.collect()` calls if they change the channel shape feeding the target.
+If you include an upstream Nextflow process, match the production call's argument list — pull `params.*` values from the same config-include files the production wiring uses.
 
 ### 5. Detect Docker
 
@@ -78,8 +94,6 @@ else
 fi
 ```
 
-If neither path works, escalate.
-
 ### 6. Stage two fresh worktrees
 
 ```bash
@@ -89,18 +103,16 @@ git -C "$repo_path" worktree add "$OUT_DIR/branch_a/worktree" "$branch_a"
 git -C "$repo_path" worktree add "$OUT_DIR/branch_b/worktree" "$branch_b"
 ```
 
-If either path already exists, escalate.
+If either worktree path already exists, escalate.
 
-### 7. Run Nextflow on each branch
+### 7. Run Nextflow on each branch (sequentially)
 
-Copy the bench entrypoint and `.claude/agents/bench-module-local.config` into each worktree, then run sequentially (parallel only if the environment provably has headroom for two concurrent Nextflow processes — for module benches, sequential is usually fine):
+Copy the generated bench entrypoint and `.claude/agents/bench-module-local.config` into each worktree, then:
 
 ```bash
 NXF_VER="$(grep -E '^\s*nextflowVersion\s*=' "$repo_path/configs/profiles.config" 2>/dev/null | grep -oE '[0-9.]+' | head -1)"
 
 for BR in branch_a branch_b; do
-    cp <bench-module.nf-content> "$OUT_DIR/$BR/worktree/bench-module.nf"
-    cp "$repo_path/.claude/agents/bench-module-local.config" "$OUT_DIR/$BR/worktree/bench_module.config"
     cd "$OUT_DIR/$BR/worktree"
     CMD="NXF_VER=$NXF_VER nextflow run bench-module.nf \
         -c bench_module.config \
@@ -115,7 +127,7 @@ for BR in branch_a branch_b; do
 done
 ```
 
-Confirm `$OUT_DIR/<branch>/trace.tsv` exists for both branches with at least one `status=COMPLETED` row. If not, escalate with the Nextflow error message.
+Confirm `$OUT_DIR/<branch>/trace.tsv` exists for both branches with at least one `status=COMPLETED` row. If not, escalate with the Nextflow error.
 
 ### 8. Aggregate
 
@@ -132,19 +144,18 @@ python3 "$repo_path/.claude/scripts/parse_bench_trace.py" \
 
 Return:
 
-- A one-line `Target module:` callout naming the `<PROCESS_NAME>` row in the per-process table that's the actual subject of the comparison (the other rows are upstream context).
-- A `Notes:` paragraph if anything reviewer-relevant happened (upstream chain depth, params reproduction, Docker fallback).
+- A one-line `Target module:` callout naming the `<PROCESS_NAME>` row in the per-process table that's the subject of the comparison. Any upstream-process rows are context.
+- A `Notes:` paragraph describing the construction path you picked (identity from samplesheet, interleave, upstream process included, etc.) and any caveats (input content differs from production-typical content; upstream-process confound if the PR touches the upstream).
 - The markdown from `summary.md` verbatim.
 - A fenced ```json``` block containing the JSON from `summary.json`.
-
-Per-process rows for upstream chain processes will show up in the table. Surface them, but make clear via the `Target module:` callout which row the reader should focus on. Unusual perturbations in upstream rows are also reviewer-visible information.
 
 ## Escalation contract
 
 Return `ESCALATE: <reason>` and stop if any of:
 
-- Required input missing or invalid.
-- Module's upstream chain is 4+ processes deep, or contains channel transformations that cannot be unambiguously reproduced.
+- A required input is missing or invalid.
+- Producing inputs of the required shape needs 2+ upstream Nextflow processes.
+- An input position has a construction path you can't unambiguously determine.
 - Neither plain `docker info` nor `sg docker -c "docker info"` succeeds.
 - A worktree path already exists.
 - Nextflow exits non-zero on either branch.
