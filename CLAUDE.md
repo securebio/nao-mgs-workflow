@@ -104,7 +104,9 @@ See `.claude/benchmarking.md` for metric definitions and reporting conventions t
 
 For perf claims scoped to a single Nextflow process, the **`bench-module-local`** subagent (`.claude/agents/bench-module-local.md`) runs an A/B comparison via local Docker: it inspects the module's `input:` declaration, generates a thin entrypoint that produces matching-shape inputs from a samplesheet (identity, inline interleave, or upstream chain when content matters), runs both branches in parallel git worktrees, and aggregates traces into the canonical PR-table format via **`.claude/scripts/parse_bench_trace.py`**. The `bench-module` skill (`.claude/skills/bench-module/`) is a thin dispatcher around the agent. See `.claude/pr-examples/pipeline-bench.md` for the writeup format.
 
-For full-pipeline cohort claims (output equality, cohort wall, multi-process Δ), drop to a Batch-cohort bench instead — that's a separate tool, tracked in a future PR.
+### Full-pipeline Batch A/B benches
+
+For perf claims that span multiple processes, output-equality claims, or claims that need production-scale wall numbers, the **`bench-workflow`** skill (`.claude/skills/bench-workflow/`) fans out one `bench-workflow-batch` subagent per branch in parallel (each runs `bin/chain_workflows.py` on AWS Batch), then aggregates traces via `parse_bench_trace.py` and verifies per-sample output equality via `.claude/scripts/bench_output_equality.py`. Use this when local-Docker module benches are too narrow.
 
 ## Testing
 
