@@ -38,7 +38,7 @@ nextflow_process {
             process {
                 '''
                 def bowtie2_params = [
-                    par_string: "--local --very-sensitive-local --score-min G,0.1,19",
+                    par_string: "--local --very-sensitive-local --score-min G,0.1,19 -X 850",
                     suffix: "virus",
                     remove_sq: true,
                     debug: true,
@@ -107,7 +107,7 @@ nextflow_process {
             process {
                 '''
                 def bowtie2_params = [
-                    par_string: "--local --very-sensitive-local",
+                    par_string: "--local --very-sensitive-local -X 850",
                     suffix: "human",
                     remove_sq: false,
                     debug: true,
