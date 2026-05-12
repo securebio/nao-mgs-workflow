@@ -1,0 +1,31 @@
+name: Build containers (on-demand)
+
+# Registration stub. GitHub's `workflow_dispatch` API requires this file to
+# exist on the repo's default branch before `gh workflow run` can dispatch
+# the workflow against *any* ref. This stub is a no-op body that exists
+# solely to satisfy that registration requirement; a real implementation
+# may live on a separate branch and be dispatched there.
+
+on:
+  workflow_dispatch:
+    inputs:
+      containers:
+        description: >
+          Containers to build. (No-op when dispatched against the stub;
+          dispatch against a branch with the full implementation to use.)
+        required: false
+        default: "changed"
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  stub:
+    runs-on: ubuntu-latest
+    timeout-minutes: 1
+    steps:
+      - run: |
+          echo "build-containers.yml registration stub — dispatch a no-op."
+          echo "To run the real workflow, dispatch against a ref whose copy"
+          echo "of this file has the full implementation."

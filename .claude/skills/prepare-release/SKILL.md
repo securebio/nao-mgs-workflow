@@ -20,7 +20,7 @@ If you're updating the version mid-stream (a PR that promotes the `-dev` from on
 
 ## Inputs
 
-- `user_handle` (optional): the GitHub handle for the branch name (`release/<user_handle>/<version>`). If omitted, default to `coding-agent` when running as the `securebio-coding-agent` App (you can detect this by checking whether `git config user.email` ends in `securebio-coding-agent`); for human-authored releases, derive via `gh api user --jq .login`. Note: `gh api user` returns 403 when authenticated as a GitHub App, so don't fall back to it from agent contexts — hardcode `coding-agent`. The convention is "who pushed the release branch".
+- `user_handle` (optional): the GitHub handle for the branch name (`release/<user_handle>/<version>`). If omitted, default to `coding-agent` when running as the `securebio-coding-agent` App (detect via `[ "$(git config user.name)" = "securebio-coding-agent" ]`); for human-authored releases, derive via `gh api user --jq .login`. Note: `gh api user` returns 403 when authenticated as a GitHub App, so don't fall back to it from agent contexts — hardcode `coding-agent`. The convention is "who pushed the release branch".
 - `bump_override` (optional): one of `major`, `schema`, `results`, `point` to force a specific bump level. If omitted, classify per Step 2 below and pick the largest. When the agent's classification disagrees with the user-provided override, surface the disagreement before applying.
 
 ## Procedure
@@ -87,8 +87,10 @@ Don't reach for a subheader for a single bullet — flat list is fine when the r
 
 - Start with a verb: `Add ...`, `Fix ...`, `Replace ...`, `Update ...`, `Switch ...`, `Bump ...`, `Remove ...`.
 - Lead with the user-facing outcome. Implementation details, file paths, function names go after the outcome or in a sub-bullet.
-- Add `(#NNN)` when there's a clear single PR behind the change. Trace via `git log <last-release-tag>..origin/dev --oneline` (unprefixed tag, e.g. `3.2.1.4..origin/dev`) to find the merge SHA and PR number for each bullet.
-- Consolidate small follow-up PRs into the bullet for the parent change. When two or more PRs implement the same logical change (e.g. a config change in one PR and its companion stub/registration in another), list them together as `(#NNN, #MMM)` on a single bullet rather than fragmenting into separate bullets. When a single PR introduces a primary change plus mechanism worth surfacing, use indented sub-bullets under the parent bullet to describe the mechanism.
+- Add `(#NNN)` **at the end of the bullet** (after the closing period), not embedded mid-sentence. For multi-PR bullets, list as `(#NNN, #MMM, #...)` at the end.
+- Trace PR numbers via `git log <last-release-tag>..origin/dev --oneline` (unprefixed tag, e.g. `3.2.1.4..origin/dev`) to find the merge SHA and PR number for each `-dev` bullet.
+- **Be aggressive about consolidation.** A perf PR that also adds container CVE waivers, a primary PR plus its companion follow-up, multiple CVE-waiver PRs against the same theme — all of these are *one* release-note bullet with their PR numbers listed at the end, not several. The `-dev` log accreted in PR-author chunks; the release entry reads better when grouped by user-facing theme. (Exemplar: v3.2.1.5 collapses five trivyignore PRs into one Cleanup bullet, and folds a check_version.py extension into the same bullet as the skill that drove it.)
+- When a single PR is worth surfacing in two layers (primary outcome + a mechanism worth naming), use indented sub-bullets under the parent bullet. Don't use sub-bullets just to split a single conceptual change across multiple PRs — that's prose-shaped, not bullet-shaped.
 - Cut implementation churn that doesn't survive the release: e.g. a `-dev` bullet describing a refactor of a function that was itself replaced before the release is just noise.
 - Indent sub-bullets at 4 spaces (the repo's existing convention).
 
@@ -109,9 +111,9 @@ HANDLE="<user_handle>"   # see Inputs; default 'coding-agent' from agent context
 VERSION="<X.Y.Z.W>"      # from Step 3
 
 # Branch name: documented convention is release/<handle>/<version>.
-# Exception: when pushing as the securebio-coding-agent GitHub App, the
-# org-wide ruleset only permits writes to coding-agent/* — push to
-# coding-agent/release/<version> instead. `bin/check_version.py`
+# The securebio-coding-agent GitHub App pushes under coding-agent/* per
+# the org's branch ruleset; the ruleset exempts coding-agent/release/*
+# from the release/* creation restriction. `bin/check_version.py`
 # recognizes both prefixes as release branches.
 if [ "$HANDLE" = "coding-agent" ]; then
   BRANCH="coding-agent/release/${VERSION}"
