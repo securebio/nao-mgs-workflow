@@ -100,6 +100,12 @@ When asked to resolve merge conflicts:
 
 See `.claude/benchmarking.md` for metric definitions and reporting conventions to use in performance PRs. Always report **two metrics** in cohort tables: `runtime` (= `complete − start`, slot wall) and `cpu-hours` (= `realtime × cpus / 3600`). Don't substitute `realtime × %cpu / 100` or `(complete − start) × cpus` for cpu-hours.
 
+### Module-level local A/B benches
+
+For perf claims scoped to a single Nextflow process, the **`bench-module-local`** subagent (`.claude/agents/bench-module-local.md`) runs an A/B comparison via local Docker: it inspects the module's `input:` declaration, generates a thin entrypoint that produces matching-shape inputs from a samplesheet (identity, inline interleave, or upstream chain when content matters), runs both branches in parallel git worktrees, and aggregates traces into the canonical PR-table format via **`.claude/scripts/parse_bench_trace.py`**. The `bench-module` skill (`.claude/skills/bench-module/`) is a thin dispatcher around the agent. See `.claude/pr-examples/pipeline-bench.md` for the writeup format.
+
+For full-pipeline cohort claims (output equality, cohort wall, multi-process Δ), drop to a Batch-cohort bench instead — that's a separate tool, tracked in a future PR.
+
 ## Testing
 
 See `docs/testing.md` for comprehensive testing guidelines. Key commands:

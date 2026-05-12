@@ -29,6 +29,20 @@ Grep `^process <process_name> ` under `<repo_path>/modules/local/` to find the d
 
 The Nextflow include path is the directory containing the file, e.g. `./modules/local/bbduk` for `modules/local/bbduk/main.nf` (multi-process files are common — only inspect the named target).
 
+**Fast-path for samplesheet-trivial modules.** If the *only* inputs are `tuple val(sample), path(reads)` (paired or single-end) and optionally `val(single_end)`, the construction is identity from `LOAD_SAMPLESHEET` — skip steps 2 and 3 and go directly to step 4 with this canned entrypoint:
+
+```groovy
+include { LOAD_SAMPLESHEET } from "./subworkflows/local/loadSampleSheet"
+include { <PROCESS_NAME> }   from "<module-include-path>"
+
+workflow {
+    sheet = LOAD_SAMPLESHEET(params.samplesheet, params.platform, false)
+    <PROCESS_NAME>(sheet.samplesheet${has_single_end ? ', sheet.single_end' : ''})
+}
+```
+
+`params.platform` is defaulted to `"illumina"` in the bench config; callers benching an ONT module pass `--platform ont` at the CLI. This saves the wiring-inspection round-trips on the common simple case. Apply only when there are no other inputs (no path-of-reference-asset, no val-of-param, no path-of-derived-data).
+
 ### 2. For each input position, pick the shortest construction from available data
 
 Available data:
@@ -122,34 +136,49 @@ If either worktree path already exists, escalate.
 
 Write the generated `bench-module.nf` **directly** into each worktree (e.g. via `Write` tool to `$OUT_DIR/branch_a/worktree/bench-module.nf`). Do *not* stage it at a shared `tmp/` path first — parallel agent invocations have clobbered each other this way.
 
-### 7. Run Nextflow on each branch (sequentially)
+### 7. Run Nextflow on each branch
 
 Copy `.claude/agents/bench-module-local.config` into each worktree (the entrypoint is already there from step 6). The shared config includes `containers.config`, `resources.config`, and `run.config` so labeled tiers resolve and `params.*` defaults are loaded — you don't need to pass adapters/genome paths at the CLI unless overriding.
 
 **Host-capacity check.** Before running, compare host RAM (`free -g`) against the largest tier any process in the entrypoint requires. If a tier exceeds host RAM (common: production `small`=16GB on a 15GB sandbox), write a small override config into the worktree that caps tiers to host capacity, and pass it as an extra `-c` flag. Don't escalate — this is expected on resource-constrained hosts.
 
+**Pass `-profile bench_module_local` to the run.** Defined in `.claude/agents/bench-module-local.config`. Its sole purpose is to suppress the auto-activated `standard` profile from `configs/profiles.config` (which would set `process.executor = "awsbatch"`). It also clears `docker.runOptions` so the repo's `ec2_local` profile's `$AWS_ACCESS_KEY_ID` interpolation doesn't fail under `set -u` on instance-role-backed hosts.
+
+**Parallel branches by default.** Run both branches concurrently (background each, then `wait`) — for the typical case where the bench data is small relative to host capacity this roughly halves the Nextflow phase, which dominates wall. Drop to sequential only when you have a concrete reason: the upstream chain's resource demand at production tier would saturate the host running two copies, or you're benching on production-scale inputs where each branch alone uses most of the host.
+
 ```bash
 NXF_VER="$(grep -E '^\s*nextflowVersion\s*=' "$repo_path/configs/profiles.config" 2>/dev/null | grep -oE '[0-9.]+(\.[0-9]+)*' | head -1)"
 
-**Pass `-profile ec2_local` to the run.** The repo's `configs/profiles.config` defines a `standard` profile that sets `process.executor = "awsbatch"`. Nextflow auto-activates `standard` when no `-profile` is given, which clobbers the bench config's local-executor intent. `-profile ec2_local` is a no-op profile (other than disabling wave/fusion + mounting AWS creds) whose presence suppresses the auto-activated `standard`.
-
-```bash
-for BR in branch_a branch_b; do
+run_branch() {
+    local BR="$1"
     cd "$OUT_DIR/$BR/worktree"
     CMD="NXF_VER=$NXF_VER nextflow run bench-module.nf \
-        -profile ec2_local \
+        -profile bench_module_local \
         -c bench_module.config \
         ${HOST_OVERRIDES:+-c $HOST_OVERRIDES} \
         --samplesheet $samplesheet \
         --out_dir $OUT_DIR/$BR \
         -work-dir $OUT_DIR/$BR/work"
     if [ -z "$DOCKER_WRAP" ]; then
-        eval "$CMD"
+        eval "$CMD" > "$OUT_DIR/$BR/nextflow.log" 2>&1
     else
-        $DOCKER_WRAP -c "$CMD"
+        $DOCKER_WRAP -c "$CMD" > "$OUT_DIR/$BR/nextflow.log" 2>&1
     fi
-done
+}
+
+run_branch branch_a &
+PID_A=$!
+run_branch branch_b &
+PID_B=$!
+wait $PID_A; STATUS_A=$?
+wait $PID_B; STATUS_B=$?
+if [ $STATUS_A -ne 0 ] || [ $STATUS_B -ne 0 ]; then
+    echo "Nextflow failed on branch_a=$STATUS_A branch_b=$STATUS_B; see nextflow.log files" >&2
+    exit 1
+fi
 ```
+
+Per-branch stdout/stderr goes to `nextflow.log` so the two parallel processes don't interleave on terminal.
 
 Confirm `$OUT_DIR/<branch>/trace.tsv` exists for both branches with at least one `status=COMPLETED` row. If not, escalate with the Nextflow error.
 
