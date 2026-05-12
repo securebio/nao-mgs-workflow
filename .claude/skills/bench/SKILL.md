@@ -1,29 +1,50 @@
 ---
 name: bench
-description: Benchmark performance or "preserves results" claims in the `securebio/nao-mgs-workflow` pipeline. Dispatches to `bench-module` (a single Nextflow process via local Docker) or `bench-workflow` (full pipeline on AWS Batch), each of which fans out a single-branch agent in parallel per branch under comparison.
+description: Benchmark performance or "preserves results" claims in the `securebio/nao-mgs-workflow` pipeline. Dispatches to the `bench-module-local` agent (a single Nextflow process via local Docker) for module-scoped claims, or to the `bench-workflow` skill (full pipeline on AWS Batch) for cohort-scale claims.
 ---
 
 # Pipeline benchmarking (dispatcher)
 
-Pick the mode that matches what you're measuring, then invoke the corresponding skill:
+Pick the mode that matches what you're measuring, then invoke the corresponding agent or skill:
 
-- **`bench-module`** — single Nextflow process, local Docker, many samples cheap. Use when the perf claim is scoped to one module *and* the module is fast enough for many-sample local iteration. The Nextflow + Docker wrapper matches production execution (container start, real I/O), so per-task numbers transfer to where the module will run.
-- **`bench-workflow`** — full pipeline on AWS Batch via `bin/chain_workflows.py`. Use when the change spans multiple processes, when the module under test is too slow for local iteration, or when you want headline cohort numbers + output equality. The trace, sliced by process, gives module- and subworkflow-level numbers as a byproduct.
+- **`bench-module-local`** (agent) — A/B benchmark of a single Nextflow process via local Docker. The agent inspects the module's input signature, finds its production call site, traces the upstream chain, assembles a thin entrypoint that reproduces the relevant dataflow slice, and runs both branches. Use when the perf claim is scoped to one module *and* the upstream chain producing its inputs is shallow (≤ 3 processes). The agent will escalate if the chain is too deep.
 
-If you're unsure, default to `bench-workflow` — its trace gives you everything `bench-module` produces plus output equality, at the cost of an extra ~40 min cohort wall.
+- **`bench-workflow`** (skill) — full-pipeline A/B benchmark on AWS Batch. Fans out one `bench-workflow-batch` agent per branch in parallel, then aggregates. Use when the change spans multiple processes, when the upstream chain for the target module is too deep for local iteration, or when you want cohort-scale numbers + output equality. The trace, sliced by process, also gives module-level numbers as a byproduct.
+
+If you're unsure or `bench-module-local` escalates with "chain too deep," fall through to `bench-workflow`.
+
+## Invoking `bench-module-local`
+
+The agent compares two branches in a single call. Inputs:
+
+```
+Agent({
+  subagent_type: "bench-module-local",
+  description: "Module bench: <module>, <branch_a> vs <branch_b>",
+  prompt: """
+  repo_path: <repo_path>
+  branch_a: <branch_a>
+  branch_b: <branch_b>
+  module: <module include path, e.g. ./modules/local/countReads>
+  samplesheet: <local samplesheet.csv path>
+  """
+})
+```
+
+The agent returns the comparison tables directly. Copy the markdown into the PR description; keep the JSON block out of the description (it would re-trigger CI on every edit per [[feedback_ci_thrash_docs]]) but cite it if a reviewer asks for the underlying numbers.
+
+## Invoking `bench-workflow`
+
+See `.claude/skills/bench-workflow/SKILL.md`. The skill fans out parallel single-branch agents and runs the aggregation scripts itself.
 
 ## Integrating results into a PR description
 
-Both skills return markdown ready to drop into a PR description. Follow the structure in `.claude/pr-examples/pipeline-bench.md`:
+Follow `.claude/pr-examples/pipeline-bench.md`. Trace comparison tables go under `# Benchmarking`; output equality (from `bench-workflow`) goes under `# Backwards compatibility`.
 
-- Trace comparison tables go under `# Benchmarking`.
-- Output equality block (from `bench-workflow` only) goes under `# Backwards compatibility`.
-- Critical-path framing — the skills don't produce this; you do. For each materially affected process, note whether it sits on the workflow critical path (cross-ref issue #785 / [[project_critical_path_illumina]]). If a per-process improvement is off the critical path, say "reduces cpu-hours but not workflow wall."
-
-Keep the JSON blocks returned by the skills out of the PR description (they would re-trigger CI on every edit per [[feedback_ci_thrash_docs]]) but cite them if a reviewer asks for the underlying numbers.
+Critical-path framing is not produced by the agents or skills — you produce it. For each materially affected process, note whether it sits on the workflow critical path (cross-ref issue #785 / [[project_critical_path_illumina]]). If a per-process improvement is off the critical path, say "reduces cpu-hours but not workflow wall."
 
 ## Cross-references
 
-- `.claude/benchmarking.md` — metric conventions (`runtime = complete - start`, `cpu-hours = realtime × cpus / 3600`).
-- `.claude/scripts/` — deterministic aggregation scripts the skills call.
+- `.claude/benchmarking.md` — metric conventions.
+- `.claude/scripts/` — deterministic aggregation scripts the agents and skills call.
 - `.claude/pr-examples/pipeline-bench.md` — worked PR-writeup example.

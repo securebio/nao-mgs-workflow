@@ -19,14 +19,7 @@ For perf or output-equality claims at full-pipeline scale, this skill runs N par
 
 ## Procedure
 
-### 1. Pick a run-namespaced local root
-
-```bash
-RUN_DIR="./tmp/bench-workflow-$(date +%Y%m%dT%H%M%S)-$$"
-mkdir -p "$RUN_DIR"
-```
-
-### 2. Fan out parallel `bench-workflow-batch` invocations
+### 1. Fan out parallel `bench-workflow-batch` invocations
 
 Launch one agent per branch in a single message (parallel Agent tool calls):
 
@@ -40,16 +33,15 @@ Agent({
   samplesheet: <samplesheet>
   ref_dir: <ref_dir>
   scratch_base: <scratch_base>
-  out_dir: <RUN_DIR>/<branch-slug>
   [platform: <platform>]
   [nextflow_args: <nextflow_args>]
   """
 })
 ```
 
-Each agent returns a `## <branch>` markdown block, a `trace_path:` line, a `results_prefix:` line (the S3 prefix containing per-sample published outputs), and a fenced JSON block. Hold onto the trace paths and result prefixes.
+Each agent returns `trace_path:` and `results_prefix:` lines plus an optional `Notes:` paragraph. Hold onto the trace paths and result prefixes.
 
-### 3. Aggregate traces
+### 2. Aggregate traces
 
 ```bash
 python3 "$repo_path/.claude/scripts/parse_bench_trace.py" \
@@ -57,7 +49,9 @@ python3 "$repo_path/.claude/scripts/parse_bench_trace.py" \
     --names "<branch_a>,<branch_b>[,...]" --format md --top 15
 ```
 
-### 4. Output equality (pairwise)
+The script produces `## Cohort` and `## Per-process` tables with Δ columns when exactly two traces are passed.
+
+### 3. Output equality (pairwise)
 
 For exactly two branches:
 
@@ -68,19 +62,19 @@ python3 "$repo_path/.claude/scripts/bench_output_equality.py" \
 
 For more than two branches, run the equality check on each pair you want to compare (typically each non-baseline branch against the baseline).
 
-### 5. Compose the result
+### 4. Compose the result
 
-Concatenate any `Notes:` paragraphs from the agents (deduplicated), the comparison markdown from step 3, and the output-equality markdown from step 4.
+Concatenate any `Notes:` paragraphs from the agents (deduplicated), the comparison markdown from step 2, and the output-equality markdown from step 3.
 
 ## Output
 
-The combined block, ready to drop into a PR description. The trace comparison goes under `# Benchmarking`; the output equality block goes under `# Backwards compatibility`. Critical-path framing is not produced here — the caller adds that during PR composition (cross-ref issue #785 / [[project_critical_path_illumina]]).
+The combined block, ready to drop into a PR description. The trace comparison goes under `# Benchmarking`; the output-equality block goes under `# Backwards compatibility`. Critical-path framing is not produced here — the caller adds that during PR composition (cross-ref issue #785 / [[project_critical_path_illumina]]).
 
 ## Escalation
 
-If any per-branch agent returns `ESCALATE: <reason>`, surface the reason to the caller and stop. Do not attempt to recover. Do not produce a partial comparison from successful agents.
+If any per-branch agent returns `ESCALATE: <reason>`, surface the reason to the caller and stop. Do not attempt to recover. Do not produce a partial comparison from successful agents — a benchmark missing one branch is not a benchmark.
 
-If `bench_output_equality.py` reports `diff_unexpected > 0` (real DIFFs on files outside the known-noise list), surface the report and let the caller decide whether to investigate. Do not investigate inline.
+If `bench_output_equality.py` reports `diff_unexpected > 0` (real DIFFs on files outside the known-noise list), surface the report and let the caller decide whether to investigate.
 
 ## Cross-references
 
