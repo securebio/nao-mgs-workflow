@@ -1,0 +1,168 @@
+---
+name: triage-trivy
+description: Triage a failing Trivy container-vulnerability scan on a PR. For each HIGH/CRITICAL CVE the scan reports, walk through a structured assessment (read the CVE, identify the affected package, determine whether the pipeline uses the vulnerable functionality, search for a fix, decide an action), then either patch the dependency or add to `.trivyignore` with rigorous reasoning + expiry date. Generates a PR-description block documenting the decision per CVE so reviewers can audit the assessment. Use whenever the `scan-containers` CI job fails — and **don't** default to adding to `.trivyignore`; the skill is structured to make that the harder path.
+---
+
+# Trivy CVE triage
+
+The `Trivy Container Vulnerability Scan` CI job fails when any container image referenced in `configs/containers.config` has HIGH or CRITICAL severity vulnerabilities that aren't already in `.trivyignore`. This skill triages those failures.
+
+**Default agent behavior on Trivy failures has historically been "add to `.trivyignore` and move on" — that's the failure mode this skill exists to prevent.** Each step below asks for evidence; record what you find as you go, because the final PR-description block has to surface the assessment to a reviewer.
+
+## When to use
+
+- `scan-containers` CI job failing on a PR.
+- A reviewer asks for a Trivy follow-up.
+- You're updating a container yml and want to confirm no new HIGH/CRITICAL CVEs slip through.
+
+## Inputs (required from caller)
+
+- `pr_number`: the PR number whose `scan-containers` CI job is failing.
+
+## Inputs (optional)
+
+- `local_scan`: if `true`, additionally run Trivy locally against the PR's containers (useful when CI is broken or you want to scan against a `.trivyignore` you haven't pushed yet). Requires `trivy` binary + Docker.
+
+## Procedure
+
+### Step 1 — Fetch the scan results
+
+From the latest `scan-containers` run on the PR:
+
+```bash
+# Find the most recent run ID for the PR's HEAD SHA.
+gh run list --workflow=trivy-scan.yml --branch <pr-branch> --limit 1 --json databaseId,headSha,conclusion
+# Then download the trivy-scan-results artifact:
+gh run download <RUN_ID> -n trivy-scan-results -D /tmp/trivy
+```
+
+The artifact contains one `<container>.json` per scanned image + an aggregated `summary.json`. The per-container JSON is the Trivy raw output; vulnerabilities live at `Results[].Vulnerabilities[]`.
+
+If running locally instead (when `local_scan=true` or CI is broken):
+
+```bash
+python bin/scan_containers.py --config configs/containers.config --output-dir /tmp/trivy
+```
+
+This pulls each container, runs Trivy with the current `.trivyignore`, and writes JSON results to `/tmp/trivy/`.
+
+### Step 2 — Extract the actionable CVE list
+
+For each per-container JSON, extract HIGH + CRITICAL vulnerabilities that aren't already in `.trivyignore`. A one-liner:
+
+```bash
+jq -r '.Results[]? | .Vulnerabilities[]? | select(.Severity == "HIGH" or .Severity == "CRITICAL") |
+       [.VulnerabilityID, .Severity, .PkgName, .InstalledVersion, .FixedVersion // "n/a", .Title // ""] | @tsv' \
+   /tmp/trivy/<container>.json
+```
+
+Cross-reference each `VulnerabilityID` against `.trivyignore` and drop any that are already listed (those have a stale ignore that needs re-evaluation if the scan still reports them — flag and treat as fresh).
+
+### Step 3 — For each CVE: gather facts before deciding
+
+**Do this per CVE. Do not batch.** Each finding gets its own structured assessment.
+
+**3a. Read the CVE.** Visit `PrimaryURL` (usually NVD or the distro tracker) and read enough to understand:
+- What kind of vulnerability is it? (RCE, DoS, information disclosure, privilege escalation, …)
+- What component of the package is affected? (a specific function, a config option, a code path)
+- What does an attacker need to trigger it? (network access, local user, malformed input, specific config)
+
+**3b. Identify the affected package's role in our containers.** Which container(s) include it? Is it pulled in directly (in the container's conda env / apt install) or transitively (as a dep of something else)? Use `bin/scan_containers.py`'s output or rerun trivy on a single container to confirm.
+
+**3c. Assess whether the pipeline uses the vulnerable functionality.** This is the key step. *Don't write off the risk based on "the container is isolated" — that's the easy way out.* Instead, name what the pipeline actually does with this package:
+
+- Does the pipeline invoke the affected functionality? (Read the relevant Nextflow process script, the bin/ scripts, the container's entrypoints.)
+- Is the attack vector reachable in our deployment? (E.g. a network-protocol DoS doesn't apply if the binary never opens a server socket; a malformed-input parser bug applies if we feed it arbitrary user data.)
+- Does the affected code path get hot data? (A vuln in seldom-touched code is less concerning than one in a hot path, but neither is dismissible without evidence.)
+
+Write this down concretely — "BBDuk in the BBTools container parses FASTQ via X; the CVE affects Y; we don't use Y because Z" or "this vulnerability is reachable; here's how."
+
+**3d. Search for a fix.** Several places to check:
+
+- **Distro update:** Is the package newer in the container's base distro? `apt-cache policy <pkg>` inside the container, or check the Debian/Alpine security tracker.
+- **Base-image bump:** Is there a newer base image (e.g. Debian bookworm → trixie) where the package is patched? Often this is the right answer when "no fix in our current Debian version" is reported.
+- **Upstream conda package:** If the package comes from conda-forge / bioconda, `conda search -c <channel> <pkg>` to see available versions.
+- **Upstream tool update:** Some CVEs trace to a tool (e.g. multiqc) shipping a vulnerable dep. Check the tool's changelog for a release that bumps the dep.
+- **Workaround at config level:** Occasionally a CVE only affects a specific config option you can disable.
+
+If you find an available fix, this is now an update PR, not an ignore PR — go to step 4a.
+
+**3e. Decide.** Three legitimate outcomes:
+
+| Outcome | When | What to do |
+|---|---|---|
+| **Patch** | A fix is available and applying it is safe | Update the container yml / pin version / bump base image. Go to step 4a. |
+| **Ignore** | No fix is available *and* the vulnerability is unreachable or has negligible impact in our context | Add to `.trivyignore` with detailed reasoning. Go to step 4b. |
+| **Escalate** | Fix unavailable *and* the vulnerability is reachable, *or* you can't unambiguously assess reachability | Surface to the user. Don't suppress. |
+
+Patterns that **do not** justify ignoring on their own:
+
+- "No Debian fix available." Check whether a base-image bump or conda update exists. Only after that.
+- "Not exploited in production." This isn't evidence; it's the absence of evidence. Assess the attack surface, don't rely on past silence.
+- "The container is isolated." Many containers run network-facing tools or process untrusted data. Don't dismiss without naming the specific isolation.
+- "Out of scope for this PR." If you're triaging Trivy, the assessment is the scope.
+
+### Step 4 — Apply the action
+
+**4a. Patch.** Edit the container yml (under `containers/`) to bump the dep, base image, or upstream tool. Run `bin/scan_containers.py` locally if you can to verify the fix takes. Commit the change with the CVE ID in the message.
+
+**4b. Add to `.trivyignore`.** Format follows the existing entries:
+
+```
+# <one-line description of the vulnerability>
+# <one paragraph: which package, which functionality is affected,
+#  why our use of the package doesn't hit it (or why the impact is bounded),
+#  what's blocking a fix, and what would trigger re-evaluation>
+CVE-XXXX-XXXXX exp:YYYY-MM-DD
+```
+
+Choose `exp:` (expiry) ~6-12 weeks out — the entry will need re-evaluation once that hits. Pick a date that aligns with when you reasonably expect a fix (upstream release cadence + buffer). Don't set expiries more than a year out; if the assessment is "this will never have a fix," that's an escalation, not an ignore.
+
+If multiple related CVEs share an assessment (e.g. several Go-stdlib CVEs in the same statically-linked binary), group them under one comment block.
+
+### Step 5 — Generate the PR-description block
+
+Append the following block to the PR's description, under a `# Trivy triage` heading. This is what the reviewer audits:
+
+```markdown
+# Trivy triage
+
+The `scan-containers` CI job flagged <N> HIGH/CRITICAL vulnerabilities on this PR.
+Each is triaged below.
+
+## CVE-XXXX-XXXXX (<SEVERITY>, <pkg> <ver>)
+
+- **Vulnerability:** <one-line description from NVD>
+- **Affected functionality:** <what part of the package; from CVE details>
+- **Our usage:** <how the pipeline uses this package, with citations to specific
+  module/script files; whether the affected functionality is reached>
+- **Mitigation status:** <fix available where, blocked by what, or "no upstream fix">
+- **Action:** **<Patch / Ignore / Escalate>** — <one-line reason>
+  <if Ignore: name the .trivyignore entry expiry date and the trigger for re-eval>
+
+## CVE-YYYY-YYYYY (...)
+...
+```
+
+Surface every finding here, including ones you patched. The reviewer should see the assessment, not just the diff.
+
+### Step 6 — Verify before push
+
+- Re-run `bin/scan_containers.py` locally (or trigger CI rerun) and confirm the failing-counter is 0 HIGH/CRITICAL.
+- Sanity-read the `.trivyignore` diff: every new line has a comment block with the four required pieces (vulnerability description, affected functionality + our usage, fix-blocker, expiry trigger).
+- Check the PR-description block surfaces every finding, not just the ones you ignored.
+
+## Anti-patterns this skill exists to prevent
+
+1. **Bulk-adding CVEs to `.trivyignore` with one-line generic comments.** Each entry needs the four-piece assessment.
+2. **"No Debian fix available" as the only stated reason.** That's a partial check, not a triage outcome. Confirm conda / base-image / upstream-tool paths are also dead ends before ignoring.
+3. **Vague expiry dates** ("six months from now") rather than tied to a specific re-evaluation trigger (upstream release cadence, distro security backport window, etc.).
+4. **Hiding the assessment from the PR description.** The reviewer needs to see *why* each CVE was ignored, not just the `.trivyignore` diff. A reviewer who can't audit the assessment from the PR body alone has been given the easy path to rubber-stamp.
+
+## Cross-references
+
+- `.trivyignore` — the file you'll be editing for ignore cases. Existing entries are the format exemplar.
+- `bin/scan_containers.py` — invokable locally for fresh scans.
+- `.github/workflows/trivy-scan.yml` — the CI job that produces the artifact.
+- `containers/*.yml` — conda env files for the project's containers; updates land here for patch cases.
+- `docs/developer.md` — repo conventions (commits, PR practices).
