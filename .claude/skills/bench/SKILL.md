@@ -74,17 +74,67 @@ The scripts (`parse_bench_trace.py`, `bench_output_equality.py`) emit tables and
 
 - **Cohort context** at the top of `# Benchmarking` — name the cohort, sample count, host, `maxForks` setting, whether inputs were pre-staged.
 - **Construction caveats** from each bench's `Notes:` — if local-bench used synthesis or a production-fidelity upstream chain, a reviewer needs to know whether the bench's input content was representative.
-- **Critical-path framing** — cross-reference issue #785 / `project_critical_path_illumina`. If the per-process Δ is on the workflow critical path, say it shortens cohort wall. If off the critical path, say it reduces cpu-hours but not time-to-results. Don't conflate the two; this is a recurring reviewer gotcha.
+- **Critical-path framing** — cross-reference issue #785 / `project_critical_path_illumina`. If the per-process Δ is on the workflow critical path, say it shortens cohort wall. If off the critical path, say it reduces cpu-hours but not time-to-results. Don't conflate the two; this is a recurring reviewer gotcha. The signature pattern: cohort wall flat + cpu-hours dropped means most wins are off the critical path.
 - **Variance caveats** — SPOT preemption noise on Batch is real; parallel `bench-workflow-batch` invocations trade some wall-time variance for parallelism. Note in prose when an Δ is "within noise."
 - **Honest scope** — if the cohort isn't production-scale, say so. If the local bench used a partial chain that confounds Δ with upstream changes, flag it. If results pass output-equality on tiny-test but the production cohort wasn't tested, say that too.
 
-## Step 5 — sanity-check before pushing
+## Step 5 — investigate apparent regressions before reporting them
+
+A perf PR's bench table almost always has at least one row trending the "wrong" way. Before writing a regression into the prose, run this checklist:
+
+1. **Per-task spread.** Pull `max_realtime_s` vs `sum_realtime_s/n` from the trace JSON. If `max ≫ mean`, the regression is a single slow task dragging the aggregate (typical signature: cold container pull, slow SPOT node, noisy neighbor). Sum cpu-h on Batch is contention-immune in aggregate but a single slow task still bumps the total.
+2. **Did the branch actually touch this process?** `git log <main>..<branch> -- modules/local/<process>` and `git log <main>..<branch> -- subworkflows/local/...`. If neither shows changes, the regression is unrelated to the bench's target.
+3. **Critical-path impact?** A regression off the critical path (per #785) costs cpu-hours but not workflow wall — significantly weakens the reviewer concern.
+
+If all three say "noise," frame the row in prose as a single-task outlier or scheduling artifact, not a code regression. If any say "real," investigate further before pushing the bench; a real regression in a perf PR is reviewer-blocking.
+
+## Notes on the script outputs
+
+- **JSON role keys are positional, not branch-named.** `parse_bench_trace.py --names main,dev` produces a `compare` block whose keys are `dev_runtime_s`, `pr_runtime_s`, `delta_runtime`, etc. The `dev_*` keys hold the *first-named* branch (here: `main`), and `pr_*` holds the *second-named* (here: `dev`). The names are role-based, not branch-based. Easy footgun for sign-of-delta interpretations.
+- **Markdown tables use the actual branch names** in column headers (via `--names`), so the markdown view is unambiguous. Use it for paste-in; reach for the JSON only when slicing programmatically.
+
+## Worked example — cohort-level synthesis (Illumina_100M, multi-PR bundle)
+
+For a bundled perf PR (several merged perf changes on `dev` vs `main`) on the standard Illumina_100M cohort, the synthesis block has roughly this shape:
+
+```markdown
+# Benchmarking
+
+Run via `bench-workflow` on the Illumina_100M benchmark cohort (19 samples) on
+AWS Batch (`coding-agent-batch-jq` SPOT queue), comparing `origin/main` vs
+`origin/dev`. Both cohorts ran concurrently on the same queue, so cpu-hours
+is the contention-immune metric and runtime carries cross-cohort scheduling
+noise. Output equality is verified via `bench_output_equality.py` (see
+Backwards compatibility below).
+
+## Cohort
+<lifted verbatim from parse_bench_trace.py --md>
+
+(then a 2-3 sentence interpretation: where the cpu-h saving comes from, and
+why cohort wall is flat if it is — critical-path framing per #785)
+
+## Per-process
+<lifted from parse_bench_trace.py --md, top ~12 rows by max(branch cpu-h)>
+
+(then a paragraph attributing each win to its merged PR and noting any
+regressions, with each regression triaged per Step 5's checklist)
+
+# Backwards compatibility
+<lifted from bench_output_equality.py --md>
+
+(then a paragraph: if all DIFFs are known-noise, name the order-sensitive
+estimators and the source of the reordering)
+```
+
+The user-facing dispatch is: ask the agent invoking this skill to compose `# Benchmarking` + `# Backwards compatibility` from artifact paths you supply (the markdown + JSON files from the underlying scripts), giving cohort context as additional prompt input.
+
+## Step 6 — sanity-check before pushing
 
 - Do the numbers in the prose match the table? Quick way to catch a typo: copy a Δ from the prose, grep for it in the table.
 - Does the Δ direction make sense given the change? A perf regression sometimes hides in a column you weren't reading.
 - Run the `pr-preflight` agent on the branch — it checks version-bump / CHANGELOG / linting.
 
-## Worked invocation shape
+## Worked invocation shape (for the top-level agent)
 
 A typical full flow from a perf-PR working directory:
 
