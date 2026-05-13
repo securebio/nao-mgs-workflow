@@ -29,7 +29,7 @@ These guidelines represent best practices to implement in new code, though some 
 - Process conventions (see `modules/local/vsearch/main.nf` for an example of a well-written process that follows these conventions):
     - All processes should have a label specifying needed resources (e.g. `label "small"`). Resources are then specified in `configs/resources.config`.
         - Most labels declare static resources (`cpus = 8; memory = 16.GB`).
-        - When a process's peak memory scales strongly with input size, the label's `memory` directive may be a closure over the process inputs — e.g. `memory = { ResourceTierUtils.pickMemoryTier(reads, ...) }`. See `bbmask_resources` and `ResourceTierUtils` in `configs/resources.config` for an example.
+        - When a process's peak memory scales strongly with input size, the label's `memory` directive may be a closure over the process inputs that picks a memory tier based on total byte size. See `bbmask_resources` in `configs/resources.config` for an example, and `tests/configs/resources/` for its associated nf-test.
     - All processes should have a label specifying the Docker container to use (e.g. `label "BBTools"`). Containers are then specified in `configs/containers.config`.
     - Any processes that are used only for testing should have `label "testing"`.
     - All processes should emit their input (for testing validation); use `ln -s` to link the input to the output.

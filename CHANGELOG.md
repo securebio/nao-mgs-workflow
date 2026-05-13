@@ -11,6 +11,16 @@
 - Add `pigz` to the `rust-tools` container.
 - Add `-X 850` to all short-read bowtie2 invocations (viral and contaminant filtering) so that concordantly paired inserts up to 850 bp are detected, up from the bowtie2 default of 500 bp.
 - Raise the minimum read length in `FASTP` from the default 15 bp to 35 bp (`--length_required 35`). Reads shorter than 35 bp cannot be meaningfully classified by any downstream kmer-based tool (BBDuk k=27, Kraken2 k~35, Bowtie2 ~34 bp floor); previously these reads passed QC but were systematically unclassifiable, deflating apparent rRNA fractions and other composition estimates.
+- Clean up Nextflow code to conform to strict syntax in preparation for adding `nextflow lint` to CI. No behavioral changes.
+    - Replace `env BAREWORD` with `env('STRING')` in process output declarations.
+    - Rename deprecated `Channel.X` factory calls to `channel.X`.
+    - Replace implicit `it` closure parameters with explicit named parameters.
+    - Restructure helper closures in `loadDownstreamData` and `clusterViralAssignments` to avoid top-level statements: in `loadDownstreamData`, convert the local `resolvePath`/`resolveDir` closures into top-level `def fn(...)` functions taking `input_base_dir` as an explicit parameter; in `clusterViralAssignments`, move the `listFiles` helper inside the workflow's `main:` block as a local closure.
+    - Drop the unused `start_time_str` parameter from `PREPARE_INPUT_LOGGING` (and its argument at the RUN call site); prefix the unused `sample` closure parameter in `splitViralTsvBySelectedTaxid` with `_`.
+    - Use `sentinel_ch.sentinel` rather than `WRITE_SENTINEL_RUN.out.sentinel` in `workflows/run.nf:54` so the assigned variable is referenced.
+    - `configs/resources.config`: remove top-level `import` statements and the `ResourceTierUtils` class (both rejected by strict syntax). Inline the tier-picking logic into the `bbmask_resources` `memory` closure using `findIndexOf` and fully-qualified `nextflow.util.MemoryUnit.of(...)` references; the single existing caller was the only consumer.
+    - `configs/run_ont.config` and `configs/downstream_ont.config`: quote the `<PATH_TO_DIRECTORY>` placeholders to match the lint-friendly form already used in `run.config` / `downstream.config`.
+    - Add `tests/configs/resources/` exercising the `bbmask_resources` memory closure end-to-end: a probe workflow uses `truncate` to create sparse inputs at each tier boundary and asserts the resolved `task.memory` matches the expected 32 / 64 / 128 GB tier.
 
 # v3.2.1.5
 

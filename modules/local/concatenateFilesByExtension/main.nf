@@ -21,7 +21,7 @@ process CONCATENATE_FILES_BY_EXTENSION {
         def extension = first_file.substring(first_file.indexOf('.') + 1)
         // Check that all files end with the identified extension
         def check_str = ".${extension}"
-        def invalid_files = files.findAll { !it.toString().endsWith(check_str) }
+        def invalid_files = files.findAll { f -> !f.toString().endsWith(check_str) }
         if (invalid_files) {
             throw new Exception("Input files ${invalid_files} do not end with .${extension}")
         }
