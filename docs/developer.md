@@ -243,7 +243,7 @@ By default, all changes are made on individual branches, and merged into `dev`. 
 Only pipeline maintainers should author a new release. The process for going through a new release is as follows:
 
 1. Stop approving new feature PRs into `dev`.
-2. Create a release branch `release/USER_HANDLE/X.Y.Z.W` (see [here](./versioning.md) for information on our versioning system). In this branch:
+2. Create a release branch `release/USER_HANDLE/X.Y.Z.W` (see [here](./versioning.md) for information on our versioning system). In this branch (if using Claude Code, the `prepare-release` skill at `.claude/skills/prepare-release/` automates steps 2.1 and 2.2):
 
     1. Review and consolidate additions to `CHANGELOG.md`; these often get somewhat disjointed across many small PRs to `dev`.
     2. Update the version number in `CHANGELOG.md` and `pyproject.toml` to remove any `-dev` suffix and reflect the magnitude of changes (again, see [here](./versioning.md) for information on the versioning schema).

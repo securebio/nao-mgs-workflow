@@ -100,6 +100,36 @@ nextflow_process {
         }
     }
 
+    test("Should filter reads shorter than 35 bp") {
+        tag "expect_success"
+        tag "single_end"
+        tag "length_filter"
+        config "tests/configs/run.config"
+        when {
+            params {}
+            process {
+                '''
+                input[0] = Channel.of(["length_test", file("${projectDir}/test-data/toy-data/fastp-length-filter.fastq")])
+                input[1] = "${params.adapters}"
+                input[2] = false
+                '''
+            }
+        }
+        then {
+            assert process.success
+            def fastq_pass = path(process.out.reads[0][1]).fastq
+            def fastq_fail = path(process.out.failed[0][1]).fastq
+            def reads_pass = fastq_pass.getNumberOfRecords()
+            def reads_fail = fastq_fail.getNumberOfRecords()
+            // 34 bp read should be filtered; 35 bp read should pass
+            assert reads_pass == 1
+            assert reads_fail == 1
+            // Verify via JSON that the filter reason is "too_short"
+            def json = new JsonSlurper().parse(path(process.out.json[0][1]).toFile())
+            assert json.filtering_result.too_short_reads > 0
+        }
+    }
+
     test("Should run correctly on single-end data") {
         tag "expect_success"
         tag "single_end"

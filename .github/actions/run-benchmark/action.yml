@@ -1,0 +1,63 @@
+name: 'Run pipeline benchmark cohort'
+description: 'Run the chained INDEX/RUN benchmark on a named cohort via chain_workflows.py and publish trace + outputs to S3'
+
+inputs:
+  samplesheet:
+    description: 'S3 URI of the cohort samplesheet'
+    required: true
+  launch-dir:
+    description: 'Local directory name passed to chain_workflows.py --launch-dir'
+    required: true
+  bench-name:
+    description: 'Identifier used to namespace the S3 base-dir (e.g. "benchmark-illumina-100M")'
+    required: true
+  platform:
+    description: 'Optional --platform flag for chain_workflows.py (e.g. "ont"); empty for default'
+    required: false
+    default: ''
+  rust-version:
+    description: 'Tag for the rust-tools image (typically "main" or "dev")'
+    required: true
+  aws-role-arn:
+    description: 'AWS OIDC role ARN to assume'
+    required: true
+  tower-token:
+    description: 'Seqera Tower access token'
+    required: true
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Setup nf-test environment
+      uses: ./.github/actions/setup-nf-test
+      with:
+        role-to-assume: ${{ inputs.aws-role-arn }}
+        role-duration-seconds: '7200'
+
+    - name: Install Python dependencies
+      shell: bash
+      run: pip install boto3
+
+    - name: Run benchmark workflow
+      shell: bash
+      env:
+        TOWER_ACCESS_TOKEN: ${{ inputs.tower-token }}
+        # Per-run scratch prefix keyed by run_id so concurrent invocations
+        # (auto-on-PR + manual workflow_dispatch) don't clobber each other.
+        BASE_DIR: s3://nao-testing-scratch/mgs-workflow-test/${{ inputs.bench-name }}/${{ github.run_id }}/
+        RUST_VERSION: ${{ inputs.rust-version }}
+        SAMPLESHEET: ${{ inputs.samplesheet }}
+        LAUNCH_DIR: ${{ inputs.launch-dir }}
+        PLATFORM: ${{ inputs.platform }}
+      run: |
+        ARGS=(
+          --ref-dir s3://nao-testing/mgs-workflow-test/index-latest/output/
+          --samplesheet "$SAMPLESHEET"
+          --launch-dir "$LAUNCH_DIR"
+          --base-dir "$BASE_DIR"
+          --nextflow-args "--rust_tools_version $RUST_VERSION"
+        )
+        if [[ -n "$PLATFORM" ]]; then
+          ARGS+=(--platform "$PLATFORM")
+        fi
+        bin/chain_workflows.py "${ARGS[@]}"
