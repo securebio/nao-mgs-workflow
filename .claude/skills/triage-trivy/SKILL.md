@@ -144,6 +144,7 @@ Patterns that **do not** justify ignoring on their own:
 
 - If the fix is in a direct dep, change the pin in the yml.
 - **If the fix is in a transitive dep, add an explicit pin for the fix package itself in the yml.** This encodes the security intent *and* changes the spec hash that `bin/build_ecr_container.py` keys off (`compute_spec_hash`). Without a spec-hash change, the build script will skip the container even when the upstream conda package has shipped a fixed version — so a transitive bump that doesn't touch the yml will silently fail to rebuild.
+- **Use exact pins, not ranges.**
 
 Commit with the CVE ID in the message, push the branch, and open the PR as a draft per CLAUDE.md's PR conventions. **The PR body must include the rebuild-handoff callout (see Step 5) at the top**, because:
 
