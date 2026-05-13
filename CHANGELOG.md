@@ -1,6 +1,13 @@
 # v3.2.2.0-dev
 
 - Tighten protection on the manual-reset workflow by gating its `reset-stable` job on the GitHub `stable-reset` environment (restricted to `main` and human approval), and remove the unused `rebuild-benchmark-index.yml` workflow along with its now-dangling `workflow_call` triggers in `nf-test-workflows-index.yml` / `check-index-age.yml` and references in `docs/ci.md` / `docs/installation.md`. Add a "Manual stable reset" section to `docs/ci.md` documenting the workflow and its `stable-reset` environment gate, and replace the now-stale "Rebuild benchmark index" pointer in `docs/developer.md` with guidance on manual rebuild.
+- Replace the BBDuk-based viral k-mer pre-screen in `EXTRACT_VIRAL_READS_SHORT` with [Nucleaze](https://github.com/jackdougle/nucleaze). The BBDuk-based ribosomal screen in `PROFILE` is unchanged (Nucleaze has no `minkmerfraction` equivalent yet). Bumps `pipeline-min-index-version` to `3.2.2.0`.
+    - INDEX: new `NUCLEAZE_INDEX` process builds `virus-genomes-masked.nucleaze.bin` once, alongside the existing bowtie2/minimap2 viral indexes.
+    - RUN reads `nucleaze_k` from the index's `input/index-params.json` so the screen-time `k` always matches the index it screens against.
+    - `NUCLEAZE` exposes `keep_match` / `keep_nomatch` flags (default true); the viral path passes `keep_nomatch: false` to skip compressing the discarded majority.
+    - `NUCLEAZE` pipes gzipped inputs through pigz FIFOs instead of letting needletail decompress them single-threaded internally; ~22 % wall reduction on the process (Illumina-100M samples, 8-core sandbox). Input-side pigz is capped at 2 threads since pigz cannot extract more parallelism from an ordinary single-stream gz. Module test covers the gz-input FIFO path.
+    - Removes the unused `BBDUK_HITS_INTERLEAVE` process and its test.
+    - Internal channel/param renames: `bbduk_match`/`bbduk_trimmed`/`min_kmer_hits`/`bbduk_suffix` → `kmer_match`/`kmer_trimmed`/`minhits`/`kmer_suffix`.
 - Add `pigz` to the `rust-tools` container.
 - Add `-X 850` to all short-read bowtie2 invocations (viral and contaminant filtering) so that concordantly paired inserts up to 850 bp are detected, up from the bowtie2 default of 500 bp.
 - Raise the minimum read length in `FASTP` from the default 15 bp to 35 bp (`--length_required 35`). Reads shorter than 35 bp cannot be meaningfully classified by any downstream kmer-based tool (BBDuk k=27, Kraken2 k~35, Bowtie2 ~34 bp floor); previously these reads passed QC but were systematically unclassifiable, deflating apparent rRNA fractions and other composition estimates.
