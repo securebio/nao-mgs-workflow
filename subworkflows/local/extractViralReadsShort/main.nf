@@ -29,6 +29,17 @@ workflow EXTRACT_VIRAL_READS_SHORT {
     main:
         // Get reference paths
         viral_kmer_index_path = "${ref_dir}/results/virus-genomes-masked.nucleaze.bin"
+        // Read nucleaze_k from the index's params snapshot so the RUN screen
+        // always uses the k the index was built against.
+        def index_params_path = file("${ref_dir}/input/index-params.json", checkIfExists: true)
+        def index_params = new groovy.json.JsonSlurper().parse(index_params_path)
+        if (index_params.nucleaze_k == null) {
+            throw new IllegalStateException(
+                "Index at ${ref_dir} has no nucleaze_k in input/index-params.json; " +
+                "rebuild against pipeline >= 3.2.2.0."
+            )
+        }
+        def nucleaze_k = index_params.nucleaze_k.toString()
         genome_meta_path = "${ref_dir}/results/virus-genome-metadata-gid.tsv.gz"
         bt2_virus_index_path = "${ref_dir}/results/bt2-virus-index"
         bt2_human_index_path = "${ref_dir}/results/bt2-human-index"
@@ -48,14 +59,12 @@ workflow EXTRACT_VIRAL_READS_SHORT {
                                "edit_distance", "edit_distance_rev", "ref_start", 
                                "ref_start_rev", "query_rc", "query_rc_rev", "pair_status"]
          // 1. Run initial k-mer screen against viral genomes with nucleaze.
-         // The viral subworkflow only consumes the match fraction (nomatch
-         // is the contaminant majority and is discarded here), so skip the
-         // compression cost on nomatch.
+         // keep_nomatch: false — the subworkflow only consumes the match
+         // fraction; skipping nomatch compression is a noticeable win.
         nucleaze_params = [
-            k: params_map.k,
+            k: nucleaze_k,
             minhits: params_map.minhits,
             suffix: params_map.kmer_suffix,
-            keep_match: true,
             keep_nomatch: false
         ]
         kmer_ch = NUCLEAZE(reads_ch, viral_kmer_index_path, nucleaze_params)

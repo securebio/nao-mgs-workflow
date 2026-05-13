@@ -1,17 +1,13 @@
 // K-mer screen paired-end reads against a pre-built nucleaze index.
-// Outputs are interleaved gzipped FASTQs (match / nomatch).
-//
-// params_map.keep_match and params_map.keep_nomatch (booleans, default true)
-// gate the corresponding output. Compressing the unwanted side is a large
-// fraction of process wall time when one side dominates (e.g. nomatch in
-// the viral-filtering pipeline), so dropping it is worth doing when the
-// caller doesn't need it. At least one must be true.
+// Outputs are interleaved gzipped FASTQs (match / nomatch). Either side
+// can be dropped via keep_match / keep_nomatch (both default true,
+// at least one must be true).
 process NUCLEAZE {
     label "small"
     label "rust_tools"
     input:
         tuple val(sample), path(reads)   // reads is [R1.fastq, R2.fastq]
-        path(index)                      // Pre-built binary index
+        path(index)
         val(params_map)                  // k, minhits, suffix, keep_match?, keep_nomatch?
     output:
         tuple val(sample), path("input_{${reads[0]},${reads[1]}}"), emit: input
@@ -33,12 +29,10 @@ process NUCLEAZE {
         def stats = "${sample}_${params_map.suffix}_nucleaze.stats.txt"
         def r1ExtractCmd = r1.toString().endsWith(".gz") ? "pigz -dc -p ${task.cpus}" : "cat"
         def r2ExtractCmd = r2.toString().endsWith(".gz") ? "pigz -dc -p ${task.cpus}" : "cat"
-        // Emit unwanted-side empty files / FIFOs only when kept.
         def empty_match_cmd   = keep_match   ? "gzip -c < /dev/null > ${match_out}"   : ""
         def empty_nomatch_cmd = keep_nomatch ? "gzip -c < /dev/null > ${nomatch_out}" : ""
         def match_target   = keep_match   ? "\${tmpdir}/match.fifo"   : "/dev/null"
         def nomatch_target = keep_nomatch ? "\${tmpdir}/nomatch.fifo" : "/dev/null"
-        // Build the mkfifo + pigz-worker + wait blocks only for kept sides.
         def fifo_cmds = []
         def pigz_cmds = []
         def wait_cmds = []
@@ -55,12 +49,9 @@ process NUCLEAZE {
         def fifo_block = fifo_cmds.join("\n            ")
         def pigz_block = pigz_cmds.join("\n            ")
         def wait_block = wait_cmds.join("\n            ")
-        // Omitting --outu2/--outm2 causes nucleaze to auto-interleave paired output
         """
         set -euo pipefail
-        # nucleaze does not create output files when both R1 and R2 are empty,
-        # so short-circuit that case by emitting empty outputs ourselves
-        # (only for sides the caller is keeping).
+        # nucleaze emits no files on empty input — synthesise empty gzips.
         r1_first=\$(${r1ExtractCmd} ${r1} | head -c 1 || true)
         r2_first=\$(${r2ExtractCmd} ${r2} | head -c 1 || true)
         if [[ -z "\${r1_first}" && -z "\${r2_first}" ]]; then
@@ -69,18 +60,8 @@ process NUCLEAZE {
             ${empty_nomatch_cmd}
             echo "No data - empty input files" > ${stats}
         else
-            # Stream nucleaze's outputs straight into pigz workers via named FIFOs,
-            # so the heavy output FASTQ never lands uncompressed on disk and
-            # compression overlaps fully with screening.
-            #   - pigz -1 (fast level) keeps up with nucleaze's output rate; default
-            #     -6 back-pressures nucleaze and inflates its processing time ~3x.
-            #   - Named FIFOs + `wait \$PID` are required (rather than bash
-            #     `>(pigz ...)` process substitution): `>(...)` does not expose its
-            #     subshell PID, so the script can exit before pigz drains the pipe
-            #     and silently truncate the gzip trailer.
-            #   - Dropped sides bypass the FIFO entirely and point nucleaze at
-            #     /dev/null, so we never pay compression cost for output the
-            #     caller doesn't keep.
+            # Named FIFOs (not `>(pigz ...)` — that hides the subshell PID
+            # and the script can exit mid-trailer, truncating the gzip).
             tmpdir=\$(mktemp -d)
             trap 'rm -rf "\${tmpdir}"' EXIT
             ${fifo_block}
@@ -98,7 +79,6 @@ process NUCLEAZE {
                 2>&1 | tee ${stats}
             ${wait_block}
         fi
-        # Symlink inputs so they are captured as process outputs for read-conservation checks
         ln -s ${r1} input_${r1}
         ln -s ${r2} input_${r2}
         """
