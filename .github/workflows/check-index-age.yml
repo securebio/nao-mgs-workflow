@@ -1,10 +1,9 @@
 name: Check benchmark index age
 
-# Release gate - runs on PRs to main/stable and after index rebuild
+# Release gate - runs on PRs to main/stable
 on:
   pull_request:
     branches: [main, stable]
-  workflow_call:
 
 permissions:
   id-token: write

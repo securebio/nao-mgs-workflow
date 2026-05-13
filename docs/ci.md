@@ -126,7 +126,7 @@ These tests run the pipeline on larger benchmark datasets to verify performance 
 
 ### Benchmark index age check (`check-index-age.yml`)
 
-Runs on PRs to `main` and `stable`. Checks the age of the benchmark index at `s3://nao-testing/mgs-workflow-test/index-latest/` against the `max-stable-index-age-days` setting in `pyproject.toml` (default: 90 days). If the index is too old, the check fails and the "Rebuild benchmark index" workflow should be run to update it.
+Runs on PRs to `main` and `stable`. Checks the age of the benchmark index at `s3://nao-testing/mgs-workflow-test/index-latest/` against the `max-stable-index-age-days` setting in `pyproject.toml` (default: 90 days). If the index is too old, the check fails and the index should be rebuilt manually.
 
 ### Release readiness check (`check-release.yml`)
 
@@ -154,21 +154,6 @@ Triggered on push to `main`. After a release is merged, this workflow:
 3. Conditionally resets `stable` to match `main` only for point releases (where the first three version numbers X.Y.Z match)
 
 This uses a GitHub App token for authentication to allow force pushes to protected branches.
-
-### Benchmark index management
-
-#### Rebuild benchmark index (`rebuild-benchmark-index.yml`)
-
-Manually triggered (`workflow_dispatch`) workflow that rebuilds the benchmark index used by integration and benchmark tests. Only users with repo write access can trigger it, and it requires typing "rebuild index" as a confirmation string.
-
-The workflow:
-1. Runs INDEX nf-tests as a preflight gate
-2. Deletes the old index (recoverable via S3 bucket versioning)
-3. Builds the full index to `s3://nao-testing/mgs-workflow-test/index-latest/`
-4. Cleans up the Nextflow work directory
-5. Verifies the new index passes the age check
-
-The workflow always uses the branch it is dispatched from (ensuring preflight tests and the build use the same code) and accepts an optional AWS Batch job queue input. After a successful rebuild, the job summary includes instructions for archiving the index to the production bucket (`s3://nao-mgs-index/`), which is a separate manual step.
 
 ### Label issues (`label-issues.yml`)
 
