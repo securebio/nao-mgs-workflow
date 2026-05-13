@@ -214,6 +214,24 @@ nextflow_process {
         tag "expect_success"
         tag "paired_end"
         tag "gz_input"
+        setup {
+            run("GZIP_FILE", alias: "GZIP_R1") {
+                script "modules/local/gzipFile/main.nf"
+                process {
+                    '''
+                    input[0] = Channel.of(["test", "${projectDir}/test-data/tiny-index/reads/R1.fastq"])
+                    '''
+                }
+            }
+            run("GZIP_FILE", alias: "GZIP_R2") {
+                script "modules/local/gzipFile/main.nf"
+                process {
+                    '''
+                    input[0] = Channel.of(["test", "${projectDir}/test-data/tiny-index/reads/R2.fastq"])
+                    '''
+                }
+            }
+        }
         when {
             params {
                 params_map = [
@@ -224,7 +242,9 @@ nextflow_process {
             }
             process {
                 '''
-                input[0] = Channel.of(["test", ["${projectDir}/test-data/tiny-index/reads/R1.fastq.gz", "${projectDir}/test-data/tiny-index/reads/R2.fastq.gz"]])
+                input[0] = GZIP_R1.out.map { s, f -> [s, f] }
+                    .join(GZIP_R2.out.map { s, f -> [s, f] })
+                    .map { s, f1, f2 -> [s, [f1, f2]] }
                 input[1] = "${projectDir}/test-data/tiny-index/output/results/virus-genomes-masked.nucleaze.bin"
                 input[2] = params.params_map
                 '''
@@ -232,7 +252,6 @@ nextflow_process {
         }
         then {
             assert process.success
-            // Output should be valid interleaved FASTQ
             def fastq_match = path(process.out.match[0][1]).fastq
             def fastq_nomatch = path(process.out.nomatch[0][1]).fastq
             def ids_match = fastq_match.readNames
@@ -241,8 +260,8 @@ nextflow_process {
             assert ids_nomatch.size() % 2 == 0
             assert ids_match.size() > 0
             assert ids_nomatch.size() > 0
-            // Same read totals as the uncompressed case — pigz FIFO path must
-            // not drop reads.
+            // Same read total as the uncompressed case — pigz FIFO path
+            // must not drop reads.
             def fastq_in_r1 = path(process.out.input[0][1][0]).fastq
             def fastq_in_r2 = path(process.out.input[0][1][1]).fastq
             assert fastq_in_r1.readNames.size() + fastq_in_r2.readNames.size() == ids_match.size() + ids_nomatch.size()
