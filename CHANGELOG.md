@@ -1,5 +1,6 @@
 # v3.2.2.0-dev
 
+- Tighten protection on the manual-reset workflow by gating its `reset-stable` job on the GitHub `stable-reset` environment (restricted to `main` and human approval), and remove the unused `rebuild-benchmark-index.yml` workflow along with its now-dangling `workflow_call` triggers in `nf-test-workflows-index.yml` / `check-index-age.yml` and references in `docs/ci.md` / `docs/installation.md`. Add a "Manual stable reset" section to `docs/ci.md` documenting the workflow and its `stable-reset` environment gate, and replace the now-stale "Rebuild benchmark index" pointer in `docs/developer.md` with guidance on manual rebuild.
 - Replace the BBDuk-based viral k-mer pre-screen in `EXTRACT_VIRAL_READS_SHORT` with [Nucleaze](https://github.com/jackdougle/nucleaze). The BBDuk-based ribosomal screen in `PROFILE` is unchanged (Nucleaze has no `minkmerfraction` equivalent yet). Bumps `pipeline-min-index-version` to `3.2.2.0`.
     - INDEX: new `NUCLEAZE_INDEX` process builds `virus-genomes-masked.nucleaze.bin` once, alongside the existing bowtie2/minimap2 viral indexes.
     - RUN reads `nucleaze_k` from the index's `input/index-params.json` so the screen-time `k` always matches the index it screens against.
