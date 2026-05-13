@@ -127,7 +127,7 @@ If you find an available fix, this is now an update PR, not an ignore PR — go 
 
 | Outcome | When | What to do |
 |---|---|---|
-| **Patch** | A fix is available and applying it is safe | Update the container yml / pin version / bump base image, then hand off to the user for the image rebuild (the agent role on this sandbox is ECR pull-only). Go to step 4a. |
+| **Patch** | A fix is available and applying it is safe | Update the container yml / pin version / bump base image, commit, push, and open the PR with a rebuild-handoff callout in the body (the agent role on this sandbox is ECR pull-only; the user finalizes the rebuild). Go to step 4a. |
 | **Ignore** | No fix is available *and* the vulnerability is unreachable or has negligible impact in our context | Add to `.trivyignore` with detailed reasoning. Go to step 4b. |
 | **Escalate** | Fix unavailable *and* the vulnerability is reachable, *or* you can't unambiguously assess reachability | Surface to the user. Don't suppress. |
 
@@ -140,40 +140,21 @@ Patterns that **do not** justify ignoring on their own:
 
 ### Step 4 — Apply the action
 
-**4a. Patch — yml edit, then hand off for rebuild.** Edit the container yml (under `containers/`) to bump the dep, base image, or upstream tool. Commit the change with the CVE ID in the message. **Stop there for the rebuild step — do not open the PR yet, and do not add a `.trivyignore` entry to cover the rebuild gap.**
+**4a. Patch — yml edit, then open the PR with the rebuild-handoff callout in the body.** Edit the container yml (under `containers/`) to apply the fix:
 
-A yml change does not itself clear the CVE on `scan-containers`: that CI job scans the *published* image tag pinned in `configs/containers.config`, and the new yml only takes effect once the container is rebuilt, pushed to ECR, and the tag re-pinned. The agent role on this sandbox is ECR pull-only and cannot publish images. Ignoring a CVE for which a fix exists is unsafe and misleading — it papers over a real vulnerability with stale-ignore boilerplate and leaves a reviewer with no way to distinguish "this is unfixable" from "we just couldn't finish the fix from this environment." So: don't.
+- If the fix is in a direct dep, change the pin in the yml.
+- **If the fix is in a transitive dep, add an explicit pin for the fix package itself in the yml.** This encodes the security intent *and* changes the spec hash that `bin/build_ecr_container.py` keys off (`compute_spec_hash`). Without a spec-hash change, the build script will skip the container even when the upstream conda package has shipped a fixed version — so a transitive bump that doesn't touch the yml will silently fail to rebuild.
 
-Instead, surface a handoff to the user before opening the PR. Tell them what you changed, where the branch is, and the exact commands they need to run from an environment with ECR push permissions. Template:
+Commit with the CVE ID in the message, push the branch, and open the PR as a draft per CLAUDE.md's PR conventions. **The PR body must include the rebuild-handoff callout (see Step 5) at the top**, because:
 
-```
-I've patched the following CVE(s) on coding-agent/trivy-triage-YYYY-MM-DD by
-editing the corresponding container yml(s):
+- The agent role on this sandbox is ECR pull-only and cannot publish images. The yml change does not itself clear the CVE on `scan-containers`: that CI job scans the *published* image tag pinned in `configs/containers.config`, and the new yml only takes effect once the container is rebuilt, pushed to ECR, and the tag re-pinned.
+- The PR is the persistent rendezvous between agent and user. Agents that ran in subagent sessions may not be reachable later; pinning the handoff to the PR body means the user can finalize without needing the original agent back.
 
-  - CVE-XXXX-XXXXX: containers/<X>.yml — <one-line description of the change>
-  - CVE-YYYY-YYYYY: containers/<Y>.yml — <one-line description of the change>
+The PR opens with `scan-containers` red. That's expected — the callout in the PR body documents why. The user runs the rebuild, pushes the resulting pin update, watches CI turn green, then deletes the callout from the PR body and marks the PR ready for review. None of that requires the agent to be re-invoked.
 
-The images need to be rebuilt and re-pinned before scan-containers can clear,
-which requires AWS ECR push permissions that this sandbox doesn't have. To
-finish:
+Do **not** add a `.trivyignore` entry for a fixable CVE to "cover the rebuild gap." Doing so buries a real, addressable vulnerability under stale-ignore boilerplate and conflates "unfixable" with "out of this environment's reach" (anti-pattern #1).
 
-  1. Pull the branch in an environment with ECR push:
-       git fetch origin coding-agent/trivy-triage-YYYY-MM-DD
-       git checkout coding-agent/trivy-triage-YYYY-MM-DD
-  2. Rebuild modified containers and update the tag pins in
-     configs/containers.config:
-       bin/build_ecr_containers.py
-  3. Commit and push the updated pins (+ any other artifacts the script produced):
-       git add configs/containers.config containers/
-       git commit -m "Rebuild containers for CVE-XXXX-XXXXX [+ others]"
-       git push
-  4. Ping me — I'll verify the next scan-containers run is clean and open the PR.
-
-If you'd prefer a different rebuild path (e.g. batch with other pending bumps),
-let me know and I'll hold the branch.
-```
-
-If the triage also produced Ignore-disposition entries, those can land on the same branch alongside the yml edit — only the Patch side needs the handoff. Open the PR only after the rebuild has happened and CI is green.
+Ignore-disposition entries from the same triage can land on the same branch and PR — only the Patch side blocks merge until rebuild.
 
 **4b. Add to `.trivyignore`.** Format follows the existing entries:
 
@@ -193,13 +174,31 @@ If multiple related CVEs share an assessment (e.g. several Go-stdlib CVEs in the
 
 ### Step 5 — Generate the PR description
 
-Use the following block as the body of the *new* triage PR (per the branching note above; the only exception is the PR-local-CVE case, where you instead append the block under a `# Trivy triage` heading on the original PR). This is what the reviewer audits:
+The PR body has two parts: a temporary rebuild-handoff callout at the top (only when there's at least one Patch outcome), and the persistent Trivy-triage assessment block. Use this as the body of the *new* triage PR (per the branching note above; the only exception is the PR-local-CVE case, where you instead append the assessment block under a `# Trivy triage` heading on the original PR):
 
 ```markdown
+> ⚠️ **Rebuild required before merge — `scan-containers` is red until then.**
+>
+> The triage below patched <N> CVE(s) by editing container yml(s), but the
+> agent role on this sandbox cannot push rebuilt images to ECR. To finalize:
+>
+>   1. Pull the branch in an environment with ECR push:
+>        git fetch origin <branch>
+>        git checkout <branch>
+>   2. Rebuild modified containers and update the tag pins in
+>      configs/containers.config:
+>        bin/build_ecr_containers.py
+>   3. Commit and push the updated pins:
+>        git add configs/containers.config containers/
+>        git commit -m "Rebuild containers for CVE-XXXX-XXXXX [+ others]"
+>        git push
+>   4. Once `scan-containers` is green, delete this whole "Rebuild required"
+>      callout from the PR body and mark the PR ready for review.
+
 # Trivy triage
 
-The `scan-containers` CI job flagged <N> HIGH/CRITICAL vulnerabilities on this PR.
-Each is triaged below.
+The `scan-containers` CI job on <origin> flagged <N> HIGH/CRITICAL
+vulnerabilities. Each is triaged below.
 
 ## CVE-XXXX-XXXXX (<SEVERITY>, <pkg> <ver>)
 
@@ -215,27 +214,27 @@ Each is triaged below.
 ...
 ```
 
-Surface every finding here, including ones you patched. The reviewer should see the assessment, not just the diff.
+Omit the top callout entirely for Ignore-only or Escalate-only triages — it's only needed when at least one Patch outcome blocks merge on a rebuild. The callout is meant to be deleted from the PR body once the rebuild lands and CI is green; the assessment block stays as the audit trail.
 
-**Container rebuilds** (add this section if any Patch outcome required a user-mediated rebuild per step 4a):
+Surface every finding in the assessment block, including ones you patched. The reviewer audits the assessment, not just the diff.
+
+**Mixed disposition by container.** A single CVE sometimes splits dispositions — e.g. the urllib3 case where `multiqc` can be patched (transitive via `requests`) but the four awscli-bearing containers cannot (awscli's feedstock pins `urllib3<=2.6.3`). Split the `Action` line by container group rather than inventing two separate CVE sections:
 
 ```markdown
-## Container rebuilds
-
-The Patch outcomes above required a container rebuild + tag re-pin, performed
-by <user> from an ECR-push environment:
-
-- `<container>.yml` rebuilt to address CVE-XXXX-XXXXX; new tag pinned in
-  `configs/containers.config` at commit <sha>.
+- **Action — multiqc:** **Patch** — added `conda-forge::urllib3>=2.7` pin in
+  `containers/multiqc.yml`.
+- **Action — blast / bowtie2_samtools / kraken2 / minimap2_samtools:**
+  **Ignore** — `urllib3` pulled in transitively via `awscli`, which pins
+  `urllib3<=2.6.3` through every conda-forge build. `.trivyignore`
+  exp:YYYY-MM-DD, re-eval trigger: <trigger>.
 ```
-
-This documents the handoff so the audit trail is on the PR itself. The PR should not be opened until the rebuild lands on the branch and `scan-containers` is green — never open a Trivy-triage PR with a red `scan-containers` and a note explaining away the failure.
 
 **Versioning / CHANGELOG.** Per `docs/versioning.md`, a Trivy-only PR is typically a point bump under the in-flight `-dev` version with a single CHANGELOG line summarizing the disposition (patched vs ignored, which packages, which re-eval trigger). The `version-bump` agent referenced in `CLAUDE.md` is the canonical authority — defer to it if uncertain.
 
 ### Step 6 — Verify before push
 
-- Re-run `bin/scan_containers.py` locally and confirm the failing-counter is 0 HIGH/CRITICAL. If you'd rather wait for CI, push the branch and re-run the failed jobs against the latest run for the head SHA — don't push an empty commit, which fires every workflow:
+- **Local re-scan covers Ignore-side dispositions only.** Both `bin/scan_containers.py` and the CI `scan-containers` job scan the *published* image tag pinned in `configs/containers.config`. They won't reflect a Patch-side yml change until after the user-side rebuild lands. So: confirm locally that Ignore entries cleared their CVEs, and accept that Patch-side CVEs will still appear red until the user finishes the rebuild — that's by design and the callout in the PR body documents it.
+- Re-run `bin/scan_containers.py` locally to confirm the Ignore-side failing-counter is 0 HIGH/CRITICAL. If you'd rather wait for CI, push the branch and re-run the failed jobs against the latest run for the head SHA — don't push an empty commit, which fires every workflow:
 
   ```bash
   RUN_ID=$(gh run list --workflow=trivy-scan.yml --branch <branch> --status completed --limit 1 --json databaseId -q '.[0].databaseId')
@@ -246,7 +245,7 @@ This documents the handoff so the audit trail is on the PR itself. The PR should
 
 ## Anti-patterns this skill exists to prevent
 
-1. **Adding a `.trivyignore` entry for a CVE that has an available fix**, to "cover the rebuild gap" or because the agent can't push images. Ignoring a fixable CVE buries a real vulnerability under stale-ignore boilerplate and conflates "unfixable" with "out of this environment's reach." Make the yml edit and hand off the rebuild per step 4a — don't ignore.
+1. **Adding a `.trivyignore` entry for a CVE that has an available fix**, to "cover the rebuild gap" or because the agent can't push images. Ignoring a fixable CVE buries a real vulnerability under stale-ignore boilerplate and conflates "unfixable" with "out of this environment's reach." Make the yml edit and hand off the rebuild per step 4a — don't ignore. (Disambiguation: a fix that exists in some upstream release but is unreachable through any current feedstock build — e.g. urllib3 2.7.0 exists, but every conda-forge `awscli` release pins `urllib3<=2.6.3` — counts as "no fix available" for the Ignore path. The distinguishing factor is whether changing the yml could actually pull a fixed build.)
 2. **Bulk-adding CVEs to `.trivyignore` with one-line generic comments.** Each entry needs the four-piece assessment.
 3. **"No Debian fix available" as the only stated reason.** That's a partial check, not a triage outcome. Confirm conda / base-image / upstream-tool paths are also dead ends before ignoring.
 4. **Vague expiry dates** ("six months from now") rather than tied to a specific re-evaluation trigger (upstream release cadence, distro security backport window, etc.).
@@ -256,6 +255,7 @@ This documents the handoff so the audit trail is on the PR itself. The PR should
 
 - `.trivyignore` — the file you'll be editing for ignore cases. Existing entries are the format exemplar.
 - `bin/scan_containers.py` — invokable locally for fresh scans.
+- `bin/build_ecr_containers.py` / `bin/build_ecr_container.py` — the rebuild commands the user runs to finalize a Patch outcome. The former iterates over `containers/`; the latter (which exposes `compute_spec_hash`) is what governs whether a yml change forces a rebuild.
 - `.github/workflows/trivy-scan.yml` — the CI job that produces the artifact.
 - `containers/*.yml` — conda env files for the project's containers; updates land here for patch cases.
 - `docs/developer.md` — repo conventions (commits, PR practices).
