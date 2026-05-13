@@ -1,5 +1,6 @@
 # v3.2.1.5-dev
 
+- Triage urllib3 CVE-2026-44431 / CVE-2026-44432: patch `multiqc` with an explicit `urllib3=2.7.0` pin; ignore on the four `awscli`-bearing containers, where the awscli feedstock caps urllib3 below 2.7.
 - Add `triage-trivy` skill (`.claude/skills/triage-trivy/`) for structured per-CVE assessment of Trivy `scan-containers` CI failures. The skill walks through: fetch the scan results (from CI artifact or local), extract HIGH/CRITICAL CVEs not already ignored, gather evidence per CVE (read the CVE, identify the affected package, check whether the pipeline uses the vulnerable functionality, search for a fix), decide patch vs ignore vs escalate, apply the action, and surface the assessment in the PR description. Structured to make `.trivyignore` the harder path — vague reasoning is explicitly named as an anti-pattern. `CLAUDE.md` updated to point at the skill from the CI-status section.
 - Fix `CONCATENATE_GENOME_FASTA` `SIGPIPE` on large genome directories by adding `|| true` escape path to `head` call.
 - Swap `zcat` for `rapidgzip --count-lines` in `COUNT_READS` for faster gzip inflate (~3-4× faster per byte than zcat at single-thread); allocation stays at `single` (1 cpu). Adds `rapidgzip=0.15.2` to the `coreutils_gzip_gawk` container. Out-of-scope swap of pigz→rapidgzip on the other decompression hot paths is tracked in #776.
