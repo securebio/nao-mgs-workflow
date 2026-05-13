@@ -145,6 +145,7 @@ Patterns that **do not** justify ignoring on their own:
 - If the fix is in a direct dep, change the pin in the yml.
 - **If the fix is in a transitive dep, add an explicit pin for the fix package itself in the yml.** This encodes the security intent *and* changes the spec hash that `bin/build_ecr_container.py` keys off (`compute_spec_hash`). Without a spec-hash change, the build script will skip the container even when the upstream conda package has shipped a fixed version — so a transitive bump that doesn't touch the yml will silently fail to rebuild.
 - **Use exact pins, not ranges.**
+- **Keep any inline yml comment to one line** naming the CVE IDs and the fix version. Detailed rationale belongs in the PR body, not the yml.
 
 Commit with the CVE ID in the message, push the branch, and open the PR as a draft per CLAUDE.md's PR conventions. **The PR body must include the rebuild-handoff callout (see Step 5) at the top**, because:
 
@@ -157,13 +158,13 @@ Do **not** add a `.trivyignore` entry for a fixable CVE to "cover the rebuild ga
 
 Ignore-disposition entries from the same triage can land on the same branch and PR — only the Patch side blocks merge until rebuild.
 
-**4b. Add to `.trivyignore`.** Format follows the existing entries:
+**4b. Add to `.trivyignore`.** Match the tightness of existing entries — typically a short header for grouped CVEs plus 4–8 comment lines total covering the four pieces below. Don't pad; if a piece is obvious from the rest, drop it.
 
 ```
 # <one-line description of the vulnerability>
-# <one paragraph: which package, which functionality is affected,
-#  why our use of the package doesn't hit it (or why the impact is bounded),
-#  what's blocking a fix, and what would trigger re-evaluation>
+# <a few lines: which package, which functionality is affected, why our
+#  use doesn't hit it (or why impact is bounded), what's blocking a fix,
+#  what would trigger re-evaluation>
 CVE-XXXX-XXXXX exp:YYYY-MM-DD
 ```
 
@@ -230,7 +231,7 @@ Surface every finding in the assessment block, including ones you patched. The r
   exp:YYYY-MM-DD, re-eval trigger: <trigger>.
 ```
 
-**Versioning / CHANGELOG.** Per `docs/versioning.md`, a Trivy-only PR is typically a point bump under the in-flight `-dev` version with a single CHANGELOG line summarizing the disposition (patched vs ignored, which packages, which re-eval trigger). The `version-bump` agent referenced in `CLAUDE.md` is the canonical authority — defer to it if uncertain.
+**Versioning / CHANGELOG.** Per `docs/versioning.md`, a Trivy-only PR is typically a point bump under the in-flight `-dev` version (or, if `-dev` is already cut, just a CHANGELOG line — no bump). The CHANGELOG entry should be **one short sentence** matching the tone of surrounding entries — name the CVE IDs, the disposition (patch vs ignore), and one phrase on the fix-blocker. Per-CVE rationale belongs in `.trivyignore` and the PR body, not the CHANGELOG. The `version-bump` agent referenced in `CLAUDE.md` is the canonical authority — defer to it if uncertain.
 
 ### Step 6 — Verify before push
 
