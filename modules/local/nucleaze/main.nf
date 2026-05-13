@@ -4,7 +4,7 @@ process NUCLEAZE {
     label "small"
     label "rust_tools"
     input:
-        tuple val(sample), path(reads)   // [R1.fastq, R2.fastq]
+        tuple val(sample), path(reads)   // reads is [R1.fastq, R2.fastq]
         path(index)                      // Pre-built binary index
         val(params_map)                  // k, minhits, suffix
     output:
@@ -18,8 +18,8 @@ process NUCLEAZE {
         def nomatch_out = "${sample}_${params_map.suffix}_nucleaze_nomatch.fastq.gz"
         def match_out = "${sample}_${params_map.suffix}_nucleaze_match.fastq.gz"
         def stats = "${sample}_${params_map.suffix}_nucleaze.stats.txt"
-        def r1ExtractCmd = r1.toString().endsWith(".gz") ? "zcat" : "cat"
-        def r2ExtractCmd = r2.toString().endsWith(".gz") ? "zcat" : "cat"
+        def r1ExtractCmd = r1.toString().endsWith(".gz") ? "pigz -dc -p ${task.cpus}" : "cat"
+        def r2ExtractCmd = r2.toString().endsWith(".gz") ? "pigz -dc -p ${task.cpus}" : "cat"
         // Omitting --outu2/--outm2 causes nucleaze to auto-interleave paired output
         """
         set -euo pipefail

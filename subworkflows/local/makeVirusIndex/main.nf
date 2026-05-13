@@ -19,8 +19,9 @@ workflow MAKE_VIRUS_INDEX {
         mask_ch = DUSTMASKER_FASTA_GZIPPED(virus_genome_fasta)
         bowtie2_ch = BOWTIE2_INDEX(mask_ch, "bt2-virus-index")
         minimap2_ch = MINIMAP2_INDEX(mask_ch, "mm2-virus-index")
-        // Build a nucleaze k-mer index from the un-dust-masked masked fasta —
-        // matches the reference the RUN k-mer screen sees.
+        // Build a nucleaze k-mer index from the BBDuk-masked viral FASTA
+        // (not the further dustmasked variant fed to bowtie2/minimap2).
+        // This matches the reference the RUN k-mer screen sees.
         nucleaze_ch = NUCLEAZE_INDEX(virus_genome_fasta, nucleaze_k)
     emit:
         bt2 = bowtie2_ch
