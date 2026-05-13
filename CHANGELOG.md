@@ -1,6 +1,11 @@
 # v3.2.2.0-dev
 
-- Replace the BBDuk-based viral k-mer pre-screen in `EXTRACT_VIRAL_READS_SHORT` with [Nucleaze](https://github.com/jackdougle/nucleaze). INDEX builds `virus-genomes-masked.nucleaze.bin` once via the new `NUCLEAZE_INDEX` process; RUN reads `nucleaze_k` from the index's `input/index-params.json` so the screen-time `k` always matches the index. The `NUCLEAZE` process exposes `keep_match` / `keep_nomatch` flags (default true); the viral path passes `keep_nomatch: false` to skip compressing the discarded majority. Removes the unused `BBDUK_HITS_INTERLEAVE` process and its test. Internal channel/param renames: `bbduk_match`/`bbduk_trimmed`/`min_kmer_hits`/`bbduk_suffix` → `kmer_match`/`kmer_trimmed`/`minhits`/`kmer_suffix`. Bumps `pipeline-min-index-version` to `3.2.2.0`. The BBDuk-based ribosomal screen in `PROFILE` is unchanged (Nucleaze has no `minkmerfraction` equivalent yet).
+- Replace the BBDuk-based viral k-mer pre-screen in `EXTRACT_VIRAL_READS_SHORT` with [Nucleaze](https://github.com/jackdougle/nucleaze). The BBDuk-based ribosomal screen in `PROFILE` is unchanged (Nucleaze has no `minkmerfraction` equivalent yet). Bumps `pipeline-min-index-version` to `3.2.2.0`.
+    - INDEX: new `NUCLEAZE_INDEX` process builds `virus-genomes-masked.nucleaze.bin` once, alongside the existing bowtie2/minimap2 viral indexes.
+    - RUN reads `nucleaze_k` from the index's `input/index-params.json` so the screen-time `k` always matches the index it screens against.
+    - `NUCLEAZE` exposes `keep_match` / `keep_nomatch` flags (default true); the viral path passes `keep_nomatch: false` to skip compressing the discarded majority.
+    - Removes the unused `BBDUK_HITS_INTERLEAVE` process and its test.
+    - Internal channel/param renames: `bbduk_match`/`bbduk_trimmed`/`min_kmer_hits`/`bbduk_suffix` → `kmer_match`/`kmer_trimmed`/`minhits`/`kmer_suffix`.
 - Add `-X 850` to all short-read bowtie2 invocations (viral and contaminant filtering) so that concordantly paired inserts up to 850 bp are detected, up from the bowtie2 default of 500 bp.
 - Raise the minimum read length in `FASTP` from the default 15 bp to 35 bp (`--length_required 35`). Reads shorter than 35 bp cannot be meaningfully classified by any downstream kmer-based tool (BBDuk k=27, Kraken2 k~35, Bowtie2 ~34 bp floor); previously these reads passed QC but were systematically unclassifiable, deflating apparent rRNA fractions and other composition estimates.
 
