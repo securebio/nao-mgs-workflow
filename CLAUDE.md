@@ -37,6 +37,8 @@ EOF
 2. **Changes list**: Bulleted list of specific changes with their justifications
 3. **Footer**: Always include the "Generated with Claude Code" attribution
 
+**Worked examples** of well-structured PR descriptions for this repo live in `.claude/pr-examples/`. Refer to them when drafting — particularly for changes with backwards-compatibility or performance implications, where the structure of the body is doing real work.
+
 **Before creating the PR:**
 - Run the **pr-preflight** agent to check branch readiness (version bump, changelog, lint, schemas)
 - Check whether your changes require documentation updates. If you modified behavior, added features, or changed workflows, update the relevant docs (e.g. `docs/`, `CLAUDE.md`) in the same PR — don't leave documentation for a follow-up. Use the **update-docs** agent to identify and edit affected doc files.
@@ -93,6 +95,10 @@ When asked to resolve merge conflicts:
 1. **Summarize the conflicts** — for each conflicted file, describe the differences between the two sides and recommend a resolution.
 2. **Wait for user approval** before resolving.
 3. When the chosen resolution is to take one side of a conflict entirely (for a given file or the whole merge), prefer git-native resolution commands (e.g., `git checkout --ours <file>` or `git checkout --theirs <file>`) over manually rewriting affected files.
+
+## Benchmarking conventions (agent-specific)
+
+See `.claude/benchmarking.md` for metric definitions and reporting conventions to use in performance PRs. Always report **two metrics** in cohort tables: `runtime` (= `complete − start`, slot wall) and `cpu-hours` (= `realtime × cpus / 3600`). Don't substitute `realtime × %cpu / 100` or `(complete − start) × cpus` for cpu-hours.
 
 ## Testing
 
@@ -151,6 +157,7 @@ Mypy is enforced in CI via `.github/workflows/mypy.yml` — all Python in `bin/`
 
 - Every PR must include a version bump in `pyproject.toml` and a corresponding update to `CHANGELOG.md`. The topmost CHANGELOG heading must match the version in `pyproject.toml`.
 - See `docs/versioning.md` for the full versioning scheme. **Always** use the **version-bump** agent to automate version bumps and changelog entries — do not determine versions manually. The 4-number scheme (Major.Schema.Results.Point) is easy to confuse; the agent reads the versioning rules and determines the appropriate bump level from the branch diff.
+- For **cutting a release** (the maintainer-side process described in `docs/developer.md` § "New releases"), use the **`prepare-release`** skill (`.claude/skills/prepare-release/`). It branches off dev, classifies the accumulated `-dev` CHANGELOG entries for bump level, rewrites them as a polished release note (mirroring the v3.2.1.0 / v3.2.1.3 grouped structure), drops the `-dev` suffix, and opens a `release/<handle>/<version>` PR into dev. The skill is the heavier-weight counterpart to `version-bump`; reach for it specifically when preparing a release, not for mid-stream version bumps.
 
 ### Backwards Compatibility Trackers
 `pyproject.toml` contains two compatibility version fields:

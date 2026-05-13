@@ -4,3 +4,4 @@ channels:
   - conda-forge
 dependencies:
   - conda-forge::coreutils=9.5
+  - conda-forge::pigz=2.8

@@ -14,6 +14,7 @@ flowchart LR
 A(Raw reads) --> B[LOAD_SAMPLESHEET]
 B --> C[COUNT_TOTAL_READS] & E[SUBSET_TRIM]
 B --> D[EXTRACT_VIRAL_READS]
+C --> E
 E --> I(Subset reads)
 E --> J(Subset trimmed reads)
 J --> G[RUN_QC] & H[PROFILE]
@@ -59,7 +60,7 @@ To perform these functions, the workflow runs a series of subworkflows responsib
 This subworkflow loads the samplesheet and creates a channel containing the samplesheet data, in the structure expected by the pipeline. It also derives the endedness for the pipeline run (single- vs paired-end) from the structure of the samplesheet, and checks that the specified sequencing platform is (a) valid and (b) compatible with the specified endedness. (No diagram is provided for this subworkflow.)
 
 ### Subset and trim reads (SUBSET_TRIM)
-This subworkflow uses [Seqtk](https://github.com/lh3/seqtk) to randomly subsample the input reads to a target number[^target] (default 1 million read pairs per sample) to save time and compute on downstream steps while still providing a reliable statistical picture of the overall sample. Following downsampling, read pairs are combined into a single interleaved file, which then undergoes adapter trimming and quality screening with [FASTP](https://github.com/OpenGene/fastp).
+This subworkflow uses [Seqtk](https://github.com/lh3/seqtk) to randomly subsample the input reads to a target number[^target] (default 1 million read pairs per sample) to save time and compute on downstream steps while still providing a reliable statistical picture of the overall sample. For paired-end input, R1 and R2 are sampled in parallel and merged into a single interleaved output in the same step (via `seqtk mergepe`); the read count required to compute the sampling fraction is provided by the upstream `COUNT_READS` task. The interleaved subset reads then undergo adapter trimming and quality screening with [FASTP](https://github.com/OpenGene/fastp).
 
 [^target]: More precisely, the subworkflow uses the total read count and target read number to calculate a fraction *p* of the input reads that should be retained, then keeps each read from the input data with probability *p*. Since each read is kept or discarded independently of the others, the final read count will not exactly match the target number; however, it will be very close for sufficiently large input files.
 
@@ -70,14 +71,15 @@ config:
   layout: horizontal
 ---
 flowchart LR
-A(Raw paired reads) --> B[Interleave reads]
-B --> C[Subset with Seqtk]
-C --> D[Trim with FASTP]
-C --> E(Subset reads)
-D --> F(Subset trimmed reads)
+A(Raw paired reads) --> B[Subset and interleave with Seqtk]
+G(Read count from COUNT_READS) --> B
+B --> C[Trim with FASTP]
+B --> D(Subset reads)
+C --> E(Subset trimmed reads)
 style A fill:#fff,stroke:#000
+style G fill:#fff,stroke:#000
+style D fill:#000,color:#fff,stroke:#000
 style E fill:#000,color:#fff,stroke:#000
-style F fill:#000,color:#fff,stroke:#000
 ```
 
 ## Helper subworkflows
@@ -201,8 +203,8 @@ config:
   layout: horizontal
 ---
 flowchart LR
-A(Raw reads) --> B["BBDuk <br> (viral index)"]
-B --> M(BBDuk-screened raw reads)
+A(Raw reads) --> B["Nucleaze <br> (viral k-mer index)"]
+B --> M(K-mer-screened raw reads)
 B --> C[FASTP]
 C --> E["Bowtie2 <br> (viral index)"]
 E --> F["Bowtie2 <br> (human index)"]
@@ -228,7 +230,7 @@ end
 style A fill:#fff,stroke:#000
 style K fill:#000,color:#fff,stroke:#000
 ```
-1. To begin with, the raw reads are screened against a database of vertebrate-infecting viral genomes generated from Genbank by the index workflow. This initial screen is performed using [BBDuk](https://jgi.doe.gov/data-and-tools/software-tools/bbtools/bb-tools-user-guide/bbduk-guide/), which flags any read that contains at least one 24-mer matching any vertebrate-infecting viral genome. The purpose of this initial screen is to rapidly and sensitively identify putative vertebrate-infecting viral reads while discarding the vast majority of non-viral reads, reducing the cost associated with the rest of this phase.
+1. To begin with, the raw reads are screened against a database of vertebrate-infecting viral genomes generated from Genbank by the index workflow. This initial screen is performed using [Nucleaze](https://github.com/jackdougle/nucleaze) against a pre-built k-mer index produced by INDEX, flagging any read that contains at least one 24-mer matching any vertebrate-infecting viral genome. The purpose of this initial screen is to rapidly and sensitively identify putative vertebrate-infecting viral reads while discarding the vast majority of non-viral reads, reducing the cost associated with the rest of this phase.
 2. Surviving reads undergo adapter and quality trimming with [FASTP](https://github.com/OpenGene/fastp) to remove adapter contamination and low-quality/low-complexity reads.
 3. Next, reads are aligned to the previously-mentioned database of vertebrate-infecting viral genomes with [Bowtie2](https://bowtie-bio.sourceforge.net/bowtie2/index.shtml) using quite permissive parameters that allow multiple alignments to be returned and are designed to capture as many putative vertebrate viral reads as possible. The output files are processed to generate new read files containing any read pair for which at least one read matches the vertebrate viral database.
 4. The output of the previous step is passed to a further filtering step, in which reads matching a series of common contaminant sequences are removed. This is done by aligning surviving reads to these contaminants using Bowtie2 in series. Contaminants to be screened against include reference genomes from human, cow, pig, carp, mouse and *E. coli*, as well as various genetic engineering vectors.

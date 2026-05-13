@@ -243,7 +243,7 @@ By default, all changes are made on individual branches, and merged into `dev`. 
 Only pipeline maintainers should author a new release. The process for going through a new release is as follows:
 
 1. Stop approving new feature PRs into `dev`.
-2. Create a release branch `release/USER_HANDLE/X.Y.Z.W` (see [here](./versioning.md) for information on our versioning system). In this branch:
+2. Create a release branch `release/USER_HANDLE/X.Y.Z.W` (see [here](./versioning.md) for information on our versioning system). In this branch (if using Claude Code, the `prepare-release` skill at `.claude/skills/prepare-release/` automates steps 2.1 and 2.2):
 
     1. Review and consolidate additions to `CHANGELOG.md`; these often get somewhat disjointed across many small PRs to `dev`.
     2. Update the version number in `CHANGELOG.md` and `pyproject.toml` to remove any `-dev` suffix and reflect the magnitude of changes (again, see [here](./versioning.md) for information on the versioning schema).
@@ -251,7 +251,7 @@ Only pipeline maintainers should author a new release. The process for going thr
 
         1. Check for new releases of reference databases and update `configs/index.config`[^refs].
         2. Update `index-min-pipeline-version` and `pipeline-min-index-version` in the `[tool.mgs-workflow]` section of `pyproject.toml` to reflect any changes to compatibility restrictions.
-        3. Run the "Rebuild benchmark index" workflow in GitHub Actions to generate a new index at `s3://nao-testing/mgs-workflow-test/index-latest/`. See [CI documentation](./ci.md#benchmark-index-management) for details.
+        3. Rebuild the benchmark index at `s3://nao-testing/mgs-workflow-test/index-latest/`; see the [Benchmark index age check](./ci.md#benchmark-index-age-check-check-index-ageyml) section of `ci.md`.
 
 3. Open a PR to merge the release branch into `dev`, wait for CI tests to complete, and resolve any failing tests. Then:
 
@@ -263,7 +263,7 @@ Only pipeline maintainers should author a new release. The process for going thr
 
 4. Once all checks pass, merge the PR into main **without squashing**[^approval]. A Github Actions workflow will automatically create and tag a new release and reset other branches (`dev` & `ci-test`, plus `stable` if only the fourth version number has changed) to match `main`.
 
-    1. Non-point releases are NOT automatically merged to `stable`. To update `stable` with a non-point release, use the "Manually reset stable branch to main" workflow in GitHub Actions (`manual-reset.yml`). This requires typing "reset stable" as confirmation.
+    1. Non-point releases are NOT automatically merged to `stable`. To update `stable` with a non-point release, use the "Manually reset stable branch to main" workflow in GitHub Actions (`manual-reset.yml`); see the [Manual stable reset](./ci.md#manual-stable-reset-manual-resetyml) section of `ci.md` for the protections gating that workflow.
 
 [^refs]: For reference genomes, check for updated releases for human, cow, pig, and mouse; do not update carp; update *E. coli* if there is a new release for the same strain. Check [SILVA](https://www.arb-silva.de/download/archive/) for rRNA databases and [here](https://benlangmead.github.io/aws-indexes/k2) for Kraken2 databases.
 [^approval]: Note that, to streamline the release process, we no longer require an approving review for PRs into `main`. (We still require an approving review for `release` PRs into `dev`.)

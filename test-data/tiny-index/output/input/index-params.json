@@ -21,6 +21,7 @@
     "virus_taxid": "10239",
     "viral_taxids_exclude_hard": "2731619 2732413 2732411",
     "host_taxa_screen": "vertebrate human",
+    "nucleaze_k": 24,
     "kraken_memory": "",
     "classify_dedup_subset": "",
     "trace_timestamp": "2026-01-21_13-48-36",

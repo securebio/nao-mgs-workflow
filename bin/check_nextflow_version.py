@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Check that the pinned Nextflow version is the latest release by
-comparing against the latest release from GitHub.
+Check the pinned Nextflow version against the highest non-ignored upstream
+release.
 """
 
 #=============================================================================
@@ -11,34 +11,36 @@ comparing against the latest release from GitHub.
 import argparse
 import json
 import re
+import sys
 import urllib.request
+from datetime import date
 from pathlib import Path
+
+from packaging.version import Version
 
 #=============================================================================
 # Constants
 #=============================================================================
 
-DEFAULT_CONFIG_PATH = Path(__file__).parent.parent / "configs" / "profiles.config"
-DEFAULT_GITHUB_API_URL = (
-    "https://api.github.com/repos/nextflow-io/nextflow/releases/latest"
-)
-GITHUB_RELEASES_URL = (
+REPO_ROOT = Path(__file__).parent.parent
+DEFAULT_CONFIG_PATH = REPO_ROOT / "configs" / "profiles.config"
+DEFAULT_IGNORE_PATH = REPO_ROOT / ".nextflowignore"
+DEFAULT_RELEASES_URL = (
     "https://api.github.com/repos/nextflow-io/nextflow/releases"
 )
 
-# Known broken Nextflow versions that should be excluded from version checks.
-# Add versions here when they have critical bugs that affect the pipeline.
-EXCLUDED_VERSIONS = {
-    "25.10.3",  # AWS Batch job submission issues
-}
-
 # Pattern to extract version from config: nextflowVersion = '!>=25.10.0'
 NEXTFLOW_VERSION_PATTERN = re.compile(
-    r"nextflowVersion\s*=\s*['\"]!>=(\d+\.\d+\.\d+)['\"]"
+    r"nextflowVersion\s*=\s*['\"]!>=(\d+\.\d+\.\d+)['\"]",
 )
 
 # Pattern to validate semantic version (X.Y.Z)
 SEMVER_PATTERN = re.compile(r"^\d+\.\d+\.\d+$")
+
+# One .nextflowignore entry: `<version>` or `<version> exp:YYYY-MM-DD`.
+IGNORE_ENTRY_PATTERN = re.compile(
+    r"^(?P<version>\d+\.\d+\.\d+)(?:\s+exp:(?P<exp>\d{4}-\d{2}-\d{2}))?\s*$",
+)
 
 #=============================================================================
 # Helper functions
@@ -46,11 +48,11 @@ SEMVER_PATTERN = re.compile(r"^\d+\.\d+\.\d+$")
 
 def validate_semver(version: str, source: str) -> str:
     """
-    Validate that a version string matches semantic versioning format.
+    Validate that a version string matches X.Y.Z semantic versioning.
 
     Args:
         version (str): The version string to validate.
-        source (str): The source of the version string.
+        source (str): The source of the version string (for error messages).
 
     Returns:
         str: The validated version string.
@@ -58,93 +60,152 @@ def validate_semver(version: str, source: str) -> str:
     if not SEMVER_PATTERN.match(version):
         raise ValueError(
             f"Invalid version format from {source}: {version!r}. "
-            "Expected semantic version: X.Y.Z"
+            "Expected semantic version: X.Y.Z",
         )
     return version
 
 def get_pinned_version(config_path: Path) -> str:
     """
-    Extract the pinned Nextflow version from a config file.
+    Extract the pinned Nextflow version from a Nextflow config file.
 
     Args:
-        config_path (Path): The path to the config file.
+        config_path (Path): Path to the config file (e.g. profiles.config).
 
     Returns:
-        str: The pinned Nextflow version.
+        str: The pinned Nextflow version (X.Y.Z).
     """
     content = config_path.read_text()
     match = NEXTFLOW_VERSION_PATTERN.search(content)
     if not match:
         raise ValueError(
             f"Could not find nextflowVersion in {config_path}. "
-            "Expected format: nextflowVersion = '!>=X.Y.Z'"
+            "Expected format: nextflowVersion = '!>=X.Y.Z'",
         )
     return validate_semver(match.group(1), str(config_path))
 
-def get_latest_version(api_url: str) -> str:
+def parse_nextflowignore(
+    ignore_path: Path,
+    today: date | None = None,
+) -> set[str]:
     """
-    Fetch the latest Nextflow release version from GitHub API.
+    Parse a .nextflowignore file and return the active ignore set.
+
+    Each non-comment, non-blank line must match `<X.Y.Z>` optionally followed
+    by ` exp:YYYY-MM-DD`. Entries with an expiration in the past are dropped
+    (with a warning to stderr) so stale ignores cannot accumulate silently.
 
     Args:
-        api_url (str): The GitHub API URL to fetch the latest release.
+        ignore_path (Path): Path to the .nextflowignore file. A missing file
+            is treated as an empty ignore set.
+        today (date | None): Reference date for expiration checks; defaults to
+            the current date. Injected for testability.
 
     Returns:
-        str: The latest Nextflow release version.
+        set[str]: Currently active ignored version strings (X.Y.Z).
+    """
+    if not ignore_path.exists():
+        return set()
+    today = today if today is not None else date.today()
+    currently_ignored: set[str] = set()
+    for line_number, raw in enumerate(ignore_path.read_text().splitlines(), 1):
+        line = raw.split("#", 1)[0].strip()
+        if not line:
+            continue
+        match = IGNORE_ENTRY_PATTERN.match(line)
+        if not match:
+            raise ValueError(
+                f"Malformed entry in {ignore_path}:{line_number}: {line!r}. "
+                "Expected '<X.Y.Z>' or '<X.Y.Z> exp:YYYY-MM-DD'.",
+            )
+        version = match.group("version")
+        exp_str = match.group("exp")
+        if exp_str is None:
+            currently_ignored.add(version)
+            continue
+        try:
+            exp_date = date.fromisoformat(exp_str)
+        except ValueError as err:
+            raise ValueError(
+                f"Invalid expiration date in {ignore_path}:{line_number}: "
+                f"{exp_str!r}.",
+            ) from err
+        if exp_date < today:
+            print(
+                f"WARNING: ignore for Nextflow {version} expired on "
+                f"{exp_date}; treating as unignored. "
+                f"Remove or extend {ignore_path}:{line_number}.",
+                file=sys.stderr,
+            )
+            continue
+        currently_ignored.add(version)
+    return currently_ignored
+
+def fetch_releases(api_url: str) -> list[str]:
+    """
+    Fetch published, non-draft, non-prerelease Nextflow releases from GitHub.
+
+    Args:
+        api_url (str): GitHub `/releases` endpoint to query.
+
+    Returns:
+        list[str]: Release version strings (X.Y.Z), in API order.
     """
     request = urllib.request.Request(
         api_url,
         headers={"Accept": "application/vnd.github.v3+json"},
     )
     with urllib.request.urlopen(request, timeout=30) as response:
-        data = json.loads(response.read().decode())
-    tag = data["tag_name"].removeprefix("v")
-    return validate_semver(tag, api_url)
-
-
-def get_latest_non_excluded_version(excluded: set[str]) -> str:
-    """
-    Fetch the latest Nextflow release version that is not in the excluded set.
-
-    Args:
-        excluded (set[str]): Set of version strings to exclude.
-
-    Returns:
-        str: The latest non-excluded Nextflow release version.
-    """
-    request = urllib.request.Request(
-        GITHUB_RELEASES_URL,
-        headers={"Accept": "application/vnd.github.v3+json"},
-    )
-    with urllib.request.urlopen(request, timeout=30) as response:
         releases = json.loads(response.read().decode())
-
+    versions: list[str] = []
     for release in releases:
         if release.get("prerelease") or release.get("draft"):
             continue
         tag = release["tag_name"].removeprefix("v")
-        try:
-            version = validate_semver(tag, GITHUB_RELEASES_URL)
-        except ValueError:
-            continue
-        if version not in excluded:
-            return version
+        if SEMVER_PATTERN.match(tag):
+            versions.append(tag)
+    return versions
 
-    raise ValueError(
-        f"Could not find any non-excluded release. Excluded: {excluded}"
-    )
-
-def compare_versions(version1: str, version2: str) -> None:
+def select_target_version(releases: list[str], ignored: set[str]) -> str:
     """
-    Compare two version strings, raising an error if they
-    do not match.
+    Pick the highest-semver release that is not in the ignore set.
 
     Args:
-        version1 (str): The first version string to compare.
-        version2 (str): The second version string to compare.
+        releases (list[str]): Candidate release version strings.
+        ignored (set[str]): Currently active ignored version strings.
+
+    Returns:
+        str: The chosen target version.
     """
-    if version1 != version2:
+    eligible = [v for v in releases if v not in ignored]
+    if not eligible:
+        if not releases:
+            raise ValueError("No Nextflow release candidates supplied.")
         raise ValueError(
-            f"Version mismatch: {version1} != {version2}"
+            f"No eligible Nextflow release: all {len(releases)} candidates "
+            f"are in the ignore set ({sorted(ignored)}).",
+        )
+    return max(eligible, key=Version)
+
+def check_pinned_against_target(pinned: str, latest_eligible: str) -> None:
+    """
+    Verify that the pinned version equals the latest eligible release.
+
+    Strict equality is intentional: if `pinned` differs from the latest
+    eligible release we either need to bump the pin or add a justification
+    to .nextflowignore. A mismatch where `pinned` is *higher* than the
+    latest eligible release typically indicates a stale ignore entry for
+    the version we are pinned to.
+
+    Args:
+        pinned (str): The pinned Nextflow version from profiles.config.
+        latest_eligible (str): The selected target — the highest-semver
+            release not currently ignored.
+    """
+    if pinned != latest_eligible:
+        raise ValueError(
+            f"Version mismatch: pinned {pinned} != latest eligible "
+            f"{latest_eligible}. Bump configs/profiles.config to match, or "
+            "add an entry to .nextflowignore with a justification.",
         )
 
 def parse_args() -> argparse.Namespace:
@@ -153,7 +214,13 @@ def parse_args() -> argparse.Namespace:
     """
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", type=Path, default=DEFAULT_CONFIG_PATH)
-    parser.add_argument("--api-url", default=DEFAULT_GITHUB_API_URL)
+    parser.add_argument("--ignore-file", type=Path, default=DEFAULT_IGNORE_PATH)
+    parser.add_argument(
+        "--releases-url",
+        default=DEFAULT_RELEASES_URL,
+        help="Nextflow releases endpoint (override is intended for tests; "
+        "production runs should use the default).",
+    )
     return parser.parse_args()
 
 #=============================================================================
@@ -167,18 +234,17 @@ def main() -> None:
     args = parse_args()
     pinned = get_pinned_version(args.config)
     print(f"Pinned Nextflow version: {pinned}")
-    latest = get_latest_version(args.api_url)
-    print(f"Latest Nextflow version: {latest}")
 
-    if latest in EXCLUDED_VERSIONS:
-        print(f"Latest version {latest} is excluded (known issues)")
-        target = get_latest_non_excluded_version(EXCLUDED_VERSIONS)
-        print(f"Latest non-excluded version: {target}")
-    else:
-        target = latest
+    ignored = parse_nextflowignore(args.ignore_file)
+    if ignored:
+        print(f"Currently ignored versions: {sorted(ignored)}")
 
-    compare_versions(pinned, target)
-    print("OK: Pinned version matches target release")
+    releases = fetch_releases(args.releases_url)
+    latest_eligible = select_target_version(releases, ignored)
+    print(f"Latest eligible Nextflow version: {latest_eligible}")
+
+    check_pinned_against_target(pinned, latest_eligible)
+    print("OK: Pinned version is current")
 
 if __name__ == "__main__":
     main()

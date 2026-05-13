@@ -13,6 +13,6 @@ process FILTER_VIRAL_GENBANK_METADATA {
         path("${name_pattern}-paths.csv"), emit: path
     script:
         """
-        filter-viral-genbank-metadata.py ${metadata_db} ${virus_db} "${host_taxa}" ${name_pattern}-metadata-filtered.tsv.gz ${name_pattern}-accessions.csv ${name_pattern}-paths.csv
+        filter_viral_genbank_metadata.py ${metadata_db} ${virus_db} "${host_taxa}" ${name_pattern}-metadata-filtered.tsv.gz ${name_pattern}-accessions.csv ${name_pattern}-paths.csv
         """
 }

@@ -4,12 +4,6 @@
 
 When attempting to run a released version of the pipeline, the most common sources of errors are AWS permission issues. Before debugging a persistent error in-depth, make sure you have all the permissions required. When running the pipeline on AWS Batch, the necessary permissions are specified in [our Batch tutorial](./batch.md#step-0-set-up-your-aws-credentials).
 
-Once you've verified you have the required permissions, make sure Nextflow has access to your AWS credentials (if not you may get `AccessDenied` errors):
-
-```
-eval "$(aws configure export-credentials --format env)"
-```
-
 ## Docker image failures
 
 Another common issue is for processes to fail with some variation of the following Docker-related error:

@@ -1,5 +1,16 @@
-# v3.2.1.5-dev
+# v3.2.2.0-dev
 
+- Tighten protection on the manual-reset workflow by gating its `reset-stable` job on the GitHub `stable-reset` environment (restricted to `main` and human approval), and remove the unused `rebuild-benchmark-index.yml` workflow along with its now-dangling `workflow_call` triggers in `nf-test-workflows-index.yml` / `check-index-age.yml` and references in `docs/ci.md` / `docs/installation.md`. Add a "Manual stable reset" section to `docs/ci.md` documenting the workflow and its `stable-reset` environment gate, and replace the now-stale "Rebuild benchmark index" pointer in `docs/developer.md` with guidance on manual rebuild.
+- Replace the BBDuk-based viral k-mer pre-screen in `EXTRACT_VIRAL_READS_SHORT` with [Nucleaze](https://github.com/jackdougle/nucleaze). The BBDuk-based ribosomal screen in `PROFILE` is unchanged (Nucleaze has no `minkmerfraction` equivalent yet). Bumps `pipeline-min-index-version` to `3.2.2.0`.
+    - INDEX: new `NUCLEAZE_INDEX` process builds `virus-genomes-masked.nucleaze.bin` once, alongside the existing bowtie2/minimap2 viral indexes.
+    - RUN reads `nucleaze_k` from the index's `input/index-params.json` so the screen-time `k` always matches the index it screens against.
+    - `NUCLEAZE` exposes `keep_match` / `keep_nomatch` flags (default true); the viral path passes `keep_nomatch: false` to skip compressing the discarded majority.
+    - `NUCLEAZE` pipes gzipped inputs through pigz FIFOs instead of letting needletail decompress them single-threaded internally; ~22 % wall reduction on the process (Illumina-100M samples, 8-core sandbox). Input-side pigz is capped at 2 threads since pigz cannot extract more parallelism from an ordinary single-stream gz. Module test covers the gz-input FIFO path.
+    - Removes the unused `BBDUK_HITS_INTERLEAVE` process and its test.
+    - Internal channel/param renames: `bbduk_match`/`bbduk_trimmed`/`min_kmer_hits`/`bbduk_suffix` → `kmer_match`/`kmer_trimmed`/`minhits`/`kmer_suffix`.
+- Add `pigz` to the `rust-tools` container.
+- Add `-X 850` to all short-read bowtie2 invocations (viral and contaminant filtering) so that concordantly paired inserts up to 850 bp are detected, up from the bowtie2 default of 500 bp.
+- Raise the minimum read length in `FASTP` from the default 15 bp to 35 bp (`--length_required 35`). Reads shorter than 35 bp cannot be meaningfully classified by any downstream kmer-based tool (BBDuk k=27, Kraken2 k~35, Bowtie2 ~34 bp floor); previously these reads passed QC but were systematically unclassifiable, deflating apparent rRNA fractions and other composition estimates.
 - Clean up Nextflow code to conform to strict syntax in preparation for adding `nextflow lint` to CI. No behavioral changes.
     - Replace `env BAREWORD` with `env('STRING')` in process output declarations.
     - Rename deprecated `Channel.X` factory calls to `channel.X`.
@@ -7,6 +18,35 @@
     - Restructure helper closures in `loadDownstreamData` and `clusterViralAssignments` to avoid top-level statements: in `loadDownstreamData`, convert the local `resolvePath`/`resolveDir` closures into top-level `def fn(...)` functions taking `input_base_dir` as an explicit parameter; in `clusterViralAssignments`, move the `listFiles` helper inside the workflow's `main:` block as a local closure.
     - Drop the unused `start_time_str` parameter from `PREPARE_INPUT_LOGGING` (and its argument at the RUN call site); prefix the unused `sample` closure parameter in `splitViralTsvBySelectedTaxid` with `_`.
     - Use `sentinel_ch.sentinel` rather than `WRITE_SENTINEL_RUN.out.sentinel` in `workflows/run.nf:54` so the assigned variable is referenced.
+
+# v3.2.1.5
+
+## Performance
+
+- Replace single-threaded gzip/zcat with pigz across `EXTRACT_VIRAL_READS_SHORT` modules (`BBDUK`, `BBDUK_HITS_INTERLEAVE`, `BOWTIE2`, `FASTP`, `SORT_FASTQ`, `SORT_FILE`); cuts cohort `RUN` cpu-hours by ~22% on the Illumina_100M benchmark. Adds `pigz=2.8` to the `bbtools`, `bowtie2_samtools`, `fastp`, and `coreutils` containers. (#774)
+- Combine `SUBSET_READS_PAIRED_TARGET` with the previously-separate `INTERLEAVE_FASTQ` step into a single FIFO-based process that reads each input once and emits interleaved output via `seqtk mergepe`; the upstream `COUNT_READS` TSV is plumbed in so the in-process read-counting pass is eliminated. Output FASTQs are byte-identical to the previous chain. Adds `pigz=2.8` to the `seqtk` container. (#775)
+- Swap `zcat` for `rapidgzip --count-lines` in `COUNT_READS` for ~3-4× faster gzip inflate at single-thread; allocation stays at `single` (1 cpu). Adds `rapidgzip=0.15.2` to the `coreutils_gzip_gawk` container. The broader pigz→rapidgzip sweep on other decompression hot paths is tracked in #776. (#777)
+
+## Bugfixes
+
+- Fix `samtools view` failure on duplicate sequence IDs in the concatenated viral genome FASTA produced by `CONCATENATE_GENOME_FASTA`. NCBI `datasets` sometimes returns superseded ("previous") assembly versions alongside current ones, causing duplicate accessions. (#758)
+    - `DOWNLOAD_VIRAL_GENOMES` now emits an `assembly_status` column in the per-taxid metadata TSV, which `PREPARE_VIRAL_METADATA` flows through to `FILTER_VIRAL_GENBANK_METADATA`; only rows with `assembly_status == 'current'` are kept.
+    - `CONCATENATE_GENOME_FASTA` now runs `seqkit rmdup --by-name` after concatenation as a defense-in-depth check (process switched from the `seqtk` to the `seqkit` container).
+- Fix `CONCATENATE_GENOME_FASTA` `SIGPIPE` (exit 141) on large genome directories by adding an `|| true` escape path to the `head` call. (#779)
+
+## Cleanup and best practice
+
+- Extract the chained `chain_workflows.py` invocation shared by both benchmark workflows into a reusable composite action at `.github/actions/run-benchmark/`, and add a manual `benchmark-on-demand.yml` workflow (`workflow_dispatch` only) that calls the action with a `dataset:` choice input. The PR-triggered `benchmark-illumina-100M.yml` and `benchmark-ont-100k.yml` become thin callers of the same action; their behavior on PRs to `main`/`stable` is unchanged. Per-run `--base-dir` is now keyed by `${{ github.run_id }}` so manual triggers and auto-on-PR runs don't clobber each other's S3 outputs. (#773)
+- Default `fusion.exportStorageCredentials = false` in the `standard`, `batch`, and `test_run` profiles, returning to Nextflow's framework default. Users who pass `--batch_job_role <ARN>` see no change; users running on AWS Batch without a job role now rely on the EC2 instance role for S3 access (per the existing `docs/batch.md` setup). The `ec2_s3` profile is unchanged. (#764)
+- Improve Nextflow version checking: replace the hardcoded `EXCLUDED_VERSIONS` constant in `bin/check_nextflow_version.py` with a `.nextflowignore` config file supporting permanent and time-limited (`exp:YYYY-MM-DD`) ignores, and switch target selection to highest-semver-among-non-ignored. Pinned Nextflow version stays at `25.10.4`; `25.10.5` is permanently ignored because it was skipped over in bioconda, leaving our conda-based provisioning automations unable to install it. Also ignores `26.04.0` and `26.04.1` until 2026-06-01. (#760, #793)
+- Register `.github/workflows/build-containers.yml` as a no-op stub on dev so the workflow file exists on main after the next dev→main release; GitHub's `workflow_dispatch` API requires this even when dispatching against a non-default ref. The real build-and-push implementation rides on companion PR #792. (#793)
+- Add new HIGH-severity Trivy CVE waivers for libcap2, libgnutls30 (including TLS-PSK CVE-2026-42010/42011 and CVE-2026-3833 / -33845 / -33846), Pillow (multiqc), rustls-webpki (Polars in multiqc), and five Go stdlib 1.23.4 CVEs in the `ncbi_datasets` container. No Debian/upstream fix is available for any, and none is exercised by our pipeline. (#755, #759, #762, #774, #778)
+
+## Coding agents
+
+- Add `prepare-release` skill (`.claude/skills/prepare-release/`) for cutting the release PR into dev described in `docs/developer.md` § "New releases" step 2. The skill reads dev's accumulated `-dev` CHANGELOG bullets, classifies the overall bump level per `docs/versioning.md`, rewrites the bullets as a polished release note mirroring the v3.2.1.0 / v3.2.1.3 grouped structure, updates `pyproject.toml` + the CHANGELOG heading, and opens a `release/<handle>/<version>` PR into dev. The lighter `version-bump` agent remains the right tool for mid-stream bumps. (#794)
+    - Extend `bin/check_version.py` release-branch detection to recognize `coding-agent/release/<version>` in addition to `release/<handle>/<version>`, since the `securebio-coding-agent` App can only push under `coding-agent/*`.
+- Add `.claude/pr-examples/` directory containing worked examples of well-structured PR descriptions for this repo, with a `CLAUDE.md` reference pointing contributors at it. (#767)
 
 # v3.2.1.4
 

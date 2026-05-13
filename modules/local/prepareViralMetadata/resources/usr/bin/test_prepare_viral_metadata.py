@@ -8,11 +8,11 @@ import pytest
 from prepare_viral_metadata import build_species_taxid_map, match_genomes_to_accessions, prepare_metadata
 
 ACCS = ["GCA_000001.1", "GCA_000002.1", "GCA_000003.1"]
-META_HEADER = ["assembly_accession", "taxid", "organism_name", "source_database"]
+META_HEADER = ["assembly_accession", "taxid", "organism_name", "source_database", "assembly_status"]
 META_ROWS = [
-    ["GCA_000001.1", "12345", "Virus A", "GenBank"],
-    ["GCA_000002.1", "67890", "Virus B", "GenBank"],
-    ["GCA_000003.1", "99999", "Virus C", "RefSeq"],
+    ["GCA_000001.1", "12345", "Virus A", "GenBank", "current"],
+    ["GCA_000002.1", "67890", "Virus B", "GenBank", "current"],
+    ["GCA_000003.1", "99999", "Virus C", "RefSeq", "current"],
 ]
 DB_HEADER = ["taxid", "taxid_species", "name"]
 DB_ROWS = [["12345", "12345", "Virus A"], ["67890", "67000", "Virus B"], ["99999", "99000", "Virus C"]]
@@ -105,13 +105,13 @@ class TestPrepareMetadata:
 
     def test_missing_genome_drops_row(self, tmp_path: Path, standard_inputs: tuple[Path, Path, Path]) -> None:
         _, db_path, _ = standard_inputs
-        meta = _write_tsv(tmp_path / "m.tsv", META_HEADER, [META_ROWS[0], ["GCA_MISSING.1", "67890", "B", "GenBank"]])
+        meta = _write_tsv(tmp_path / "m.tsv", META_HEADER, [META_ROWS[0], ["GCA_MISSING.1", "67890", "B", "GenBank", "current"]])
         gdir = _make_genome_dir(tmp_path / "sub", ["GCA_000001.1"])
         rows = _run_prepare(tmp_path / "run", meta, db_path, gdir)
         assert len(rows) == 1 and rows[0]["assembly_accession"] == "GCA_000001.1"
 
     def test_unmapped_taxid_gives_empty_species(self, tmp_path: Path) -> None:
-        meta = _write_tsv(tmp_path / "m.tsv", META_HEADER, [["GCA_000001.1", "00000", "X", "GenBank"]])
+        meta = _write_tsv(tmp_path / "m.tsv", META_HEADER, [["GCA_000001.1", "00000", "X", "GenBank", "current"]])
         db = _write_tsv(tmp_path / "db.tsv", DB_HEADER, [["12345", "12345", "V"]])
         rows = _run_prepare(tmp_path / "run", meta, db, _make_genome_dir(tmp_path, ["GCA_000001.1"]))
         assert rows[0]["species_taxid"] == ""
