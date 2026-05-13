@@ -149,25 +149,14 @@ CVE-2026-42010 exp:2026-06-30
 #   https://security-tracker.debian.org/tracker/CVE-2026-42011
 CVE-2026-42011 exp:2026-06-30
 
-# ── urllib3 2.6.3 transitively pulled in by awscli=2.34.9 in blast,
-# bowtie2_samtools, kraken2, minimap2_samtools containers ──
-# CVE-2026-44431 (HIGH): sensitive headers forwarded across origins in proxied
-#   low-level redirects (PoolManager.urlopen).
-# CVE-2026-44432 (HIGH): decompression-bomb safeguards bypassed in parts of
-#   the streaming API (raw .stream() / .read_chunked() consumers).
-# Both are fixed in urllib3>=2.7.0, but every current conda-forge build of
-# awscli (through at least 2.34.45) pins `urllib3 >=1.25.4,<=2.6.3`, so no
-# reachable conda-forge build of awscli ships the fix.
-# In our pipeline these awscli-bearing containers only run `update_blastdb.pl
-# --source aws` (and equivalents for minimap2/bowtie2 ref downloads), which
-# fetch over HTTPS from known NCBI/AWS endpoints without an HTTP proxy and
-# without consuming attacker-controlled compressed streams — so neither
-# vulnerability is reachable from our usage. The multiqc container, where
-# urllib3 is *not* awscli-pinned, is being patched in the same PR via an
-# explicit urllib3>=2.7 pin in containers/multiqc.yml.
-# Re-eval trigger: a conda-forge awscli release that bumps the urllib3 cap
-# to permit >=2.7.0. Check with:
-#   curl -s https://api.anaconda.org/release/conda-forge/awscli/<ver> \
-#     | jq '.distributions[0].attrs.depends[] | select(test("urllib3"))'
+# ── urllib3 2.6.3 transitive via awscli=2.34.9 in blast, bowtie2_samtools,
+# kraken2, minimap2_samtools ──
+# Our awscli usage is `update_blastdb.pl --source aws` and equivalents — HTTPS
+# to known NCBI/AWS endpoints, no proxy, no attacker-controlled compressed
+# streams; neither CVE is reachable. Fix exists in urllib3>=2.7.0 but every
+# current conda-forge awscli build pins urllib3<=2.6.3; re-eval when the
+# feedstock relaxes the cap.
+# CVE-2026-44431 (HIGH): cross-origin header leak in proxied low-level redirects.
 CVE-2026-44431 exp:2026-06-30
+# CVE-2026-44432 (HIGH): decompression-bomb safeguard bypass in streaming reads.
 CVE-2026-44432 exp:2026-06-30

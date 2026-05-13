@@ -5,9 +5,5 @@ channels:
   - bioconda
 dependencies:
   - bioconda::multiqc=1.33
-  # Explicit urllib3 pin to override the version transitively pulled in via
-  # multiqc → requests (which allows urllib3 >=1.21.1,<3). multiqc 1.33 resolves
-  # urllib3==2.6.3, which has HIGH CVE-2026-44431 (cross-origin sensitive-header
-  # leak in proxied low-level redirects) and CVE-2026-44432 (decompression-bomb
-  # safeguard bypass in parts of the streaming API). Both are fixed in 2.7.0.
+  # Forces urllib3 2.7.0 (came in transitively at 2.6.3) to address CVE-2026-44431, CVE-2026-44432.
   - conda-forge::urllib3=2.7.0
