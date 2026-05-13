@@ -179,7 +179,7 @@ If multiple related CVEs share an assessment (e.g. several Go-stdlib CVEs in the
 The PR body has two parts: a temporary rebuild-handoff callout at the top (only when there's at least one Patch outcome), and the persistent Trivy-triage assessment block. Use this as the body of the *new* triage PR (per the branching note above; the only exception is the PR-local-CVE case, where you instead append the assessment block under a `# Trivy triage` heading on the original PR):
 
 ```markdown
-> ⚠️ **Rebuild required before merge — `scan-containers` is red until then.**
+> **Rebuild required before merge — `scan-containers` is red until then.**
 >
 > The triage below patched <N> CVE(s) by editing container yml(s), but the
 > agent role on this sandbox cannot push rebuilt images to ECR. To finalize:
