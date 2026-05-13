@@ -92,7 +92,7 @@ container-base-image = "mambaorg/micromamba@sha256:3955d0f1987accbcc382c37758a3d
 # Minimum pipeline version required to use indexes built with this pipeline version
 index-min-pipeline-version = "2.8.1.2"
 # Minimum index version required by this pipeline version
-pipeline-min-index-version = "3.2.1.5"
+pipeline-min-index-version = "3.2.2.0"
 # Maximum age (in days) for the benchmark index before CI flags it as stale
 max-stable-index-age-days = 90
 
