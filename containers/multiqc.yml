@@ -10,4 +10,4 @@ dependencies:
   # urllib3==2.6.3, which has HIGH CVE-2026-44431 (cross-origin sensitive-header
   # leak in proxied low-level redirects) and CVE-2026-44432 (decompression-bomb
   # safeguard bypass in parts of the streaming API). Both are fixed in 2.7.0.
-  - conda-forge::urllib3>=2.7
+  - conda-forge::urllib3=2.7.0
