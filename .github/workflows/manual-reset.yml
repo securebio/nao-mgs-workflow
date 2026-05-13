@@ -16,6 +16,7 @@ permissions:
 jobs:
   reset-stable:
     runs-on: ubuntu-latest
+    environment: stable-reset
 
     steps:
       - name: Validate confirmation
