@@ -59,12 +59,12 @@ workflow EXTRACT_VIRAL_READS_SHORT {
             interleaved: true,
             db_download_timeout: params_map.db_download_timeout
         ]
-        par_virus = "--local --very-sensitive-local --score-min G,0.1,19 -k 10"
+        par_virus = "--local --very-sensitive-local --score-min G,0.1,19 -k 10 -X 850"
         bowtie2_virus_params = bowtie_base_params + [par_string: par_virus, suffix: "virus"]
         bowtie2_ch = BOWTIE2_VIRUS(fastp_ch.reads, bt2_virus_index_path, bowtie2_virus_params)
 
         // 4. Filter contaminants
-        par_contaminants = "--local --very-sensitive-local"
+        par_contaminants = "--local --very-sensitive-local -X 850"
         bowtie2_human_params = bowtie_base_params + [par_string: par_contaminants, suffix: "human"]
         human_bt2_ch = BOWTIE2_HUMAN(bowtie2_ch.reads_mapped, bt2_human_index_path, bowtie2_human_params)
         bowtie2_other_params = bowtie_base_params + [par_string: par_contaminants, suffix: "other"]

@@ -159,6 +159,7 @@ Mypy is enforced in CI via `.github/workflows/mypy.yml` — all Python in `bin/`
 
 - Every PR must include a version bump in `pyproject.toml` and a corresponding update to `CHANGELOG.md`. The topmost CHANGELOG heading must match the version in `pyproject.toml`.
 - See `docs/versioning.md` for the full versioning scheme. **Always** use the **version-bump** agent to automate version bumps and changelog entries — do not determine versions manually. The 4-number scheme (Major.Schema.Results.Point) is easy to confuse; the agent reads the versioning rules and determines the appropriate bump level from the branch diff.
+- For **cutting a release** (the maintainer-side process described in `docs/developer.md` § "New releases"), use the **`prepare-release`** skill (`.claude/skills/prepare-release/`). It branches off dev, classifies the accumulated `-dev` CHANGELOG entries for bump level, rewrites them as a polished release note (mirroring the v3.2.1.0 / v3.2.1.3 grouped structure), drops the `-dev` suffix, and opens a `release/<handle>/<version>` PR into dev. The skill is the heavier-weight counterpart to `version-bump`; reach for it specifically when preparing a release, not for mid-stream version bumps.
 
 ### Backwards Compatibility Trackers
 `pyproject.toml` contains two compatibility version fields:
