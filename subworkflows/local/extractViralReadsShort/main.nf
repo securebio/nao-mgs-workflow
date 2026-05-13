@@ -47,11 +47,16 @@ workflow EXTRACT_VIRAL_READS_SHORT {
                                "best_alignment_score", "best_alignment_score_rev",
                                "edit_distance", "edit_distance_rev", "ref_start", 
                                "ref_start_rev", "query_rc", "query_rc_rev", "pair_status"]
-         // 1. Run initial k-mer screen against viral genomes with nucleaze
+         // 1. Run initial k-mer screen against viral genomes with nucleaze.
+         // The viral subworkflow only consumes the match fraction (nomatch
+         // is the contaminant majority and is discarded here), so skip the
+         // compression cost on nomatch.
         nucleaze_params = [
             k: params_map.k,
             minhits: params_map.minhits,
-            suffix: params_map.kmer_suffix
+            suffix: params_map.kmer_suffix,
+            keep_match: true,
+            keep_nomatch: false
         ]
         kmer_ch = NUCLEAZE(reads_ch, viral_kmer_index_path, nucleaze_params)
         // 2. Carry out adapter removal with FASTP

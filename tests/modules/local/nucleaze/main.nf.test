@@ -137,4 +137,103 @@ nextflow_process {
             assert fastq_in_r1.readNames.size() + fastq_in_r2.readNames.size() == ids_nomatch.size()
         }
     }
+
+    test("Should skip nomatch output when keep_nomatch is false") {
+        tag "expect_success"
+        tag "paired_end"
+        tag "keep_flags"
+        when {
+            params {
+                params_map = [
+                    k: "24",
+                    minhits: "1",
+                    suffix: "viral",
+                    keep_match: true,
+                    keep_nomatch: false
+                ]
+            }
+            process {
+                '''
+                input[0] = Channel.of(["test", ["${projectDir}/test-data/tiny-index/reads/R1.fastq", "${projectDir}/test-data/tiny-index/reads/R2.fastq"]])
+                input[1] = "${projectDir}/test-data/tiny-index/output/results/virus-genomes-masked.nucleaze.bin"
+                input[2] = params.params_map
+                '''
+            }
+        }
+        then {
+            assert process.success
+            // Match should be emitted and non-empty
+            assert process.out.match.size() == 1
+            def fastq_match = path(process.out.match[0][1]).fastq
+            assert fastq_match.readNames.size() > 0
+            // Nomatch channel must be empty (output is optional and skipped)
+            assert process.out.nomatch.size() == 0
+            // Stats and input symlinks are unaffected by the flag
+            assert path(process.out.log[0][1]).exists()
+            assert process.out.input[0][1].size() == 2
+        }
+    }
+
+    test("Should skip match output when keep_match is false") {
+        tag "expect_success"
+        tag "paired_end"
+        tag "keep_flags"
+        when {
+            params {
+                params_map = [
+                    k: "24",
+                    minhits: "1",
+                    suffix: "viral",
+                    keep_match: false,
+                    keep_nomatch: true
+                ]
+            }
+            process {
+                '''
+                input[0] = Channel.of(["test", ["${projectDir}/test-data/tiny-index/reads/R1.fastq", "${projectDir}/test-data/tiny-index/reads/R2.fastq"]])
+                input[1] = "${projectDir}/test-data/tiny-index/output/results/virus-genomes-masked.nucleaze.bin"
+                input[2] = params.params_map
+                '''
+            }
+        }
+        then {
+            assert process.success
+            // Nomatch should be emitted and non-empty
+            assert process.out.nomatch.size() == 1
+            def fastq_nomatch = path(process.out.nomatch[0][1]).fastq
+            assert fastq_nomatch.readNames.size() > 0
+            // Match channel must be empty (output is optional and skipped)
+            assert process.out.match.size() == 0
+            // Stats and input symlinks are unaffected by the flag
+            assert path(process.out.log[0][1]).exists()
+            assert process.out.input[0][1].size() == 2
+        }
+    }
+
+    test("Should fail when both keep_match and keep_nomatch are false") {
+        tag "expect_failure"
+        tag "paired_end"
+        tag "keep_flags"
+        when {
+            params {
+                params_map = [
+                    k: "24",
+                    minhits: "1",
+                    suffix: "viral",
+                    keep_match: false,
+                    keep_nomatch: false
+                ]
+            }
+            process {
+                '''
+                input[0] = Channel.of(["test", ["${projectDir}/test-data/tiny-index/reads/R1.fastq", "${projectDir}/test-data/tiny-index/reads/R2.fastq"]])
+                input[1] = "${projectDir}/test-data/tiny-index/output/results/virus-genomes-masked.nucleaze.bin"
+                input[2] = params.params_map
+                '''
+            }
+        }
+        then {
+            assert process.failed
+        }
+    }
 }
