@@ -210,6 +210,45 @@ nextflow_process {
         }
     }
 
+    test("Should handle gzipped input via pigz FIFOs") {
+        tag "expect_success"
+        tag "paired_end"
+        tag "gz_input"
+        when {
+            params {
+                params_map = [
+                    k: "24",
+                    minhits: "1",
+                    suffix: "viral"
+                ]
+            }
+            process {
+                '''
+                input[0] = Channel.of(["test", ["${projectDir}/test-data/tiny-index/reads/R1.fastq.gz", "${projectDir}/test-data/tiny-index/reads/R2.fastq.gz"]])
+                input[1] = "${projectDir}/test-data/tiny-index/output/results/virus-genomes-masked.nucleaze.bin"
+                input[2] = params.params_map
+                '''
+            }
+        }
+        then {
+            assert process.success
+            // Output should be valid interleaved FASTQ
+            def fastq_match = path(process.out.match[0][1]).fastq
+            def fastq_nomatch = path(process.out.nomatch[0][1]).fastq
+            def ids_match = fastq_match.readNames
+            def ids_nomatch = fastq_nomatch.readNames
+            assert ids_match.size() % 2 == 0
+            assert ids_nomatch.size() % 2 == 0
+            assert ids_match.size() > 0
+            assert ids_nomatch.size() > 0
+            // Same read totals as the uncompressed case — pigz FIFO path must
+            // not drop reads.
+            def fastq_in_r1 = path(process.out.input[0][1][0]).fastq
+            def fastq_in_r2 = path(process.out.input[0][1][1]).fastq
+            assert fastq_in_r1.readNames.size() + fastq_in_r2.readNames.size() == ids_match.size() + ids_nomatch.size()
+        }
+    }
+
     test("Should fail when both keep_match and keep_nomatch are false") {
         tag "expect_failure"
         tag "paired_end"

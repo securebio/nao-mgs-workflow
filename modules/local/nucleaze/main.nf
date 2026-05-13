@@ -31,41 +31,10 @@ process NUCLEAZE {
         def r2_gz = r2.toString().endsWith(".gz")
         def r1ExtractCmd = r1_gz ? "zcat" : "cat"
         def r2ExtractCmd = r2_gz ? "zcat" : "cat"
+        def keep_match_str = keep_match ? "true" : "false"
+        def keep_nomatch_str = keep_nomatch ? "true" : "false"
         def empty_match_cmd   = keep_match   ? "gzip -c < /dev/null > ${match_out}"   : ""
         def empty_nomatch_cmd = keep_nomatch ? "gzip -c < /dev/null > ${nomatch_out}" : ""
-        def in1_path = r1_gz ? "\${tmpdir}/in1.fifo" : "${r1}"
-        def in2_path = r2_gz ? "\${tmpdir}/in2.fifo" : "${r2}"
-        def match_target   = keep_match   ? "\${tmpdir}/match.fifo"   : "/dev/null"
-        def nomatch_target = keep_nomatch ? "\${tmpdir}/nomatch.fifo" : "/dev/null"
-        def fifo_cmds = []
-        def pigz_cmds = []
-        def wait_cmds = []
-        // Input-side pigz: nucleaze decompresses gz natively but single-
-        // threaded (needletail/flate2), which is ~22 % of process wall on
-        // gz inputs. Hand it pre-decompressed bytes via a FIFO instead.
-        if (r1_gz) {
-            fifo_cmds << "mkfifo \"\${tmpdir}/in1.fifo\""
-            pigz_cmds << "pigz -dc -p ${task.cpus} < ${r1} > \"\${tmpdir}/in1.fifo\" & DEC1=\$!"
-            wait_cmds << "wait \"\${DEC1}\""
-        }
-        if (r2_gz) {
-            fifo_cmds << "mkfifo \"\${tmpdir}/in2.fifo\""
-            pigz_cmds << "pigz -dc -p ${task.cpus} < ${r2} > \"\${tmpdir}/in2.fifo\" & DEC2=\$!"
-            wait_cmds << "wait \"\${DEC2}\""
-        }
-        if (keep_match) {
-            fifo_cmds << "mkfifo \"\${tmpdir}/match.fifo\""
-            pigz_cmds << "pigz -p ${task.cpus} -1 < \"\${tmpdir}/match.fifo\"   > ${match_out}   & PIGZ_M=\$!"
-            wait_cmds << "wait \"\${PIGZ_M}\""
-        }
-        if (keep_nomatch) {
-            fifo_cmds << "mkfifo \"\${tmpdir}/nomatch.fifo\""
-            pigz_cmds << "pigz -p ${task.cpus} -1 < \"\${tmpdir}/nomatch.fifo\" > ${nomatch_out} & PIGZ_U=\$!"
-            wait_cmds << "wait \"\${PIGZ_U}\""
-        }
-        def fifo_block = fifo_cmds.join("\n            ")
-        def pigz_block = pigz_cmds.join("\n            ")
-        def wait_block = wait_cmds.join("\n            ")
         """
         set -euo pipefail
         # nucleaze emits no files on empty input — synthesise empty gzips.
@@ -77,24 +46,61 @@ process NUCLEAZE {
             ${empty_nomatch_cmd}
             echo "No data - empty input files" > ${stats}
         else
-            # Named FIFOs (not `>(pigz ...)` — that hides the subshell PID
-            # and the script can exit mid-trailer, truncating the gzip).
             tmpdir=\$(mktemp -d)
             trap 'rm -rf "\${tmpdir}"' EXIT
-            ${fifo_block}
-            ${pigz_block}
+            PIDS=()
+
+            # Input side: nucleaze's built-in (needletail/flate2) gz
+            # decompression is single-threaded and becomes the limiting
+            # stage on gz inputs (see CHANGELOG for the production-scale
+            # measurement). Pipe pre-decompressed bytes in via pigz FIFOs.
+            # Named FIFOs (not `<(pigz ...)`) keep the pigz PID visible so
+            # we can `wait` on it and surface decoder errors. pigz parallel
+            # decompression of an ordinary gz stream tops out at ~2 threads
+            # (inflate + CRC/readahead) — don't allocate more.
+            in1=${r1}
+            in2=${r2}
+            if [[ "${r1}" == *.gz ]]; then
+                mkfifo "\${tmpdir}/in1.fifo"
+                pigz -dc -p 2 < ${r1} > "\${tmpdir}/in1.fifo" & PIDS+=(\$!)
+                in1="\${tmpdir}/in1.fifo"
+            fi
+            if [[ "${r2}" == *.gz ]]; then
+                mkfifo "\${tmpdir}/in2.fifo"
+                pigz -dc -p 2 < ${r2} > "\${tmpdir}/in2.fifo" & PIDS+=(\$!)
+                in2="\${tmpdir}/in2.fifo"
+            fi
+
+            # Output side: named FIFOs (not `>(pigz ...)`) because the
+            # process-substitution subshell PID is hidden, so the script
+            # can exit while pigz is mid-trailer and truncate the gzip.
+            # `-1` (fast level) keeps pigz from back-pressuring nucleaze.
+            outm=/dev/null
+            outu=/dev/null
+            if [[ "${keep_match_str}" == "true" ]]; then
+                mkfifo "\${tmpdir}/match.fifo"
+                pigz -p ${task.cpus} -1 < "\${tmpdir}/match.fifo" > ${match_out} & PIDS+=(\$!)
+                outm="\${tmpdir}/match.fifo"
+            fi
+            if [[ "${keep_nomatch_str}" == "true" ]]; then
+                mkfifo "\${tmpdir}/nomatch.fifo"
+                pigz -p ${task.cpus} -1 < "\${tmpdir}/nomatch.fifo" > ${nomatch_out} & PIDS+=(\$!)
+                outu="\${tmpdir}/nomatch.fifo"
+            fi
+
             nucleaze \
                 --binref ${index} \
-                --in ${in1_path} \
-                --in2 ${in2_path} \
-                --outm ${match_target} \
-                --outu ${nomatch_target} \
+                --in "\${in1}" \
+                --in2 "\${in2}" \
+                --outm "\${outm}" \
+                --outu "\${outu}" \
                 --k ${params_map.k} \
                 --minhits ${params_map.minhits} \
                 --canonical \
                 --threads ${task.cpus} \
                 2>&1 | tee ${stats}
-            ${wait_block}
+
+            for pid in "\${PIDS[@]}"; do wait "\${pid}"; done
         fi
         ln -s ${r1} input_${r1}
         ln -s ${r2} input_${r2}
