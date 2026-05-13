@@ -72,6 +72,8 @@ When the user asks you to handle PR review comments:
 
 When working on changes to an existing PR branch, proactively check CI status with `gh pr checks` to identify test failures, timeouts, or version-check errors. Don't wait for the user to point out failures — catch and address them as part of your workflow. Use the **ci-debugger** agent to diagnose failures.
 
+For **Trivy container-vulnerability scan failures** (`scan-containers` CI job), use the **`triage-trivy`** skill (`.claude/skills/triage-trivy/`). It walks per-CVE through reachability assessment and fix-search before deciding Patch / Ignore / Escalate. Don't default to adding entries to `.trivyignore` — the skill is structured to make that the harder path.
+
 ### GitHub Actions Workflows
 
 When writing or modifying GitHub Actions workflows:
