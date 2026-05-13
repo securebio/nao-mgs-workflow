@@ -126,7 +126,7 @@ These tests run the pipeline on larger benchmark datasets to verify performance 
 
 ### Benchmark index age check (`check-index-age.yml`)
 
-Runs on PRs to `main` and `stable`. Checks the age of the benchmark index at `s3://nao-testing/mgs-workflow-test/index-latest/` against the `max-stable-index-age-days` setting in `pyproject.toml` (default: 90 days). If the index is too old, the check fails and the index should be rebuilt manually.
+Runs on PRs to `main` and `stable`. Checks the age of the benchmark index at `s3://nao-testing/mgs-workflow-test/index-latest/` against the `max-stable-index-age-days` setting in `pyproject.toml` (default: 90 days). If the index is too old, the check fails and the index should be rebuilt manually: run the INDEX workflow against the latest reference configs, then upload the resulting index to `s3://nao-testing/mgs-workflow-test/index-latest/`. See [the installation guide](./installation.md) for instructions on building an index.
 
 ### Release readiness check (`check-release.yml`)
 
@@ -154,6 +154,17 @@ Triggered on push to `main`. After a release is merged, this workflow:
 3. Conditionally resets `stable` to match `main` only for point releases (where the first three version numbers X.Y.Z match)
 
 This uses a GitHub App token for authentication to allow force pushes to protected branches.
+
+### Manual stable reset (`manual-reset.yml`)
+
+Manually triggered (`workflow_dispatch`). Resets the `stable` branch to match `main` via force push. Used when a non-point release (one that changes any of the first three version numbers) needs to be propagated to `stable`, since `reset-branches.yml` only auto-resets `stable` for point releases. See [`docs/developer.md`](./developer.md) for how this fits into the release process.
+
+The workflow is gated by two layers of protection:
+
+1. **`stable-reset` environment.** The `reset-stable` job runs in the `stable-reset` GitHub Actions [environment](https://docs.github.com/en/actions/how-tos/manage-workflow-runs/manage-environments-for-deployment), which is configured (in the repository settings) to be restricted to the `main` branch and to require human approval before any job in it can run. This is the primary gate.
+2. **Confirmation string.** The job additionally requires the user to type `reset stable` as a `workflow_dispatch` input, as defense-in-depth against accidental dispatch.
+
+When adding or modifying environment-gated workflows, both the environment configuration (in GitHub UI) and the `environment:` key in the workflow YAML need to be kept consistent.
 
 ### Label issues (`label-issues.yml`)
 
