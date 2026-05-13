@@ -27,32 +27,15 @@ process NUCLEAZE {
         def nomatch_out = "${sample}_${params_map.suffix}_nucleaze_nomatch.fastq.gz"
         def match_out = "${sample}_${params_map.suffix}_nucleaze_match.fastq.gz"
         def stats = "${sample}_${params_map.suffix}_nucleaze.stats.txt"
-        def r1_gz = r1.toString().endsWith(".gz")
-        def r2_gz = r2.toString().endsWith(".gz")
-        def r1ExtractCmd = r1_gz ? "zcat" : "cat"
-        def r2ExtractCmd = r2_gz ? "zcat" : "cat"
+        def r1ExtractCmd = r1.toString().endsWith(".gz") ? "zcat" : "cat"
+        def r2ExtractCmd = r2.toString().endsWith(".gz") ? "zcat" : "cat"
         def empty_match_cmd   = keep_match   ? "gzip -c < /dev/null > ${match_out}"   : ""
         def empty_nomatch_cmd = keep_nomatch ? "gzip -c < /dev/null > ${nomatch_out}" : ""
-        def in1_path = r1_gz ? "\${tmpdir}/in1.fifo" : "${r1}"
-        def in2_path = r2_gz ? "\${tmpdir}/in2.fifo" : "${r2}"
         def match_target   = keep_match   ? "\${tmpdir}/match.fifo"   : "/dev/null"
         def nomatch_target = keep_nomatch ? "\${tmpdir}/nomatch.fifo" : "/dev/null"
         def fifo_cmds = []
         def pigz_cmds = []
         def wait_cmds = []
-        // Input-side pigz: nucleaze decompresses gz natively but single-
-        // threaded (needletail/flate2), which is ~22 % of process wall on
-        // gz inputs. Hand it pre-decompressed bytes via a FIFO instead.
-        if (r1_gz) {
-            fifo_cmds << "mkfifo \"\${tmpdir}/in1.fifo\""
-            pigz_cmds << "pigz -dc -p ${task.cpus} < ${r1} > \"\${tmpdir}/in1.fifo\" & DEC1=\$!"
-            wait_cmds << "wait \"\${DEC1}\""
-        }
-        if (r2_gz) {
-            fifo_cmds << "mkfifo \"\${tmpdir}/in2.fifo\""
-            pigz_cmds << "pigz -dc -p ${task.cpus} < ${r2} > \"\${tmpdir}/in2.fifo\" & DEC2=\$!"
-            wait_cmds << "wait \"\${DEC2}\""
-        }
         if (keep_match) {
             fifo_cmds << "mkfifo \"\${tmpdir}/match.fifo\""
             pigz_cmds << "pigz -p ${task.cpus} -1 < \"\${tmpdir}/match.fifo\"   > ${match_out}   & PIGZ_M=\$!"
@@ -85,8 +68,8 @@ process NUCLEAZE {
             ${pigz_block}
             nucleaze \
                 --binref ${index} \
-                --in ${in1_path} \
-                --in2 ${in2_path} \
+                --in ${r1} \
+                --in2 ${r2} \
                 --outm ${match_target} \
                 --outu ${nomatch_target} \
                 --k ${params_map.k} \

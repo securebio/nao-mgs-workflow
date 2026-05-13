@@ -28,7 +28,7 @@ FROM alpine:3.21
 # bash:   Nextflow script blocks default to /bin/bash
 # grep:   GNU grep with PCRE support (-oP) used in Nextflow modules
 # procps: Nextflow resource monitoring
-# pigz:   parallel (de)compression used by the NUCLEAZE module on both inputs and outputs
+# pigz:   parallel gzip used by NUCLEAZE module to compress its FASTQ outputs
 RUN apk add --no-cache bash grep procps pigz
 
 # Copy compiled binaries from builder
