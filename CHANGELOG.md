@@ -18,6 +18,9 @@
     - Restructure helper closures in `loadDownstreamData` and `clusterViralAssignments` to avoid top-level statements: in `loadDownstreamData`, convert the local `resolvePath`/`resolveDir` closures into top-level `def fn(...)` functions taking `input_base_dir` as an explicit parameter; in `clusterViralAssignments`, move the `listFiles` helper inside the workflow's `main:` block as a local closure.
     - Drop the unused `start_time_str` parameter from `PREPARE_INPUT_LOGGING` (and its argument at the RUN call site); prefix the unused `sample` closure parameter in `splitViralTsvBySelectedTaxid` with `_`.
     - Use `sentinel_ch.sentinel` rather than `WRITE_SENTINEL_RUN.out.sentinel` in `workflows/run.nf:54` so the assigned variable is referenced.
+    - `configs/resources.config`: remove top-level `import` statements and the `ResourceTierUtils` class (both rejected by strict syntax). Inline the tier-picking logic into the `bbmask_resources` `memory` closure using `findIndexOf` and fully-qualified `nextflow.util.MemoryUnit.of(...)` references; the single existing caller was the only consumer.
+    - `configs/run_ont.config` and `configs/downstream_ont.config`: quote the `<PATH_TO_DIRECTORY>` placeholders to match the lint-friendly form already used in `run.config` / `downstream.config`.
+    - Add `tests/configs/resources/` exercising the `bbmask_resources` memory closure end-to-end: a probe workflow uses `truncate` to create sparse inputs at each tier boundary and asserts the resolved `task.memory` matches the expected 32 / 64 / 128 GB tier.
 
 # v3.2.1.5
 
