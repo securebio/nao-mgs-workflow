@@ -4,6 +4,7 @@
     - INDEX: new `NUCLEAZE_INDEX` process builds `virus-genomes-masked.nucleaze.bin` once, alongside the existing bowtie2/minimap2 viral indexes.
     - RUN reads `nucleaze_k` from the index's `input/index-params.json` so the screen-time `k` always matches the index it screens against.
     - `NUCLEAZE` exposes `keep_match` / `keep_nomatch` flags (default true); the viral path passes `keep_nomatch: false` to skip compressing the discarded majority.
+    - `NUCLEAZE` pipes gzipped inputs through pigz FIFOs instead of letting needletail decompress them single-threaded internally; ~22 % wall reduction on the process (Illumina-100M samples, 8-core sandbox).
     - Removes the unused `BBDUK_HITS_INTERLEAVE` process and its test.
     - Internal channel/param renames: `bbduk_match`/`bbduk_trimmed`/`min_kmer_hits`/`bbduk_suffix` → `kmer_match`/`kmer_trimmed`/`minhits`/`kmer_suffix`.
 - Add `-X 850` to all short-read bowtie2 invocations (viral and contaminant filtering) so that concordantly paired inserts up to 850 bp are detected, up from the bowtie2 default of 500 bp.
