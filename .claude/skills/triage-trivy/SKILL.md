@@ -199,18 +199,13 @@ The PR body has two parts: a temporary rebuild-handoff callout at the top (only 
 
 # Trivy triage
 
-The `scan-containers` CI job on <origin> flagged <N> HIGH/CRITICAL
-vulnerabilities. Each is triaged below.
+`scan-containers` on <origin> flagged <N> HIGH/CRITICAL vulnerabilities. Each is triaged below.
 
 ## CVE-XXXX-XXXXX (<SEVERITY>, <pkg> <ver>)
 
-- **Vulnerability:** <one-line description from NVD>
-- **Affected functionality:** <what part of the package; from CVE details>
-- **Our usage:** <how the pipeline uses this package, with citations to specific
-  module/script files; whether the affected functionality is reached>
-- **Mitigation status:** <fix available where, blocked by what, or "no upstream fix">
-- **Action:** **<Patch / Ignore / Escalate>** — <one-line reason>
-  <if Ignore: name the .trivyignore entry expiry date and the trigger for re-eval>
+<one-line vulnerability summary>. Fixed in <pkg> <fixed-ver>.
+
+- **Action — <container(s)>:** **<Patch / Ignore / Escalate>** — <one-line reachability assessment + what we did>. <if Ignore: `.trivyignore` exp:YYYY-MM-DD, re-eval: <trigger>.>
 
 ## CVE-YYYY-YYYYY (...)
 ...
@@ -218,17 +213,18 @@ vulnerabilities. Each is triaged below.
 
 Omit the top callout entirely for Ignore-only or Escalate-only triages — it's only needed when at least one Patch outcome blocks merge on a rebuild. The callout is meant to be deleted from the PR body once the rebuild lands and CI is green; the assessment block stays as the audit trail.
 
-Surface every finding in the assessment block, including ones you patched. The reviewer audits the assessment, not just the diff.
+**Keep it tight.** A reviewer needs the disposition and *why* it's safe; they can click NVD for vulnerability details. The per-CVE summary is one line; the per-container Action bullet folds reachability + what-we-did into one more line. NVD-style paraphrases of the vuln's internal mechanics, file-system paths inside the container, and lists of HTTP headers don't belong in the PR body — they pad the assessment without giving a reviewer anything new.
 
-**Mixed disposition by container.** A single CVE sometimes splits dispositions — e.g. the urllib3 case where `multiqc` can be patched (transitive via `requests`) but the four awscli-bearing containers cannot (awscli's feedstock pins `urllib3<=2.6.3`). Split the `Action` line by container group rather than inventing two separate CVE sections:
+**Mixed disposition by container.** A single CVE sometimes splits dispositions — e.g. the urllib3 case where `multiqc` can be patched (transitive via `requests`) but the four awscli-bearing containers cannot (awscli's feedstock pins `urllib3<=2.6.3`). Split the `Action` line by container group:
 
 ```markdown
-- **Action — multiqc:** **Patch** — added `conda-forge::urllib3>=2.7` pin in
-  `containers/multiqc.yml`.
+- **Action — multiqc:** **Patch** — `conda-forge::urllib3=2.7.0` pin in
+  `containers/multiqc.yml` (multiqc reaches urllib3 only via `requests`).
 - **Action — blast / bowtie2_samtools / kraken2 / minimap2_samtools:**
-  **Ignore** — `urllib3` pulled in transitively via `awscli`, which pins
-  `urllib3<=2.6.3` through every conda-forge build. `.trivyignore`
-  exp:YYYY-MM-DD, re-eval trigger: <trigger>.
+  **Ignore** — awscli pins `urllib3<=2.6.3` through every conda-forge
+  build; awscli usage here is `update_blastdb.pl --source aws` and
+  equivalents, no proxy or attacker-controlled compressed streams.
+  `.trivyignore` exp:YYYY-MM-DD, re-eval: awscli feedstock relaxes the cap.
 ```
 
 **Versioning / CHANGELOG.** Per `docs/versioning.md`, a Trivy-only PR is typically a point bump under the in-flight `-dev` version (or, if `-dev` is already cut, just a CHANGELOG line — no bump). The CHANGELOG entry should be **one short sentence** matching the tone of surrounding entries — name the CVE IDs, the disposition (patch vs ignore), and one phrase on the fix-blocker. Per-CVE rationale belongs in `.trivyignore` and the PR body, not the CHANGELOG. The `version-bump` agent referenced in `CLAUDE.md` is the canonical authority — defer to it if uncertain.
