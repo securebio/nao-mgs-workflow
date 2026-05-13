@@ -1,6 +1,6 @@
 # v3.2.2.0-dev
 
-- Add `triage-trivy` skill (`.claude/skills/triage-trivy/`) for structured per-CVE assessment of Trivy `scan-containers` CI failures. The skill walks through: fetch the scan results (from CI artifact or local), extract HIGH/CRITICAL CVEs not already ignored, gather evidence per CVE (read the CVE, identify the affected package, check whether the pipeline uses the vulnerable functionality, search for a fix), decide patch vs ignore vs escalate, apply the action, and surface the assessment in the PR description. Structured to make `.trivyignore` the harder path — vague reasoning is explicitly named as an anti-pattern. `CLAUDE.md` updated to point at the skill from the CI-status section.
+- Add `triage-trivy` skill (`.claude/skills/triage-trivy/`) for per-CVE triage of `scan-containers` CI failures, structured to make `.trivyignore` the harder path. `CLAUDE.md`'s CI-status section points at it.
 - Add `pigz` to the `rust-tools` container.
 - Add `-X 850` to all short-read bowtie2 invocations (viral and contaminant filtering) so that concordantly paired inserts up to 850 bp are detected, up from the bowtie2 default of 500 bp.
 - Raise the minimum read length in `FASTP` from the default 15 bp to 35 bp (`--length_required 35`). Reads shorter than 35 bp cannot be meaningfully classified by any downstream kmer-based tool (BBDuk k=27, Kraken2 k~35, Bowtie2 ~34 bp floor); previously these reads passed QC but were systematically unclassifiable, deflating apparent rRNA fractions and other composition estimates.

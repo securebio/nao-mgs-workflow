@@ -5,7 +5,7 @@ description: Triage a failing `scan-containers` Trivy CI job. For each HIGH/CRIT
 
 # Trivy CVE triage
 
-The `Trivy Container Vulnerability Scan` CI job fails when any container image referenced in `configs/containers.config` has HIGH or CRITICAL severity vulnerabilities that aren't already in `.trivyignore`. This skill triages those failures.
+The `scan-containers` CI job fails on HIGH/CRITICAL vulnerabilities in any container image pinned in `configs/containers.config` that aren't already in `.trivyignore`. This skill triages those failures.
 
 **Default agent behavior on Trivy failures has historically been "add to `.trivyignore` and move on" — that's the failure mode this skill exists to prevent.** Each step below asks for evidence; record what you find as you go, because the final PR-description block has to surface the assessment to a reviewer.
 
@@ -25,11 +25,9 @@ The `Trivy Container Vulnerability Scan` CI job fails when any container image r
 
 ## Branching: triage work goes in its own PR, not the failing PR
 
-**Default: branch off `dev` and open a new PR for the triage**, separate from whatever PR's CI surfaced the failure. The common case is global-state CVEs (libcap2, libgnutls30, Go-stdlib, etc.) that affect every container scan regardless of which PR is in flight — those have no causal relationship to the perf change / feature work on the failing PR, and piling security patches onto an unrelated PR conflates two reviewer concerns. Use the failing PR's CI output as the *input* to the triage; deliver the fix as a separate change.
+**Default: branch off `dev` and open a separate triage PR.** Most `scan-containers` failures surface global-state CVEs (libcap2, libgnutls30, Go-stdlib, etc.) that have no causal link to the failing PR's actual changes; piling security patches onto an unrelated PR conflates reviewer concerns. Use the failing PR's CI output as the *input* to the triage; deliver the fix separately.
 
-There's one exception: if the failing PR itself introduced the CVE (e.g. a new container yml in the PR added a vulnerable dep), the fix belongs inline on that PR. Decide by looking at the diff — if the failing CVE traces to a package whose version pin is in the PR's diff, it's PR-local; otherwise it's a separate-PR triage.
-
-When in doubt, ask the user before stacking.
+Exception: if the failing PR itself introduced the CVE (a new yml pin in its diff), the fix belongs inline on that PR. When in doubt, ask.
 
 ## Procedure
 
@@ -40,7 +38,7 @@ git fetch origin dev --quiet
 git checkout -b coding-agent/trivy-triage-YYYY-MM-DD origin/dev
 ```
 
-(Or, if Step 1's CVE-source analysis later confirms the CVE is PR-local, switch to the failing PR's branch instead.)
+(If Step 1 confirms the CVE is PR-local per the Branching section above, switch to the failing PR's branch instead.)
 
 ### Step 1 — Fetch the scan results
 
@@ -75,7 +73,7 @@ jq -r '.Results[]? | .Vulnerabilities[]? | select(.Severity == "HIGH" or .Severi
    /tmp/trivy/<container>.json
 ```
 
-`.Type` (`gobinary`, `python-pkg`, `debian`, `conda-pkg`, …) makes the direct-vs-transitive call in step 3b faster — a `python-pkg` finding lives in a conda env's site-packages, a `debian` finding is system-level apt, a `gobinary` finding is statically linked into a precompiled tool.
+`.Type` (`gobinary`/`python-pkg`/`debian`/...) is a quick direct-vs-transitive hint when present — `python-pkg` = conda env site-packages, `debian` = system apt, `gobinary` = statically linked. Fall back to `PkgPath` if `.Type` is null.
 
 Cross-reference each ID against `.trivyignore` and drop any that are already listed. Note `.trivyignore` carries both `CVE-*` and `GHSA-*` IDs (e.g. `GHSA-82j2-j2ch-gfr8` for Rust crates without a NVD entry), so match both:
 
@@ -96,32 +94,27 @@ If the scan still reports an ID that's in `.trivyignore`, the existing ignore is
 
 **3b. Identify the affected package's role in our containers.** Which container(s) include it? Is it pulled in directly (in the container's conda env / apt install) or transitively (as a dep of something else)?
 
-The Trivy JSON's `Results[].Vulnerabilities[].PkgPath` is the most useful forensic field here — e.g. `opt/conda/lib/python3.13/site-packages/urllib3-...` tells you immediately whether the package is in a conda env (and which one), inside a wheel (and which dep installed it), or system-level. Use that plus `bin/scan_containers.py`'s output to confirm.
+The Trivy JSON's `Results[].Vulnerabilities[].PkgPath` is the most useful forensic field — e.g. `opt/conda/lib/python3.13/site-packages/urllib3-...` tells you the package is in a conda env (and which env), inside a wheel, or system-level.
 
-**3c. Assess whether the pipeline uses the vulnerable functionality.** This is the key step. *Don't write off the risk based on "the container is isolated" — that's the easy way out.* Instead, name what the pipeline actually does with this package:
+**3c. Assess whether the pipeline reaches the vulnerable functionality.** The load-bearing step. Don't dismiss based on "the container is isolated"; name what the pipeline actually does with this package:
 
-- Does the pipeline invoke the affected functionality? (Read the relevant Nextflow process script, the bin/ scripts, the container's entrypoints.)
-- Is the attack vector reachable in our deployment? (E.g. a network-protocol DoS doesn't apply if the binary never opens a server socket; a malformed-input parser bug applies if we feed it arbitrary user data.)
-- Does the affected code path get hot data? (A vuln in seldom-touched code is less concerning than one in a hot path, but neither is dismissible without evidence.)
+- Does the pipeline invoke the affected functionality? (Read the Nextflow process scripts, `bin/` scripts, container entrypoints.)
+- Is the attack vector reachable? (A network-protocol DoS doesn't apply if the binary never opens a socket; a malformed-input bug applies if we feed it arbitrary user data.)
 
-Write this down concretely — "BBDuk in the BBTools container parses FASTQ via X; the CVE affects Y; we don't use Y because Z" or "this vulnerability is reachable; here's how."
+Write the conclusion concretely — "BBDuk parses FASTQ via X; the CVE affects Y; we don't use Y because Z" or "reachable; here's how."
 
 **3d. Search for a fix.** Several places to check:
 
 - **Distro update:** Is the package newer in the container's base distro? `apt-cache policy <pkg>` inside the container, or check the Debian/Alpine security tracker.
 - **Base-image bump:** Is there a newer base image (e.g. Debian bookworm → trixie) where the package is patched? Often this is the right answer when "no fix in our current Debian version" is reported.
-- **Upstream conda package:** If the package comes from conda-forge / bioconda, `conda search -c <channel> <pkg>` shows available versions. Check `command -v conda` first — on a fresh sandbox conda may not be installed, in which case the anaconda.org REST API is the agent-friendly fallback for checking version availability *and* — critically — what each version's deps pin. The "fix exists upstream but a feedstock pins it out of reach" pattern is common (urllib3 inside awscli, quinn-proto inside Polars, etc.). Recipe to check pinned deps for a specific version:
+- **Upstream conda package:** `conda search -c <channel> <pkg>` lists versions when conda is installed (check `command -v conda` first). Otherwise the anaconda.org REST API works — and critically, also shows what each version's deps pin, which catches the common "fix exists upstream but a feedstock pins it out of reach" pattern (urllib3 inside awscli, quinn-proto inside Polars):
 
   ```bash
   curl -s "https://api.anaconda.org/release/conda-forge/<pkg>/<version>" |
     jq '.distributions[0].attrs.depends[] | select(test("<dep_pattern>"))'
   ```
-
-  If that returns a pin like `urllib3<=2.6.3`, the fix is blocked upstream until the feedstock relaxes the cap.
 - **Upstream tool update:** Some CVEs trace to a tool (e.g. multiqc) shipping a vulnerable dep. Check the tool's changelog for a release that bumps the dep.
 - **Workaround at config level:** Occasionally a CVE only affects a specific config option you can disable.
-
-If you find an available fix, this is now an update PR, not an ignore PR — go to step 4a.
 
 **3e. Decide.** Three legitimate outcomes:
 
@@ -152,9 +145,9 @@ Commit with the CVE ID in the message, push the branch, and open the PR as a dra
 - The agent role on this sandbox is ECR pull-only and cannot publish images. The yml change does not itself clear the CVE on `scan-containers`: that CI job scans the *published* image tag pinned in `configs/containers.config`, and the new yml only takes effect once the container is rebuilt, pushed to ECR, and the tag re-pinned.
 - The PR is the persistent rendezvous between agent and user. Agents that ran in subagent sessions may not be reachable later; pinning the handoff to the PR body means the user can finalize without needing the original agent back.
 
-The PR opens with `scan-containers` red. That's expected — the callout in the PR body documents why. The user runs the rebuild, pushes the resulting pin update, watches CI turn green, then deletes the callout from the PR body and marks the PR ready for review. None of that requires the agent to be re-invoked.
+The PR opens with `scan-containers` red — expected, the callout explains why. The user runs the rebuild, pushes, watches CI go green, deletes the callout, and marks the PR ready for review; no agent re-invocation needed.
 
-Do **not** add a `.trivyignore` entry for a fixable CVE to "cover the rebuild gap." Doing so buries a real, addressable vulnerability under stale-ignore boilerplate and conflates "unfixable" with "out of this environment's reach" (anti-pattern #1).
+Do **not** add a `.trivyignore` entry for a fixable CVE to "cover the rebuild gap" — anti-pattern #1.
 
 Ignore-disposition entries from the same triage can land on the same branch and PR — only the Patch side blocks merge until rebuild.
 
@@ -168,7 +161,7 @@ Ignore-disposition entries from the same triage can land on the same branch and 
 CVE-XXXX-XXXXX exp:YYYY-MM-DD
 ```
 
-Choose `exp:` (expiry) ~6-12 weeks out — the entry will need re-evaluation once that hits. Pick a date that aligns with when you reasonably expect a fix (upstream release cadence + buffer). Don't set expiries more than a year out; if the assessment is "this will never have a fix," that's an escalation, not an ignore.
+Pick `exp:` ~6-12 weeks out, aligned with a realistic fix arrival (upstream release cadence + buffer). No expiries beyond a year — "this will never have a fix" is an Escalate, not an Ignore.
 
 The existing `.trivyignore` skews toward a single batch re-eval date (e.g. `2026-06-30`) used across many entries. Per-entry dates tied to a specific release cadence are more useful when the trigger is well-defined (e.g. "awscli feedstock relaxes urllib3 cap"); batch dates are reasonable when the trigger is opaque and re-eval is best done as a periodic chore. Either pattern is acceptable; pick the one that gives the next triage agent the most useful signal.
 
@@ -213,7 +206,7 @@ The PR body has two parts: a temporary rebuild-handoff callout at the top (only 
 
 Omit the top callout entirely for Ignore-only or Escalate-only triages — it's only needed when at least one Patch outcome blocks merge on a rebuild. The callout is meant to be deleted from the PR body once the rebuild lands and CI is green; the assessment block stays as the audit trail.
 
-**Keep it tight.** A reviewer needs the disposition and *why* it's safe; they can click NVD for vulnerability details. The per-CVE summary is one line; the per-container Action bullet folds reachability + what-we-did into one more line. NVD-style paraphrases of the vuln's internal mechanics, file-system paths inside the container, and lists of HTTP headers don't belong in the PR body — they pad the assessment without giving a reviewer anything new.
+**Keep it tight.** Reviewers need the disposition and why it's safe; NVD details are one click away. Don't paraphrase the vuln's internals, paste container filesystem paths, or list HTTP headers — that pads without informing.
 
 **Mixed disposition by container.** A single CVE sometimes splits dispositions — e.g. the urllib3 case where `multiqc` can be patched (transitive via `requests`) but the four awscli-bearing containers cannot (awscli's feedstock pins `urllib3<=2.6.3`). Split the `Action` line by container group:
 
@@ -227,12 +220,12 @@ Omit the top callout entirely for Ignore-only or Escalate-only triages — it's 
   `.trivyignore` exp:YYYY-MM-DD, re-eval: awscli feedstock relaxes the cap.
 ```
 
-**Versioning / CHANGELOG.** Per `docs/versioning.md`, a Trivy-only PR is typically a point bump under the in-flight `-dev` version (or, if `-dev` is already cut, just a CHANGELOG line — no bump). The CHANGELOG entry should be **one short sentence** matching the tone of surrounding entries — name the CVE IDs, the disposition (patch vs ignore), and one phrase on the fix-blocker. Per-CVE rationale belongs in `.trivyignore` and the PR body, not the CHANGELOG. The `version-bump` agent referenced in `CLAUDE.md` is the canonical authority — defer to it if uncertain.
+**Versioning / CHANGELOG.** A Trivy-only PR is typically a point bump under the in-flight `-dev` version (or just a CHANGELOG line if `-dev` is already cut). The CHANGELOG entry is **one short sentence**: CVE IDs, disposition, one phrase on the fix-blocker. Per-CVE rationale belongs in `.trivyignore` and the PR body, not the CHANGELOG. Defer to the `version-bump` agent (per `CLAUDE.md`) if uncertain.
 
 ### Step 6 — Verify before push
 
-- **Local re-scan covers Ignore-side dispositions only.** Both `bin/scan_containers.py` and the CI `scan-containers` job scan the *published* image tag pinned in `configs/containers.config`. They won't reflect a Patch-side yml change until after the user-side rebuild lands. So: confirm locally that Ignore entries cleared their CVEs, and accept that Patch-side CVEs will still appear red until the user finishes the rebuild — that's by design and the callout in the PR body documents it.
-- Re-run `bin/scan_containers.py` locally to confirm the Ignore-side failing-counter is 0 HIGH/CRITICAL. If you'd rather wait for CI, push the branch and re-run the failed jobs against the latest run for the head SHA — don't push an empty commit, which fires every workflow:
+- **Local re-scan covers Ignore-side dispositions only.** `bin/scan_containers.py` and the CI `scan-containers` job both scan the *published* tag pinned in `configs/containers.config`, so neither reflects a Patch-side yml change until after the user-side rebuild. Patch-side CVEs stay red on the PR until then — by design.
+- Re-run `bin/scan_containers.py` locally to confirm Ignore-side findings cleared. To wait for CI instead, push the branch and re-run the failed jobs against the latest run for the head SHA — don't push an empty commit (it fires every workflow):
 
   ```bash
   RUN_ID=$(gh run list --workflow=trivy-scan.yml --branch <branch> --status completed --limit 1 --json databaseId -q '.[0].databaseId')
@@ -253,7 +246,7 @@ Omit the top callout entirely for Ignore-only or Escalate-only triages — it's 
 
 - `.trivyignore` — the file you'll be editing for ignore cases. Existing entries are the format exemplar.
 - `bin/scan_containers.py` — invokable locally for fresh scans.
-- `bin/build_ecr_containers.py` / `bin/build_ecr_container.py` — the rebuild commands the user runs to finalize a Patch outcome. The former iterates over `containers/`; the latter (which exposes `compute_spec_hash`) is what governs whether a yml change forces a rebuild.
+- `bin/build_ecr_containers.py` / `bin/build_ecr_container.py` — rebuild commands for finalizing a Patch outcome. The former iterates over `containers/`; the latter exposes `compute_spec_hash`, which decides whether a yml change forces a rebuild.
 - `.github/workflows/trivy-scan.yml` — the CI job that produces the artifact.
 - `containers/*.yml` — conda env files for the project's containers; updates land here for patch cases.
 - `docs/developer.md` — repo conventions (commits, PR practices).
