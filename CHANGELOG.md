@@ -7,6 +7,7 @@
     - `NUCLEAZE` pipes gzipped inputs through pigz FIFOs instead of letting needletail decompress them single-threaded internally; ~22 % wall reduction on the process (Illumina-100M samples, 8-core sandbox).
     - Removes the unused `BBDUK_HITS_INTERLEAVE` process and its test.
     - Internal channel/param renames: `bbduk_match`/`bbduk_trimmed`/`min_kmer_hits`/`bbduk_suffix` → `kmer_match`/`kmer_trimmed`/`minhits`/`kmer_suffix`.
+- Add `pigz` to the `rust-tools` container.
 - Add `-X 850` to all short-read bowtie2 invocations (viral and contaminant filtering) so that concordantly paired inserts up to 850 bp are detected, up from the bowtie2 default of 500 bp.
 - Raise the minimum read length in `FASTP` from the default 15 bp to 35 bp (`--length_required 35`). Reads shorter than 35 bp cannot be meaningfully classified by any downstream kmer-based tool (BBDuk k=27, Kraken2 k~35, Bowtie2 ~34 bp floor); previously these reads passed QC but were systematically unclassifiable, deflating apparent rRNA fractions and other composition estimates.
 
