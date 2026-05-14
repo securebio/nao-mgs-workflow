@@ -42,8 +42,7 @@ process DOWNLOAD_VIRAL_GENOMES {
             BACKOFF=\$((BACKOFF * 2))
         done
 
-        # 3. Flatten rehydrate output into a single genomes/ directory. Use
-        # batched xargs mv instead of per-file `find -exec mv {} \\;`.
+        # 3. Flatten rehydrate output into a single genomes/ directory.
         mkdir -p genomes
         find output/ncbi_dataset/data -name '*.fna.gz' -print0 \\
             | xargs -0 -r mv -t genomes/
