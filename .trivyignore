@@ -1,0 +1,150 @@
+# Trivy ignore file for known false positives and accepted risks
+# See: https://aquasecurity.github.io/trivy/latest/docs/configuration/filtering/#trivyignore
+
+# zlib/minizip: integer overflow in zipOpenNewFileInZip4_64 — Debian does not build
+# the vulnerable minizip code into its zlib binary packages (Debian status: ignored)
+CVE-2023-45853 exp:2026-06-30
+
+# glibc: integer overflow in memalign — Debian bookworm marks as <no-dsa>
+# (minor issue, requires attacker control of size+alignment args)
+CVE-2026-0861 exp:2026-06-30
+
+# ── Rust crates embedded in compiled Polars .so (multiqc dependency) ──
+# quinn-proto: QUIC protocol DoS
+# No fix available until Polars releases a build with quinn-proto >= 0.11.14
+CVE-2026-31812 exp:2026-06-30
+# rustls-webpki: DoS via panic on malformed CRL BIT STRING.
+# No fix available until Polars releases a build with rustls-webpki >= 0.103.13.
+GHSA-82j2-j2ch-gfr8 exp:2026-06-30
+
+# linux-pam: directory traversal (no Debian fix available as of 2026-03-14)
+CVE-2025-6020 exp:2026-06-30
+
+# GnuPG gpgv: information disclosure / potential code execution (no Debian fix available as of 2026-03-14)
+CVE-2025-68973 exp:2026-06-30
+
+# ── Go stdlib v1.23.4 in ncbi-datasets-cli 18.21.0 (ncbi_datasets container) ──
+# The NCBI datasets/dataformat binaries are pre-compiled Go executables distributed
+# via conda-forge. They ship Go stdlib v1.23.4.
+# Go ~= 1.25.10 or ~= 1.26.3 is required to address all vulnerabilities.
+# We cannot rebuild these — only NCBI can, by updating their Go toolchain.
+#
+# Risk assessment: these binaries run in an isolated container that only downloads
+# genome metadata from NCBI's API and writes local files. They do not serve TLS,
+# connect to Postgres, or process untrusted archives — so the practical attack
+# surface for these CVEs is minimal in our pipeline context.
+#
+# TODO: Remove these ignores when a newer ncbi-datasets-cli is available on
+# conda-forge built with Go ~= 1.25.10 or ~= 1.26.3. Check with:
+#   conda search -c conda-forge ncbi-datasets-cli
+#   strings $(conda run -n <env> which datasets) | grep '^go1\.'
+# As of 2026-05-11, 18.25.1 still ships Go 1.23.4.
+#
+# crypto/tls: unexpected session resumption (CRITICAL)
+CVE-2025-68121 exp:2026-06-30
+# database/sql: Postgres scan race condition (HIGH)
+CVE-2025-47907 exp:2026-06-30
+# archive/tar: unbounded allocation parsing GNU sparse map (HIGH)
+CVE-2025-58183 exp:2026-06-30
+# net/url: memory exhaustion in query parameter parsing (HIGH)
+CVE-2025-61726 exp:2026-06-30
+# archive/zip: excessive CPU consumption building archive index (HIGH)
+CVE-2025-61728 exp:2026-06-30
+# crypto/x509: DoS via crafted certificate (HIGH)
+CVE-2025-61729 exp:2026-06-30
+# net/url: incorrect parsing of IPv6 host literals (HIGH)
+CVE-2026-25679 exp:2026-06-30
+# crypto/x509: excessive CPU in certificate chain building (HIGH)
+CVE-2026-32280 exp:2026-06-30
+# internal/syscall/unix: Root.Chmod can follow symlinks out of the root (HIGH)
+CVE-2026-32282 exp:2026-06-30
+# crypto/x509: DoS via inefficient certificate chain validation (HIGH)
+CVE-2026-32281 exp:2026-06-30
+# crypto/tls: TLS 1.3 post-handshake key-update deadlock DoS (HIGH)
+CVE-2026-32283 exp:2026-06-30
+# net (cgo resolver): LookupCNAME mishandling of overlong CNAME responses (HIGH)
+CVE-2026-33811 exp:2026-06-30
+# net/http: HTTP/2 transport infinite loop on crafted SETTINGS frames (HIGH)
+CVE-2026-33814 exp:2026-06-30
+# net/mail: DoS via crafted ParseAddress/ParseAddressList/ParseDate inputs (HIGH)
+CVE-2026-39820 exp:2026-06-30
+# net: panic in Dial/LookupPort when handling NUL byte (HIGH)
+CVE-2026-39836 exp:2026-06-30
+# net/mail: DoS via pathological consumePhrase inputs (HIGH)
+CVE-2026-42499 exp:2026-06-30
+
+# ── Pillow in multiqc container (transitive dependency via matplotlib) ──
+# multiqc 1.33 (latest on bioconda) pulls Pillow 12.1.1; fix requires >= 12.2.0.
+# We cannot pin Pillow independently in the conda environment spec.
+# The vulnerability is a FITS GZIP decompression bomb — not a realistic attack
+# vector since multiqc only processes pipeline QC data, not untrusted FITS images.
+CVE-2026-40192 exp:2026-06-30
+# OOB write via integer overflow in PSD tile extents (HIGH): pipeline does not
+# generate or process PSD-format images.
+CVE-2026-42311 exp:2026-06-30
+
+# ── Debian bookworm base image: no fixes available ──
+# glibc: DoS via iconv() with specific character set conversions (fix_deferred)
+# Our containers don't perform attacker-controlled iconv conversions.
+CVE-2026-4046 exp:2026-06-30
+
+# ncurses: stack-based buffer overflow in infocmp CLI tool (no-dsa, low urgency)
+# Our containers never invoke infocmp. Fix only in sid (6.6+).
+CVE-2025-69720 exp:2026-06-30
+
+# systemd: IPC API mishandling from unprivileged callers causing service freeze
+# Our containers don't run systemd services. Fix only in sid (260.1+).
+CVE-2026-29111 exp:2026-06-30
+
+# libgcrypt20: heap overflow / DoS via crafted ECDH ciphertext to gcry_pk_decrypt
+# (no Debian fix available as of 2026-04-29; fixed in upstream libgcrypt >= 1.12.2)
+# Our pipeline containers never decrypt attacker-controlled ECDH ciphertext.
+# Check for a Debian fix at:
+#   https://security-tracker.debian.org/tracker/CVE-2026-41989
+CVE-2026-41989 exp:2026-06-30
+
+# libcap2: setcap (cap_set_file) exploit usable by non-root users.
+# (No Debian fix available as of 2026-05-01.) Our pipeline containers do
+# not invoke setcap/cap_set_file, so we do not call the affected code;
+# additionally, they run as root, which puts them outside the non-root
+# threat model of this CVE.
+# Check for a Debian fix at:
+#   https://security-tracker.debian.org/tracker/CVE-2026-4878
+CVE-2026-4878 exp:2026-06-30
+
+# libgnutls30: DoS / out-of-bounds read in DTLS handshake fragment reassembly.
+# (No Debian fix available as of 2026-05-02). Our pipeline containers do not
+# run DTLS, only HTTPS, so we do not call the affected code.
+# Check for a Debian fix at:
+#   https://security-tracker.debian.org/tracker/CVE-2026-33845
+CVE-2026-33845 exp:2026-06-30
+
+# libgnutls30: heap buffer overflow / DoS in DTLS handshake fragment reassembly
+# via inconsistent message_length across fragments.
+# (No Debian fix available as of 2026-05-05.) Our pipeline containers do not
+# run DTLS, only HTTPS, so we do not call the affected code.
+# Check for a Debian fix at:
+#   https://security-tracker.debian.org/tracker/CVE-2026-33846
+CVE-2026-33846 exp:2026-06-30
+
+# libgnutls30: case-sensitive comparison in X.509 nameConstraints allows
+# for bypass of excluded/permitted certificate authority constraints
+# Our containers fetch resources over HTTPS from public endpoints, do not
+# use custom or constrained CA, and do not use gnutls
+# Check for a Debian fix at:
+#   https://security-tracker.debian.org/tracker/CVE-2026-3833
+CVE-2026-3833 exp:2026-06-30
+
+# libgnutls30: TLS-PSK identity confusion / authentication bypass.
+# (No Debian fix available as of 2026-05-10.) Our pipeline containers do not
+# negotiate TLS-PSK with anything; they pull HTTPS from public endpoints with
+# standard X.509 auth.
+# Check for a Debian fix at:
+#   https://security-tracker.debian.org/tracker/CVE-2026-42010
+CVE-2026-42010 exp:2026-06-30
+
+# libgnutls30: DoS in TLS-PSK handshake matching-companion processing.
+# (No Debian fix available as of 2026-05-10.) Same rationale as CVE-2026-42010.
+# Check for a Debian fix at:
+#   https://security-tracker.debian.org/tracker/CVE-2026-42011
+CVE-2026-42011 exp:2026-06-30
