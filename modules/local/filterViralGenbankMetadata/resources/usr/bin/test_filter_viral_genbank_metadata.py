@@ -86,6 +86,18 @@ class TestFilterMetadata:
         actual = list(zip(result["assembly_accession"], result["taxid"], result["assembly_status"], strict=True))
         assert sorted(actual) == sorted(expected)
 
+    def test_empty_taxid_species_matches_only_via_direct_taxid(self) -> None:
+        """When taxid_species is empty, species-level rollup yields "" which
+        never appears in virus_taxids. The row still passes if its taxid matches
+        directly."""
+        virus_db = pd.read_csv(io.StringIO(
+            "taxid\ttaxid_species\tinfection_status_vertebrate\n"
+            "1\t\t1\n"
+        ), sep="\t", dtype=str)
+        meta = _meta([("GCA_001.1", "1", "current"), ("GCA_999.1", "999", "current")])
+        result = filter_metadata(meta, virus_db, ["vertebrate"])
+        assert list(result["assembly_accession"]) == ["GCA_001.1"]
+
     def test_missing_assembly_status_column_raises(self) -> None:
         """Pandas raises KeyError when the schema-required `assembly_status` column is absent."""
         meta_no_status = pd.DataFrame(
