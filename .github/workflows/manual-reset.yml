@@ -47,10 +47,11 @@ jobs:
 
       - name: Show version info
         run: |
-          MAIN_VERSION=$(git checkout main -- pyproject.toml && python -c "import tomllib; print(tomllib.load(open('pyproject.toml', 'rb'))['project']['version'])")
-          git checkout -- .
-          STABLE_VERSION=$(git checkout stable -- pyproject.toml && python -c "import tomllib; print(tomllib.load(open('pyproject.toml', 'rb'))['project']['version'])")
-          git checkout -- .
+          read_version() {
+            git show "$1:pyproject.toml" | python -c "import sys, tomllib; print(tomllib.load(sys.stdin.buffer)['project']['version'])"
+          }
+          MAIN_VERSION=$(read_version origin/main)
+          STABLE_VERSION=$(read_version origin/stable)
 
           echo "Main version: $MAIN_VERSION"
           echo "Stable version: $STABLE_VERSION"
