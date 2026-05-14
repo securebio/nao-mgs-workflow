@@ -118,8 +118,10 @@ class TestPrepareMetadata:
         _, db_path, _ = standard_inputs
         meta = _write_tsv(tmp_path / "m.tsv", META_HEADER, [META_ROWS[0], ["GCA_MISSING.1", "67890", "B", "GenBank", "current"]])
         gdir = _make_genome_dir(tmp_path / "sub", ["GCA_000001.1"])
-        rows = _run_prepare(tmp_path / "run", meta, db_path, gdir)
+        run_dir = tmp_path / "run"
+        rows = _run_prepare(run_dir, meta, db_path, gdir)
         assert len(rows) == 1 and rows[0]["assembly_accession"] == "GCA_000001.1"
+        assert (run_dir / "paths.txt").read_text().splitlines() == [rows[0]["local_filename"]]
 
     def test_unmapped_taxid_gives_empty_species(self, tmp_path: Path) -> None:
         meta = _write_tsv(tmp_path / "m.tsv", META_HEADER, [["GCA_000001.1", "00000", "X", "GenBank", "current"]])
