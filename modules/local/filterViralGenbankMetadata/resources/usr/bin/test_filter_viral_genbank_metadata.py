@@ -87,9 +87,9 @@ class TestFilterMetadata:
         assert sorted(actual) == sorted(expected)
 
     def test_empty_taxid_species_matches_only_via_direct_taxid(self) -> None:
-        """When taxid_species is empty, species-level rollup yields "" which
-        never appears in virus_taxids. The row still passes if its taxid matches
-        directly."""
+        """When taxid_species is empty, species-level rollup yields NaN (via
+        pd.read_csv dtype=str default NA handling), which isin() excludes. The
+        row still passes if its taxid matches directly."""
         virus_db = pd.read_csv(io.StringIO(
             "taxid\ttaxid_species\tinfection_status_vertebrate\n"
             "1\t\t1\n"
