@@ -15,6 +15,7 @@ process ENUMERATE_VIRAL_ACCESSIONS {
     script:
         """
         # 1. Enumerate all assemblies under ${taxid} via `datasets summary`.
+        # Taxids with no assemblies will hard fail at this step.
         datasets summary genome taxon ${taxid} \\
             --assembly-source ${assembly_source} \\
             --as-json-lines \\
