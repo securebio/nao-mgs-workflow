@@ -11,8 +11,9 @@ nextflow_process {
     //   - test_chunk.txt:     refseq only      -> GCF_018547865.1
     //   - test_chunk_two.txt: refseq + genbank -> GCF_018547865.1 + GCA_018547865.1
     //   - test_chunk_bad.txt: a non-existent accession (failure-mode fixture)
-    // NCBI assembly accessions are stable; regenerate by re-running
-    // ENUMERATE_VIRAL_ACCESSIONS on taxid 2847173 if NCBI republishes HDV.
+    // If these NCBI assembly accessions are removed or are no longer current,
+    // pick new accessions using the command
+    // `datasets summary genome taxon 2847173 --assembly-source all --as-json-lines`
 
     test("Should download a single-accession chunk (HDV refseq)") {
         tag "expect_success"

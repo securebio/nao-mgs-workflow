@@ -1,0 +1,2 @@
+task_id	hash	name	status	exit	realtime	%cpu	cpus	memory	start	complete	duration	rchar	wchar
+1	15/95f76c	CONCATENATE_GENOME_FASTA	COMPLETED	0	4m 3s	38.5%	8	16 GB	2026-05-11 20:42:13.515	2026-05-11 20:46:33.571	4m 37s	5.4 GB	4.7 GB

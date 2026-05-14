@@ -1,0 +1,25 @@
+=== Launching cohort=large ===
+config=/home/ec2-user/src/nao-mgs-workflow/bench/cohort_large.config
+base_dir=s3://nao-jo/concat-bench-par/large
+launch_dir=/home/ec2-user/src/nao-mgs-workflow/bench/runs/large
+[33mNextflow 26.04.0 is available - Please consider updating your version to it[m
+
+ N E X T F L O W   ~  version 25.10.5
+
+Launching `/home/ec2-user/src/nao-mgs-workflow/concat_bench.nf` [kickass_gates] DSL2 - revision: 6946e4d52e
+
+[-        ] CONCATENATE_GENOME_FASTA -
+
+Monitor the execution with Seqera Platform using this URL: https://cloud.seqera.io/user/jo/watch/2c2nnbzsCB66Sz
+[-        ] CONCATENATE_GENOME_FASTA -
+
+Monitor the execution with Seqera Platform using this URL: https://cloud.seqera.io/user/jo/watch/2c2nnbzsCB66Sz
+[-        ] CONCATENATE_GENOME_FASTA | 0 of 1
+
+Monitor the execution with Seqera Platform using this URL: https://cloud.seqera.io/user/jo/watch/2c2nnbzsCB66Sz
+executor >  awsbatch (fusion enabled) (1)
+[1d/d7281e] CONCATENATE_GENOME_FASTA | 0 of 1
+
+Monitor the execution with Seqera Platform using this URL: https://cloud.seqera.io/user/jo/watch/2c2nnbzsCB66Sz
+executor >  awsbatch (fusion enabled) (1)
+[1d/d7281e] CONCATENATE_GENOME_FASTA | 0 of 1

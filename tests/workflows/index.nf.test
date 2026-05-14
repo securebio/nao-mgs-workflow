@@ -12,14 +12,11 @@ nextflow_pipeline {
             assert workflow.success
 
             // === MAKE_VIRUS_GENOME_DB outputs ===
-            // Assertions are structural — no specific accessions or row counts —
-            // so the test stays green if NCBI republishes HDV. The test config
-            // picks HDV (taxid 2847173) with `--assembly-source all`, which
-            // returns ≥2 assemblies (refseq + genbank versions). With
-            // chunk_size=2, FILTER writes one chunk of 2 accessions and DOWNLOAD
-            // pulls both in a single task — exercising the multi-accession-per-
-            // chunk path. A row count ≥2 confirms the kept assemblies survived
-            // FILTER → DOWNLOAD → PREPARE intact.
+            // Assertions are structural and do not depend on specific NCBI accessions for HDV.
+            // Tests expect HDV (taxid 2847173) with `--assembly-source all` to return  ≥2 assemblies
+            // across refseq and genbank.
+            // With chunk_size=2, FILTER_VIRAL_GENBANK_METADATA writes one chunk of 2 accessions
+            // and this tests downloading multiple assemblies in one DOWNLOAD_VIRAL_GENOMES task.
             def metadata = path("${launchDir}/output/results/virus-genome-metadata-gid.tsv.gz").csv(sep: "\t", decompress: true)
             def expectedCols = ["assembly_accession", "taxid", "organism_name", "source_database",
                                 "assembly_status", "species_taxid", "local_filename", "genome_id"]

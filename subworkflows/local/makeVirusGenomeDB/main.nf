@@ -43,7 +43,7 @@ workflow MAKE_VIRUS_GENOME_DB {
         )
         // 3. Download genomes per chunk in parallel. `flatten()` turns the
         //    list of chunk files into one channel emission per chunk so
-        //    Nextflow can fan out tasks. Runs on /scratch (see module).
+        //    Nextflow can fan out tasks.
         chunk_ch = filter_ch.accession_chunks.flatten()
         download_ch = DOWNLOAD_VIRAL_GENOMES(chunk_ch, assembly_source, datasets_download_extra_args, 5)
         // 4. Match downloaded files to filtered metadata, populate

@@ -15,21 +15,16 @@ process ENUMERATE_VIRAL_ACCESSIONS {
     script:
         """
         # 1. Enumerate all assemblies under ${taxid} via `datasets summary`.
-        # Unlike the per-child download module, no empty-taxon fallback is needed:
-        # this is always called on the viral root (or download_virus_taxid),
-        # which by construction has assemblies. Failures should be loud.
         datasets summary genome taxon ${taxid} \\
             --assembly-source ${assembly_source} \\
             --as-json-lines \\
             ${extra_args} \\
             > assembly_data_report.jsonl
 
-        # 2. Convert to TSV; rewrite the header to standardized column names
-        # so downstream consumers (FILTER_VIRAL_GENBANK_METADATA,
-        # PREPARE_VIRAL_METADATA) can be reused without changes.
+        # 2. Convert to TSV; rewrite the header to standardized column names.
         # `assminfo-status` is included so FILTER_VIRAL_GENBANK_METADATA can drop
-        # non-current assemblies (the `datasets` `--assembly-version` arg is
-        # broken; see ncbi/datasets#576).
+        # non-current assemblies (the `datasets` `--assembly-version` does not allow
+        # this when using `--assembly-source all`; see ncbi/datasets#576).
         dataformat tsv genome \\
             --inputfile assembly_data_report.jsonl \\
             --fields accession,organism-tax-id,organism-name,source_database,assminfo-status \\

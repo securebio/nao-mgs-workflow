@@ -1,0 +1,25 @@
+=== Launching cohort=single ===
+config=/home/ec2-user/src/nao-mgs-workflow/bench/cohort_single.config
+base_dir=s3://nao-jo/concat-bench-par/single
+launch_dir=/home/ec2-user/src/nao-mgs-workflow/bench/runs/single
+[33mNextflow 26.04.0 is available - Please consider updating your version to it[m
+
+ N E X T F L O W   ~  version 25.10.5
+
+Launching `/home/ec2-user/src/nao-mgs-workflow/concat_bench.nf` [voluminous_booth] DSL2 - revision: 6946e4d52e
+
+[-        ] CONCATENATE_GENOME_FASTA -
+
+Monitor the execution with Seqera Platform using this URL: https://cloud.seqera.io/user/jo/watch/5bS22Lglh4ie7j
+[-        ] CONCATENATE_GENOME_FASTA -
+
+Monitor the execution with Seqera Platform using this URL: https://cloud.seqera.io/user/jo/watch/5bS22Lglh4ie7j
+[-        ] CONCATENATE_GENOME_FASTA | 0 of 1
+
+Monitor the execution with Seqera Platform using this URL: https://cloud.seqera.io/user/jo/watch/5bS22Lglh4ie7j
+executor >  awsbatch (fusion enabled) (1)
+[6c/8ec8a7] CONCATENATE_GENOME_FASTA | 0 of 1
+
+Monitor the execution with Seqera Platform using this URL: https://cloud.seqera.io/user/jo/watch/5bS22Lglh4ie7j
+executor >  awsbatch (fusion enabled) (1)
+[6c/8ec8a7] CONCATENATE_GENOME_FASTA | 0 of 1

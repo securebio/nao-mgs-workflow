@@ -1,0 +1,2 @@
+task_id	hash	name	status	exit	realtime	%cpu	cpus	memory	start	complete	duration	rchar	wchar
+1	02/e806fe	ADD_GENBANK_GENOME_IDS	COMPLETED	0	2m 4s	23.5%	16	32 GB	2026-05-11 22:09:32.631	2026-05-11 22:11:52.694	5m 6s	1.5 GB	755.3 MB
