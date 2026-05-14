@@ -54,9 +54,7 @@ def filter_metadata(meta_db: pd.DataFrame, virus_db: pd.DataFrame, host_taxa: li
     virus_taxids = virus_db[screen_status]["taxid"].reset_index(drop=True)
     # Roll the input taxid up to species level via virus_db so that strain-
     # level accessions whose taxid isn't directly host-infecting still match
-    # if their species is. Replaces the prior reliance on a `species_taxid`
-    # column in meta_db (which used to be added by PREPARE_VIRAL_METADATA
-    # upstream of filtering; it now runs downstream of filtering).
+    # if their species is.
     species_map = dict(zip(virus_db["taxid"], virus_db["taxid_species"], strict=True))
     species_taxid = meta_db["taxid"].map(species_map)
     host_infecting = meta_db.loc[meta_db["taxid"].isin(virus_taxids) | species_taxid.isin(virus_taxids)]
