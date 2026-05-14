@@ -117,10 +117,8 @@ class TestWriteAccessionChunks:
                 "chunk_0001.txt": "GCA_A\n",
                 "chunk_0002.txt": "GCA_B\n",
             }),
-            # Empty input — single empty chunk so downstream channel is non-empty.
-            ([], 10, {"chunk_0001.txt": ""}),
         ],
-        ids=["exact_boundary", "partial_final_chunk", "size_one", "empty_input"],
+        ids=["exact_boundary", "partial_final_chunk", "size_one"],
     )
     def test_chunking(self, tmp_path: Path, accessions: list[str],
                       chunk_size: int, expected_chunks: dict[str, str]) -> None:
@@ -128,6 +126,10 @@ class TestWriteAccessionChunks:
         assert n == len(expected_chunks)
         actual = {p.name: p.read_text() for p in tmp_path.iterdir()}
         assert actual == expected_chunks
+
+    def test_empty_input_raises(self, tmp_path: Path) -> None:
+        with pytest.raises(ValueError, match="No accessions passed filter"):
+            write_accession_chunks(pd.Series([], dtype=str), tmp_path, 10)
 
     def test_invalid_chunk_size_raises(self, tmp_path: Path) -> None:
         with pytest.raises(ValueError, match="chunk_size must be >= 1"):

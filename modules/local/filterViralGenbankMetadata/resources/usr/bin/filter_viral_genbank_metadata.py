@@ -56,6 +56,7 @@ def filter_metadata(meta_db: pd.DataFrame, virus_db: pd.DataFrame, host_taxa: li
     # level accessions whose taxid isn't directly host-infecting still match
     # if their species is.
     species_map = dict(zip(virus_db["taxid"], virus_db["taxid_species"], strict=True))
+    # Unmapped taxids yield NaN, which isin() excludes — intentional.
     species_taxid = meta_db["taxid"].map(species_map)
     host_infecting = meta_db.loc[meta_db["taxid"].isin(virus_taxids) | species_taxid.isin(virus_taxids)]
     before = len(host_infecting)
@@ -76,18 +77,17 @@ def write_accession_chunks(accessions: pd.Series, chunk_dir: Path, chunk_size: i
         chunk_size: Maximum accessions per chunk (must be >= 1).
 
     Returns:
-        Number of chunk files written. Always at least 1: an empty input
-        produces a single empty chunk file so the downstream channel is
-        well-defined (Nextflow can dispatch a no-op task rather than hang).
+        Number of chunk files written.
+
+    Raises:
+        ValueError: If no accessions remain after filtering.
     """
     if chunk_size < 1:
         raise ValueError(f"chunk_size must be >= 1, got {chunk_size}")
     chunk_dir.mkdir(parents=True, exist_ok=True)
     n = len(accessions)
     if n == 0:
-        (chunk_dir / "chunk_0001.txt").write_text("")
-        logger.info("No accessions passed filter; wrote 1 empty chunk file.")
-        return 1
+        raise ValueError("No accessions passed filter; cannot build virus genome DB.")
     n_chunks = (n + chunk_size - 1) // chunk_size
     for i in range(n_chunks):
         chunk = accessions.iloc[i * chunk_size:(i + 1) * chunk_size]
