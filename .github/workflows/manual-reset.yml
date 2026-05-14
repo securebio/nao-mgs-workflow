@@ -47,6 +47,7 @@ jobs:
 
       - name: Show version info
         run: |
+          set -euo pipefail
           read_version() {
             git show "$1:pyproject.toml" | python -c "import sys, tomllib; print(tomllib.load(sys.stdin.buffer)['project']['version'])"
           }
