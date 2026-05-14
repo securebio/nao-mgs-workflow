@@ -1,6 +1,5 @@
 // Download viral genomes for a chunk of pre-filtered assembly accessions
-// using NCBI datasets CLI. Uses a local scratch directory on Batch profiles
-// as defined in configs/profiles.config.
+// using NCBI datasets CLI.
 process DOWNLOAD_VIRAL_GENOMES {
     label "ncbi_datasets"
     label "large"
@@ -42,11 +41,9 @@ process DOWNLOAD_VIRAL_GENOMES {
             BACKOFF=\$((BACKOFF * 2))
         done
 
-        # 3. Flatten rehydrate output into a single genomes/ directory. Use
-        # batched xargs mv instead of per-file `find -exec mv {} \\;`.
+        # 3. Flatten rehydrate output into a single genomes/ directory.
         mkdir -p genomes
-        find output/ncbi_dataset/data -name '*.fna.gz' -print0 \\
-            | xargs -0 -r mv -t genomes/
+        find output/ncbi_dataset/data -name '*.fna.gz' -exec mv {} genomes/ \\;
 
         rm -rf output/ output.zip
         echo "Downloaded \$(find genomes -maxdepth 1 -name '*.fna.gz' | wc -l) genomes for chunk \$CHUNK_ID"
