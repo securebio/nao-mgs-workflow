@@ -56,8 +56,7 @@ The pipeline can be run in multiple ways by modifying various configuration vari
   - This profile is the default and attempts to run the pipeline with AWS Batch. This is the most reliable and convenient way to run the pipeline, but requires significant additional setup (described [here](./batch.md)). Before running the pipeline using this profile, make sure you specify `--queue` on the command line or set `params.queue` in your config file to the correct Batch job queue.
   - Note that this profile uses automatic reference file caching (in the `/scratch` directory on the instance), which significantly reduces large database load times.
       - To turn off file caching, remove the `aws.batch.volumes = ['/scratch:/scratch']` line from the relevant profile.
-  - This profile also uses a local `/scratch` directory for certain processes with a high volume of file operations.
-      - To turn this off, remove the `process { withName: <process> { scratch = '/scratch' } }` line from the relevant profile.
+  - Processes labeled `use_scratch` automatically use a local scratch directory for heavy file operations: `/scratch` on Batch profiles (via the volume mount), or the system temp dir on `ec2_s3` (where Fusion is enabled but `/scratch` is not mounted). On `ec2_local`, scratch is disabled since the work directory is already local. See `configs/profiles.config` for per-profile `withLabel: 'use_scratch'` selectors.
 - `ec2_local`: **Requires the least setup, but is bottlenecked by your instance's compute, memory and storage.**
   - This profile attempts to run the whole pipeline locally on your EC2 instance, storing all files on instance-linked block storage.
   - This is simple and can be relatively fast, but requires large CPU, memory and storage allocations: at least 128GB RAM, 64 CPU cores, and 256GB local storage are recommended, though the latter in particular is highly dependent on the size of your dataset.

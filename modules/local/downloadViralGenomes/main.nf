@@ -1,9 +1,9 @@
 // Download viral genomes for a chunk of pre-filtered assembly accessions
-// using NCBI datasets CLI. Uses a local scratch directory on Batch profiles
-// as defined in configs/profiles.config.
+// using NCBI datasets CLI.
 process DOWNLOAD_VIRAL_GENOMES {
     label "ncbi_datasets"
     label "large"
+    label "use_scratch"
     input:
         path(accession_chunk)
         val(assembly_source)
