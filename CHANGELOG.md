@@ -1,6 +1,6 @@
 # v3.2.2.0-dev
 
-- Speed up `DOWNLOAD_VIRAL_GENOMES` by staging on local scratch and replacing per-file `find -exec mv` with batched `xargs mv`. Introduce a `use_scratch` label with a cascading config selector in `configs/profiles.config`: uses `/scratch` on Batch profiles (volume-mounted), the system temp dir on `ec2_s3` (Fusion-enabled), or disabled on `ec2_local`.
+- Speed up `DOWNLOAD_VIRAL_GENOMES` by staging on local scratch and replacing per-file `find -exec mv` with batched `xargs mv`. Introduce a `use_scratch` label with a per-profile process selector in `configs/profiles.config` that enables scratch directories for profiles with Fusion enabled.
 - Rework `MAKE_VIRUS_GENOME_DB` to enumerate viral accessions up-front, filter by host-infection and assembly status, then fan out chunks to `DOWNLOAD_VIRAL_GENOMES` to evenly parallelize across the taxonomic tree.
     - Replace `datasets_extra_args` with more specific `datasets_summary_extra_args` and `datasets_download_extra_args` parameters for `INDEX` workflow.
 - Fix the `Show version info` step in `.github/workflows/manual-reset.yml`, which was failing with `fatal: invalid reference: stable` because `actions/checkout@v4` only makes the checked-out ref available as a local branch (other branches are only present as `origin/<name>` remote-tracking refs). Replace the brittle `git checkout <ref> -- pyproject.toml` / revert pattern with `git show origin/main:pyproject.toml` and `git show origin/stable:pyproject.toml`, which reads the file content without touching the working tree.

@@ -65,7 +65,7 @@ The pipeline can be run in multiple ways by modifying various configuration vari
 For each Fusion-enabled profile, processes with the `use_scratch` label create a local [scratch](https://docs.seqera.io/nextflow/reference/process#scratch) directory for file operations and then stage out to Fusion at the end of the process.
 - This allows file operation-heavy processes to avoid the Fusion file metadata tracking overhead.
 - The scratch directory is created in the container using the `$TMPDIR` environment variable and `$(mktemp / tmp)` if `$TMPDIR` is not set.
-- To turn this off, remove the `process { withLabel: 'use_scratch' { scratch = true } }` line from the relevant profile.
+- To turn this off, remove the `process { withLabel: 'use_scratch' { scratch = true } }` selector from the relevant profile in `configs/profiles.config`.
 
 To run the pipeline with a specified profile, run
 
