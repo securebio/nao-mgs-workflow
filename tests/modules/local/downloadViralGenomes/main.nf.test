@@ -79,4 +79,26 @@ nextflow_process {
         }
     }
 
+    test("Should download genomes with scratch enabled") {
+        tag "expect_success"
+        tag "scratch"
+        config "tests/configs/scratch_download.config"
+        when {
+            params {}
+            process {
+                """
+                input[0] = file("${projectDir}/tests/modules/local/downloadViralGenomes/test_chunk.txt")
+                input[1] = "refseq"
+                input[2] = ""
+                input[3] = 5
+                """
+            }
+        }
+        then {
+            assert process.success
+            assert process.out.genomes.size() == 1
+            assert process.out.genomes[0].toString().endsWith('.fna.gz')
+        }
+    }
+
 }

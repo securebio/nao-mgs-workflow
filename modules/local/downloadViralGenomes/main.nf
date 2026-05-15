@@ -3,6 +3,7 @@
 process DOWNLOAD_VIRAL_GENOMES {
     label "ncbi_datasets"
     label "large"
+    label "use_scratch"
     input:
         path(accession_chunk)
         val(assembly_source)
@@ -43,7 +44,8 @@ process DOWNLOAD_VIRAL_GENOMES {
 
         # 3. Flatten rehydrate output into a single genomes/ directory.
         mkdir -p genomes
-        find output/ncbi_dataset/data -name '*.fna.gz' -exec mv {} genomes/ \\;
+        find output/ncbi_dataset/data -name '*.fna.gz' -print0 \\
+            | xargs -0 -r mv -t genomes/
 
         rm -rf output/ output.zip
         echo "Downloaded \$(find genomes -maxdepth 1 -name '*.fna.gz' | wc -l) genomes for chunk \$CHUNK_ID"
