@@ -3,9 +3,9 @@
 status and assembly status, then emit the filtered accessions in fixed-size
 chunk files for parallel downstream download."""
 
-#=======================================================================
+# =======================================================================
 # Preamble
-#=======================================================================
+# =======================================================================
 
 import argparse
 import logging
@@ -18,20 +18,25 @@ import pandas as pd
 class UTCFormatter(logging.Formatter):
     def formatTime(self, record: logging.LogRecord, datefmt: str | None = None) -> str:
         dt = datetime.fromtimestamp(record.created, UTC)
-        return dt.strftime('%Y-%m-%d %H:%M:%S UTC')
+        return dt.strftime("%Y-%m-%d %H:%M:%S UTC")
+
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger()
 handler = logging.StreamHandler()
-formatter = UTCFormatter('[%(asctime)s] %(message)s')
+formatter = UTCFormatter("[%(asctime)s] %(message)s")
 handler.setFormatter(formatter)
 logger.handlers.clear()
 logger.addHandler(handler)
 
-#=======================================================================
+# =======================================================================
 # Filter
-#=======================================================================
+# =======================================================================
 
-def filter_metadata(meta_db: pd.DataFrame, virus_db: pd.DataFrame, host_taxa: list[str]) -> pd.DataFrame:
+
+def filter_metadata(
+    meta_db: pd.DataFrame, virus_db: pd.DataFrame, host_taxa: list[str]
+) -> pd.DataFrame:
     """Filter the viral metadata TSV to host-infecting, current assemblies.
 
     Args:
@@ -58,17 +63,23 @@ def filter_metadata(meta_db: pd.DataFrame, virus_db: pd.DataFrame, host_taxa: li
     species_map = dict(zip(virus_db["taxid"], virus_db["taxid_species"], strict=True))
     # Unmapped taxids yield NaN, which isin() excludes — intentional.
     species_taxid = meta_db["taxid"].map(species_map)
-    host_infecting = meta_db.loc[meta_db["taxid"].isin(virus_taxids) | species_taxid.isin(virus_taxids)]
+    host_infecting = meta_db.loc[
+        meta_db["taxid"].isin(virus_taxids) | species_taxid.isin(virus_taxids)
+    ]
     before = len(host_infecting)
     current = host_infecting.loc[host_infecting["assembly_status"] == "current"]
     logger.info("Dropped %d non-current assemblies.", before - len(current))
     return current
 
-#=======================================================================
-# Chunking
-#=======================================================================
 
-def write_accession_chunks(accessions: pd.Series, chunk_dir: Path, chunk_size: int) -> int:
+# =======================================================================
+# Chunking
+# =======================================================================
+
+
+def write_accession_chunks(
+    accessions: pd.Series, chunk_dir: Path, chunk_size: int
+) -> int:
     """Write accessions to fixed-size chunk files for parallel download fan-out.
 
     Args:
@@ -90,24 +101,42 @@ def write_accession_chunks(accessions: pd.Series, chunk_dir: Path, chunk_size: i
         raise ValueError("No accessions passed filter; cannot build virus genome DB.")
     n_chunks = (n + chunk_size - 1) // chunk_size
     for i in range(n_chunks):
-        chunk = accessions.iloc[i * chunk_size:(i + 1) * chunk_size]
+        chunk = accessions.iloc[i * chunk_size : (i + 1) * chunk_size]
         chunk.to_csv(chunk_dir / f"chunk_{i + 1:04d}.txt", index=False, header=False)
-    logger.info("Wrote %d accessions to %d chunk files (chunk_size=%d).", n, n_chunks, chunk_size)
+    logger.info(
+        "Wrote %d accessions to %d chunk files (chunk_size=%d).",
+        n,
+        n_chunks,
+        chunk_size,
+    )
     return n_chunks
 
-#=======================================================================
+
+# =======================================================================
 # Main
-#=======================================================================
+# =======================================================================
+
 
 def parse_arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("meta_db", help="Path to metadata table from ENUMERATE_VIRAL_ACCESSIONS.")
-    parser.add_argument("virus_db", help="Path to TSV of virus taxa, annotated with infection status.")
-    parser.add_argument("host_taxa", help="Space-separated list of host taxon names to filter to.")
+    parser.add_argument(
+        "meta_db", help="Path to metadata table from ENUMERATE_VIRAL_ACCESSIONS."
+    )
+    parser.add_argument(
+        "virus_db", help="Path to TSV of virus taxa, annotated with infection status."
+    )
+    parser.add_argument(
+        "host_taxa", help="Space-separated list of host taxon names to filter to."
+    )
     parser.add_argument("output_db", help="Output path to filtered metadata TSV.")
-    parser.add_argument("output_chunk_dir", help="Output directory for chunked accession lists.")
-    parser.add_argument("chunk_size", type=int, help="Maximum accessions per chunk file.")
+    parser.add_argument(
+        "output_chunk_dir", help="Output directory for chunked accession lists."
+    )
+    parser.add_argument(
+        "chunk_size", type=int, help="Maximum accessions per chunk file."
+    )
     return parser.parse_args()
+
 
 def main() -> None:
     logger.info("Initializing script.")
@@ -120,8 +149,11 @@ def main() -> None:
     filtered = filter_metadata(meta_db, virus_db, host_taxa)
     logger.info("Writing output.")
     filtered.to_csv(args.output_db, sep="\t", index=False)
-    write_accession_chunks(filtered["assembly_accession"], Path(args.output_chunk_dir), args.chunk_size)
+    write_accession_chunks(
+        filtered["assembly_accession"], Path(args.output_chunk_dir), args.chunk_size
+    )
     logger.info("Script complete.")
+
 
 if __name__ == "__main__":
     main()

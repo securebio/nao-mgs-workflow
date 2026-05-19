@@ -4,9 +4,9 @@ Check the pinned Nextflow version against the highest non-ignored upstream
 release.
 """
 
-#=============================================================================
+# =============================================================================
 # Imports
-#=============================================================================
+# =============================================================================
 
 import argparse
 import json
@@ -18,16 +18,14 @@ from pathlib import Path
 
 from packaging.version import Version
 
-#=============================================================================
+# =============================================================================
 # Constants
-#=============================================================================
+# =============================================================================
 
 REPO_ROOT = Path(__file__).parent.parent
 DEFAULT_CONFIG_PATH = REPO_ROOT / "configs" / "profiles.config"
 DEFAULT_IGNORE_PATH = REPO_ROOT / ".nextflowignore"
-DEFAULT_RELEASES_URL = (
-    "https://api.github.com/repos/nextflow-io/nextflow/releases"
-)
+DEFAULT_RELEASES_URL = "https://api.github.com/repos/nextflow-io/nextflow/releases"
 
 # Pattern to extract version from config: nextflowVersion = '!>=25.10.0'
 NEXTFLOW_VERSION_PATTERN = re.compile(
@@ -42,9 +40,10 @@ IGNORE_ENTRY_PATTERN = re.compile(
     r"^(?P<version>\d+\.\d+\.\d+)(?:\s+exp:(?P<exp>\d{4}-\d{2}-\d{2}))?\s*$",
 )
 
-#=============================================================================
+# =============================================================================
 # Helper functions
-#=============================================================================
+# =============================================================================
+
 
 def validate_semver(version: str, source: str) -> str:
     """
@@ -64,6 +63,7 @@ def validate_semver(version: str, source: str) -> str:
         )
     return version
 
+
 def get_pinned_version(config_path: Path) -> str:
     """
     Extract the pinned Nextflow version from a Nextflow config file.
@@ -82,6 +82,7 @@ def get_pinned_version(config_path: Path) -> str:
             "Expected format: nextflowVersion = '!>=X.Y.Z'",
         )
     return validate_semver(match.group(1), str(config_path))
+
 
 def parse_nextflowignore(
     ignore_path: Path,
@@ -126,8 +127,7 @@ def parse_nextflowignore(
             exp_date = date.fromisoformat(exp_str)
         except ValueError as err:
             raise ValueError(
-                f"Invalid expiration date in {ignore_path}:{line_number}: "
-                f"{exp_str!r}.",
+                f"Invalid expiration date in {ignore_path}:{line_number}: {exp_str!r}.",
             ) from err
         if exp_date < today:
             print(
@@ -139,6 +139,7 @@ def parse_nextflowignore(
             continue
         currently_ignored.add(version)
     return currently_ignored
+
 
 def fetch_releases(api_url: str) -> list[str]:
     """
@@ -165,6 +166,7 @@ def fetch_releases(api_url: str) -> list[str]:
             versions.append(tag)
     return versions
 
+
 def select_target_version(releases: list[str], ignored: set[str]) -> str:
     """
     Pick the highest-semver release that is not in the ignore set.
@@ -185,6 +187,7 @@ def select_target_version(releases: list[str], ignored: set[str]) -> str:
             f"are in the ignore set ({sorted(ignored)}).",
         )
     return max(eligible, key=Version)
+
 
 def check_pinned_against_target(pinned: str, latest_eligible: str) -> None:
     """
@@ -208,6 +211,7 @@ def check_pinned_against_target(pinned: str, latest_eligible: str) -> None:
             "add an entry to .nextflowignore with a justification.",
         )
 
+
 def parse_args() -> argparse.Namespace:
     """
     Parse command line arguments.
@@ -223,9 +227,11 @@ def parse_args() -> argparse.Namespace:
     )
     return parser.parse_args()
 
-#=============================================================================
+
+# =============================================================================
 # Main function
-#=============================================================================
+# =============================================================================
+
 
 def main() -> None:
     """
@@ -245,6 +251,7 @@ def main() -> None:
 
     check_pinned_against_target(pinned, latest_eligible)
     print("OK: Pinned version is current")
+
 
 if __name__ == "__main__":
     main()

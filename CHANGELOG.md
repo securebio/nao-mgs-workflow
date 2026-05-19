@@ -30,6 +30,7 @@
 - Apply the broader mechanical Ruff sweep across the Python codebase (`ruff format` + `ruff check --fix`/`--unsafe-fixes` autofixes plus a few small manual cleanups). No behavioural changes.
     - Drop `COM` from `lint.select` in `pyproject.toml`: the formatter manages trailing commas on its own and Ruff explicitly warns that `COM812` conflicts with `ruff format`. Also extend the Ruff `exclude` list to `.venv`, `tmp`, `.nf-test`, `test-data/tiny-index/output/logging`, and `post-processing/deps` so vendored deps, scratch dirs, and stale test-fixture `pyproject.toml` files don't trigger Ruff's hierarchical config discovery.
 - Add Ruff CI gate (`.github/workflows/ruff.yml`) running `ruff check .` and `ruff format --check .` on PRs, and document the new gate in `CLAUDE.md`, `docs/ci.md`, and `docs/developer.md` (#752).
+    - Reformat seven Python files (`bin/check_nextflow_version.py`, `bin/check_version.py`, `bin/test_check_nextflow_version.py`, `modules/local/filterViralGenbankMetadata/.../{filter_viral_genbank_metadata,test_filter_viral_genbank_metadata}.py`, `modules/local/prepareViralMetadata/.../{prepare_viral_metadata,test_prepare_viral_metadata}.py`) introduced or last-edited on dev after the mechanical Ruff sweep ran, so the new gate is satisfied from day one.
 
 # v3.2.1.5
 
