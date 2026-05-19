@@ -165,9 +165,10 @@ Ignore-outcome entries from the same triage can land on the same branch and PR โ
 
 ```
 # <one-line description of the vulnerability>
-# <a few lines: which package, which functionality is affected, why our
-#  use doesn't hit it (or why impact is bounded), what's blocking a fix,
-#  what would trigger re-evaluation>
+# <a few lines: which package, which functionality is affected, the
+#  reachability conclusion from ยง3c (why our pipeline doesn't hit the
+#  vulnerable code path, or what bounds the impact if it does),
+#  what's blocking a fix, what would trigger re-evaluation>
 CVE-XXXX-XXXXX exp:YYYY-MM-DD
 ```
 
