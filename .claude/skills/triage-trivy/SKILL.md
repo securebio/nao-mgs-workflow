@@ -73,7 +73,13 @@ jq -r '.Results[]? | .Vulnerabilities[]? | select(.Severity == "HIGH" or .Severi
    /tmp/trivy/<container>.json
 ```
 
-`.Type` (`gobinary`/`python-pkg`/`debian`/...) is a quick direct-vs-transitive hint when present — `python-pkg` = conda env site-packages, `debian` = system apt, `gobinary` = statically linked. Fall back to `PkgPath` if `.Type` is null.
+`.Type` tells you which packaging ecosystem the vulnerable code lives in, which determines where a fix can come from:
+
+- `python-pkg` → conda env site-packages: fix lands in a `containers/*.yml` pin (direct or transitive — see §3d).
+- `debian` → system apt: a fix usually requires a base-image bump rather than a yml edit (Debian stable rarely backports CVE fixes into the running release; status `<no-dsa>` is the common dead end).
+- `gobinary` → a statically-linked Go binary shipped by an upstream conda package: the fix has to come from that upstream rebuilding against a newer Go toolchain. The yml can only switch to a fixed upstream release if one exists (often it doesn't — Escalate).
+
+Fall back to `PkgPath` (e.g. `opt/conda/.../site-packages/...` or `usr/bin/<name>`) if `.Type` is null.
 
 Cross-reference each ID against `.trivyignore` and drop any that are already listed. Note `.trivyignore` carries both `CVE-*` and `GHSA-*` IDs (e.g. `GHSA-82j2-j2ch-gfr8` for Rust crates without a NVD entry), so match both:
 
