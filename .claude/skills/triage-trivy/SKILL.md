@@ -231,7 +231,7 @@ Omit the top callout entirely for Ignore-only or Escalate-only triages — it's 
   `.trivyignore` exp:YYYY-MM-DD, re-eval: awscli feedstock relaxes the cap.
 ```
 
-**Versioning / CHANGELOG.** A Trivy-only PR is typically a point bump under the in-flight `-dev` version (or just a CHANGELOG line if `-dev` is already cut). The CHANGELOG entry is **one short sentence**: CVE IDs, outcome, one phrase on the fix-blocker. Per-CVE rationale belongs in `.trivyignore` and the PR body, not the CHANGELOG. Defer to the `version-bump` agent (per `CLAUDE.md`) if uncertain.
+**Versioning / CHANGELOG.** A Trivy-only PR is typically a point bump on the in-flight `-dev` release. If a `-dev` point bump has already happened in this cycle for an unrelated change, just append a CHANGELOG line under the existing `-dev` heading without further bumping the version. The CHANGELOG entry is **one short sentence**: CVE IDs, outcome, one phrase on the fix-blocker. Per-CVE rationale belongs in `.trivyignore` and the PR body, not the CHANGELOG. Defer to the `version-bump` agent (per `CLAUDE.md`) if uncertain.
 
 ### Step 6 — Verify before push
 
