@@ -74,16 +74,19 @@ def main() -> int:
     # If branch info provided, check dev suffix rules
     if args.base_branch:
         is_dev_version = pyproject_version.endswith("-dev")
-        is_release_branch = args.head_branch and args.head_branch.startswith("release/")
+        is_release_branch = (
+            args.head_branch and (
+                args.head_branch.startswith("release/")
+                or args.head_branch.startswith("coding-agent/release/")
+            )
+        )
 
         print(f"Base branch: {args.base_branch}")
         print(f"Head branch: {args.head_branch}")
 
         # Rule 1: PRs to main/stable, or release PRs to dev, must NOT have -dev suffix
         if args.base_branch in ("main", "stable") or is_release_branch:
-            msg_base = (
-                "release PRs" if is_release_branch else f"PRs to {args.base_branch}"
-            )
+            msg_base = "release PRs" if is_release_branch else f"PRs to {args.base_branch}"
             if is_dev_version:
                 msg = f"ERROR: {msg_base} must not have -dev version suffix"
                 print(msg, file=sys.stderr)

@@ -2,7 +2,6 @@ name: nf-test INDEX workflow test
 
 on:
   pull_request: # Runs on all PRs
-  workflow_call: # Called by rebuild-benchmark-index
 
 permissions:
   id-token: write

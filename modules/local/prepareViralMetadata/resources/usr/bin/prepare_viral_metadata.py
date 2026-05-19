@@ -19,10 +19,7 @@ from typing import IO, cast
 
 class UTCFormatter(logging.Formatter):
     def formatTime(self, record: logging.LogRecord, datefmt: str | None = None) -> str:
-        return datetime.fromtimestamp(record.created, UTC).strftime(
-            "%Y-%m-%d %H:%M:%S UTC"
-        )
-
+        return datetime.fromtimestamp(record.created, UTC).strftime("%Y-%m-%d %H:%M:%S UTC")
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger()
@@ -31,13 +28,11 @@ handler.setFormatter(UTCFormatter("[%(asctime)s] %(message)s"))
 logger.handlers.clear()
 logger.addHandler(handler)
 
-
 def open_by_suffix(path: str, mode: str = "r") -> IO[str]:
     """Open a file, transparently handling .gz compression."""
     if path.endswith(".gz"):
         return cast(IO[str], gzip.open(path, mode + "t"))
     return cast(IO[str], open(path, mode))
-
 
 def build_species_taxid_map(virus_db_path: str) -> dict[str, str]:
     """Build taxid -> species_taxid mapping from virus taxonomy DB.
@@ -47,20 +42,13 @@ def build_species_taxid_map(virus_db_path: str) -> dict[str, str]:
         Dictionary mapping taxid to species-level taxid.
     """
     with open_by_suffix(virus_db_path) as f:
-        result = {
-            row["taxid"]: row["taxid_species"]
-            for row in csv.DictReader(f, delimiter="\t")
-        }
+        result = {row["taxid"]: row["taxid_species"] for row in csv.DictReader(f, delimiter="\t")}
     logger.info("Read %d entries from virus DB", len(result))
     return result
 
-
 ACCESSION_RE = re.compile(r"^(GC[AF]_\d+\.\d+)")
 
-
-def match_genomes_to_accessions(
-    genome_dir: Path, accessions: list[str]
-) -> dict[str, str]:
+def match_genomes_to_accessions(genome_dir: Path, accessions: list[str]) -> dict[str, str]:
     """Match genome .fna.gz files to assembly accessions by filename prefix.
     Args:
         genome_dir: Directory containing genome .fna.gz files.
@@ -76,13 +64,9 @@ def match_genomes_to_accessions(
             result[m.group(1)] = f.name
     return result
 
-
 def prepare_metadata(
-    merged_metadata_path: str,
-    virus_db_path: str,
-    genomes_dir: str,
-    output_metadata_path: str,
-    output_genomes_dir: str,
+    merged_metadata_path: str, virus_db_path: str, genomes_dir: str,
+    output_metadata_path: str, output_genomes_dir: str, output_paths_path: str,
 ) -> None:
     """Read metadata + virus DB, add species_taxid and local_filename, symlink genomes.
     Args:
@@ -91,6 +75,9 @@ def prepare_metadata(
         genomes_dir: Directory containing downloaded genome .fna.gz files.
         output_metadata_path: Output path for prepared metadata TSV.
         output_genomes_dir: Output directory for symlinked genome files.
+        output_paths_path: Output path for newline-delimited list of
+            symlinked genome file paths (consumed by CONCATENATE_GENOME_FASTA;
+            mirrors the column order of `output_metadata_path`).
     """
     taxid_to_species = build_species_taxid_map(virus_db_path)
     with open_by_suffix(merged_metadata_path) as f:
@@ -106,58 +93,45 @@ def prepare_metadata(
         with open(output_metadata_path, "w", newline="") as f:
             writer = csv.DictWriter(f, fieldnames=out_fields, delimiter="\t")
             writer.writeheader()
+        Path(output_paths_path).write_text("")
         return
     accessions = sorted({r["assembly_accession"] for r in rows})
     acc_to_file = match_genomes_to_accessions(genome_dir, accessions)
-    logger.info(
-        "Matched %d/%d accessions to genome files", len(acc_to_file), len(accessions)
-    )
+    logger.info("Matched %d/%d accessions to genome files", len(acc_to_file), len(accessions))
     # Symlink matched genomes into output directory
     for filename in acc_to_file.values():
         os.symlink(os.path.abspath(genome_dir / filename), output_dir / filename)
     n_written = 0
-    with open(output_metadata_path, "w", newline="") as f:
+    with open(output_metadata_path, "w", newline="") as f, open(output_paths_path, "w") as paths_f:
         writer = csv.DictWriter(f, fieldnames=out_fields, delimiter="\t")
         writer.writeheader()
         for row in rows:
             if row["assembly_accession"] not in acc_to_file:
                 continue
             row["species_taxid"] = taxid_to_species.get(row["taxid"], "")
-            row["local_filename"] = (
-                f"{output_genomes_dir}/{acc_to_file[row['assembly_accession']]}"
-            )
+            row["local_filename"] = f"{output_genomes_dir}/{acc_to_file[row['assembly_accession']]}"
             writer.writerow(row)
+            paths_f.write(f"{row['local_filename']}\n")
             n_written += 1
-    logger.info(
-        "Wrote %d rows (dropped %d unmatched)", n_written, len(rows) - n_written
-    )
-
+    logger.info("Wrote %d rows (dropped %d unmatched)", n_written, len(rows) - n_written)
 
 def parse_arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("merged_metadata", help="Path to merged metadata TSV.")
     parser.add_argument("virus_db", help="Path to virus taxonomy DB TSV.")
     parser.add_argument("genomes_dir", help="Directory containing .fna.gz files.")
-    parser.add_argument(
-        "output_metadata", help="Output path for prepared metadata TSV."
-    )
+    parser.add_argument("output_metadata", help="Output path for prepared metadata TSV.")
     parser.add_argument("output_genomes_dir", help="Output directory for genome files.")
+    parser.add_argument("output_paths", help="Output path for list of symlinked genome file paths.")
     return parser.parse_args()
-
 
 def main() -> None:
     start_time = time.time()
     logger.info("Starting prepare_viral_metadata.")
     args = parse_arguments()
-    prepare_metadata(
-        args.merged_metadata,
-        args.virus_db,
-        args.genomes_dir,
-        args.output_metadata,
-        args.output_genomes_dir,
-    )
+    prepare_metadata(args.merged_metadata, args.virus_db, args.genomes_dir,
+                     args.output_metadata, args.output_genomes_dir, args.output_paths)
     logger.info("Total time elapsed: %.2f seconds", time.time() - start_time)
-
 
 if __name__ == "__main__":
     main()

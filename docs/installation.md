@@ -37,11 +37,6 @@ aws_access_key_id = <ACCESS_KEY_ID>
 aws_secret_access_key = <SECRET_ACCESS_KEY>
 ```
 
-Then, export the keys as environment variables before running nextflow:
-```
-eval "$(aws configure export-credentials --format env)"
-```
-
 Next, you need to make sure your user is configured to use Docker. To do this, create the `docker` user group and add your current user to it:
 
 ```
@@ -89,9 +84,10 @@ If possible, we recommend validating the pipeline's basic functionality in your 
 > [!TIP]
 > We recommend running the test suite on an `m5.xlarge`, to most closely match the conditions under which our CI/CD tests run with Github Actions. However, any Linux machine with sufficient resources should work.
 
-To run the tests, clone this repository onto your machine, navigate to the repo directory, and run
+To run the tests, clone this repository onto your machine, navigate to the repo directory, export your AWS credentials so the tests can read S3-hosted test data, and run `nf-test test`:
 
 ```bash
+eval "$(aws configure export-credentials --format env)"
 nf-test test
 ```
 
@@ -99,9 +95,6 @@ nf-test test
 
 > [!TIP]
 > If someone else in your organization already uses this pipeline, it's likely they've already run the index workflow and generated an output directory. If this is the case, you can reduce costs and increase reproducibility by using theirs instead of generating your own. If you want to do this, skip this step, and edit `configs/run.config` (or `configs/run_ont.config`) such that `params.ref_dir` points to `INDEX_DIR/output`.
-
-> [!NOTE]
-> **For repository maintainers:** The recommended way to rebuild the benchmark index is via the "Rebuild benchmark index" workflow in GitHub Actions (`rebuild-benchmark-index.yml`). This runs INDEX nf-tests as a preflight check, builds the index to the test bucket, and verifies freshness automatically. See the [CI documentation](./ci.md#benchmark-index-management) for details.
 
 Create a new launch directory outside the repo directory and run the index workflow, passing the config file with `-c` and specifying per-run values on the command line:
 
