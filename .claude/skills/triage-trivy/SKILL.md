@@ -159,7 +159,7 @@ The PR opens with `scan-containers` red — expected, the callout explains why. 
 
 Do **not** add a `.trivyignore` entry for a fixable CVE to "cover the rebuild gap" — anti-pattern #1.
 
-Ignore-disposition entries from the same triage can land on the same branch and PR — only the Patch side blocks merge until rebuild.
+Ignore-outcome entries from the same triage can land on the same branch and PR — only the Patch side blocks merge until rebuild.
 
 **4b. Add to `.trivyignore`.** Match the tightness of existing entries — typically a short header for grouped CVEs plus 4–8 comment lines total covering the four pieces below. Don't pad; if a piece is obvious from the rest, drop it.
 
@@ -216,9 +216,9 @@ The PR body has two parts: a temporary rebuild-handoff callout at the top (only 
 
 Omit the top callout entirely for Ignore-only or Escalate-only triages — it's only needed when at least one Patch outcome blocks merge on a rebuild. The callout is meant to be deleted from the PR body once the rebuild lands and CI is green; the assessment block stays as the audit trail.
 
-**Keep it tight.** Reviewers need the disposition and why it's safe; NVD details are one click away. Don't paraphrase the vuln's internals, paste container filesystem paths, or list HTTP headers — that pads without informing.
+**Keep it tight.** Reviewers need the outcome and why it's safe; NVD details are one click away. Don't paraphrase the vuln's internals, paste container filesystem paths, or list HTTP headers — that pads without informing.
 
-**Mixed disposition by container.** A single CVE sometimes splits dispositions — e.g. the urllib3 case where `multiqc` can be patched (transitive via `requests`) but the four awscli-bearing containers cannot (awscli's feedstock pins `urllib3<=2.6.3`). Split the `Action` line by container group:
+**Mixed outcomes by container.** A single CVE sometimes splits outcomes — e.g. the urllib3 case where `multiqc` can be patched (transitive via `requests`) but the four awscli-bearing containers cannot (awscli's feedstock pins `urllib3<=2.6.3`). Split the `Action` line by container group:
 
 ```markdown
 - **Action — multiqc:** **Patch** — `conda-forge::urllib3=2.7.0` pin in
@@ -230,11 +230,11 @@ Omit the top callout entirely for Ignore-only or Escalate-only triages — it's 
   `.trivyignore` exp:YYYY-MM-DD, re-eval: awscli feedstock relaxes the cap.
 ```
 
-**Versioning / CHANGELOG.** A Trivy-only PR is typically a point bump under the in-flight `-dev` version (or just a CHANGELOG line if `-dev` is already cut). The CHANGELOG entry is **one short sentence**: CVE IDs, disposition, one phrase on the fix-blocker. Per-CVE rationale belongs in `.trivyignore` and the PR body, not the CHANGELOG. Defer to the `version-bump` agent (per `CLAUDE.md`) if uncertain.
+**Versioning / CHANGELOG.** A Trivy-only PR is typically a point bump under the in-flight `-dev` version (or just a CHANGELOG line if `-dev` is already cut). The CHANGELOG entry is **one short sentence**: CVE IDs, outcome, one phrase on the fix-blocker. Per-CVE rationale belongs in `.trivyignore` and the PR body, not the CHANGELOG. Defer to the `version-bump` agent (per `CLAUDE.md`) if uncertain.
 
 ### Step 6 — Verify before push
 
-- **Local re-scan covers Ignore-side dispositions only.** `bin/scan_containers.py` and the CI `scan-containers` job both scan the *published* tag pinned in `configs/containers.config`, so neither reflects a Patch-side yml change until after the user-side rebuild. Patch-side CVEs stay red on the PR until then — by design.
+- **Local re-scan covers Ignore-side outcomes only.** `bin/scan_containers.py` and the CI `scan-containers` job both scan the *published* tag pinned in `configs/containers.config`, so neither reflects a Patch-side yml change until after the user-side rebuild. Patch-side CVEs stay red on the PR until then — by design.
 - Re-run `bin/scan_containers.py` locally to confirm Ignore-side findings cleared. To wait for CI instead, push the branch and re-run the failed jobs against the latest run for the head SHA — don't push an empty commit (it fires every workflow):
 
   ```bash
