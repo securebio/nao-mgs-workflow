@@ -42,7 +42,7 @@ Main heading represents the folder name, and subheadings represent a description
 
 - `aligner_hits_all.tsv.gz`: List of all putative viral alignments (primary, secondary and supplementary) from the aligner used in the `EXTRACT_VIRAL_READS` subworkflow (bowtie2 for short reads or minimap2 for ONT) with modified columns from the [SAM specification](https://samtools.github.io/hts-specs/SAMv1.pdf).
 - `lca_hits_all.tsv.gz`: List of putative viral reads after having applied LCA to `aligner_hits_all.tsv.gz`, along with columns representing summary statistics.
-- `reads/raw_viral/*`: Directory containing raw reads corresponding to those reads that survive initial viral screening with BBDuk. (Note: this is not currently produced for ONT data.)
+- `reads/raw_viral/*`: Directory containing raw reads corresponding to those reads that survive initial viral k-mer screening (with Nucleaze). (Note: this is not currently produced for ONT data.)
 
 ### `results/`
 
@@ -120,7 +120,8 @@ Main heading represents the folder name, and subheadings describes the tool that
 
 - `kraken_db`: Directory containing Kraken2 reference database (default: Most recent version of Standard).
 
-#### BBduk
+#### K-mer screening references
 
 - `virus-genomes-masked.fasta.gz`: FASTA file containing host-infecting viral genomes downloaded from viral Genbank (filtered to remove transgenic, contaminated, or erroneous sequences).
-- `ribo-ref-concat.fasta.gz`: Reference database of ribosomal LSU and SSU sequences from SILVA.
+- `virus-genomes-masked.nucleaze.bin`: Pre-built [Nucleaze](https://github.com/jackdougle/nucleaze) k-mer index over the masked viral genomes, consumed by RUN's viral k-mer screen.
+- `ribo-ref-concat.fasta.gz`: Reference database of ribosomal LSU and SSU sequences from SILVA, used by RUN's BBDuk-based ribosomal screen.

@@ -99,7 +99,7 @@ In order to cut down on the time it takes to run our test suite, we have switche
 To run the tests locally, you need to make sure that you have a powerful enough compute instance (at least 4 cores, 14GB of RAM, and 32GB of storage). On AWS EC2, we recommend the `m5.2xlarge`. Note that you may want a more powerful instance when running tests in parallel (as described below).
 
 > [!NOTE]
-> Before running tests, to allow access to testing datasets/indexes on AWS, you will need to set up AWS credentials as described in [installation.md](installation.md), and then export them as described in the installation doc:
+> Before running tests, to allow access to testing datasets/indexes on AWS, you will need to set up AWS credentials as described in [installation.md](installation.md) and export them as environment variables:
 >
 > ```
 > eval "$(aws configure export-credentials --format env)"

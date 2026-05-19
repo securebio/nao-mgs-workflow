@@ -38,8 +38,8 @@ workflow INDEX {
         virus_genome_params.putAll([k: "20", hdist: "3", entropy: "0.5", polyx_len: "10"])
         MAKE_VIRUS_GENOME_DB(
             params.download_virus_taxid ?: params.virus_taxid,
-            params.assembly_source, params.datasets_extra_args,
-            MAKE_VIRUS_TAXONOMY_DB.out.db, MAKE_VIRUS_TAXONOMY_DB.out.nodes,
+            params.assembly_source,
+            MAKE_VIRUS_TAXONOMY_DB.out.db,
             virus_genome_params
         )
         // Download ribosomal references
@@ -47,7 +47,7 @@ workflow INDEX {
         WGET_LSU(params.lsu_url, "lsu_ref.fasta.gz")
         // Build alignment indices
         JOIN_RIBO_REF(WGET_SSU.out.file, WGET_LSU.out.file)
-        MAKE_VIRUS_INDEX(MAKE_VIRUS_GENOME_DB.out.fasta)
+        MAKE_VIRUS_INDEX(MAKE_VIRUS_GENOME_DB.out.fasta, params.nucleaze_k)
         MAKE_HUMAN_INDEX(params.human_url)
         MAKE_CONTAMINANT_INDEX(params.genome_urls, params.contaminants)
         MAKE_RIBO_INDEX(JOIN_RIBO_REF.out.ribo_ref)
@@ -91,7 +91,9 @@ workflow INDEX {
             MAKE_VIRUS_INDEX.out.mm2,
             MAKE_HUMAN_INDEX.out.mm2,
             MAKE_RIBO_INDEX.out.mm2,
-            MAKE_CONTAMINANT_INDEX.out.mm2
+            MAKE_CONTAMINANT_INDEX.out.mm2,
+            // Nucleaze k-mer index for the viral screen in RUN
+            MAKE_VIRUS_INDEX.out.nucleaze
         )
         experimental_index = channel.empty()
 }

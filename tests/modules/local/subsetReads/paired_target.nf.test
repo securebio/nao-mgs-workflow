@@ -7,13 +7,24 @@ nextflow_process {
     tag "module"
     tag "subset_reads_paired_target"
 
-    test("Should return all reads when target is greater than total"){
+    test("Should pass through all reads when target is greater than total"){
         tag "expect_success"
+        setup {
+            run("COUNT_READS") {
+                script "modules/local/countReads/main.nf"
+                process {
+                    '''
+                    input[0] = Channel.of(["test", ["${projectDir}/test-data/tiny-index/reads/R1.fastq", "${projectDir}/test-data/tiny-index/reads/R2.fastq"]])
+                    input[1] = false
+                    '''
+                }
+            }
+        }
         when {
             params {}
             process {
                 '''
-                input[0] = Channel.of(["test", ["${projectDir}/test-data/tiny-index/reads/R1.fastq", "${projectDir}/test-data/tiny-index/reads/R2.fastq"]])
+                input[0] = Channel.of(["test", ["${projectDir}/test-data/tiny-index/reads/R1.fastq", "${projectDir}/test-data/tiny-index/reads/R2.fastq"]]).join(COUNT_READS.out.output)
                 input[1] = 100
                 input[2] = 42 // Arbitrary seed value
                 '''
@@ -21,48 +32,70 @@ nextflow_process {
         }
         then {
             assert process.success
-            assert path(process.out.input[0][1][0]).md5 == path(process.out.output[0][1][0]).md5
-            assert path(process.out.input[0][1][1]).md5 == path(process.out.output[0][1][1]).md5
+            // Output is a single interleaved file containing all input reads
+            def fastq_out = path(process.out.output[0][1]).fastq
+            def names_out = fastq_out.readNames as List
+            def fastq_r1 = path(process.out.input[0][1][0]).fastq
+            def fastq_r2 = path(process.out.input[0][1][1]).fastq
+            def names_r1 = fastq_r1.readNames as List
+            def names_r2 = fastq_r2.readNames as List
+            assert names_out.size() == names_r1.size() + names_r2.size()
+            // Interleave order: R1[0], R2[0], R1[1], R2[1], ...
+            for (int i = 0; i < names_r1.size(); i++) {
+                assert names_out[2*i]     == names_r1[i]
+                assert names_out[2*i + 1] == names_r2[i]
+            }
         }
     }
 
-    test("Should subset appropriately when target is less than total") {
+    test("Should subset and interleave when target is less than total") {
         tag "expect_success"
+        setup {
+            run("COUNT_READS") {
+                script "modules/local/countReads/main.nf"
+                process {
+                    '''
+                    input[0] = Channel.of(["test", ["${projectDir}/test-data/tiny-index/reads/R1.fastq", "${projectDir}/test-data/tiny-index/reads/R2.fastq"]])
+                    input[1] = false
+                    '''
+                }
+            }
+        }
         when {
             params {
                 readTarget = 10
             }
             process {
                 '''
-                input[0] = Channel.of(["test", ["${projectDir}/test-data/tiny-index/reads/R1.fastq", "${projectDir}/test-data/tiny-index/reads/R2.fastq"]])
+                input[0] = Channel.of(["test", ["${projectDir}/test-data/tiny-index/reads/R1.fastq", "${projectDir}/test-data/tiny-index/reads/R2.fastq"]]).join(COUNT_READS.out.output)
                 input[1] = params.readTarget
                 input[2] = 42 // Arbitrary seed value
                 '''
             }
         }
         then {
-            // Should run without errors
             assert process.success
-            // Output should be subset of input
-            def fastq_in = path(process.out.input[0][1][0]).fastq
-            def fastq_out = path(process.out.output[0][1][0]).fastq
-            def names_in = fastq_in.readNames
-            def names_out = fastq_out.readNames
-            assert names_out.size() < names_in.size()
-            for (name in names_out){
-                assert name in names_in
-                assert fastq_out.getRecordByName(name) == fastq_in.getRecordByName(name)
+            def fastq_in_r1 = path(process.out.input[0][1][0]).fastq
+            def fastq_in_r2 = path(process.out.input[0][1][1]).fastq
+            def names_in_r1 = fastq_in_r1.readNames as List
+            def names_in_r2 = fastq_in_r2.readNames as List
+            def fastq_out = path(process.out.output[0][1]).fastq
+            def names_out = fastq_out.readNames as List
+            // Output should be paired (even length) and smaller than total input
+            assert names_out.size() % 2 == 0
+            assert names_out.size() < names_in_r1.size() + names_in_r2.size()
+            def n_pairs_out = (names_out.size() / 2) as int
+            def tolerance = 0.1
+            assert n_pairs_out >= params.readTarget * (1 - tolerance)
+            assert n_pairs_out <= params.readTarget * (1 + tolerance)
+            // Each output read pair must align: same ID on both sides
+            for (int i = 0; i < n_pairs_out; i++) {
+                def r1_name = names_out[2*i]
+                def r2_name = names_out[2*i + 1]
+                assert r1_name in names_in_r1
+                assert r2_name in names_in_r2
+                assert r1_name.split(" ")[0] == r2_name.split(" ")[0]
             }
-            // Number of output reads should be close to target (not exact due to independent sampling)
-            def tolerance = 0.1 // arbitrary
-            assert names_out.size() >= params.readTarget * (1 - tolerance)
-            assert names_out.size() <= params.readTarget * (1 + tolerance)
-            // IDs should match between forward and reverse subsets
-            def ids_out = names_out.collect{it.split(" ")[0]}
-            def fastq_out_rev = path(process.out.output[0][1][1]).fastq
-            def names_out_rev = fastq_out_rev.readNames
-            def ids_out_rev = names_out_rev.collect{it.split(" ")[0]}
-            assert ids_out == ids_out_rev
         }
     }
 

@@ -9,7 +9,8 @@ process COUNT_READS {
         tuple val(sample), path("${sample}_reads_in.fastq.gz"), emit: input
     script:
         def readFile = single_end ? reads : reads[0] // For paired-end data, count the forward reads
-        def extractCmd = readFile.toString().endsWith(".gz") ? "zcat" : "cat"
+        // rapidgzip --count-lines counts inside the parallel decoder; faster than `| wc -l`.
+        def countCmd = readFile.toString().endsWith(".gz") ? "rapidgzip --count-lines -P ${task.cpus}" : "wc -l <"
         """
         set -eou pipefail
         READS=${readFile}
@@ -19,7 +20,7 @@ process COUNT_READS {
         else
             # File has content - try to count lines
             # This will fail if file is corrupted
-            LINECOUNT=\$(${extractCmd} \${READS} | wc -l)
+            LINECOUNT=\$(${countCmd} \${READS})
             if [ \${LINECOUNT} -eq 0 ]; then
                 COUNT=0 # File has content but no lines (e.g., gzip header only)
             else
