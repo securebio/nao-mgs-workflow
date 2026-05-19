@@ -235,7 +235,19 @@ Omit the top callout entirely for Ignore-only or Escalate-only triages — it's 
 
 ### Step 6 — Verify before push
 
-- **Local re-scan covers Ignore-side outcomes only.** `bin/scan_containers.py` and the CI `scan-containers` job both scan the *published* tag pinned in `configs/containers.config`, so neither reflects a Patch-side yml change until after the user-side rebuild. Patch-side CVEs stay red on the PR until then — by design.
+- **Verify Patch outcomes by building the modified container locally and scanning it directly** (recommended for any non-trivial patch — transitive pins, version bumps, base-image swaps). The published-tag scan path won't see the yml change yet (see next bullet), so this is the only pre-merge way to catch a hallucinated fix. Requires local Docker + the `trivy` binary:
+
+  ```bash
+  # Build the modified yml into a local tag (no push — uses build_container() directly):
+  python -c "from pathlib import Path; from bin.build_ecr_container import build_container; \
+    build_container(Path('containers/<name>.yml'), 'triage-local:<name>', 'triage-local:<name>')"
+  # Scan the local image with the same .trivyignore CI uses:
+  trivy image --severity HIGH,CRITICAL --ignorefile .trivyignore triage-local:<name>
+  ```
+
+  If the target CVE doesn't drop out of the local scan, the patch didn't land. Common causes: (a) a feedstock cap keeps the fix unreachable through conda (the urllib3-in-awscli pattern, §3d) — reclassify as Ignore; (b) wrong package pinned — re-read the Trivy `PkgPath`; (c) base image hasn't been bumped though the CVE is system-level.
+
+- **`bin/scan_containers.py` and the CI `scan-containers` job both scan the *published* tag pinned in `configs/containers.config`**, so neither reflects a Patch-side yml change until after the user-side rebuild. They cover Ignore-side outcomes only on a triage branch. Patch-side CVEs stay red on the PR until rebuild — by design.
 - Re-run `bin/scan_containers.py` locally to confirm Ignore-side findings cleared. To wait for CI instead, push the branch and re-run the failed jobs against the latest run for the head SHA — don't push an empty commit (it fires every workflow):
 
   ```bash
