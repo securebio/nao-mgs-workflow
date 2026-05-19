@@ -45,6 +45,27 @@ nextflow_process {
             // `--by-name` keeps the first occurrence (from GCA_002.fna.gz, which
             // paths.csv lists before GCA_003.fna.gz) and drops the duplicate.
             assert fasta["SHARED_NAME_DIFF_SEQ"] == "AAAAAAAA"
+            // Output sequences appear in path-file order (GCA_002 → 003 → 001
+            // per paths.csv), not filesystem readdir order. The module's `awk`
+            // over the paths file enforces this; without it, `seqkit rmdup
+            // --by-name` first-occurrence behavior depends on staging-dir
+            // readdir order, which is hash-bucket-dependent at production
+            // scale (~45k files on ext4 with dir_index). paths.csv lists
+            // files in non-alphabetical order to document the invariant; at
+            // this fixture size readdir may still happen to return path-file
+            // order, but the assertion remains correct as a forward guard.
+            def headers = path(process.out[0][0]).linesGzip
+                .findAll { it.startsWith(">") }
+                .collect { it.substring(1) }
+            assert headers == [
+                "UNIQUE_B",            // GCA_002
+                "SHARED_NAME_DIFF_SEQ",
+                "SHARED_NAME_SAME_SEQ",
+                "UNIQUE_C",            // GCA_003 (SHARED_NAME_* dropped by dedup)
+                "DIFF_NAME_SAME_SEQ_B",
+                "UNIQUE_A",            // GCA_001
+                "DIFF_NAME_SAME_SEQ_A",
+            ]
         }
     }
 
