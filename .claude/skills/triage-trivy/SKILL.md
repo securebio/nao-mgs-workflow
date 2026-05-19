@@ -61,7 +61,7 @@ If running locally instead (when `local_scan=true` or CI is broken):
 python bin/scan_containers.py --config configs/containers.config --output-dir /tmp/trivy
 ```
 
-This pulls each container, runs Trivy with the current `.trivyignore`, and writes JSON results to `/tmp/trivy/`.
+This pulls each container, runs Trivy with the current `.trivyignore`, and writes JSON results to `/tmp/trivy/`. **Note: it scans the containers in your *current branch's* `configs/containers.config`.** After Step 0 you're branched off `dev`, so the local scan reflects the dev container set — usually fine, since most `scan-containers` failures are global-state CVEs that apply identically across branches. If the failing PR has yml or `configs/containers.config` changes in its diff, check out that branch first (or copy the relevant files in) before running the local scan.
 
 ### Step 2 — Extract the actionable CVE list
 
