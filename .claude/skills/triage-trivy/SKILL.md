@@ -269,7 +269,7 @@ Omit the top callout entirely for Ignore-only or Escalate-only triages — it's 
 
 - `.trivyignore` — the file you'll be editing for ignore cases. Existing entries are the format exemplar.
 - `bin/scan_containers.py` — invokable locally for fresh scans.
-- `bin/build_ecr_containers.py` / `bin/build_ecr_container.py` — rebuild commands for finalizing a Patch outcome. The former iterates over `containers/`; the latter exposes `compute_spec_hash`, which decides whether a yml change forces a rebuild.
+- `bin/build_ecr_containers.py` / `bin/build_ecr_container.py` — **user-side** rebuild commands run after the triage PR lands. The agent role on this sandbox is ECR pull-only and does not run them end-to-end. The former iterates over `containers/`; the latter exposes `compute_spec_hash`, which decides whether a yml change forces a rebuild, and `build_container()`, which is the local-only build path the agent *does* call from Step 6's verification step.
 - `.github/workflows/trivy-scan.yml` — the CI job that produces the artifact.
 - `containers/*.yml` — conda env files for the project's containers; updates land here for patch cases.
 - `docs/developer.md` — repo conventions (commits, PR practices).
