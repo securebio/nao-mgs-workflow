@@ -22,15 +22,11 @@ process CONCATENATE_GENOME_FASTA {
         fi
         echo "Filepath file contains" \$(cat ${path_file} | wc -l) "paths, beginning with:"
         head ${path_file}
-        # Parallel-fetch all .fna.gz files into a local staging dir, then
-        # serial-cat through seqkit. Serial cat over Fusion-mounted source is
-        # bottlenecked on per-file S3 GET latency × N files; `xargs -P` cuts
-        # wall time ~13x on production-sized shards. `-P 4*cpus` because
-        # fetches are I/O-bound (sleeping on socket reads). Phase 2 cats in
-        # path-file order (not filesystem order) so `seqkit rmdup --by-name`
-        # first-occurrence behavior is stable across runs.
+        # `-P 4*cpus` because fetches are I/O-bound (sleeping on socket reads).
         mkdir -p staged
         xargs -P \$(( ${task.cpus} * 4 )) -n 100 -a ${path_file} cp -t staged/
+        # Cat in path-file order (not `find staged` filesystem order) so
+        # `seqkit rmdup --by-name` first-occurrence behavior is deterministic.
         awk -F/ '{print "staged/" \$NF}' ${path_file} \\
             | xargs cat \\
             | seqkit rmdup --by-name --threads ${task.cpus} \\
