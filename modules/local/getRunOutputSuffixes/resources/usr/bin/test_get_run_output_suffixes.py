@@ -1,46 +1,47 @@
 #!/usr/bin/env python3
 
-from unittest.mock import patch
-import pytest
-import get_run_output_suffixes
 from pathlib import Path
+from unittest.mock import patch
+
+import get_run_output_suffixes
+import pytest
 
 
 class TestGetRunOutputSuffixes:
     """Test the get_run_output_suffixes function."""
 
     TOML_WITH_SHORTREAD_EXTRA = (
-        '[tool.mgs-workflow]\n'
-        'expected-outputs-run = [\n'
+        "[tool.mgs-workflow]\n"
+        "expected-outputs-run = [\n"
         '    "results/{SAMPLE}_virus_hits.tsv.gz",\n'
-        ']\n'
-        'expected-outputs-run-shortread-extra = [\n'
+        "]\n"
+        "expected-outputs-run-shortread-extra = [\n"
         '    "results/{SAMPLE}_fastp.json",\n'
-        ']\n'
+        "]\n"
     )
 
     @pytest.mark.parametrize(
         "toml_content,expected",
         [
             pytest.param(
-                '[tool.mgs-workflow]\n'
-                'expected-outputs-run = [\n'
+                "[tool.mgs-workflow]\n"
+                "expected-outputs-run = [\n"
                 '    "results/{SAMPLE}_virus_hits.tsv.gz",\n'
                 '    "results/{SAMPLE}_read_counts.tsv",\n'
                 '    "input/samplesheet.csv",\n'
-                ']\n',
+                "]\n",
                 ["read_counts.tsv", "virus_hits.tsv"],
                 id="extracts_sample_suffixes_and_strips_gz",
             ),
             pytest.param(
-                '[tool.mgs-workflow]\n'
-                'expected-outputs-run = [\n'
+                "[tool.mgs-workflow]\n"
+                "expected-outputs-run = [\n"
                 '    "results/{SAMPLE}_read_counts.tsv",\n'
                 '    "input/samplesheet.csv",\n'
-                ']\n'
-                'expected-outputs-downstream = [\n'
+                "]\n"
+                "expected-outputs-downstream = [\n"
                 '    "results_downstream/{GROUP}_validation_hits.tsv.gz",\n'
-                ']\n',
+                "]\n",
                 ["read_counts.tsv"],
                 id="ignores_group_patterns_and_non_templated",
             ),
@@ -51,7 +52,9 @@ class TestGetRunOutputSuffixes:
             ),
         ],
     )
-    def test_get_run_output_suffixes(self, tmp_path: Path, toml_content: str, expected: list[str]) -> None:
+    def test_get_run_output_suffixes(
+        self, tmp_path: Path, toml_content: str, expected: list[str]
+    ) -> None:
         pyproject = tmp_path / "pyproject.toml"
         pyproject.write_text(toml_content)
         assert get_run_output_suffixes.get_run_output_suffixes(pyproject) == expected
@@ -71,7 +74,9 @@ class TestGetRunOutputSuffixes:
             ),
         ],
     )
-    def test_platform_filtering(self, tmp_path: Path, platform: str, expected: list[str]) -> None:
+    def test_platform_filtering(
+        self, tmp_path: Path, platform: str, expected: list[str]
+    ) -> None:
         pyproject = tmp_path / "pyproject.toml"
         pyproject.write_text(self.TOML_WITH_SHORTREAD_EXTRA)
         result = get_run_output_suffixes.get_run_output_suffixes(pyproject, platform)
@@ -90,27 +95,40 @@ class TestGetRunOutputSuffixes:
         for s in result:
             assert not s.endswith(".gz")
 
+
 class TestMain:
     """Test the main() CLI entrypoint."""
 
-    def test_prints_suffixes_to_stdout(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    def test_prints_suffixes_to_stdout(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
         pyproject = tmp_path / "pyproject.toml"
         pyproject.write_text(
-            '[tool.mgs-workflow]\n'
-            'expected-outputs-run = [\n'
+            "[tool.mgs-workflow]\n"
+            "expected-outputs-run = [\n"
             '    "results/{SAMPLE}_bracken.tsv.gz",\n'
             '    "results/{SAMPLE}_read_counts.tsv",\n'
-            ']\n'
+            "]\n"
         )
-        with patch("sys.argv", ["get_run_output_suffixes.py", "--platform", "illumina", str(pyproject)]):
+        with patch(
+            "sys.argv",
+            ["get_run_output_suffixes.py", "--platform", "illumina", str(pyproject)],
+        ):
             get_run_output_suffixes.main()
         captured = capsys.readouterr()
         assert captured.out == "bracken.tsv\nread_counts.tsv\n"
 
     def test_exits_on_missing_file(self, tmp_path: Path) -> None:
-        with patch(
-            "sys.argv",
-            ["get_run_output_suffixes.py", "--platform", "illumina", str(tmp_path / "nonexistent.toml")],
+        with (
+            patch(
+                "sys.argv",
+                [
+                    "get_run_output_suffixes.py",
+                    "--platform",
+                    "illumina",
+                    str(tmp_path / "nonexistent.toml"),
+                ],
+            ),
+            pytest.raises(SystemExit),
         ):
-            with pytest.raises(SystemExit):
-                get_run_output_suffixes.main()
+            get_run_output_suffixes.main()

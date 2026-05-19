@@ -61,9 +61,7 @@ def extract_sample_name(filepath: Path, suffix: str) -> str:
     filename = filepath.name
     expected_ending = f"_{suffix}"
     if not filename.endswith(expected_ending):
-        raise ValueError(
-            f"Filename '{filename}' does not end with '{expected_ending}'"
-        )
+        raise ValueError(f"Filename '{filename}' does not end with '{expected_ending}'")
     return filename[: -len(expected_ending)]
 
 
@@ -90,9 +88,7 @@ def combine_sample_jsons(
     for filepath in sorted(input_files):
         sample = extract_sample_name(filepath, suffix)
         if sample in combined:
-            raise ValueError(
-                f"Duplicate sample name '{sample}' from {filepath.name}"
-            )
+            raise ValueError(f"Duplicate sample name '{sample}' from {filepath.name}")
         with open(filepath) as f:
             data = json.load(f)
         data["sample"] = sample
@@ -152,8 +148,10 @@ def main() -> None:
     start_time = time.time()
     logger.info("Initializing script.")
     args = parse_arguments()
-    logger.info(f"Arguments: group={args.group}, suffix={args.suffix}, "
-                f"output={args.output}, input_files={len(args.input_files)} file(s)")
+    logger.info(
+        f"Arguments: group={args.group}, suffix={args.suffix}, "
+        f"output={args.output}, input_files={len(args.input_files)} file(s)"
+    )
     combined = combine_sample_jsons(args.input_files, args.group, args.suffix)
     with open(args.output, "w") as f:
         json.dump(combined, f, indent=2)

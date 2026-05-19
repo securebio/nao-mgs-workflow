@@ -27,6 +27,8 @@
     - Add `tests/configs/resources/` exercising the `bbmask_resources` memory closure end-to-end: a probe workflow uses `truncate` to create sparse inputs at each tier boundary and asserts the resolved `task.memory` matches the expected 32 / 64 / 128 GB tier.
 - Configure Ruff and apply behaviour-changing Ruff fixes in preparation for adding Ruff to CI.
 - Document Ruff lint/format commands in `CLAUDE.md` under a new "Linting / Formatting" subsection.
+- Apply the broader mechanical Ruff sweep across the Python codebase (`ruff format` + `ruff check --fix`/`--unsafe-fixes` autofixes plus a few small manual cleanups). No behavioural changes.
+    - Drop `COM` from `lint.select` in `pyproject.toml`: the formatter manages trailing commas on its own and Ruff explicitly warns that `COM812` conflicts with `ruff format`. Also extend the Ruff `exclude` list to `.venv`, `tmp`, `.nf-test`, `test-data/tiny-index/output/logging`, and `post-processing/deps` so vendored deps, scratch dirs, and stale test-fixture `pyproject.toml` files don't trigger Ruff's hierarchical config discovery.
 
 # v3.2.1.5
 

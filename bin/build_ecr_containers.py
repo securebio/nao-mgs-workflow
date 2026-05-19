@@ -2,8 +2,8 @@
 """
 Rebuild all ECR containers from specs in containers/ directory.
 """
+
 import argparse
-import logging
 import sys
 from pathlib import Path
 
@@ -68,7 +68,7 @@ def main() -> None:
             failed.append(spec_file.name)
             logger.error(f"Failed to build {spec_file.name}: {e}")
             if not args.continue_on_error:
-                logger.error(f"\nStopping due to error")
+                logger.error("\nStopping due to error")
                 sys.exit(1)
             logger.info("")
 

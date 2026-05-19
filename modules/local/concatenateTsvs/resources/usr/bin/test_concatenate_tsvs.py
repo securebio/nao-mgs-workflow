@@ -2,9 +2,8 @@
 
 from typing import Any
 
-import pytest
-
 import concatenate_tsvs
+import pytest
 
 
 class TestConcatenateTsvs:

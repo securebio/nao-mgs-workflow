@@ -4,9 +4,8 @@ import json
 from pathlib import Path
 from unittest.mock import patch
 
-import pytest
-
 import combine_sample_jsons
+import pytest
 
 
 class TestExtractSampleName:
@@ -16,11 +15,17 @@ class TestExtractSampleName:
         "filename,suffix,expected",
         [
             pytest.param("sample_1_fastp.json", "fastp.json", "sample_1", id="simple"),
-            pytest.param("a_b_c_fastp.json", "fastp.json", "a_b_c", id="underscores_in_name"),
-            pytest.param("s1_metrics.json", "metrics.json", "s1", id="different_suffix"),
+            pytest.param(
+                "a_b_c_fastp.json", "fastp.json", "a_b_c", id="underscores_in_name"
+            ),
+            pytest.param(
+                "s1_metrics.json", "metrics.json", "s1", id="different_suffix"
+            ),
         ],
     )
-    def test_extracts_sample_name(self, filename: str, suffix: str, expected: str) -> None:
+    def test_extracts_sample_name(
+        self, filename: str, suffix: str, expected: str
+    ) -> None:
         result = combine_sample_jsons.extract_sample_name(Path(filename), suffix)
         assert result == expected
 
@@ -41,7 +46,9 @@ class TestCombineSampleJsons:
             pytest.param(["s1", "s2", "s3"], id="multiple_samples"),
         ],
     )
-    def test_combines_samples_with_injected_fields(self, tmp_path: Path, sample_names: list[str]) -> None:
+    def test_combines_samples_with_injected_fields(
+        self, tmp_path: Path, sample_names: list[str]
+    ) -> None:
         input_data = {name: {"reads": name} for name in sample_names}
         for name, data in input_data.items():
             (tmp_path / f"{name}_fastp.json").write_text(json.dumps(data))
@@ -78,13 +85,18 @@ class TestMain:
         input_file.write_text(json.dumps({"total": 42}))
         output_file = tmp_path / "output.json"
 
-        mock_argv.extend([
-            "combine_sample_jsons.py",
-            "--group", "g1",
-            "--suffix", "fastp.json",
-            "--output", str(output_file),
-            str(input_file),
-        ])
+        mock_argv.extend(
+            [
+                "combine_sample_jsons.py",
+                "--group",
+                "g1",
+                "--suffix",
+                "fastp.json",
+                "--output",
+                str(output_file),
+                str(input_file),
+            ]
+        )
         combine_sample_jsons.main()
 
         result = json.loads(output_file.read_text())

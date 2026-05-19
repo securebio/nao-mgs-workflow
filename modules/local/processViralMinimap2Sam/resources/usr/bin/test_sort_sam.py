@@ -20,7 +20,6 @@ def _read_lines(path: Path) -> list[str]:
 
 
 class TestSortSam:
-
     def test_empty_sam_header_only(self, tmp_path: Path) -> None:
         """Header-only SAM produces output with just headers."""
         inp = tmp_path / "input.sam.gz"
@@ -31,7 +30,7 @@ class TestSortSam:
 
         lines = _read_lines(out)
         assert len(lines) == 2
-        assert all(l.startswith("@") for l in lines)
+        assert all(line.startswith("@") for line in lines)
 
     @pytest.mark.parametrize(
         "order,expected",
@@ -41,7 +40,9 @@ class TestSortSam:
         ],
         ids=["already_sorted", "reverse_sorted"],
     )
-    def test_sort_order(self, tmp_path: Path, order: list[str], expected: list[str]) -> None:
+    def test_sort_order(
+        self, tmp_path: Path, order: list[str], expected: list[str]
+    ) -> None:
         """Alignments are sorted by QNAME regardless of input order."""
         inp = tmp_path / "input.sam.gz"
         out = tmp_path / "sorted.sam"
@@ -53,7 +54,7 @@ class TestSortSam:
         sort_sam.sort_sam(str(inp), str(out))
 
         lines = _read_lines(out)
-        qnames = [l.split("\t")[0] for l in lines if not l.startswith("@")]
+        qnames = [line.split("\t")[0] for line in lines if not line.startswith("@")]
         assert qnames == expected
 
     def test_multiple_alignments_per_read(self, tmp_path: Path) -> None:
@@ -71,7 +72,7 @@ class TestSortSam:
         sort_sam.sort_sam(str(inp), str(out))
 
         lines = _read_lines(out)
-        qnames = [l.split("\t")[0] for l in lines if not l.startswith("@")]
+        qnames = [line.split("\t")[0] for line in lines if not line.startswith("@")]
         assert qnames == ["readA", "readA", "readB"]
 
     def test_header_preservation(self, tmp_path: Path) -> None:
@@ -91,7 +92,7 @@ class TestSortSam:
         sort_sam.sort_sam(str(inp), str(out))
 
         lines = _read_lines(out)
-        header_lines = [l for l in lines if l.startswith("@")]
+        header_lines = [line for line in lines if line.startswith("@")]
         assert len(header_lines) == 5
         assert header_lines[0].startswith("@HD")
         assert header_lines[1].startswith("@SQ")
