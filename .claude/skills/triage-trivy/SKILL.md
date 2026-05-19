@@ -91,7 +91,7 @@ If the scan still reports an ID that's in `.trivyignore`, the existing ignore is
 
 ### Step 3 — For each CVE: gather facts before deciding
 
-**Do this per CVE. Do not batch.** Each finding gets its own structured assessment.
+**Do this per CVE. Do not batch.** Each finding gets its own structured assessment. Run the per-CVE blocks inline, or dispatch each one to a sub-agent (good when there are many findings, to keep each context focused) — either is fine, but don't collapse multiple CVEs into a single shared assessment.
 
 **3a. Read the CVE.** Visit `PrimaryURL` (usually NVD or the distro tracker) and read enough to understand:
 - What kind of vulnerability is it? (RCE, DoS, information disclosure, privilege escalation, …)
