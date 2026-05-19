@@ -28,9 +28,13 @@ from Bio.SeqIO.FastaIO import SimpleFastaParser
 # LOGGING #
 ###########
 
+
 class UTCFormatter(logging.Formatter):
     def formatTime(self, record: logging.LogRecord, datefmt: str | None = None) -> str:
-        return datetime.fromtimestamp(record.created, UTC).strftime("%Y-%m-%d %H:%M:%S UTC")
+        return datetime.fromtimestamp(record.created, UTC).strftime(
+            "%Y-%m-%d %H:%M:%S UTC"
+        )
+
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger()
@@ -43,7 +47,10 @@ logger.addHandler(handler)
 # FUNCTIONS #
 #############
 
-def stage_genomes_parallel(filepaths: list[str], staged_dir: Path, parallelism: int) -> None:
+
+def stage_genomes_parallel(
+    filepaths: list[str], staged_dir: Path, parallelism: int
+) -> None:
     """Parallel-fetch each path in `filepaths` into `staged_dir/<basename>`.
     Uses `xargs -P` (driven by `cp -t`) so up to `parallelism` fetches run
     concurrently; basenames are assumed unique (one assembly per accession).
@@ -55,11 +62,28 @@ def stage_genomes_parallel(filepaths: list[str], staged_dir: Path, parallelism: 
     staged_dir.mkdir(parents=True, exist_ok=True)
     paths_txt = staged_dir.parent / "paths.txt"
     paths_txt.write_text("\n".join(filepaths) + "\n")
-    logger.info("Staging %d genome files into %s with -P %d", len(filepaths), staged_dir, parallelism)
+    logger.info(
+        "Staging %d genome files into %s with -P %d",
+        len(filepaths),
+        staged_dir,
+        parallelism,
+    )
     subprocess.run(
-        ["xargs", "-P", str(parallelism), "-n", "100", "-a", str(paths_txt), "cp", "-t", str(staged_dir)],
+        [
+            "xargs",
+            "-P",
+            str(parallelism),
+            "-n",
+            "100",
+            "-a",
+            str(paths_txt),
+            "cp",
+            "-t",
+            str(staged_dir),
+        ],
         check=True,
     )
+
 
 def extract_genome_ids(filepaths: list[str], staged_dir: Path) -> list[list[str]]:
     """Parse each `staged_dir/<basename(filepath)>` FASTA file and collect the
@@ -79,6 +103,7 @@ def extract_genome_ids(filepaths: list[str], staged_dir: Path) -> list[list[str]
                 gid_list.append(genome_id)
         gid_lists.append(gid_list)
     return gid_lists
+
 
 def add_genome_ids(metadata_path: str, output_path: str, parallelism: int) -> None:
     """Read metadata, stage genomes locally, parse FASTA headers, and write
@@ -100,17 +125,29 @@ def add_genome_ids(metadata_path: str, output_path: str, parallelism: int) -> No
     meta_db_gid.to_csv(output_path, sep="\t", index=False)
     logger.info("Wrote %d rows to %s", len(meta_db_gid), output_path)
 
+
 ########
 # MAIN #
 ########
 
+
 def parse_arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("metadata", help="Input Genbank metadata TSV (must contain `local_filename` column).")
-    parser.add_argument("output", help="Output gzipped TSV path (with added `genome_id` column).")
-    parser.add_argument("--parallelism", type=int, default=1,
-                        help="Number of concurrent cp workers for staging (default: 1).")
+    parser.add_argument(
+        "metadata",
+        help="Input Genbank metadata TSV (must contain `local_filename` column).",
+    )
+    parser.add_argument(
+        "output", help="Output gzipped TSV path (with added `genome_id` column)."
+    )
+    parser.add_argument(
+        "--parallelism",
+        type=int,
+        default=1,
+        help="Number of concurrent cp workers for staging (default: 1).",
+    )
     return parser.parse_args()
+
 
 def main() -> None:
     start_time = time.time()
@@ -118,6 +155,7 @@ def main() -> None:
     args = parse_arguments()
     add_genome_ids(args.metadata, args.output, args.parallelism)
     logger.info("Total time elapsed: %.2f seconds", time.time() - start_time)
+
 
 if __name__ == "__main__":
     main()
