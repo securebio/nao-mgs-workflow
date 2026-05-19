@@ -45,6 +45,20 @@ nextflow_process {
             // `--by-name` keeps the first occurrence (from GCA_002.fna.gz, which
             // paths.csv lists before GCA_003.fna.gz) and drops the duplicate.
             assert fasta["SHARED_NAME_DIFF_SEQ"] == "AAAAAAAA"
+            // Output is in path-file order, not readdir order.
+            // (paths.csv lists files non-alphabetically to make this assertion meaningful.)
+            def headers = path(process.out[0][0]).linesGzip
+                .findAll { it.startsWith(">") }
+                .collect { it.substring(1) }
+            assert headers == [
+                "UNIQUE_B",            // GCA_002
+                "SHARED_NAME_DIFF_SEQ",
+                "SHARED_NAME_SAME_SEQ",
+                "UNIQUE_C",            // GCA_003 (SHARED_NAME_* dropped by dedup)
+                "DIFF_NAME_SAME_SEQ_B",
+                "UNIQUE_A",            // GCA_001
+                "DIFF_NAME_SAME_SEQ_A",
+            ]
         }
     }
 
