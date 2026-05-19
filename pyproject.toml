@@ -62,7 +62,6 @@ lint.select = [
     "C4",  # comprehensions (better list/dict comprehensions)
     "UP",  # pyupgrade (modernize Python code)
     "N",   # naming (PEP8 naming conventions)
-    "COM", # commas (trailing commas)
     "PIE", # misc. lints (unnecessary code)
     "RET", # return statements (consistent returns)
     "SIM", # simplify (code simplification)
@@ -81,6 +80,11 @@ exclude = [
     "__pycache__",
     "build",
     "dist",
+    ".venv",
+    "tmp",
+    ".nf-test",
+    "test-data/tiny-index/output/logging",
+    "post-processing/deps",
 ]
 
 # Target Python version

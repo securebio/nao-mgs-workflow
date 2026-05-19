@@ -14,20 +14,23 @@ import argparse
 import hashlib
 import json
 import logging
-from datetime import datetime, timezone
-from pathlib import Path
 import time
+from datetime import UTC, datetime
+from pathlib import Path
 
 ###########
 # LOGGING #
 ###########
 
+
 class UTCFormatter(logging.Formatter):
     """Custom logging formatter that displays timestamps in UTC."""
+
     def formatTime(self, record: logging.LogRecord, datefmt: str | None = None) -> str:
         """Format log timestamps in UTC timezone."""
-        dt = datetime.fromtimestamp(record.created, timezone.utc)
+        dt = datetime.fromtimestamp(record.created, UTC)
         return dt.strftime("%Y-%m-%d %H:%M:%S UTC")
+
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger()
@@ -41,6 +44,7 @@ logger.addHandler(handler)
 # HELPER FUNCTIONS #
 ####################
 
+
 def parse_snapshot(snapshot_path: Path) -> dict[str, dict[str, str]]:
     """
     Parse nf-test snapshot file and extract MD5 sums.
@@ -50,7 +54,7 @@ def parse_snapshot(snapshot_path: Path) -> dict[str, dict[str, str]]:
         dict[str, dict[str, str]]: Dictionary mapping snapshot names to {filename: md5} dictionaries
     """
     results: dict[str, dict[str, str]] = {}
-    with open(snapshot_path, "r") as f:
+    with open(snapshot_path) as f:
         snapshot = json.load(f)
     for snapshot_name, snapshot_data in snapshot.items():
         content = snapshot_data.get("content", [])
@@ -67,6 +71,7 @@ def parse_snapshot(snapshot_path: Path) -> dict[str, dict[str, str]]:
         results[snapshot_name] = md5_map
     return results
 
+
 def compute_md5(file_path: Path) -> str:
     """
     Compute MD5 hash of a file.
@@ -80,6 +85,7 @@ def compute_md5(file_path: Path) -> str:
         for chunk in iter(lambda: f.read(8192), b""):
             md5_hash.update(chunk)
     return md5_hash.hexdigest()
+
 
 def validate_snapshot(
     snapshot_path: Path,
@@ -110,12 +116,15 @@ def validate_snapshot(
             else:
                 actual_md5 = compute_md5(file_path)
                 if actual_md5 != expected_md5:
-                    errors.append(f"MD5 mismatch for {file_path}: {actual_md5} (actual) != {expected_md5} (expected)")
+                    errors.append(
+                        f"MD5 mismatch for {file_path}: {actual_md5} (actual) != {expected_md5} (expected)"
+                    )
         if errors:
             logger.error(f"Errors found for {snapshot_name}:")
             for error in errors:
                 logger.error(f"  {error}")
             raise ValueError(f"Errors found for {snapshot_name}")
+
 
 def parse_arguments() -> argparse.Namespace:
     """
@@ -141,9 +150,11 @@ def parse_arguments() -> argparse.Namespace:
     )
     return parser.parse_args()
 
+
 #################
 # MAIN FUNCTION #
 #################
+
 
 def main() -> None:
     """Main entry point for the script."""
@@ -155,6 +166,7 @@ def main() -> None:
     validate_snapshot(args.snapshot, args.results_dir)
     end_time = time.time()
     logger.info(f"Script completed successfully in {end_time - start_time} seconds.")
+
 
 if __name__ == "__main__":
     main()

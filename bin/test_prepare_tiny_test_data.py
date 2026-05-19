@@ -30,7 +30,11 @@ class TestParseS3Uri:
         ],
     )
     def test_valid(
-        self, uri: str, default_key: str, expected_bucket: str, expected_key: str,
+        self,
+        uri: str,
+        default_key: str,
+        expected_bucket: str,
+        expected_key: str,
     ) -> None:
         bucket, key = parse_s3_uri(uri, default_key)
         assert bucket == expected_bucket

@@ -2,9 +2,8 @@
 
 from typing import Any
 
-import pytest
-
 import add_fixed_column
+import pytest
 
 
 class TestAddColumn:
@@ -64,7 +63,11 @@ class TestAddColumn:
                 "col1\tcol2\tnew_a\tnew_b\n",
             ),
         ],
-        ids=["multi_column_basic", "multi_column_empty_file", "multi_column_header_only"],
+        ids=[
+            "multi_column_basic",
+            "multi_column_empty_file",
+            "multi_column_header_only",
+        ],
     )
     def test_add_multiple_columns(
         self, tsv_factory: Any, input_content: str, columns: str, expected_output: str

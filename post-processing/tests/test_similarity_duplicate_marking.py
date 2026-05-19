@@ -32,6 +32,7 @@ def binary_path():
 
     return str(bin_path)
 
+
 @pytest.fixture
 def tsv_factory(tmp_path):
     """Factory fixture for TSV file operations.
@@ -108,8 +109,8 @@ def run_binary_and_get_output(binary_path, input_file, output_file):
     if result.returncode != 0:
         raise RuntimeError(f"Binary failed: {result.stderr}")
 
-    with gzip.open(output_file, 'rt') as f:
-        reader = csv.DictReader(f, delimiter='\t')
+    with gzip.open(output_file, "rt") as f:
+        reader = csv.DictReader(f, delimiter="\t")
         fieldnames = reader.fieldnames
         rows = list(reader)
 
@@ -126,10 +127,12 @@ class TestEndToEnd:
         qual1 = "I" * 76
         qual2 = "H" * 76
 
-        content = create_test_tsv_content([
-            ("read1", seq1, qual1, "read1"),
-            ("read2", seq2, qual2, "read2"),
-        ])
+        content = create_test_tsv_content(
+            [
+                ("read1", seq1, qual1, "read1"),
+                ("read2", seq2, qual2, "read2"),
+            ]
+        )
         input_file = tsv_factory.create_gzip("input.tsv.gz", content)
         output_file = tsv_factory.get_path("output.tsv.gz")
 
@@ -149,11 +152,13 @@ class TestEndToEnd:
         seq3 = "GGCC" * 19
         qual = "I" * 76
 
-        content = create_test_tsv_content([
-            ("read1", seq1, qual, "read1"),
-            ("read2", seq2, qual, "read1"),  # alignment duplicate of read1
-            ("read3", seq3, qual, "read3"),
-        ])
+        content = create_test_tsv_content(
+            [
+                ("read1", seq1, qual, "read1"),
+                ("read2", seq2, qual, "read1"),  # alignment duplicate of read1
+                ("read3", seq3, qual, "read3"),
+            ]
+        )
         input_file = tsv_factory.create_gzip("input.tsv.gz", content)
         output_file = tsv_factory.get_path("output.tsv.gz")
 
@@ -170,7 +175,9 @@ class TestEndToEnd:
         # Alignment dup gets NA
         assert rows[1]["sim_dup_group_size"] == "NA"
 
-    def test_similarity_duplicates_among_alignment_unique(self, binary_path, tsv_factory):
+    def test_similarity_duplicates_among_alignment_unique(
+        self, binary_path, tsv_factory
+    ):
         """Test similarity deduplication among alignment-unique reads."""
         # read1 and read3 are identical (similarity duplicates)
         seq1 = "A" * 76
@@ -178,11 +185,13 @@ class TestEndToEnd:
         qual1 = "I" * 76
         qual2 = "H" * 76
 
-        content = create_test_tsv_content([
-            ("read1", seq1, qual1, "read1"),
-            ("read2", seq2, qual2, "read1"),  # Alignment duplicate of read1
-            ("read3", seq1, qual1, "read3"),  # Identical to read1
-        ])
+        content = create_test_tsv_content(
+            [
+                ("read1", seq1, qual1, "read1"),
+                ("read2", seq2, qual2, "read1"),  # Alignment duplicate of read1
+                ("read3", seq1, qual1, "read3"),  # Identical to read1
+            ]
+        )
         input_file = tsv_factory.create_gzip("input.tsv.gz", content)
         output_file = tsv_factory.get_path("output.tsv.gz")
 
@@ -212,7 +221,9 @@ class TestEndToEnd:
         input_file = tsv_factory.create_gzip("input.tsv.gz", content)
         output_file = tsv_factory.get_path("output.tsv.gz")
 
-        rows, fieldnames = run_binary_and_get_output(binary_path, input_file, output_file)
+        rows, fieldnames = run_binary_and_get_output(
+            binary_path, input_file, output_file
+        )
 
         # Verify output has header but no data rows
         assert len(rows) == 0
@@ -224,9 +235,11 @@ class TestEndToEnd:
         seq = "ACGT" * 12
         qual = "I" * 48
 
-        content = create_test_tsv_content([
-            ("read1", seq, qual, "read1"),
-        ])
+        content = create_test_tsv_content(
+            [
+                ("read1", seq, qual, "read1"),
+            ]
+        )
         input_file = tsv_factory.create_gzip("input.tsv.gz", content)
         output_file = tsv_factory.get_path("output.tsv.gz")
 
@@ -250,13 +263,23 @@ class TestEndToEnd:
         input_file = tsv_factory.create_gzip("input.tsv.gz", content)
         output_file = tsv_factory.get_path("output.tsv.gz")
 
-        rows, fieldnames = run_binary_and_get_output(binary_path, input_file, output_file)
+        rows, fieldnames = run_binary_and_get_output(
+            binary_path, input_file, output_file
+        )
 
         # Check column order: original columns + sim_dup_exemplar at end
         expected_fields = [
-            "extra1", "seq_id", "extra2", "query_seq", "query_seq_rev",
-            "query_qual", "query_qual_rev", "prim_align_dup_exemplar",
-            "extra3", "sim_dup_exemplar", "sim_dup_group_size",
+            "extra1",
+            "seq_id",
+            "extra2",
+            "query_seq",
+            "query_seq_rev",
+            "query_qual",
+            "query_qual_rev",
+            "prim_align_dup_exemplar",
+            "extra3",
+            "sim_dup_exemplar",
+            "sim_dup_group_size",
         ]
         assert fieldnames == expected_fields
 
@@ -270,11 +293,13 @@ class TestEndToEnd:
         seq = "ACGT" * 12
         qual = "I" * 48
 
-        content = create_test_tsv_content([
-            ("read1", seq, qual, "read1"),
-            ("read2", seq, qual, "read1"),  # alignment dup
-            ("read3", seq, qual, "read1"),  # alignment dup
-        ])
+        content = create_test_tsv_content(
+            [
+                ("read1", seq, qual, "read1"),
+                ("read2", seq, qual, "read1"),  # alignment dup
+                ("read3", seq, qual, "read1"),  # alignment dup
+            ]
+        )
         input_file = tsv_factory.create_gzip("input.tsv.gz", content)
         output_file = tsv_factory.get_path("output.tsv.gz")
 
@@ -302,20 +327,24 @@ class TestEndToEnd:
         qual_high = "I" * 76
         qual_low = "5" * 76
 
-        content = create_test_tsv_content([
-            # Alignment group 1: read1 (exemplar) + read2 (align dup)
-            ("read1", seq, qual_high, "read1"),
-            ("read2", seq, qual_low, "read1"),
-            # Alignment group 2: read3 (exemplar) + read4, read5 (align dups)
-            ("read3", seq, qual_low, "read3"),
-            ("read4", seq, qual_low, "read3"),
-            ("read5", seq, qual_low, "read3"),
-        ])
+        content = create_test_tsv_content(
+            [
+                # Alignment group 1: read1 (exemplar) + read2 (align dup)
+                ("read1", seq, qual_high, "read1"),
+                ("read2", seq, qual_low, "read1"),
+                # Alignment group 2: read3 (exemplar) + read4, read5 (align dups)
+                ("read3", seq, qual_low, "read3"),
+                ("read4", seq, qual_low, "read3"),
+                ("read5", seq, qual_low, "read3"),
+            ]
+        )
         input_file = tsv_factory.create_gzip("input.tsv.gz", content)
         output_file = tsv_factory.get_path("output.tsv.gz")
 
         rows, fieldnames = run_binary_and_get_output(
-            binary_path, input_file, output_file,
+            binary_path,
+            input_file,
+            output_file,
         )
 
         assert "sim_dup_group_size" in fieldnames

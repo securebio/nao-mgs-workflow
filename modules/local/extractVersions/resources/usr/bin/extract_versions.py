@@ -6,7 +6,7 @@ Extract version information from pyproject.toml files and output as environment 
 
 import argparse
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Any
 
 try:
     import tomllib
@@ -19,8 +19,8 @@ class VersionInfo:
     """Version information extracted from a pyproject.toml file."""
 
     version: str
-    min_index_version: Optional[str] = None
-    min_pipeline_version: Optional[str] = None
+    min_index_version: str | None = None
+    min_pipeline_version: str | None = None
 
 
 def parse_args() -> argparse.Namespace:

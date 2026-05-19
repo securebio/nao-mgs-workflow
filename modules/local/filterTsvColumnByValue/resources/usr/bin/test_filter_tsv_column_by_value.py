@@ -2,12 +2,11 @@
 
 # TODO: Add unit tests for individual functions in a future pass
 
+import logging
 from typing import Any
 
-import pytest
-import logging
-
 import filter_tsv_column_by_value
+import pytest
 
 
 class TestFilterTsvColumnByValue:
@@ -21,16 +20,15 @@ class TestFilterTsvColumnByValue:
         # Mock logger
         logger = logging.getLogger()
 
-        with open(input_file, "r") as inf, open(output_file, "w") as outf:
+        with open(input_file) as inf, open(output_file, "w") as outf:
             filter_tsv_column_by_value.stream_and_filter_tsv(
                 inf,
                 outf,
                 "test_column",
                 "test_value",
                 keep_matching=True,
-                logger=logger
+                logger=logger,
             )
-
 
         result = tsv_factory.read_plain(output_file)
         assert result == ""
@@ -43,14 +41,9 @@ class TestFilterTsvColumnByValue:
 
         logger = logging.getLogger()
 
-        with open(input_file, "r") as inf, open(output_file, "w") as outf:
+        with open(input_file) as inf, open(output_file, "w") as outf:
             filter_tsv_column_by_value.stream_and_filter_tsv(
-                inf,
-                outf,
-                "x",
-                "test_value",
-                keep_matching=True,
-                logger=logger
+                inf, outf, "x", "test_value", keep_matching=True, logger=logger
             )
 
         result = tsv_factory.read_plain(output_file)
@@ -64,16 +57,21 @@ class TestFilterTsvColumnByValue:
 
         logger = logging.getLogger()
 
-        with pytest.raises(ValueError, match="Column 'nonexistent_column' not found in header"):
-            with open(input_file, "r") as inf, open(output_file, "w") as outf:
-                filter_tsv_column_by_value.stream_and_filter_tsv(
-                    inf,
-                    outf,
-                    "nonexistent_column",
-                    "false",
-                    keep_matching=True,
-                    logger=logger
-                )
+        with (
+            pytest.raises(
+                ValueError, match="Column 'nonexistent_column' not found in header"
+            ),
+            open(input_file) as inf,
+            open(output_file, "w") as outf,
+        ):
+            filter_tsv_column_by_value.stream_and_filter_tsv(
+                inf,
+                outf,
+                "nonexistent_column",
+                "false",
+                keep_matching=True,
+                logger=logger,
+            )
 
     def test_filter_keep_no_rows(self, tsv_factory: Any) -> None:
         """Test filtering that removes all rows (keep_matching=True, no matching values)."""
@@ -83,14 +81,14 @@ class TestFilterTsvColumnByValue:
 
         logger = logging.getLogger()
 
-        with open(input_file, "r") as inf, open(output_file, "w") as outf:
+        with open(input_file) as inf, open(output_file, "w") as outf:
             filter_tsv_column_by_value.stream_and_filter_tsv(
                 inf,
                 outf,
                 "x",
                 5,  # No rows have x=5
                 keep_matching=True,
-                logger=logger
+                logger=logger,
             )
 
         result = tsv_factory.read_plain(output_file)
@@ -108,14 +106,14 @@ class TestFilterTsvColumnByValue:
 
         logger = logging.getLogger()
 
-        with open(input_file, "r") as inf, open(output_file, "w") as outf:
+        with open(input_file) as inf, open(output_file, "w") as outf:
             filter_tsv_column_by_value.stream_and_filter_tsv(
                 inf,
                 outf,
                 "x",
                 6,  # Only one row has x=6
                 keep_matching=True,
-                logger=logger
+                logger=logger,
             )
 
         result = tsv_factory.read_plain(output_file)
@@ -134,14 +132,14 @@ class TestFilterTsvColumnByValue:
 
         logger = logging.getLogger()
 
-        with open(input_file, "r") as inf, open(output_file, "w") as outf:
+        with open(input_file) as inf, open(output_file, "w") as outf:
             filter_tsv_column_by_value.stream_and_filter_tsv(
                 inf,
                 outf,
                 "x",
                 6,  # Discard the row with x=6
                 keep_matching=False,
-                logger=logger
+                logger=logger,
             )
 
         result = tsv_factory.read_plain(output_file)
@@ -158,21 +156,16 @@ class TestFilterTsvColumnByValue:
         for line in lines[1:]:
             fields = line.split("\t")
             assert int(fields[0]) != 6
-    
+
     def test_filter_lines_with_quotes(self, tsv_factory: Any) -> None:
         """Should correctly handle fields with quotes (regression test)."""
         input_content = 'x\ty\tz\n"0"\t"1"\t"2"\n"0"\t"3"\t"4"\n'
         input_file = tsv_factory.create_plain("input.tsv", input_content)
         output_file = tsv_factory.get_path("output.tsv")
         logger = logging.getLogger()
-        with open(input_file, "r") as inf, open(output_file, "w") as outf:
+        with open(input_file) as inf, open(output_file, "w") as outf:
             filter_tsv_column_by_value.stream_and_filter_tsv(
-                inf,
-                outf,
-                "x",
-                '"0"',
-                keep_matching=True,
-                logger=logger
+                inf, outf, "x", '"0"', keep_matching=True, logger=logger
             )
         result = tsv_factory.read_plain(output_file)
         assert result == input_content

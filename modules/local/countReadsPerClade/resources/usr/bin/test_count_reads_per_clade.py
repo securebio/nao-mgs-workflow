@@ -495,7 +495,9 @@ def test_group_mismatch_error(tsv_factory: Any) -> None:
     reads_file = tsv_factory.create_plain("reads.tsv", reads_content)
 
     # Try to process with wrong group
-    with pytest.raises(AssertionError, match="Expected group 'wrong_group', found 'test'"):
+    with pytest.raises(
+        AssertionError, match="Expected group 'wrong_group', found 'test'"
+    ):
         count_direct_reads_per_taxid(read_tsv(reads_file), "wrong_group")
 
 
@@ -525,7 +527,7 @@ def test_header_only_reads_file(tsv_factory: Any) -> None:
 
     # Read and verify output is header-only
     output_content = tsv_factory.read_gzip(output_file).strip()
-    lines = output_content.split('\n')
+    lines = output_content.split("\n")
 
     # Should have exactly 1 line (header only)
     assert len(lines) == 1

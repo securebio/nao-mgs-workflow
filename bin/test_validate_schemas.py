@@ -6,7 +6,6 @@ import json
 from pathlib import Path
 
 import pytest
-
 from validate_schemas import (
     decompressed_path,
     find_data_files,
@@ -21,6 +20,7 @@ from validate_schemas import (
 ############################
 # get_output_schema_names  #
 ############################
+
 
 class TestGetOutputSchemaNames:
     def test_extracts_schema_names_from_pyproject(self, tmp_path: Path) -> None:
@@ -59,9 +59,11 @@ some-other-key = "value"
         result = get_output_schema_names(pyproject)
         assert result == set()
 
+
 #########################
 # find_schema_for_file  #
 #########################
+
 
 class TestFindSchemaForFile:
     def test_returns_path_when_schema_exists(self, tmp_path: Path) -> None:
@@ -102,9 +104,11 @@ class TestFindSchemaForFile:
         result = find_schema_for_file(data_file, schema_dir, known_schema_names)
         assert result == schema_file
 
+
 ####################
 # find_data_files  #
 ####################
+
 
 class TestFindDataFiles:
     def test_finds_files_in_results_dirs(self, tmp_path: Path) -> None:
@@ -132,9 +136,11 @@ class TestFindDataFiles:
         files = find_data_files(tmp_path)
         assert files == []
 
+
 #####################
 # decompressed_path #
 #####################
+
 
 class TestDecompressedPath:
     def test_yields_original_path_for_uncompressed(self, tmp_path: Path) -> None:
@@ -153,9 +159,11 @@ class TestDecompressedPath:
             assert path != data_file
             assert path.read_text() == content
 
+
 ########################
 # reordered_to_schema  #
 ########################
+
 
 class TestReorderedToSchema:
     def _make_schema(
@@ -189,7 +197,11 @@ class TestReorderedToSchema:
         ],
     )
     def test_no_reorder(
-        self, tmp_path: Path, fields: list[str], fields_match: str | None, data: str,
+        self,
+        tmp_path: Path,
+        fields: list[str],
+        fields_match: str | None,
+        data: str,
     ) -> None:
         schema_path = self._make_schema(tmp_path, fields, fields_match)
         data_file = tmp_path / "test.tsv"
@@ -210,7 +222,11 @@ class TestReorderedToSchema:
         ids=["basic", "quote_characters"],
     )
     def test_reorders(
-        self, tmp_path: Path, fields: list[str], data: str, expected: str,
+        self,
+        tmp_path: Path,
+        fields: list[str],
+        data: str,
+        expected: str,
     ) -> None:
         schema_path = self._make_schema(tmp_path, fields, "equal")
         data_file = tmp_path / "test.tsv"
@@ -223,13 +239,17 @@ class TestReorderedToSchema:
         schema_path = self._make_schema(tmp_path, ["a", "b", "c"], "equal")
         data_file = tmp_path / "test.tsv"
         data_file.write_text("a\tb\ta\n1\t2\t3\n")
-        with pytest.raises(ValueError, match="Duplicate columns"):
-            with reordered_to_schema(data_file, schema_path) as path:
-                pass
+        with (
+            pytest.raises(ValueError, match="Duplicate columns"),
+            reordered_to_schema(data_file, schema_path),
+        ):
+            pass
+
 
 #######################
 # validate_json_file  #
 #######################
+
 
 class TestValidateJsonFile:
     SCHEMA_WITH_REQUIRED = {
@@ -243,13 +263,19 @@ class TestValidateJsonFile:
         "type": "object",
     }
 
-    @pytest.mark.parametrize("schema,data,should_pass", [
-        (SCHEMA_WITH_REQUIRED, {"name": "hello"}, True),
-        (SCHEMA_WITH_REQUIRED, {}, False),
-        (SCHEMA_WITH_REQUIRED, {"name": "hello", "count": "not_an_int"}, False),
-        (PERMISSIVE_SCHEMA, {}, True),
-    ], ids=["valid", "missing_required", "wrong_type", "empty_object_permissive"])
-    def test_validates_json(self, tmp_path: Path, schema: dict, data: dict, should_pass: bool) -> None:
+    @pytest.mark.parametrize(
+        "schema,data,should_pass",
+        [
+            (SCHEMA_WITH_REQUIRED, {"name": "hello"}, True),
+            (SCHEMA_WITH_REQUIRED, {}, False),
+            (SCHEMA_WITH_REQUIRED, {"name": "hello", "count": "not_an_int"}, False),
+            (PERMISSIVE_SCHEMA, {}, True),
+        ],
+        ids=["valid", "missing_required", "wrong_type", "empty_object_permissive"],
+    )
+    def test_validates_json(
+        self, tmp_path: Path, schema: dict, data: dict, should_pass: bool
+    ) -> None:
         data_file = tmp_path / "test.json"
         data_file.write_text(json.dumps(data))
         is_valid, errors = validate_json_file(data_file, schema)
@@ -287,9 +313,11 @@ class TestValidateJsonFile:
         assert len(errors) == 1
         assert "Invalid schema" in errors[0]
 
+
 #################
 # validate_file #
 #################
+
 
 class TestValidateFile:
     @pytest.fixture
@@ -320,14 +348,18 @@ class TestValidateFile:
         assert is_valid
         assert errors == []
 
-    def test_invalid_type_returns_errors(self, tmp_path: Path, simple_schema: Path) -> None:
+    def test_invalid_type_returns_errors(
+        self, tmp_path: Path, simple_schema: Path
+    ) -> None:
         data_file = tmp_path / "test.tsv"
         data_file.write_text("col1\tcol2\nfoo\tnot_an_int\n")
         is_valid, errors = validate_file(data_file, simple_schema)
         assert not is_valid
         assert len(errors) > 0
 
-    def test_empty_data_file_is_valid(self, tmp_path: Path, simple_schema: Path) -> None:
+    def test_empty_data_file_is_valid(
+        self, tmp_path: Path, simple_schema: Path
+    ) -> None:
         """Header-only files should validate successfully."""
         data_file = tmp_path / "test.tsv"
         data_file.write_text("col1\tcol2\n")
@@ -346,19 +378,37 @@ class TestValidateFile:
             ),
             # Pattern constraint - invalid
             (
-                [{"name": "id", "type": "string", "constraints": {"pattern": "^[^/]+(/[^/]+)?$"}}],
+                [
+                    {
+                        "name": "id",
+                        "type": "string",
+                        "constraints": {"pattern": "^[^/]+(/[^/]+)?$"},
+                    }
+                ],
                 "id\nfoo/bar/baz\n",
                 False,
             ),
             # Pattern constraint - valid
             (
-                [{"name": "id", "type": "string", "constraints": {"pattern": "^[^/]+(/[^/]+)?$"}}],
+                [
+                    {
+                        "name": "id",
+                        "type": "string",
+                        "constraints": {"pattern": "^[^/]+(/[^/]+)?$"},
+                    }
+                ],
                 "id\nNC_001234.1\nAB/CD\n",
                 True,
             ),
             # Enum constraint - invalid
             (
-                [{"name": "status", "type": "string", "constraints": {"enum": ["pass", "fail"]}}],
+                [
+                    {
+                        "name": "status",
+                        "type": "string",
+                        "constraints": {"enum": ["pass", "fail"]},
+                    }
+                ],
                 "status\nunknown\n",
                 False,
             ),
@@ -375,7 +425,14 @@ class TestValidateFile:
                 False,
             ),
         ],
-        ids=["required", "pattern_invalid", "pattern_valid", "enum", "minimum", "maximum"],
+        ids=[
+            "required",
+            "pattern_invalid",
+            "pattern_valid",
+            "enum",
+            "minimum",
+            "maximum",
+        ],
     )
     def test_constraint_validation(
         self, tmp_path: Path, schema_fields: list, data: str, should_pass: bool
@@ -429,19 +486,29 @@ class TestValidateFile:
         assert is_valid
         assert errors == []
 
-    def test_multiple_errors_all_reported(self, tmp_path: Path, simple_schema: Path) -> None:
+    def test_multiple_errors_all_reported(
+        self, tmp_path: Path, simple_schema: Path
+    ) -> None:
         """Multiple validation errors should all be reported."""
         data_file = tmp_path / "test.tsv"
-        data_file.write_text("col1\tcol2\nfoo\tnot_int_1\nbar\tnot_int_2\nbaz\tnot_int_3\n")
+        data_file.write_text(
+            "col1\tcol2\nfoo\tnot_int_1\nbar\tnot_int_2\nbaz\tnot_int_3\n"
+        )
         is_valid, errors = validate_file(data_file, simple_schema)
         assert not is_valid
         assert len(errors) >= 3
 
-    @pytest.mark.parametrize("data,should_pass", [
-        ({"name": "hello"}, True),
-        ({}, False),
-    ], ids=["valid_json", "invalid_json"])
-    def test_json_schema_dispatch(self, tmp_path: Path, data: dict, should_pass: bool) -> None:
+    @pytest.mark.parametrize(
+        "data,should_pass",
+        [
+            ({"name": "hello"}, True),
+            ({}, False),
+        ],
+        ids=["valid_json", "invalid_json"],
+    )
+    def test_json_schema_dispatch(
+        self, tmp_path: Path, data: dict, should_pass: bool
+    ) -> None:
         """validate_file dispatches to JSON Schema validation for JSON Schemas."""
         schema = {
             "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -458,9 +525,11 @@ class TestValidateFile:
         if not should_pass:
             assert len(errors) > 0
 
+
 ####################
 # validate_outputs #
 ####################
+
 
 class TestValidateOutputs:
     @pytest.fixture
@@ -506,7 +575,9 @@ expected-outputs-downstream = [
         exit_code = validate_outputs(output_dir, schema_dir, pyproject)
         assert exit_code == 1
 
-    def test_success_when_no_matching_schemas(self, tmp_path: Path, pyproject: Path) -> None:
+    def test_success_when_no_matching_schemas(
+        self, tmp_path: Path, pyproject: Path
+    ) -> None:
         schema_dir = tmp_path / "schemas"
         schema_dir.mkdir()
         output_dir = tmp_path / "output"
@@ -517,14 +588,18 @@ expected-outputs-downstream = [
         exit_code = validate_outputs(output_dir, schema_dir, pyproject)
         assert exit_code == 0
 
-    def test_failure_when_output_dir_missing(self, tmp_path: Path, pyproject: Path) -> None:
+    def test_failure_when_output_dir_missing(
+        self, tmp_path: Path, pyproject: Path
+    ) -> None:
         schema_dir = tmp_path / "schemas"
         schema_dir.mkdir()
         output_dir = tmp_path / "nonexistent"
         exit_code = validate_outputs(output_dir, schema_dir, pyproject)
         assert exit_code == 1
 
-    def test_failure_when_schema_dir_missing(self, tmp_path: Path, pyproject: Path) -> None:
+    def test_failure_when_schema_dir_missing(
+        self, tmp_path: Path, pyproject: Path
+    ) -> None:
         output_dir = tmp_path / "output"
         output_dir.mkdir()
         schema_dir = tmp_path / "nonexistent"
@@ -540,12 +615,31 @@ expected-outputs-downstream = [
         exit_code = validate_outputs(output_dir, schema_dir, pyproject)
         assert exit_code == 1
 
-    @pytest.mark.parametrize("schema,expected_exit", [
-        ({"$schema": "https://json-schema.org/draft/2020-12/schema", "type": "object"}, 0),
-        ({"$schema": "https://json-schema.org/draft/2020-12/schema", "type": "object",
-          "properties": {"name": {"type": "string"}}, "required": ["name"]}, 1),
-    ], ids=["valid_json", "invalid_json"])
-    def test_json_validation(self, tmp_path: Path, schema: dict, expected_exit: int) -> None:
+    @pytest.mark.parametrize(
+        "schema,expected_exit",
+        [
+            (
+                {
+                    "$schema": "https://json-schema.org/draft/2020-12/schema",
+                    "type": "object",
+                },
+                0,
+            ),
+            (
+                {
+                    "$schema": "https://json-schema.org/draft/2020-12/schema",
+                    "type": "object",
+                    "properties": {"name": {"type": "string"}},
+                    "required": ["name"],
+                },
+                1,
+            ),
+        ],
+        ids=["valid_json", "invalid_json"],
+    )
+    def test_json_validation(
+        self, tmp_path: Path, schema: dict, expected_exit: int
+    ) -> None:
         """JSON files are validated against JSON Schemas."""
         pyproject = tmp_path / "pyproject.toml"
         pyproject.write_text("""
@@ -570,12 +664,19 @@ expected-outputs-downstream = [
 # TestFastpSchemaIntegration  #
 ###############################
 
+
 class TestFastpSchemaIntegration:
     def test_real_fastp_schema_integration(self) -> None:
         """Integration test: validate real test data against the fastp schema."""
         repo_root = Path(__file__).resolve().parent.parent
         schema_path = repo_root / "schemas" / "fastp.schema.json"
-        data_path = repo_root / "test-data" / "results" / "downstream_output_shortread" / "tt1_fastp.json"
+        data_path = (
+            repo_root
+            / "test-data"
+            / "results"
+            / "downstream_output_shortread"
+            / "tt1_fastp.json"
+        )
         is_valid, errors = validate_file(data_path, schema_path)
         assert is_valid, f"Validation errors: {errors}"
 
@@ -589,11 +690,16 @@ class TestFastpSchemaIntegration:
 
         repo_root = Path(__file__).resolve().parent.parent
         schema_path = repo_root / "schemas" / "fastp.schema.json"
-        fixture_path = repo_root / "test-data" / "downstream" / "empty" / "empty_sample_fastp.json"
+        fixture_path = (
+            repo_root / "test-data" / "downstream" / "empty" / "empty_sample_fastp.json"
+        )
         with open(schema_path) as f:
             full_schema = json.load(f)
         # Extract sample_entry and inject $defs so $ref resolution works
-        sample_entry_schema = {**full_schema["$defs"]["sample_entry"], "$defs": full_schema["$defs"]}
+        sample_entry_schema = {
+            **full_schema["$defs"]["sample_entry"],
+            "$defs": full_schema["$defs"],
+        }
         with open(fixture_path) as f:
             fixture_data = json.load(f)
         # The fixture is a per-sample file; add pipeline-injected fields
@@ -601,5 +707,9 @@ class TestFastpSchemaIntegration:
         fixture_data["group"] = "empty_group"
         validator_cls = validator_for(full_schema)
         validator = validator_cls(sample_entry_schema)
-        errors = sorted(validator.iter_errors(fixture_data), key=lambda e: list(e.absolute_path))
-        assert not errors, f"Fixture fails sample_entry validation: {[e.message for e in errors]}"
+        errors = sorted(
+            validator.iter_errors(fixture_data), key=lambda e: list(e.absolute_path)
+        )
+        assert not errors, (
+            f"Fixture fails sample_entry validation: {[e.message for e in errors]}"
+        )
