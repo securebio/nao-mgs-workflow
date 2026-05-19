@@ -180,7 +180,7 @@ If multiple related CVEs share an assessment (e.g. several Go-stdlib CVEs in the
 
 ### Step 5 — Generate the PR description
 
-The PR body has two parts: a temporary rebuild-handoff callout at the top (only when there's at least one Patch outcome), and the persistent Trivy-triage assessment block. Use this as the body of the *new* triage PR (per the branching note above; the only exception is the PR-local-CVE case, where you instead append the assessment block under a `# Trivy triage` heading on the original PR):
+The PR body has two parts: a temporary rebuild-handoff callout at the top (only when there's at least one Patch outcome), and the persistent Trivy-triage assessment block. Use this as the body of the *new* triage PR. **Exception:** when the failing PR's own diff introduced the CVE (a new yml pin or container change in its diff — see the Branching section above), the fix belongs inline on that PR, so append the assessment block under a `# Trivy triage` heading on the original PR instead.
 
 ```markdown
 > **Rebuild required before merge — `scan-containers` is red until then.**
