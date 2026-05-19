@@ -219,7 +219,7 @@ Omit the top callout entirely for Ignore-only or Escalate-only triages — it's 
 
 **Keep it tight.** Reviewers need the outcome and why it's safe; NVD details are one click away. Don't paraphrase the vuln's internals, paste container filesystem paths, or list HTTP headers — that pads without informing.
 
-**Mixed outcomes by container.** A single CVE sometimes splits outcomes — e.g. the urllib3 case where `multiqc` can be patched (transitive via `requests`) but the four awscli-bearing containers cannot (awscli's feedstock pins `urllib3<=2.6.3`). Split the `Action` line by container group:
+**Worked example — mixed outcomes by container (urllib3 in awscli).** A single CVE sometimes splits outcomes. urllib3 is the canonical case: `multiqc` can be patched (urllib3 enters transitively via `requests`, so an explicit `urllib3=2.7.0` pin in `multiqc.yml` pulls in the fixed wheel) but the four awscli-bearing containers cannot (awscli's feedstock pins `urllib3<=2.6.3` across every conda-forge build, blocking the fix until awscli relaxes the cap). The triage outcome is Patch for one container group, Ignore for the other, in the same PR. Split the `Action` line by container group in the PR description:
 
 ```markdown
 - **Action — multiqc:** **Patch** — `conda-forge::urllib3=2.7.0` pin in
