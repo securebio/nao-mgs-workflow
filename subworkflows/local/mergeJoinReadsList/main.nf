@@ -29,13 +29,13 @@ workflow MERGE_JOIN_READS_LIST {
         single_end // Boolean channel: true if input reads are single-ended, false if interleaved
     main:
         // Split single-end value channel into two branches, one of which will be empty
-        single_end_check = single_end.branch{
-            single: it
-            paired: !it
+        single_end_check = single_end.branch{ v ->
+            single: v
+            paired: !v
         }
         // Forward reads into one of two channels based on endedness (the other will be empty)
-        reads_ch_single = single_end_check.single.combine(reads_ch).map{it -> [it[1], it[2]] }
-        reads_ch_paired = single_end_check.paired.combine(reads_ch).map{it -> [it[1], it[2]] }
+        reads_ch_single = single_end_check.single.combine(reads_ch).map { _flag, sample, reads -> [sample, reads] }
+        reads_ch_paired = single_end_check.paired.combine(reads_ch).map { _flag, sample, reads -> [sample, reads] }
         // In paired-end case, merge and join
         merged_ch = BBMERGE(reads_ch_paired)
         // Sort both merged and unmerged lists to ensure alignment
@@ -45,7 +45,7 @@ workflow MERGE_JOIN_READS_LIST {
         sorted_reads_ch = merged_ch.reads.map { sample, merged, unmerged ->
             def merged_list = merged instanceof List ? merged : [merged]
             def unmerged_list = unmerged instanceof List ? unmerged : [unmerged]
-            tuple(sample, merged_list.sort { it.name }, unmerged_list.sort { it.name })
+            tuple(sample, merged_list.sort { f -> f.name }, unmerged_list.sort { f -> f.name })
         }
         single_read_ch_paired = JOIN_FASTQ(sorted_reads_ch, false).reads
             .map{ sample, files -> tuple(sample, files instanceof List ? files : [files]) }
@@ -53,7 +53,7 @@ workflow MERGE_JOIN_READS_LIST {
             .map{ sample, files -> tuple(sample, files instanceof List ? files : [files]) }
         // In single-end case, take unmodified reads
         single_read_ch_single = reads_ch_single
-        summarize_bbmerge_ch_single = Channel.empty()
+        summarize_bbmerge_ch_single = channel.empty()
         single_read_ch = single_read_ch_paired.mix(single_read_ch_single)
         summarize_bbmerge_ch = summarize_bbmerge_ch_paired.mix(summarize_bbmerge_ch_single)
     emit:

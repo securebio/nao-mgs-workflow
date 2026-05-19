@@ -1,44 +1,33 @@
-// Download viral genomes for a single taxon using NCBI datasets CLI
+// Download viral genomes for a chunk of pre-filtered assembly accessions
+// using NCBI datasets CLI.
 process DOWNLOAD_VIRAL_GENOMES {
     label "ncbi_datasets"
     label "large"
+    label "use_scratch"
     input:
-        val(taxid)
+        path(accession_chunk)
         val(assembly_source)
         val(extra_args)
         val(max_attempts)
     output:
-        path("${taxid}_genomes/*.fna.gz"), optional: true, emit: genomes
-        path("${taxid}_metadata.tsv"), emit: metadata
+        path("genomes/*.fna.gz"), emit: genomes
     script:
-        // Header schema for ${taxid}_metadata.tsv
-        def metadata_header = "assembly_accession\\ttaxid\\torganism_name\\tsource_database\\tassembly_status"
         """
-        trap 'rm -f dl_err.txt' EXIT
+        CHUNK_ID=\$(basename ${accession_chunk} .txt)
 
-        # 1. Download dehydrated package (metadata + manifest only).
-        # NCBI's taxonomy can include taxa without assemblies,
-        # so catch and emit empty outputs instead of failing.
-        if ! datasets download genome taxon ${taxid} \\
+        # 1. Download dehydrated package (manifest only) for the accessions in
+        # this chunk. Filtering happened upstream in FILTER_VIRAL_GENBANK_METADATA.
+        datasets download genome accession \\
             --assembly-source ${assembly_source} \\
             --include genome \\
             --no-progressbar \\
             --dehydrated \\
+            --inputfile ${accession_chunk} \\
             ${extra_args} \\
-            --filename output.zip 2> dl_err.txt
-        then
-            cat dl_err.txt >&2
-            if grep -qE '^Error:.*no genome data is currently available for this taxon\\.\$' dl_err.txt; then
-                echo -e "${metadata_header}" > ${taxid}_metadata.tsv
-                echo "Taxon ${taxid} has no assemblies available; emitting empty outputs." >&2
-                exit 0
-            fi
-            exit 1
-        fi
-        cat dl_err.txt >&2
+            --filename output.zip
         unzip -o output.zip -d output/
 
-        # 2. Rehydrate: download actual genome files with retry and exponential backoff
+        # 2. Rehydrate: download actual genome files with retry and exponential backoff.
         BACKOFF=10
         for attempt in \$(seq 1 ${max_attempts}); do
             if datasets rehydrate --directory output/ --max-workers ${task.cpus} --no-progressbar --gzip; then
@@ -53,25 +42,12 @@ process DOWNLOAD_VIRAL_GENOMES {
             BACKOFF=\$((BACKOFF * 2))
         done
 
-        # 3. Convert assembly report to TSV with standardized column names.
-        # `assminfo-status` is included so downstream filtering in
-        # filterViralGenbankMetadata can drop non-current assemblies
-        # `datasets` `--assembly-version` arg does not work currently,
-        # see ncbi/datasets#576 for bug report
-        dataformat tsv genome \\
-            --inputfile output/ncbi_dataset/data/assembly_data_report.jsonl \\
-            --fields accession,organism-tax-id,organism-name,source_database,assminfo-status \\
-            > raw_metadata.tsv
+        # 3. Flatten rehydrate output into a single genomes/ directory.
+        mkdir -p genomes
+        find output/ncbi_dataset/data -name '*.fna.gz' -print0 \\
+            | xargs -0 -r mv -t genomes/
 
-        # 4. Replace header with standardized column names
-        { echo -e "${metadata_header}"
-          tail -n +2 raw_metadata.tsv
-        } > ${taxid}_metadata.tsv
-
-        # 5. Collect genome FASTAs into genomes/ directory
-        mkdir -p ${taxid}_genomes
-        find output/ncbi_dataset/data -name '*.fna.gz' -exec mv {} ${taxid}_genomes/ \\;
-        rm -rf output/ output.zip raw_metadata.tsv
-        echo "Downloaded \$((  \$(wc -l < ${taxid}_metadata.tsv) - 1  )) assemblies for taxid ${taxid}"
+        rm -rf output/ output.zip
+        echo "Downloaded \$(find genomes -maxdepth 1 -name '*.fna.gz' | wc -l) genomes for chunk \$CHUNK_ID"
         """
 }

@@ -48,3 +48,9 @@ If you still keep running into this issue, you may consider contacting Seqera fo
 - This generally causes no problems, but is something to be aware of:
      - The default `/scratch/` directory on AWS EC2 instances works fine in our experience, but if you are seeing `/scratch` directory permissions or space issues, you may have to customize the `/scratch/` directory with a UserData script in your EC2 launch template.
      - To turn off caching, you can always remove the `aws.batch.volumes = ['/scratch:/scratch']` line from the relevant profile.
+
+## Scratch directories
+- For each Fusion-enabled profile defined in `configs/profiles.config`, processes with the `use_scratch` label create a local [scratch](https://docs.seqera.io/nextflow/reference/process#scratch) directory for file operations and then stage out to Fusion at the end of the process
+- SecureBio's standard Batch launch templates are sized for this. If you run on a custom launch template with a small root volume and hit scratch space issues, you can remove the `process { withLabel: 'use_scratch' { scratch = true } }` selector from the relevant profile in `configs/profiles.config`.
+- If a process with the `use_scratch` label fails during stage out, Nextflow is likely trying to stage out too many files at once. Remove the scratch selector from the relevant profile in `configs/profiles.config` or reduce the number of staged out files per-process, for example by increasing parallelization at that step if that is an exposed parameter.
+- In both cases, at production scale, this will likely dramatically slow down file operations for processes with the `use_scratch` tag.

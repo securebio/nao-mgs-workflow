@@ -29,7 +29,7 @@ These guidelines represent best practices to implement in new code, though some 
 - Process conventions (see `modules/local/vsearch/main.nf` for an example of a well-written process that follows these conventions):
     - All processes should have a label specifying needed resources (e.g. `label "small"`). Resources are then specified in `configs/resources.config`.
         - Most labels declare static resources (`cpus = 8; memory = 16.GB`).
-        - When a process's peak memory scales strongly with input size, the label's `memory` directive may be a closure over the process inputs — e.g. `memory = { ResourceTierUtils.pickMemoryTier(reads, ...) }`. See `bbmask_resources` and `ResourceTierUtils` in `configs/resources.config` for an example.
+        - When a process's peak memory scales strongly with input size, the label's `memory` directive may be a closure over the process inputs that picks a memory tier based on total byte size. See `bbmask_resources` in `configs/resources.config` for an example, and `tests/configs/resources/` for its associated nf-test.
     - All processes should have a label specifying the Docker container to use (e.g. `label "BBTools"`). Containers are then specified in `configs/containers.config`.
     - Any processes that are used only for testing should have `label "testing"`.
     - All processes should emit their input (for testing validation); use `ln -s` to link the input to the output.
@@ -61,7 +61,7 @@ These guidelines represent best practices to implement in new code, though some 
 - Python style: 
     - Loosely follow PEP 8 conventions.
     - Type hints are encouraged. When used, prefer Python 3.12+ native syntax (e.g. `list[str]`, `str | None`) over imports from the `typing` module.
-    - Linting is encouraged using `ruff`. Type checking with `mypy` is enforced in CI (see `.github/workflows/mypy.yml`).
+    - Linting and formatting are enforced via `ruff` in CI (see `.github/workflows/ruff.yml`); CI runs `ruff check .` and `ruff format --check .` and never auto-fixes — run `ruff check --fix .` and `ruff format .` locally and commit the results. Type checking with `mypy` is enforced in CI (see `.github/workflows/mypy.yml`).
     - Formatting applied (including in nested directories) will follow the configuration in `pyproject.toml`.
     - After making any formatting changes, carefully review the diff to ensure no unintended modifications were introduced that could affect functionality.
 
@@ -138,6 +138,7 @@ You can run Python tools directly without installing them first:
 ```bash
 uv run pytest           # Run tests
 uv run ruff check .     # Lint code
+uv run ruff format .    # Auto-format code
 uv run mypy .           # Type checking
 ```
 
@@ -145,8 +146,9 @@ Alternatively, you can sync the environment once and then use the tools directly
 ```bash
 uv sync                 # Install all dependencies from pyproject.toml
 source .venv/bin/activate
-pytest                  
+pytest
 ruff check .
+ruff format .
 mypy .
 ```
 
@@ -251,7 +253,7 @@ Only pipeline maintainers should author a new release. The process for going thr
 
         1. Check for new releases of reference databases and update `configs/index.config`[^refs].
         2. Update `index-min-pipeline-version` and `pipeline-min-index-version` in the `[tool.mgs-workflow]` section of `pyproject.toml` to reflect any changes to compatibility restrictions.
-        3. Run the "Rebuild benchmark index" workflow in GitHub Actions to generate a new index at `s3://nao-testing/mgs-workflow-test/index-latest/`. See [CI documentation](./ci.md#benchmark-index-management) for details.
+        3. Rebuild the benchmark index at `s3://nao-testing/mgs-workflow-test/index-latest/`; see the [Benchmark index age check](./ci.md#benchmark-index-age-check-check-index-ageyml) section of `ci.md`.
 
 3. Open a PR to merge the release branch into `dev`, wait for CI tests to complete, and resolve any failing tests. Then:
 
@@ -263,7 +265,7 @@ Only pipeline maintainers should author a new release. The process for going thr
 
 4. Once all checks pass, merge the PR into main **without squashing**[^approval]. A Github Actions workflow will automatically create and tag a new release and reset other branches (`dev` & `ci-test`, plus `stable` if only the fourth version number has changed) to match `main`.
 
-    1. Non-point releases are NOT automatically merged to `stable`. To update `stable` with a non-point release, use the "Manually reset stable branch to main" workflow in GitHub Actions (`manual-reset.yml`). This requires typing "reset stable" as confirmation.
+    1. Non-point releases are NOT automatically merged to `stable`. To update `stable` with a non-point release, use the "Manually reset stable branch to main" workflow in GitHub Actions (`manual-reset.yml`); see the [Manual stable reset](./ci.md#manual-stable-reset-manual-resetyml) section of `ci.md` for the protections gating that workflow.
 
 [^refs]: For reference genomes, check for updated releases for human, cow, pig, and mouse; do not update carp; update *E. coli* if there is a new release for the same strain. Check [SILVA](https://www.arb-silva.de/download/archive/) for rRNA databases and [here](https://benlangmead.github.io/aws-indexes/k2) for Kraken2 databases.
 [^approval]: Note that, to streamline the release process, we no longer require an approving review for PRs into `main`. (We still require an approving review for `release` PRs into `dev`.)

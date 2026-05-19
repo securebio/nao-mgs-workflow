@@ -1,9 +1,9 @@
 #! /usr/bin/env python3
 import argparse
-import subprocess
 import os
 import re
-import sys
+import subprocess
+
 
 def find_dependency(directory: str, component: str) -> set[str]:
 
@@ -27,13 +27,13 @@ def find_dependency(directory: str, component: str) -> set[str]:
     file_paths = set()
     for line in grep_results.stdout.splitlines():
         if any(trigger in line for trigger in relevant_triggers):
-                file = line.split(":", 1)[0]
-                if "nf-test" in file:
-                    continue
-                else:
-                    file_paths.add(file)
+            file = line.split(":", 1)[0]
+            if "nf-test" in file:
+                continue
+            file_paths.add(file)
 
     return file_paths
+
 
 def identify_component_file(component: str) -> str | None:
     # Search in subworkflows and workflow directories
@@ -52,15 +52,16 @@ def identify_component_file(component: str) -> str | None:
                 return path
     return None
 
+
 def get_subcomponents(component_path: str) -> tuple[set[str], set[str]]:
-    with open(component_path, "r") as f:
+    with open(component_path) as f:
         component_content = f.read()
 
     modules, workflows = set(), set()
     for line in component_content.splitlines():
         if "include" in line:
             # Extract the first all caps variable in the include line
-            match = re.search(r'include\s*{\s*([A-Z][A-Z0-9_]*)', line)
+            match = re.search(r"include\s*{\s*([A-Z][A-Z0-9_]*)", line)
             if match:
                 if "subworkflows" in line:
                     workflows.add(match.group(1))
@@ -69,7 +70,10 @@ def get_subcomponents(component_path: str) -> tuple[set[str], set[str]]:
                 continue
     return modules, workflows
 
-def collect_component_dependencies(component: str) -> tuple[set[str] | None, set[str] | None]:
+
+def collect_component_dependencies(
+    component: str,
+) -> tuple[set[str] | None, set[str] | None]:
     file_path = identify_component_file(component)
     if file_path is None:
         return None, None
@@ -84,41 +88,39 @@ def collect_component_dependencies(component: str) -> tuple[set[str] | None, set
 
     return modules, workflows
 
+
 def workflow_uses_subworkflow(workflow: str, subworkflow_path: str) -> bool:
     workflow_path = f"workflows/{workflow}"
     subworkflow_dir = subworkflow_path.replace("/main.nf", "")
 
-    with open(workflow_path, "r") as f:
+    with open(workflow_path) as f:
         workflow_content = f.read()
 
     # Use word boundaries to preempt substring matches
-    if re.search(r'\b' + re.escape(subworkflow_dir) + r'\b', workflow_content):
-        return True
-    else:
-        return False
+    return bool(re.search(r"\b" + re.escape(subworkflow_dir) + r"\b", workflow_content))
 
 
 def subworkflow_uses_subworkflow(subworkflow: str, dependent_subworkflow: str) -> bool:
     subworkflow_path = f"subworkflows/local/{subworkflow}/main.nf"
     dependent_subworkflow_dir = dependent_subworkflow.replace("/main.nf", "")
 
-    with open(subworkflow_path, "r") as f:
+    with open(subworkflow_path) as f:
         subworkflow_content = f.read()
 
     # Use word boundaries to preempt substring matches
-    if re.search(r'\b' + re.escape(dependent_subworkflow_dir) + r'\b', subworkflow_content):
-        return True
-    else:
-        return False
+    return bool(
+        re.search(
+            r"\b" + re.escape(dependent_subworkflow_dir) + r"\b", subworkflow_content
+        )
+    )
 
 
 def get_workflow_test(workflow: str) -> str:
     workflow_path = f"workflows/{workflow}"
-    if re.search(r'\b' + re.escape("run_dev_se") + r'\b', workflow_path):
+    if re.search(r"\b" + re.escape("run_dev_se") + r"\b", workflow_path):
         return "tests/workflows/run_dev.nf.test"
-    else:
-        base_name = os.path.basename(workflow_path).split(".")[0]
-        return f"tests/workflows/{base_name}.nf.test"
+    base_name = os.path.basename(workflow_path).split(".")[0]
+    return f"tests/workflows/{base_name}.nf.test"
 
 
 def parse_args() -> tuple[str, bool, bool]:
@@ -160,15 +162,16 @@ def main() -> None:
     component, verbose, skip_subcomponents = parse_args()
 
     # Validate component name - only allow alphanumerics and underscores
-    if not re.match(r'^[a-zA-Z0-9_]+$', component):
-        raise ValueError(f"Error: Invalid component name '{component}'. Component names must contain only alphanumeric characters and underscores.")
+    if not re.match(r"^[a-zA-Z0-9_]+$", component):
+        raise ValueError(
+            f"Error: Invalid component name '{component}'. Component names must contain only alphanumeric characters and underscores."
+        )
 
     tests_to_execute = set()
 
-
-    #-----------------------------------------------------------------#
+    # -----------------------------------------------------------------#
     # Identifying tests that directly use the component
-    #-----------------------------------------------------------------#
+    # -----------------------------------------------------------------#
 
     direct_tests = find_dependency("tests/", component)
     tests_to_execute.update(direct_tests)
@@ -185,9 +188,9 @@ def main() -> None:
         print(f"   • {test}")
     print()
 
-    #-----------------------------------------------------------------#
+    # -----------------------------------------------------------------#
     # Identifying dependents
-    #-----------------------------------------------------------------#
+    # -----------------------------------------------------------------#
 
     # Find dependent subworkflows
     dependent_subworkflows = set(find_dependency("subworkflows/", component))
@@ -230,7 +233,6 @@ def main() -> None:
     for workflow in dependent_workflows:
         workflow_tests.add(get_workflow_test(workflow))
 
-
     print("=" * 72)
     print(f"Found {len(workflow_tests)} tests for affected workflows:")
     print("=" * 72)
@@ -238,9 +240,9 @@ def main() -> None:
         print(f"   • {test}")
     print()
 
-    #-----------------------------------------------------------------#
+    # -----------------------------------------------------------------#
     # Identifying dependencies
-    #-----------------------------------------------------------------#
+    # -----------------------------------------------------------------#
 
     # Identifying module and subworkflow dependencies and their tests
     if not skip_subcomponents:
@@ -253,11 +255,14 @@ def main() -> None:
         else:
             if modules is not None:
                 for module in modules:
-                    subcomp_tests.update(find_dependency("tests/modules/local/", module))
+                    subcomp_tests.update(
+                        find_dependency("tests/modules/local/", module)
+                    )
             if workflows is not None:
                 for workflow in workflows:
-                    subcomp_tests.update(find_dependency("tests/subworkflows/local/", workflow))
-
+                    subcomp_tests.update(
+                        find_dependency("tests/subworkflows/local/", workflow)
+                    )
 
             print("=" * 72)
             print(f"Found {len(subcomp_tests)} tests for subcomponents of {component}:")
@@ -268,13 +273,12 @@ def main() -> None:
             print()
             tests_to_execute.update(subcomp_tests)
 
-
     tests_to_execute.update(subworkflow_tests)
     tests_to_execute.update(workflow_tests)
 
-    #-----------------------------------------------------------------#
+    # -----------------------------------------------------------------#
     # Running tests
-    #-----------------------------------------------------------------#
+    # -----------------------------------------------------------------#
 
     print("=" * 72)
     print(f"Identified {len(tests_to_execute)} test files to execute. Running...")
@@ -283,15 +287,15 @@ def main() -> None:
     cmd = ["nf-test", "test"] + sorted(tests_to_execute)
     if verbose:
         cmd.append("--verbose")
-        print(f"\nRunning test files with verbose output:")
+        print("\nRunning test files with verbose output:")
     else:
-        print(f"\nRunning test files:")
+        print("\nRunning test files:")
 
     for test in sorted(tests_to_execute):
         print(f"   • {test}")
     print("-" * 72)
 
-    result = subprocess.run(cmd)
+    subprocess.run(cmd)
 
 
 if __name__ == "__main__":

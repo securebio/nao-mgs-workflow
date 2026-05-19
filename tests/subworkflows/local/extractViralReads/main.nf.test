@@ -24,8 +24,8 @@ nextflow_workflow {
             assert workflow.out.hits_final.size() > 0
             assert workflow.out.inter_lca.size() > 0
             assert workflow.out.inter_aligner.size() > 0
-            assert workflow.out.bbduk_match.size() > 0
-            assert workflow.out.bbduk_trimmed.size() > 0
+            assert workflow.out.kmer_match.size() > 0
+            assert workflow.out.kmer_trimmed.size() > 0
             // hits_final should be a valid gzipped TSV with rows
             def hits_tab = path(workflow.out.hits_final[0][1]).csv(sep: "\t", decompress: true)
             assert hits_tab.rowCount > 0
@@ -50,9 +50,9 @@ nextflow_workflow {
             assert workflow.out.hits_final.size() > 0
             assert workflow.out.inter_lca.size() > 0
             assert workflow.out.inter_aligner.size() > 0
-            // BBDuk channels should be empty for ONT
-            assert workflow.out.bbduk_match.size() == 0
-            assert workflow.out.bbduk_trimmed.size() == 0
+            // K-mer screen channels should be empty for ONT
+            assert workflow.out.kmer_match.size() == 0
+            assert workflow.out.kmer_trimmed.size() == 0
             // hits_final should be a valid gzipped TSV with rows
             def hits_tab = path(workflow.out.hits_final[0][1]).csv(sep: "\t", decompress: true)
             assert hits_tab.rowCount > 0

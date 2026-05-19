@@ -1,9 +1,37 @@
 # v3.2.2.0-dev
 
+- Speed up `DOWNLOAD_VIRAL_GENOMES` by staging on local scratch and replacing per-file `find -exec mv` with batched `xargs mv`. Introduce a `use_scratch` label with a per-profile process selector in `configs/profiles.config` that enables scratch directories for profiles with Fusion enabled.
+- Rework `MAKE_VIRUS_GENOME_DB` to enumerate viral accessions up-front, filter by host-infection and assembly status, then fan out chunks to `DOWNLOAD_VIRAL_GENOMES` to evenly parallelize across the taxonomic tree.
+    - Replace `datasets_extra_args` with more specific `datasets_summary_extra_args` and `datasets_download_extra_args` parameters for `INDEX` workflow.
+- Fix the `Show version info` step in `.github/workflows/manual-reset.yml`, which was failing with `fatal: invalid reference: stable` because `actions/checkout@v4` only makes the checked-out ref available as a local branch (other branches are only present as `origin/<name>` remote-tracking refs). Replace the brittle `git checkout <ref> -- pyproject.toml` / revert pattern with `git show origin/main:pyproject.toml` and `git show origin/stable:pyproject.toml`, which reads the file content without touching the working tree.
+- Tighten protection on the manual-reset workflow by gating its `reset-stable` job on the GitHub `stable-reset` environment (restricted to `main` and human approval), and remove the unused `rebuild-benchmark-index.yml` workflow along with its now-dangling `workflow_call` triggers in `nf-test-workflows-index.yml` / `check-index-age.yml` and references in `docs/ci.md` / `docs/installation.md`. Add a "Manual stable reset" section to `docs/ci.md` documenting the workflow and its `stable-reset` environment gate, and replace the now-stale "Rebuild benchmark index" pointer in `docs/developer.md` with guidance on manual rebuild.
+- Replace the BBDuk-based viral k-mer pre-screen in `EXTRACT_VIRAL_READS_SHORT` with [Nucleaze](https://github.com/jackdougle/nucleaze). The BBDuk-based ribosomal screen in `PROFILE` is unchanged (Nucleaze has no `minkmerfraction` equivalent yet). Bumps `pipeline-min-index-version` to `3.2.2.0`.
+    - INDEX: new `NUCLEAZE_INDEX` process builds `virus-genomes-masked.nucleaze.bin` once, alongside the existing bowtie2/minimap2 viral indexes.
+    - RUN reads `nucleaze_k` from the index's `input/index-params.json` so the screen-time `k` always matches the index it screens against.
+    - `NUCLEAZE` exposes `keep_match` / `keep_nomatch` flags (default true); the viral path passes `keep_nomatch: false` to skip compressing the discarded majority.
+    - `NUCLEAZE` pipes gzipped inputs through pigz FIFOs instead of letting needletail decompress them single-threaded internally; ~22 % wall reduction on the process (Illumina-100M samples, 8-core sandbox). Input-side pigz is capped at 2 threads since pigz cannot extract more parallelism from an ordinary single-stream gz. Module test covers the gz-input FIFO path.
+    - Removes the unused `BBDUK_HITS_INTERLEAVE` process and its test.
+    - Internal channel/param renames: `bbduk_match`/`bbduk_trimmed`/`min_kmer_hits`/`bbduk_suffix` → `kmer_match`/`kmer_trimmed`/`minhits`/`kmer_suffix`.
 - Add `triage-trivy` skill (`.claude/skills/triage-trivy/`) for per-CVE triage of `scan-containers` CI failures, structured to make `.trivyignore` the harder path. `CLAUDE.md`'s CI-status section points at it.
 - Add `pigz` to the `rust-tools` container.
 - Add `-X 850` to all short-read bowtie2 invocations (viral and contaminant filtering) so that concordantly paired inserts up to 850 bp are detected, up from the bowtie2 default of 500 bp.
 - Raise the minimum read length in `FASTP` from the default 15 bp to 35 bp (`--length_required 35`). Reads shorter than 35 bp cannot be meaningfully classified by any downstream kmer-based tool (BBDuk k=27, Kraken2 k~35, Bowtie2 ~34 bp floor); previously these reads passed QC but were systematically unclassifiable, deflating apparent rRNA fractions and other composition estimates.
+- Clean up Nextflow code to conform to strict syntax in preparation for adding `nextflow lint` to CI. No behavioral changes.
+    - Replace `env BAREWORD` with `env('STRING')` in process output declarations.
+    - Rename deprecated `Channel.X` factory calls to `channel.X`.
+    - Replace implicit `it` closure parameters with explicit named parameters.
+    - Restructure helper closures in `loadDownstreamData` and `clusterViralAssignments` to avoid top-level statements: in `loadDownstreamData`, convert the local `resolvePath`/`resolveDir` closures into top-level `def fn(...)` functions taking `input_base_dir` as an explicit parameter; in `clusterViralAssignments`, move the `listFiles` helper inside the workflow's `main:` block as a local closure.
+    - Drop the unused `start_time_str` parameter from `PREPARE_INPUT_LOGGING` (and its argument at the RUN call site); prefix the unused `sample` closure parameter in `splitViralTsvBySelectedTaxid` with `_`.
+    - Use `sentinel_ch.sentinel` rather than `WRITE_SENTINEL_RUN.out.sentinel` in `workflows/run.nf:54` so the assigned variable is referenced.
+    - `configs/resources.config`: remove top-level `import` statements and the `ResourceTierUtils` class (both rejected by strict syntax). Inline the tier-picking logic into the `bbmask_resources` `memory` closure using `findIndexOf` and fully-qualified `nextflow.util.MemoryUnit.of(...)` references; the single existing caller was the only consumer.
+    - `configs/run_ont.config` and `configs/downstream_ont.config`: quote the `<PATH_TO_DIRECTORY>` placeholders to match the lint-friendly form already used in `run.config` / `downstream.config`.
+    - Add `tests/configs/resources/` exercising the `bbmask_resources` memory closure end-to-end: a probe workflow uses `truncate` to create sparse inputs at each tier boundary and asserts the resolved `task.memory` matches the expected 32 / 64 / 128 GB tier.
+- Configure Ruff and apply behaviour-changing Ruff fixes in preparation for adding Ruff to CI.
+- Document Ruff lint/format commands in `CLAUDE.md` under a new "Linting / Formatting" subsection.
+- Apply the broader mechanical Ruff sweep across the Python codebase (`ruff format` + `ruff check --fix`/`--unsafe-fixes` autofixes plus a few small manual cleanups). No behavioural changes.
+    - Drop `COM` from `lint.select` in `pyproject.toml`: the formatter manages trailing commas on its own and Ruff explicitly warns that `COM812` conflicts with `ruff format`. Also extend the Ruff `exclude` list to `.venv`, `tmp`, `.nf-test`, `test-data/tiny-index/output/logging`, and `post-processing/deps` so vendored deps, scratch dirs, and stale test-fixture `pyproject.toml` files don't trigger Ruff's hierarchical config discovery.
+- Add Ruff CI gate (`.github/workflows/ruff.yml`) running `ruff check .` and `ruff format --check .` on PRs, and document the new gate in `CLAUDE.md`, `docs/ci.md`, and `docs/developer.md` (#752).
+    - Reformat seven Python files (`bin/check_nextflow_version.py`, `bin/check_version.py`, `bin/test_check_nextflow_version.py`, `modules/local/filterViralGenbankMetadata/.../{filter_viral_genbank_metadata,test_filter_viral_genbank_metadata}.py`, `modules/local/prepareViralMetadata/.../{prepare_viral_metadata,test_prepare_viral_metadata}.py`) introduced or last-edited on dev after the mechanical Ruff sweep ran, so the new gate is satisfied from day one.
 
 # v3.2.1.5
 

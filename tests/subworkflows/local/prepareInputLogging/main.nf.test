@@ -16,7 +16,6 @@ nextflow_workflow {
                 input[0] = params
                 input[1] = Channel.fromPath("${projectDir}/test-data/tiny-index/output/logging/pyproject.toml")
                 input[2] = Channel.fromPath("${projectDir}/pyproject.toml")
-                input[3] = Channel.of("2026-01-21 13:48:36 UTC (+0000)")
                 """
             }
         }

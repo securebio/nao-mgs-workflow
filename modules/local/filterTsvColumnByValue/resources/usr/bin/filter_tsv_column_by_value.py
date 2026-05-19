@@ -9,13 +9,13 @@ Treats quote characters as regular characters, not as delimiters.
 # Preamble
 # =======================================================================
 
-import logging
 import argparse
 import csv
-import sys
 import gzip
-from typing import IO, TextIO, Any, Union, cast
-from datetime import datetime, timezone
+import logging
+import sys
+from datetime import UTC, datetime
+from typing import IO, Any, TextIO, cast
 
 
 # Configure logging
@@ -38,7 +38,7 @@ class UTCFormatter(logging.Formatter):
         Returns:
             Formatted timestamp string in UTC
         """
-        dt = datetime.fromtimestamp(record.created, timezone.utc)
+        dt = datetime.fromtimestamp(record.created, UTC)
         return dt.strftime("%Y-%m-%d %H:%M:%S UTC")
 
 
@@ -69,8 +69,7 @@ def open_by_suffix(filename: str, mode: str = "r") -> IO[str]:
     """
     if filename.endswith(".gz"):
         return cast(IO[str], gzip.open(filename, mode + "t"))
-    else:
-        return open(filename, mode)
+    return open(filename, mode)
 
 
 def parse_args() -> argparse.Namespace:
@@ -155,7 +154,7 @@ def validate_input_columns(
     return column_index
 
 
-def convert_value(value_str: str) -> Union[str, bool, int, float]:
+def convert_value(value_str: str) -> str | bool | int | float:
     """
     Convert string value to appropriate type (bool, int, float, or str).
 
@@ -215,7 +214,9 @@ def stream_and_filter_tsv(
     """
     logger.info("Initializing streaming TSV reader and writer")
     reader = csv.reader(input_file, delimiter="\t", quotechar=None)
-    writer = csv.writer(output_file, delimiter="\t", lineterminator="\n", quotechar=None)
+    writer = csv.writer(
+        output_file, delimiter="\t", lineterminator="\n", quotechar=None
+    )
     # Read and validate header
     try:
         header = next(reader)
@@ -242,7 +243,9 @@ def stream_and_filter_tsv(
         try:
             # Validate row
             if len(row) != len(header):
-                raise ValueError(f"Row has {len(row)} columns but header has {len(header)} columns")
+                raise ValueError(
+                    f"Row has {len(row)} columns but header has {len(header)} columns"
+                )
             cell_value = row[column_index]
             converted_cell_value = convert_value(cell_value)
             matches = converted_cell_value == filter_value

@@ -8,7 +8,6 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from botocore.exceptions import ClientError
-
 from chain_workflows import (
     create_launch_directories,
     execute_nextflow,
@@ -36,11 +35,17 @@ class TestResolveSamplesheetPath:
     ) -> None:
         repo_root = tmp_path / "repo"
         result = resolve_samplesheet_path(samplesheet_arg, tmp_path, repo_root)
-        expected = repo_root / samplesheet_arg if resolve_against_repo else Path(samplesheet_arg)
+        expected = (
+            repo_root / samplesheet_arg
+            if resolve_against_repo
+            else Path(samplesheet_arg)
+        )
         assert result == expected
 
     @patch("chain_workflows.boto3")
-    def test_downloads_s3_samplesheet(self, mock_boto3: MagicMock, tmp_path: Path) -> None:
+    def test_downloads_s3_samplesheet(
+        self, mock_boto3: MagicMock, tmp_path: Path
+    ) -> None:
         run_launch_dir = tmp_path / "run"
         run_launch_dir.mkdir()
         result = resolve_samplesheet_path(
@@ -61,7 +66,9 @@ class TestResolveSamplesheetPath:
             {"Error": {"Code": "404", "Message": "Not Found"}}, "GetObject"
         )
         with pytest.raises(RuntimeError, match="Failed to download"):
-            resolve_samplesheet_path("s3://bucket/missing.csv", run_launch_dir, tmp_path)
+            resolve_samplesheet_path(
+                "s3://bucket/missing.csv", run_launch_dir, tmp_path
+            )
 
 
 #################################
@@ -79,6 +86,7 @@ class TestGenerateDownstreamInput:
     @pytest.fixture
     def make_samplesheet(self, tmp_path: Path) -> Callable[[list[str]], Path]:
         """Factory fixture that writes a samplesheet CSV and returns its path."""
+
         def _make(samples: list[str]) -> Path:
             path = tmp_path / "samplesheet.csv"
             with open(path, "w") as f:
@@ -87,6 +95,7 @@ class TestGenerateDownstreamInput:
                 for s in samples:
                     writer.writerow([s])
             return path
+
         return _make
 
     @pytest.mark.parametrize(
@@ -95,7 +104,10 @@ class TestGenerateDownstreamInput:
         ids=["single_sample", "multiple_samples"],
     )
     def test_generates_correct_files(
-        self, launch_dir: Path, make_samplesheet: Callable[[list[str]], Path], samples: list[str]
+        self,
+        launch_dir: Path,
+        make_samplesheet: Callable[[list[str]], Path],
+        samples: list[str],
     ) -> None:
         sheet = make_samplesheet(samples)
         run_results_dir = "s3://bucket/run/output/results"
@@ -210,7 +222,9 @@ class TestExecuteNextflow:
 
 class TestMain:
     @pytest.fixture
-    def mock_deps(self, tmp_path: Path) -> Generator[dict[str, MagicMock | dict[str, Path] | Path], None, None]:
+    def mock_deps(
+        self, tmp_path: Path
+    ) -> Generator[dict[str, MagicMock | dict[str, Path] | Path], None, None]:
         """Mock all external dependencies of main(), yielding them for assertions."""
         mock_args = MagicMock()
         mock_args.launch_dir = tmp_path / "launch"
@@ -236,7 +250,9 @@ class TestMain:
 
         with (
             patch("chain_workflows.parse_arguments", return_value=mock_args),
-            patch("chain_workflows.create_launch_directories", return_value=launch_dirs),
+            patch(
+                "chain_workflows.create_launch_directories", return_value=launch_dirs
+            ),
             patch("chain_workflows.execute_nextflow") as mock_execute,
             patch(
                 "chain_workflows.resolve_samplesheet_path",
