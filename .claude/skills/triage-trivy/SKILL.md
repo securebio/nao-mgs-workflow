@@ -109,18 +109,18 @@ The Trivy JSON's `Results[].Vulnerabilities[].PkgPath` is the most useful forens
 
 Write the conclusion concretely — "BBDuk parses FASTQ via X; the CVE affects Y; we don't use Y because Z" or "reachable; here's how."
 
-**3d. Search for a fix.** Several places to check:
+**3d. Search for a fix, and identify the concrete yml edit each fix-source implies.** Each source dictates a different kind of yml change in step 4a:
 
-- **Distro update:** Is the package newer in the container's base distro? `apt-cache policy <pkg>` inside the container, or check the Debian/Alpine security tracker.
-- **Base-image bump:** Is there a newer base image (e.g. Debian bookworm → trixie) where the package is patched? Often this is the right answer when "no fix in our current Debian version" is reported.
-- **Upstream conda package:** `conda search -c <channel> <pkg>` lists versions when conda is installed (check `command -v conda` first). Otherwise the anaconda.org REST API works — and critically, also shows what each version's deps pin, which catches the common "fix exists upstream but a feedstock pins it out of reach" pattern (urllib3 inside awscli, quinn-proto inside Polars):
+- **Distro update** → no yml edit; pull the next container rebuild. `apt-cache policy <pkg>` inside the container, or check the Debian/Alpine security tracker. Rarely fires for stable Debian since CVEs are usually marked `<no-dsa>` rather than backported.
+- **Base-image bump** (e.g. Debian bookworm → trixie) → change the base-image config knob in `pyproject.toml` (single source of truth; see `get_base_image()` in `bin/build_ecr_container.py`). Often the right answer when "no fix in our current Debian version" is reported. **This affects every container — flag it explicitly in the PR body.**
+- **Upstream conda package** → bump the existing yml pin to a fixed version, or, for the common "fix exists upstream but a feedstock pins it out of reach" pattern (urllib3 inside awscli, quinn-proto inside Polars), add an *explicit* pin for the transitive dep so the spec hash changes and the build picks up the fixed build (see step 4a). `conda search -c <channel> <pkg>` lists versions when conda is installed (check `command -v conda` first). Otherwise the anaconda.org REST API works and critically also shows what each version's deps pin:
 
   ```bash
   curl -s "https://api.anaconda.org/release/conda-forge/<pkg>/<version>" |
     jq '.distributions[0].attrs.depends[] | select(test("<dep_pattern>"))'
   ```
-- **Upstream tool update:** Some CVEs trace to a tool (e.g. multiqc) shipping a vulnerable dep. Check the tool's changelog for a release that bumps the dep.
-- **Workaround at config level:** Occasionally a CVE only affects a specific config option you can disable.
+- **Upstream tool update** → bump the tool's pin in its container yml (e.g. `multiqc=1.30 → 1.31` pulls in patched deps). Check the tool's changelog first to flag any potentially breaking changes in the PR body.
+- **Workaround at config level** → no yml edit; the workaround lives in the pipeline code (Nextflow process, `bin/` script). Rare; usually means Escalate so the user can decide whether the workaround is worth the complexity.
 
 **3e. Decide.** Three legitimate outcomes:
 
