@@ -102,6 +102,20 @@ If the scan still reports an ID that's in `.trivyignore`, the existing ignore is
 
 The Trivy JSON's `Results[].Vulnerabilities[].PkgPath` is the most useful forensic field — e.g. `opt/conda/lib/python3.13/site-packages/urllib3-...` tells you the package is in a conda env (and which env), inside a wheel, or system-level.
 
+To inspect a published container interactively (pull it, drop into a shell, verify package versions):
+
+```bash
+# The image tag lives in configs/containers.config — grab it directly:
+TAG=$(grep -E "^\s*<container_name>\s*=" configs/containers.config | sed -E 's/.*"(.*)".*/\1/')
+docker pull "$TAG"
+docker run --rm -it --entrypoint bash "$TAG"
+# Inside the container:
+#   apt-cache policy <pkg>        # apt-side installed + candidate version
+#   micromamba list <pkg>         # conda-side installed version
+#   pip show <pkg>                # python-pkg-side
+#   strings $(which <bin>) | grep '^go1\.'    # Go stdlib version in a gobinary
+```
+
 **3c. Assess whether the pipeline reaches the vulnerable functionality.** The load-bearing step. Don't dismiss based on "the container is isolated"; name what the pipeline actually does with this package:
 
 - Does the pipeline invoke the affected functionality? (Read the Nextflow process scripts, `bin/` scripts, container entrypoints.)
