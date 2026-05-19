@@ -20,6 +20,7 @@ import subprocess
 import time
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import IO
 
 import pandas as pd
 from Bio.SeqIO.FastaIO import SimpleFastaParser
@@ -46,6 +47,13 @@ logger.addHandler(handler)
 #############
 # FUNCTIONS #
 #############
+
+
+def open_by_suffix(filename: str | Path, mode: str = "r") -> IO[str]:
+    """Open `.gz` or plaintext FASTA transparently in text mode."""
+    if str(filename).endswith(".gz"):
+        return gzip.open(filename, mode + "t")  # type: ignore[return-value]
+    return open(filename, mode)
 
 
 def stage_genomes_parallel(
@@ -97,7 +105,7 @@ def extract_genome_ids(filepaths: list[str], staged_dir: Path) -> list[list[str]
     gid_lists: list[list[str]] = []
     for path in filepaths:
         gid_list: list[str] = []
-        with gzip.open(staged_dir / os.path.basename(path), "rt") as inf:
+        with open_by_suffix(staged_dir / os.path.basename(path)) as inf:
             for title, _sequence in SimpleFastaParser(inf):
                 genome_id, _name = title.split(" ", 1)
                 gid_list.append(genome_id)

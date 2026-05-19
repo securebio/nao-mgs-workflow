@@ -15,9 +15,10 @@ from add_genbank_genome_ids import (
 META_HEADER = ["assembly_accession", "taxid", "local_filename"]
 
 
-def _write_fna_gz(path: Path, records: list[tuple[str, str]]) -> None:
-    """Write a list of (header, sequence) records to a gzipped FASTA file."""
-    with gzip.open(path, "wt") as f:
+def _write_fna(path: Path, records: list[tuple[str, str]]) -> None:
+    """Write FASTA records; gzip if `path` ends in `.gz`, plaintext otherwise."""
+    opener = gzip.open if str(path).endswith(".gz") else open
+    with opener(path, "wt") as f:
         for header, seq in records:
             f.write(f">{header}\n{seq}\n")
 
@@ -29,14 +30,16 @@ def _write_metadata(path: Path, rows: list[list[str]]) -> None:
         w.writerows(rows)
 
 
-@pytest.fixture()
-def two_assemblies(tmp_path: Path) -> tuple[Path, Path]:
-    """Two assemblies: one single-segment, one three-segment. Returns (metadata, source_dir)."""
+@pytest.fixture(params=["gz", "plain"])
+def two_assemblies(tmp_path: Path, request: pytest.FixtureRequest) -> tuple[Path, Path]:
+    """Two assemblies: one single-segment, one three-segment. Returns (metadata, source_dir).
+    Parametrized over `.fna.gz` and plaintext `.fna` to exercise both code paths."""
+    ext = ".fna.gz" if request.param == "gz" else ".fna"
     src = tmp_path / "src"
     src.mkdir()
-    _write_fna_gz(src / "GCA_001.fna.gz", [("seq1 organism A", "ACGT")])
-    _write_fna_gz(
-        src / "GCA_002.fna.gz",
+    _write_fna(src / f"GCA_001{ext}", [("seq1 organism A", "ACGT")])
+    _write_fna(
+        src / f"GCA_002{ext}",
         [
             ("seq2a organism B segment 1", "AAAA"),
             ("seq2b organism B segment 2", "CCCC"),
@@ -47,8 +50,8 @@ def two_assemblies(tmp_path: Path) -> tuple[Path, Path]:
     _write_metadata(
         meta_path,
         [
-            ["GCA_001.1", "1001", str(src / "GCA_001.fna.gz")],
-            ["GCA_002.1", "1002", str(src / "GCA_002.fna.gz")],
+            ["GCA_001.1", "1001", str(src / f"GCA_001{ext}")],
+            ["GCA_002.1", "1002", str(src / f"GCA_002{ext}")],
         ],
     )
     return meta_path, src
@@ -60,13 +63,12 @@ class TestStageGenomesParallel:
     ) -> None:
         """Source files are present in staged_dir under their original basenames."""
         _, src = two_assemblies
-        sources = [str(src / "GCA_001.fna.gz"), str(src / "GCA_002.fna.gz")]
+        sources = sorted(str(p) for p in src.iterdir())
         staged = tmp_path / "staged"
         stage_genomes_parallel(sources, staged, parallelism=2)
-        assert sorted(p.name for p in staged.iterdir()) == [
-            "GCA_001.fna.gz",
-            "GCA_002.fna.gz",
-        ]
+        assert sorted(p.name for p in staged.iterdir()) == sorted(
+            Path(s).name for s in sources
+        )
 
     def test_raises_on_missing_source(self, tmp_path: Path) -> None:
         """cp failure on a non-existent source surfaces as CalledProcessError."""
@@ -84,7 +86,7 @@ class TestExtractGenomeIDs:
     ) -> None:
         """One inner list per input file; segments appear in FASTA order."""
         _, src = two_assemblies
-        sources = [str(src / "GCA_001.fna.gz"), str(src / "GCA_002.fna.gz")]
+        sources = sorted(str(p) for p in src.iterdir())
         # extract_genome_ids reads from staged_dir; reuse src as the staged dir here.
         result = extract_genome_ids(sources, src)
         assert result == [["seq1"], ["seq2a", "seq2b", "seq2c"]]
