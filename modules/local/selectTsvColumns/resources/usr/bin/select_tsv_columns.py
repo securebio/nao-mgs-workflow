@@ -98,11 +98,11 @@ def get_header_index(
     """
     try:
         return headers.index(field)
-    except ValueError:
+    except ValueError as e:
         msg = f"Field not found in header: {field}"
         if mode == "keep":
             logger.error(msg)
-            raise ValueError(msg)
+            raise ValueError(msg) from e
         else:
             logger.warning(msg)
             return None

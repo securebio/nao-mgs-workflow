@@ -25,6 +25,8 @@
     - `configs/resources.config`: remove top-level `import` statements and the `ResourceTierUtils` class (both rejected by strict syntax). Inline the tier-picking logic into the `bbmask_resources` `memory` closure using `findIndexOf` and fully-qualified `nextflow.util.MemoryUnit.of(...)` references; the single existing caller was the only consumer.
     - `configs/run_ont.config` and `configs/downstream_ont.config`: quote the `<PATH_TO_DIRECTORY>` placeholders to match the lint-friendly form already used in `run.config` / `downstream.config`.
     - Add `tests/configs/resources/` exercising the `bbmask_resources` memory closure end-to-end: a probe workflow uses `truncate` to create sparse inputs at each tier boundary and asserts the resolved `task.memory` matches the expected 32 / 64 / 128 GB tier.
+- Configure Ruff and apply behaviour-changing Ruff fixes in preparation for adding Ruff to CI.
+- Document Ruff lint/format commands in `CLAUDE.md` under a new "Linting / Formatting" subsection.
 
 # v3.2.1.5
 

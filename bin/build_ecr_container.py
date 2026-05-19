@@ -287,7 +287,7 @@ def build_container(spec_file: Path,
         except Exception as e:
             msg = f"Error building container: {e}"
             logger.error(msg)
-            raise RuntimeError(msg)
+            raise RuntimeError(msg) from e
 
 ######################
 # ECR PUSH FUNCTIONS #
@@ -320,7 +320,7 @@ def docker_login_ecr(registry_url: str) -> None:
         error_output = e.stderr.strip() if e.stderr else e.stdout.strip() if e.stdout else "No error output"
         msg = f"Error authenticating with ECR Public: {error_output}"
         logger.error(msg)
-        raise RuntimeError(msg)
+        raise RuntimeError(msg) from e
 
 def push_docker_image(image_tag: str) -> None:
     """Push a Docker image to ECR.
@@ -337,7 +337,7 @@ def push_docker_image(image_tag: str) -> None:
     except subprocess.CalledProcessError as e:
         msg = f"Error pushing Docker image: {e}"
         logger.error(msg)
-        raise RuntimeError(msg)
+        raise RuntimeError(msg) from e
 
 def push_to_ecr(
     image_tag: str,
@@ -358,7 +358,7 @@ def push_to_ecr(
     except Exception as e:
         msg = f"Error pushing to ECR Public: {e}"
         logger.error(msg)
-        raise RuntimeError(msg)
+        raise RuntimeError(msg) from e
 
 ###########################
 # CONFIG UPDATE FUNCTIONS #

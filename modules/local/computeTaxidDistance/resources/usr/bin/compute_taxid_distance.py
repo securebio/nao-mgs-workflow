@@ -78,8 +78,8 @@ def get_header_index(headers: list[str], field: str) -> int:
     """Get the index of a field in a header line."""
     try:
         return headers.index(field)
-    except ValueError:
-        raise ValueError(f"Field not found in header: {field}")
+    except ValueError as e:
+        raise ValueError(f"Field not found in header: {field}") from e
     
 def join_line(inputs: list[str]) -> str:
     """Join a list of strings with tabs followed by a newline."""

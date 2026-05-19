@@ -454,7 +454,7 @@ def test_missing_reads_columns(tsv_factory: Any, missing_column: str) -> None:
     # Remove the missing column and its corresponding value
     columns = []
     values = []
-    for col, val in zip(all_columns, test_values):
+    for col, val in zip(all_columns, test_values, strict=True):
         if col != missing_column:
             columns.append(col)
             values.append(val)

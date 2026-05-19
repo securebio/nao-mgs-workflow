@@ -40,7 +40,7 @@ def join_paired_reads(input_file: str, output_file: str, gap: str = "N", debug: 
         if debug: print_log("\tInitiating parsing...")
         r0 = SeqIO.parse(inf, "fastq") # Read FASTQ
         if debug: print_log("\tOrganizing read pairs...")
-        r = zip(r0,r0) # Join FASTQ pairs
+        r = zip(r0,r0, strict=True) # Join FASTQ pairs
         if debug: print_log("\tIterating over read pairs...")
         if debug: nread = 0
         for fwd,rev in r:

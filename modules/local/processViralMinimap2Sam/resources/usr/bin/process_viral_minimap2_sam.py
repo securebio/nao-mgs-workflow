@@ -84,8 +84,8 @@ def extract_viral_taxid(genome_id: str, genbank_metadata: dict[str, list[str]], 
         if species_taxid in viral_taxids:
             return species_taxid
         return taxid
-    except KeyError:
-        raise ValueError(f"No matching genome ID found: {genome_id}")
+    except KeyError as e:
+        raise ValueError(f"No matching genome ID found: {genome_id}") from e
 
 
 def parse_sam_alignment(
@@ -218,7 +218,8 @@ def main() -> None:
         genbank_metadata = {
             genome_id: [taxid, species_taxid]
             for genome_id, taxid, species_taxid in zip(
-                meta_db["genome_id"], meta_db["taxid"], meta_db["species_taxid"]
+                meta_db["genome_id"], meta_db["taxid"], meta_db["species_taxid"],
+                strict=True,
             )
         }
         virus_db = pd.read_csv(args.viral_db, sep="\t", dtype=str)

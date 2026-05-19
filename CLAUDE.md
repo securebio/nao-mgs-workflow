@@ -151,6 +151,10 @@ All Python scripts should have corresponding Pytest scripts in the same director
 
 Mypy is enforced in CI via `.github/workflows/mypy.yml` — all Python in `bin/` and `modules/local/` must pass `python -m mypy bin/ modules/local/`. Add per-package `[[tool.mypy.overrides]]` in `pyproject.toml` for untyped third-party libraries rather than inline `# type: ignore` comments.
 
+### Linting / Formatting
+
+Ruff handles both linting and formatting; config lives under `[tool.ruff]` in `pyproject.toml`. Run `uv run ruff check .` to lint and `uv run ruff format .` to auto-format. Ruff is not currently enforced in CI, but new Python should be clean against both. See `docs/developer.md` for the full Python tooling commands.
+
 ## Versioning and Changelog
 
 **Both of these are required for PRs to `dev` — CI will fail if they're missing.**
