@@ -146,6 +146,10 @@ Patterns that **do not** justify ignoring on their own:
 - **Use exact pins, not ranges.**
 - **Keep any inline yml comment to one line** naming the CVE IDs and the fix version. Detailed rationale belongs in the PR body, not the yml.
 
+**Permitted edits:** add explicit pins (direct or transitive), tighten an existing range to a fixed version, bump the base-image config knob in `pyproject.toml`.
+
+**Not permitted** (Escalate if a fix seems to need one of these): removing existing pinned deps (they're pinned for replication or compatibility reasons that aren't visible from the yml), editing the Dockerfile-generation code in `bin/build_ecr_container.py`, switching the base distro family (e.g. Debian → Alpine), or changing the conda channel list / channel-priority semantics.
+
 Commit with the CVE ID in the message, push the branch, and open the PR as a draft per CLAUDE.md's PR conventions. **The PR body must include the rebuild-handoff callout (see Step 5) at the top**, because:
 
 - The agent role on this sandbox is ECR pull-only and cannot publish images. The yml change does not itself clear the CVE on `scan-containers`: that CI job scans the *published* image tag pinned in `configs/containers.config`, and the new yml only takes effect once the container is rebuilt, pushed to ECR, and the tag re-pinned.
