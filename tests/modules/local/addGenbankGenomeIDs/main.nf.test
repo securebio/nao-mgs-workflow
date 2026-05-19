@@ -22,8 +22,8 @@ nextflow_process {
         }
         then {
             assert process.success
-            def in_meta = path("${projectDir}/test-data/addGenbankGenomeIDs/metadata.tsv").csv(sep: "\t")
-            def out_meta = path(process.out[0][0]).csv(sep: "\t", decompress: true)
+            def in_meta = path(process.out.input[0]).csv(sep: "\t")
+            def out_meta = path(process.out.output[0]).csv(sep: "\t", decompress: true)
 
             // Schema: input columns + `genome_id`.
             assert out_meta.columnNames == in_meta.columnNames + ["genome_id"]

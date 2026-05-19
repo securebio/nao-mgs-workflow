@@ -9,12 +9,15 @@ process ADD_GENBANK_GENOME_IDS {
         path(genbank_genomes)
         val(filename_prefix)
     output:
-        path("${filename_prefix}-metadata-gid.tsv.gz")
+        path("${filename_prefix}-metadata-gid.tsv.gz"), emit: output
+        path("input_${genbank_metadata}"), emit: input
     script:
         """
         add_genbank_genome_ids.py \\
             ${genbank_metadata} \\
             ${filename_prefix}-metadata-gid.tsv.gz \\
             --parallelism \$(( ${task.cpus} * 4 ))
+        # Link input file for testing
+        ln -s ${genbank_metadata} input_${genbank_metadata}
         """
 }
