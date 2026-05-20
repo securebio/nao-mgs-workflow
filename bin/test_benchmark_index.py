@@ -18,6 +18,7 @@ from benchmark_index import (
     check_ref_staleness,
     classify_coverage,
     compare_size_listings,
+    detect_bidirectional_flips,
     diff_genome_metadata,
     diff_params,
     diff_taxonomy,
@@ -28,6 +29,7 @@ from benchmark_index import (
     infection_status_transitions,
     parse_kraken_url_date,
     parse_silva_url_release,
+    summarise_params_changes,
     tsv_header,
     tsv_row_count,
 )
@@ -631,6 +633,64 @@ class TestRefStaleness:
         rows = check_ref_staleness(params)
         assert {r["ref"] for r in rows} == {"human_url", "taxonomy_url"}
         assert all(r["status"] == "unknown" for r in rows)
+
+
+class TestDetectBidirectionalFlips:
+    """A species_taxid that's actionable in BOTH directions across different
+    hosts is the upstream-VHDB-taxonomy-churn fingerprint that summary.md
+    needs to surface as its own callout (the Turlock virus case)."""
+
+    def _changes_row(self, taxid, old_s, new_s, name="x", covered=""):
+        return {"taxid": taxid, "name": name, "rank": "species",
+                "old_status": old_s, "new_status": new_s, "covered_by": covered}
+
+    def test_detects_bidirectional_taxid(self) -> None:
+        per_host = {
+            "human": pd.DataFrame([self._changes_row("100", "0", "1", "T")]),
+            "primate": pd.DataFrame([self._changes_row("100", "0", "1", "T")]),
+            "bird": pd.DataFrame([self._changes_row("100", "1", "0", "T")]),
+        }
+        out = detect_bidirectional_flips(per_host)
+        assert len(out) == 1
+        row = out.iloc[0]
+        assert row["taxid"] == "100"
+        assert row["hosts_up"] == "human,primate"
+        assert row["hosts_down"] == "bird"
+
+    def test_single_direction_does_not_qualify(self) -> None:
+        per_host = {
+            "human": pd.DataFrame([self._changes_row("100", "0", "1")]),
+            "primate": pd.DataFrame([self._changes_row("100", "0", "1")]),
+        }
+        assert detect_bidirectional_flips(per_host).empty
+
+    def test_covered_rows_are_excluded(self) -> None:
+        # If both flips are covered by rules, they shouldn't surface.
+        per_host = {
+            "human": pd.DataFrame([self._changes_row("100", "0", "1", covered="excluded")]),
+            "bird": pd.DataFrame([self._changes_row("100", "1", "0", covered="excluded")]),
+        }
+        assert detect_bidirectional_flips(per_host).empty
+
+
+class TestSummariseParamsChanges:
+    def test_added_removed_changed(self) -> None:
+        out = summarise_params_changes(
+            {"a": 1, "b": "old", "kept": 42},
+            {"a": 1, "b": "new", "c": "fresh", "kept": 42},
+        ).set_index("key")
+        assert "kept" not in out.index  # unchanged keys omitted
+        assert out.loc["b", "kind"] == "changed"
+        assert out.loc["b", "old"] == "old"
+        assert out.loc["b", "new"] == "new"
+        assert out.loc["c", "kind"] == "added"
+        assert out.loc["c", "old"] == ""
+
+    def test_truncates_long_values(self) -> None:
+        long_val = "x" * 500
+        out = summarise_params_changes({"k": "short"}, {"k": long_val})
+        assert out.iloc[0]["new"].endswith("…")
+        assert len(out.iloc[0]["new"]) <= 121
 
 
 if __name__ == "__main__":

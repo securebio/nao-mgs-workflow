@@ -77,7 +77,10 @@ For **1→0 human demotions**:
 
 For **0→1 promotions**:
 - Homo sapiens now in column 4 → upstream VHDB addition. Then ask: is the species name structurally a recognised pathogen, or generic/placeholder (Bacteriophage sp., "Human gut <foo>", Microviridae, Smacoviridae, Picobirnaviridae)? If the latter → recommend adding the taxid (or a broader family/class) to `viral_taxids_exclude_hard`.
+- No row at all → try grepping by name. The actionable taxid is often a freshly-minted NCBI species ID; VHDB tends to lag by months and may still carry the host annotations under a legacy taxid (e.g. *Orthobunyavirus turlockense* `3052452` returns nothing, but *Turlock virus* `35320` carries the host data). If the parent virus shows no Homo sapiens at any taxid, the promotion was carried by ancestor / descendant propagation rather than a direct VHDB Homo sapiens annotation — investigate before recommending an override.
 - **Cross-reference `genomes_by_species.tsv`** (in the output dir) for the same taxid. If the promotion is paired with a large `delta` (e.g. 0 → 1349), the trigger is likely a pipeline parameter change pulling in many new accessions, not VHDB drift. Cite the causal link explicitly.
+
+**Bidirectional same-taxid flips.** When the same `taxid` appears in both the `1→0` and `0→1` columns across different hosts (look for it in summary.md's per-host §5.x tables), that's a fingerprint of upstream VHDB taxonomy churn at the species rank — the species got new host annotations on some columns while losing them on others, typically because VHDB moved an entry between related taxids. Treat as a distinct narrative pattern from a single-direction call: investigate the upstream cause before recommending an edit, since a `viral_taxids_exclude_hard` entry will demote on *every* host including the legitimate ones.
 
 ### Step 4 — Produce the report
 
@@ -92,6 +95,7 @@ Write `<outdir>/REVIEW.md`. Overwrite if it exists.
 - Don't say "the usual pattern" or "we already understood" — say what the pattern *is*.
 - Trust the script's coverage / redistribution annotations; don't manually classify coverage or guess at families.
 - De-duplicate cross-host findings: if a single taxid is actionable on multiple hosts, write it up once (under the highest-priority host it affected — human > primate > mammal > vertebrate > bird) and cross-reference from the others.
+- **Format translation note**: the `included_for_other_hosts` / "Override scope" column in summary.md is comma-separated (e.g. `human,vertebrate`); when writing a `ref/host-infection-overrides.json` diff, translate to a JSON array (`["human", "vertebrate"]`). Don't paste the column value verbatim into the JSON.
 
 Five sections, in order. Lead with a one-paragraph headline that stands on its own.
 

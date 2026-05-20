@@ -473,6 +473,87 @@ def annotate_changes_with_coverage(
     return out
 
 
+def detect_bidirectional_flips(
+    per_host_changes: dict[str, pd.DataFrame],
+) -> pd.DataFrame:
+    """Identify taxids whose species-rank actionable transitions go in *both*
+    directions (1→0 on some hosts, 0→1 on others). This is the upstream-VHDB
+    -taxonomy-churn fingerprint — a single `viral_taxids_exclude_hard` entry
+    would demote the legitimate hosts along with the incorrect ones, so these
+    cases need a distinct narrative.
+
+    Returns one row per affected taxid with columns: taxid, name, hosts_up
+    (comma-joined hosts promoted 0→1), hosts_down (comma-joined hosts demoted
+    1→0). Empty DataFrame if no taxid satisfies both directions."""
+    up_hosts: dict[str, set[str]] = defaultdict(set)
+    down_hosts: dict[str, set[str]] = defaultdict(set)
+    names: dict[str, str] = {}
+    for host, df in per_host_changes.items():
+        if df.empty or "covered_by" not in df.columns:
+            continue
+        actionable = df[
+            (df["rank"] == "species") & (df["covered_by"] == "")
+        ]
+        for _, row in actionable.iterrows():
+            old_s, new_s = str(row["old_status"]), str(row["new_status"])
+            if old_s == "0" and new_s == "1":
+                up_hosts[row["taxid"]].add(host)
+                names[row["taxid"]] = row["name"]
+            elif old_s == "1" and new_s == "0":
+                down_hosts[row["taxid"]].add(host)
+                names[row["taxid"]] = row["name"]
+    overlap = set(up_hosts) & set(down_hosts)
+    rows = [
+        {
+            "taxid": t,
+            "name": names[t],
+            "hosts_up": ",".join(sorted(up_hosts[t])),
+            "hosts_down": ",".join(sorted(down_hosts[t])),
+        }
+        for t in sorted(overlap)
+    ]
+    return pd.DataFrame(rows, columns=["taxid", "name", "hosts_up", "hosts_down"])
+
+
+def summarise_params_changes(
+    old_params: dict, new_params: dict
+) -> pd.DataFrame:
+    """Top-level key-by-key change summary for `index-params.json`. Each row
+    describes one key with kind ∈ {added, removed, changed} and short string
+    representations of the values. Nested dict/list values are JSON-stringified
+    for display; long values are truncated."""
+    rows: list[dict[str, str]] = []
+    all_keys = sorted(set(old_params) | set(new_params))
+    for k in all_keys:
+        in_old = k in old_params
+        in_new = k in new_params
+        if in_old and in_new and old_params[k] == new_params[k]:
+            continue
+        old_v = _stringify_param(old_params.get(k)) if in_old else ""
+        new_v = _stringify_param(new_params.get(k)) if in_new else ""
+        if not in_old:
+            kind = "added"
+        elif not in_new:
+            kind = "removed"
+        else:
+            kind = "changed"
+        rows.append({"key": k, "kind": kind, "old": old_v, "new": new_v})
+    return pd.DataFrame(rows, columns=["key", "kind", "old", "new"])
+
+
+def _stringify_param(v: object, max_len: int = 120) -> str:
+    """Compact one-line stringification of a param value for table display."""
+    if v is None:
+        return ""
+    if isinstance(v, (dict, list)):
+        s = json.dumps(v, sort_keys=True)
+    else:
+        s = str(v)
+    if len(s) > max_len:
+        s = s[: max_len - 1] + "…"
+    return s
+
+
 def diff_params(old_params: dict, new_params: dict) -> str:
     """Return a unified diff between two pretty-printed params dicts."""
     old_lines = json.dumps(old_params, indent=2, sort_keys=True).splitlines(
@@ -675,6 +756,8 @@ def write_summary_md(
     transitions: dict[str, pd.DataFrame],
     per_host_changes: dict[str, pd.DataFrame],
     coverage_available: bool,
+    params_changes: pd.DataFrame,
+    bidirectional_flips: pd.DataFrame,
 ) -> None:
     """Write a self-contained summary.md. Embeds all data the reviewer needs;
     does not direct the reader to other files (the per-host TSVs and others in
@@ -952,6 +1035,23 @@ def write_summary_md(
             "",
             "_*Override policy gap = an actionable demotion whose `species_taxid` IS in `ref/host-infection-overrides.json`, but only for other hosts. The override entry's `hosts` list excludes the host that just demoted; either the entry needs widening or the demotion is acceptable for that host._",
         ]
+        # Bidirectional flips — same taxid actionable on hosts in BOTH directions.
+        # A fingerprint of upstream VHDB taxonomy churn (the species got new
+        # host annotations on some columns and lost them on others). A blanket
+        # hard-exclude would demote on every host including legitimate ones, so
+        # these warrant a distinct narrative.
+        if not bidirectional_flips.empty:
+            lines += [
+                "",
+                f"**Bidirectional flips ({len(bidirectional_flips)})** — same taxid actionable in *both* directions across different hosts (upstream VHDB taxonomy churn fingerprint; a single `viral_taxids_exclude_hard` entry would demote on every host including the legitimate ones):",
+                "",
+                "| taxid | Name | Promoted (0→1) on | Demoted (1→0) on |",
+                "|---|---|---|---|",
+            ]
+            for _, row in bidirectional_flips.iterrows():
+                lines.append(
+                    f"| `{row['taxid']}` | *{row['name']}* | {row['hosts_up']} | {row['hosts_down']} |"
+                )
 
         # Embed actionable rows inline so the report is self-contained.
         for host, buckets in actionable_per_host.items():
@@ -987,16 +1087,37 @@ def write_summary_md(
                     f"_(includes {len(gap)} override policy gap{'s' if len(gap) != 1 else ''} — listed in the demotions table; non-empty 'Override scope' column)_",
                 ]
 
-    # Params diff section — keep brief, full diff is structurally too big to embed.
+    # Params diff section — embed a key-by-key change table so the agent can
+    # write the "Other notable changes" narrative without reading the verbatim
+    # diff in Appendix C. Cosmetic-only path-prefix changes are normal here
+    # (e.g. base_dir always changes; container paths shift when the build host
+    # layout changes).
     lines += [
         "",
-        "## 6. Params diff",
-        "",
-        "Pipeline-version bump, Kraken DB URL changes, new/removed `params.*` keys, "
-        "and changes to `viral_taxids_exclude_hard` are typically visible in the full "
-        "`index-params.json` diff. See Appendix C for the verbatim diff.",
+        "## 6. `index-params.json` changes",
         "",
     ]
+    if params_changes.empty:
+        lines.append("_No top-level key changes._")
+    else:
+        added = params_changes[params_changes["kind"] == "added"]
+        removed = params_changes[params_changes["kind"] == "removed"]
+        changed = params_changes[params_changes["kind"] == "changed"]
+        lines.append(
+            f"{len(added)} added, {len(removed)} removed, {len(changed)} value-changed. "
+            "Appendix C carries the verbatim diff."
+        )
+        lines += [
+            "",
+            "| Key | Kind | Old | New |",
+            "|---|---|---|---|",
+        ]
+        for _, row in params_changes.iterrows():
+            old_s = row["old"] or "—"
+            new_s = row["new"] or "—"
+            lines.append(
+                f"| `{row['key']}` | {row['kind']} | {old_s} | {new_s} |"
+            )
 
     # Appendices: A) covered 0↔1 transitions per host (for audit of what the
     # rules absorbed), B) full lost-genomes inventory, C) verbatim params diff.
@@ -1339,6 +1460,10 @@ def main() -> None:
     logger.info("Checking reference-DB staleness (Kraken2, SILVA).")
     staleness_rows = check_ref_staleness(new_params)
 
+    # Params changes + bidirectional flips for the summary.
+    params_changes = summarise_params_changes(old_params, new_params)
+    bidirectional_flips = detect_bidirectional_flips(per_host_changes)
+
     # Summary
     write_summary_md(
         args.out,
@@ -1356,6 +1481,8 @@ def main() -> None:
         transitions,
         per_host_changes,
         coverage_available,
+        params_changes,
+        bidirectional_flips,
     )
     logger.info(f"Done. Outputs in {args.out.resolve()}")
 
