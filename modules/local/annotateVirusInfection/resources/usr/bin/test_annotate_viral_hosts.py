@@ -48,6 +48,7 @@ State meanings:
 # =======================================================================
 
 import itertools
+import json
 from collections.abc import Callable
 from pathlib import Path
 from typing import Protocol
@@ -62,12 +63,16 @@ from annotate_viral_hosts import (
     UNCLEAR,
     UNRESOLVED,
     add_descendants,
+    annotate_virus_db,
     annotate_virus_db_single,
     build_virus_tree,
+    check_infection,
     exclude_infections,
     expand_taxid,
     get_host_taxids,
     get_virus_host_mapping,
+    include_infections,
+    load_host_overrides,
     mark_ancestor_infections,
     mark_ancestor_infections_single,
     mark_descendant_infections,
@@ -1243,6 +1248,213 @@ class TestExcludeInfections:
 
 
 # =======================================================================
+# Tests for include_infections
+# =======================================================================
+
+
+class TestIncludeInfections:
+    """
+    Test the include_infections function. Unlike exclude_infections,
+    include_infections marks only the listed taxids — descendant propagation
+    is delegated to mark_descendant_infections() downstream. Full-pipeline
+    descendant-propagation coverage lives in TestCheckInfection.
+    """
+
+    @pytest.mark.parametrize(
+        "statuses, include_taxids, expected",
+        [
+            (
+                pd.Series(
+                    {
+                        "1": INCONSISTENT,
+                        "2": INCONSISTENT,
+                        "3": UNCLEAR,
+                        "4": CONSISTENT,
+                        "5": UNRESOLVED,
+                    }
+                ),
+                ["2"],
+                pd.Series(
+                    {
+                        "1": INCONSISTENT,
+                        "2": MATCH,
+                        "3": UNCLEAR,
+                        "4": CONSISTENT,
+                        "5": UNRESOLVED,
+                    }
+                ),
+            ),
+            (
+                pd.Series({"1": INCONSISTENT, "2": CONSISTENT, "3": UNCLEAR}),
+                [],
+                pd.Series({"1": INCONSISTENT, "2": CONSISTENT, "3": UNCLEAR}),
+            ),
+            (
+                pd.Series({"1": INCONSISTENT, "2": INCONSISTENT, "3": INCONSISTENT}),
+                ["1", "3"],
+                pd.Series({"1": MATCH, "2": INCONSISTENT, "3": MATCH}),
+            ),
+            (
+                pd.Series({"1": MATCH, "2": MATCH}),
+                ["1"],
+                pd.Series({"1": MATCH, "2": MATCH}),
+            ),
+            # Descendants are NOT touched by include — propagation is
+            # mark_descendant_infections's job. A future change that re-bakes
+            # descendant expansion into include_infections would fail here.
+            (
+                pd.Series({"X": UNRESOLVED, "Y": UNRESOLVED, "Z": UNRESOLVED}),
+                ["X"],
+                pd.Series({"X": MATCH, "Y": UNRESOLVED, "Z": UNRESOLVED}),
+            ),
+        ],
+        ids=[
+            "marks_only_listed_taxid",
+            "empty_include_list_is_noop",
+            "marks_multiple_listed_taxids",
+            "idempotent_on_existing_match",
+            "descendants_unchanged_by_include",
+        ],
+    )
+    def test_include_infections(
+        self,
+        statuses: pd.Series,
+        include_taxids: list[str],
+        expected: pd.Series,
+    ) -> None:
+        result = include_infections(statuses.copy(), include_taxids)
+        pd.testing.assert_series_equal(result, expected)
+
+
+# =======================================================================
+# Tests for load_host_overrides
+# =======================================================================
+
+
+class TestLoadHostOverrides:
+    """Test the load_host_overrides JSON-parsing helper."""
+
+    @pytest.mark.parametrize(
+        "json_content, expected",
+        [
+            (
+                {
+                    "description": "test",
+                    "overrides": [
+                        {
+                            "taxid": "3048448",
+                            "name": "WNV",
+                            "rationale": "test",
+                            "hosts": ["human", "vertebrate"],
+                        },
+                        {
+                            "taxid": "11082",
+                            "name": "WNV legacy",
+                            "rationale": "test",
+                            "hosts": ["human"],
+                        },
+                    ],
+                },
+                {"human": ["3048448", "11082"], "vertebrate": ["3048448"]},
+            ),
+            ({"overrides": []}, {}),
+            ({"description": "no overrides yet"}, {}),
+            # Numeric taxids in JSON are coerced to str to match virus DB dtype.
+            (
+                {"overrides": [{"taxid": 3048448, "hosts": ["human"]}]},
+                {"human": ["3048448"]},
+            ),
+        ],
+        ids=[
+            "typical_per_host_grouping",
+            "empty_overrides_list",
+            "missing_overrides_key",
+            "int_taxid_coerced_to_str",
+        ],
+    )
+    def test_load_host_overrides(
+        self,
+        tmp_path: Path,
+        json_content: dict,
+        expected: dict[str, list[str]],
+    ) -> None:
+        path = tmp_path / "overrides.json"
+        path.write_text(json.dumps(json_content))
+        assert load_host_overrides(path) == expected
+
+    @pytest.mark.parametrize(
+        "malformed",
+        [
+            # Top-level shape violations
+            [{"taxid": "1", "hosts": ["human"]}],  # top-level list, not dict
+            {"overrides": {"taxid": "1", "hosts": ["human"]}},  # overrides is a dict
+            # Per-entry shape violations
+            {"overrides": ["not-a-dict"]},
+            {"overrides": [{"hosts": ["human"]}]},  # missing taxid
+            {"overrides": [{"taxid": "1"}]},  # missing hosts
+            {"overrides": [{"taxid": ["1"], "hosts": ["human"]}]},  # taxid is a list
+            {"overrides": [{"taxid": None, "hosts": ["human"]}]},
+            {"overrides": [{"taxid": {"x": "y"}, "hosts": ["human"]}]},
+            {"overrides": [{"taxid": True, "hosts": ["human"]}]},  # bool ⊂ int
+            {"overrides": [{"taxid": "1", "hosts": "human"}]},  # hosts is a str
+            {"overrides": [{"taxid": "1", "hosts": {"human": True}}]},
+            {"overrides": [{"taxid": "1", "hosts": [1, 2]}]},
+            {"overrides": [{"taxid": "1", "hosts": [None]}]},
+        ],
+        ids=[
+            "top-level-list",
+            "overrides-dict",
+            "entry-not-dict",
+            "missing-taxid",
+            "missing-hosts",
+            "taxid-list",
+            "taxid-none",
+            "taxid-dict",
+            "taxid-bool",
+            "hosts-str",
+            "hosts-dict",
+            "hosts-list-of-int",
+            "hosts-list-of-none",
+        ],
+    )
+    def test_rejects_malformed_schema(self, tmp_path: Path, malformed: object) -> None:
+        """Any JSON that doesn't match the documented schema raises ValueError."""
+        path = tmp_path / "overrides.json"
+        path.write_text(json.dumps(malformed))
+        with pytest.raises(ValueError, match="does not match schema"):
+            load_host_overrides(path)
+
+    @pytest.mark.parametrize(
+        "overrides, expected_match",
+        [
+            # hosts=[] is a no-op; minItems=1 in the schema catches it.
+            ([{"taxid": "1", "hosts": []}], "does not match schema"),
+            # Duplicate (taxid, host) across entries is a cross-entry check
+            # the schema can't express; load_host_overrides raises after
+            # JSON Schema validation passes.
+            (
+                [
+                    {"taxid": "1", "hosts": ["human"]},
+                    {"taxid": "1", "hosts": ["human", "vertebrate"]},
+                ],
+                r"duplicate \(taxid, host\) pair",
+            ),
+        ],
+        ids=["empty_hosts_rejected", "duplicate_taxid_host_pair_rejected"],
+    )
+    def test_rejects_suspect_entries(
+        self,
+        tmp_path: Path,
+        overrides: list[dict],
+        expected_match: str,
+    ) -> None:
+        path = tmp_path / "overrides.json"
+        path.write_text(json.dumps({"overrides": overrides}))
+        with pytest.raises(ValueError, match=expected_match):
+            load_host_overrides(path)
+
+
+# =======================================================================
 # Tests for mark_ancestor_infections
 # =======================================================================
 
@@ -1399,6 +1611,79 @@ class TestGetVirusHostMapping:
 
 
 # =======================================================================
+# Tests for check_infection
+# =======================================================================
+
+
+class TestCheckInfection:
+    """Integration tests for check_infection covering the hard-include code path."""
+
+    @pytest.mark.parametrize(
+        "virus_taxids, virus_tree, virus_host_mapping, hard_exclude, hard_include, expected",
+        [
+            # hard_include keeps the short-circuit guard from swallowing the
+            # override when VHDB has zero direct matches; descendants ("3","4")
+            # pick up MATCH via mark_descendant_infections, and the ancestor
+            # ("1") via mark_ancestor_infections.
+            (
+                pd.Series(["1", "2", "3", "4"], index=["1", "2", "3", "4"]),
+                {"1": {"2"}, "2": {"3", "4"}, "3": set(), "4": set()},
+                {},
+                [],
+                ["2"],
+                {"1": MATCH, "2": MATCH, "3": MATCH, "4": MATCH},
+            ),
+            # No direct matches and no includes: short-circuit fast path fires.
+            (
+                pd.Series(["1", "2"], index=["1", "2"]),
+                {"1": {"2"}, "2": set()},
+                {},
+                [],
+                [],
+                {"1": INCONSISTENT, "2": INCONSISTENT},
+            ),
+            # When the same taxid is in both hard_exclude and hard_include,
+            # include wins — pins down the exclude→include ordering.
+            (
+                pd.Series(["1", "2"], index=["1", "2"]),
+                {"1": set(), "2": set()},
+                {"1": {"9606"}, "2": {"10090"}},
+                ["2"],
+                ["2"],
+                {"1": MATCH, "2": MATCH},
+            ),
+        ],
+        ids=[
+            "hard_include_survives_short_circuit",
+            "no_matches_no_include_short_circuits",
+            "include_wins_on_conflict_with_exclude",
+        ],
+    )
+    def test_check_infection(
+        self,
+        virus_taxids: pd.Series,
+        virus_tree: dict[str, set[str]],
+        virus_host_mapping: dict[str, set[str]],
+        hard_exclude: list[str],
+        hard_include: list[str],
+        expected: dict[str, int],
+    ) -> None:
+        result = check_infection(
+            virus_taxids,
+            {"9606"},
+            virus_tree,
+            virus_host_mapping,
+            hard_exclude,
+            hard_include,
+        )
+        pd.testing.assert_series_equal(
+            result.sort_index(),
+            pd.Series(expected).sort_index(),
+            check_names=False,
+        )
+
+
+# =======================================================================
 # Tests for annotate_virus_db_single
 # =======================================================================
 
@@ -1421,6 +1706,7 @@ class TestAnnotateVirusDbSingle:
             virus_tree: dict[str, set[str]],
             virus_host_mapping: dict[str, set[str]],
             hard_exclude: list[str],
+            hard_include: list[str],
         ) -> pd.Series:  # type: ignore[type-arg]
             return pd.Series([MATCH, INCONSISTENT, UNCLEAR], index=virus_taxids)
 
@@ -1433,6 +1719,7 @@ class TestAnnotateVirusDbSingle:
         host_taxids = {"9606"}
         virus_host_mapping: dict[str, set[str]] = {}
         hard_exclude: list[str] = []
+        hard_include: list[str] = []
 
         # Act
         result = annotate_virus_db_single(
@@ -1442,11 +1729,68 @@ class TestAnnotateVirusDbSingle:
             sample_virus_tree,
             virus_host_mapping,
             hard_exclude,
+            hard_include,
         )
 
         # Assert
         assert "infection_status_human" in result.columns
         assert list(result["infection_status_human"]) == [MATCH, INCONSISTENT, UNCLEAR]
+
+
+# =======================================================================
+# Tests for annotate_virus_db (override-rejection paths)
+# =======================================================================
+
+
+class TestAnnotateVirusDbOverrideRejections:
+    """annotate_virus_db() rejects overrides that reference unknowns."""
+
+    @pytest.mark.parametrize(
+        "hard_include_mapping, expected_fragments",
+        [
+            # Unknown host name (typo or missing entry in host_taxon_db).
+            (
+                {"human": ["1"], "alien": ["2"]},
+                ["unknown host group(s)", "alien"],
+            ),
+            # Unknown taxid (typo or NCBI deprecation).
+            (
+                {"human": ["1", "99999"]},
+                ["not present in the virus DB", "99999"],
+            ),
+            # Unknown-taxid error sample is truncated at 10 with "+N more"
+            # so a paste of a stale taxonomy doesn't produce a multi-kB log
+            # line. 50 unknown taxids → 10 in sample, 40 in "+N more".
+            (
+                {"human": [f"9{i:03d}" for i in range(50)]},
+                ["not present in the virus DB", "+40 more"],
+            ),
+        ],
+        ids=[
+            "unknown_host_name",
+            "unknown_taxid",
+            "many_unknown_taxids_truncated",
+        ],
+    )
+    def test_rejects_unknown_overrides(
+        self,
+        hard_include_mapping: dict[str, list[str]],
+        expected_fragments: list[str],
+    ) -> None:
+        virus_db = pd.DataFrame({"taxid": ["1", "2"], "parent_taxid": ["0", "1"]})
+        with pytest.raises(ValueError) as excinfo:
+            annotate_virus_db(
+                virus_db,
+                host_mapping={"human": {"9606"}},
+                virus_host_mapping={"1": {"9606"}},  # 1 direct match
+                hard_exclude_taxids=[],
+                hard_include_mapping=hard_include_mapping,
+            )
+        msg = str(excinfo.value)
+        for fragment in expected_fragments:
+            assert fragment in msg, (
+                f"Expected {fragment!r} in error message; got: {msg!r}"
+            )
 
 
 # =======================================================================

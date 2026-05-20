@@ -1,0 +1,29 @@
+{
+    "description": "Host-infection overrides forcing MATCH (status=1) for taxa misannotated in Virus-Host-DB. See docs/annotation.md for semantics.",
+    "overrides": [
+        {
+            "taxid": "3048448",
+            "name": "Orthoflavivirus nilense (West Nile virus)",
+            "rationale": "Established human and vertebrate pathogen; VHDB does not list Homo sapiens as a host for the species taxid.",
+            "hosts": ["human", "vertebrate"]
+        },
+        {
+            "taxid": "3052303",
+            "name": "Mammarenavirus choriomeningitidis (lymphocytic choriomeningitis virus, LCMV)",
+            "rationale": "Classic human pathogen causing lymphocytic choriomeningitis (encephalitis, congenital infection, organ-transplant-associated severe disease). VHDB annotates the human disease in its disease column ('Lymphocytic choriomeningitis') but its host column lists only Chlorocebus aethiops, Mus musculus, and Mesocricetus auratus for the species taxid — so without this override the pipeline annotates LCMV as infection_status_human=0. Demoted from 1 to 0 in the 20260518 index relative to 20250825.",
+            "hosts": ["human", "vertebrate"]
+        },
+        {
+            "taxid": "3052493",
+            "name": "Orthohantavirus puumalaense (Puumala virus)",
+            "rationale": "Causes nephropathia epidemica (a milder hemorrhagic fever with renal syndrome) in Northern Europe; endemic with thousands of confirmed human cases per year. VHDB annotates 'Hemorrhagic fever with renal syndrome' as the disease but its host column lists only Chlorocebus aethiops and Myodes glareolus (bank vole) for the species taxid. Demoted from 1 to 0 in the 20260518 index relative to 20250825.",
+            "hosts": ["human", "vertebrate"]
+        },
+        {
+            "taxid": "3047395",
+            "name": "Orthoflavivirus banziense (Banzi virus)",
+            "rationale": "African flavivirus (Flaviviridae, mosquito-borne) with documented human febrile illness cases in southern Africa. VHDB lists only Mastomys natalensis, Cricetinae gen. sp., and Culex rubinotus as hosts for the species taxid — no Homo sapiens. Demoted from 1 to 0 in the 20260518 index relative to 20250825.",
+            "hosts": ["human", "vertebrate"]
+        }
+    ]
+}

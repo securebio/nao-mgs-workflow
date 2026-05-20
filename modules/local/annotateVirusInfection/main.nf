@@ -8,10 +8,11 @@ process ANNOTATE_VIRUS_INFECTION {
         path(infection_db)
         path(nodes_db)
         val(hard_exclude_taxids)
+        path(host_infection_overrides)
     output:
         path("total-virus-db-annotated.tsv.gz"), emit: db
     script:
         """
-        annotate_viral_hosts.py ${virus_db} ${host_db} ${infection_db} ${nodes_db} "${hard_exclude_taxids}" total-virus-db-annotated.tsv.gz
+        annotate_viral_hosts.py ${virus_db} ${host_db} ${infection_db} ${nodes_db} "${hard_exclude_taxids}" ${host_infection_overrides} total-virus-db-annotated.tsv.gz
         """
 }
