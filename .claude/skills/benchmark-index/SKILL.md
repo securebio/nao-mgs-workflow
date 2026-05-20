@@ -51,7 +51,19 @@ The interpretation work below turns those counts into a written report.
 
 The script has already filtered to the actionable rows. Your job is to name them and decide what to recommend.
 
-**`species_transitions_human.tsv`** is the most important file. Filter the rows you read to `covered_by == ""` — those are the genuine concerns. The rest are explained by existing rules in `ref/host-infection-overrides.json` or `viral_taxids_exclude_hard` and don't need action.
+**Two TSV families to keep straight:**
+- `species_transitions_<host>.tsv` — species-rank only, annotated with `covered_by` ("excluded" | "included" | "") and `included_for_other_hosts`. **Use this for triage.**
+- `infection_status_changes_<host>.tsv` — all ranks, raw, no coverage annotation. Use only if you need strain-level detail; otherwise ignore.
+
+**`species_transitions_human.tsv`** is the most important file. Filter the rows you read to `covered_by == ""` — those are the genuine concerns. Don't `Read` the whole file (often >1000 rows of which only a handful are actionable); filter first:
+
+```bash
+awk -F'\t' 'NR==1 || $6==""' /tmp/<outdir>/species_transitions_human.tsv | column -t -s $'\t'
+```
+
+(adjust the column number if the script's schema changes — `covered_by` is the 6th column in the current output).
+
+The rest of the rows (those with a non-empty `covered_by`) are explained by existing rules in `ref/host-infection-overrides.json` or `viral_taxids_exclude_hard` and don't need action.
 
 For each **uncovered 1→0 human demotion**:
 - Look up the species by name. Is it a known human pathogen?
@@ -64,18 +76,15 @@ For each **uncovered 0→1 human promotion**:
 
 For the other hosts (`bird`, `mammal`, `primate`, `vertebrate`), the bar is lower — only flag if uncovered counts are unusually high or include conspicuous names. Most non-human animal-pathogen reannotations don't affect the human-surveillance use case.
 
-**Watch the `included_for_other_hosts` column** in each `species_transitions_<host>.tsv`. When this column is non-empty for an uncovered demotion, it means the taxid IS in `ref/host-infection-overrides.json` — just for different host(s) than the one demoting. summary.md surfaces the count as "N policy gap(s)" inline. This is a scope-of-override question: do we want the override to apply across the whole human-bearing taxonomic chain (human / primate / mammal / vertebrate), or only the hosts the entry explicitly lists? Flag the gap in the report but don't unilaterally recommend expanding scope — it's a policy call.
+**Watch the `included_for_other_hosts` column** in each `species_transitions_<host>.tsv`. When this column is non-empty (comma-joined list, e.g. `"human,vertebrate"`) for an uncovered demotion, it means the taxid IS in `ref/host-infection-overrides.json` — just for different host(s) than the one demoting. summary.md surfaces the count as "N policy gap(s)" inline. This is a scope-of-override question: do we want the override to apply across the whole human-bearing taxonomic chain (human / primate / mammal / vertebrate), or only the hosts the entry explicitly lists? Flag the gap in the report but don't unilaterally recommend expanding scope — it's a policy call.
 
 **Heuristic for "bar for flagging" on non-human hosts**: by default, only single out by name uncovered transitions for `bird` / `mammal` / `primate` / `vertebrate` if either (a) the actionable count is materially larger than for `human` (rule of thumb: ≥5× the human count for the same direction), or (b) the names include a recognizable human/livestock pathogen (mention SARS-CoV-2 / influenza / hantavirus / orthopox / rabies / ebola / hepatitis / etc. → name it; if it's clearly an environmental / arthropod / non-mammalian-host virus → aggregate). When uncertain about a name, say "flag for scientist review" rather than recommending action — these columns matter less for human-surveillance reporting and the cost of a missed call is low.
 
-**`species_lost_all_genomes.tsv`** — species with `new_count=0` and `old_count>0`. For each in the top 10–20:
+**`species_lost_all_genomes.tsv`** — species with `new_count=0` and `old_count>0`. The script already auto-annotates each row with `likely_rename` and `new_taxonomy_name`; focus on rows where `likely_rename == False`. For each in the top 10–20:
 - Is it a known human pathogen? If yes → real concern; recommend investigating whether a `download_virus_taxid` config change is needed.
-- Otherwise (smacovirus, environmental virus, etc.) → likely fine.
-- **Caveat**: NCBI taxonomy renames cause false positives here. If a species name "disappears" but the new taxonomy DB has a similar name under a *different* taxid (i.e. the species was rekeyed), the genomes likely moved with it. Spot-check by searching the new taxonomy:
-  ```bash
-  zcat <outdir>/../*-db/total-virus-db-annotated.tsv.gz 2>/dev/null | grep -i "<species name>" | head
-  ```
-  Or do a quick web search on the species name to see if NCBI's taxonomy browser shows a rename.
+- **Does its family/class already appear in `viral_taxids_exclude_hard`?** If yes (Smacoviridae `2169574`, Picobirnaviridae `585893`, Microviricetes `10841`, Caudoviricetes `2731619`, Malgrandaviricetes `2732413`, Faserviricetes `2732411`), the loss has no downstream effect — the taxon would be force-zeroed regardless. Note this and move on.
+- Otherwise (environmental virus with no surveillance relevance) → likely fine.
+- **Caveat on `likely_rename` heuristic**: it relies on `species_taxid` still resolving in the new taxonomy DB to a *different* name. If the rename also changed the taxid itself, the row will show as a "true loss" — sanity-check the top entries with a quick web search on the organism name.
 
 **`sizes.tsv`** — any negative `delta_bytes`? Common explanations to mention:
 - `virus-genomes-masked.fasta.gz` + `virus-genome-metadata-gid.tsv.gz` both shrinking → assembly-status filter (current-only) is dropping superseded NCBI assemblies. Normal since the v3.2.1.5 rework; not a regression.
@@ -103,6 +112,12 @@ For each actionable `<taxid>`:
 awk -F'\t' -v t=<taxid> '$1==t {print $1"\t"$2"\t"$6"\t"$8"\t"$9}' /tmp/vhdb-current.tsv
 ```
 (columns: virus tax id, virus name, disease, host tax id, host name)
+
+**If the taxid returns no rows in VHDB**, the species was probably renamed (the new NCBI taxid hasn't propagated to VHDB yet, or VHDB has the same organism under a pre-rename taxid). Look it up by name instead:
+```bash
+grep -i "<organism name>" /tmp/vhdb-current.tsv | head
+```
+Use the organism name from `species_transitions_<host>.tsv` (the `name` column) or, if you have it, the pre-rename name from `species_lost_all_genomes.tsv`. If VHDB still has nothing under any spelling, treat the upstream evidence as absent — don't recommend an override from the benchmark alone.
 
 For **1→0 human demotions**:
 - Homo sapiens (9606) in column 4 → the demotion is **not** upstream; investigate the workflow code (rare).
@@ -205,11 +220,20 @@ is conspicuous (e.g. a name change for a known human pathogen).]
 
 [Pipeline version bump (call out the range explicitly), new/removed
 params, schema changes in any of the data files. Cosmetic path
-changes can be mentioned and dismissed in one sentence.]
+changes can be mentioned and dismissed in one sentence.
+
+Read `CHANGELOG.md` in the workflow checkout for the version range
+between the two builds — it carries the "why" for each artifact change
+(new pre-screen, new hard-exclude additions, new override entries) that
+params_diff.txt alone won't tell you. Mine it for Section 4 narrative.]
 
 ## 5. Recommendations
 
-[Concrete config edits, keyed to findings:
+[Concrete config edits, keyed to findings. **Order by confidence:** the
+edits you're most confident about (clear VHDB false-positive, obvious
+exclude-list addition) first, scientist-judgment items second, policy
+questions last.
+
 - "Add `<taxid>` (`<name>`) to `viral_taxids_exclude_hard` in
   `configs/index.config`, `configs/index-for-run-test.config`, and
   `tests/configs/index.config`: <reason>". Show the literal before/after
@@ -218,6 +242,7 @@ changes can be mentioned and dismissed in one sentence.]
   <reason>".
 - Policy questions (e.g. override scope) stated as a question, not a
   unilateral recommendation.
+
 If no config changes are needed, say so explicitly in section 5.]
 ```
 
