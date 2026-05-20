@@ -51,17 +51,19 @@ The interpretation work below turns those counts into a written report.
 
 The script has already filtered to the actionable rows. Your job is to name them and decide what to recommend.
 
-**Two TSV families to keep straight:**
-- `species_transitions_<host>.tsv` — species-rank only, annotated with `covered_by` ("excluded" | "included" | "") and `included_for_other_hosts`. **Use this for triage.**
+**Three TSVs to keep straight:**
+- `species_transitions_<host>.tsv` — species-rank only, annotated with `covered_by` ("excluded" | "included" | "") and `included_for_other_hosts`. **Use this for triage.** Columns: `taxid, name, rank, old_status, new_status, covered_by, covered_rule_taxid, included_for_other_hosts`.
 - `infection_status_changes_<host>.tsv` — all ranks, raw, no coverage annotation. Use only if you need strain-level detail; otherwise ignore.
+- `genomes_by_species.tsv` — `species_taxid, organism_name, old_count, new_count, delta`, sorted by `delta`. **Cross-reference this for every actionable 0→1 promotion** — a large simultaneous genome-count jump is diagnostic of an upstream pipeline-config-driven false positive (e.g. a parameter change like `assembly_source = "all"` pulling in a flood of new accessions under one placeholder taxid).
 
-**`species_transitions_human.tsv`** is the most important file. Filter the rows you read to `covered_by == ""` — those are the genuine concerns. Don't `Read` the whole file (often >1000 rows of which only a handful are actionable); filter first:
+**`species_transitions_human.tsv`** is the most important file. The actionable rows are uncovered 1→0 demotions and 0→1 promotions (i.e. `covered_by == ""` *and* a `0↔1` status flip — `2↔3` transitions are unknown-vs-likely re-evaluations and not actionable). Don't `Read` the whole file (often >1000 rows of which only a handful are actionable); filter first:
 
 ```bash
-awk -F'\t' 'NR==1 || $6==""' /tmp/<outdir>/species_transitions_human.tsv | column -t -s $'\t'
+awk -F'\t' 'NR==1 || ($6=="" && (($4==1 && $5==0) || ($4==0 && $5==1)))' \
+  /tmp/<outdir>/species_transitions_human.tsv | column -t -s $'\t'
 ```
 
-(adjust the column number if the script's schema changes — `covered_by` is the 6th column in the current output).
+(columns: `1=taxid, 2=name, 3=rank, 4=old_status, 5=new_status, 6=covered_by, 7=covered_rule_taxid, 8=included_for_other_hosts` — adjust if the script's schema changes).
 
 The rest of the rows (those with a non-empty `covered_by`) are explained by existing rules in `ref/host-infection-overrides.json` or `viral_taxids_exclude_hard` and don't need action.
 
@@ -72,11 +74,21 @@ For each **uncovered 1→0 human demotion**:
 
 For each **uncovered 0→1 human promotion**:
 - Pattern-match the name. Bacteriophage / Microviridae / gokushovirus / Smacoviridae / Picobirnaviridae / "Human gut <foo>" → false positive, recommend adding the species (or, better, its family/class) to `viral_taxids_exclude_hard`.
+- **Cross-reference `genomes_by_species.tsv` for the same taxid.** If the promotion is paired with a large genome-count jump (e.g. 0 → 1349) at the top of `genomes_by_species.tsv`, the promotion is probably driven by a pipeline parameter change pulling in many new accessions, not by VHDB drift. Mention the causal link in the report — it's the strongest possible justification for the exclude-list recommendation.
 - Anything else → flag for scientist review.
 
 For the other hosts (`bird`, `mammal`, `primate`, `vertebrate`), the bar is lower — only flag if uncovered counts are unusually high or include conspicuous names. Most non-human animal-pathogen reannotations don't affect the human-surveillance use case.
 
-**Watch the `included_for_other_hosts` column** in each `species_transitions_<host>.tsv`. When this column is non-empty (comma-joined list, e.g. `"human,vertebrate"`) for an uncovered demotion, it means the taxid IS in `ref/host-infection-overrides.json` — just for different host(s) than the one demoting. summary.md surfaces the count as "N policy gap(s)" inline. This is a scope-of-override question: do we want the override to apply across the whole human-bearing taxonomic chain (human / primate / mammal / vertebrate), or only the hosts the entry explicitly lists? Flag the gap in the report but don't unilaterally recommend expanding scope — it's a policy call.
+**De-duplicate cross-host transitions.** A single taxid often appears in multiple `species_transitions_<host>.tsv` files as an actionable transition (a 0→1 promotion on `human` typically propagates to `primate`, `mammal`, and `vertebrate`). Write up the taxid **once** in the host section where it matters most (usually `human`) and cross-reference it from the others; don't repeat the same finding five times.
+
+**Override policy gaps.** When `included_for_other_hosts` (column 8 of `species_transitions_<host>.tsv`) is non-empty for an actionable demotion, the taxid IS in `ref/host-infection-overrides.json` — just for different host(s) than the one demoting. The value is a comma-joined list of the hosts the override DOES cover (e.g. `"human,vertebrate"`). Find them directly:
+
+```bash
+awk -F'\t' 'NR==1 || ($6=="" && $8!="")' \
+  /tmp/<outdir>/species_transitions_<host>.tsv | column -t -s $'\t'
+```
+
+summary.md surfaces the count as "N policy gap(s)" inline; the awk above identifies which taxid. The policy question to ask in the report: do we want the override to apply across the whole human-bearing taxonomic chain (human / primate / mammal / vertebrate), or only the hosts the entry explicitly lists? Flag the gap but don't unilaterally recommend expanding scope — it's a policy call.
 
 **Heuristic for "bar for flagging" on non-human hosts**: by default, only single out by name uncovered transitions for `bird` / `mammal` / `primate` / `vertebrate` if either (a) the actionable count is materially larger than for `human` (rule of thumb: ≥5× the human count for the same direction), or (b) the names include a recognizable human/livestock pathogen (mention SARS-CoV-2 / influenza / hantavirus / orthopox / rabies / ebola / hepatitis / etc. → name it; if it's clearly an environmental / arthropod / non-mammalian-host virus → aggregate). When uncertain about a name, say "flag for scientist review" rather than recommending action — these columns matter less for human-surveillance reporting and the cost of a missed call is low.
 
@@ -122,7 +134,8 @@ Use the organism name from `species_transitions_<host>.tsv` (the `name` column) 
 For **1→0 human demotions**:
 - Homo sapiens (9606) in column 4 → the demotion is **not** upstream; investigate the workflow code (rare).
 - No Homo sapiens but a human disease named in column 3 → demotion **is** upstream VHDB drift (host annotation isn't capturing the disease annotation). Typical pattern; recommend adding to overrides.
-- No Homo sapiens, no human disease → either the demotion is correct, or VHDB has no human data at all. Don't recommend an override without a separate evidence source (textbook, recent literature).
+- Host taxid `1` (`root`) in column 4 → VHDB has the species recorded but with no specific host annotation. The demotion is real (no host info to override against); don't recommend a `1`-override unless you can cite an external evidence source. This is the typical pattern for niche circovirids/cycloviruses and other obscure non-pathogen taxa.
+- No Homo sapiens, no human disease, no row at all → either the demotion is correct, or VHDB hasn't ingested the taxid yet. Don't recommend an override without a separate evidence source (textbook, recent literature).
 
 For **0→1 promotions**:
 - Homo sapiens now in column 4 → the promotion is upstream and reflects a genuine VHDB addition. Then decide if it's biologically plausible (some VHDB additions are correct, some are false positives based on incidental sample origins):
