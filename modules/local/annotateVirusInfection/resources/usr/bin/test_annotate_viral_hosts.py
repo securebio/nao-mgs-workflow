@@ -48,6 +48,7 @@ State meanings:
 # =======================================================================
 
 import itertools
+import json
 from collections.abc import Callable
 from pathlib import Path
 from typing import Protocol
@@ -64,10 +65,13 @@ from annotate_viral_hosts import (
     add_descendants,
     annotate_virus_db_single,
     build_virus_tree,
+    check_infection,
     exclude_infections,
     expand_taxid,
     get_host_taxids,
     get_virus_host_mapping,
+    include_infections,
+    load_host_overrides,
     mark_ancestor_infections,
     mark_ancestor_infections_single,
     mark_descendant_infections,
@@ -1243,6 +1247,142 @@ class TestExcludeInfections:
 
 
 # =======================================================================
+# Tests for include_infections
+# =======================================================================
+
+
+class TestIncludeInfections:
+    """
+    Test the include_infections function. Unlike exclude_infections,
+    include_infections marks only the listed taxids — descendant propagation
+    is delegated to mark_descendant_infections() downstream. Full-pipeline
+    descendant-propagation coverage lives in TestCheckInfection.
+    """
+
+    @pytest.mark.parametrize(
+        "statuses, include_taxids, expected",
+        [
+            (
+                pd.Series(
+                    {
+                        "1": INCONSISTENT,
+                        "2": INCONSISTENT,
+                        "3": UNCLEAR,
+                        "4": CONSISTENT,
+                        "5": UNRESOLVED,
+                    }
+                ),
+                ["2"],
+                pd.Series(
+                    {
+                        "1": INCONSISTENT,
+                        "2": MATCH,
+                        "3": UNCLEAR,
+                        "4": CONSISTENT,
+                        "5": UNRESOLVED,
+                    }
+                ),
+            ),
+            (
+                pd.Series({"1": INCONSISTENT, "2": CONSISTENT, "3": UNCLEAR}),
+                [],
+                pd.Series({"1": INCONSISTENT, "2": CONSISTENT, "3": UNCLEAR}),
+            ),
+            (
+                pd.Series({"1": INCONSISTENT, "2": INCONSISTENT, "3": INCONSISTENT}),
+                ["1", "3"],
+                pd.Series({"1": MATCH, "2": INCONSISTENT, "3": MATCH}),
+            ),
+            (
+                pd.Series({"1": MATCH, "2": MATCH}),
+                ["1"],
+                pd.Series({"1": MATCH, "2": MATCH}),
+            ),
+            # Descendants are NOT touched by include — propagation is
+            # mark_descendant_infections's job. A future change that re-bakes
+            # descendant expansion into include_infections would fail here.
+            (
+                pd.Series({"X": UNRESOLVED, "Y": UNRESOLVED, "Z": UNRESOLVED}),
+                ["X"],
+                pd.Series({"X": MATCH, "Y": UNRESOLVED, "Z": UNRESOLVED}),
+            ),
+        ],
+        ids=[
+            "marks_only_listed_taxid",
+            "empty_include_list_is_noop",
+            "marks_multiple_listed_taxids",
+            "idempotent_on_existing_match",
+            "descendants_unchanged_by_include",
+        ],
+    )
+    def test_include_infections(
+        self,
+        statuses: pd.Series,
+        include_taxids: list[str],
+        expected: pd.Series,
+    ) -> None:
+        result = include_infections(statuses.copy(), include_taxids)
+        pd.testing.assert_series_equal(result, expected)
+
+
+# =======================================================================
+# Tests for load_host_overrides
+# =======================================================================
+
+
+class TestLoadHostOverrides:
+    """Test the load_host_overrides JSON-parsing helper."""
+
+    @pytest.mark.parametrize(
+        "json_content, expected",
+        [
+            (
+                {
+                    "description": "test",
+                    "overrides": [
+                        {
+                            "taxid": "3048448",
+                            "name": "WNV",
+                            "rationale": "test",
+                            "hosts": ["human", "vertebrate"],
+                        },
+                        {
+                            "taxid": "11082",
+                            "name": "WNV legacy",
+                            "rationale": "test",
+                            "hosts": ["human"],
+                        },
+                    ],
+                },
+                {"human": ["3048448", "11082"], "vertebrate": ["3048448"]},
+            ),
+            ({"overrides": []}, {}),
+            ({"description": "no overrides yet"}, {}),
+            # Numeric taxids in JSON are coerced to str to match virus DB dtype.
+            (
+                {"overrides": [{"taxid": 3048448, "hosts": ["human"]}]},
+                {"human": ["3048448"]},
+            ),
+        ],
+        ids=[
+            "typical_per_host_grouping",
+            "empty_overrides_list",
+            "missing_overrides_key",
+            "int_taxid_coerced_to_str",
+        ],
+    )
+    def test_load_host_overrides(
+        self,
+        tmp_path: Path,
+        json_content: dict,
+        expected: dict[str, list[str]],
+    ) -> None:
+        path = tmp_path / "overrides.json"
+        path.write_text(json.dumps(json_content))
+        assert load_host_overrides(path) == expected
+
+
+# =======================================================================
 # Tests for mark_ancestor_infections
 # =======================================================================
 
@@ -1399,6 +1539,79 @@ class TestGetVirusHostMapping:
 
 
 # =======================================================================
+# Tests for check_infection
+# =======================================================================
+
+
+class TestCheckInfection:
+    """Integration tests for check_infection covering the hard-include code path."""
+
+    @pytest.mark.parametrize(
+        "virus_taxids, virus_tree, virus_host_mapping, hard_exclude, hard_include, expected",
+        [
+            # hard_include keeps the short-circuit guard from swallowing the
+            # override when VHDB has zero direct matches; descendants ("3","4")
+            # pick up MATCH via mark_descendant_infections, and the ancestor
+            # ("1") via mark_ancestor_infections.
+            (
+                pd.Series(["1", "2", "3", "4"], index=["1", "2", "3", "4"]),
+                {"1": {"2"}, "2": {"3", "4"}, "3": set(), "4": set()},
+                {},
+                [],
+                ["2"],
+                {"1": MATCH, "2": MATCH, "3": MATCH, "4": MATCH},
+            ),
+            # No direct matches and no includes: short-circuit fast path fires.
+            (
+                pd.Series(["1", "2"], index=["1", "2"]),
+                {"1": {"2"}, "2": set()},
+                {},
+                [],
+                [],
+                {"1": INCONSISTENT, "2": INCONSISTENT},
+            ),
+            # When the same taxid is in both hard_exclude and hard_include,
+            # include wins — pins down the exclude→include ordering.
+            (
+                pd.Series(["1", "2"], index=["1", "2"]),
+                {"1": set(), "2": set()},
+                {"1": {"9606"}, "2": {"10090"}},
+                ["2"],
+                ["2"],
+                {"1": MATCH, "2": MATCH},
+            ),
+        ],
+        ids=[
+            "hard_include_survives_short_circuit",
+            "no_matches_no_include_short_circuits",
+            "include_wins_on_conflict_with_exclude",
+        ],
+    )
+    def test_check_infection(
+        self,
+        virus_taxids: pd.Series,
+        virus_tree: dict[str, set[str]],
+        virus_host_mapping: dict[str, set[str]],
+        hard_exclude: list[str],
+        hard_include: list[str],
+        expected: dict[str, int],
+    ) -> None:
+        result = check_infection(
+            virus_taxids,
+            {"9606"},
+            virus_tree,
+            virus_host_mapping,
+            hard_exclude,
+            hard_include,
+        )
+        pd.testing.assert_series_equal(
+            result.sort_index(),
+            pd.Series(expected).sort_index(),
+            check_names=False,
+        )
+
+
+# =======================================================================
 # Tests for annotate_virus_db_single
 # =======================================================================
 
@@ -1421,6 +1634,7 @@ class TestAnnotateVirusDbSingle:
             virus_tree: dict[str, set[str]],
             virus_host_mapping: dict[str, set[str]],
             hard_exclude: list[str],
+            hard_include: list[str],
         ) -> pd.Series:  # type: ignore[type-arg]
             return pd.Series([MATCH, INCONSISTENT, UNCLEAR], index=virus_taxids)
 
@@ -1433,6 +1647,7 @@ class TestAnnotateVirusDbSingle:
         host_taxids = {"9606"}
         virus_host_mapping: dict[str, set[str]] = {}
         hard_exclude: list[str] = []
+        hard_include: list[str] = []
 
         # Act
         result = annotate_virus_db_single(
@@ -1442,6 +1657,7 @@ class TestAnnotateVirusDbSingle:
             sample_virus_tree,
             virus_host_mapping,
             hard_exclude,
+            hard_include,
         )
 
         # Assert

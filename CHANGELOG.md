@@ -1,5 +1,6 @@
 # v3.2.2.0-dev
 
+- Add a hard-include override mechanism to `ANNOTATE_VIRUS_INFECTION` for taxa misannotated in Virus-Host-DB. New `params.host_infection_overrides` (default `ref/host-infection-overrides.json`) lists per-taxid host-group overrides forcing `MATCH` (status=1); applied after hard-exclude so includes win on conflict, then propagated via the existing ancestor/descendant steps. Seeded with one entry for West Nile virus (`3048448`, hosts `human`/`vertebrate`); further additions (LCMV, Puumala, Banzi, etc.) will follow in a separate PR.
 - Triage urllib3 CVE-2026-44431 / CVE-2026-44432: patch `multiqc` with an explicit `urllib3=2.7.0` pin; ignore on the four `awscli`-bearing containers, where the awscli feedstock caps urllib3 below 2.7.
 - Add Microviricetes (`10841`), Smacoviridae (`2169574`), and Picobirnaviridae (`585893`) to `viral_taxids_exclude_hard` in all three INDEX configs; these groups are routinely misflagged human-infecting by upstream Virus-Host-DB. Also fixes the `Malgrantaviricetes` → `Malgrandaviricetes` typo in the inline comment.
 - Speed up `ADD_GENBANK_GENOME_IDS` by parallel-fetching staged genomes with `xargs -P` and bumping label from `single` to `xsmall`. Inline Python is refactored into a dedicated `add_genbank_genome_ids.py` script (with pytest coverage).
