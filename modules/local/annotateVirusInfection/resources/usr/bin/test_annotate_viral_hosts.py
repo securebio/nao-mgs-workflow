@@ -1425,41 +1425,33 @@ class TestLoadHostOverrides:
             load_host_overrides(path)
 
     @pytest.mark.parametrize(
-        "overrides, expected_result, expected_warning_fragments",
+        "overrides, expected_match",
         [
-            # hosts=[] is a no-op; warn to surface the likely typo.
-            (
-                [{"taxid": "1", "hosts": []}],
-                {},
-                ["empty 'hosts'", "no-op"],
-            ),
-            # Duplicate (taxid, host) across entries → dedup and warn.
+            # hosts=[] is a no-op; minItems=1 in the schema catches it.
+            ([{"taxid": "1", "hosts": []}], "does not match schema"),
+            # Duplicate (taxid, host) across entries is a cross-entry check
+            # the schema can't express; load_host_overrides raises after
+            # JSON Schema validation passes.
             (
                 [
                     {"taxid": "1", "hosts": ["human"]},
                     {"taxid": "1", "hosts": ["human", "vertebrate"]},
                 ],
-                {"human": ["1"], "vertebrate": ["1"]},
-                ["Duplicate", "human"],
+                r"duplicate \(taxid, host\) pair",
             ),
         ],
-        ids=["empty_hosts_is_noop", "duplicate_taxid_host_pair"],
+        ids=["empty_hosts_rejected", "duplicate_taxid_host_pair_rejected"],
     )
-    def test_warns_on_questionable_entries(
+    def test_rejects_suspect_entries(
         self,
         tmp_path: Path,
-        caplog: pytest.LogCaptureFixture,
         overrides: list[dict],
-        expected_result: dict[str, list[str]],
-        expected_warning_fragments: list[str],
+        expected_match: str,
     ) -> None:
         path = tmp_path / "overrides.json"
         path.write_text(json.dumps({"overrides": overrides}))
-        with caplog.at_level("WARNING"):
-            result = load_host_overrides(path)
-        assert result == expected_result
-        msgs = [r.getMessage() for r in caplog.records if r.levelname == "WARNING"]
-        assert any(all(frag in m for frag in expected_warning_fragments) for m in msgs)
+        with pytest.raises(ValueError, match=expected_match):
+            load_host_overrides(path)
 
 
 # =======================================================================
