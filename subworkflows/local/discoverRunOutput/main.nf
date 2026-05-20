@@ -37,11 +37,11 @@ workflow DISCOVER_RUN_OUTPUT {
             .toList()
             .flatMap { all_candidates ->
                 def missing = all_candidates
-                    .findAll { it[4] == null }
-                    .collect { "${it[0]}\t${it[1]}\t${it[3]}" }
+                    .findAll { c -> c[4] == null }
+                    .collect { c -> "${c[0]}\t${c[1]}\t${c[3]}" }
                 if (missing) {
                     def unique_missing = (missing as Set).sort()
-                    def formatted = unique_missing.collect { it.replace('\t', ' / ') }.join('\n  ')
+                    def formatted = unique_missing.collect { line -> line.replace('\t', ' / ') }.join('\n  ')
                     throw new RuntimeException(
                         "Missing ${unique_missing.size()} expected RUN output file(s) in run_results_dir:\n  " +
                         "${formatted}\n" +

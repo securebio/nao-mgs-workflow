@@ -38,7 +38,7 @@ workflow PROCESS_LCA_ALIGNER_OUTPUT {
         selected_ch = SELECT_TSV_COLUMNS(filtered_ch.output, col_keep, "keep")
         // Step 6: Rename columns with prefix using REHEAD_TSV
         old_cols = col_keep_add_prefix.join(",")
-        new_cols = col_keep_add_prefix.collect { "${column_prefix}${it}" }.join(",")
+        new_cols = col_keep_add_prefix.collect { c -> "${column_prefix}${c}" }.join(",")
         renamed_ch = REHEAD_TSV(selected_ch.output, old_cols, new_cols)
         // Step 7: Add sample column to LCA TSV for intermediate output
         lca_labeled_ch = ADD_SAMPLE_COLUMN_LCA(lca_tsv, "sample", "viral_lca")

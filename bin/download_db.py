@@ -32,18 +32,21 @@ import subprocess
 import time
 from collections.abc import Generator
 from contextlib import contextmanager
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 ###########
 # LOGGING #
 ###########
 
+
 class UTCFormatter(logging.Formatter):
     """Custom logging formatter that displays timestamps in UTC."""
+
     def formatTime(self, record: logging.LogRecord, datefmt: str | None = None) -> str:
-        dt = datetime.fromtimestamp(record.created, timezone.utc)
+        dt = datetime.fromtimestamp(record.created, UTC)
         return dt.strftime("%Y-%m-%d %H:%M:%S UTC")
+
 
 logger = logging.getLogger(__name__)
 handler = logging.StreamHandler()
@@ -55,6 +58,7 @@ logger.setLevel(logging.INFO)
 ####################
 # HELPER FUNCTIONS #
 ####################
+
 
 def parse_source_path(path: str) -> tuple[str, bool]:
     """
@@ -68,10 +72,11 @@ def parse_source_path(path: str) -> tuple[str, bool]:
     # Collapse consecutive slashes
     normalized = re.sub(r"//+", "/", path)
     # Check if S3 path and restore proper s3:// prefix
-    if normalized.startswith("s3:/") or normalized.startswith("s3:"):
+    if normalized.startswith(("s3:/", "s3:")):
         path_without_prefix = re.sub(r"^s3:/*", "", normalized)
         return f"s3://{path_without_prefix}", True
     return normalized, False
+
 
 def get_cache_name(source_path: str) -> str:
     """
@@ -83,8 +88,11 @@ def get_cache_name(source_path: str) -> str:
     path_hash = hashlib.sha256(source_path.encode()).hexdigest()[:8]
     return f"{basename}_{path_hash}"
 
+
 @contextmanager
-def file_lock(lock_file: Path, timeout_seconds: float | None = None) -> Generator[None, None, None]:
+def file_lock(
+    lock_file: Path, timeout_seconds: float | None = None
+) -> Generator[None, None, None]:
     """
     Context manager for exclusive file locking.
     Args:
@@ -101,11 +109,11 @@ def file_lock(lock_file: Path, timeout_seconds: float | None = None) -> Generato
                 try:
                     fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
                     break
-                except BlockingIOError:
+                except BlockingIOError as e:
                     if time.time() - start_time >= timeout_seconds:
                         raise TimeoutError(
                             f"Timed out waiting for lock after {timeout_seconds} seconds"
-                        )
+                        ) from e
                     time.sleep(0.1)
         else:
             fcntl.flock(f, fcntl.LOCK_EX)
@@ -114,9 +122,11 @@ def file_lock(lock_file: Path, timeout_seconds: float | None = None) -> Generato
     # Lock is released when file is closed
     logger.info("Released lock")
 
+
 #####################
 # DATABASE TRANSFER #
 #####################
+
 
 def configure_aws_s3_transfer() -> None:
     """Configure AWS CLI settings for optimal S3 transfer performance."""
@@ -131,6 +141,7 @@ def configure_aws_s3_transfer() -> None:
             check=True,
             capture_output=True,
         )
+
 
 def sync_from_s3(source_path: str, local_path: Path) -> None:
     """
@@ -148,6 +159,7 @@ def sync_from_s3(source_path: str, local_path: Path) -> None:
     )
     logger.info("S3 sync completed")
 
+
 def sync_from_local(source_path: str, local_path: Path) -> None:
     """
     Sync a database from a local path using 'rsync -a --delete'.
@@ -162,9 +174,11 @@ def sync_from_local(source_path: str, local_path: Path) -> None:
     )
     logger.info("Local sync completed")
 
+
 ##############
 # MAIN LOGIC #
 ##############
+
 
 def download_database(
     source_path: str,
@@ -200,6 +214,7 @@ def download_database(
         logger.info(f"Database available at: {local_path}")
         return local_path
 
+
 def parse_arguments() -> argparse.Namespace:
     """Parse command-line arguments."""
     parser = argparse.ArgumentParser(
@@ -219,6 +234,7 @@ def parse_arguments() -> argparse.Namespace:
     )
     return parser.parse_args()
 
+
 def main() -> None:
     """Main entry point."""
     logger.info("Initializing script.")
@@ -231,6 +247,7 @@ def main() -> None:
     finally:
         elapsed = time.time() - start_time
         logger.info(f"Total time elapsed: {elapsed:.2f} seconds")
+
 
 if __name__ == "__main__":
     main()

@@ -3,11 +3,6 @@ Cluster a channel of viral sequences with VSEARCH, process the output,
 and extract the representative sequences of the top N largest clusters.
 */
 
-def listFiles = { label, files ->
-    def file_list = files instanceof List ? files : [files]
-    [label, file_list]
-}
-
 /***************************
 | MODULES AND SUBWORKFLOWS |
 ***************************/
@@ -31,6 +26,11 @@ workflow CLUSTER_VIRAL_ASSIGNMENTS {
         n_clusters // Number of cluster representatives to validate for each species
         single_end // Is the input read data single-ended (true) or interleaved (false)?
     main:
+        // Helper to wrap single-Path values in a list, so all emit channels have a uniform [label, [files]] shape
+        def listFiles = { label, files ->
+            def file_list = files instanceof List ? files : [files]
+            return [label, file_list]
+        }
         // 1. Merge and join interleaved sequences to produce a single sequence per input pair
         merge_ch = MERGE_JOIN_READS(reads_ch, single_end)
         // 2. Cluster merged reads
@@ -47,7 +47,7 @@ workflow CLUSTER_VIRAL_ASSIGNMENTS {
             .map { sample, reads, ids ->
                 def reads_list = reads instanceof List ? reads : [reads]
                 def ids_list = ids instanceof List ? ids : [ids]
-                tuple(sample, reads_list.sort { it.name }, ids_list.sort { it.name })
+                tuple(sample, reads_list.sort { f -> f.name }, ids_list.sort { f -> f.name })
             }
         rep_fastq_ch = DOWNSAMPLE_FASTN_BY_ID(id_prep_ch).output
         rep_fasta_ch = CONVERT_FASTQ_FASTA(rep_fastq_ch).output

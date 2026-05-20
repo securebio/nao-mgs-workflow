@@ -21,6 +21,7 @@ import boto3
 # LOGGING #
 ###########
 
+
 class UTCFormatter(logging.Formatter):
     """Custom logging formatter that displays timestamps in UTC."""
 
@@ -35,6 +36,7 @@ class UTCFormatter(logging.Formatter):
         dt = datetime.fromtimestamp(record.created, UTC)
         return dt.strftime("%Y-%m-%d %H:%M:%S UTC")
 
+
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 handler = logging.StreamHandler()
@@ -47,6 +49,7 @@ logger.addHandler(handler)
 # INDEX AGE CHECKS  #
 #####################
 
+
 def get_max_index_age_days(pyproject_path: str = "pyproject.toml") -> int:
     """Read max-stable-index-age-days from pyproject.toml.
     Args:
@@ -57,6 +60,7 @@ def get_max_index_age_days(pyproject_path: str = "pyproject.toml") -> int:
     with open(pyproject_path, "rb") as f:
         data = tomllib.load(f)
     return int(data["tool"]["mgs-workflow"]["max-stable-index-age-days"])
+
 
 def parse_index_date(time_text: str) -> date:
     """Extract the date from an INDEX workflow time.txt timestamp.
@@ -71,6 +75,7 @@ def parse_index_date(time_text: str) -> date:
     text = time_text.strip().replace("(", "").replace(")", "")
     return datetime.strptime(text, "%Y-%m-%d %H:%M:%S %Z %z").date()
 
+
 def fetch_time_txt_from_s3(s3_uri: str) -> str:
     """Download and return the contents of time.txt from S3.
     Args:
@@ -84,6 +89,7 @@ def fetch_time_txt_from_s3(s3_uri: str) -> str:
     response = s3_client.get_object(Bucket=bucket, Key=key)
     content: str = response["Body"].read().decode("utf-8")
     return content
+
 
 def check_index_age(
     index_date: date,
@@ -103,9 +109,11 @@ def check_index_age(
     age_days = (today - index_date).days
     return age_days <= max_age_days, age_days
 
+
 ##############
 # MAIN LOGIC #
 ##############
+
 
 def parse_arguments() -> argparse.Namespace:
     """Parse command-line arguments.
@@ -128,6 +136,7 @@ def parse_arguments() -> argparse.Namespace:
     )
     return parser.parse_args()
 
+
 def main() -> None:
     """Check benchmark index age and raise an error if it is too old."""
     args = parse_arguments()
@@ -149,6 +158,7 @@ def main() -> None:
         age_days,
         max_age_days,
     )
+
 
 if __name__ == "__main__":
     main()

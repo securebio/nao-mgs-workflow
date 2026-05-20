@@ -4,13 +4,12 @@ Test module for lca_tsv.py
 
 import gzip
 import os
-import pytest
-import sys
 from pathlib import Path
 from typing import Any
 
 # Import the module being tested
 import lca_tsv
+import pytest
 
 
 class TestLcaTsv:
@@ -21,8 +20,15 @@ class TestLcaTsv:
         """Fixture providing path to toy taxonomy data."""
         return os.path.join(
             os.path.dirname(__file__),
-            "..", "..", "..", "..", "..", "..",
-            "test-data", "toy-data", "lca-taxonomy"
+            "..",
+            "..",
+            "..",
+            "..",
+            "..",
+            "..",
+            "test-data",
+            "toy-data",
+            "lca-taxonomy",
         )
 
     @pytest.fixture
@@ -40,15 +46,30 @@ class TestLcaTsv:
         """Fixture providing expected output headers."""
         return [
             "seq_id",
-            "test_taxid_lca_combined", "test_n_assignments_combined", "test_n_assignments_classified_combined",
-            "test_taxid_top_combined", "test_taxid_top_classified_combined",
-            "test_test_score_min_combined", "test_test_score_max_combined", "test_test_score_mean_combined",
-            "test_taxid_lca", "test_n_assignments", "test_n_assignments_classified",
-            "test_taxid_top", "test_taxid_top_classified",
-            "test_test_score_min", "test_test_score_max", "test_test_score_mean",
-            "test_taxid_lca_artificial", "test_n_assignments_artificial", "test_n_assignments_classified_artificial",
-            "test_taxid_top_artificial", "test_taxid_top_classified_artificial",
-            "test_test_score_min_artificial", "test_test_score_max_artificial", "test_test_score_mean_artificial"
+            "test_taxid_lca_combined",
+            "test_n_assignments_combined",
+            "test_n_assignments_classified_combined",
+            "test_taxid_top_combined",
+            "test_taxid_top_classified_combined",
+            "test_test_score_min_combined",
+            "test_test_score_max_combined",
+            "test_test_score_mean_combined",
+            "test_taxid_lca",
+            "test_n_assignments",
+            "test_n_assignments_classified",
+            "test_taxid_top",
+            "test_taxid_top_classified",
+            "test_test_score_min",
+            "test_test_score_max",
+            "test_test_score_mean",
+            "test_taxid_lca_artificial",
+            "test_n_assignments_artificial",
+            "test_n_assignments_classified_artificial",
+            "test_taxid_top_artificial",
+            "test_taxid_top_classified_artificial",
+            "test_test_score_min_artificial",
+            "test_test_score_max_artificial",
+            "test_test_score_mean_artificial",
         ]
 
     @pytest.fixture
@@ -113,26 +134,41 @@ class TestLcaTsv:
         child_to_parent, parent_to_children = lca_tsv.parse_nodes_db(toy_nodes_db, 8000)
         names_db = lca_tsv.parse_names_db(toy_names_db)
         unclassified_taxids = lca_tsv.get_unclassified_taxids(names_db)
-        unclassified_taxids_descendants = lca_tsv.get_descendants(unclassified_taxids, parent_to_children)
-        artificial_taxids = lca_tsv.get_descendants(set([8000]), parent_to_children)
+        unclassified_taxids_descendants = lca_tsv.get_descendants(
+            unclassified_taxids, parent_to_children
+        )
+        artificial_taxids = lca_tsv.get_descendants({8000}, parent_to_children)
 
         return {
             "child_to_parent": child_to_parent,
             "parent_to_children": parent_to_children,
             "artificial_taxids": artificial_taxids,
-            "unclassified_taxids_descendants": unclassified_taxids_descendants
+            "unclassified_taxids_descendants": unclassified_taxids_descendants,
         }
 
-    def test_natural_input(self, tsv_factory: Any, natural_input_data: str, taxonomy_dbs: dict[str, Any], expected_headers: list[str], tmp_path: Path) -> None:
+    def test_natural_input(
+        self,
+        tsv_factory: Any,
+        natural_input_data: str,
+        taxonomy_dbs: dict[str, Any],
+        expected_headers: list[str],
+        tmp_path: Path,
+    ) -> None:
         """Test LCA computation on natural input."""
         input_file = tsv_factory.create_plain("input.tsv", natural_input_data)
         output_file = str(tmp_path / "output.tsv.gz")
 
         # Run LCA computation
         lca_tsv.parse_input_tsv(
-            input_file, output_file, "seq_id", "taxid", "test_score",
-            taxonomy_dbs["child_to_parent"], taxonomy_dbs["artificial_taxids"],
-            taxonomy_dbs["unclassified_taxids_descendants"], "test"
+            input_file,
+            output_file,
+            "seq_id",
+            "taxid",
+            "test_score",
+            taxonomy_dbs["child_to_parent"],
+            taxonomy_dbs["artificial_taxids"],
+            taxonomy_dbs["unclassified_taxids_descendants"],
+            "test",
         )
 
         # Read output
@@ -140,18 +176,23 @@ class TestLcaTsv:
             output_lines = [line.strip().split("\t") for line in f.readlines()]
 
         # Parse input to get expected values per group
-        input_lines = [line.strip().split("\t") for line in natural_input_data.strip().split("\n")[1:]]
+        input_lines = [
+            line.strip().split("\t")
+            for line in natural_input_data.strip().split("\n")[1:]
+        ]
         groups: dict[str, list[dict[str, int | float]]] = {}
         for fields in input_lines:
             group_id = fields[0]
             if group_id not in groups:
                 groups[group_id] = []
-            groups[group_id].append({
-                "taxid": int(fields[1]),
-                "score": float(fields[2]),
-                "exp_lca": int(fields[3]),
-                "exp_top_taxid": int(fields[4])
-            })
+            groups[group_id].append(
+                {
+                    "taxid": int(fields[1]),
+                    "score": float(fields[2]),
+                    "exp_lca": int(fields[3]),
+                    "exp_top_taxid": int(fields[4]),
+                }
+            )
 
         # Verify output
         headers = output_lines[0]
@@ -183,16 +224,29 @@ class TestLcaTsv:
             assert row[headers.index("test_taxid_lca_artificial")] == "NA"
             assert row[headers.index("test_n_assignments_artificial")] == "0"
 
-    def test_artificial_input(self, tsv_factory: Any, artificial_input_data: str, taxonomy_dbs: dict[str, Any], expected_headers: list[str], tmp_path: Path) -> None:
+    def test_artificial_input(
+        self,
+        tsv_factory: Any,
+        artificial_input_data: str,
+        taxonomy_dbs: dict[str, Any],
+        expected_headers: list[str],
+        tmp_path: Path,
+    ) -> None:
         """Test LCA computation with mixed natural and artificial sequences."""
         input_file = tsv_factory.create_plain("input.tsv", artificial_input_data)
         output_file = str(tmp_path / "output.tsv.gz")
 
         # Run LCA computation
         lca_tsv.parse_input_tsv(
-            input_file, output_file, "seq_id", "taxid", "test_score",
-            taxonomy_dbs["child_to_parent"], taxonomy_dbs["artificial_taxids"],
-            taxonomy_dbs["unclassified_taxids_descendants"], "test"
+            input_file,
+            output_file,
+            "seq_id",
+            "taxid",
+            "test_score",
+            taxonomy_dbs["child_to_parent"],
+            taxonomy_dbs["artificial_taxids"],
+            taxonomy_dbs["unclassified_taxids_descendants"],
+            "test",
         )
 
         # Read output
@@ -200,7 +254,10 @@ class TestLcaTsv:
             output_lines = [line.strip().split("\t") for line in f.readlines()]
 
         # Parse expected values from input
-        input_lines = [line.strip().split("\t") for line in artificial_input_data.strip().split("\n")[1:]]
+        input_lines = [
+            line.strip().split("\t")
+            for line in artificial_input_data.strip().split("\n")[1:]
+        ]
         groups: dict[str, dict[str, str]] = {}
         for fields in input_lines:
             group_id = fields[0]
@@ -222,20 +279,38 @@ class TestLcaTsv:
             assert row[0] == group_id
 
             exp = groups[group_id]
-            assert row[headers.index("test_taxid_lca_combined")] == exp["exp_lca_combined"]
+            assert (
+                row[headers.index("test_taxid_lca_combined")] == exp["exp_lca_combined"]
+            )
             assert row[headers.index("test_taxid_lca")] == exp["exp_lca"]
-            assert row[headers.index("test_taxid_lca_artificial")] == exp["exp_lca_artificial"]
+            assert (
+                row[headers.index("test_taxid_lca_artificial")]
+                == exp["exp_lca_artificial"]
+            )
 
-    def test_unclassified_input(self, tsv_factory: Any, unclassified_input_data: str, taxonomy_dbs: dict[str, Any], expected_headers: list[str], tmp_path: Path) -> None:
+    def test_unclassified_input(
+        self,
+        tsv_factory: Any,
+        unclassified_input_data: str,
+        taxonomy_dbs: dict[str, Any],
+        expected_headers: list[str],
+        tmp_path: Path,
+    ) -> None:
         """Test LCA computation with unclassified taxids."""
         input_file = tsv_factory.create_plain("input.tsv", unclassified_input_data)
         output_file = str(tmp_path / "output.tsv.gz")
 
         # Run LCA computation
         lca_tsv.parse_input_tsv(
-            input_file, output_file, "seq_id", "taxid", "test_score",
-            taxonomy_dbs["child_to_parent"], taxonomy_dbs["artificial_taxids"],
-            taxonomy_dbs["unclassified_taxids_descendants"], "test"
+            input_file,
+            output_file,
+            "seq_id",
+            "taxid",
+            "test_score",
+            taxonomy_dbs["child_to_parent"],
+            taxonomy_dbs["artificial_taxids"],
+            taxonomy_dbs["unclassified_taxids_descendants"],
+            "test",
         )
 
         # Read output
@@ -243,19 +318,24 @@ class TestLcaTsv:
             output_lines = [line.strip().split("\t") for line in f.readlines()]
 
         # Parse expected values from input
-        input_lines = [line.strip().split("\t") for line in unclassified_input_data.strip().split("\n")[1:]]
+        input_lines = [
+            line.strip().split("\t")
+            for line in unclassified_input_data.strip().split("\n")[1:]
+        ]
         groups: dict[str, list[dict[str, int | float | bool]]] = {}
         for fields in input_lines:
             group_id = fields[0]
             if group_id not in groups:
                 groups[group_id] = []
-            groups[group_id].append({
-                "exp_lca": int(fields[3]),
-                "exp_top_taxid": int(fields[4]),
-                "exp_top_taxid_classified": fields[5] == "True",
-                "exp_n_classified": int(fields[6]),
-                "score": float(fields[2])
-            })
+            groups[group_id].append(
+                {
+                    "exp_lca": int(fields[3]),
+                    "exp_top_taxid": int(fields[4]),
+                    "exp_top_taxid_classified": fields[5] == "True",
+                    "exp_n_classified": int(fields[6]),
+                    "score": float(fields[2]),
+                }
+            )
 
         # Verify output
         headers = output_lines[0]
@@ -276,14 +356,20 @@ class TestLcaTsv:
 
             assert row[headers.index("test_taxid_lca")] == str(exp["exp_lca"])
             assert row[headers.index("test_taxid_top")] == str(exp["exp_top_taxid"])
-            assert row[headers.index("test_taxid_top_classified")] == str(exp["exp_top_taxid_classified"])
+            assert row[headers.index("test_taxid_top_classified")] == str(
+                exp["exp_top_taxid_classified"]
+            )
             assert row[headers.index("test_n_assignments")] == str(exp_n_entries)
-            assert row[headers.index("test_n_assignments_classified")] == str(exp["exp_n_classified"])
+            assert row[headers.index("test_n_assignments_classified")] == str(
+                exp["exp_n_classified"]
+            )
             assert float(row[headers.index("test_test_score_min")]) == exp_min_score
             assert float(row[headers.index("test_test_score_max")]) == exp_max_score
             assert float(row[headers.index("test_test_score_mean")]) == exp_mean_score
 
-    def test_missing_group_field(self, tsv_factory: Any, taxonomy_dbs: dict[str, Any], tmp_path: Path) -> None:
+    def test_missing_group_field(
+        self, tsv_factory: Any, taxonomy_dbs: dict[str, Any], tmp_path: Path
+    ) -> None:
         """Test that missing group field raises assertion error."""
         input_content = "seq_id\ttaxid\ttest_score\nA\t9001\t100\n"
         input_file = tsv_factory.create_plain("input.tsv", input_content)
@@ -291,12 +377,20 @@ class TestLcaTsv:
 
         with pytest.raises(AssertionError, match="Group field not found in header"):
             lca_tsv.parse_input_tsv(
-                input_file, output_file, "missing", "taxid", "test_score",
-                taxonomy_dbs["child_to_parent"], taxonomy_dbs["artificial_taxids"],
-                taxonomy_dbs["unclassified_taxids_descendants"], "test"
+                input_file,
+                output_file,
+                "missing",
+                "taxid",
+                "test_score",
+                taxonomy_dbs["child_to_parent"],
+                taxonomy_dbs["artificial_taxids"],
+                taxonomy_dbs["unclassified_taxids_descendants"],
+                "test",
             )
 
-    def test_missing_taxid_field(self, tsv_factory: Any, taxonomy_dbs: dict[str, Any], tmp_path: Path) -> None:
+    def test_missing_taxid_field(
+        self, tsv_factory: Any, taxonomy_dbs: dict[str, Any], tmp_path: Path
+    ) -> None:
         """Test that missing taxid field raises assertion error."""
         input_content = "seq_id\ttaxid\ttest_score\nA\t9001\t100\n"
         input_file = tsv_factory.create_plain("input.tsv", input_content)
@@ -304,12 +398,20 @@ class TestLcaTsv:
 
         with pytest.raises(AssertionError, match="Taxid field not found in header"):
             lca_tsv.parse_input_tsv(
-                input_file, output_file, "seq_id", "missing", "test_score",
-                taxonomy_dbs["child_to_parent"], taxonomy_dbs["artificial_taxids"],
-                taxonomy_dbs["unclassified_taxids_descendants"], "test"
+                input_file,
+                output_file,
+                "seq_id",
+                "missing",
+                "test_score",
+                taxonomy_dbs["child_to_parent"],
+                taxonomy_dbs["artificial_taxids"],
+                taxonomy_dbs["unclassified_taxids_descendants"],
+                "test",
             )
 
-    def test_missing_score_field(self, tsv_factory: Any, taxonomy_dbs: dict[str, Any], tmp_path: Path) -> None:
+    def test_missing_score_field(
+        self, tsv_factory: Any, taxonomy_dbs: dict[str, Any], tmp_path: Path
+    ) -> None:
         """Test that missing score field raises assertion error."""
         input_content = "seq_id\ttaxid\ttest_score\nA\t9001\t100\n"
         input_file = tsv_factory.create_plain("input.tsv", input_content)
@@ -317,24 +419,32 @@ class TestLcaTsv:
 
         with pytest.raises(AssertionError, match="Score field not found in header"):
             lca_tsv.parse_input_tsv(
-                input_file, output_file, "seq_id", "taxid", "missing",
-                taxonomy_dbs["child_to_parent"], taxonomy_dbs["artificial_taxids"],
-                taxonomy_dbs["unclassified_taxids_descendants"], "test"
+                input_file,
+                output_file,
+                "seq_id",
+                "taxid",
+                "missing",
+                taxonomy_dbs["child_to_parent"],
+                taxonomy_dbs["artificial_taxids"],
+                taxonomy_dbs["unclassified_taxids_descendants"],
+                "test",
             )
 
-    def test_missing_root_in_taxonomy_db(self, tsv_factory: Any, toy_taxonomy_dir: str, tmp_path: Path) -> None:
+    def test_missing_root_in_taxonomy_db(
+        self, tsv_factory: Any, toy_taxonomy_dir: str, tmp_path: Path
+    ) -> None:
         """Test that missing root in taxonomy DB raises assertion error."""
-        input_content = "seq_id\ttaxid\ttest_score\nA\t9001\t100\n"
-        input_file = tsv_factory.create_plain("input.tsv", input_content)
-        output_file = str(tmp_path / "output.tsv.gz")
-
         # Use truncated nodes DB that's missing root
         truncated_nodes_db = os.path.join(toy_taxonomy_dir, "test-nodes-truncated.dmp")
 
         with pytest.raises(AssertionError, match="Taxonomy DB does not contain root"):
-            child_to_parent, parent_to_children = lca_tsv.parse_nodes_db(truncated_nodes_db, 8000)
+            child_to_parent, parent_to_children = lca_tsv.parse_nodes_db(
+                truncated_nodes_db, 8000
+            )
 
-    def test_unsorted_input(self, tsv_factory: Any, taxonomy_dbs: dict[str, Any], tmp_path: Path) -> None:
+    def test_unsorted_input(
+        self, tsv_factory: Any, taxonomy_dbs: dict[str, Any], tmp_path: Path
+    ) -> None:
         """Test that unsorted input raises assertion error."""
         # This input has groups out of order (B comes after C)
         input_content = (
@@ -350,21 +460,35 @@ class TestLcaTsv:
 
         with pytest.raises(AssertionError, match="Group ID out of order"):
             lca_tsv.parse_input_tsv(
-                input_file, output_file, "seq_id", "taxid", "test_score",
-                taxonomy_dbs["child_to_parent"], taxonomy_dbs["artificial_taxids"],
-                taxonomy_dbs["unclassified_taxids_descendants"], "test"
+                input_file,
+                output_file,
+                "seq_id",
+                "taxid",
+                "test_score",
+                taxonomy_dbs["child_to_parent"],
+                taxonomy_dbs["artificial_taxids"],
+                taxonomy_dbs["unclassified_taxids_descendants"],
+                "test",
             )
 
-    def test_empty_file_no_header(self, tsv_factory: Any, taxonomy_dbs: dict[str, Any], tmp_path: Path) -> None:
+    def test_empty_file_no_header(
+        self, tsv_factory: Any, taxonomy_dbs: dict[str, Any], tmp_path: Path
+    ) -> None:
         """Test that fully empty file produces empty output."""
         input_content = ""
         input_file = tsv_factory.create_plain("input.txt", input_content)
         output_file = str(tmp_path / "output.tsv.gz")
 
         lca_tsv.parse_input_tsv(
-            input_file, output_file, "seq_id", "taxid", "test_score",
-            taxonomy_dbs["child_to_parent"], taxonomy_dbs["artificial_taxids"],
-            taxonomy_dbs["unclassified_taxids_descendants"], "test"
+            input_file,
+            output_file,
+            "seq_id",
+            "taxid",
+            "test_score",
+            taxonomy_dbs["child_to_parent"],
+            taxonomy_dbs["artificial_taxids"],
+            taxonomy_dbs["unclassified_taxids_descendants"],
+            "test",
         )
 
         # Output file should be empty (no lines)
@@ -372,16 +496,28 @@ class TestLcaTsv:
             content = f.read()
         assert content == ""
 
-    def test_empty_file_header_only(self, tsv_factory: Any, taxonomy_dbs: dict[str, Any], expected_headers: list[str], tmp_path: Path) -> None:
+    def test_empty_file_header_only(
+        self,
+        tsv_factory: Any,
+        taxonomy_dbs: dict[str, Any],
+        expected_headers: list[str],
+        tmp_path: Path,
+    ) -> None:
         """Test that header-only file produces header-only output."""
         input_content = "seq_id\ttaxid\ttest_score\n"
         input_file = tsv_factory.create_plain("input.tsv", input_content)
         output_file = str(tmp_path / "output.tsv.gz")
 
         lca_tsv.parse_input_tsv(
-            input_file, output_file, "seq_id", "taxid", "test_score",
-            taxonomy_dbs["child_to_parent"], taxonomy_dbs["artificial_taxids"],
-            taxonomy_dbs["unclassified_taxids_descendants"], "test"
+            input_file,
+            output_file,
+            "seq_id",
+            "taxid",
+            "test_score",
+            taxonomy_dbs["child_to_parent"],
+            taxonomy_dbs["artificial_taxids"],
+            taxonomy_dbs["unclassified_taxids_descendants"],
+            "test",
         )
 
         # Output should have header only

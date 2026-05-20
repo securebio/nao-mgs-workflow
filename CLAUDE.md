@@ -72,7 +72,7 @@ When the user asks you to handle PR review comments:
 
 When working on changes to an existing PR branch, proactively check CI status with `gh pr checks` to identify test failures, timeouts, or version-check errors. Don't wait for the user to point out failures — catch and address them as part of your workflow. Use the **ci-debugger** agent to diagnose failures.
 
-For **Trivy container-vulnerability scan failures** (`scan-containers` CI job), use the **`triage-trivy`** skill (`.claude/skills/triage-trivy/`). It walks through a structured per-CVE assessment (read the CVE, identify the affected package, check whether the pipeline uses the vulnerable functionality, search for fixes, decide an action) and generates a PR-description block documenting each decision. Don't default to adding entries to `.trivyignore` — the skill is structured to make that the harder path, requiring evidence-based reasoning rather than generic "no fix available" boilerplate.
+For **Trivy container-vulnerability scan failures** (`scan-containers` CI job), use the **`triage-trivy`** skill (`.claude/skills/triage-trivy/`). It walks per-CVE through reachability assessment and fix-search before deciding Patch / Ignore / Escalate. Don't default to adding entries to `.trivyignore` — the skill is structured to make that the harder path.
 
 ### GitHub Actions Workflows
 
@@ -153,12 +153,17 @@ All Python scripts should have corresponding Pytest scripts in the same director
 
 Mypy is enforced in CI via `.github/workflows/mypy.yml` — all Python in `bin/` and `modules/local/` must pass `python -m mypy bin/ modules/local/`. Add per-package `[[tool.mypy.overrides]]` in `pyproject.toml` for untyped third-party libraries rather than inline `# type: ignore` comments.
 
+### Ruff / Lint and Format
+
+Ruff is enforced in CI via `.github/workflows/ruff.yml` — all Python in the repo must pass both `python -m ruff check .` and `python -m ruff format --check .`. CI is read-only and never auto-fixes; run `ruff check --fix .` and `ruff format .` locally and commit the results before pushing. Lint rule selection and exclusions live under `[tool.ruff]` in `pyproject.toml`.
+
 ## Versioning and Changelog
 
 **Both of these are required for PRs to `dev` — CI will fail if they're missing.**
 
 - Every PR must include a version bump in `pyproject.toml` and a corresponding update to `CHANGELOG.md`. The topmost CHANGELOG heading must match the version in `pyproject.toml`.
 - See `docs/versioning.md` for the full versioning scheme. **Always** use the **version-bump** agent to automate version bumps and changelog entries — do not determine versions manually. The 4-number scheme (Major.Schema.Results.Point) is easy to confuse; the agent reads the versioning rules and determines the appropriate bump level from the branch diff.
+- For **cutting a release** (the maintainer-side process described in `docs/developer.md` § "New releases"), use the **`prepare-release`** skill (`.claude/skills/prepare-release/`). It branches off dev, classifies the accumulated `-dev` CHANGELOG entries for bump level, rewrites them as a polished release note (mirroring the v3.2.1.0 / v3.2.1.3 grouped structure), drops the `-dev` suffix, and opens a `release/<handle>/<version>` PR into dev. The skill is the heavier-weight counterpart to `version-bump`; reach for it specifically when preparing a release, not for mid-stream version bumps.
 
 ### Backwards Compatibility Trackers
 `pyproject.toml` contains two compatibility version fields:
