@@ -27,20 +27,25 @@ If either root is missing, ask the user — don't guess.
 
 ### Step 1 — Run the script
 
-Always invoke with `--repo-root .` (assuming you're at a mgs-workflow checkout root) so per-species transitions get annotated with `covered_by` ("excluded" | "included" | ""). Without that flag, you'd have to do the cross-reference manually:
+`cd` into a mgs-workflow checkout first (so `bin/benchmark_index.py` and `--repo-root .` both resolve), then:
 
 ```bash
+cd /path/to/mgs-workflow
 python bin/benchmark_index.py --old <old> --new <new> --out <outdir> --repo-root .
 ```
 
-If `<outdir>` already has `summary.md` and the per-host `species_transitions_*.tsv` files, skip and reuse — flag to the user that you reused. Re-running is cheap (~10MB of small file downloads).
+Always use `--repo-root` so per-species transitions get annotated with `covered_by` ("excluded" | "included" | ""). Without it the script falls back to plain counts and the agent has to cross-reference rules by hand.
 
-Read `<outdir>/summary.md` first. It surfaces the actionable counts directly:
-- Per-host: total transitions / **uncovered** 1→0 demotions / **uncovered** 0→1 promotions
-- Top-10 species that lost all genomes
-- Shrunk DBs
+All paths in the report should be **absolute** — that way a colleague reading the report can copy the path verbatim regardless of their working directory. Use absolute paths for `--out` (e.g. `/tmp/bench-...`, not `./bench-...`).
 
-The interpretation work below is about turning those counts into a written report.
+If `<outdir>` already has `summary.md` and the per-host `species_transitions_*.tsv` files, skip the script run and reuse — flag to the user that you reused. Re-running is cheap (~10MB of small file downloads).
+
+Read `<outdir>/summary.md` first. It surfaces the actionable counts directly in tables:
+- Per-host: total transitions / actionable 1→0 demotions / actionable 0→1 promotions / override policy gaps
+- Top true losses among "species lost all genomes" (with `likely_rename` annotations)
+- Per-DB sizes table with the shrunk ones flagged
+
+The interpretation work below turns those counts into a written report.
 
 ### Step 2 — Drill into the uncovered subset
 
@@ -84,22 +89,31 @@ For the other hosts (`bird`, `mammal`, `primate`, `vertebrate`), the bar is lowe
 
 **`taxa_added.tsv` / `taxa_removed.tsv`** — usually thousands of rows from NCBI taxonomy churn. Don't itemise; just note the magnitude in the report.
 
-### Step 3 — Confirm uncovered demotions against upstream VHDB
+### Step 3 — Confirm actionable transitions against upstream VHDB
 
-Only needed if Step 2 produced **uncovered 1→0 human demotions** worth following up on. Skip otherwise.
+Run for **any** actionable transition you're considering recommending an edit for — both 1→0 demotions (to confirm whether VHDB really dropped the host) and 0→1 promotions (to confirm whether VHDB really added it). Skip if Step 2 produced nothing actionable.
 
-Fetch the current VHDB once:
+Fetch the current VHDB once (~40K lines, ~5MB):
 ```bash
 curl -sL https://www.genome.jp/ftp/db/virushostdb/virushostdb.daily.tsv -o /tmp/vhdb-current.tsv
 ```
 
-For each uncovered demoted `<taxid>`:
+For each actionable `<taxid>`:
 ```bash
 awk -F'\t' -v t=<taxid> '$1==t {print $1"\t"$2"\t"$6"\t"$8"\t"$9}' /tmp/vhdb-current.tsv
 ```
-- Homo sapiens (9606) in column 8 → the demotion is **not** upstream; investigate the workflow code (rare).
-- No Homo sapiens but a human disease named in column 6/7 → demotion **is** upstream VHDB drift (the host annotation isn't capturing what the disease annotation says). Typical pattern; recommend adding to overrides.
+(columns: virus tax id, virus name, disease, host tax id, host name)
+
+For **1→0 human demotions**:
+- Homo sapiens (9606) in column 4 → the demotion is **not** upstream; investigate the workflow code (rare).
+- No Homo sapiens but a human disease named in column 3 → demotion **is** upstream VHDB drift (host annotation isn't capturing the disease annotation). Typical pattern; recommend adding to overrides.
 - No Homo sapiens, no human disease → either the demotion is correct, or VHDB has no human data at all. Don't recommend an override without a separate evidence source (textbook, recent literature).
+
+For **0→1 promotions**:
+- Homo sapiens now in column 4 → the promotion is upstream and reflects a genuine VHDB addition. Then decide if it's biologically plausible (some VHDB additions are correct, some are false positives based on incidental sample origins):
+  - The taxon name is structurally a recognised pathogen → leave the promotion in place; no action.
+  - The taxon name is generic / placeholder / phage-like / "Human gut <foo>" / Smacoviridae / Picobirnaviridae / Microviridae / bacteriophage → false-positive sample contamination; recommend adding the taxid (or a broader family/class) to `viral_taxids_exclude_hard`.
+- No Homo sapiens in column 4 → the promotion was carried by a descendant or ancestor rule in the workflow, not by VHDB directly. Investigate.
 
 ### Step 4 — Produce the report
 
@@ -107,11 +121,12 @@ Write a markdown report to `<outdir>/REVIEW.md` (overwrite if it already exists 
 
 **The report must be readable in isolation.** A colleague who hasn't seen this conversation, doesn't know the workflow's history, and isn't familiar with the override/exclude mechanisms should be able to read REVIEW.md cold and understand (a) what changed between indexes, (b) what to do about it. Concretely:
 
-- **Always include a "How to read this report" preamble** between the headline and Section 1, defining the three pieces of background a reader needs: the `infection_status_<host>` columns and what their values mean, the two override mechanisms (`viral_taxids_exclude_hard` and `ref/host-infection-overrides.json`), and the "covered" / "actionable" distinction the per-host table uses.
+- **Always include a "How to read this report" preamble** between the headline and Section 1, defining the four pieces of background a reader needs: the `infection_status_<host>` columns and what their values mean, the two override mechanisms (`viral_taxids_exclude_hard` and `ref/host-infection-overrides.json`), the "covered" / "actionable" distinction the per-host table uses, and what "override policy gap" means (since it appears as its own column).
 - Don't reference PRs by number without explaining what they did.
 - Don't say things like "we already understood" or "the usual pattern" — say what the pattern is.
 - Prefer **tables** for per-DB sizes and per-host transition counts (much easier to scan than prose). Bold counts that require action.
 - Use the word **actionable** (or "needs review") rather than **uncovered** in prose, with one inline definition near first use. "Uncovered" reads like jargon to a fresh reader.
+- Use **absolute paths** when referencing the output directory or files inside it (don't write `./bench-...`; write `/tmp/bench-...`).
 
 Five sections, in order. **Lead with a one-paragraph headline**: is the index ready to promote, with what (if any) changes required? Make the headline meaningful when read alone.
 
@@ -119,10 +134,10 @@ Five sections, in order. **Lead with a one-paragraph headline**: is the index re
 # Index benchmark review: <OLD> → <NEW>
 
 **Headline**: <one-paragraph summary that can be quoted on its own.
-"Ready to promote with one config tweak — add `38018` (Bacteriophage sp.)
-to the hard-exclude list. Everything else is either already covered by
-existing rules, a taxonomy rename rather than a real loss, or non-human
-drift with no surveillance impact." or similar.>
+Concrete shape: "Ready to promote / Not ready to promote, because <reason>.
+<count> actionable item(s) — <one-line summary of each>. <pointer to any
+secondary policy question>." The example in this template is intentionally
+generic; do not copy it.>
 
 ---
 
@@ -148,6 +163,11 @@ drift with no surveillance impact." or similar.>
   needed; the workflow intentionally overrides VHDB). If no → actionable
   (genuine, unmediated VHDB drift that a human should look at). Counts
   in **bold** in the table below are actionable rows.
+- **"Override policy gap"**: a special sub-case of actionable demotion
+  where the demoted taxid IS in `ref/host-infection-overrides.json`, but
+  the entry's `hosts` list doesn't include the host that just demoted.
+  Either the entry needs widening to cover that host, or we accept the
+  drift on that host column as out-of-scope.
 
 ---
 
@@ -160,19 +180,26 @@ is new. Group byte-identical DBs into a single row to save space.]
 
 ## 2. Infection-status changes
 
-[Open with the per-host table (Host, Total transitions, Actionable 1→0,
-Actionable 0→1, Policy gaps — all numeric). Bold the actionable
-counts. Then drill into each host with a non-zero actionable count by
-name; aggregate the covered counts in one line per host. Bigger bars
-for non-human hosts (per Step 2 heuristic).]
+[Open with the per-host table. The columns to use:
+
+  | Host | Total transitions (all ranks) | Species 1→0 demotions: actionable / total | Species 0→1 promotions: actionable / total | Override policy gaps |
+
+  (Mirrors the format the script emits in summary.md so the agent and a
+  human reader see consistent numbers.) Bold the actionable counts.
+
+Then drill into each host with a non-zero actionable count by name;
+aggregate the covered counts in one line per host. Apply the heuristic
+from Step 2 above to decide how much detail to give for non-human hosts.]
 
 ## 3. Lost virus genomes
 
-[Top-line: N added, M removed, K species went to zero. The K count
-should already be split into "likely renames" vs "true losses" by the
-script (see `species_lost_all_genomes.tsv`'s `likely_rename` column).
-Table the top true losses with the likely-rename column visible.
-Don't itemise the renames unless one is conspicuous.]
+[Top-line: N added, M removed, K species went to zero. The K count is
+already split into "likely renames" vs "true losses" in
+`species_lost_all_genomes.tsv` (look at the `likely_rename` column).
+Surface the split in the prose. Table the top true losses with the
+`likely_rename` and `new_taxonomy_name` columns visible — readers want
+to see the rename target inline. Don't itemise the renames unless one
+is conspicuous (e.g. a name change for a known human pathogen).]
 
 ## 4. Other notable changes
 
