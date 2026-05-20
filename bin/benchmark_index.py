@@ -473,6 +473,62 @@ def annotate_changes_with_coverage(
     return out
 
 
+def annotate_cross_host_actionables(
+    per_host_changes: dict[str, pd.DataFrame],
+    species_lost_taxids: set[str],
+) -> dict[str, pd.DataFrame]:
+    """For each per-host changes DataFrame, add two columns to species-rank
+    actionable rows:
+
+    - `cross_host_actionable_on`: comma-joined list of *other* hosts where the
+      same taxid is actionable in the same direction. Mirrors the existing
+      `included_for_other_hosts` policy-gap column but for the actionable-rather
+      -than-policy side. Lets the report group "promoted on human, primate,
+      mammal, vertebrate" as one item instead of writing it up four times.
+    - `driven_by_genome_loss` (demotions only): "yes" if the demoted taxid is
+      also in the lost-all-genomes table. Surfaces the §3.1 → §5.x mechanical
+      link so reviewers see "demotion is a consequence of the genome loss, not
+      a VHDB drift" without having to cross-reference manually.
+    """
+    # First pass: build {(taxid, direction): set of hosts}
+    actionable_hosts: dict[tuple[str, str], set[str]] = defaultdict(set)
+    for host, df in per_host_changes.items():
+        if df.empty or "covered_by" not in df.columns:
+            continue
+        sp = df[(df["rank"] == "species") & (df["covered_by"] == "")]
+        for _, row in sp.iterrows():
+            old_s, new_s = str(row["old_status"]), str(row["new_status"])
+            if (old_s, new_s) in (("1", "0"), ("0", "1")):
+                actionable_hosts[(row["taxid"], f"{old_s}->{new_s}")].add(host)
+    # Second pass: annotate each DataFrame.
+    out: dict[str, pd.DataFrame] = {}
+    for host, df in per_host_changes.items():
+        if df.empty or "covered_by" not in df.columns:
+            out[host] = df
+            continue
+        df2 = df.copy()
+
+        def _cross_host(row, current_host=host):
+            old_s, new_s = str(row["old_status"]), str(row["new_status"])
+            if (old_s, new_s) not in (("1", "0"), ("0", "1")) or row["covered_by"] != "":
+                return ""
+            others = actionable_hosts.get(
+                (row["taxid"], f"{old_s}->{new_s}"), set()
+            ) - {current_host}
+            return ",".join(sorted(others))
+
+        def _gloss(row):
+            old_s, new_s = str(row["old_status"]), str(row["new_status"])
+            if (old_s, new_s) != ("1", "0") or row["covered_by"] != "":
+                return ""
+            return "yes" if row["taxid"] in species_lost_taxids else ""
+
+        df2["cross_host_actionable_on"] = df2.apply(_cross_host, axis=1)
+        df2["driven_by_genome_loss"] = df2.apply(_gloss, axis=1)
+        out[host] = df2
+    return out
+
+
 def detect_bidirectional_flips(
     per_host_changes: dict[str, pd.DataFrame],
 ) -> pd.DataFrame:
@@ -1054,6 +1110,10 @@ def write_summary_md(
                 )
 
         # Embed actionable rows inline so the report is self-contained.
+        # Demotion table carries `Override scope` (policy-gap indicator) and
+        # `Genome loss` (yes if §3.1 mechanically drove the demotion).
+        # Promotion table carries `Also actionable on` (cross-host
+        # propagation of the same promotion) for symmetric grouping.
         for host, buckets in actionable_per_host.items():
             dem = buckets["demotions"]
             pro = buckets["promotions"]
@@ -1065,22 +1125,24 @@ def write_summary_md(
                 lines += [
                     "**Demotions (1→0):**",
                     "",
-                    "| taxid | Name | Override scope (other hosts) |",
-                    "|---|---|---|",
+                    "| taxid | Name | Override scope (other hosts) | Genome loss |",
+                    "|---|---|---|---|",
                 ]
                 for _, row in dem.iterrows():
                     other = row.get("included_for_other_hosts", "") or "—"
-                    lines.append(f"| `{row['taxid']}` | *{row['name']}* | {other} |")
+                    gloss = row.get("driven_by_genome_loss", "") or "—"
+                    lines.append(f"| `{row['taxid']}` | *{row['name']}* | {other} | {gloss} |")
             if not pro.empty:
                 lines += [
                     "",
                     "**Promotions (0→1):**",
                     "",
-                    "| taxid | Name |",
-                    "|---|---|",
+                    "| taxid | Name | Also actionable on |",
+                    "|---|---|---|",
                 ]
                 for _, row in pro.iterrows():
-                    lines.append(f"| `{row['taxid']}` | *{row['name']}* |")
+                    cross = row.get("cross_host_actionable_on", "") or "—"
+                    lines.append(f"| `{row['taxid']}` | *{row['name']}* | {cross} |")
             if not gap.empty:
                 lines += [
                     "",
@@ -1463,6 +1525,23 @@ def main() -> None:
     # Params changes + bidirectional flips for the summary.
     params_changes = summarise_params_changes(old_params, new_params)
     bidirectional_flips = detect_bidirectional_flips(per_host_changes)
+
+    # Cross-host actionable annotation + genome-loss-driven demotion flag.
+    # These add two columns to each per-host DataFrame for the §5.x inline
+    # tables and re-persist the per-host TSVs so the agent sees the same data
+    # in the files.
+    species_lost_taxids = set(species_lost["species_taxid"].astype(str))
+    per_host_changes = annotate_cross_host_actionables(
+        per_host_changes, species_lost_taxids
+    )
+    for host, df in per_host_changes.items():
+        df.to_csv(
+            args.out / f"infection_status_changes_{host}.tsv", sep="\t", index=False
+        )
+        species_changes = df[df["rank"] == "species"]
+        species_changes.to_csv(
+            args.out / f"species_transitions_{host}.tsv", sep="\t", index=False
+        )
 
     # Summary
     write_summary_md(

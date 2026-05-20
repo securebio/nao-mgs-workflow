@@ -13,6 +13,7 @@ import pandas as pd
 import pytest
 from benchmark_index import (
     annotate_changes_with_coverage,
+    annotate_cross_host_actionables,
     annotate_lost_genomes,
     build_parent_map,
     check_ref_staleness,
@@ -671,6 +672,52 @@ class TestDetectBidirectionalFlips:
             "bird": pd.DataFrame([self._changes_row("100", "1", "0", covered="excluded")]),
         }
         assert detect_bidirectional_flips(per_host).empty
+
+
+class TestAnnotateCrossHostActionables:
+    """`cross_host_actionable_on` mirrors `included_for_other_hosts` but for
+    actionable transitions — surfacing that a single taxid is actionable on
+    multiple hosts so the report doesn't write the same item up four times.
+    `driven_by_genome_loss` flags demotions whose cause is the §3.1 genome
+    loss rather than VHDB drift."""
+
+    def _row(self, taxid, old_s, new_s, name="x", covered=""):
+        return {"taxid": taxid, "name": name, "rank": "species",
+                "old_status": old_s, "new_status": new_s, "covered_by": covered}
+
+    def test_cross_host_lists_other_hosts_with_same_direction(self) -> None:
+        per_host = {
+            "human": pd.DataFrame([self._row("100", "0", "1")]),
+            "primate": pd.DataFrame([self._row("100", "0", "1")]),
+            "mammal": pd.DataFrame([self._row("100", "0", "1")]),
+            "bird": pd.DataFrame([self._row("200", "1", "0")]),
+        }
+        out = annotate_cross_host_actionables(per_host, set())
+        assert out["human"]["cross_host_actionable_on"].iloc[0] == "mammal,primate"
+        assert out["primate"]["cross_host_actionable_on"].iloc[0] == "human,mammal"
+        assert out["bird"]["cross_host_actionable_on"].iloc[0] == ""  # only host
+
+    def test_covered_rows_get_empty_cross_host(self) -> None:
+        per_host = {
+            "human": pd.DataFrame([self._row("100", "0", "1", covered="excluded")]),
+            "mammal": pd.DataFrame([self._row("100", "0", "1", covered="excluded")]),
+        }
+        out = annotate_cross_host_actionables(per_host, set())
+        assert out["human"]["cross_host_actionable_on"].iloc[0] == ""
+
+    def test_driven_by_genome_loss_only_on_demotions(self) -> None:
+        per_host = {
+            "mammal": pd.DataFrame([
+                self._row("100", "1", "0"),  # taxid in lost set
+                self._row("200", "1", "0"),  # taxid not in lost set
+                self._row("300", "0", "1"),  # promotion, not demotion
+            ]),
+        }
+        out = annotate_cross_host_actionables(per_host, species_lost_taxids={"100", "300"})
+        gloss = out["mammal"].set_index("taxid")["driven_by_genome_loss"]
+        assert gloss["100"] == "yes"
+        assert gloss["200"] == ""
+        assert gloss["300"] == ""  # promotions don't get the flag
 
 
 class TestSummariseParamsChanges:

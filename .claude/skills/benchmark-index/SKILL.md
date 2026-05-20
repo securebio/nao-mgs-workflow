@@ -72,7 +72,7 @@ Columns: virus tax id, virus name, disease, host tax id, host name.
 For **1→0 human demotions**:
 - Homo sapiens (9606) in column 4 → demotion is **not** upstream; investigate the workflow code (rare).
 - No Homo sapiens but a human disease in column 3 → upstream VHDB drift; recommend adding to overrides.
-- Host taxid `1` (`root`) in column 4 → VHDB has no specific host annotation; the demotion is real, don't recommend a `1`-override without external evidence.
+- Host taxid `1` (`root`) in column 4 → VHDB has no specific host annotation; the demotion is real, don't recommend a `1`-override without external evidence. If the taxid is also in summary.md §3.1 (true-loss table) — i.e. the §5.x demotion row has `Genome loss = yes` — the old `1` status was almost certainly ancestor-propagated through a higher-rank taxon that still has annotations; the demotion is mechanical (no genomes → no propagation evidence) and the right disposition is "no action, no override".
 - No row at all → species may have been renamed and VHDB still has the old taxid; try grepping by name. If still nothing, don't recommend an override from the benchmark alone.
 
 For **0→1 promotions**:
