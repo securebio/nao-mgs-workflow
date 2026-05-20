@@ -32,7 +32,8 @@ workflow INDEX {
         // Build viral taxonomy and infection DB
         MAKE_VIRUS_TAXONOMY_DB(params.taxonomy_url, params.virus_host_db_url,
             params.host_taxon_db, params.virus_taxid,
-            params.viral_taxids_exclude_hard)
+            params.viral_taxids_exclude_hard,
+            params.host_infection_overrides)
         // Get reference DB of viral genomes of interest
         virus_genome_params = params.collectEntries { k, v -> [k, v] }
         virus_genome_params.putAll([k: "20", hdist: "3", entropy: "0.5", polyx_len: "10"])

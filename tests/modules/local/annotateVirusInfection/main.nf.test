@@ -16,6 +16,7 @@ nextflow_process {
                 infection_db = "${projectDir}/test-data/toy-data/virus-taxonomy/test-infection-db.tsv"
                 nodes = "${projectDir}/test-data/toy-data/virus-taxonomy/test-nodes.tsv"
                 hard_exclude_taxids = file("${projectDir}/test-data/toy-data/virus-taxonomy/test-hard-excluded-taxids.txt").readLines().first()
+                host_infection_overrides = "${projectDir}/test-data/toy-data/virus-taxonomy/test-host-infection-overrides-empty.json"
             }
             process {
                 '''
@@ -24,6 +25,7 @@ nextflow_process {
                 input[2] = params.infection_db
                 input[3] = params.nodes
                 input[4] = params.hard_exclude_taxids
+                input[5] = params.host_infection_overrides
                 '''
             }
         }
@@ -45,6 +47,43 @@ nextflow_process {
                 def col_obs = "infection_status_" + host
                 assert virus_tab_out.columns[col_exp] == virus_tab_out.columns[col_obs]
             }
+        }
+    }
+
+    test("Should apply hard-include override end-to-end"){
+        tag "expect_success"
+        when {
+            params {
+                virus_db = "${projectDir}/test-data/toy-data/virus-taxonomy/test-virus-db.tsv"
+                host_db = "${projectDir}/test-data/toy-data/virus-taxonomy/test-host-db.tsv"
+                infection_db = "${projectDir}/test-data/toy-data/virus-taxonomy/test-infection-db.tsv"
+                nodes = "${projectDir}/test-data/toy-data/virus-taxonomy/test-nodes.tsv"
+                hard_exclude_taxids = file("${projectDir}/test-data/toy-data/virus-taxonomy/test-hard-excluded-taxids.txt").readLines().first()
+                host_infection_overrides = "${projectDir}/test-data/toy-data/virus-taxonomy/test-host-infection-overrides-with-entry.json"
+            }
+            process {
+                '''
+                input[0] = params.virus_db
+                input[1] = params.host_db
+                input[2] = params.infection_db
+                input[3] = params.nodes
+                input[4] = params.hard_exclude_taxids
+                input[5] = params.host_infection_overrides
+                '''
+            }
+        }
+        then {
+            // Should run without errors
+            assert process.success
+            // Locate the row for the overridden taxid (999002) and confirm
+            // its jabberwocks status flipped from the default 0 to MATCH (1).
+            // This is an end-to-end smoke test of the new path(host_infection_overrides)
+            // input wiring; pre- vs post-propagation behavior is covered by the
+            // dedicated Python pytests (TestIncludeInfections, TestCheckInfection).
+            def virus_tab_out = path(process.out.db[0]).csv(sep: "\t", decompress: true)
+            def override_row = virus_tab_out.rows.findIndexOf { it["taxid"] == "999002" }
+            assert override_row >= 0
+            assert virus_tab_out.columns["infection_status_jabberwocks"][override_row] == "1"
         }
     }
 }

@@ -13,6 +13,10 @@ As part of the [index workflow](./index.md), the pipeline generates a database o
 
 Some taxa are *hard-excluded* by the user via the index workflow's config file; any such taxon, and all its descendants, are automatically marked with an infection status of 0. This is useful for cases where we believe Virus-Host DB has misannotated certain taxa (such as human-gut-colonizing phages) in ways that give rise to misleading results in our pipeline.
 
+Conversely, some taxa are *hard-included* by the user via a JSON overrides file pointed to by `params.host_infection_overrides`; any such taxon is marked with an infection status of 1 for the listed host groups. Hard-includes are applied *after* hard-excludes, so when the same taxon appears in both lists the include wins. This is useful for the inverse case: known human/vertebrate pathogens whose Virus-Host DB entries don't list `Homo sapiens` (or any vertebrate) as a host. Note that hard-include marks *only the target taxon*; its descendants pick up `MATCH` (1) through the normal downward propagation phase, and its ancestors pick up `CONSISTENT` (3) or `UNCLEAR` (2) through the normal upward propagation phase, exactly as if Virus-Host DB had directly marked that taxon.
+
+The diagram below shows the *logical precedence* of each rule (top-down), not the implementation's evaluation order — in the code, hard-exclude is applied first and hard-include then overwrites, but the user-facing effect is identical to "hard-include wins" at the top of the precedence stack.
+
 ```mermaid
 ---
 title: Viral infection status annotation
@@ -20,11 +24,11 @@ config:
     layout: "auto"
 ---
 flowchart TD
-A{{Hard-excluded taxon?}} -->|Yes| B((0))
-A --> |No| C{{Descended from a hard-excluded taxon?}}
-C -->|Yes| B
-C -->|No| D{{Marked as host-infecting by Virus-Host DB?}}
-D -->|Yes| E((1))
+AI{{Hard-included taxon for this host?}} -->|Yes| E((1))
+AI -->|No| AE{{Hard-excluded taxon (or descendant thereof)?}}
+AE -->|Yes| B((0))
+AE -->|No| D{{Marked as host-infecting by Virus-Host DB?}}
+D -->|Yes| E
 D -->|No| F{{Descended from a 1-marked taxon?}}
 F -->|Yes| E
 F -->|No| G{{All descendants marked 1?}}
@@ -74,6 +78,8 @@ This phase sets the baseline status for each taxon based on direct evidence.
     * **`UNRESOLVED` (-1):** The taxon is not found in the database.
 
 2.  **Hard Exclusions** (`exclude_infections`): User-defined "hard-excluded" taxa and all of their descendants are immediately set to **`INCONSISTENT` (0)**, overriding any status set in the previous step.
+
+3.  **Hard Inclusions** (`include_infections`): User-defined "hard-included" taxa (loaded from `params.host_infection_overrides`) are immediately set to **`MATCH` (1)** for the listed host groups, overriding any status set in steps 1 and 2 above. Unlike Hard Exclusions, this step marks *only the listed taxa themselves*; descendants are picked up by the normal downward-propagation phase (Phase 3), and ancestors by the normal upward-propagation phase (Phase 2), exactly as they would be for a Virus-Host DB direct match. Use this step to repair taxa that Virus-Host DB misses or misannotates.
 
 ### Phase 2: Upward Propagation (Ancestor Inference)
 
