@@ -49,7 +49,7 @@ The script's output is structured to feed the report directly. Each `summary.md`
 
 | `summary.md` section | What it gives you |
 |---|---|
-| §1 Reference-DB staleness | Auto-active check for Kraken2 + SILVA; passive URL display for human / NCBI taxonomy / VHDB. Cite any **stale** flag in the headline. |
+| §1 Reference-DB staleness | Auto-active check for Kraken2 + SILVA; passive URL display for human / NCBI taxonomy / VHDB. Cite any **stale** flag in the headline. **Staleness applies to the URL pinned for the *next* build, not this one** — never a blocker for promoting an index that's already built. Frame as "bump for the next build" in the recommendations, not as a regression. |
 | §2 Per-DB sizes + §2.1 content metrics + §2.2 schema diff | Tells the real story about size deltas. Compressed bytes are misleading for gzipped FASTAs/TSVs; surface the content-metrics columns (records, total_bp, rows) for that. Schema diff explains most of any metadata-file shrink. |
 | §3 Virus genomes (3.1 true losses / 3.2 redistributed / 3.3 covered) | The script has already split by redistribution + hard-exclude coverage. Use §3.1 (true losses) for your "concerning" list; §3.2 (redistributed) is informational; §3.3 is dispatched in one sentence. |
 | §5 Infection-status changes | Per-host actionable table + drill-down with every actionable row inline. Pull these directly into your report; don't paraphrase, don't repeat covered rows. |
