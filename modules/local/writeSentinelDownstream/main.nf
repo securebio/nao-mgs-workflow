@@ -6,6 +6,7 @@
 // this process does not run and no sentinel is produced.
 process WRITE_SENTINEL_DOWNSTREAM {
     executor 'local'
+    label "sentinel"
     input:
         val(group)                     // Group name; drives per-group fan-out
         val(ready)                     // Dependency signal: collected items from all downstream publish channels
