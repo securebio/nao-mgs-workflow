@@ -445,8 +445,8 @@ def write_summary_md(
             # is overridden for some OTHER host but not this one?
             dem_policy = dem_uncov[dem_uncov["included_for_other_hosts"] != ""]
             policy_note = (
-                f" — including **{len(dem_policy)} policy gap(s)** "
-                f"(taxid is in `host_infection_overrides.json` for other hosts but not this one)"
+                f" — incl. **{len(dem_policy)} policy gap{'' if len(dem_policy) == 1 else 's'}** "
+                f"(taxid is in `host_infection_overrides.json` for other host(s) but not this one)"
                 if len(dem_policy)
                 else ""
             )
