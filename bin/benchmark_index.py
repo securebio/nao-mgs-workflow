@@ -243,7 +243,7 @@ def classify_coverage(
 ) -> tuple[str, str]:
     """For one transition, walk the taxid up its lineage and return (covered_by,
     rule_taxid) — "excluded"/"included"/"" — describing whether an existing
-    config rule already explains the observed status change.
+    config rule already explains the observed status change for `host`.
 
     `included_taxids` is host -> set of taxids that are hard-included for that host."""
     host_includes = included_taxids.get(host, set())
@@ -260,6 +260,32 @@ def classify_coverage(
     return "", ""
 
 
+def includes_for_other_hosts(
+    taxid: str,
+    parent_map: dict[str, str],
+    included_taxids: dict[str, set[str]],
+    host: str,
+) -> list[str]:
+    """Return the list of *other* hosts for which the taxid (or any ancestor) is
+    in the include rules. Used to flag policy/scope issues — e.g. a primate
+    demotion of a taxid that we DID override for human/vertebrate. Empty list
+    if no other host has this taxid included."""
+    other_hosts: list[str] = []
+    for h, taxids in included_taxids.items():
+        if h == host:
+            continue
+        cur: str | None = taxid
+        while cur:
+            if cur in taxids:
+                other_hosts.append(h)
+                break
+            parent = parent_map.get(cur)
+            if parent is None or parent == cur:
+                break
+            cur = parent
+    return sorted(other_hosts)
+
+
 def annotate_changes_with_coverage(
     changes: pd.DataFrame,
     host: str,
@@ -267,11 +293,17 @@ def annotate_changes_with_coverage(
     excluded_taxids: set[str],
     included_taxids: dict[str, set[str]],
 ) -> pd.DataFrame:
-    """Add `covered_by` (excluded | included | "") and `covered_rule_taxid` columns."""
+    """Add three columns:
+    - `covered_by` ("excluded" | "included" | "")
+    - `covered_rule_taxid` (the lineage taxid matched by the rule, or "")
+    - `included_for_other_hosts` (comma-separated host names where the same
+      taxid IS in include rules, when covered_by != "included" — flags policy
+      gaps like a primate demotion of a taxid we overrode for human only)
+    """
     out = changes.copy()
     if out.empty:
-        out["covered_by"] = pd.Series(dtype=str)
-        out["covered_rule_taxid"] = pd.Series(dtype=str)
+        for col in ("covered_by", "covered_rule_taxid", "included_for_other_hosts"):
+            out[col] = pd.Series(dtype=str)
         return out
     coverage = out["taxid"].apply(
         lambda t: classify_coverage(
@@ -280,6 +312,18 @@ def annotate_changes_with_coverage(
     )
     out["covered_by"] = coverage.apply(lambda x: x[0])
     out["covered_rule_taxid"] = coverage.apply(lambda x: x[1])
+    out["included_for_other_hosts"] = out.apply(
+        lambda row: (
+            ",".join(
+                includes_for_other_hosts(
+                    row["taxid"], parent_map, included_taxids, host
+                )
+            )
+            if row["covered_by"] != "included"
+            else ""
+        ),
+        axis=1,
+    )
     return out
 
 
@@ -397,7 +441,16 @@ def write_summary_md(
         if coverage_available and not changes_df.empty:
             dem_uncov = species_demotions[species_demotions["covered_by"] == ""]
             pro_uncov = species_promotions[species_promotions["covered_by"] == ""]
-            tail = f" / **{len(dem_uncov)} uncovered 1→0** ({len(species_demotions)} total demotions) / **{len(pro_uncov)} uncovered 0→1** ({len(species_promotions)} total promotions)"
+            # Of the uncovered demotions, how many are "policy gaps" — the taxid
+            # is overridden for some OTHER host but not this one?
+            dem_policy = dem_uncov[dem_uncov["included_for_other_hosts"] != ""]
+            policy_note = (
+                f" — including **{len(dem_policy)} policy gap(s)** "
+                f"(taxid is in `host_infection_overrides.json` for other hosts but not this one)"
+                if len(dem_policy)
+                else ""
+            )
+            tail = f" / **{len(dem_uncov)} uncovered 1→0** ({len(species_demotions)} total demotions){policy_note} / **{len(pro_uncov)} uncovered 0→1** ({len(species_promotions)} total promotions)"
         else:
             tail = f" / {len(species_demotions)} species 1→0 / {len(species_promotions)} species 0→1"
         lines.append(

@@ -19,6 +19,7 @@ from benchmark_index import (
     diff_genome_metadata,
     diff_params,
     diff_taxonomy,
+    includes_for_other_hosts,
     infection_status_changes,
     infection_status_columns,
     infection_status_transitions,
@@ -395,7 +396,75 @@ class TestCoverageClassification:
         out = annotate_changes_with_coverage(empty, "human", {}, set(), {})
         assert "covered_by" in out.columns
         assert "covered_rule_taxid" in out.columns
+        assert "included_for_other_hosts" in out.columns
         assert out.empty
+
+    def test_includes_for_other_hosts_flags_policy_gap(self) -> None:
+        # taxid 5 is included for human + vertebrate but not primate.
+        # When we ask about primate, includes_for_other_hosts should return
+        # ['human', 'vertebrate']; when we ask about human, it returns [].
+        parent_map = {"5": "1", "1": "0"}
+        included = {"human": {"5"}, "vertebrate": {"5"}, "primate": set()}
+        assert includes_for_other_hosts("5", parent_map, included, "primate") == [
+            "human",
+            "vertebrate",
+        ]
+        assert includes_for_other_hosts("5", parent_map, included, "human") == [
+            "vertebrate"
+        ]
+
+    def test_includes_for_other_hosts_walks_lineage(self) -> None:
+        # Ancestor 1 is included for human; descendant 5 should report that.
+        parent_map = {"5": "3", "3": "1", "1": "0"}
+        included = {"human": {"1"}}
+        assert includes_for_other_hosts("5", parent_map, included, "primate") == [
+            "human"
+        ]
+
+    def test_annotate_adds_other_hosts_column(self) -> None:
+        # Banzi-virus-style case: taxid 5 is overridden for human + vertebrate.
+        # In a primate demotion (covered_by == ""), we want
+        # included_for_other_hosts == "human,vertebrate".
+        parent_map = {"5": "1", "1": "0"}
+        included = {"human": {"5"}, "vertebrate": {"5"}, "primate": set()}
+        changes = pd.DataFrame(
+            [
+                {
+                    "taxid": "5",
+                    "name": "Banzi-like",
+                    "rank": "species",
+                    "old_status": "1",
+                    "new_status": "0",
+                }
+            ]
+        )
+        out = annotate_changes_with_coverage(
+            changes, "primate", parent_map, set(), included
+        )
+        assert out["covered_by"].iloc[0] == ""
+        assert out["included_for_other_hosts"].iloc[0] == "human,vertebrate"
+
+    def test_other_hosts_column_blank_when_covered_by_include(self) -> None:
+        # If a taxid IS included for the host we're asking about, the
+        # included_for_other_hosts column should be blank to avoid noise.
+        parent_map = {"5": "1", "1": "0"}
+        included = {"human": {"5"}, "vertebrate": {"5"}}
+        changes = pd.DataFrame(
+            [
+                {
+                    "taxid": "5",
+                    "name": "x",
+                    "rank": "species",
+                    "old_status": "0",
+                    "new_status": "1",
+                }
+            ]
+        )
+        out = annotate_changes_with_coverage(
+            changes, "human", parent_map, set(), included
+        )
+        assert out["covered_by"].iloc[0] == "included"
+        assert out["included_for_other_hosts"].iloc[0] == ""
 
 
 if __name__ == "__main__":

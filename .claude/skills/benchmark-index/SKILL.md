@@ -59,6 +59,8 @@ For each **uncovered 0→1 human promotion**:
 
 For the other hosts (`bird`, `mammal`, `primate`, `vertebrate`), the bar is lower — only flag if uncovered counts are unusually high or include conspicuous names. Most non-human animal-pathogen reannotations don't affect the human-surveillance use case.
 
+**Watch the `included_for_other_hosts` column** in each `species_transitions_<host>.tsv`. When this column is non-empty for an uncovered demotion, it means the taxid IS in `ref/host-infection-overrides.json` — just for different host(s) than the one demoting. summary.md surfaces the count as "N policy gap(s)" inline. This is a scope-of-override question: do we want the override to apply across the whole human-bearing taxonomic chain (human / primate / mammal / vertebrate), or only the hosts the entry explicitly lists? Flag the gap in the report but don't unilaterally recommend expanding scope — it's a policy call.
+
 **`species_lost_all_genomes.tsv`** — species with `new_count=0` and `old_count>0`. For each in the top 10–20:
 - Is it a known human pathogen? If yes → real concern; recommend investigating whether a `download_virus_taxid` config change is needed.
 - Otherwise (smacovirus, environmental virus, etc.) → likely fine.
