@@ -310,6 +310,40 @@ def load_host_overrides(path: Path) -> dict[str, list[str]]:
     return dict(out)
 
 
+def _validate_host_include_mapping(
+    hard_include_mapping: dict[str, list[str]],
+    host_mapping: dict[str, set[str]],
+    known_taxids: set[str],
+) -> None:
+    """Raise ValueError if `hard_include_mapping` references any host name not in
+    `host_mapping` or any taxid not present in the virus DB. Override mistakes are
+    almost always typos in a hand-edited config and should fail loudly: a silent
+    no-op would hide the misconfiguration, and an overrides-only-of-unknowns file
+    would bypass the no-direct-matches short-circuit in check_infection() and trip
+    the UNRESOLVED assertion deep in mark_descendant_infections()."""
+    # Unknown hosts (not present in host_mapping)
+    unknown_hosts = set(hard_include_mapping) - set(host_mapping)
+    if unknown_hosts:
+        raise ValueError(
+            f"Host-infection overrides reference unknown host group(s) "
+            f"{sorted(unknown_hosts)}. Expected one of {sorted(host_mapping)}."
+        )
+    # Unknown taxids (not present in the virus DB)
+    all_taxids = {t for taxids in hard_include_mapping.values() for t in taxids}
+    unknown_taxids = all_taxids - known_taxids
+    if unknown_taxids:
+        sample = sorted(unknown_taxids)[:10]
+        more = (
+            f" (+{len(unknown_taxids) - len(sample)} more)"
+            if len(unknown_taxids) > len(sample)
+            else ""
+        )
+        raise ValueError(
+            f"Host-infection overrides reference {len(unknown_taxids)} taxid(s) "
+            f"not present in the virus DB: {sample}{more}."
+        )
+
+
 def mark_ancestor_infections_single(
     virus_taxid: str, virus_df: pd.DataFrame, virus_tree: dict[str, set[str]]
 ) -> pd.DataFrame:
@@ -582,6 +616,10 @@ def annotate_virus_db(
     """
     # Get viral taxonomic tree
     virus_tree = build_virus_tree(virus_db)
+    # Reject overrides that reference unknown hosts or unknown taxids.
+    _validate_host_include_mapping(
+        hard_include_mapping, host_mapping, set(virus_db["taxid"])
+    )
     # Add annotations for each host group
     for k in host_mapping:
         virus_db = annotate_virus_db_single(
