@@ -13,17 +13,23 @@ import pandas as pd
 import pytest
 from benchmark_index import (
     annotate_changes_with_coverage,
-    annotate_lost_genomes_with_renames,
+    annotate_lost_genomes,
     build_parent_map,
+    check_ref_staleness,
     classify_coverage,
     compare_size_listings,
     diff_genome_metadata,
     diff_params,
     diff_taxonomy,
+    fasta_content_stats,
     includes_for_other_hosts,
     infection_status_changes,
     infection_status_columns,
     infection_status_transitions,
+    parse_kraken_url_date,
+    parse_silva_url_release,
+    tsv_header,
+    tsv_row_count,
 )
 
 ###########
@@ -468,80 +474,163 @@ class TestCoverageClassification:
         assert out["included_for_other_hosts"].iloc[0] == ""
 
 
-class TestLostGenomeRenameAnnotation:
-    """When NCBI / ICTV rename a species concept and re-key the genomes under
-    the new species, the OLD species_taxid keeps existing but points at a
-    different name — the genome count goes to 0 even though no genomes were
-    really culled."""
+class TestAnnotateLostGenomes:
+    """The genome_id-level redistribution check classifies "lost" species by
+    where their underlying genome_ids actually went. A species_taxid whose
+    genomes were reassigned to a different species_taxid in the new metadata
+    is `likely_rename = yes` (the genomes are still in the index); one whose
+    genomes are absent from new metadata entirely is a true loss."""
 
-    def test_flags_rename_when_taxid_name_changed(self) -> None:
-        lost = pd.DataFrame(
-            [
-                {
-                    "species_taxid": "100",
-                    "organism_name": "Old name",
-                    "old_count": 5,
-                    "new_count": 0,
-                    "delta": -5,
-                },
-                {
-                    "species_taxid": "200",
-                    "organism_name": "Same name",
-                    "old_count": 3,
-                    "new_count": 0,
-                    "delta": -3,
-                },
-            ]
-        )
-        new_db = pd.DataFrame(
-            [
-                {"taxid": "100", "name": "New rename"},
-                {"taxid": "200", "name": "Same name"},
-            ]
-        )
-        out = annotate_lost_genomes_with_renames(lost, new_db)
-        assert out.set_index("species_taxid")["likely_rename"]["100"] == "yes"
-        assert out.set_index("species_taxid")["likely_rename"]["200"] == "no"
-        assert (
-            out.set_index("species_taxid")["new_taxonomy_name"]["100"] == "New rename"
-        )
+    def test_redistribution_detected_via_genome_ids(self) -> None:
+        # Species 100 had 4 genomes in old; all 4 are present in new under
+        # species_taxid 999 — this is the Jingmen-tick-virus pattern. Should
+        # be marked likely_rename=yes with redistribution annotations.
+        lost = pd.DataFrame([
+            {"species_taxid": "100", "organism_name": "Old name",
+             "old_count": 4, "new_count": 0, "delta": -4},
+        ])
+        old_meta = pd.DataFrame([
+            {"genome_id": f"G{i}", "taxid": "100", "species_taxid": "100",
+             "organism_name": "Old name"} for i in range(4)
+        ])
+        new_meta = pd.DataFrame([
+            {"genome_id": f"G{i}", "taxid": "100", "species_taxid": "999",
+             "organism_name": "New species"} for i in range(4)
+        ])
+        new_db = pd.DataFrame([{"taxid": "100", "name": "Old name"}])
+        out = annotate_lost_genomes(lost, old_meta, new_meta, new_db)
+        row = out.iloc[0]
+        assert row["likely_rename"] == "yes"
+        assert row["redistributed_to_species_taxid"] == "999"
+        assert row["redistributed_to_name"] == "New species"
+        assert row["redistributed_genome_count"] == 4
+        assert row["truly_lost_count"] == 0
 
-    def test_marks_no_when_taxid_missing_from_new_taxonomy(self) -> None:
-        # A taxid that's gone from the new taxonomy DB entirely is a real loss
-        # candidate, not a rename — even though the script can't fully confirm
-        # it without checking the genome IDs.
-        lost = pd.DataFrame(
-            [
-                {
-                    "species_taxid": "999",
-                    "organism_name": "Vanished",
-                    "old_count": 2,
-                    "new_count": 0,
-                    "delta": -2,
-                }
-            ]
+    def test_true_loss_when_genome_ids_absent(self) -> None:
+        lost = pd.DataFrame([
+            {"species_taxid": "100", "organism_name": "Gone",
+             "old_count": 3, "new_count": 0, "delta": -3},
+        ])
+        old_meta = pd.DataFrame([
+            {"genome_id": f"G{i}", "taxid": "100", "species_taxid": "100",
+             "organism_name": "Gone"} for i in range(3)
+        ])
+        new_meta = pd.DataFrame([
+            {"genome_id": "X1", "taxid": "200", "species_taxid": "200",
+             "organism_name": "Different"}
+        ])
+        new_db = pd.DataFrame([{"taxid": "100", "name": "Gone"}])
+        out = annotate_lost_genomes(lost, old_meta, new_meta, new_db)
+        row = out.iloc[0]
+        assert row["likely_rename"] == "no"
+        assert row["redistributed_genome_count"] == 0
+        assert row["truly_lost_count"] == 3
+
+    def test_partial_redistribution_uses_half_threshold(self) -> None:
+        # 3 of 4 redistributed (>=50%) -> likely_rename=yes; 1 of 4 -> no.
+        lost = pd.DataFrame([
+            {"species_taxid": "100", "organism_name": "Three of four",
+             "old_count": 4, "new_count": 0, "delta": -4},
+            {"species_taxid": "200", "organism_name": "One of four",
+             "old_count": 4, "new_count": 0, "delta": -4},
+        ])
+        old_meta = pd.DataFrame(
+            [{"genome_id": f"A{i}", "taxid": "100", "species_taxid": "100",
+              "organism_name": "Three of four"} for i in range(4)]
+            + [{"genome_id": f"B{i}", "taxid": "200", "species_taxid": "200",
+                "organism_name": "One of four"} for i in range(4)]
         )
-        new_db = pd.DataFrame(columns=["taxid", "name"])
-        out = annotate_lost_genomes_with_renames(lost, new_db)
-        assert out["likely_rename"].iloc[0] == "no"
-        assert out["new_taxonomy_name"].iloc[0] == ""
+        new_meta = pd.DataFrame(
+            [{"genome_id": f"A{i}", "taxid": "100", "species_taxid": "999",
+              "organism_name": "Dest"} for i in range(3)]  # A3 absent
+            + [{"genome_id": "B0", "taxid": "200", "species_taxid": "888",
+                "organism_name": "Other"}]  # B1-B3 absent
+        )
+        new_db = pd.DataFrame()
+        out = annotate_lost_genomes(lost, old_meta, new_meta, new_db).set_index("species_taxid")
+        assert out.loc["100", "likely_rename"] == "yes"
+        assert out.loc["200", "likely_rename"] == "no"
+
+    def test_hard_exclude_coverage_via_ancestry(self) -> None:
+        # species 100 -> parent 50 -> parent 10 (excluded). Should be marked covered.
+        lost = pd.DataFrame([
+            {"species_taxid": "100", "organism_name": "Excluded family member",
+             "old_count": 5, "new_count": 0, "delta": -5},
+            {"species_taxid": "200", "organism_name": "Unrelated",
+             "old_count": 2, "new_count": 0, "delta": -2},
+        ])
+        old_meta = pd.DataFrame()  # no redistribution; doesn't matter for coverage
+        new_meta = pd.DataFrame()
+        new_db = pd.DataFrame()
+        parent_map = {"100": "50", "50": "10", "200": "20"}
+        out = annotate_lost_genomes(
+            lost, old_meta, new_meta, new_db,
+            parent_map=parent_map, excluded_taxids={"10"},
+        ).set_index("species_taxid")
+        assert out.loc["100", "covered_by_hard_exclude"] == "10"
+        assert out.loc["200", "covered_by_hard_exclude"] == ""
 
     def test_empty_input(self) -> None:
-        empty = pd.DataFrame(
-            columns=[
-                "species_taxid",
-                "organism_name",
-                "old_count",
-                "new_count",
-                "delta",
-            ]
-        )
-        out = annotate_lost_genomes_with_renames(
-            empty, pd.DataFrame(columns=["taxid", "name"])
-        )
-        assert "likely_rename" in out.columns
-        assert "new_taxonomy_name" in out.columns
+        empty = pd.DataFrame(columns=["species_taxid", "organism_name", "old_count",
+                                       "new_count", "delta"])
+        out = annotate_lost_genomes(empty, pd.DataFrame(), pd.DataFrame(), pd.DataFrame())
         assert out.empty
+        for col in ("redistributed_to_species_taxid", "redistributed_genome_count",
+                    "truly_lost_count", "likely_rename", "covered_by_hard_exclude"):
+            assert col in out.columns
+
+
+class TestContentMetrics:
+    def test_fasta_stats_counts_records_bp_and_n(self, tmp_path) -> None:
+        fa = tmp_path / "sample.fa"
+        fa.write_text(">r1\nACGT\nNNNN\n>r2\nACgtN\n")
+        stats = fasta_content_stats(fa)
+        assert stats == {"records": 2, "total_bp": 13, "n_bp": 5}
+
+    def test_fasta_stats_handles_gzip(self, tmp_path) -> None:
+        import gzip
+        fa = tmp_path / "sample.fa.gz"
+        with gzip.open(fa, "wt") as f:
+            f.write(">a\nACGTACGT\n>b\nNN\n")
+        stats = fasta_content_stats(fa)
+        assert stats == {"records": 2, "total_bp": 10, "n_bp": 2}
+
+    def test_tsv_row_count_excludes_header(self, tmp_path) -> None:
+        t = tmp_path / "x.tsv"
+        t.write_text("a\tb\n1\t2\n3\t4\n5\t6\n")
+        assert tsv_row_count(t) == 3
+
+    def test_tsv_header(self, tmp_path) -> None:
+        t = tmp_path / "x.tsv"
+        t.write_text("col1\tcol2\tcol3\n1\t2\t3\n")
+        assert tsv_header(t) == ["col1", "col2", "col3"]
+
+
+class TestRefStaleness:
+    def test_parse_kraken_url_date(self) -> None:
+        assert parse_kraken_url_date(
+            "https://genome-idx.s3.amazonaws.com/kraken/k2_standard_20251015.tar.gz"
+        ) == "20251015"
+        assert parse_kraken_url_date("https://example.com/foo.tar.gz") == ""
+
+    def test_parse_silva_url_release(self) -> None:
+        url = "https://www.arb-silva.de/fileadmin/silva_databases/release_138.2/Exports/x.gz"
+        assert parse_silva_url_release(url) == "138.2"
+        # underscore form
+        url = "https://ftp.arb-silva.de/release_138_2/Exports/x.gz"
+        assert parse_silva_url_release(url) == "138.2"
+        assert parse_silva_url_release("https://example.com/foo") == ""
+
+    def test_check_ref_staleness_passive_only(self, monkeypatch) -> None:
+        # With no Kraken/SILVA URLs in params, only the passive refs should
+        # appear (status=unknown), and no network calls are made.
+        params = {
+            "human_url": "https://example.com/genome.fa.gz",
+            "taxonomy_url": "https://ftp.ncbi.nlm.nih.gov/.../new_taxdump.zip",
+        }
+        rows = check_ref_staleness(params)
+        assert {r["ref"] for r in rows} == {"human_url", "taxonomy_url"}
+        assert all(r["status"] == "unknown" for r in rows)
 
 
 if __name__ == "__main__":

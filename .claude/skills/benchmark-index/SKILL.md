@@ -1,11 +1,13 @@
 ---
 name: benchmark-index
-description: Compare two mgs-workflow index releases and produce a structured pre-rollout review report. Runs `bin/benchmark_index.py` (with `--repo-root` so per-species infection-status transitions are annotated with whether existing `ref/host-infection-overrides.json` or `viral_taxids_exclude_hard` rules already cover them), then interprets the *uncovered* (actionable) subset — drills into the human-infection list first, cross-references upstream Virus-Host-DB only for genuinely uncovered demotions to attribute the change to upstream drift vs a workflow change, spot-checks species that lost all their genomes, and proposes concrete config edits (additions to `ref/host-infection-overrides.json` or `viral_taxids_exclude_hard`) keyed to the findings. Use before promoting a new `s3://nao-mgs-index/<DATE>` build to production.
+description: Compare two mgs-workflow index releases and produce a structured pre-rollout review report. Runs `bin/benchmark_index.py` (with `--repo-root` so it can annotate transitions with existing rule coverage and classify lost genomes by redistribution / hard-exclude), then turns the script's `summary.md` into a written review with a headline recommendation and concrete config edits. Use before promoting a new `s3://nao-mgs-index/<DATE>` build to production.
 ---
 
 # Benchmark an index release
 
-Compare an `--old` and `--new` index release, produce a structured markdown review that a maintainer can paste into a Slack thread / PR description / Linear ticket. The script (`bin/benchmark_index.py`) does the deterministic data extraction *and* the cross-reference against existing exclude/override rules; this skill turns the pre-filtered output into a written review with concrete recommendations.
+`bin/benchmark_index.py` does the heavy data work — it diffs sizes, content (FASTA records/bp, TSV row counts, metadata schema), infection-status transitions (annotated with `covered_by` / `included_for_other_hosts`), lost-genome inventories (annotated with `covered_by_hard_exclude`, `redistributed_to_species_taxid`, `redistributed_genome_count`, `truly_lost_count`), and reference-DB freshness (active checks for Kraken2 and SILVA). The script writes a self-contained `summary.md`.
+
+Your job is to read `summary.md` and turn its structured data into a written `REVIEW.md` aimed at a colleague who hasn't seen this conversation — adding a one-paragraph headline, a "how to read this report" preamble, and concrete config-edit recommendations. The narrative is yours; the arithmetic is the script's.
 
 ## When to use
 
@@ -13,271 +15,212 @@ Compare an `--old` and `--new` index release, produce a structured markdown revi
 - The user has two `s3://nao-mgs-index/<DATE>` URIs (or local paths) and asks for a comparison.
 - The user references "index benchmark", "index review", "index rollout check", or similar.
 
-If the user is only asking for raw numbers (no interpretation), just run the script — don't write the review.
+If the user is only asking for raw numbers (no written review), just run the script and surface `summary.md` — don't write `REVIEW.md`.
 
 ## Inputs
 
 - `--old <root>`: parent of `output/` for the old index. `s3://...` or local path. **Required.**
 - `--new <root>`: parent of `output/` for the new index. **Required.**
-- `--out <dir>` (optional): output directory. Default `./bench-<old-tag>-vs-<new-tag>/` derived from the URI basenames.
+- `--out <dir>`: output directory. Use an absolute path so paths in the report are reader-portable.
+- `--repo-root <path>`: a mgs-workflow checkout. Without this, the script falls back to plain counts; with it you get all the coverage / redistribution / hard-exclude annotations that drive the report.
 
-If either root is missing, ask the user — don't guess.
+If any of these is missing, ask the user — don't guess.
 
 ## Procedure
 
 ### Step 1 — Run the script
 
-`cd` into a mgs-workflow checkout first (so `bin/benchmark_index.py` and `--repo-root .` both resolve), then:
+`cd` into a mgs-workflow checkout first, then:
 
 ```bash
 cd /path/to/mgs-workflow
-python bin/benchmark_index.py --old <old> --new <new> --out <outdir> --repo-root .
+python bin/benchmark_index.py \
+  --old <old> --new <new> \
+  --out <outdir> --repo-root .
 ```
 
-Always use `--repo-root` so per-species transitions get annotated with `covered_by` ("excluded" | "included" | ""). Without it the script falls back to plain counts and the agent has to cross-reference rules by hand.
+Use **absolute** paths for `--out` (e.g. `/tmp/bench-...`, not `./bench-...`) — they'll appear in the report and a colleague should be able to copy them verbatim.
 
-All paths in the report should be **absolute** — that way a colleague reading the report can copy the path verbatim regardless of their working directory. Use absolute paths for `--out` (e.g. `/tmp/bench-...`, not `./bench-...`).
+Takes ~60 seconds (most of it is staging the ~700 MB virus FASTAs for content-metric counts; the rest is small TSV downloads). If `<outdir>/summary.md` already exists, skip the script run and reuse — but note that to the user.
 
-If `<outdir>` already has `summary.md` and the per-host `species_transitions_*.tsv` files, skip the script run and reuse — flag to the user that you reused. Re-running is cheap (~10MB of small file downloads).
+### Step 2 — Read `summary.md` end-to-end
 
-Read `<outdir>/summary.md` first. It surfaces the actionable counts directly in tables:
-- Per-host: total transitions / actionable 1→0 demotions / actionable 0→1 promotions / override policy gaps
-- Top true losses among "species lost all genomes" (with `likely_rename` annotations)
-- Per-DB sizes table with the shrunk ones flagged
+The script's output is structured to feed the report directly. Each `summary.md` section maps to a `REVIEW.md` section:
 
-The interpretation work below turns those counts into a written report.
+| `summary.md` section | What it gives you |
+|---|---|
+| §1 Reference-DB staleness | Auto-active check for Kraken2 + SILVA; passive URL display for human / NCBI taxonomy / VHDB. Cite any **stale** flag in the headline. |
+| §2 Per-DB sizes + §2.1 content metrics + §2.2 schema diff | Tells the real story about size deltas. Compressed bytes are misleading for gzipped FASTAs/TSVs; surface the content-metrics columns (records, total_bp, rows) for that. Schema diff explains most of any metadata-file shrink. |
+| §3 Virus genomes (3.1 true losses / 3.2 redistributed / 3.3 covered) | The script has already split by redistribution + hard-exclude coverage. Use §3.1 (true losses) for your "concerning" list; §3.2 (redistributed) is informational; §3.3 is dispatched in one sentence. |
+| §5 Infection-status changes | Per-host actionable table + drill-down with every actionable row inline. Pull these directly into your report; don't paraphrase, don't repeat covered rows. |
+| Appendix A (covered transitions) | Only consult if you want to spot-check a specific covered claim — usually skip. |
+| Appendix B (full lost-genomes) | Reference if a user asks for the full inventory. |
+| Appendix C (verbatim params diff) | The basis for your §4 (Other notable changes). Read `CHANGELOG.md` in the workflow checkout for the human "why" behind each version-bump-driven change. |
 
-### Step 2 — Drill into the uncovered subset
+**Trust the script's annotations.** If a row has `covered_by_hard_exclude = 2169574`, write "covered by Smacoviridae hard-exclude" — don't guess a family without checking. If a row has `redistributed_genome_count = N`, the genomes went *somewhere* in the new metadata; report N / old_count and the destination taxid + name.
 
-The script has already filtered to the actionable rows. Your job is to name them and decide what to recommend.
+### Step 3 — VHDB cross-reference (optional, only for actionable items)
 
-**Three TSVs to keep straight:**
-- `species_transitions_<host>.tsv` — species-rank only, annotated with `covered_by` ("excluded" | "included" | "") and `included_for_other_hosts`. **Use this for triage.** Columns: `taxid, name, rank, old_status, new_status, covered_by, covered_rule_taxid, included_for_other_hosts`.
-- `infection_status_changes_<host>.tsv` — all ranks, raw, no coverage annotation. Use only if you need strain-level detail; otherwise ignore.
-- `genomes_by_species.tsv` — `species_taxid, organism_name, old_count, new_count, delta`, sorted by `delta`. **Cross-reference this for every actionable 0→1 promotion** — a large simultaneous genome-count jump is diagnostic of an upstream pipeline-config-driven false positive (e.g. a parameter change like `assembly_source = "all"` pulling in a flood of new accessions under one placeholder taxid).
+For any actionable transition you're about to recommend an edit for (most often the 0→1 human promotions), confirm the upstream direction by checking VHDB.
 
-**`species_transitions_human.tsv`** is the most important file. The actionable rows are uncovered 1→0 demotions and 0→1 promotions (i.e. `covered_by == ""` *and* a `0↔1` status flip — `2↔3` transitions are unknown-vs-likely re-evaluations and not actionable). Don't `Read` the whole file (often >1000 rows of which only a handful are actionable); filter first:
-
-```bash
-awk -F'\t' 'NR==1 || ($6=="" && (($4==1 && $5==0) || ($4==0 && $5==1)))' \
-  /tmp/<outdir>/species_transitions_human.tsv | column -t -s $'\t'
-```
-
-(columns: `1=taxid, 2=name, 3=rank, 4=old_status, 5=new_status, 6=covered_by, 7=covered_rule_taxid, 8=included_for_other_hosts` — adjust if the script's schema changes).
-
-The rest of the rows (those with a non-empty `covered_by`) are explained by existing rules in `ref/host-infection-overrides.json` or `viral_taxids_exclude_hard` and don't need action.
-
-For each **uncovered 1→0 human demotion**:
-- Look up the species by name. Is it a known human pathogen?
-- If yes → recommend adding it to `ref/host-infection-overrides.json` (see Step 3 for the VHDB confirmation step).
-- If unsure → flag for scientist review rather than recommending an override.
-
-For each **uncovered 0→1 human promotion**:
-- Pattern-match the name. Bacteriophage / Microviridae / gokushovirus / Smacoviridae / Picobirnaviridae / "Human gut <foo>" → false positive, recommend adding the species (or, better, its family/class) to `viral_taxids_exclude_hard`.
-- **Cross-reference `genomes_by_species.tsv` for the same taxid.** If the promotion is paired with a large genome-count jump (e.g. 0 → 1349) at the top of `genomes_by_species.tsv`, the promotion is probably driven by a pipeline parameter change pulling in many new accessions, not by VHDB drift. Mention the causal link in the report — it's the strongest possible justification for the exclude-list recommendation.
-- Anything else → flag for scientist review.
-
-For the other hosts (`bird`, `mammal`, `primate`, `vertebrate`), the bar is lower — only flag if uncovered counts are unusually high or include conspicuous names. Most non-human animal-pathogen reannotations don't affect the human-surveillance use case.
-
-**De-duplicate cross-host transitions.** A single taxid often appears in multiple `species_transitions_<host>.tsv` files as an actionable transition (a 0→1 promotion on `human` typically propagates to `primate`, `mammal`, and `vertebrate`). Write up the taxid **once** in the host section where it matters most (usually `human`) and cross-reference it from the others; don't repeat the same finding five times.
-
-**Override policy gaps.** When `included_for_other_hosts` (column 8 of `species_transitions_<host>.tsv`) is non-empty for an actionable demotion, the taxid IS in `ref/host-infection-overrides.json` — just for different host(s) than the one demoting. The value is a comma-joined list of the hosts the override DOES cover (e.g. `"human,vertebrate"`). Find them directly:
-
-```bash
-awk -F'\t' 'NR==1 || ($6=="" && $8!="")' \
-  /tmp/<outdir>/species_transitions_<host>.tsv | column -t -s $'\t'
-```
-
-summary.md surfaces the count as "N policy gap(s)" inline; the awk above identifies which taxid. The policy question to ask in the report: do we want the override to apply across the whole human-bearing taxonomic chain (human / primate / mammal / vertebrate), or only the hosts the entry explicitly lists? Flag the gap but don't unilaterally recommend expanding scope — it's a policy call.
-
-**Heuristic for "bar for flagging" on non-human hosts**: by default, only single out by name uncovered transitions for `bird` / `mammal` / `primate` / `vertebrate` if either (a) the actionable count is materially larger than for `human` (rule of thumb: ≥5× the human count for the same direction), or (b) the names include a recognizable human/livestock pathogen (mention SARS-CoV-2 / influenza / hantavirus / orthopox / rabies / ebola / hepatitis / etc. → name it; if it's clearly an environmental / arthropod / non-mammalian-host virus → aggregate). When uncertain about a name, say "flag for scientist review" rather than recommending action — these columns matter less for human-surveillance reporting and the cost of a missed call is low.
-
-**`species_lost_all_genomes.tsv`** — species with `new_count=0` and `old_count>0`. The script already auto-annotates each row with `likely_rename` and `new_taxonomy_name`; focus on rows where `likely_rename == False`. For each in the top 10–20:
-- Is it a known human pathogen? If yes → real concern; recommend investigating whether a `download_virus_taxid` config change is needed.
-- **Does its family/class already appear in `viral_taxids_exclude_hard`?** If yes (Smacoviridae `2169574`, Picobirnaviridae `585893`, Microviricetes `10841`, Caudoviricetes `2731619`, Malgrandaviricetes `2732413`, Faserviricetes `2732411`), the loss has no downstream effect — the taxon would be force-zeroed regardless. Note this and move on.
-- Otherwise (environmental virus with no surveillance relevance) → likely fine.
-- **Caveat on `likely_rename` heuristic**: it relies on `species_taxid` still resolving in the new taxonomy DB to a *different* name. If the rename also changed the taxid itself, the row will show as a "true loss" — sanity-check the top entries with a quick web search on the organism name.
-
-**`sizes.tsv`** — any negative `delta_bytes`? Common explanations to mention:
-- `virus-genomes-masked.fasta.gz` + `virus-genome-metadata-gid.tsv.gz` both shrinking → assembly-status filter (current-only) is dropping superseded NCBI assemblies. Normal since the v3.2.1.5 rework; not a regression.
-- A bowtie2 / minimap2 index identical to old → reference URL unchanged.
-
-**`params_diff.txt`** — look for:
-- `kraken_db` URL change → note the date version.
-- Pipeline version bump (top of `pyproject.toml`, if you can see it in the diff) → mention the release range.
-- New / removed `params.*` keys → list them.
-- Path-prefix-only changes (`/repo/ref/` → `/ref/`) → cosmetic, ignore.
-
-**`taxa_added.tsv` / `taxa_removed.tsv`** — usually thousands of rows from NCBI taxonomy churn. Don't itemise; just note the magnitude in the report.
-
-### Step 3 — Confirm actionable transitions against upstream VHDB
-
-Run for **any** actionable transition you're considering recommending an edit for — both 1→0 demotions (to confirm whether VHDB really dropped the host) and 0→1 promotions (to confirm whether VHDB really added it). Skip if Step 2 produced nothing actionable.
-
-Fetch the current VHDB once (~40K lines, ~5MB):
 ```bash
 curl -sL https://www.genome.jp/ftp/db/virushostdb/virushostdb.daily.tsv -o /tmp/vhdb-current.tsv
-```
-
-For each actionable `<taxid>`:
-```bash
 awk -F'\t' -v t=<taxid> '$1==t {print $1"\t"$2"\t"$6"\t"$8"\t"$9}' /tmp/vhdb-current.tsv
 ```
-(columns: virus tax id, virus name, disease, host tax id, host name)
-
-**If the taxid returns no rows in VHDB**, the species was probably renamed (the new NCBI taxid hasn't propagated to VHDB yet, or VHDB has the same organism under a pre-rename taxid). Look it up by name instead:
-```bash
-grep -i "<organism name>" /tmp/vhdb-current.tsv | head
-```
-Use the organism name from `species_transitions_<host>.tsv` (the `name` column) or, if you have it, the pre-rename name from `species_lost_all_genomes.tsv`. If VHDB still has nothing under any spelling, treat the upstream evidence as absent — don't recommend an override from the benchmark alone.
+Columns: virus tax id, virus name, disease, host tax id, host name.
 
 For **1→0 human demotions**:
-- Homo sapiens (9606) in column 4 → the demotion is **not** upstream; investigate the workflow code (rare).
-- No Homo sapiens but a human disease named in column 3 → demotion **is** upstream VHDB drift (host annotation isn't capturing the disease annotation). Typical pattern; recommend adding to overrides.
-- Host taxid `1` (`root`) in column 4 → VHDB has the species recorded but with no specific host annotation. The demotion is real (no host info to override against); don't recommend a `1`-override unless you can cite an external evidence source. This is the typical pattern for niche circovirids/cycloviruses and other obscure non-pathogen taxa.
-- No Homo sapiens, no human disease, no row at all → either the demotion is correct, or VHDB hasn't ingested the taxid yet. Don't recommend an override without a separate evidence source (textbook, recent literature).
+- Homo sapiens (9606) in column 4 → demotion is **not** upstream; investigate the workflow code (rare).
+- No Homo sapiens but a human disease in column 3 → upstream VHDB drift; recommend adding to overrides.
+- Host taxid `1` (`root`) in column 4 → VHDB has no specific host annotation; the demotion is real, don't recommend a `1`-override without external evidence.
+- No row at all → species may have been renamed and VHDB still has the old taxid; try grepping by name. If still nothing, don't recommend an override from the benchmark alone.
 
 For **0→1 promotions**:
-- Homo sapiens now in column 4 → the promotion is upstream and reflects a genuine VHDB addition. Then decide if it's biologically plausible (some VHDB additions are correct, some are false positives based on incidental sample origins):
-  - The taxon name is structurally a recognised pathogen → leave the promotion in place; no action.
-  - The taxon name is generic / placeholder / phage-like / "Human gut <foo>" / Smacoviridae / Picobirnaviridae / Microviridae / bacteriophage → false-positive sample contamination; recommend adding the taxid (or a broader family/class) to `viral_taxids_exclude_hard`.
-- No Homo sapiens in column 4 → the promotion was carried by a descendant or ancestor rule in the workflow, not by VHDB directly. Investigate.
+- Homo sapiens now in column 4 → upstream VHDB addition. Then ask: is the species name structurally a recognised pathogen, or generic/placeholder (Bacteriophage sp., "Human gut <foo>", Microviridae, Smacoviridae, Picobirnaviridae)? If the latter → recommend adding the taxid (or a broader family/class) to `viral_taxids_exclude_hard`.
+- **Cross-reference `genomes_by_species.tsv`** (in the output dir) for the same taxid. If the promotion is paired with a large `delta` (e.g. 0 → 1349), the trigger is likely a pipeline parameter change pulling in many new accessions, not VHDB drift. Cite the causal link explicitly.
 
 ### Step 4 — Produce the report
 
-Write a markdown report to `<outdir>/REVIEW.md` (overwrite if it already exists — the script doesn't manage this file, so a stale copy from a previous skill run won't be touched without you doing it). Surface the report inline in the user-facing reply.
+Write `<outdir>/REVIEW.md`. Overwrite if it exists.
 
-**The report must be readable in isolation.** A colleague who hasn't seen this conversation, doesn't know the workflow's history, and isn't familiar with the override/exclude mechanisms should be able to read REVIEW.md cold and understand (a) what changed between indexes, (b) what to do about it. Concretely:
+**The report must be readable in isolation.** A colleague who hasn't seen this conversation, doesn't know the workflow's history, and isn't familiar with the override/exclude mechanisms must be able to read REVIEW.md cold and understand what changed and what to do about it. Concretely:
 
-- **Always include a "How to read this report" preamble** between the headline and Section 1, defining the four pieces of background a reader needs: the `infection_status_<host>` columns and what their values mean, the two override mechanisms (`viral_taxids_exclude_hard` and `ref/host-infection-overrides.json`), the "covered" / "actionable" distinction the per-host table uses, and what "override policy gap" means (since it appears as its own column).
+- Always include the "How to read this report" preamble below (4 items).
+- Don't refer the reader to TSVs or to other files in the output directory. Embed every table you need inline — long tables go in an appendix at the end of REVIEW.md, not as a pointer to elsewhere.
+- Use **absolute paths** when you must reference output-dir files (e.g. for the user to look at the underlying data themselves).
 - Don't reference PRs by number without explaining what they did.
-- Don't say things like "we already understood" or "the usual pattern" — say what the pattern is.
-- Prefer **tables** for per-DB sizes and per-host transition counts (much easier to scan than prose). Bold counts that require action.
-- Use the word **actionable** (or "needs review") rather than **uncovered** in prose, with one inline definition near first use. "Uncovered" reads like jargon to a fresh reader.
-- Use **absolute paths** when referencing the output directory or files inside it (don't write `./bench-...`; write `/tmp/bench-...`).
+- Don't say "the usual pattern" or "we already understood" — say what the pattern *is*.
+- Trust the script's coverage / redistribution annotations; don't manually classify coverage or guess at families.
+- De-duplicate cross-host findings: if a single taxid is actionable on multiple hosts, write it up once (under the highest-priority host it affected — human > primate > mammal > vertebrate > bird) and cross-reference from the others.
 
-Five sections, in order. **Lead with a one-paragraph headline**: is the index ready to promote, with what (if any) changes required? Make the headline meaningful when read alone.
+Five sections, in order. Lead with a one-paragraph headline that stands on its own.
 
-```markdown
+````markdown
 # Index benchmark review: <OLD> → <NEW>
 
-**Headline**: <one-paragraph summary that can be quoted on its own.
-Concrete shape: "Ready to promote / Not ready to promote, because <reason>.
-<count> actionable item(s) — <one-line summary of each>. <pointer to any
-secondary policy question>." The example in this template is intentionally
-generic; do not copy it.>
+**Headline**: <one paragraph readable in isolation. Concrete shape:
+"Ready to promote / Not ready to promote, because <reason>. <count>
+actionable item(s) — <one-line each>. <reference-DB staleness call if
+any>. <pointer to any policy question>." The example shape here is
+intentionally generic; don't copy it.>
 
 ---
 
 ## How to read this report
 
-- **`infection_status_<host>` columns**: every viral taxon in the index
-  carries five columns (`human`, `primate`, `mammal`, `vertebrate`, `bird`)
-  saying whether the species infects that host. `1` = infects, `0` = does
-  not, `2` = unknown, `3` = likely. Values come from upstream Virus-Host-DB
-  (VHDB) and are recomputed each index build, so they drift between
-  releases as VHDB updates.
-- **Two workflow override mechanisms** correct known VHDB mis-annotations:
-  - `viral_taxids_exclude_hard` (in `configs/index.config`): a space-
-    separated list of taxids forced to status `0` for every host, along
-    with all their descendants. Used for whole families of known false
-    positives.
-  - `ref/host-infection-overrides.json`: `{taxid, hosts}` entries that
-    force status `1` for the listed hosts. Used for known human pathogens
-    that VHDB mis-classifies.
+- **`infection_status_<host>` columns**: every viral taxon carries five
+  columns (`human`, `primate`, `mammal`, `vertebrate`, `bird`). `1` =
+  infects, `0` = does not, `2` = unknown, `3` = likely. Values come from
+  upstream Virus-Host-DB (VHDB).
+- **Two workflow override mechanisms** correct VHDB mis-annotations:
+  - `viral_taxids_exclude_hard` (in `configs/index.config`): taxids
+    forced to `0` for every host, applied to all descendants. Used for
+    whole families of known false positives.
+  - `ref/host-infection-overrides.json`: `{taxid, hosts}` entries
+    forcing `1` for the listed hosts. Used for known human pathogens
+    VHDB mis-classifies.
 - **"Covered" vs "actionable" transitions**: when a status flips between
-  the two indexes, the benchmark script checks whether one of the two
-  mechanisms above already explains the flip. If yes → covered (no action
-  needed; the workflow intentionally overrides VHDB). If no → actionable
-  (genuine, unmediated VHDB drift that a human should look at). Counts
-  in **bold** in the table below are actionable rows.
-- **"Override policy gap"**: a special sub-case of actionable demotion
-  where the demoted taxid IS in `ref/host-infection-overrides.json`, but
-  the entry's `hosts` list doesn't include the host that just demoted.
-  Either the entry needs widening to cover that host, or we accept the
-  drift on that host column as out-of-scope.
+  the two indexes, the benchmark script checks whether one of the rules
+  above already explains it. Covered → no action; actionable → needs
+  human review.
+- **"Override policy gap"**: actionable demotion whose `species_taxid` IS
+  in `ref/host-infection-overrides.json` but only for *other* hosts.
+  Either widen the override's `hosts` list or accept the drift.
+
+Underlying data: `<absolute outdir path>/`. The script's `summary.md`
+contains every table this report is built from, plus an appendix with
+the full lost-genomes inventory and verbatim params diff.
 
 ---
 
-## 1. Per-DB sizes
+## 1. Reference-DB staleness
 
-[Table with columns: DB, Old, New, Δ (absolute + percent), Notes.
-Use human-readable units (GB / MB / KB). Bold the Δ for any DB that
-shrunk. Inline one-line note per DB if it shrank (likely cause) or
-is new. Group byte-identical DBs into a single row to save space.]
+[Table from summary.md §1. Bold any "stale" flag. One sentence on what
+to do (e.g., "Kraken DB is 7 months out of date; consider bumping
+before the next index build." or "All references are current.")]
 
-## 2. Infection-status changes
+## 2. Per-DB sizes
 
-[Open with the per-host table. The columns to use:
+[Table from summary.md §2 (compressed bytes), plus a brief callout for
+each shrunk DB. Always pair "compressed shrank" with the content metric
+from §2.1 — if records/total_bp grew, the compressed shrink is a gzip
+artifact, not a content regression. Surface the schema diff from §2.2
+when relevant: "Most of the metadata-file shrink is the 18-column schema
+reduction, not row loss."]
 
-  | Host | Total transitions (all ranks) | Species 1→0 demotions: actionable / total | Species 0→1 promotions: actionable / total | Override policy gaps |
+## 3. Virus genomes
 
-  (Mirrors the format the script emits in summary.md so the agent and a
-  human reader see consistent numbers.) Bold the actionable counts.
+[Top-line counts. Three sub-sections matching the script's split:
+- 3.1 True losses (table from summary.md §3.1, dispatched per row with
+  one-line context per non-trivial entry).
+- 3.2 Redistribution (one paragraph + table). Call out any notable
+  destinations (e.g. "Human adenovirus 89 → Simian adenovirus 45 is a
+  documented NCBI reassignment; 310 genomes moved").
+- 3.3 Covered by hard-exclude (one sentence: "N species in this bucket
+  are absorbed by the existing Smacoviridae / Picobirnaviridae / ...
+  excludes and have no surveillance impact.").]
 
-Then drill into each host with a non-zero actionable count by name;
-aggregate the covered counts in one line per host. Apply the heuristic
-from Step 2 above to decide how much detail to give for non-human hosts.]
+## 4. Infection-status changes
 
-## 3. Lost virus genomes
+[Per-host table from summary.md §5. For each host with actionable rows,
+write a short prose paragraph naming the taxa (using the §5.x inline
+tables). De-duplicate cross-host findings: write up each taxid once.
+Address any override policy gap explicitly.]
 
-[Top-line: N added, M removed, K species went to zero. The K count is
-already split into "likely renames" vs "true losses" in
-`species_lost_all_genomes.tsv` (look at the `likely_rename` column).
-Surface the split in the prose. Table the top true losses with the
-`likely_rename` and `new_taxonomy_name` columns visible — readers want
-to see the rename target inline. Don't itemise the renames unless one
-is conspicuous (e.g. a name change for a known human pathogen).]
+## 5. Other notable changes
 
-## 4. Other notable changes
+[Pipeline version range (from `pyproject.toml` and `CHANGELOG.md`).
+Mine the CHANGELOG for the "why" behind each substantive change. Surface
+any `pipeline-min-index-version` bump that downstream RUN consumers
+need to coordinate with.]
 
-[Pipeline version bump (call out the range explicitly), new/removed
-params, schema changes in any of the data files. Cosmetic path
-changes can be mentioned and dismissed in one sentence.
+## 6. Recommendations
 
-Read `CHANGELOG.md` in the workflow checkout for the version range
-between the two builds — it carries the "why" for each artifact change
-(new pre-screen, new hard-exclude additions, new override entries) that
-params_diff.txt alone won't tell you. Mine it for Section 4 narrative.]
+[Concrete config edits, ordered by confidence (highest first):
 
-## 5. Recommendations
+1. High-confidence edits with clear evidence (VHDB false positive,
+   pipeline-driven contamination). Show the literal before/after diff:
 
-[Concrete config edits, keyed to findings. **Order by confidence:** the
-edits you're most confident about (clear VHDB false-positive, obvious
-exclude-list addition) first, scientist-judgment items second, policy
-questions last.
+   ```
+   - viral_taxids_exclude_hard = "..."
+   + viral_taxids_exclude_hard = "... <new-taxid>"
+   ```
 
-- "Add `<taxid>` (`<name>`) to `viral_taxids_exclude_hard` in
-  `configs/index.config`, `configs/index-for-run-test.config`, and
-  `tests/configs/index.config`: <reason>". Show the literal before/after
-  for the edit when small.
-- "Add `<taxid>` (`<name>`) to `ref/host-infection-overrides.json`:
-  <reason>".
-- Policy questions (e.g. override scope) stated as a question, not a
-  unilateral recommendation.
+2. Scientist-judgment items (low-confidence but worth a sanity check).
 
-If no config changes are needed, say so explicitly in section 5.]
-```
+3. Policy questions (e.g. override-scope), stated as questions, not
+   unilateral recommendations.
+
+4. Reference-DB bumps if §1 flagged anything stale.
+
+If no config changes are needed, say so explicitly.]
+
+## Appendix — Full <whatever you need>
+
+[If a reader might want the full lost-genomes inventory or the full
+covered-transitions list, embed it here as a markdown table. Pull from
+summary.md's appendices.]
+````
 
 ### Step 5 — Hand off
 
-Write `REVIEW.md` to `<outdir>/REVIEW.md` and print its path back to the user with a 3-line summary inline. The script does **not** clobber `REVIEW.md` on re-run (it only writes files it owns), but if you `rm -rf` the outdir between iterations of the skill — to force a fresh script run — your `REVIEW.md` goes with it. Don't `rm -rf` the outdir; let the script overwrite the TSVs in place.
+Print the `REVIEW.md` path back to the user with a 3-line inline summary. Don't open a PR or commit anything — recommendations need human judgment before going to code review.
 
-Don't open a PR or commit anything — recommendations need human judgment before they're committed.
+Don't `rm -rf` the outdir between iterations; the script overwrites the files it owns, but your `REVIEW.md` would go with the directory.
 
 ## What not to do
 
-- **Don't itemise covered transitions.** The script already pre-filtered them out. Only name the *uncovered* ones. (Aggregate covered counts in one line per host if useful.)
-- **Don't fabricate pathogen knowledge.** If you can't confidently identify whether an uncovered species is a human pathogen, say "flag for scientist review" rather than guess.
-- **Don't paste raw TSVs.** The user can `less` them; the report's job is to name the specific findings and recommend actions.
-- **Don't act on recommendations.** Surface them; let the user decide. Config edits go through code review.
-- **Don't loop the VHDB cross-reference.** Fetch the file once at the top of Step 3 and grep against the local copy.
+- **Don't itemise covered transitions.** The script already pre-filtered them; only name the *actionable* ones. Aggregate the covered count in one line per host if useful.
+- **Don't make up coverage claims.** When the report says "covered by Smacoviridae", that has to come from the script's `covered_by_hard_exclude = 2169574` column, not a guess at family membership.
+- **Don't conflate compressed file size with content size** for gzipped FASTAs/TSVs. Cite §2.1 content metrics when explaining a size delta.
+- **Don't refer the reader to TSVs or to summary.md.** The TSVs are the script's working data; `summary.md` is its self-contained report; `REVIEW.md` is yours, also self-contained. Pull whatever tables your reader needs into `REVIEW.md` directly.
+- **Don't fabricate pathogen knowledge.** If you can't confidently identify whether an actionable species is a human pathogen, say "flag for scientist review" rather than guess.
+- **Don't act on recommendations.** Surface them; the user decides; config edits go through code review.
 
 ## Edge cases
 
-- **No infection-status changes for a host**: skip the bullet for that host rather than writing "no changes."
-- **Schema change in `virus-genome-metadata-gid.tsv.gz`** (column set differs): the script's `diff_genome_metadata` already restricts to common columns; mention the schema difference in Section 4.
-- **One-off staging failures** (network blip on `aws s3 cp`): retry the script before falling back to a partial report.
-- **Old index missing a host group** (e.g., `infection_status_bird` only added later): note in Section 2 that the host is newly tracked; no transition data to report.
-- **`--repo-root` skipped or pointed at the wrong place**: the script falls back to no coverage annotation and summary.md shows "X species 1→0" instead of "X uncovered 1→0". If you see that, re-run with `--repo-root .` from a mgs-workflow checkout.
-- **Taxonomy rename masquerading as genome loss**: see Step 2 caveat under `species_lost_all_genomes.tsv`. Always sanity-check the top entries.
+- **No infection-status changes for a host**: skip the §4 bullet for that host rather than writing "no changes".
+- **Old index missing a host group** (e.g., `infection_status_bird` only added later): note in §4 that the host is newly tracked; no transition data to report.
+- **`--repo-root` skipped**: the script falls back to no coverage / redistribution annotation; you'll see "(coverage unavailable)" in summary.md. Re-run with `--repo-root .` from a mgs-workflow checkout.
+- **A reference check errors out** (network blip): summary.md §1 will show `status: error` for that row. Note the inability to verify and continue.
+- **Pipeline-min-index-version bump**: if `CHANGELOG.md` mentions one in the version range, surface it in §5 — RUN deployments need to be on a compatible version before consuming the new index.
