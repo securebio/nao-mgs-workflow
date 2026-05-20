@@ -52,7 +52,7 @@ workflow MAKE_VIRUS_GENOME_DB {
             filter_ch.db, virus_db, download_ch.genomes.collect()
         )
         // 5. Add per-sequence genome IDs by reading FASTA headers.
-        gid_ch = ADD_GENBANK_GENOME_IDS(prepare_ch.metadata, prepare_ch.genomes, "virus-genome")
+        gid_ch = ADD_GENBANK_GENOME_IDS(prepare_ch.metadata, prepare_ch.genomes, "virus-genome").output
         // 6. Concatenate matching genomes.
         genome_concat_ch = CONCATENATE_GENOME_FASTA(prepare_ch.genomes, prepare_ch.paths)
         // 7. Filter to remove undesired/contaminated genomes by sequence-header
