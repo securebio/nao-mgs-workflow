@@ -1382,6 +1382,77 @@ class TestLoadHostOverrides:
         path.write_text(json.dumps(json_content))
         assert load_host_overrides(path) == expected
 
+    @pytest.mark.parametrize(
+        "malformed",
+        [
+            # Top-level shape violations
+            [{"taxid": "1", "hosts": ["human"]}],  # top-level list, not dict
+            {"overrides": {"taxid": "1", "hosts": ["human"]}},  # overrides is a dict
+            # Per-entry shape violations
+            {"overrides": ["not-a-dict"]},
+            {"overrides": [{"hosts": ["human"]}]},  # missing taxid
+            {"overrides": [{"taxid": "1"}]},  # missing hosts
+            {"overrides": [{"taxid": ["1"], "hosts": ["human"]}]},  # taxid is a list
+            {"overrides": [{"taxid": None, "hosts": ["human"]}]},
+            {"overrides": [{"taxid": {"x": "y"}, "hosts": ["human"]}]},
+            {"overrides": [{"taxid": True, "hosts": ["human"]}]},  # bool ⊂ int
+            {"overrides": [{"taxid": "1", "hosts": "human"}]},  # hosts is a str
+            {"overrides": [{"taxid": "1", "hosts": {"human": True}}]},
+            {"overrides": [{"taxid": "1", "hosts": [1, 2]}]},
+            {"overrides": [{"taxid": "1", "hosts": [None]}]},
+        ],
+        ids=[
+            "top-level-list",
+            "overrides-dict",
+            "entry-not-dict",
+            "missing-taxid",
+            "missing-hosts",
+            "taxid-list",
+            "taxid-none",
+            "taxid-dict",
+            "taxid-bool",
+            "hosts-str",
+            "hosts-dict",
+            "hosts-list-of-int",
+            "hosts-list-of-none",
+        ],
+    )
+    def test_rejects_malformed_schema(self, tmp_path: Path, malformed: object) -> None:
+        """Any JSON that doesn't match the documented schema raises ValueError."""
+        path = tmp_path / "overrides.json"
+        path.write_text(json.dumps(malformed))
+        with pytest.raises(ValueError, match="does not match schema"):
+            load_host_overrides(path)
+
+    @pytest.mark.parametrize(
+        "overrides, expected_match",
+        [
+            # hosts=[] is a no-op; minItems=1 in the schema catches it.
+            ([{"taxid": "1", "hosts": []}], "does not match schema"),
+            # Duplicate (taxid, host) across entries is a cross-entry check
+            # the schema can't express; load_host_overrides raises after
+            # JSON Schema validation passes.
+            (
+                [
+                    {"taxid": "1", "hosts": ["human"]},
+                    {"taxid": "1", "hosts": ["human", "vertebrate"]},
+                ],
+                r"duplicate \(taxid, host\) pair",
+            ),
+        ],
+        ids=["empty_hosts_rejected", "duplicate_taxid_host_pair_rejected"],
+    )
+    def test_rejects_suspect_entries(
+        self,
+        tmp_path: Path,
+        overrides: list[dict],
+        expected_match: str,
+    ) -> None:
+        path = tmp_path / "overrides.json"
+        path.write_text(json.dumps({"overrides": overrides}))
+        with pytest.raises(ValueError, match=expected_match):
+            load_host_overrides(path)
+
 
 # =======================================================================
 # Tests for mark_ancestor_infections

@@ -8,12 +8,13 @@
 import argparse
 import json
 import logging
-from collections import defaultdict
+from collections import Counter, defaultdict
 from datetime import UTC, datetime
 from logging import LogRecord
 from pathlib import Path
 from typing import cast, override
 
+import jsonschema
 import pandas as pd
 
 
@@ -287,22 +288,75 @@ def include_infections(statuses: pd.Series, include_taxids: list[str]) -> pd.Ser
     return statuses
 
 
+# JSON Schema for the host-infection overrides file. JSON Schema's `integer`
+# type excludes booleans (unlike Python's `isinstance(True, int)`), so bool
+# taxids are rejected automatically. `additionalProperties: true` keeps
+# entries forward-compatible with informational fields like `name` /
+# `rationale` that the seeded JSON uses for human readability.
+_OVERRIDES_SCHEMA: dict = {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "properties": {
+        "overrides": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "required": ["taxid", "hosts"],
+                "properties": {
+                    "taxid": {"type": ["string", "integer"]},
+                    "hosts": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "minItems": 1,  # empty hosts is a no-op typo
+                    },
+                },
+                "additionalProperties": True,
+            },
+        },
+    },
+    "additionalProperties": True,
+}
+
+
 def load_host_overrides(path: Path) -> dict[str, list[str]]:
     """
     Load the host-infection-overrides JSON file and return a mapping from
     host-group name to a list of viral taxids that should be force-included
     (i.e. marked MATCH) for that host group. See
-    ref/host-infection-overrides.json for the on-disk schema.
+    ref/host-infection-overrides.json for the on-disk shape, and
+    _OVERRIDES_SCHEMA below for the formal schema.
+
+    Raises ValueError if the file doesn't conform to _OVERRIDES_SCHEMA, or
+    if the same (taxid, host) pair appears in more than one entry (a
+    hand-edit slip the JSON Schema can't catch since it's cross-entry).
     """
     logger.info(f"Loading host-infection overrides from {path}.")
     with path.open() as f:
         data = json.load(f)
+    try:
+        jsonschema.validate(data, _OVERRIDES_SCHEMA)
+    except jsonschema.ValidationError as e:
+        loc = ".".join(str(p) for p in e.absolute_path) or "(root)"
+        raise ValueError(
+            f"Overrides JSON at {path} does not match schema: {e.message} (at {loc})."
+        ) from e
     entries = data.get("overrides", [])
     out: dict[str, list[str]] = defaultdict(list)
     for entry in entries:
         taxid = str(entry["taxid"])
         for host in entry["hosts"]:
             out[host].append(taxid)
+    duplicates = sorted(
+        p
+        for p, n in Counter(
+            (taxid, host) for host, taxids in out.items() for taxid in taxids
+        ).items()
+        if n > 1
+    )
+    if duplicates:
+        raise ValueError(
+            f"Overrides JSON at {path} contains duplicate (taxid, host) pair(s): {duplicates}."
+        )
     n_pairs = sum(len(v) for v in out.values())
     logger.info(
         f"\tLoaded {len(entries)} override entries covering {n_pairs} (taxid, host) pairs across {len(out)} host group(s)."
