@@ -1,5 +1,6 @@
 # v3.2.2.0-dev
 
+- Triage libgnutls30 CVE-2026-42009 (and the previously-ignored CVE-2026-3833 / -33845 / -33846 / -42010 / -42011 in the same family): patch by bumping `container-base-image` from `mambaorg/micromamba` on Debian bookworm to the Debian trixie digest, which carries DSA-6281-1 (fixes all six). Also drops the five now-stale `.trivyignore` entries.
 - Triage urllib3 CVE-2026-44431 / CVE-2026-44432: patch `multiqc` with an explicit `urllib3=2.7.0` pin; ignore on the four `awscli`-bearing containers, where the awscli feedstock caps urllib3 below 2.7.
 - Add Microviricetes (`10841`), Smacoviridae (`2169574`), and Picobirnaviridae (`585893`) to `viral_taxids_exclude_hard` in all three INDEX configs; these groups are routinely misflagged human-infecting by upstream Virus-Host-DB. Also fixes the `Malgrantaviricetes` → `Malgrandaviricetes` typo in the inline comment.
 - Speed up `CONCATENATE_GENOME_FASTA` by parallel-fetching staged genomes with `xargs -P` and bumping label from `single` to `xsmall`.
