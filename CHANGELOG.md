@@ -1,5 +1,6 @@
 # v3.2.2.0-dev
 
+- Add `bin/benchmark_index.py` for comparing two index releases (`--old`, `--new` accepting s3:// or local paths). Emits per-DB size deltas, genome add/drop/per-species counts, virus-taxonomy DB add/drop, per-host infection-status transition tables and per-taxon change lists, and a params diff; writes a top-line `summary.md` flagging shrunk DBs. Pure-function helpers (size diff, genome diff, taxonomy diff, status transitions/changes, params diff) are covered by `bin/test_benchmark_index.py`. Intended for use as a pre-rollout review checklist; the judgment-heavy parts (which demotions actually matter, which exclusions/overrides to add) remain manual.
 - Speed up `CONCATENATE_GENOME_FASTA` by parallel-fetching staged genomes with `xargs -P` and bumping label from `single` to `xsmall`.
 - Speed up `DOWNLOAD_VIRAL_GENOMES` by staging on local scratch and replacing per-file `find -exec mv` with batched `xargs mv`. Introduce a `use_scratch` label with a per-profile process selector in `configs/profiles.config` that enables scratch directories for profiles with Fusion enabled.
 - Rework `MAKE_VIRUS_GENOME_DB` to enumerate viral accessions up-front, filter by host-infection and assembly status, then fan out chunks to `DOWNLOAD_VIRAL_GENOMES` to evenly parallelize across the taxonomic tree.
