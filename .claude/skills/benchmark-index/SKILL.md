@@ -61,6 +61,8 @@ For the other hosts (`bird`, `mammal`, `primate`, `vertebrate`), the bar is lowe
 
 **Watch the `included_for_other_hosts` column** in each `species_transitions_<host>.tsv`. When this column is non-empty for an uncovered demotion, it means the taxid IS in `ref/host-infection-overrides.json` — just for different host(s) than the one demoting. summary.md surfaces the count as "N policy gap(s)" inline. This is a scope-of-override question: do we want the override to apply across the whole human-bearing taxonomic chain (human / primate / mammal / vertebrate), or only the hosts the entry explicitly lists? Flag the gap in the report but don't unilaterally recommend expanding scope — it's a policy call.
 
+**Heuristic for "bar for flagging" on non-human hosts**: by default, only single out by name uncovered transitions for `bird` / `mammal` / `primate` / `vertebrate` if either (a) the actionable count is materially larger than for `human` (rule of thumb: ≥5× the human count for the same direction), or (b) the names include a recognizable human/livestock pathogen (mention SARS-CoV-2 / influenza / hantavirus / orthopox / rabies / ebola / hepatitis / etc. → name it; if it's clearly an environmental / arthropod / non-mammalian-host virus → aggregate). When uncertain about a name, say "flag for scientist review" rather than recommending action — these columns matter less for human-surveillance reporting and the cost of a missed call is low.
+
 **`species_lost_all_genomes.tsv`** — species with `new_count=0` and `old_count>0`. For each in the top 10–20:
 - Is it a known human pathogen? If yes → real concern; recommend investigating whether a `download_virus_taxid` config change is needed.
 - Otherwise (smacovirus, environmental virus, etc.) → likely fine.
@@ -101,51 +103,95 @@ awk -F'\t' -v t=<taxid> '$1==t {print $1"\t"$2"\t"$6"\t"$8"\t"$9}' /tmp/vhdb-cur
 
 ### Step 4 — Produce the report
 
-Write a markdown report to `<outdir>/REVIEW.md` and surface it inline in the user-facing reply. Five sections, in order. **Lead with the headline number**: how many actionable rows are there?
+Write a markdown report to `<outdir>/REVIEW.md` (overwrite if it already exists — the script doesn't manage this file, so a stale copy from a previous skill run won't be touched without you doing it). Surface the report inline in the user-facing reply.
+
+**The report must be readable in isolation.** A colleague who hasn't seen this conversation, doesn't know the workflow's history, and isn't familiar with the override/exclude mechanisms should be able to read REVIEW.md cold and understand (a) what changed between indexes, (b) what to do about it. Concretely:
+
+- **Always include a "How to read this report" preamble** between the headline and Section 1, defining the three pieces of background a reader needs: the `infection_status_<host>` columns and what their values mean, the two override mechanisms (`viral_taxids_exclude_hard` and `ref/host-infection-overrides.json`), and the "covered" / "actionable" distinction the per-host table uses.
+- Don't reference PRs by number without explaining what they did.
+- Don't say things like "we already understood" or "the usual pattern" — say what the pattern is.
+- Prefer **tables** for per-DB sizes and per-host transition counts (much easier to scan than prose). Bold counts that require action.
+- Use the word **actionable** (or "needs review") rather than **uncovered** in prose, with one inline definition near first use. "Uncovered" reads like jargon to a fresh reader.
+
+Five sections, in order. **Lead with a one-paragraph headline**: is the index ready to promote, with what (if any) changes required? Make the headline meaningful when read alone.
 
 ```markdown
 # Index benchmark review: <OLD> → <NEW>
 
-**Headline**: <one-sentence summary, e.g. "Ready to promote — no uncovered
-human-infection demotions; 1 new bacteriophage false-positive to add to the
-exclude list" OR "3 known human pathogens lost their VHDB human-host
-annotation upstream — recommend adding overrides before promoting".>
+**Headline**: <one-paragraph summary that can be quoted on its own.
+"Ready to promote with one config tweak — add `38018` (Bacteriophage sp.)
+to the hard-exclude list. Everything else is either already covered by
+existing rules, a taxonomy rename rather than a real loss, or non-human
+drift with no surveillance impact." or similar.>
+
+---
+
+## How to read this report
+
+- **`infection_status_<host>` columns**: every viral taxon in the index
+  carries five columns (`human`, `primate`, `mammal`, `vertebrate`, `bird`)
+  saying whether the species infects that host. `1` = infects, `0` = does
+  not, `2` = unknown, `3` = likely. Values come from upstream Virus-Host-DB
+  (VHDB) and are recomputed each index build, so they drift between
+  releases as VHDB updates.
+- **Two workflow override mechanisms** correct known VHDB mis-annotations:
+  - `viral_taxids_exclude_hard` (in `configs/index.config`): a space-
+    separated list of taxids forced to status `0` for every host, along
+    with all their descendants. Used for whole families of known false
+    positives.
+  - `ref/host-infection-overrides.json`: `{taxid, hosts}` entries that
+    force status `1` for the listed hosts. Used for known human pathogens
+    that VHDB mis-classifies.
+- **"Covered" vs "actionable" transitions**: when a status flips between
+  the two indexes, the benchmark script checks whether one of the two
+  mechanisms above already explains the flip. If yes → covered (no action
+  needed; the workflow intentionally overrides VHDB). If no → actionable
+  (genuine, unmediated VHDB drift that a human should look at). Counts
+  in **bold** in the table below are actionable rows.
+
+---
 
 ## 1. Per-DB sizes
 
-[Bullet per DB that changed materially. Flag any that shrunk and give the
-known cause (e.g. assembly-status filter for virus-genomes-masked.fasta.gz).
-Reference sizes.tsv.]
+[Table with columns: DB, Old, New, Δ (absolute + percent), Notes.
+Use human-readable units (GB / MB / KB). Bold the Δ for any DB that
+shrunk. Inline one-line note per DB if it shrank (likely cause) or
+is new. Group byte-identical DBs into a single row to save space.]
 
 ## 2. Infection-status changes
 
-[Per-host bullets with: total transitions, uncovered counts, and the
-specific names for each uncovered species transition. Group as
-"Uncovered demotions to recommend overriding" and "Uncovered
-promotions to recommend excluding". Confirmed-covered counts get a
-one-line aggregate ("8 other 1→0 demotions all covered by existing
-Smacoviridae/Picobirnaviridae exclusions, no action needed").]
+[Open with the per-host table (Host, Total transitions, Actionable 1→0,
+Actionable 0→1, Policy gaps — all numeric). Bold the actionable
+counts. Then drill into each host with a non-zero actionable count by
+name; aggregate the covered counts in one line per host. Bigger bars
+for non-human hosts (per Step 2 heuristic).]
 
 ## 3. Lost virus genomes
 
-[Top-line: N genomes added, M removed, K species went to zero. List
-the top species-by-loss; flag any that are known human pathogens
-(and note if the loss is likely a taxonomy rename — confirm or refute
-explicitly).]
+[Top-line: N added, M removed, K species went to zero. The K count
+should already be split into "likely renames" vs "true losses" by the
+script (see `species_lost_all_genomes.tsv`'s `likely_rename` column).
+Table the top true losses with the likely-rename column visible.
+Don't itemise the renames unless one is conspicuous.]
 
 ## 4. Other notable changes
 
-[Params diff highlights, new output files, schema changes.]
+[Pipeline version bump (call out the range explicitly), new/removed
+params, schema changes in any of the data files. Cosmetic path
+changes can be mentioned and dismissed in one sentence.]
 
 ## 5. Recommendations
 
 [Concrete config edits, keyed to findings:
-- "Add <taxid> (<name>) to ref/host-infection-overrides.json: <reason>"
-- "Add <taxid> (<name>) to viral_taxids_exclude_hard (in
-  configs/index.config + the two test variants): <reason>"
-- "Investigate workflow change <X>: <observation>"
-If no recommendations are warranted, say so explicitly ("No config
-changes needed — index is ready to promote.").]
+- "Add `<taxid>` (`<name>`) to `viral_taxids_exclude_hard` in
+  `configs/index.config`, `configs/index-for-run-test.config`, and
+  `tests/configs/index.config`: <reason>". Show the literal before/after
+  for the edit when small.
+- "Add `<taxid>` (`<name>`) to `ref/host-infection-overrides.json`:
+  <reason>".
+- Policy questions (e.g. override scope) stated as a question, not a
+  unilateral recommendation.
+If no config changes are needed, say so explicitly in section 5.]
 ```
 
 ### Step 5 — Hand off

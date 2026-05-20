@@ -13,6 +13,7 @@ import pandas as pd
 import pytest
 from benchmark_index import (
     annotate_changes_with_coverage,
+    annotate_lost_genomes_with_renames,
     build_parent_map,
     classify_coverage,
     compare_size_listings,
@@ -465,6 +466,82 @@ class TestCoverageClassification:
         )
         assert out["covered_by"].iloc[0] == "included"
         assert out["included_for_other_hosts"].iloc[0] == ""
+
+
+class TestLostGenomeRenameAnnotation:
+    """When NCBI / ICTV rename a species concept and re-key the genomes under
+    the new species, the OLD species_taxid keeps existing but points at a
+    different name — the genome count goes to 0 even though no genomes were
+    really culled."""
+
+    def test_flags_rename_when_taxid_name_changed(self) -> None:
+        lost = pd.DataFrame(
+            [
+                {
+                    "species_taxid": "100",
+                    "organism_name": "Old name",
+                    "old_count": 5,
+                    "new_count": 0,
+                    "delta": -5,
+                },
+                {
+                    "species_taxid": "200",
+                    "organism_name": "Same name",
+                    "old_count": 3,
+                    "new_count": 0,
+                    "delta": -3,
+                },
+            ]
+        )
+        new_db = pd.DataFrame(
+            [
+                {"taxid": "100", "name": "New rename"},
+                {"taxid": "200", "name": "Same name"},
+            ]
+        )
+        out = annotate_lost_genomes_with_renames(lost, new_db)
+        assert out.set_index("species_taxid")["likely_rename"]["100"] == "yes"
+        assert out.set_index("species_taxid")["likely_rename"]["200"] == "no"
+        assert (
+            out.set_index("species_taxid")["new_taxonomy_name"]["100"] == "New rename"
+        )
+
+    def test_marks_no_when_taxid_missing_from_new_taxonomy(self) -> None:
+        # A taxid that's gone from the new taxonomy DB entirely is a real loss
+        # candidate, not a rename — even though the script can't fully confirm
+        # it without checking the genome IDs.
+        lost = pd.DataFrame(
+            [
+                {
+                    "species_taxid": "999",
+                    "organism_name": "Vanished",
+                    "old_count": 2,
+                    "new_count": 0,
+                    "delta": -2,
+                }
+            ]
+        )
+        new_db = pd.DataFrame(columns=["taxid", "name"])
+        out = annotate_lost_genomes_with_renames(lost, new_db)
+        assert out["likely_rename"].iloc[0] == "no"
+        assert out["new_taxonomy_name"].iloc[0] == ""
+
+    def test_empty_input(self) -> None:
+        empty = pd.DataFrame(
+            columns=[
+                "species_taxid",
+                "organism_name",
+                "old_count",
+                "new_count",
+                "delta",
+            ]
+        )
+        out = annotate_lost_genomes_with_renames(
+            empty, pd.DataFrame(columns=["taxid", "name"])
+        )
+        assert "likely_rename" in out.columns
+        assert "new_taxonomy_name" in out.columns
+        assert out.empty
 
 
 if __name__ == "__main__":

@@ -234,6 +234,36 @@ def build_parent_map(new_db: pd.DataFrame) -> dict[str, str]:
     return dict(zip(new_db["taxid"], new_db["parent_taxid"], strict=False))
 
 
+def annotate_lost_genomes_with_renames(
+    lost: pd.DataFrame, new_db: pd.DataFrame
+) -> pd.DataFrame:
+    """For each species in the lost-all-genomes table, check whether its
+    species_taxid still exists in the new annotated virus DB and was renamed.
+    Mass NCBI / ICTV reorgs (e.g. binomial nomenclature for circoviruses,
+    cycloviruses, hantaviruses) re-key species concepts under different taxids,
+    leaving the OLD species_taxid pointing at a different species — the genomes
+    haven't been culled, they just moved.
+
+    Adds two columns:
+    - `new_taxonomy_name`: the name of this taxid in the new taxonomy DB (or "")
+    - `likely_rename`: "yes" if the new name differs from the old organism_name
+      (i.e. taxid was repurposed); "no" if the name is unchanged or the taxid
+      is gone from the new taxonomy DB.
+    """
+    out = lost.copy()
+    if out.empty:
+        out["new_taxonomy_name"] = pd.Series(dtype=str)
+        out["likely_rename"] = pd.Series(dtype=str)
+        return out
+    new_name_lookup = dict(zip(new_db["taxid"], new_db["name"], strict=False))
+    out["new_taxonomy_name"] = out["species_taxid"].map(new_name_lookup).fillna("")
+    out["likely_rename"] = (
+        (out["new_taxonomy_name"] != "")
+        & (out["new_taxonomy_name"] != out["organism_name"])
+    ).map({True: "yes", False: "no"})
+    return out
+
+
 def classify_coverage(
     taxid: str,
     parent_map: dict[str, str],
@@ -357,14 +387,15 @@ def write_summary_md(
     sizes: pd.DataFrame,
     added_genomes: pd.DataFrame,
     removed_genomes: pd.DataFrame,
-    species_delta: pd.DataFrame,
+    species_lost: pd.DataFrame,
     added_taxa: pd.DataFrame,
     removed_taxa: pd.DataFrame,
     transitions: dict[str, pd.DataFrame],
     per_host_changes: dict[str, pd.DataFrame],
     coverage_available: bool,
 ) -> None:
-    """Write a human-readable summary referencing the TSVs."""
+    """Write a human-readable summary referencing the TSVs. Designed so the
+    skill's REVIEW.md can quote it directly without re-doing the arithmetic."""
     lines = [
         "# Index benchmark report",
         "",
@@ -378,53 +409,81 @@ def write_summary_md(
     shrunk = sizes[sizes["delta_bytes"] < 0]
     grown = sizes[sizes["delta_bytes"] > 0]
     same = sizes[sizes["delta_bytes"] == 0]
-    lines.append(
-        f"- {len(shrunk)} entries shrunk, {len(grown)} grew, {len(same)} unchanged. See `sizes.tsv`."
-    )
-    if len(shrunk):
+    lines += [
+        f"{len(shrunk)} entries shrunk, {len(grown)} grew, {len(same)} unchanged. Full table in `sizes.tsv`; entries that changed by ≥1 byte:",
+        "",
+        "| DB | Old | New | Δ |",
+        "|---|---:|---:|---:|",
+    ]
+    for _, row in sizes[sizes["delta_bytes"] != 0].iterrows():
+        pct = "" if pd.isna(row["pct_change"]) else f" ({row['pct_change']:+.1f}%)"
         lines.append(
-            f"- **Shrunk DBs** (flag for review): {', '.join(shrunk['name'])}."
+            f"| `{row['name']}` | {_fmt_bytes(row['old_bytes'])} | {_fmt_bytes(row['new_bytes'])} | {_fmt_bytes(row['delta_bytes'], signed=True)}{pct} |"
         )
-    # Species that lost all their genomes (most likely-concerning genome diff)
-    species_zeroed = species_delta[
-        (species_delta["new_count"] == 0) & (species_delta["old_count"] > 0)
-    ].sort_values("old_count", ascending=False)
+    if len(shrunk):
+        lines += [
+            "",
+            f"**Shrunk DBs (flag for review)**: {', '.join(f'`{n}`' for n in shrunk['name'])}.",
+        ]
+    # Lost-genomes triage. Renames vs true losses computed by
+    # annotate_lost_genomes_with_renames upstream.
+    if "likely_rename" in species_lost.columns:
+        true_losses = species_lost[species_lost["likely_rename"] == "no"]
+        renames = species_lost[species_lost["likely_rename"] == "yes"]
+    else:
+        true_losses = species_lost
+        renames = species_lost.iloc[0:0]
     lines += [
         "",
         "## Virus genomes",
         "",
-        f"- {len(added_genomes)} added, {len(removed_genomes)} removed (by `genome_id`). See `genomes_added.tsv`, `genomes_removed.tsv`.",
-        f"- Per-species deltas in `genomes_by_species.tsv` ({len(species_delta)} species with any change).",
-        f"- **{len(species_zeroed)} species lost all their genomes** (new_count=0, old_count>0). See `species_lost_all_genomes.tsv` for the full list; sample by largest loss:",
+        f"- **{len(added_genomes):,} genomes added, {len(removed_genomes):,} removed** (by NCBI `genome_id`). See `genomes_added.tsv`, `genomes_removed.tsv`.",
+        f"- **{len(species_lost)} species had their genome count drop to zero in the new index.** {len(renames)} of those are likely NCBI/ICTV taxonomy renames (the same `species_taxid` still exists in the new taxonomy DB but now points to a different species concept — the genomes likely moved with the new species). {len(true_losses)} appear to be true losses (taxid kept the same name, or taxid disappeared from the new taxonomy DB).",
+        "",
+        "See `species_lost_all_genomes.tsv` (full list, with `likely_rename` and `new_taxonomy_name` columns to triage each row). Top true losses by genome count:",
+        "",
+        "| `species_taxid` | Organism | Genomes before | Genomes after |",
+        "|---|---|---:|---:|",
     ]
-    sample = species_zeroed.head(10)
-    for _, row in sample.iterrows():
+    for _, row in true_losses.head(10).iterrows():
         lines.append(
-            f"    - `{row['species_taxid']}` *{row['organism_name']}* ({row['old_count']} → 0)"
+            f"| `{row['species_taxid']}` | *{row['organism_name']}* | {row['old_count']} | 0 |"
         )
-    if len(species_zeroed) > len(sample):
-        lines.append(f"    - ...and {len(species_zeroed) - len(sample)} more.")
+    if len(true_losses) > 10:
+        lines.append(
+            f"_…and {len(true_losses) - 10} more true losses; see `species_lost_all_genomes.tsv`._"
+        )
     lines += [
         "",
         "## Virus taxonomy DB",
         "",
-        f"- {len(added_taxa)} taxa added, {len(removed_taxa)} removed. See `taxa_added.tsv`, `taxa_removed.tsv`.",
+        f"- {len(added_taxa):,} taxa added, {len(removed_taxa):,} removed. Driven by NCBI taxonomy churn. See `taxa_added.tsv`, `taxa_removed.tsv`.",
         "",
-        "## Infection-status changes (shared taxa)",
+        "## Infection-status annotation changes (shared taxa)",
         "",
     ]
     if coverage_available:
-        lines.append(
-            "Per-host counts below: total changes / species-rank 1→0 demotions (uncovered) / species-rank 0→1 promotions (uncovered). "
-            "'Uncovered' = neither the taxon nor any ancestor is matched by the current `viral_taxids_exclude_hard` or `ref/host-infection-overrides.json`. "
-            "Uncovered species are the actionable rows — see `species_transitions_<host>.tsv`."
-        )
+        lines += [
+            "Each viral taxon carries an `infection_status_<host>` column per host group (`human`, `primate`, `mammal`, `vertebrate`, `bird`); `1` = infecting, `0` = not, `2` = unknown, `3` = likely. The table below summarises how those annotations changed between indexes, after filtering to species-rank transitions only (which is where the actionable signal lives — strain-level transitions are mostly downstream propagation noise).",
+            "",
+            "**Already-handled** transitions are explained by an existing rule in `viral_taxids_exclude_hard` (forces the taxon and its descendants to `0`) or `ref/host-infection-overrides.json` (forces the listed taxa to `1`).  **Needs review** transitions aren't — those are the rows worth investigating.",
+            "",
+        ]
     else:
-        lines.append(
-            "Per-host counts below: total changes / species-rank 1→0 demotions / species-rank 0→1 promotions. "
-            "Pass `--repo-root <mgs-workflow>` to annotate which transitions are covered by existing exclude / override rules and surface only the uncovered (actionable) ones."
-        )
-    lines.append("")
+        lines += [
+            "Each viral taxon carries an `infection_status_<host>` column per host group; the table below summarises how those changed between indexes at species rank. Run with `--repo-root <mgs-workflow>` to annotate which transitions are already covered by existing exclude/override rules.",
+            "",
+        ]
+    if coverage_available:
+        lines += [
+            "| Host | Total transitions (all ranks) | Species 1→0 demotions (needs review) | Species 0→1 promotions (needs review) | Override policy gaps* |",
+            "|---|---:|---:|---:|---:|",
+        ]
+    else:
+        lines += [
+            "| Host | Total transitions (all ranks) | Species 1→0 demotions | Species 0→1 promotions |",
+            "|---|---:|---:|---:|",
+        ]
     for host, df in transitions.items():
         n_changes = int(df["count"].sum()) if not df.empty else 0
         changes_df = per_host_changes.get(host, pd.DataFrame())
@@ -439,35 +498,65 @@ def write_summary_md(
             & (changes_df["new_status"].astype(str) == "1")
         ]
         if coverage_available and not changes_df.empty:
-            dem_uncov = species_demotions[species_demotions["covered_by"] == ""]
-            pro_uncov = species_promotions[species_promotions["covered_by"] == ""]
-            # Of the uncovered demotions, how many are "policy gaps" — the taxid
-            # is overridden for some OTHER host but not this one?
-            dem_policy = dem_uncov[dem_uncov["included_for_other_hosts"] != ""]
-            policy_note = (
-                f" — incl. **{len(dem_policy)} policy gap{'' if len(dem_policy) == 1 else 's'}** "
-                f"(taxid is in `host_infection_overrides.json` for other host(s) but not this one)"
-                if len(dem_policy)
-                else ""
+            dem_actionable = species_demotions[species_demotions["covered_by"] == ""]
+            pro_actionable = species_promotions[species_promotions["covered_by"] == ""]
+            dem_policy = dem_actionable[
+                dem_actionable["included_for_other_hosts"] != ""
+            ]
+            lines.append(
+                f"| `{host}` | {n_changes:,} | **{len(dem_actionable)}** ({len(species_demotions)} total) | **{len(pro_actionable)}** ({len(species_promotions)} total) | {len(dem_policy)} |"
             )
-            tail = f" / **{len(dem_uncov)} uncovered 1→0** ({len(species_demotions)} total demotions){policy_note} / **{len(pro_uncov)} uncovered 0→1** ({len(species_promotions)} total promotions)"
         else:
-            tail = f" / {len(species_demotions)} species 1→0 / {len(species_promotions)} species 0→1"
+            lines.append(
+                f"| `{host}` | {n_changes:,} | {len(species_demotions)} | {len(species_promotions)} |"
+            )
+    if coverage_available:
+        lines += [
+            "",
+            "_*Override policy gap = an uncovered demotion whose `species_taxid` IS in `ref/host-infection-overrides.json`, but only for other hosts. The override entry's `hosts` list excludes the host that just demoted; either the entry needs widening or the demotion is acceptable for that host._",
+            "",
+            "Per-host actionable detail in `species_transitions_<host>.tsv` (species rank, with `covered_by` and `included_for_other_hosts` columns). For all-rank detail see `infection_status_changes_<host>.tsv`.",
+        ]
+    else:
         lines.append(
-            f"- `{host}`: {n_changes} total transitions{tail}. See `species_transitions_{host}.tsv` (species rank only) or `infection_status_changes_{host}.tsv` (all ranks)."
+            "Per-host detail in `species_transitions_<host>.tsv` and `infection_status_changes_<host>.tsv`."
         )
     lines += [
         "",
         "## Params diff",
         "",
-        "See `params_diff.txt`.",
+        "Diff of `output/input/index-params.json` between the two indexes is in `params_diff.txt`. Look for `kraken_db` URL changes (Kraken DB version bumps), new/removed `params.*` keys (workflow surface changes), and pipeline-version bumps.",
         "",
         "---",
         "",
-        "_Generated by `bin/benchmark_index.py`. Reviewers: focus on shrunk DBs, removed taxa, and (when run with `--repo-root`) **uncovered** species-rank 1→0 demotions and 0→1 promotions per host._",
+        "_Generated by `bin/benchmark_index.py`. To turn the per-host counts into a written review, walk the `.claude/skills/benchmark-index/` skill against this directory._",
         "",
     ]
     (out_dir / "summary.md").write_text("\n".join(lines))
+
+
+def _fmt_bytes(n: int | float, signed: bool = False) -> str:
+    """Format bytes as a human-readable string. 1234567890 → '1.15 GB'."""
+    if pd.isna(n):
+        return "—"
+    n = int(n)
+    sign = "+" if signed and n > 0 else ("-" if signed and n < 0 else "")
+    n = abs(n)
+    units = [
+        ("TB", 1 << 40),
+        ("GB", 1 << 30),
+        ("MB", 1 << 20),
+        ("KB", 1 << 10),
+        ("B", 1),
+    ]
+    for unit, threshold in units:
+        if n >= threshold or unit == "B":
+            return (
+                f"{sign}{n / threshold:.2f} {unit}"
+                if unit != "B"
+                else f"{sign}{n} {unit}"
+            )
+    return f"{sign}{n} B"
 
 
 ########
@@ -556,10 +645,10 @@ def main() -> None:
         added_g.to_csv(args.out / "genomes_added.tsv", sep="\t", index=False)
         removed_g.to_csv(args.out / "genomes_removed.tsv", sep="\t", index=False)
         by_species.to_csv(args.out / "genomes_by_species.tsv", sep="\t", index=False)
-        by_species[
-            (by_species["new_count"] == 0) & (by_species["old_count"] > 0)
-        ].sort_values("old_count", ascending=False).to_csv(
-            args.out / "species_lost_all_genomes.tsv", sep="\t", index=False
+        species_lost = (
+            by_species[(by_species["new_count"] == 0) & (by_species["old_count"] > 0)]
+            .sort_values("old_count", ascending=False)
+            .reset_index(drop=True)
         )
 
         # Taxonomy + infection-status diff
@@ -575,6 +664,13 @@ def main() -> None:
         added_t, removed_t = diff_taxonomy(old_db, new_db)
         added_t.to_csv(args.out / "taxa_added.tsv", sep="\t", index=False)
         removed_t.to_csv(args.out / "taxa_removed.tsv", sep="\t", index=False)
+
+        # Lost-genomes triage: distinguish true losses from NCBI/ICTV renames
+        # (taxid kept, name swapped → genomes moved to a different species concept)
+        species_lost = annotate_lost_genomes_with_renames(species_lost, new_db)
+        species_lost.to_csv(
+            args.out / "species_lost_all_genomes.tsv", sep="\t", index=False
+        )
 
         # Fetch params now so we can use new_params for coverage classification
         logger.info("Diffing index-params.json.")
@@ -644,7 +740,7 @@ def main() -> None:
         sizes,
         added_g,
         removed_g,
-        by_species,
+        species_lost,
         added_t,
         removed_t,
         transitions,
