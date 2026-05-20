@@ -1,5 +1,7 @@
 # v3.2.2.0-dev
 
+- Triage urllib3 CVE-2026-44431 / CVE-2026-44432: patch `multiqc` with an explicit `urllib3=2.7.0` pin; ignore on the four `awscli`-bearing containers, where the awscli feedstock caps urllib3 below 2.7.
+- Add Microviricetes (`10841`), Smacoviridae (`2169574`), and Picobirnaviridae (`585893`) to `viral_taxids_exclude_hard` in all three INDEX configs; these groups are routinely misflagged human-infecting by upstream Virus-Host-DB. Also fixes the `Malgrantaviricetes` → `Malgrandaviricetes` typo in the inline comment.
 - Speed up `ADD_GENBANK_GENOME_IDS` by parallel-fetching staged genomes with `xargs -P` and bumping label from `single` to `xsmall`. Inline Python is refactored into a dedicated `add_genbank_genome_ids.py` script (with pytest coverage).
 - Speed up `CONCATENATE_GENOME_FASTA` by parallel-fetching staged genomes with `xargs -P` and bumping label from `single` to `xsmall`.
 - Speed up `DOWNLOAD_VIRAL_GENOMES` by staging on local scratch and replacing per-file `find -exec mv` with batched `xargs mv`. Introduce a `use_scratch` label with a per-profile process selector in `configs/profiles.config` that enables scratch directories for profiles with Fusion enabled.
@@ -14,6 +16,7 @@
     - `NUCLEAZE` pipes gzipped inputs through pigz FIFOs instead of letting needletail decompress them single-threaded internally; ~22 % wall reduction on the process (Illumina-100M samples, 8-core sandbox). Input-side pigz is capped at 2 threads since pigz cannot extract more parallelism from an ordinary single-stream gz. Module test covers the gz-input FIFO path.
     - Removes the unused `BBDUK_HITS_INTERLEAVE` process and its test.
     - Internal channel/param renames: `bbduk_match`/`bbduk_trimmed`/`min_kmer_hits`/`bbduk_suffix` → `kmer_match`/`kmer_trimmed`/`minhits`/`kmer_suffix`.
+- Add `triage-trivy` skill (`.claude/skills/triage-trivy/`) for per-CVE triage of `scan-containers` CI failures, structured to make `.trivyignore` the harder path. `CLAUDE.md`'s CI-status section points at it.
 - Add `pigz` to the `rust-tools` container.
 - Add `-X 850` to all short-read bowtie2 invocations (viral and contaminant filtering) so that concordantly paired inserts up to 850 bp are detected, up from the bowtie2 default of 500 bp.
 - Raise the minimum read length in `FASTP` from the default 15 bp to 35 bp (`--length_required 35`). Reads shorter than 35 bp cannot be meaningfully classified by any downstream kmer-based tool (BBDuk k=27, Kraken2 k~35, Bowtie2 ~34 bp floor); previously these reads passed QC but were systematically unclassifiable, deflating apparent rRNA fractions and other composition estimates.
