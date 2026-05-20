@@ -351,23 +351,23 @@ def load_host_overrides(path: Path) -> dict[str, list[str]]:
     return dict(out)
 
 
-def _filter_host_include_mapping(
+def _validate_host_include_mapping(
     hard_include_mapping: dict[str, list[str]],
     host_mapping: dict[str, set[str]],
     known_taxids: set[str],
-) -> dict[str, list[str]]:
-    """Drop unknown hosts and unknown taxids from `hard_include_mapping`, warning on
-    each. Returns a mapping containing only known hosts and known taxids so the
-    per-host annotation loop in annotate_virus_db() can iterate without further
-    filtering. Dropping unknown taxids (rather than just warning) also prevents an
-    overrides-only-of-unknowns file from bypassing the no-direct-matches short-circuit
-    in check_infection() and tripping the UNRESOLVED assertion downstream."""
+) -> None:
+    """Raise ValueError if `hard_include_mapping` references any host name not in
+    `host_mapping` or any taxid not present in the virus DB. Override mistakes are
+    almost always typos in a hand-edited config and should fail loudly: a silent
+    no-op would hide the misconfiguration, and an overrides-only-of-unknowns file
+    would bypass the no-direct-matches short-circuit in check_infection() and trip
+    the UNRESOLVED assertion deep in mark_descendant_infections()."""
     # Unknown hosts (not present in host_mapping)
     unknown_hosts = set(hard_include_mapping) - set(host_mapping)
     if unknown_hosts:
-        logger.warning(
+        raise ValueError(
             f"Host-infection overrides reference unknown host group(s) "
-            f"{sorted(unknown_hosts)}; these will be ignored. Expected one of {sorted(host_mapping)}."
+            f"{sorted(unknown_hosts)}. Expected one of {sorted(host_mapping)}."
         )
     # Unknown taxids (not present in the virus DB)
     all_taxids = {t for taxids in hard_include_mapping.values() for t in taxids}
@@ -379,15 +379,10 @@ def _filter_host_include_mapping(
             if len(unknown_taxids) > len(sample)
             else ""
         )
-        logger.warning(
-            f"Host-infection overrides reference {len(unknown_taxids)} taxid(s) not present "
-            f"in the virus DB; these will be ignored: {sample}{more}."
+        raise ValueError(
+            f"Host-infection overrides reference {len(unknown_taxids)} taxid(s) "
+            f"not present in the virus DB: {sample}{more}."
         )
-    return {
-        host: [t for t in taxids if t in known_taxids]
-        for host, taxids in hard_include_mapping.items()
-        if host in host_mapping
-    }
 
 
 def mark_ancestor_infections_single(
@@ -662,8 +657,8 @@ def annotate_virus_db(
     """
     # Get viral taxonomic tree
     virus_tree = build_virus_tree(virus_db)
-    # Drop unknown hosts/taxids from the override mapping (with warnings).
-    hard_include_mapping = _filter_host_include_mapping(
+    # Reject overrides that reference unknown hosts or unknown taxids.
+    _validate_host_include_mapping(
         hard_include_mapping, host_mapping, set(virus_db["taxid"])
     )
     # Add annotations for each host group

@@ -1742,65 +1742,59 @@ class TestAnnotateVirusDbSingle:
 
 
 # =======================================================================
-# Tests for annotate_virus_db (override-warning paths)
+# Tests for annotate_virus_db (override-rejection paths)
 # =======================================================================
 
 
-class TestAnnotateVirusDbOverrideWarnings:
-    """Integration tests for the warning paths in annotate_virus_db()."""
+class TestAnnotateVirusDbOverrideRejections:
+    """annotate_virus_db() rejects overrides that reference unknowns."""
 
-    @pytest.fixture
-    def minimal_virus_db(self) -> pd.DataFrame:
-        """A 2-row virus DB with no VHDB hits (so the test depends only on overrides)."""
-        return pd.DataFrame({"taxid": ["1", "2"], "parent_taxid": ["0", "1"]})
-
-    def test_warns_on_unknown_host_in_overrides(
-        self, minimal_virus_db: pd.DataFrame, caplog: pytest.LogCaptureFixture
+    @pytest.mark.parametrize(
+        "hard_include_mapping, expected_fragments",
+        [
+            # Unknown host name (typo or missing entry in host_taxon_db).
+            (
+                {"human": ["1"], "alien": ["2"]},
+                ["unknown host group(s)", "alien"],
+            ),
+            # Unknown taxid (typo or NCBI deprecation).
+            (
+                {"human": ["1", "99999"]},
+                ["not present in the virus DB", "99999"],
+            ),
+            # Unknown-taxid error sample is truncated at 10 with "+N more"
+            # so a paste of a stale taxonomy doesn't produce a multi-kB log
+            # line. 50 unknown taxids → 10 in sample, 40 in "+N more".
+            (
+                {"human": [f"9{i:03d}" for i in range(50)]},
+                ["not present in the virus DB", "+40 more"],
+            ),
+        ],
+        ids=[
+            "unknown_host_name",
+            "unknown_taxid",
+            "many_unknown_taxids_truncated",
+        ],
+    )
+    def test_rejects_unknown_overrides(
+        self,
+        hard_include_mapping: dict[str, list[str]],
+        expected_fragments: list[str],
     ) -> None:
-        """Override referencing a host name not in host_mapping logs a warning."""
-        with caplog.at_level("WARNING"):
+        virus_db = pd.DataFrame({"taxid": ["1", "2"], "parent_taxid": ["0", "1"]})
+        with pytest.raises(ValueError) as excinfo:
             annotate_virus_db(
-                minimal_virus_db.copy(),
+                virus_db,
                 host_mapping={"human": {"9606"}},
                 virus_host_mapping={"1": {"9606"}},  # 1 direct match
                 hard_exclude_taxids=[],
-                hard_include_mapping={"human": ["1"], "alien": ["2"]},
+                hard_include_mapping=hard_include_mapping,
             )
-        msgs = [r.getMessage() for r in caplog.records if r.levelname == "WARNING"]
-        assert any("unknown host group(s)" in m and "alien" in m for m in msgs)
-
-    def test_warns_on_unknown_taxid_in_overrides(
-        self, minimal_virus_db: pd.DataFrame, caplog: pytest.LogCaptureFixture
-    ) -> None:
-        """Override referencing a taxid not in the virus DB logs a warning."""
-        with caplog.at_level("WARNING"):
-            annotate_virus_db(
-                minimal_virus_db.copy(),
-                host_mapping={"human": {"9606"}},
-                virus_host_mapping={"1": {"9606"}},
-                hard_exclude_taxids=[],
-                hard_include_mapping={"human": ["1", "99999"]},  # 99999 absent
+        msg = str(excinfo.value)
+        for fragment in expected_fragments:
+            assert fragment in msg, (
+                f"Expected {fragment!r} in error message; got: {msg!r}"
             )
-        msgs = [r.getMessage() for r in caplog.records if r.levelname == "WARNING"]
-        assert any("not present in the virus DB" in m and "99999" in m for m in msgs)
-
-    def test_truncates_unknown_taxid_warning_at_ten(
-        self, caplog: pytest.LogCaptureFixture
-    ) -> None:
-        """Unknown-taxid warning sample is capped at 10 entries with a +N more suffix."""
-        virus_db = pd.DataFrame({"taxid": ["1"], "parent_taxid": ["0"]})
-        with caplog.at_level("WARNING"):
-            annotate_virus_db(
-                virus_db.copy(),
-                host_mapping={"human": {"9606"}},
-                virus_host_mapping={"1": {"9606"}},
-                hard_exclude_taxids=[],
-                hard_include_mapping={"human": [f"9{i:03d}" for i in range(50)]},
-            )
-        msgs = [r.getMessage() for r in caplog.records if r.levelname == "WARNING"]
-        unk = next(m for m in msgs if "not present in the virus DB" in m)
-        assert "+40 more" in unk  # 50 - 10 = 40 truncated
-        assert unk.count("9") < 200  # log line is bounded — not a multi-kB dump
 
 
 # =======================================================================
