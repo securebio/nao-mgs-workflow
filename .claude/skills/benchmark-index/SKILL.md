@@ -150,7 +150,9 @@ changes needed — index is ready to promote.").]
 
 ### Step 5 — Hand off
 
-Print the report path and a 3-line summary to the user. Don't open a PR or commit anything — recommendations need human judgment before they're committed.
+Write `REVIEW.md` to `<outdir>/REVIEW.md` and print its path back to the user with a 3-line summary inline. The script does **not** clobber `REVIEW.md` on re-run (it only writes files it owns), but if you `rm -rf` the outdir between iterations of the skill — to force a fresh script run — your `REVIEW.md` goes with it. Don't `rm -rf` the outdir; let the script overwrite the TSVs in place.
+
+Don't open a PR or commit anything — recommendations need human judgment before they're committed.
 
 ## What not to do
 
