@@ -81,9 +81,11 @@ nextflow_process {
             // input wiring; pre- vs post-propagation behavior is covered by the
             // dedicated Python pytests (TestIncludeInfections, TestCheckInfection).
             def virus_tab_out = path(process.out.db[0]).csv(sep: "\t", decompress: true)
-            def override_row = virus_tab_out.rows.findIndexOf { it["taxid"] == "999002" }
+            // nf-test's CSV parser auto-detects numeric columns as Integer, so we
+            // stringify before comparing against the literal "999002" / "1".
+            def override_row = virus_tab_out.rows.findIndexOf { it["taxid"].toString() == "999002" }
             assert override_row >= 0
-            assert virus_tab_out.columns["infection_status_jabberwocks"][override_row] == "1"
+            assert virus_tab_out.columns["infection_status_jabberwocks"][override_row].toString() == "1"
         }
     }
 }
