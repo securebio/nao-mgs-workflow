@@ -19,6 +19,7 @@ nextflow_workflow {
                 input[2] = params.host_taxon_db
                 input[3] = params.virus_taxid
                 input[4] = params.viral_taxids_exclude_hard
+                input[5] = params.host_infection_overrides
                 '''
             }
         }

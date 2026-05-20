@@ -20,6 +20,7 @@ workflow MAKE_VIRUS_TAXONOMY_DB {
         host_taxon_db // TSV giving host taxa to annotate infection status
         virus_taxid // Top-level taxid for viruses as a whole
         hard_exclude_taxids // Virus taxids to hard-exclude from host annotation
+        host_infection_overrides // JSON of per-host taxid overrides forcing MATCH
     main:
         // Get NCBI taxonomy
         dl_ch = DOWNLOAD_NCBI_TAXONOMY(taxonomy_url)
@@ -32,7 +33,7 @@ workflow MAKE_VIRUS_TAXONOMY_DB {
         raised_ch = RAISE_TAXONOMY_RANKS(virus_ch, "species genus family order class phylum")
         // Annotate virus taxid DB with infection status for host taxa
         annot_ch = ANNOTATE_VIRUS_INFECTION(raised_ch, host_taxon_db, vh_ch,
-            ext_ch.nodes, hard_exclude_taxids)
+            ext_ch.nodes, hard_exclude_taxids, host_infection_overrides)
     emit:
         db = annot_ch
         nodes = ext_ch.nodes

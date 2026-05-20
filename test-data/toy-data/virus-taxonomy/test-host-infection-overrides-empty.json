@@ -1,0 +1,4 @@
+{
+    "description": "Empty overrides fixture for ANNOTATE_VIRUS_INFECTION nf-test; include behavior is exercised by the Python pytest.",
+    "overrides": []
+}

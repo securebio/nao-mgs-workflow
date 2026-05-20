@@ -1,0 +1,11 @@
+{
+    "description": "Non-empty overrides fixture for the ANNOTATE_VIRUS_INFECTION nf-test; forces 999002 to MATCH for jabberwocks.",
+    "overrides": [
+        {
+            "taxid": "999002",
+            "name": "Synthetic leaf taxon",
+            "rationale": "Smoke-test that path(host_infection_overrides) is plumbed end-to-end.",
+            "hosts": ["jabberwocks"]
+        }
+    ]
+}

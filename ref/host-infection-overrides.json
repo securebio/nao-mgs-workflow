@@ -1,0 +1,11 @@
+{
+    "description": "Host-infection overrides forcing MATCH (status=1) for taxa misannotated in Virus-Host-DB. See docs/annotation.md for semantics.",
+    "overrides": [
+        {
+            "taxid": "3048448",
+            "name": "Orthoflavivirus nilense (West Nile virus)",
+            "rationale": "Established human and vertebrate pathogen; VHDB does not list Homo sapiens as a host for the species taxid.",
+            "hosts": ["human", "vertebrate"]
+        }
+    ]
+}
