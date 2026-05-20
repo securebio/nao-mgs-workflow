@@ -1259,70 +1259,70 @@ class TestIncludeInfections:
     descendant-propagation coverage lives in TestCheckInfection.
     """
 
-    def test_marks_only_listed_taxids(self) -> None:
-        """Listed taxids become MATCH; descendants are not touched."""
-        statuses = pd.Series(
-            {
-                "1": INCONSISTENT,
-                "2": INCONSISTENT,
-                "3": UNCLEAR,
-                "4": CONSISTENT,
-                "5": UNRESOLVED,
-            }
-        )
-        result = include_infections(statuses.copy(), ["2"])
-        # Only the listed taxid flips; siblings/descendants keep their previous
-        # statuses. Descendant propagation is mark_descendant_infections's job.
-        assert result["1"] == INCONSISTENT  # ancestor, unchanged
-        assert result["2"] == MATCH  # listed, flipped
-        assert result["3"] == UNCLEAR  # sibling, unchanged
-        assert result["4"] == CONSISTENT  # would-be descendant, unchanged
-        assert result["5"] == UNRESOLVED  # would-be descendant, unchanged
-
-    def test_empty_include_list(self) -> None:
-        """Empty include list results in no changes."""
-        statuses = pd.Series({"1": INCONSISTENT, "2": CONSISTENT, "3": UNCLEAR})
-        result = include_infections(statuses.copy(), [])
-        pd.testing.assert_series_equal(result, statuses)
-
-    def test_marks_multiple_listed_taxids(self) -> None:
-        """Multiple listed taxids each flip independently; non-listed taxa untouched."""
-        statuses = pd.Series({"1": INCONSISTENT, "2": INCONSISTENT, "3": INCONSISTENT})
-        result = include_infections(statuses.copy(), ["1", "3"])
-        assert result["1"] == MATCH
-        assert result["2"] == INCONSISTENT  # not listed, unchanged
-        assert result["3"] == MATCH
-
-    def test_include_overwrites_existing_match(self) -> None:
-        """Include is idempotent on already-MATCH taxa."""
-        statuses = pd.Series({"1": MATCH, "2": MATCH})
-        result = include_infections(statuses.copy(), ["1"])
-        assert result["1"] == MATCH
-        assert result["2"] == MATCH
-
-    def test_descendants_picked_up_by_propagation_not_by_include(self) -> None:
-        """
-        include_infections marks only the target; mark_descendant_infections is what
-        actually propagates MATCH down to descendants. This staging test makes that
-        contract explicit: after include alone, descendants are still in their pre-
-        include state; only after the propagation step do they flip to MATCH. A
-        future change that re-bakes descendant expansion into include_infections
-        would make the stage-1 assertions fail.
-        """
-        virus_tree = {"X": {"Y"}, "Y": {"Z"}, "Z": set()}
-        statuses = pd.Series({"X": UNRESOLVED, "Y": UNRESOLVED, "Z": UNRESOLVED})
-
-        # Stage 1: include only flips the target; Y and Z are unchanged here.
-        after_include = include_infections(statuses.copy(), ["X"])
-        assert after_include["X"] == MATCH
-        assert after_include["Y"] == UNRESOLVED
-        assert after_include["Z"] == UNRESOLVED
-
-        # Stage 2: mark_descendant_infections is what carries MATCH down the tree.
-        after_propagation = mark_descendant_infections(virus_tree, after_include)
-        assert after_propagation["X"] == MATCH
-        assert after_propagation["Y"] == MATCH
-        assert after_propagation["Z"] == MATCH
+    @pytest.mark.parametrize(
+        "statuses, include_taxids, expected",
+        [
+            (
+                pd.Series(
+                    {
+                        "1": INCONSISTENT,
+                        "2": INCONSISTENT,
+                        "3": UNCLEAR,
+                        "4": CONSISTENT,
+                        "5": UNRESOLVED,
+                    }
+                ),
+                ["2"],
+                pd.Series(
+                    {
+                        "1": INCONSISTENT,
+                        "2": MATCH,
+                        "3": UNCLEAR,
+                        "4": CONSISTENT,
+                        "5": UNRESOLVED,
+                    }
+                ),
+            ),
+            (
+                pd.Series({"1": INCONSISTENT, "2": CONSISTENT, "3": UNCLEAR}),
+                [],
+                pd.Series({"1": INCONSISTENT, "2": CONSISTENT, "3": UNCLEAR}),
+            ),
+            (
+                pd.Series({"1": INCONSISTENT, "2": INCONSISTENT, "3": INCONSISTENT}),
+                ["1", "3"],
+                pd.Series({"1": MATCH, "2": INCONSISTENT, "3": MATCH}),
+            ),
+            (
+                pd.Series({"1": MATCH, "2": MATCH}),
+                ["1"],
+                pd.Series({"1": MATCH, "2": MATCH}),
+            ),
+            # Descendants are NOT touched by include — propagation is
+            # mark_descendant_infections's job. A future change that re-bakes
+            # descendant expansion into include_infections would fail here.
+            (
+                pd.Series({"X": UNRESOLVED, "Y": UNRESOLVED, "Z": UNRESOLVED}),
+                ["X"],
+                pd.Series({"X": MATCH, "Y": UNRESOLVED, "Z": UNRESOLVED}),
+            ),
+        ],
+        ids=[
+            "marks_only_listed_taxid",
+            "empty_include_list_is_noop",
+            "marks_multiple_listed_taxids",
+            "idempotent_on_existing_match",
+            "descendants_unchanged_by_include",
+        ],
+    )
+    def test_include_infections(
+        self,
+        statuses: pd.Series,
+        include_taxids: list[str],
+        expected: pd.Series,
+    ) -> None:
+        result = include_infections(statuses.copy(), include_taxids)
+        pd.testing.assert_series_equal(result, expected)
 
 
 # =======================================================================
@@ -1333,12 +1333,10 @@ class TestIncludeInfections:
 class TestLoadHostOverrides:
     """Test the load_host_overrides JSON-parsing helper."""
 
-    def test_loads_per_host_taxid_mapping(self, tmp_path: Path) -> None:
-        """A typical overrides file groups taxids by host."""
-        # Arrange
-        path = tmp_path / "overrides.json"
-        path.write_text(
-            json.dumps(
+    @pytest.mark.parametrize(
+        "json_content, expected",
+        [
+            (
                 {
                     "description": "test",
                     "overrides": [
@@ -1355,62 +1353,33 @@ class TestLoadHostOverrides:
                             "hosts": ["human"],
                         },
                     ],
-                }
-            )
-        )
-
-        # Act
-        result = load_host_overrides(path)
-
-        # Assert
-        assert result == {
-            "human": ["3048448", "11082"],
-            "vertebrate": ["3048448"],
-        }
-
-    def test_handles_empty_overrides(self, tmp_path: Path) -> None:
-        """An empty overrides list yields an empty mapping."""
-        # Arrange
+                },
+                {"human": ["3048448", "11082"], "vertebrate": ["3048448"]},
+            ),
+            ({"overrides": []}, {}),
+            ({"description": "no overrides yet"}, {}),
+            # Numeric taxids in JSON are coerced to str to match virus DB dtype.
+            (
+                {"overrides": [{"taxid": 3048448, "hosts": ["human"]}]},
+                {"human": ["3048448"]},
+            ),
+        ],
+        ids=[
+            "typical_per_host_grouping",
+            "empty_overrides_list",
+            "missing_overrides_key",
+            "int_taxid_coerced_to_str",
+        ],
+    )
+    def test_load_host_overrides(
+        self,
+        tmp_path: Path,
+        json_content: dict,
+        expected: dict[str, list[str]],
+    ) -> None:
         path = tmp_path / "overrides.json"
-        path.write_text(json.dumps({"overrides": []}))
-
-        # Act
-        result = load_host_overrides(path)
-
-        # Assert
-        assert result == {}
-
-    def test_handles_missing_overrides_key(self, tmp_path: Path) -> None:
-        """A file with no overrides key behaves like an empty overrides list."""
-        # Arrange
-        path = tmp_path / "overrides.json"
-        path.write_text(json.dumps({"description": "no overrides yet"}))
-
-        # Act
-        result = load_host_overrides(path)
-
-        # Assert
-        assert result == {}
-
-    def test_coerces_int_taxids_to_str(self, tmp_path: Path) -> None:
-        """Numeric taxids in JSON are coerced to strings to match virus DB dtype=str."""
-        # Arrange
-        path = tmp_path / "overrides.json"
-        path.write_text(
-            json.dumps(
-                {
-                    "overrides": [
-                        {"taxid": 3048448, "hosts": ["human"]},
-                    ]
-                }
-            )
-        )
-
-        # Act
-        result = load_host_overrides(path)
-
-        # Assert
-        assert result == {"human": ["3048448"]}
+        path.write_text(json.dumps(json_content))
+        assert load_host_overrides(path) == expected
 
 
 # =======================================================================
@@ -1577,89 +1546,56 @@ class TestGetVirusHostMapping:
 class TestCheckInfection:
     """Integration tests for check_infection covering the hard-include code path."""
 
-    def test_hard_include_overrides_short_circuit_when_no_direct_matches(self) -> None:
-        """
-        With zero direct VHDB matches AND a non-empty hard_include list, the function
-        must NOT short-circuit to all-INCONSISTENT — the manual include should land
-        on the include taxon (and its descendants) as MATCH.
-
-        Before this PR, check_infection returned `pd.Series(INCONSISTENT, ...)` when
-        no direct VHDB matches existed, which would silently swallow any hard-include
-        override. The added `and not hard_include_taxids` guard makes the override
-        survive the short-circuit; without it this test would see all-INCONSISTENT.
-
-        This is also the test that pins down end-to-end descendant propagation:
-        include_infections() now only marks the listed taxa (no expansion); descendants
-        ("3", "4" here) become MATCH solely because mark_descendant_infections() runs
-        afterwards. If that step were ever removed or reordered, "3" and "4" would
-        fall to INCONSISTENT (or UNRESOLVED) and this assertion would catch it.
-        """
-        # Arrange: a 4-node tree with no VHDB hits at all
-        virus_taxids = pd.Series(["1", "2", "3", "4"], index=["1", "2", "3", "4"])
-        virus_tree: dict[str, set[str]] = {
-            "1": {"2"},
-            "2": {"3", "4"},
-            "3": set(),
-            "4": set(),
-        }
-        host_taxids: set[str] = {"9606"}
-        virus_host_mapping: dict[str, set[str]] = {}  # empty VHDB -> all UNRESOLVED
-        hard_exclude: list[str] = []
-        hard_include = ["2"]
-
-        # Act
-        result = check_infection(
-            virus_taxids,
-            host_taxids,
-            virus_tree,
-            virus_host_mapping,
-            hard_exclude,
-            hard_include,
-        )
-
-        # Assert: include taxon and descendants get MATCH
-        assert result["2"] == MATCH
-        assert result["3"] == MATCH
-        assert result["4"] == MATCH
-        # And no taxon is INCONSISTENT (the short-circuit didn't fire).
-        # This pins down the `and not hard_include_taxids` guard in check_infection();
-        # removing that guard would make this assertion fail with an all-INCONSISTENT series.
-        assert (result != INCONSISTENT).all()
-
-    def test_no_direct_matches_and_empty_include_still_short_circuits(self) -> None:
-        """The short-circuit fast path is preserved when there are no includes."""
-        # Arrange
-        virus_taxids = pd.Series(["1", "2"], index=["1", "2"])
-        virus_tree: dict[str, set[str]] = {"1": {"2"}, "2": set()}
-        result = check_infection(
-            virus_taxids,
-            {"9606"},
-            virus_tree,
-            {},  # empty VHDB
-            [],
-            [],  # empty include
-        )
-
-        # Assert: every taxon is INCONSISTENT
-        assert (result == INCONSISTENT).all()
-
-    def test_include_wins_on_conflict_with_exclude(self) -> None:
-        """
-        When a taxid appears in both hard_exclude_taxids and hard_include_taxids,
-        the include must win — that's the core invariant of the override mechanism.
-        A future reordering of exclude_infections and include_infections in
-        check_infection() would silently break this; this test pins it down.
-        """
-        # Arrange: a single-node tree with one MATCH in VHDB so we get past the
-        # short-circuit even without the include guard. The conflicting taxon
-        # ("2") starts as INCONSISTENT (VHDB lists it but not against this host).
-        virus_taxids = pd.Series(["1", "2"], index=["1", "2"])
-        virus_tree: dict[str, set[str]] = {"1": set(), "2": set()}
-        virus_host_mapping = {"1": {"9606"}, "2": {"10090"}}  # 1 matches, 2 doesn't
-        hard_exclude = ["2"]
-        hard_include = ["2"]
-
-        # Act
+    @pytest.mark.parametrize(
+        "virus_taxids, virus_tree, virus_host_mapping, hard_exclude, hard_include, expected",
+        [
+            # hard_include keeps the short-circuit guard from swallowing the
+            # override when VHDB has zero direct matches; descendants ("3","4")
+            # pick up MATCH via mark_descendant_infections, and the ancestor
+            # ("1") via mark_ancestor_infections.
+            (
+                pd.Series(["1", "2", "3", "4"], index=["1", "2", "3", "4"]),
+                {"1": {"2"}, "2": {"3", "4"}, "3": set(), "4": set()},
+                {},
+                [],
+                ["2"],
+                {"1": MATCH, "2": MATCH, "3": MATCH, "4": MATCH},
+            ),
+            # No direct matches and no includes: short-circuit fast path fires.
+            (
+                pd.Series(["1", "2"], index=["1", "2"]),
+                {"1": {"2"}, "2": set()},
+                {},
+                [],
+                [],
+                {"1": INCONSISTENT, "2": INCONSISTENT},
+            ),
+            # When the same taxid is in both hard_exclude and hard_include,
+            # include wins — pins down the exclude→include ordering.
+            (
+                pd.Series(["1", "2"], index=["1", "2"]),
+                {"1": set(), "2": set()},
+                {"1": {"9606"}, "2": {"10090"}},
+                ["2"],
+                ["2"],
+                {"1": MATCH, "2": MATCH},
+            ),
+        ],
+        ids=[
+            "hard_include_survives_short_circuit",
+            "no_matches_no_include_short_circuits",
+            "include_wins_on_conflict_with_exclude",
+        ],
+    )
+    def test_check_infection(
+        self,
+        virus_taxids: pd.Series,
+        virus_tree: dict[str, set[str]],
+        virus_host_mapping: dict[str, set[str]],
+        hard_exclude: list[str],
+        hard_include: list[str],
+        expected: dict[str, int],
+    ) -> None:
         result = check_infection(
             virus_taxids,
             {"9606"},
@@ -1668,10 +1604,11 @@ class TestCheckInfection:
             hard_exclude,
             hard_include,
         )
-
-        # Assert: 2 ends up MATCH because include was applied after exclude
-        assert result["2"] == MATCH
-        assert result["1"] == MATCH  # unchanged from VHDB
+        pd.testing.assert_series_equal(
+            result.sort_index(),
+            pd.Series(expected).sort_index(),
+            check_names=False,
+        )
 
 
 # =======================================================================

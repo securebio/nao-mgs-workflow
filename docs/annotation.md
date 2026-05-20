@@ -25,9 +25,11 @@ config:
 ---
 flowchart TD
 AI{{Hard-included taxon for this host?}} -->|Yes| E((1))
-AI -->|No| AE{{Hard-excluded taxon (or descendant thereof)?}}
-AE -->|Yes| B((0))
-AE -->|No| D{{Marked as host-infecting by Virus-Host DB?}}
+AI -->|No| A{{Hard-excluded taxon?}}
+A -->|Yes| B((0))
+A --> |No| C{{Descended from a hard-excluded taxon?}}
+C -->|Yes| B
+C -->|No| D{{Marked as host-infecting by Virus-Host DB?}}
 D -->|Yes| E
 D -->|No| F{{Descended from a 1-marked taxon?}}
 F -->|Yes| E
