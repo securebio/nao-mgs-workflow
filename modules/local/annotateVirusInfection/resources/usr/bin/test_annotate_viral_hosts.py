@@ -1424,38 +1424,42 @@ class TestLoadHostOverrides:
         with pytest.raises(ValueError, match="does not match schema"):
             load_host_overrides(path)
 
-    def test_warns_on_empty_hosts(
-        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    @pytest.mark.parametrize(
+        "overrides, expected_result, expected_warning_fragments",
+        [
+            # hosts=[] is a no-op; warn to surface the likely typo.
+            (
+                [{"taxid": "1", "hosts": []}],
+                {},
+                ["empty 'hosts'", "no-op"],
+            ),
+            # Duplicate (taxid, host) across entries → dedup and warn.
+            (
+                [
+                    {"taxid": "1", "hosts": ["human"]},
+                    {"taxid": "1", "hosts": ["human", "vertebrate"]},
+                ],
+                {"human": ["1"], "vertebrate": ["1"]},
+                ["Duplicate", "human"],
+            ),
+        ],
+        ids=["empty_hosts_is_noop", "duplicate_taxid_host_pair"],
+    )
+    def test_warns_on_questionable_entries(
+        self,
+        tmp_path: Path,
+        caplog: pytest.LogCaptureFixture,
+        overrides: list[dict],
+        expected_result: dict[str, list[str]],
+        expected_warning_fragments: list[str],
     ) -> None:
-        """An entry with hosts=[] is a no-op; warn to surface the likely typo."""
         path = tmp_path / "overrides.json"
-        path.write_text(json.dumps({"overrides": [{"taxid": "1", "hosts": []}]}))
+        path.write_text(json.dumps({"overrides": overrides}))
         with caplog.at_level("WARNING"):
             result = load_host_overrides(path)
-        assert result == {}
+        assert result == expected_result
         msgs = [r.getMessage() for r in caplog.records if r.levelname == "WARNING"]
-        assert any("empty 'hosts'" in m and "no-op" in m for m in msgs)
-
-    def test_warns_on_duplicate_taxid_host_pair(
-        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
-    ) -> None:
-        """The same (taxid, host) pair across two entries gets de-duplicated with a warning."""
-        path = tmp_path / "overrides.json"
-        path.write_text(
-            json.dumps(
-                {
-                    "overrides": [
-                        {"taxid": "1", "hosts": ["human"]},
-                        {"taxid": "1", "hosts": ["human", "vertebrate"]},
-                    ]
-                }
-            )
-        )
-        with caplog.at_level("WARNING"):
-            result = load_host_overrides(path)
-        assert result == {"human": ["1"], "vertebrate": ["1"]}
-        msgs = [r.getMessage() for r in caplog.records if r.levelname == "WARNING"]
-        assert any("Duplicate" in m and "human" in m for m in msgs)
+        assert any(all(frag in m for frag in expected_warning_fragments) for m in msgs)
 
 
 # =======================================================================
