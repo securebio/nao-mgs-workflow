@@ -1413,6 +1413,81 @@ class TestLoadHostOverrides:
         # Assert
         assert result == {"human": ["3048448"]}
 
+    @pytest.mark.parametrize(
+        "malformed",
+        [
+            # Top-level shape violations
+            [{"taxid": "1", "hosts": ["human"]}],  # top-level list, not dict
+            {"overrides": {"taxid": "1", "hosts": ["human"]}},  # overrides is a dict
+            # Per-entry shape violations
+            {"overrides": ["not-a-dict"]},
+            {"overrides": [{"hosts": ["human"]}]},  # missing taxid
+            {"overrides": [{"taxid": "1"}]},  # missing hosts
+            {"overrides": [{"taxid": ["1"], "hosts": ["human"]}]},  # taxid is a list
+            {"overrides": [{"taxid": None, "hosts": ["human"]}]},
+            {"overrides": [{"taxid": {"x": "y"}, "hosts": ["human"]}]},
+            {"overrides": [{"taxid": True, "hosts": ["human"]}]},  # bool ⊂ int
+            {"overrides": [{"taxid": "1", "hosts": "human"}]},  # hosts is a str
+            {"overrides": [{"taxid": "1", "hosts": {"human": True}}]},
+            {"overrides": [{"taxid": "1", "hosts": [1, 2]}]},
+            {"overrides": [{"taxid": "1", "hosts": [None]}]},
+        ],
+        ids=[
+            "top-level-list",
+            "overrides-dict",
+            "entry-not-dict",
+            "missing-taxid",
+            "missing-hosts",
+            "taxid-list",
+            "taxid-none",
+            "taxid-dict",
+            "taxid-bool",
+            "hosts-str",
+            "hosts-dict",
+            "hosts-list-of-int",
+            "hosts-list-of-none",
+        ],
+    )
+    def test_rejects_malformed_schema(self, tmp_path: Path, malformed: object) -> None:
+        """Any JSON that doesn't match the documented schema raises ValueError."""
+        path = tmp_path / "overrides.json"
+        path.write_text(json.dumps(malformed))
+        with pytest.raises(ValueError, match="does not match schema"):
+            load_host_overrides(path)
+
+    def test_warns_on_empty_hosts(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """An entry with hosts=[] is a no-op; warn to surface the likely typo."""
+        path = tmp_path / "overrides.json"
+        path.write_text(json.dumps({"overrides": [{"taxid": "1", "hosts": []}]}))
+        with caplog.at_level("WARNING"):
+            result = load_host_overrides(path)
+        assert result == {}
+        msgs = [r.getMessage() for r in caplog.records if r.levelname == "WARNING"]
+        assert any("empty 'hosts'" in m and "no-op" in m for m in msgs)
+
+    def test_warns_on_duplicate_taxid_host_pair(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """The same (taxid, host) pair across two entries gets de-duplicated with a warning."""
+        path = tmp_path / "overrides.json"
+        path.write_text(
+            json.dumps(
+                {
+                    "overrides": [
+                        {"taxid": "1", "hosts": ["human"]},
+                        {"taxid": "1", "hosts": ["human", "vertebrate"]},
+                    ]
+                }
+            )
+        )
+        with caplog.at_level("WARNING"):
+            result = load_host_overrides(path)
+        assert result == {"human": ["1"], "vertebrate": ["1"]}
+        msgs = [r.getMessage() for r in caplog.records if r.levelname == "WARNING"]
+        assert any("Duplicate" in m and "human" in m for m in msgs)
+
 
 # =======================================================================
 # Tests for mark_ancestor_infections

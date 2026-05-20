@@ -287,21 +287,62 @@ def include_infections(statuses: pd.Series, include_taxids: list[str]) -> pd.Ser
     return statuses
 
 
+# Expected JSON shape, used both for runtime validation and for the
+# error-message hint shown when a user-edited file doesn't conform.
+_OVERRIDES_SCHEMA_HINT = (
+    "{'overrides': [{'taxid': str|int, 'hosts': [str, ...], ...}, ...]}"
+)
+
+
+def _override_entry_matches_schema(entry: object) -> bool:
+    """Schema check for a single overrides entry. See _OVERRIDES_SCHEMA_HINT."""
+    return (
+        isinstance(entry, dict)
+        and isinstance(entry.get("taxid"), (str, int))
+        and not isinstance(entry.get("taxid"), bool)  # bool ⊂ int in Python
+        and isinstance(entry.get("hosts"), list)
+        and all(isinstance(h, str) for h in entry["hosts"])
+    )
+
+
 def load_host_overrides(path: Path) -> dict[str, list[str]]:
     """
     Load the host-infection-overrides JSON file and return a mapping from
     host-group name to a list of viral taxids that should be force-included
     (i.e. marked MATCH) for that host group. See
     ref/host-infection-overrides.json for the on-disk schema.
+
+    Raises ValueError if the file doesn't conform to _OVERRIDES_SCHEMA_HINT.
     """
     logger.info(f"Loading host-infection overrides from {path}.")
     with path.open() as f:
         data = json.load(f)
+    # Top-level schema check
+    if not (isinstance(data, dict) and isinstance(data.get("overrides", []), list)):
+        raise ValueError(
+            f"Overrides JSON at {path} does not match schema {_OVERRIDES_SCHEMA_HINT}: {data!r}"
+        )
     entries = data.get("overrides", [])
     out: dict[str, list[str]] = defaultdict(list)
-    for entry in entries:
+    for i, entry in enumerate(entries):
+        # Per-entry schema check
+        if not _override_entry_matches_schema(entry):
+            raise ValueError(
+                f"Override entry at index {i} in {path} does not match schema {_OVERRIDES_SCHEMA_HINT}: {entry!r}"
+            )
         taxid = str(entry["taxid"])
-        for host in entry["hosts"]:
+        hosts: list[str] = entry["hosts"]
+        # Warn on no-op entries (empty hosts list) and on duplicate (taxid, host) pairs
+        if not hosts:
+            logger.warning(
+                f"Override entry at index {i} in {path} (taxid={taxid!r}) has an empty 'hosts' list; entry is a no-op."
+            )
+        for host in hosts:
+            if taxid in out[host]:
+                logger.warning(
+                    f"Duplicate (taxid={taxid!r}, host={host!r}) override in {path}; keeping the first occurrence."
+                )
+                continue
             out[host].append(taxid)
     n_pairs = sum(len(v) for v in out.values())
     logger.info(
