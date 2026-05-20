@@ -1,5 +1,6 @@
 # v3.2.2.0-dev
 
+- Triage urllib3 CVE-2026-44431 / CVE-2026-44432: patch `multiqc` with an explicit `urllib3=2.7.0` pin; ignore on the four `awscli`-bearing containers, where the awscli feedstock caps urllib3 below 2.7.
 - Add Microviricetes (`10841`), Smacoviridae (`2169574`), and Picobirnaviridae (`585893`) to `viral_taxids_exclude_hard` in all three INDEX configs; these groups are routinely misflagged human-infecting by upstream Virus-Host-DB. Also fixes the `Malgrantaviricetes` → `Malgrandaviricetes` typo in the inline comment.
 - Speed up `CONCATENATE_GENOME_FASTA` by parallel-fetching staged genomes with `xargs -P` and bumping label from `single` to `xsmall`.
 - Speed up `DOWNLOAD_VIRAL_GENOMES` by staging on local scratch and replacing per-file `find -exec mv` with batched `xargs mv`. Introduce a `use_scratch` label with a per-profile process selector in `configs/profiles.config` that enables scratch directories for profiles with Fusion enabled.

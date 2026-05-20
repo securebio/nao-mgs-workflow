@@ -148,3 +148,15 @@ CVE-2026-42010 exp:2026-06-30
 # Check for a Debian fix at:
 #   https://security-tracker.debian.org/tracker/CVE-2026-42011
 CVE-2026-42011 exp:2026-06-30
+
+# ── urllib3 2.6.3 transitive via awscli=2.34.9 in blast, bowtie2_samtools,
+# kraken2, minimap2_samtools ──
+# Our awscli usage is `update_blastdb.pl --source aws` and equivalents — HTTPS
+# to known NCBI/AWS endpoints, no proxy, no attacker-controlled compressed
+# streams; neither CVE is reachable. Fix exists in urllib3>=2.7.0 but every
+# current conda-forge awscli build pins urllib3<=2.6.3; re-eval when the
+# feedstock relaxes the cap.
+# CVE-2026-44431 (HIGH): cross-origin header leak in proxied low-level redirects.
+CVE-2026-44431 exp:2026-06-30
+# CVE-2026-44432 (HIGH): decompression-bomb safeguard bypass in streaming reads.
+CVE-2026-44432 exp:2026-06-30
