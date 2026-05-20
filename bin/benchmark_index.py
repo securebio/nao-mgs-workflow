@@ -26,7 +26,7 @@ import logging
 import shutil
 import subprocess
 import tempfile
-from collections import Counter
+from collections import Counter, defaultdict
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -229,6 +229,60 @@ def infection_status_changes(
     return changes.reset_index(drop=True)
 
 
+def build_parent_map(new_db: pd.DataFrame) -> dict[str, str]:
+    """taxid -> parent_taxid lookup from the new annotated virus DB."""
+    return dict(zip(new_db["taxid"], new_db["parent_taxid"], strict=False))
+
+
+def classify_coverage(
+    taxid: str,
+    parent_map: dict[str, str],
+    excluded_taxids: set[str],
+    included_taxids: dict[str, set[str]],
+    host: str,
+) -> tuple[str, str]:
+    """For one transition, walk the taxid up its lineage and return (covered_by,
+    rule_taxid) — "excluded"/"included"/"" — describing whether an existing
+    config rule already explains the observed status change.
+
+    `included_taxids` is host -> set of taxids that are hard-included for that host."""
+    host_includes = included_taxids.get(host, set())
+    cur: str | None = taxid
+    while cur:
+        if cur in excluded_taxids:
+            return "excluded", cur
+        if cur in host_includes:
+            return "included", cur
+        parent = parent_map.get(cur)
+        if parent is None or parent == cur:
+            break
+        cur = parent
+    return "", ""
+
+
+def annotate_changes_with_coverage(
+    changes: pd.DataFrame,
+    host: str,
+    parent_map: dict[str, str],
+    excluded_taxids: set[str],
+    included_taxids: dict[str, set[str]],
+) -> pd.DataFrame:
+    """Add `covered_by` (excluded | included | "") and `covered_rule_taxid` columns."""
+    out = changes.copy()
+    if out.empty:
+        out["covered_by"] = pd.Series(dtype=str)
+        out["covered_rule_taxid"] = pd.Series(dtype=str)
+        return out
+    coverage = out["taxid"].apply(
+        lambda t: classify_coverage(
+            t, parent_map, excluded_taxids, included_taxids, host
+        )
+    )
+    out["covered_by"] = coverage.apply(lambda x: x[0])
+    out["covered_rule_taxid"] = coverage.apply(lambda x: x[1])
+    return out
+
+
 def diff_params(old_params: dict, new_params: dict) -> str:
     """Return a unified diff between two pretty-printed params dicts."""
     old_lines = json.dumps(old_params, indent=2, sort_keys=True).splitlines(
@@ -263,6 +317,8 @@ def write_summary_md(
     added_taxa: pd.DataFrame,
     removed_taxa: pd.DataFrame,
     transitions: dict[str, pd.DataFrame],
+    per_host_changes: dict[str, pd.DataFrame],
+    coverage_available: bool,
 ) -> None:
     """Write a human-readable summary referencing the TSVs."""
     lines = [
@@ -285,12 +341,26 @@ def write_summary_md(
         lines.append(
             f"- **Shrunk DBs** (flag for review): {', '.join(shrunk['name'])}."
         )
+    # Species that lost all their genomes (most likely-concerning genome diff)
+    species_zeroed = species_delta[
+        (species_delta["new_count"] == 0) & (species_delta["old_count"] > 0)
+    ].sort_values("old_count", ascending=False)
     lines += [
         "",
         "## Virus genomes",
         "",
         f"- {len(added_genomes)} added, {len(removed_genomes)} removed (by `genome_id`). See `genomes_added.tsv`, `genomes_removed.tsv`.",
         f"- Per-species deltas in `genomes_by_species.tsv` ({len(species_delta)} species with any change).",
+        f"- **{len(species_zeroed)} species lost all their genomes** (new_count=0, old_count>0). See `species_lost_all_genomes.tsv` for the full list; sample by largest loss:",
+    ]
+    sample = species_zeroed.head(10)
+    for _, row in sample.iterrows():
+        lines.append(
+            f"    - `{row['species_taxid']}` *{row['organism_name']}* ({row['old_count']} → 0)"
+        )
+    if len(species_zeroed) > len(sample):
+        lines.append(f"    - ...and {len(species_zeroed) - len(sample)} more.")
+    lines += [
         "",
         "## Virus taxonomy DB",
         "",
@@ -299,10 +369,39 @@ def write_summary_md(
         "## Infection-status changes (shared taxa)",
         "",
     ]
+    if coverage_available:
+        lines.append(
+            "Per-host counts below: total changes / species-rank 1→0 demotions (uncovered) / species-rank 0→1 promotions (uncovered). "
+            "'Uncovered' = neither the taxon nor any ancestor is matched by the current `viral_taxids_exclude_hard` or `ref/host-infection-overrides.json`. "
+            "Uncovered species are the actionable rows — see `species_transitions_<host>.tsv`."
+        )
+    else:
+        lines.append(
+            "Per-host counts below: total changes / species-rank 1→0 demotions / species-rank 0→1 promotions. "
+            "Pass `--repo-root <mgs-workflow>` to annotate which transitions are covered by existing exclude / override rules and surface only the uncovered (actionable) ones."
+        )
+    lines.append("")
     for host, df in transitions.items():
         n_changes = int(df["count"].sum()) if not df.empty else 0
+        changes_df = per_host_changes.get(host, pd.DataFrame())
+        species_demotions = changes_df[
+            (changes_df["rank"] == "species")
+            & (changes_df["old_status"].astype(str) == "1")
+            & (changes_df["new_status"].astype(str) == "0")
+        ]
+        species_promotions = changes_df[
+            (changes_df["rank"] == "species")
+            & (changes_df["old_status"].astype(str) == "0")
+            & (changes_df["new_status"].astype(str) == "1")
+        ]
+        if coverage_available and not changes_df.empty:
+            dem_uncov = species_demotions[species_demotions["covered_by"] == ""]
+            pro_uncov = species_promotions[species_promotions["covered_by"] == ""]
+            tail = f" / **{len(dem_uncov)} uncovered 1→0** ({len(species_demotions)} total demotions) / **{len(pro_uncov)} uncovered 0→1** ({len(species_promotions)} total promotions)"
+        else:
+            tail = f" / {len(species_demotions)} species 1→0 / {len(species_promotions)} species 0→1"
         lines.append(
-            f"- `{host}`: {n_changes} taxa changed status. See `infection_status_transitions.tsv` and `infection_status_changes_{host}.tsv`."
+            f"- `{host}`: {n_changes} total transitions{tail}. See `species_transitions_{host}.tsv` (species rank only) or `infection_status_changes_{host}.tsv` (all ranks)."
         )
     lines += [
         "",
@@ -312,7 +411,7 @@ def write_summary_md(
         "",
         "---",
         "",
-        "_Generated by `bin/benchmark_index.py`. Reviewers: focus on shrunk DBs, removed taxa, and 1→0 transitions in the per-host infection-status change lists._",
+        "_Generated by `bin/benchmark_index.py`. Reviewers: focus on shrunk DBs, removed taxa, and (when run with `--repo-root`) **uncovered** species-rank 1→0 demotions and 0→1 promotions per host._",
         "",
     ]
     (out_dir / "summary.md").write_text("\n".join(lines))
@@ -343,7 +442,34 @@ def parse_arguments() -> argparse.Namespace:
         required=True,
         help="Output directory for TSVs and summary.md.",
     )
+    parser.add_argument(
+        "--repo-root",
+        type=Path,
+        default=None,
+        help="Path to a mgs-workflow checkout. When given, the script reads "
+        "ref/host-infection-overrides.json and uses the new index's "
+        "viral_taxids_exclude_hard to annotate per-species transitions with "
+        "which existing rule (if any) covers them, surfacing only the "
+        "uncovered actionable ones in summary.md.",
+    )
     return parser.parse_args()
+
+
+def load_existing_overrides(repo_root: Path) -> dict[str, set[str]]:
+    """Read ref/host-infection-overrides.json and return host -> set of taxids."""
+    path = repo_root / "ref" / "host-infection-overrides.json"
+    out: dict[str, set[str]] = defaultdict(set)
+    if not path.exists():
+        logger.warning(
+            f"No overrides file at {path}; coverage will treat all transitions as uncovered."
+        )
+        return dict(out)
+    data = json.loads(path.read_text())
+    for entry in data.get("overrides", []):
+        taxid = str(entry["taxid"])
+        for host in entry["hosts"]:
+            out[host].add(taxid)
+    return dict(out)
 
 
 def main() -> None:
@@ -377,6 +503,11 @@ def main() -> None:
         added_g.to_csv(args.out / "genomes_added.tsv", sep="\t", index=False)
         removed_g.to_csv(args.out / "genomes_removed.tsv", sep="\t", index=False)
         by_species.to_csv(args.out / "genomes_by_species.tsv", sep="\t", index=False)
+        by_species[
+            (by_species["new_count"] == 0) & (by_species["old_count"] > 0)
+        ].sort_values("old_count", ascending=False).to_csv(
+            args.out / "species_lost_all_genomes.tsv", sep="\t", index=False
+        )
 
         # Taxonomy + infection-status diff
         logger.info("Diffing virus taxonomy DB and infection-status annotations.")
@@ -392,7 +523,31 @@ def main() -> None:
         added_t.to_csv(args.out / "taxa_added.tsv", sep="\t", index=False)
         removed_t.to_csv(args.out / "taxa_removed.tsv", sep="\t", index=False)
 
+        # Fetch params now so we can use new_params for coverage classification
+        logger.info("Diffing index-params.json.")
+        old_params_path = fetch(args.old, "output/input/index-params.json", td / "old")
+        new_params_path = fetch(args.new, "output/input/index-params.json", td / "new")
+        old_params = json.loads(old_params_path.read_text())
+        new_params = json.loads(new_params_path.read_text())
+        (args.out / "params_diff.txt").write_text(diff_params(old_params, new_params))
+
+        # Coverage data: hard-excluded taxids come from the new index's params;
+        # hard-included taxids come from the repo's overrides file (if --repo-root
+        # was given). Without --repo-root we skip the annotation entirely.
+        coverage_available = args.repo_root is not None
+        if coverage_available:
+            included_taxids = load_existing_overrides(args.repo_root)
+            excluded_taxids = set(
+                new_params.get("viral_taxids_exclude_hard", "").split()
+            )
+            parent_map = build_parent_map(new_db)
+        else:
+            included_taxids = {}
+            excluded_taxids = set()
+            parent_map = {}
+
         transitions: dict[str, pd.DataFrame] = {}
+        per_host_changes: dict[str, pd.DataFrame] = {}
         host_cols = sorted(
             set(infection_status_columns(old_db))
             & set(infection_status_columns(new_db))
@@ -406,8 +561,18 @@ def main() -> None:
                 all_transitions.append(trans)
             transitions[host] = trans
             changes = infection_status_changes(old_db, new_db, col)
+            if coverage_available:
+                changes = annotate_changes_with_coverage(
+                    changes, host, parent_map, excluded_taxids, included_taxids
+                )
+            per_host_changes[host] = changes
             changes.to_csv(
                 args.out / f"infection_status_changes_{host}.tsv", sep="\t", index=False
+            )
+            # Species-rank-only file for the actionable subset
+            species_changes = changes[changes["rank"] == "species"]
+            species_changes.to_csv(
+                args.out / f"species_transitions_{host}.tsv", sep="\t", index=False
             )
         if all_transitions:
             pd.concat(all_transitions, ignore_index=True).to_csv(
@@ -417,14 +582,6 @@ def main() -> None:
             (args.out / "infection_status_transitions.tsv").write_text(
                 "host\told\tnew\tcount\n"
             )
-
-        # Params diff
-        logger.info("Diffing index-params.json.")
-        old_params_path = fetch(args.old, "output/input/index-params.json", td / "old")
-        new_params_path = fetch(args.new, "output/input/index-params.json", td / "new")
-        old_params = json.loads(old_params_path.read_text())
-        new_params = json.loads(new_params_path.read_text())
-        (args.out / "params_diff.txt").write_text(diff_params(old_params, new_params))
 
     # Summary
     write_summary_md(
@@ -438,6 +595,8 @@ def main() -> None:
         added_t,
         removed_t,
         transitions,
+        per_host_changes,
+        coverage_available,
     )
     logger.info(f"Done. Outputs in {args.out.resolve()}")
 

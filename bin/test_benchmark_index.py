@@ -12,6 +12,9 @@ real index releases; this file covers the deterministic diff logic only.
 import pandas as pd
 import pytest
 from benchmark_index import (
+    annotate_changes_with_coverage,
+    build_parent_map,
+    classify_coverage,
     compare_size_listings,
     diff_genome_metadata,
     diff_params,
@@ -258,6 +261,141 @@ class TestDiffParams:
         assert "old.tar.gz" in diff
         assert "new.tar.gz" in diff
         assert "added" in diff
+
+
+class TestCoverageClassification:
+    """A small DB: 1 (root) -> 2 (family Smacoviridae) -> 3 (genus) -> 4 (species);
+    1 -> 10 (species WNV-like, in overrides for "human")."""
+
+    @pytest.fixture
+    def parent_map(self) -> dict[str, str]:
+        return {"1": "1", "2": "1", "3": "2", "4": "3", "10": "1"}
+
+    @pytest.fixture
+    def excluded(self) -> set[str]:
+        return {"2"}  # Smacoviridae-equivalent
+
+    @pytest.fixture
+    def included(self) -> dict[str, set[str]]:
+        return {"human": {"10"}}
+
+    def test_classifies_excluded_ancestor(
+        self,
+        parent_map: dict[str, str],
+        excluded: set[str],
+        included: dict[str, set[str]],
+    ) -> None:
+        # taxid 4 is a descendant of excluded family 2
+        assert classify_coverage("4", parent_map, excluded, included, "human") == (
+            "excluded",
+            "2",
+        )
+
+    def test_classifies_included_self(
+        self,
+        parent_map: dict[str, str],
+        excluded: set[str],
+        included: dict[str, set[str]],
+    ) -> None:
+        assert classify_coverage("10", parent_map, excluded, included, "human") == (
+            "included",
+            "10",
+        )
+
+    def test_uncovered_returns_empty(
+        self,
+        parent_map: dict[str, str],
+        excluded: set[str],
+        included: dict[str, set[str]],
+    ) -> None:
+        # taxid 1 (root) is neither excluded nor in any host's includes
+        assert classify_coverage("1", parent_map, excluded, included, "human") == (
+            "",
+            "",
+        )
+
+    def test_excluded_wins_over_included_when_walking_up(
+        self,
+        parent_map: dict[str, str],
+        included: dict[str, set[str]],
+    ) -> None:
+        # If a closer ancestor is excluded, that's reported first (we walk from
+        # the leaf upward). This makes the coverage column show the *nearest*
+        # explanation rather than skipping past it.
+        excluded = {"3"}  # genus
+        # walk: 4 -> not in set; 3 -> excluded; never reaches 10
+        assert classify_coverage(
+            "4", {"4": "3", "3": "2", "2": "1", "10": "1"}, excluded, included, "human"
+        ) == ("excluded", "3")
+
+    def test_other_host_not_matched(
+        self,
+        parent_map: dict[str, str],
+        excluded: set[str],
+        included: dict[str, set[str]],
+    ) -> None:
+        # taxid 10 is included for "human" but not "vertebrate"
+        assert classify_coverage(
+            "10", parent_map, excluded, included, "vertebrate"
+        ) == (
+            "",
+            "",
+        )
+
+    def test_build_parent_map_from_db(self) -> None:
+        db = pd.DataFrame(
+            [
+                {"taxid": "1", "parent_taxid": "0"},
+                {"taxid": "2", "parent_taxid": "1"},
+            ]
+        )
+        assert build_parent_map(db) == {"1": "0", "2": "1"}
+
+    def test_annotate_changes_adds_coverage_columns(
+        self,
+        parent_map: dict[str, str],
+        excluded: set[str],
+        included: dict[str, set[str]],
+    ) -> None:
+        changes = pd.DataFrame(
+            [
+                {
+                    "taxid": "4",
+                    "name": "species under excluded family",
+                    "rank": "species",
+                    "old_status": "1",
+                    "new_status": "0",
+                },
+                {
+                    "taxid": "10",
+                    "name": "covered by include",
+                    "rank": "species",
+                    "old_status": "0",
+                    "new_status": "1",
+                },
+                {
+                    "taxid": "999",
+                    "name": "uncovered",
+                    "rank": "species",
+                    "old_status": "0",
+                    "new_status": "1",
+                },
+            ]
+        )
+        out = annotate_changes_with_coverage(
+            changes, "human", parent_map, excluded, included
+        )
+        assert list(out["covered_by"]) == ["excluded", "included", ""]
+        assert list(out["covered_rule_taxid"]) == ["2", "10", ""]
+
+    def test_annotate_empty_changes_still_has_columns(self) -> None:
+        empty = pd.DataFrame(
+            columns=["taxid", "name", "rank", "old_status", "new_status"]
+        )
+        out = annotate_changes_with_coverage(empty, "human", {}, set(), {})
+        assert "covered_by" in out.columns
+        assert "covered_rule_taxid" in out.columns
+        assert out.empty
 
 
 if __name__ == "__main__":
