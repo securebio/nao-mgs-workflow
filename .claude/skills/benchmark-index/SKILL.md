@@ -112,9 +112,11 @@ Copy `review-template.md` to `<outdir>/REVIEW.md` and fill it in using data from
 - **§3.2 / §3.3 discussion**: prose around the script-provided category breakdowns. Identify which losses / gains are surveillance-relevant; flag any species that warrant scientist review. If a meaningful shared-fate group sits in `other`, pull it out as its own bullet (don't leave generic "Other" bullets to hide real signal).
 - **Recommendations**: ordered list of concrete ship-or-regen decisions. Each entry: `**Action summary** (confidence)` followed by a brief bulleted justification. Each action is one of:
   - "**Ship as-is**" — explicitly accept a finding.
-  - "**Regenerate with [config change]**" — show the literal config diff that would fix the issue, and what it costs to regen.
+  - "**Regenerate with [config change]**" — show the literal config diff that would fix the issue.
   - "**Coordination**" (for `pipeline-min-index-version` bumps or downstream consumer compatibility — these are about rolling out RUN, not changing the index itself).
   - Confidence levels: `high` (clear evidence), `scientist judgement` (low-confidence sanity check), `policy` (decision required, no obvious right answer), `coordination`.
+
+  **Consolidate recommendations as one regen plan.** Regen cost is per-build (~2 hours), not per-fix. If ANY finding warrants regenerating, the marginal cost of folding in additional fixes is essentially zero — so any "ship as-is unless we're regenerating anyway" recommendations should flip to "regenerate with" once the overall decision is to regen. The headline should be a single ship-or-regen call with the full set of fixes the regen will include; the per-finding entries below it explain each fix's individual justification.
 
   **Never recommend "fix in the next build"**; if a fix is warranted, the action is regen now.
 - **Appendix**: copy the appendix tables from `summary.md` (A.1 through A.15). Trim to the most relevant if length is a concern, but never replace with a pointer to another file — the report must stand alone.
