@@ -881,103 +881,42 @@ class TestSummariseParamsChanges:
 class TestCategorizeLostGenomes:
     """The lost-gid categorizer assigns each removed genome_id to the most
     likely reason it was dropped. Categories are exclusive in priority order:
-    hard_excluded → infection_status_demotion → species_retired → other."""
+    hard_excluded → change_in_assigned_taxid → infection_status_change →
+    non_current_genome_version → other."""
 
     @pytest.fixture
     def base_removed(self) -> pd.DataFrame:
         return pd.DataFrame(
             [
+                # Old species 100 is hard-excluded via parent 50.
                 {
                     "genome_id": "G_HE",
                     "taxid": "100",
                     "species_taxid": "100",
                     "organism_name": "Excluded sp.",
                 },
+                # Old species 200 lost all its gids and was redistributed elsewhere.
+                {
+                    "genome_id": "G_CT",
+                    "taxid": "200",
+                    "species_taxid": "200",
+                    "organism_name": "Redistributed sp.",
+                },
+                # Old species 300 lost all its gids (no redistribution) — filter flipped.
                 {
                     "genome_id": "G_IS",
-                    "taxid": "200",
-                    "species_taxid": "200",
-                    "organism_name": "Demoted sp.",
-                },
-                {
-                    "genome_id": "G_RT",
                     "taxid": "300",
                     "species_taxid": "300",
-                    "organism_name": "Retired sp.",
+                    "organism_name": "Filter-flipped sp.",
                 },
+                # Old species 400 still has surviving gids in new metadata — gid-level loss only.
                 {
-                    "genome_id": "G_OT",
+                    "genome_id": "G_NC",
                     "taxid": "400",
                     "species_taxid": "400",
-                    "organism_name": "Other sp.",
+                    "organism_name": "Surviving sp.",
                 },
-            ]
-        )
-
-    def test_priority_classification(self, base_removed: pd.DataFrame) -> None:
-        # parent_map: 100 → 50 (excluded). 200, 400 → 1; 300 not in new_db.
-        new_db = pd.DataFrame(
-            [
-                {"taxid": "200", "name": "Demoted sp."},
-                {"taxid": "400", "name": "Other sp."},
-            ]
-        )
-        parent_map = {"100": "50", "200": "1", "400": "1"}
-        excluded = {"50"}
-        old_human = {"200": "1", "400": "0"}
-        new_human = {"200": "0", "400": "0"}
-        out = categorize_lost_genomes(
-            base_removed, new_db, parent_map, excluded, old_human, new_human
-        ).set_index("genome_id")
-        assert out.loc["G_HE", "reason"] == "hard_excluded"
-        assert out.loc["G_HE", "reason_taxid"] == "50"
-        assert out.loc["G_IS", "reason"] == "infection_status_demotion"
-        assert out.loc["G_RT", "reason"] == "species_retired"
-        assert out.loc["G_OT", "reason"] == "other"
-
-    def test_empty_input_has_columns(self) -> None:
-        empty = pd.DataFrame(
-            columns=["genome_id", "taxid", "species_taxid", "organism_name"]
-        )
-        out = categorize_lost_genomes(empty, pd.DataFrame(), {}, set(), {}, {})
-        assert "reason" in out.columns
-        assert "reason_taxid" in out.columns
-        assert out.empty
-
-
-class TestCategorizeGainedGenomes:
-    """The gained-gid categorizer assigns each new genome_id to the most likely
-    reason it was added. Categories in priority order: hard_included →
-    infection_status_promotion → newly_deposited_existing → species_new → other."""
-
-    @pytest.fixture
-    def base_added(self) -> pd.DataFrame:
-        return pd.DataFrame(
-            [
-                {
-                    "genome_id": "G_HI",
-                    "taxid": "100",
-                    "species_taxid": "100",
-                    "organism_name": "Included sp.",
-                },
-                {
-                    "genome_id": "G_IP",
-                    "taxid": "200",
-                    "species_taxid": "200",
-                    "organism_name": "Promoted sp.",
-                },
-                {
-                    "genome_id": "G_ND",
-                    "taxid": "300",
-                    "species_taxid": "300",
-                    "organism_name": "Already-infecting sp.",
-                },
-                {
-                    "genome_id": "G_SN",
-                    "taxid": "400",
-                    "species_taxid": "400",
-                    "organism_name": "Brand-new species",
-                },
+                # Old species 500 falls through to other.
                 {
                     "genome_id": "G_OT",
                     "taxid": "500",
@@ -987,27 +926,137 @@ class TestCategorizeGainedGenomes:
             ]
         )
 
+    def test_priority_classification(self, base_removed: pd.DataFrame) -> None:
+        parent_map = {"100": "50", "200": "1", "300": "1", "400": "1", "500": "1"}
+        excluded = {"50"}
+        species_redistributed = {"200"}
+        species_truly_lost = {"300"}
+        species_in_new_meta = {"400"}
+        out = categorize_lost_genomes(
+            base_removed,
+            parent_map,
+            excluded,
+            species_redistributed,
+            species_truly_lost,
+            species_in_new_meta,
+        ).set_index("genome_id")
+        assert out.loc["G_HE", "reason"] == "hard_excluded"
+        assert out.loc["G_HE", "reason_taxid"] == "50"
+        assert out.loc["G_CT", "reason"] == "change_in_assigned_taxid"
+        assert out.loc["G_IS", "reason"] == "infection_status_change"
+        assert out.loc["G_NC", "reason"] == "non_current_genome_version"
+        assert out.loc["G_OT", "reason"] == "other"
+
+    def test_hard_exclude_wins_over_redistribution(self) -> None:
+        # If a species is both excluded and redistributed, hard_excluded wins
+        # (higher priority).
+        removed = pd.DataFrame(
+            [
+                {
+                    "genome_id": "G1",
+                    "taxid": "100",
+                    "species_taxid": "100",
+                    "organism_name": "x",
+                }
+            ]
+        )
+        out = categorize_lost_genomes(
+            removed,
+            {"100": "50"},
+            {"50"},
+            {"100"},
+            set(),
+            set(),
+        )
+        assert out.iloc[0]["reason"] == "hard_excluded"
+
+    def test_empty_input_has_columns(self) -> None:
+        empty = pd.DataFrame(
+            columns=["genome_id", "taxid", "species_taxid", "organism_name"]
+        )
+        out = categorize_lost_genomes(empty, {}, set(), set(), set(), set())
+        assert "reason" in out.columns
+        assert "reason_taxid" in out.columns
+        assert out.empty
+
+
+class TestCategorizeGainedGenomes:
+    """The gained-gid categorizer assigns each new genome_id to the most likely
+    reason it was added. Categories in priority order: hard_included →
+    change_in_assigned_taxid → newly_deposited_existing → infection_status_change
+    → other."""
+
+    @pytest.fixture
+    def base_added(self) -> pd.DataFrame:
+        return pd.DataFrame(
+            [
+                # New species 100 hard-included via parent 50.
+                {
+                    "genome_id": "G_HI",
+                    "taxid": "100",
+                    "species_taxid": "100",
+                    "organism_name": "Included sp.",
+                },
+                # New species 200 is destination of an old-species redistribution.
+                {
+                    "genome_id": "G_CT",
+                    "taxid": "200",
+                    "species_taxid": "200",
+                    "organism_name": "Restructure target",
+                },
+                # New species 300 was already in old metadata.
+                {
+                    "genome_id": "G_ND",
+                    "taxid": "300",
+                    "species_taxid": "300",
+                    "organism_name": "Already-surveilled",
+                },
+                # New species 400 was in old_db but NOT in old_meta (filter flipped).
+                {
+                    "genome_id": "G_IS",
+                    "taxid": "400",
+                    "species_taxid": "400",
+                    "organism_name": "Newly-surveilled",
+                },
+                # New species 500 — brand new (not in old_db, not a restructure target).
+                {
+                    "genome_id": "G_OT",
+                    "taxid": "500",
+                    "species_taxid": "500",
+                    "organism_name": "Brand new",
+                },
+            ]
+        )
+
     def test_priority_classification(self, base_added: pd.DataFrame) -> None:
         parent_map = {"100": "50", "200": "1", "300": "1", "400": "1", "500": "1"}
         included = {"human": {"50"}}
-        old_human = {"200": "0", "300": "1", "500": "0"}
-        new_human = {"200": "1", "300": "1", "500": "0"}
-        old_taxids = {"100", "200", "300", "500"}  # 400 is new
+        species_in_old_meta = {"300"}
+        species_in_old_db = {
+            "300",
+            "400",
+        }  # 400 was in old taxonomy but not in metadata
+        species_redistribution_destinations = {"200"}
         out = categorize_gained_genomes(
-            base_added, parent_map, included, old_human, new_human, old_taxids
+            base_added,
+            parent_map,
+            included,
+            species_in_old_meta,
+            species_in_old_db,
+            species_redistribution_destinations,
         ).set_index("genome_id")
         assert out.loc["G_HI", "reason"] == "hard_included"
         assert out.loc["G_HI", "reason_taxid"] == "50"
-        assert out.loc["G_IP", "reason"] == "infection_status_promotion"
+        assert out.loc["G_CT", "reason"] == "change_in_assigned_taxid"
         assert out.loc["G_ND", "reason"] == "newly_deposited_existing"
-        assert out.loc["G_SN", "reason"] == "species_new"
+        assert out.loc["G_IS", "reason"] == "infection_status_change"
         assert out.loc["G_OT", "reason"] == "other"
 
     def test_empty_input_has_columns(self) -> None:
         empty = pd.DataFrame(
             columns=["genome_id", "taxid", "species_taxid", "organism_name"]
         )
-        out = categorize_gained_genomes(empty, {}, {}, {}, {}, set())
+        out = categorize_gained_genomes(empty, {}, {}, set(), set(), set())
         assert "reason" in out.columns
         assert out.empty
 
