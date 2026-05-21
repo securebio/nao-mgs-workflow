@@ -1119,6 +1119,10 @@ def write_summary_md(  # noqa: C901, PLR0912, PLR0915 - long but linear report w
             f"{len(removed_cols)} columns removed, {len(added_cols)} added "
             f"(drives most of that file's compressed-bytes change independent of row count)."
         )
+        if removed_cols:
+            lines.append(f"    - removed: {', '.join(f'`{c}`' for c in removed_cols)}")
+        if added_cols:
+            lines.append(f"    - added: {', '.join(f'`{c}`' for c in added_cols)}")
 
     # ---------- §3 Virus genomes
     lines += ["", "### 3. Virus genomes", "", "#### 3.1. Total", ""]
@@ -1141,7 +1145,7 @@ def write_summary_md(  # noqa: C901, PLR0912, PLR0915 - long but linear report w
     loss_labels = [
         ("hard_excluded", "Hard-excluded", "A.1"),
         ("infection_status_demotion", "Change in infection status (1→0 human)", "A.2"),
-        ("species_retired", "Change in assigned taxid (old species retired)", "A.3"),
+        ("species_retired", "Old species_taxid retired from NCBI taxonomy DB", "A.3"),
         ("other", "Other", "A.4"),
     ]
     gain_labels = [
@@ -1459,8 +1463,7 @@ def write_summary_md(  # noqa: C901, PLR0912, PLR0915 - long but linear report w
             )
         if len(subset) > head_n:
             body.append(
-                f"_…and {len(subset) - head_n:,} more; full list in `genomes_lost_categorized.tsv` /"
-                " `genomes_gained_categorized.tsv` in the output directory._"
+                f"_…and {len(subset) - head_n:,} more (truncated to top {head_n} for readability)._"
             )
         return body
 
@@ -1525,8 +1528,8 @@ def write_summary_md(  # noqa: C901, PLR0912, PLR0915 - long but linear report w
             )
         if len(species_gained) > head_n:
             lines.append(
-                f"_…and {len(species_gained) - head_n:,} more; see"
-                " `genomes_by_species.tsv` in the output directory._"
+                f"_…and {len(species_gained) - head_n:,} more (truncated to top"
+                f" {head_n} for readability)._"
             )
         lines.append("")
 
