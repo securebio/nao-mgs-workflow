@@ -32,6 +32,7 @@ import urllib.request
 from collections import Counter, defaultdict
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import cast
 
 import pandas as pd
 
@@ -353,9 +354,11 @@ def annotate_lost_genomes(
     # heuristic missed cases like Jingmen tick virus, where the same taxid is now
     # rank=isolate under a new species_taxid; that's redistribution, not a loss.
     out["likely_rename"] = out.apply(
-        lambda r: "yes"
-        if r["redistributed_genome_count"] >= (r["old_count"] + 1) // 2
-        else "no",
+        lambda r: (
+            "yes"
+            if r["redistributed_genome_count"] >= (r["old_count"] + 1) // 2
+            else "no"
+        ),
         axis=1,
     )
 
@@ -377,6 +380,146 @@ def annotate_lost_genomes(
         out["covered_by_hard_exclude"] = cov
     else:
         out["covered_by_hard_exclude"] = ""
+    return out
+
+
+def _ancestor_in(taxid: str, parent_map: dict[str, str], target: set[str]) -> str:
+    """Walk the lineage of `taxid` and return the first ancestor (or self) in
+    `target`, or "" if none. Stops at roots (parent missing or self-loop)."""
+    cur: str | None = taxid
+    while cur:
+        if cur in target:
+            return cur
+        parent = parent_map.get(cur)
+        if parent is None or parent == cur:
+            return ""
+        cur = parent
+    return ""
+
+
+def categorize_lost_genomes(
+    removed: pd.DataFrame,
+    new_db: pd.DataFrame,
+    parent_map: dict[str, str],
+    excluded_taxids: set[str],
+    old_infection_human: dict[str, str],
+    new_infection_human: dict[str, str],
+) -> pd.DataFrame:
+    """Classify each removed `genome_id` (gone from new metadata at the gid
+    level) by the most likely reason it was dropped. Categories, in priority
+    order:
+
+    - `hard_excluded`: gid's old species_taxid (or an ancestor) is now in
+      `viral_taxids_exclude_hard` in the new build — the new exclude rule
+      explains the loss.
+    - `infection_status_demotion`: gid's old species had
+      `infection_status_human = 1` and now has `0` in the new build (the
+      species lost its human-infecting annotation, often the proximate cause
+      for the gid being dropped from a surveillance-focused index).
+    - `species_retired`: old species_taxid is no longer in the new taxonomy DB
+      — the species concept was reorganized away and its gids weren't
+      reassigned.
+    - `other`: no rule applies; a genuine upstream drop.
+
+    Returns the input DataFrame with `reason` and `reason_taxid` columns
+    appended. `reason_taxid` is the lineage taxid that matched the rule
+    (the excluded ancestor for `hard_excluded`, the species_taxid for the
+    other categories, or "" for `other`)."""
+    out = removed.copy()
+    if out.empty:
+        out["reason"] = pd.Series(dtype=str)
+        out["reason_taxid"] = pd.Series(dtype=str)
+        return out
+    new_taxids: set[str] = set(new_db["taxid"]) if "taxid" in new_db.columns else set()
+    reasons: list[str] = []
+    reason_taxids: list[str] = []
+    for _, row in out.iterrows():
+        sp = str(row["species_taxid"])
+        hard = _ancestor_in(sp, parent_map, excluded_taxids)
+        if hard:
+            reasons.append("hard_excluded")
+            reason_taxids.append(hard)
+            continue
+        if (
+            old_infection_human.get(sp, "") == "1"
+            and new_infection_human.get(sp, "") == "0"
+        ):
+            reasons.append("infection_status_demotion")
+            reason_taxids.append(sp)
+            continue
+        if sp not in new_taxids:
+            reasons.append("species_retired")
+            reason_taxids.append(sp)
+            continue
+        reasons.append("other")
+        reason_taxids.append("")
+    out["reason"] = reasons
+    out["reason_taxid"] = reason_taxids
+    return out
+
+
+def categorize_gained_genomes(
+    added: pd.DataFrame,
+    parent_map: dict[str, str],
+    included_taxids: dict[str, set[str]],
+    old_infection_human: dict[str, str],
+    new_infection_human: dict[str, str],
+    old_taxids: set[str],
+) -> pd.DataFrame:
+    """Classify each newly-added `genome_id` by the most likely reason it was
+    added. Categories, in priority order:
+
+    - `hard_included`: gid's new species_taxid (or an ancestor) is in
+      `ref/host-infection-overrides.json` for any host — the include rule
+      explains why this gid lands in the surveillance set.
+    - `infection_status_promotion`: gid's new species had
+      `infection_status_human = 0` in old and now has `1` — a species that
+      was previously not surveilled is now flagged human-infecting.
+    - `newly_deposited_existing`: gid's new species already had
+      `infection_status_human = 1` in the old index (and still does). New
+      data for a known human-infecting species.
+    - `species_new`: gid's new species_taxid did not exist in the old
+      taxonomy DB — a brand-new species concept.
+    - `other`: gid belongs to a known non-human-infecting species; the new
+      record adds reference data without affecting the surveillance set.
+
+    Returns the input DataFrame with `reason` and `reason_taxid` columns
+    appended."""
+    out = added.copy()
+    if out.empty:
+        out["reason"] = pd.Series(dtype=str)
+        out["reason_taxid"] = pd.Series(dtype=str)
+        return out
+    all_included: set[str] = set()
+    for taxids in included_taxids.values():
+        all_included.update(taxids)
+    reasons: list[str] = []
+    reason_taxids: list[str] = []
+    for _, row in out.iterrows():
+        sp = str(row["species_taxid"])
+        hard = _ancestor_in(sp, parent_map, all_included)
+        if hard:
+            reasons.append("hard_included")
+            reason_taxids.append(hard)
+            continue
+        old_h = old_infection_human.get(sp, "")
+        new_h = new_infection_human.get(sp, "")
+        if old_h == "0" and new_h == "1":
+            reasons.append("infection_status_promotion")
+            reason_taxids.append(sp)
+            continue
+        if old_h == "1":
+            reasons.append("newly_deposited_existing")
+            reason_taxids.append(sp)
+            continue
+        if sp not in old_taxids:
+            reasons.append("species_new")
+            reason_taxids.append(sp)
+            continue
+        reasons.append("other")
+        reason_taxids.append("")
+    out["reason"] = reasons
+    out["reason_taxid"] = reason_taxids
     return out
 
 
@@ -508,16 +651,18 @@ def annotate_cross_host_actionables(
             continue
         df2 = df.copy()
 
-        def _cross_host(row, current_host=host):
+        def _cross_host(row: pd.Series, current_host: str = host) -> str:
             old_s, new_s = str(row["old_status"]), str(row["new_status"])
-            if (old_s, new_s) not in (("1", "0"), ("0", "1")) or row["covered_by"] != "":
+            if (old_s, new_s) not in (("1", "0"), ("0", "1")) or row[
+                "covered_by"
+            ] != "":
                 return ""
             others = actionable_hosts.get(
                 (row["taxid"], f"{old_s}->{new_s}"), set()
             ) - {current_host}
             return ",".join(sorted(others))
 
-        def _gloss(row):
+        def _gloss(row: pd.Series) -> str:
             old_s, new_s = str(row["old_status"]), str(row["new_status"])
             if (old_s, new_s) != ("1", "0") or row["covered_by"] != "":
                 return ""
@@ -547,9 +692,7 @@ def detect_bidirectional_flips(
     for host, df in per_host_changes.items():
         if df.empty or "covered_by" not in df.columns:
             continue
-        actionable = df[
-            (df["rank"] == "species") & (df["covered_by"] == "")
-        ]
+        actionable = df[(df["rank"] == "species") & (df["covered_by"] == "")]
         for _, row in actionable.iterrows():
             old_s, new_s = str(row["old_status"]), str(row["new_status"])
             if old_s == "0" and new_s == "1":
@@ -571,9 +714,7 @@ def detect_bidirectional_flips(
     return pd.DataFrame(rows, columns=["taxid", "name", "hosts_up", "hosts_down"])
 
 
-def summarise_params_changes(
-    old_params: dict, new_params: dict
-) -> pd.DataFrame:
+def summarise_params_changes(old_params: dict, new_params: dict) -> pd.DataFrame:
     """Top-level key-by-key change summary for `index-params.json`. Each row
     describes one key with kind ∈ {added, removed, changed} and short string
     representations of the values. Nested dict/list values are JSON-stringified
@@ -601,10 +742,7 @@ def _stringify_param(v: object, max_len: int = 120) -> str:
     """Compact one-line stringification of a param value for table display."""
     if v is None:
         return ""
-    if isinstance(v, (dict, list)):
-        s = json.dumps(v, sort_keys=True)
-    else:
-        s = str(v)
+    s = json.dumps(v, sort_keys=True) if isinstance(v, dict | list) else str(v)
     if len(s) > max_len:
         s = s[: max_len - 1] + "…"
     return s
@@ -664,8 +802,7 @@ def tsv_header(path: Path) -> list[str]:
     """Return the header columns of a (optionally gzipped) TSV."""
     opener = gzip.open if str(path).endswith(".gz") else open
     with opener(path, "rt") as f:  # type: ignore[arg-type]
-        header = f.readline().rstrip("\n").split("\t")
-    return header
+        return f.readline().rstrip("\n").split("\t")
 
 
 ######################
@@ -673,7 +810,11 @@ def tsv_header(path: Path) -> list[str]:
 ######################
 
 KRAKEN_BUCKET_LIST_CMD = [
-    "aws", "s3", "ls", "s3://genome-idx/kraken/", "--no-sign-request",
+    "aws",
+    "s3",
+    "ls",
+    "s3://genome-idx/kraken/",
+    "--no-sign-request",
 ]
 SILVA_FTP_INDEX = "https://ftp.arb-silva.de/"
 
@@ -690,7 +831,10 @@ def latest_kraken_release() -> tuple[str, str] | None:
     try:
         out = subprocess.run(
             KRAKEN_BUCKET_LIST_CMD,
-            check=True, capture_output=True, text=True, timeout=15,
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=15,
         ).stdout
     except (subprocess.SubprocessError, OSError):
         return None
@@ -748,19 +892,29 @@ def check_ref_staleness(new_params: dict) -> list[dict[str, str]]:
         cur_date = parse_kraken_url_date(kraken_url)
         latest = latest_kraken_release()
         if latest is None:
-            rows.append({
-                "ref": "kraken_db", "current": kraken_url,
-                "current_date": cur_date, "latest": "", "latest_date": "",
-                "status": "error",
-            })
+            rows.append(
+                {
+                    "ref": "kraken_db",
+                    "current": kraken_url,
+                    "current_date": cur_date,
+                    "latest": "",
+                    "latest_date": "",
+                    "status": "error",
+                }
+            )
         else:
             latest_date, latest_name = latest
             status = "current" if cur_date == latest_date else "stale"
-            rows.append({
-                "ref": "kraken_db", "current": kraken_url,
-                "current_date": cur_date, "latest": latest_name,
-                "latest_date": latest_date, "status": status,
-            })
+            rows.append(
+                {
+                    "ref": "kraken_db",
+                    "current": kraken_url,
+                    "current_date": cur_date,
+                    "latest": latest_name,
+                    "latest_date": latest_date,
+                    "status": status,
+                }
+            )
 
     for key in ("ssu_url", "lsu_url"):
         url = new_params.get(key, "")
@@ -769,25 +923,43 @@ def check_ref_staleness(new_params: dict) -> list[dict[str, str]]:
         cur_rel = parse_silva_url_release(url)
         latest_rel = latest_silva_release()
         if latest_rel is None:
-            rows.append({
-                "ref": key, "current": url, "current_date": cur_rel,
-                "latest": "", "latest_date": "", "status": "error",
-            })
+            rows.append(
+                {
+                    "ref": key,
+                    "current": url,
+                    "current_date": cur_rel,
+                    "latest": "",
+                    "latest_date": "",
+                    "status": "error",
+                }
+            )
         else:
             status = "current" if cur_rel == latest_rel else "stale"
-            rows.append({
-                "ref": key, "current": url, "current_date": cur_rel,
-                "latest": "", "latest_date": latest_rel, "status": status,
-            })
+            rows.append(
+                {
+                    "ref": key,
+                    "current": url,
+                    "current_date": cur_rel,
+                    "latest": "",
+                    "latest_date": latest_rel,
+                    "status": status,
+                }
+            )
 
     for key in ("human_url", "taxonomy_url", "virus_host_db_url"):
         url = new_params.get(key, "")
         if not url:
             continue
-        rows.append({
-            "ref": key, "current": url, "current_date": "", "latest": "",
-            "latest_date": "", "status": "unknown",
-        })
+        rows.append(
+            {
+                "ref": key,
+                "current": url,
+                "current_date": "",
+                "latest": "",
+                "latest_date": "",
+                "status": "unknown",
+            }
+        )
     return rows
 
 
@@ -796,7 +968,7 @@ def check_ref_staleness(new_params: dict) -> list[dict[str, str]]:
 ################
 
 
-def write_summary_md(
+def write_summary_md(  # noqa: C901, PLR0912, PLR0915 - long but linear report writer
     out_dir: Path,
     old: str,
     new: str,
@@ -804,9 +976,10 @@ def write_summary_md(
     content_rows: list[dict[str, object]],
     metadata_schema_diff: tuple[list[str], list[str]],
     staleness_rows: list[dict[str, str]],
-    added_genomes: pd.DataFrame,
-    removed_genomes: pd.DataFrame,
+    lost_categorized: pd.DataFrame,
+    gained_categorized: pd.DataFrame,
     species_lost: pd.DataFrame,
+    species_gained: pd.DataFrame,
     added_taxa: pd.DataFrame,
     removed_taxa: pd.DataFrame,
     transitions: dict[str, pd.DataFrame],
@@ -815,40 +988,51 @@ def write_summary_md(
     params_changes: pd.DataFrame,
     bidirectional_flips: pd.DataFrame,
 ) -> None:
-    """Write a self-contained summary.md. Embeds all data the reviewer needs;
-    does not direct the reader to other files (the per-host TSVs and others in
-    the output directory exist as scratch material for the script's own
-    consumption, not as report references)."""
-    lines = [
-        "# Index benchmark report",
+    """Write a self-contained `summary.md` following the structure of
+    `.claude/skills/benchmark-index/review-template.md`. Data-only; the
+    `Summary`, per-section `Findings:` bullets, `§3.2/§3.3` discussion, and
+    `Recommendations` sections carry script-generated factual bullets that
+    the reviewer expands into prose in `REVIEW.md`."""
+    # ---------- Header
+    lines: list[str] = [
+        "# `mgs-workflow` index benchmark report",
         "",
-        f"- **old**: `{old}`",
-        f"- **new**: `{new}`",
-        f"- generated: {datetime.now(UTC).isoformat(timespec='seconds')}",
+        f"- **Target index:** `{new}`",
+        f"- **Reference index:** `{old}`",
+        f"- **Report timestamp:** {datetime.now(UTC).strftime('%Y-%m-%d %H:%M')} UTC",
         "",
-        "## 1. Reference-DB staleness",
+        "---",
+        "",
+        "## Summary",
+        "",
+        "_To be filled in by the reviewer with a bullet-list of top-level findings"
+        " (drawing on the Findings sections below) and a **Recommendations** sub-list_"
+        " _restating the concrete actions from the Recommendations section. Don't"
+        " link out to other files or directory paths; the report should stand alone._",
+        "",
+        "---",
+        "",
+        "## Findings",
         "",
     ]
+
+    # ---------- §1 Staleness
+    lines += ["### 1. Staleness", ""]
     if staleness_rows:
-        any_stale = any(r["status"] == "stale" for r in staleness_rows)
         lines += [
-            "Freshness of each external reference URL pinned in the new index's "
-            "`index-params.json`. Active checks attempted for Kraken2 (`s3://genome-idx/kraken/`) "
-            "and SILVA (`https://ftp.arb-silva.de/`); other references are passive "
-            "(URL printed for manual verification — `taxonomy_url` and `virus_host_db_url` "
-            "always fetch the latest by design and have no embedded version).",
-            "",
-            "| Reference | Current | Latest available | Status |",
+            "| Reference | Version in target index | Latest available | Status |",
             "|---|---|---|---|",
         ]
         for r in staleness_rows:
-            cur_str = r["current"]
-            if r["current_date"]:
-                cur_str = f"`{Path(cur_str).name}` ({r['current_date']})"
-            else:
-                cur_str = f"`{cur_str}`"
+            cur_str = (
+                f"`{Path(r['current']).name}` ({r['current_date']})"
+                if r["current_date"]
+                else f"`{r['current']}`"
+            )
             if r["status"] == "stale":
-                latest_str = f"**`{r['latest'] or r['latest_date']}` ({r['latest_date']})**"
+                latest_str = (
+                    f"**`{r['latest'] or r['latest_date']}` ({r['latest_date']})**"
+                )
                 status_str = "**stale**"
             elif r["status"] == "current":
                 latest_str = f"`{r['latest'] or r['latest_date']}` ({r['latest_date']})"
@@ -860,205 +1044,232 @@ def write_summary_md(
                 latest_str = "_check failed_"
                 status_str = "error"
             lines.append(f"| `{r['ref']}` | {cur_str} | {latest_str} | {status_str} |")
-        if any_stale:
-            stale_refs = [r["ref"] for r in staleness_rows if r["status"] == "stale"]
-            lines += [
-                "",
-                f"**Action**: at least one reference is stale ({', '.join(f'`{n}`' for n in stale_refs)}). "
-                "Consider bumping before the next index build.",
-            ]
     else:
         lines.append("_No reference URLs detected in `index-params.json`._")
+    lines += ["", "**Findings:**", ""]
+    stale_refs = [r["ref"] for r in staleness_rows if r["status"] == "stale"]
+    if stale_refs:
+        lines.append(
+            f"- {len(stale_refs)} reference{'s' if len(stale_refs) != 1 else ''} stale: "
+            f"{', '.join(f'`{n}`' for n in stale_refs)}. Staleness applies to the URL pinned"
+            " for the *next* build, not this one — never a blocker for promoting an already-built"
+            " index. Recommend bumping in the next build (see Recommendations)."
+        )
+    else:
+        lines.append("- All actively-checked references are current.")
+    unknown_refs = [r["ref"] for r in staleness_rows if r["status"] == "unknown"]
+    if unknown_refs:
+        lines.append(
+            f"- Passive (no automated check): {', '.join(f'`{n}`' for n in unknown_refs)}."
+            " `taxonomy_url` and `virus_host_db_url` always fetch the latest by design."
+        )
 
-    lines += [
-        "",
-        "## 2. Per-DB sizes",
-        "",
-    ]
+    # ---------- §2 Database size
     shrunk = sizes[sizes["delta_bytes"] < 0]
     grown = sizes[sizes["delta_bytes"] > 0]
     same = sizes[sizes["delta_bytes"] == 0]
     lines += [
-        f"{len(shrunk)} entries shrunk, {len(grown)} grew, {len(same)} unchanged. "
-        "Entries that changed by ≥1 byte:",
         "",
-        "| DB | Old | New | Δ |",
+        "### 2. Database size",
+        "",
+        "| DB | Size in reference index | Size in target index | Δ |",
         "|---|---:|---:|---:|",
     ]
     for _, row in sizes[sizes["delta_bytes"] != 0].iterrows():
         pct = "" if pd.isna(row["pct_change"]) else f" ({row['pct_change']:+.1f}%)"
         lines.append(
-            f"| `{row['name']}` | {_fmt_bytes(row['old_bytes'])} | {_fmt_bytes(row['new_bytes'])} | {_fmt_bytes(row['delta_bytes'], signed=True)}{pct} |"
+            f"| `{row['name']}` | {_fmt_bytes(row['old_bytes'])} "
+            f"| {_fmt_bytes(row['new_bytes'])} "
+            f"| {_fmt_bytes(row['delta_bytes'], signed=True)}{pct} |"
         )
-
-    # Content metrics for FASTAs / metadata / annotated DB. Compressed file
-    # size is misleading for gzipped FASTA + TSV artifacts because gzip
-    # compressibility varies with content; report record counts and uncompressed
-    # bp / row counts so reviewers can see whether the underlying content
-    # actually grew or shrank.
+    lines += ["", "**Findings:**", ""]
+    lines.append(
+        f"- {len(shrunk)} entries shrank, {len(grown)} grew, {len(same)} unchanged."
+    )
+    # Content-vs-compressed callouts so reviewers don't mistake gzip artifacts for content loss.
     if content_rows:
-        lines += [
-            "",
-            "### 2.1 Content metrics for FASTA / TSV artifacts",
-            "",
-            "Compressed file size is a noisy proxy for content size on gzipped FASTAs/TSVs "
-            "— the same content can compress differently between releases. The table below "
-            "reports record counts and total bp/rows so you can distinguish genuine content "
-            "changes from compression artifacts.",
-            "",
-            "| Artifact | Metric | Old | New | Δ |",
-            "|---|---|---:|---:|---:|",
-        ]
-        for r in content_rows:
-            for metric, fmt in r.get("metrics", []):
-                old_v = r["old"].get(metric)
-                new_v = r["new"].get(metric)
-                if old_v is None and new_v is None:
-                    continue
-                old_v = old_v or 0
-                new_v = new_v or 0
+        for content in content_rows:
+            old_dict = cast(dict[str, int], content.get("old", {}))
+            new_dict = cast(dict[str, int], content.get("new", {}))
+            metrics_list = cast(list[tuple[str, object]], content.get("metrics", []))
+            for metric, _fmt in metrics_list:
+                old_v = old_dict.get(metric, 0) or 0
+                new_v = new_dict.get(metric, 0) or 0
                 delta = new_v - old_v
-                lines.append(
-                    f"| `{r['name']}` | {metric} | {fmt(old_v)} | {fmt(new_v)} | {fmt(delta, signed=True)} |"
-                )
-
-    # Metadata schema diff
+                if delta == 0:
+                    continue
+                name = content.get("name", "")
+                if metric == "records":
+                    lines.append(
+                        f"- `{name}` records: {old_v:,} → {new_v:,} ({delta:+,})"
+                    )
+                elif metric == "total_bp":
+                    lines.append(
+                        f"- `{name}` total bp: {_fmt_bp(old_v)} → {_fmt_bp(new_v)} "
+                        f"({_fmt_bp(delta, signed=True)})"
+                    )
+                elif metric == "rows":
+                    lines.append(
+                        f"- `{name}` row count: {old_v:,} → {new_v:,} ({delta:+,})"
+                    )
     removed_cols, added_cols = metadata_schema_diff
     if removed_cols or added_cols:
-        lines += [
-            "",
-            "### 2.2 Metadata schema change",
-            "",
-            "`virus-genome-metadata-gid.tsv.gz` column-set diff (drives most of the "
-            "compressed-bytes change for that file, independently of row count):",
-            "",
-        ]
-        if removed_cols:
-            lines.append(f"- **Removed ({len(removed_cols)})**: {', '.join(f'`{c}`' for c in removed_cols)}")
-        if added_cols:
-            lines.append(f"- **Added ({len(added_cols)})**: {', '.join(f'`{c}`' for c in added_cols)}")
+        lines.append(
+            f"- `virus-genome-metadata-gid.tsv.gz` schema changed: "
+            f"{len(removed_cols)} columns removed, {len(added_cols)} added "
+            f"(drives most of that file's compressed-bytes change independent of row count)."
+        )
 
-    # Lost-genomes section: split into excluded / redistributed / true-loss.
+    # ---------- §3 Virus genomes
+    lines += ["", "### 3. Virus genomes", "", "#### 3.1. Total", ""]
+
+    # Loss breakdown (template categories: hard_excluded, infection_status_demotion,
+    # species_retired, other) and gain breakdown (hard_included,
+    # infection_status_promotion, newly_deposited_existing, species_new, other).
+    loss_n = len(lost_categorized)
+    gain_n = len(gained_categorized)
+    loss_counts: dict[str, int] = (
+        {str(k): int(v) for k, v in lost_categorized["reason"].value_counts().items()}
+        if loss_n
+        else {}
+    )
+    gain_counts: dict[str, int] = (
+        {str(k): int(v) for k, v in gained_categorized["reason"].value_counts().items()}
+        if gain_n
+        else {}
+    )
+    loss_labels = [
+        ("hard_excluded", "Hard-excluded", "A.1"),
+        ("infection_status_demotion", "Change in infection status (1→0 human)", "A.2"),
+        ("species_retired", "Change in assigned taxid (old species retired)", "A.3"),
+        ("other", "Other", "A.4"),
+    ]
+    gain_labels = [
+        ("hard_included", "Hard-included", "A.5"),
+        (
+            "newly_deposited_existing",
+            "Newly deposited for existing included taxa",
+            "A.6",
+        ),
+        ("infection_status_promotion", "Change in infection status (0→1 human)", "A.7"),
+        ("species_new", "Change in assigned taxid (new species concept)", "A.8"),
+        ("other", "Other (non-human-infecting reference data)", "A.9"),
+    ]
+    lines.append(f"- **Genome IDs lost: {loss_n:,}**")
+    for key, label, appendix in loss_labels:
+        n = loss_counts.get(key, 0)
+        lines.append(f"    - {label}: {n:,} (see Appendix {appendix})")
+    lines.append(f"- **Genome IDs gained: {gain_n:,}**")
+    for key, label, appendix in gain_labels:
+        n = gain_counts.get(key, 0)
+        lines.append(f"    - {label}: {n:,} (see Appendix {appendix})")
+
+    # §3.2 Losses discussion (data + script-generated bullet starters; agent expands).
+    lines += ["", "#### 3.2. Losses", ""]
+    if loss_n == 0:
+        lines.append("- No genome IDs lost.")
+    else:
+        for key, label, _ in loss_labels:
+            n = loss_counts.get(key, 0)
+            if n == 0:
+                continue
+            lines.append(f"- **{label} ({n:,} gids)**")
+            sub = lost_categorized[lost_categorized["reason"] == key]
+            top_species = (
+                sub.groupby(["species_taxid", "organism_name"], dropna=False)
+                .size()
+                .sort_values(ascending=False)
+                .head(5)
+            )
+            # MultiIndex key from groupby on two cols is a 2-tuple; mypy
+            # types items() keys as bare Hashable, so iterate via the
+            # underlying records. "count" shadows namedtuple.count(), so
+            # the count column is renamed "n_gids".
+            for record in (
+                top_species.to_frame("n_gids").reset_index().itertuples(index=False)
+            ):
+                lines.append(
+                    f"    - `{record.species_taxid}` *{record.organism_name}*:"
+                    f" {int(cast(int, record.n_gids)):,} gids"
+                )
+        # Species not hard-excluded that nonetheless went to zero (the §3.2
+        # "discuss species that drop to zero but aren't hard-excluded" ask).
+        if not species_lost.empty and "covered_by_hard_exclude" in species_lost.columns:
+            uncovered_zeros = species_lost[
+                species_lost["covered_by_hard_exclude"] == ""
+            ]
+            if not uncovered_zeros.empty:
+                lines.append("")
+                lines.append(
+                    f"- {len(uncovered_zeros)} species dropped to zero genomes without"
+                    " being covered by a hard-exclude rule. Of these:"
+                )
+                if "likely_rename" in uncovered_zeros.columns:
+                    redistributed = uncovered_zeros[
+                        uncovered_zeros["likely_rename"] == "yes"
+                    ]
+                    true_losses = uncovered_zeros[
+                        uncovered_zeros["likely_rename"] == "no"
+                    ]
+                    lines.append(
+                        f"    - {len(redistributed)} redistributed (genome_ids moved to a"
+                        " different species_taxid via NCBI/ICTV taxonomy restructuring; the"
+                        " sequences remain in the index — see Appendix A.10)."
+                    )
+                    lines.append(
+                        f"    - {len(true_losses)} true losses (genome_ids absent from the new"
+                        " metadata entirely — see Appendix A.10)."
+                    )
+
+    # §3.3 Gains discussion.
+    lines += ["", "#### 3.3. Gains", ""]
+    if gain_n == 0:
+        lines.append("- No genome IDs gained.")
+    else:
+        for key, label, _ in gain_labels:
+            n = gain_counts.get(key, 0)
+            if n == 0:
+                continue
+            lines.append(f"- **{label} ({n:,} gids)**")
+            sub = gained_categorized[gained_categorized["reason"] == key]
+            top_species = (
+                sub.groupby(["species_taxid", "organism_name"], dropna=False)
+                .size()
+                .sort_values(ascending=False)
+                .head(5)
+            )
+            # MultiIndex key from groupby on two cols is a 2-tuple; mypy
+            # types items() keys as bare Hashable, so iterate via the
+            # underlying records. "count" shadows namedtuple.count(), so
+            # the count column is renamed "n_gids".
+            for record in (
+                top_species.to_frame("n_gids").reset_index().itertuples(index=False)
+            ):
+                lines.append(
+                    f"    - `{record.species_taxid}` *{record.organism_name}*:"
+                    f" {int(cast(int, record.n_gids)):,} gids"
+                )
+        if species_gained is not None and not species_gained.empty:
+            lines.append("")
+            lines.append(
+                f"- {len(species_gained)} species went from 0 → nonzero genomes between builds"
+                " — see Appendix A.11."
+            )
+
+    # ---------- §4 Infection status
     lines += [
         "",
-        "## 3. Virus genomes",
+        "### 4. Infection status",
         "",
-        f"- **{len(added_genomes):,} unique `genome_id`s added; {len(removed_genomes):,} truly removed.**",
-        f"- **{len(species_lost)} species had their genome count drop to zero** in the new index (grouped by `species_taxid`).",
+        "Gains or losses of viral species assigned to each host category, ignoring"
+        " hard inclusions and exclusions (i.e. only the **actionable** subset that"
+        " a reviewer should look at):",
+        "",
+        "| Host | Promotions (0→1, actionable) | Demotions (1→0, actionable) |",
+        "|---|---:|---:|",
     ]
-    if "covered_by_hard_exclude" in species_lost.columns:
-        excluded = species_lost[species_lost["covered_by_hard_exclude"] != ""]
-        not_excluded = species_lost[species_lost["covered_by_hard_exclude"] == ""]
-        if "likely_rename" in not_excluded.columns:
-            redistributed = not_excluded[not_excluded["likely_rename"] == "yes"]
-            true_losses = not_excluded[not_excluded["likely_rename"] == "no"]
-        else:
-            redistributed = not_excluded.iloc[0:0]
-            true_losses = not_excluded
-        lines.append(
-            f"  - **{len(excluded)} covered by hard-exclude rules** (no downstream effect — the workflow "
-            "forces these to status `0` regardless of genome count).",
-        )
-        lines.append(
-            f"  - **{len(redistributed)} redistributed**: the species' `genome_id`s appear in the new "
-            "metadata under a different `species_taxid` (typically driven by NCBI/ICTV taxonomy "
-            "restructuring; the genomes themselves remain in the index).",
-        )
-        lines.append(
-            f"  - **{len(true_losses)} true losses**: not covered by an exclude rule, "
-            "and the underlying `genome_id`s are absent from the new metadata.",
-        )
-    else:
-        excluded = species_lost.iloc[0:0]
-        redistributed = species_lost.iloc[0:0]
-        true_losses = species_lost
-
-    if len(true_losses):
-        lines += [
-            "",
-            "### 3.1 True losses (uncovered, no redistribution)",
-            "",
-            "| species_taxid | Organism | Genomes before | Truly lost gids | New taxonomy name |",
-            "|---|---|---:|---:|---|",
-        ]
-        head_n = 25
-        for _, row in true_losses.head(head_n).iterrows():
-            truly_lost = row.get("truly_lost_count", row["old_count"])
-            nt_name = row.get("new_taxonomy_name", "") or "—"
-            lines.append(
-                f"| `{row['species_taxid']}` | *{row['organism_name']}* | {row['old_count']} | {truly_lost} | {nt_name} |"
-            )
-        if len(true_losses) > head_n:
-            lines.append(
-                f"_…and {len(true_losses) - head_n} more true losses; full table in Appendix B._"
-            )
-
-    if len(redistributed):
-        lines += [
-            "",
-            "### 3.2 Redistributed (genomes moved to a different species_taxid)",
-            "",
-            "| Old species_taxid | Old name | → New species_taxid | New name | Redistributed gids |",
-            "|---|---|---|---|---:|",
-        ]
-        head_n = 20
-        for _, row in redistributed.head(head_n).iterrows():
-            redist_taxid = row.get("redistributed_to_species_taxid", "")
-            redist_name = row.get("redistributed_to_name", "")
-            lines.append(
-                f"| `{row['species_taxid']}` | *{row['organism_name']}* | `{redist_taxid}` | *{redist_name}* | {row.get('redistributed_genome_count', 0)} / {row['old_count']} |"
-            )
-        if len(redistributed) > head_n:
-            lines.append(f"_…and {len(redistributed) - head_n} more redistributions; see Appendix B._")
-
-    if len(excluded):
-        lines += [
-            "",
-            "### 3.3 Hard-excluded losses (no surveillance impact)",
-            "",
-            f"{len(excluded)} species in this bucket. Acknowledged here for completeness; "
-            "do not require review. Top entries:",
-            "",
-            "| species_taxid | Organism | Genomes before | Exclude rule taxid |",
-            "|---|---|---:|---|",
-        ]
-        head_n = 10
-        for _, row in excluded.head(head_n).iterrows():
-            rule = row.get("covered_by_hard_exclude", "")
-            lines.append(
-                f"| `{row['species_taxid']}` | *{row['organism_name']}* | {row['old_count']} | `{rule}` |"
-            )
-        if len(excluded) > head_n:
-            lines.append(f"_…and {len(excluded) - head_n} more excluded losses; see Appendix B._")
-
-    lines += [
-        "",
-        "## 4. Virus taxonomy DB",
-        "",
-        f"- **{len(added_taxa):,} taxa added, {len(removed_taxa):,} removed.** Routine NCBI taxonomy churn at this magnitude; not itemised.",
-        "",
-        "## 5. Infection-status changes (shared taxa)",
-        "",
-    ]
-    if coverage_available:
-        lines += [
-            "Each viral taxon carries an `infection_status_<host>` column per host group (`human`, `primate`, `mammal`, `vertebrate`, `bird`); `1` = infecting, `0` = not, `2` = unknown, `3` = likely. The table below summarises species-rank transitions only (strain-level changes are downstream propagation noise).",
-            "",
-            "**Covered** transitions are explained by an existing rule in `viral_taxids_exclude_hard` (forces the taxon and its descendants to `0`) or `ref/host-infection-overrides.json` (forces the listed taxa to `1`). **Actionable** (needs review) transitions aren't.",
-            "",
-            "| Host | Total transitions (all ranks) | Species 1→0 demotions: actionable / total | Species 0→1 promotions: actionable / total | Override policy gaps* |",
-            "|---|---:|---:|---:|---:|",
-        ]
-    else:
-        lines += [
-            "Each viral taxon carries an `infection_status_<host>` column per host group; the table below summarises species-rank changes. Run with `--repo-root <mgs-workflow>` to annotate which transitions are already covered by existing rules.",
-            "",
-            "| Host | Total transitions (all ranks) | Species 1→0 demotions | Species 0→1 promotions |",
-            "|---|---:|---:|---:|",
-        ]
     actionable_per_host: dict[str, dict[str, pd.DataFrame]] = {}
-    for host, df in transitions.items():
-        n_changes = int(df["count"].sum()) if not df.empty else 0
+    for host in transitions:
         changes_df = per_host_changes.get(host, pd.DataFrame())
         species_demotions = changes_df[
             (changes_df["rank"] == "species")
@@ -1073,161 +1284,217 @@ def write_summary_md(
         if coverage_available and not changes_df.empty:
             dem_actionable = species_demotions[species_demotions["covered_by"] == ""]
             pro_actionable = species_promotions[species_promotions["covered_by"] == ""]
-            dem_policy = dem_actionable[dem_actionable["included_for_other_hosts"] != ""]
+            dem_policy = dem_actionable[
+                dem_actionable["included_for_other_hosts"] != ""
+            ]
             actionable_per_host[host] = {
                 "demotions": dem_actionable,
                 "promotions": pro_actionable,
                 "policy_gaps": dem_policy,
             }
             lines.append(
-                f"| `{host}` | {n_changes:,} | **{len(dem_actionable)}** / {len(species_demotions)} | **{len(pro_actionable)}** / {len(species_promotions)} | {len(dem_policy)} |"
+                f"| `{host}` | {len(pro_actionable)} | {len(dem_actionable)} |"
             )
         else:
             lines.append(
-                f"| `{host}` | {n_changes:,} | {len(species_demotions)} | {len(species_promotions)} |"
+                f"| `{host}` | {len(species_promotions)} | {len(species_demotions)} |"
             )
-    if coverage_available:
-        lines += [
-            "",
-            "_*Override policy gap = an actionable demotion whose `species_taxid` IS in `ref/host-infection-overrides.json`, but only for other hosts. The override entry's `hosts` list excludes the host that just demoted; either the entry needs widening or the demotion is acceptable for that host._",
-        ]
-        # Bidirectional flips — same taxid actionable on hosts in BOTH directions.
-        # A fingerprint of upstream VHDB taxonomy churn (the species got new
-        # host annotations on some columns and lost them on others). A blanket
-        # hard-exclude would demote on every host including legitimate ones, so
-        # these warrant a distinct narrative.
-        if not bidirectional_flips.empty:
-            lines += [
-                "",
-                f"**Bidirectional flips ({len(bidirectional_flips)})** — same taxid actionable in *both* directions across different hosts (upstream VHDB taxonomy churn fingerprint; a single `viral_taxids_exclude_hard` entry would demote on every host including the legitimate ones):",
-                "",
-                "| taxid | Name | Promoted (0→1) on | Demoted (1→0) on |",
-                "|---|---|---|---|",
+    lines += ["", "**Findings:**", ""]
+    if not coverage_available:
+        lines.append(
+            "- Coverage annotation unavailable (re-run with `--repo-root <mgs-workflow>`"
+            " to identify which transitions are absorbed by existing rules)."
+        )
+    else:
+        # Build de-duplicated actionable taxid lists for the findings + appendix.
+        all_actionable_pro: dict[tuple[str, str], set[str]] = defaultdict(set)
+        all_actionable_dem: dict[tuple[str, str], set[str]] = defaultdict(set)
+        for host, buckets in actionable_per_host.items():
+            for _, row in buckets["promotions"].iterrows():
+                all_actionable_pro[(row["taxid"], row["name"])].add(host)
+            for _, row in buckets["demotions"].iterrows():
+                all_actionable_dem[(row["taxid"], row["name"])].add(host)
+        if all_actionable_pro:
+            lines.append(
+                f"- **{len(all_actionable_pro)} unique actionable promotion taxid(s)**"
+                f" across {sum(len(h) for h in all_actionable_pro.values())} host-rows."
+                " See Appendix A.12 for each taxid with its affected hosts."
+            )
+            for (taxid, name), hosts in sorted(
+                all_actionable_pro.items(), key=lambda x: (-len(x[1]), x[0])
+            ):
+                lines.append(
+                    f"    - `{taxid}` *{name}* — promoted on {','.join(sorted(hosts))}"
+                )
+        else:
+            lines.append("- No actionable promotions.")
+        if all_actionable_dem:
+            policy_gap_rows = [
+                (host, row)
+                for host, buckets in actionable_per_host.items()
+                for _, row in buckets["policy_gaps"].iterrows()
             ]
+            genome_loss_count = sum(
+                1
+                for _host, buckets in actionable_per_host.items()
+                for _, row in buckets["demotions"].iterrows()
+                if str(row.get("driven_by_genome_loss", "")) == "yes"
+            )
+            lines.append(
+                f"- **{len(all_actionable_dem)} unique actionable demotion taxid(s)**"
+                f" across {sum(len(h) for h in all_actionable_dem.values())} host-rows."
+                f" {genome_loss_count} of those host-rows are mechanically driven by §3.2"
+                " genome losses (no genomes → no ancestor-propagation evidence → demotion),"
+                " not by upstream VHDB drift; those need no override."
+            )
+            if policy_gap_rows:
+                lines.append(
+                    f"- **{len(policy_gap_rows)} override policy gap(s)** — demotion(s)"
+                    " whose species_taxid IS in `ref/host-infection-overrides.json` but"
+                    " only for *other* hosts. Widen the override entry's `hosts` list or"
+                    " accept the drift:"
+                )
+                for host, row in policy_gap_rows:
+                    lines.append(
+                        f"    - `{row['taxid']}` *{row['name']}* on `{host}`"
+                        f" (override covers: {row['included_for_other_hosts']})"
+                    )
+        else:
+            lines.append("- No actionable demotions.")
+        if not bidirectional_flips.empty:
+            lines.append(
+                f"- **{len(bidirectional_flips)} bidirectional flip(s)** — same taxid"
+                " actionable in both directions across different hosts (upstream VHDB"
+                " taxonomy churn fingerprint; a `viral_taxids_exclude_hard` entry would"
+                " demote on every host including the legitimate ones):"
+            )
             for _, row in bidirectional_flips.iterrows():
                 lines.append(
-                    f"| `{row['taxid']}` | *{row['name']}* | {row['hosts_up']} | {row['hosts_down']} |"
+                    f"    - `{row['taxid']}` *{row['name']}*: promoted on"
+                    f" {row['hosts_up']}, demoted on {row['hosts_down']}"
                 )
 
-        # Embed actionable rows inline so the report is self-contained.
-        # Demotion table carries `Override scope` (policy-gap indicator) and
-        # `Genome loss` (yes if §3.1 mechanically drove the demotion).
-        # Promotion table carries `Also actionable on` (cross-host
-        # propagation of the same promotion) for symmetric grouping.
-        for host, buckets in actionable_per_host.items():
-            dem = buckets["demotions"]
-            pro = buckets["promotions"]
-            gap = buckets["policy_gaps"]
-            if dem.empty and pro.empty:
-                continue
-            lines += ["", f"### 5.{list(actionable_per_host).index(host) + 1} `{host}` actionable transitions", ""]
-            if not dem.empty:
-                lines += [
-                    "**Demotions (1→0):**",
-                    "",
-                    "| taxid | Name | Override scope (other hosts) | Genome loss |",
-                    "|---|---|---|---|",
-                ]
-                for _, row in dem.iterrows():
-                    other = row.get("included_for_other_hosts", "") or "—"
-                    gloss = row.get("driven_by_genome_loss", "") or "—"
-                    lines.append(f"| `{row['taxid']}` | *{row['name']}* | {other} | {gloss} |")
-            if not pro.empty:
-                lines += [
-                    "",
-                    "**Promotions (0→1):**",
-                    "",
-                    "| taxid | Name | Also actionable on |",
-                    "|---|---|---|",
-                ]
-                for _, row in pro.iterrows():
-                    cross = row.get("cross_host_actionable_on", "") or "—"
-                    lines.append(f"| `{row['taxid']}` | *{row['name']}* | {cross} |")
-            if not gap.empty:
-                lines += [
-                    "",
-                    f"_(includes {len(gap)} override policy gap{'s' if len(gap) != 1 else ''} — listed in the demotions table; non-empty 'Override scope' column)_",
-                ]
-
-    # Params diff section — embed a key-by-key change table so the agent can
-    # write the "Other notable changes" narrative without reading the verbatim
-    # diff in Appendix C. Cosmetic-only path-prefix changes are normal here
-    # (e.g. base_dir always changes; container paths shift when the build host
-    # layout changes).
-    lines += [
-        "",
-        "## 6. `index-params.json` changes",
-        "",
-    ]
+    # ---------- §5 Other notable changes
+    lines += ["", "### 5. Other notable changes", ""]
     if params_changes.empty:
-        lines.append("_No top-level key changes._")
+        lines.append("- No top-level `index-params.json` key changes.")
     else:
         added = params_changes[params_changes["kind"] == "added"]
         removed = params_changes[params_changes["kind"] == "removed"]
         changed = params_changes[params_changes["kind"] == "changed"]
         lines.append(
-            f"{len(added)} added, {len(removed)} removed, {len(changed)} value-changed. "
-            "Appendix C carries the verbatim diff."
+            f"- **`index-params.json`**: {len(added)} keys added, {len(removed)} removed,"
+            f" {len(changed)} value-changed. See Appendix A.13 for the key-by-key table"
+            " and Appendix A.14 for the verbatim diff."
         )
-        lines += [
-            "",
-            "| Key | Kind | Old | New |",
-            "|---|---|---|---|",
-        ]
-        for _, row in params_changes.iterrows():
-            old_s = row["old"] or "—"
-            new_s = row["new"] or "—"
-            lines.append(
-                f"| `{row['key']}` | {row['kind']} | {old_s} | {new_s} |"
-            )
+        # Single-line callouts for high-signal params.
+        for _, row in changed.iterrows():
+            key = row["key"]
+            if key in {"trace_timestamp", "base_dir"}:
+                continue  # noise
+            if key.endswith("_url") or key == "kraken_db":
+                lines.append(
+                    f"    - `{key}` changed: `{Path(row['old']).name}` → "
+                    f"`{Path(row['new']).name}`"
+                )
+            elif key == "viral_taxids_exclude_hard":
+                old_tx = set(row["old"].split())
+                new_tx = set(row["new"].split())
+                add_tx = new_tx - old_tx
+                rm_tx = old_tx - new_tx
+                if add_tx:
+                    lines.append(
+                        f"    - `viral_taxids_exclude_hard` added: "
+                        f"{', '.join(f'`{t}`' for t in sorted(add_tx))}"
+                    )
+                if rm_tx:
+                    lines.append(
+                        f"    - `viral_taxids_exclude_hard` removed: "
+                        f"{', '.join(f'`{t}`' for t in sorted(rm_tx))}"
+                    )
+    lines.append(
+        f"- **Virus taxonomy DB**: {len(added_taxa):,} taxa added, {len(removed_taxa):,}"
+        " removed (routine NCBI/ICTV churn at this magnitude; not itemised)."
+    )
 
-    # Appendices: A) covered 0↔1 transitions per host (for audit of what the
-    # rules absorbed), B) full lost-genomes inventory, C) verbatim params diff.
-    # Strain-rank and 2↔3 transitions intentionally omitted — they're noise.
+    # ---------- Recommendations placeholder
     lines += [
         "",
         "---",
         "",
-        "## Appendix A — Covered 0↔1 species-rank transitions per host",
+        "## Recommendations",
         "",
-        "Species-rank transitions where the workflow's override or exclude rules "
-        "already absorbed the change (so they don't appear as actionable in §5). "
-        "Listed here for audit / spot-checking that the right rules fired.",
-        "",
+        "_To be filled in by the reviewer based on findings above. Use the template's"
+        " ordered list with each entry's confidence level (high / scientist judgement /"
+        " policy / next-build hygiene / coordination)._",
     ]
-    for host, df in per_host_changes.items():
-        if df.empty:
-            continue
-        covered_flips = df[
-            (df["rank"] == "species")
-            & (df.get("covered_by", "") != "")
-            & (
-                ((df["old_status"].astype(str) == "1") & (df["new_status"].astype(str) == "0"))
-                | ((df["old_status"].astype(str) == "0") & (df["new_status"].astype(str) == "1"))
-            )
-        ]
-        if covered_flips.empty:
-            continue
-        lines += [
-            f"### A.{list(per_host_changes).index(host) + 1} `{host}` ({len(covered_flips)} covered species transitions)",
-            "",
-            "| taxid | Name | Old → New | Covered by | Rule taxid |",
-            "|---|---|---|---|---|",
-        ]
-        for _, row in covered_flips.iterrows():
-            lines.append(
-                f"| `{row['taxid']}` | *{row['name']}* | {row['old_status']} → {row['new_status']} "
-                f"| {row.get('covered_by', '')} | `{row.get('covered_rule_taxid', '')}` |"
-            )
 
+    # ---------- Appendix
+    lines += ["", "---", "", "## Appendix", ""]
+
+    # A.1–A.4: lost gid categories. A.5–A.9: gained gid categories. A.10:
+    # full lost-species inventory. A.11: full gained-species inventory.
+    # A.12: per-host actionable transitions. A.13: params changes table.
+    # A.14: verbatim params diff.
+    def _gid_appendix(
+        label: str, reason_key: str, df: pd.DataFrame, head_n: int = 50
+    ) -> list[str]:
+        subset = df[df["reason"] == reason_key] if not df.empty else df
+        body: list[str] = [
+            f"### {label}",
+            "",
+            f"{len(subset):,} genome_ids.",
+            "",
+        ]
+        if len(subset) == 0:
+            return body
+        body += [
+            "| genome_id | species_taxid | Organism | reason_taxid |",
+            "|---|---|---|---|",
+        ]
+        for _, row in subset.head(head_n).iterrows():
+            body.append(
+                f"| `{row['genome_id']}` | `{row['species_taxid']}` "
+                f"| *{row['organism_name']}* | `{row.get('reason_taxid', '') or ''}` |"
+            )
+        if len(subset) > head_n:
+            body.append(
+                f"_…and {len(subset) - head_n:,} more; full list in `genomes_lost_categorized.tsv` /"
+                " `genomes_gained_categorized.tsv` in the output directory._"
+            )
+        return body
+
+    for label, key in [
+        ("A.1. Lost gids — hard-excluded", "hard_excluded"),
+        ("A.2. Lost gids — infection-status demotion", "infection_status_demotion"),
+        ("A.3. Lost gids — species retired", "species_retired"),
+        ("A.4. Lost gids — other", "other"),
+    ]:
+        lines += _gid_appendix(label, key, lost_categorized)
+        lines.append("")
+
+    for label, key in [
+        ("A.5. Gained gids — hard-included", "hard_included"),
+        (
+            "A.6. Gained gids — newly deposited for existing included taxa",
+            "newly_deposited_existing",
+        ),
+        ("A.7. Gained gids — infection-status promotion", "infection_status_promotion"),
+        ("A.8. Gained gids — new species concept", "species_new"),
+        ("A.9. Gained gids — other (non-human-infecting reference data)", "other"),
+    ]:
+        lines += _gid_appendix(label, key, gained_categorized)
+        lines.append("")
+
+    # A.10 — full lost-species inventory
     if len(species_lost) > 0:
         lines += [
-            "",
-            "## Appendix B — Full lost-genomes inventory",
+            "### A.10. Full lost-species inventory",
             "",
             f"All {len(species_lost)} species with new_count = 0 (sorted by old_count desc):",
             "",
-            "| species_taxid | Organism | Old | Redist gids | Truly lost | → Dest taxid | Dest name | Covered_by_hard_exclude |",
+            "| species_taxid | Organism | Old | Redist gids | Truly lost"
+            " | → Dest taxid | Dest name | Covered_by_hard_exclude |",
             "|---|---|---:|---:|---:|---|---|---|",
         ]
         for _, row in species_lost.iterrows():
@@ -1238,13 +1505,89 @@ def write_summary_md(
                 f"| {row.get('redistributed_to_name', '')} "
                 f"| {row.get('covered_by_hard_exclude', '')} |"
             )
+        lines.append("")
 
+    # A.11 — full gained-species inventory (species that went 0 → nonzero)
+    if species_gained is not None and not species_gained.empty:
+        lines += [
+            "### A.11. Full gained-species inventory",
+            "",
+            f"All {len(species_gained)} species with old_count = 0 and new_count > 0"
+            " (sorted by new_count desc):",
+            "",
+            "| species_taxid | Organism | New genome count |",
+            "|---|---|---:|",
+        ]
+        head_n = 100
+        for _, row in species_gained.head(head_n).iterrows():
+            lines.append(
+                f"| `{row['species_taxid']}` | *{row['organism_name']}* | {row['new_count']} |"
+            )
+        if len(species_gained) > head_n:
+            lines.append(
+                f"_…and {len(species_gained) - head_n:,} more; see"
+                " `genomes_by_species.tsv` in the output directory._"
+            )
+        lines.append("")
+
+    # A.12 — per-host actionable transitions
+    if coverage_available and actionable_per_host:
+        lines += [
+            "### A.12. Per-host actionable transitions",
+            "",
+        ]
+        for host, buckets in actionable_per_host.items():
+            dem = buckets["demotions"]
+            pro = buckets["promotions"]
+            if dem.empty and pro.empty:
+                continue
+            lines += ["", f"**`{host}`**", ""]
+            if not pro.empty:
+                lines += [
+                    "Promotions (0→1):",
+                    "",
+                    "| taxid | Name | Also actionable on |",
+                    "|---|---|---|",
+                ]
+                for _, row in pro.iterrows():
+                    cross = row.get("cross_host_actionable_on", "") or "—"
+                    lines.append(f"| `{row['taxid']}` | *{row['name']}* | {cross} |")
+                lines.append("")
+            if not dem.empty:
+                lines += [
+                    "Demotions (1→0):",
+                    "",
+                    "| taxid | Name | Override scope (other hosts) | Genome loss |",
+                    "|---|---|---|---|",
+                ]
+                for _, row in dem.iterrows():
+                    other = row.get("included_for_other_hosts", "") or "—"
+                    gloss = row.get("driven_by_genome_loss", "") or "—"
+                    lines.append(
+                        f"| `{row['taxid']}` | *{row['name']}* | {other} | {gloss} |"
+                    )
+
+    # A.13 — params changes table
+    if not params_changes.empty:
+        lines += [
+            "",
+            "### A.13. `index-params.json` key-by-key changes",
+            "",
+            "| Key | Kind | Old | New |",
+            "|---|---|---|---|",
+        ]
+        for _, row in params_changes.iterrows():
+            old_s = row["old"] or "—"
+            new_s = row["new"] or "—"
+            lines.append(f"| `{row['key']}` | {row['kind']} | {old_s} | {new_s} |")
+
+    # A.14 — verbatim params diff
     diff_path = out_dir / "params_diff.txt"
     if diff_path.exists():
         diff_text = diff_path.read_text()
         lines += [
             "",
-            "## Appendix C — Verbatim `index-params.json` diff",
+            "### A.14. Verbatim `index-params.json` diff",
             "",
             "```diff",
             diff_text.rstrip("\n"),
@@ -1435,8 +1778,12 @@ def main() -> None:
         # cases like Jingmen tick virus (same taxid, demoted from species to isolate
         # rank under a new species_taxid, all genome_ids still present).
         species_lost = annotate_lost_genomes(
-            species_lost, old_meta, new_meta, new_db,
-            parent_map=parent_map, excluded_taxids=excluded_taxids,
+            species_lost,
+            old_meta,
+            new_meta,
+            new_db,
+            parent_map=parent_map,
+            excluded_taxids=excluded_taxids,
         )
         species_lost.to_csv(
             args.out / "species_lost_all_genomes.tsv", sep="\t", index=False
@@ -1462,7 +1809,12 @@ def main() -> None:
                 "old": old_fasta_stats,
                 "new": new_fasta_stats,
                 "metrics": [
-                    ("records", lambda n, signed=False: f"{'+' if signed and n > 0 else ''}{n:,}"),
+                    (
+                        "records",
+                        lambda n, signed=False: (
+                            f"{'+' if signed and n > 0 else ''}{n:,}"
+                        ),
+                    ),
                     ("total_bp", _fmt_bp),
                     ("n_bp", _fmt_bp),
                 ],
@@ -1471,13 +1823,27 @@ def main() -> None:
                 "name": "virus-genome-metadata-gid.tsv.gz",
                 "old": {"rows": tsv_row_count(old_meta_path)},
                 "new": {"rows": tsv_row_count(new_meta_path)},
-                "metrics": [("rows", lambda n, signed=False: f"{'+' if signed and n > 0 else ''}{n:,}")],
+                "metrics": [
+                    (
+                        "rows",
+                        lambda n, signed=False: (
+                            f"{'+' if signed and n > 0 else ''}{n:,}"
+                        ),
+                    )
+                ],
             },
             {
                 "name": "total-virus-db-annotated.tsv.gz",
                 "old": {"rows": tsv_row_count(old_db_path)},
                 "new": {"rows": tsv_row_count(new_db_path)},
-                "metrics": [("rows", lambda n, signed=False: f"{'+' if signed and n > 0 else ''}{n:,}")],
+                "metrics": [
+                    (
+                        "rows",
+                        lambda n, signed=False: (
+                            f"{'+' if signed and n > 0 else ''}{n:,}"
+                        ),
+                    )
+                ],
             },
         ]
 
@@ -1527,9 +1893,8 @@ def main() -> None:
     bidirectional_flips = detect_bidirectional_flips(per_host_changes)
 
     # Cross-host actionable annotation + genome-loss-driven demotion flag.
-    # These add two columns to each per-host DataFrame for the §5.x inline
-    # tables and re-persist the per-host TSVs so the agent sees the same data
-    # in the files.
+    # These add two columns to each per-host DataFrame for the inline
+    # actionable tables (Appendix A.12) and re-persist the per-host TSVs.
     species_lost_taxids = set(species_lost["species_taxid"].astype(str))
     per_host_changes = annotate_cross_host_actionables(
         per_host_changes, species_lost_taxids
@@ -1543,6 +1908,65 @@ def main() -> None:
             args.out / f"species_transitions_{host}.tsv", sep="\t", index=False
         )
 
+    # Per-genome-id categorization for §3.1 (lost / gained gids by reason).
+    # The infection_status_human lookups are built from old_db / new_db
+    # taxonomy rows; missing entries (taxid absent from a db) read as "".
+    logger.info("Categorizing lost / gained genome IDs.")
+    old_infection_human: dict[str, str] = {}
+    new_infection_human: dict[str, str] = {}
+    if "infection_status_human" in old_db.columns:
+        old_infection_human = dict(
+            zip(
+                old_db["taxid"].astype(str),
+                old_db["infection_status_human"].astype(str),
+                strict=False,
+            )
+        )
+    if "infection_status_human" in new_db.columns:
+        new_infection_human = dict(
+            zip(
+                new_db["taxid"].astype(str),
+                new_db["infection_status_human"].astype(str),
+                strict=False,
+            )
+        )
+    old_taxids = (
+        set(old_db["taxid"].astype(str)) if "taxid" in old_db.columns else set()
+    )
+    lost_categorized = categorize_lost_genomes(
+        removed_g,
+        new_db,
+        parent_map,
+        excluded_taxids,
+        old_infection_human,
+        new_infection_human,
+    )
+    gained_categorized = categorize_gained_genomes(
+        added_g,
+        parent_map,
+        included_taxids,
+        old_infection_human,
+        new_infection_human,
+        old_taxids,
+    )
+    lost_categorized.to_csv(
+        args.out / "genomes_lost_categorized.tsv", sep="\t", index=False
+    )
+    gained_categorized.to_csv(
+        args.out / "genomes_gained_categorized.tsv", sep="\t", index=False
+    )
+
+    # Species that went from 0 → nonzero genomes (the gains counterpart to
+    # species_lost_all_genomes). Used in §3.3 and Appendix A.11.
+    species_gained = (
+        by_species[(by_species["old_count"] == 0) & (by_species["new_count"] > 0)]
+        .sort_values("new_count", ascending=False)
+        .reset_index(drop=True)
+    )
+    species_gained.to_csv(
+        args.out / "species_gained_all_genomes.tsv", sep="\t", index=False
+    )
+
     # Summary
     write_summary_md(
         args.out,
@@ -1552,9 +1976,10 @@ def main() -> None:
         content_rows,
         metadata_schema_diff,
         staleness_rows,
-        added_g,
-        removed_g,
+        lost_categorized,
+        gained_categorized,
         species_lost,
+        species_gained,
         added_t,
         removed_t,
         transitions,

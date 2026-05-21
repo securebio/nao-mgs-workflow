@@ -16,6 +16,8 @@ from benchmark_index import (
     annotate_cross_host_actionables,
     annotate_lost_genomes,
     build_parent_map,
+    categorize_gained_genomes,
+    categorize_lost_genomes,
     check_ref_staleness,
     classify_coverage,
     compare_size_listings,
@@ -488,18 +490,39 @@ class TestAnnotateLostGenomes:
         # Species 100 had 4 genomes in old; all 4 are present in new under
         # species_taxid 999 — this is the Jingmen-tick-virus pattern. Should
         # be marked likely_rename=yes with redistribution annotations.
-        lost = pd.DataFrame([
-            {"species_taxid": "100", "organism_name": "Old name",
-             "old_count": 4, "new_count": 0, "delta": -4},
-        ])
-        old_meta = pd.DataFrame([
-            {"genome_id": f"G{i}", "taxid": "100", "species_taxid": "100",
-             "organism_name": "Old name"} for i in range(4)
-        ])
-        new_meta = pd.DataFrame([
-            {"genome_id": f"G{i}", "taxid": "100", "species_taxid": "999",
-             "organism_name": "New species"} for i in range(4)
-        ])
+        lost = pd.DataFrame(
+            [
+                {
+                    "species_taxid": "100",
+                    "organism_name": "Old name",
+                    "old_count": 4,
+                    "new_count": 0,
+                    "delta": -4,
+                },
+            ]
+        )
+        old_meta = pd.DataFrame(
+            [
+                {
+                    "genome_id": f"G{i}",
+                    "taxid": "100",
+                    "species_taxid": "100",
+                    "organism_name": "Old name",
+                }
+                for i in range(4)
+            ]
+        )
+        new_meta = pd.DataFrame(
+            [
+                {
+                    "genome_id": f"G{i}",
+                    "taxid": "100",
+                    "species_taxid": "999",
+                    "organism_name": "New species",
+                }
+                for i in range(4)
+            ]
+        )
         new_db = pd.DataFrame([{"taxid": "100", "name": "Old name"}])
         out = annotate_lost_genomes(lost, old_meta, new_meta, new_db)
         row = out.iloc[0]
@@ -510,18 +533,38 @@ class TestAnnotateLostGenomes:
         assert row["truly_lost_count"] == 0
 
     def test_true_loss_when_genome_ids_absent(self) -> None:
-        lost = pd.DataFrame([
-            {"species_taxid": "100", "organism_name": "Gone",
-             "old_count": 3, "new_count": 0, "delta": -3},
-        ])
-        old_meta = pd.DataFrame([
-            {"genome_id": f"G{i}", "taxid": "100", "species_taxid": "100",
-             "organism_name": "Gone"} for i in range(3)
-        ])
-        new_meta = pd.DataFrame([
-            {"genome_id": "X1", "taxid": "200", "species_taxid": "200",
-             "organism_name": "Different"}
-        ])
+        lost = pd.DataFrame(
+            [
+                {
+                    "species_taxid": "100",
+                    "organism_name": "Gone",
+                    "old_count": 3,
+                    "new_count": 0,
+                    "delta": -3,
+                },
+            ]
+        )
+        old_meta = pd.DataFrame(
+            [
+                {
+                    "genome_id": f"G{i}",
+                    "taxid": "100",
+                    "species_taxid": "100",
+                    "organism_name": "Gone",
+                }
+                for i in range(3)
+            ]
+        )
+        new_meta = pd.DataFrame(
+            [
+                {
+                    "genome_id": "X1",
+                    "taxid": "200",
+                    "species_taxid": "200",
+                    "organism_name": "Different",
+                }
+            ]
+        )
         new_db = pd.DataFrame([{"taxid": "100", "name": "Gone"}])
         out = annotate_lost_genomes(lost, old_meta, new_meta, new_db)
         row = out.iloc[0]
@@ -531,55 +574,126 @@ class TestAnnotateLostGenomes:
 
     def test_partial_redistribution_uses_half_threshold(self) -> None:
         # 3 of 4 redistributed (>=50%) -> likely_rename=yes; 1 of 4 -> no.
-        lost = pd.DataFrame([
-            {"species_taxid": "100", "organism_name": "Three of four",
-             "old_count": 4, "new_count": 0, "delta": -4},
-            {"species_taxid": "200", "organism_name": "One of four",
-             "old_count": 4, "new_count": 0, "delta": -4},
-        ])
+        lost = pd.DataFrame(
+            [
+                {
+                    "species_taxid": "100",
+                    "organism_name": "Three of four",
+                    "old_count": 4,
+                    "new_count": 0,
+                    "delta": -4,
+                },
+                {
+                    "species_taxid": "200",
+                    "organism_name": "One of four",
+                    "old_count": 4,
+                    "new_count": 0,
+                    "delta": -4,
+                },
+            ]
+        )
         old_meta = pd.DataFrame(
-            [{"genome_id": f"A{i}", "taxid": "100", "species_taxid": "100",
-              "organism_name": "Three of four"} for i in range(4)]
-            + [{"genome_id": f"B{i}", "taxid": "200", "species_taxid": "200",
-                "organism_name": "One of four"} for i in range(4)]
+            [
+                {
+                    "genome_id": f"A{i}",
+                    "taxid": "100",
+                    "species_taxid": "100",
+                    "organism_name": "Three of four",
+                }
+                for i in range(4)
+            ]
+            + [
+                {
+                    "genome_id": f"B{i}",
+                    "taxid": "200",
+                    "species_taxid": "200",
+                    "organism_name": "One of four",
+                }
+                for i in range(4)
+            ]
         )
         new_meta = pd.DataFrame(
-            [{"genome_id": f"A{i}", "taxid": "100", "species_taxid": "999",
-              "organism_name": "Dest"} for i in range(3)]  # A3 absent
-            + [{"genome_id": "B0", "taxid": "200", "species_taxid": "888",
-                "organism_name": "Other"}]  # B1-B3 absent
+            [
+                {
+                    "genome_id": f"A{i}",
+                    "taxid": "100",
+                    "species_taxid": "999",
+                    "organism_name": "Dest",
+                }
+                for i in range(3)
+            ]  # A3 absent
+            + [
+                {
+                    "genome_id": "B0",
+                    "taxid": "200",
+                    "species_taxid": "888",
+                    "organism_name": "Other",
+                }
+            ]  # B1-B3 absent
         )
         new_db = pd.DataFrame()
-        out = annotate_lost_genomes(lost, old_meta, new_meta, new_db).set_index("species_taxid")
+        out = annotate_lost_genomes(lost, old_meta, new_meta, new_db).set_index(
+            "species_taxid"
+        )
         assert out.loc["100", "likely_rename"] == "yes"
         assert out.loc["200", "likely_rename"] == "no"
 
     def test_hard_exclude_coverage_via_ancestry(self) -> None:
         # species 100 -> parent 50 -> parent 10 (excluded). Should be marked covered.
-        lost = pd.DataFrame([
-            {"species_taxid": "100", "organism_name": "Excluded family member",
-             "old_count": 5, "new_count": 0, "delta": -5},
-            {"species_taxid": "200", "organism_name": "Unrelated",
-             "old_count": 2, "new_count": 0, "delta": -2},
-        ])
+        lost = pd.DataFrame(
+            [
+                {
+                    "species_taxid": "100",
+                    "organism_name": "Excluded family member",
+                    "old_count": 5,
+                    "new_count": 0,
+                    "delta": -5,
+                },
+                {
+                    "species_taxid": "200",
+                    "organism_name": "Unrelated",
+                    "old_count": 2,
+                    "new_count": 0,
+                    "delta": -2,
+                },
+            ]
+        )
         old_meta = pd.DataFrame()  # no redistribution; doesn't matter for coverage
         new_meta = pd.DataFrame()
         new_db = pd.DataFrame()
         parent_map = {"100": "50", "50": "10", "200": "20"}
         out = annotate_lost_genomes(
-            lost, old_meta, new_meta, new_db,
-            parent_map=parent_map, excluded_taxids={"10"},
+            lost,
+            old_meta,
+            new_meta,
+            new_db,
+            parent_map=parent_map,
+            excluded_taxids={"10"},
         ).set_index("species_taxid")
         assert out.loc["100", "covered_by_hard_exclude"] == "10"
         assert out.loc["200", "covered_by_hard_exclude"] == ""
 
     def test_empty_input(self) -> None:
-        empty = pd.DataFrame(columns=["species_taxid", "organism_name", "old_count",
-                                       "new_count", "delta"])
-        out = annotate_lost_genomes(empty, pd.DataFrame(), pd.DataFrame(), pd.DataFrame())
+        empty = pd.DataFrame(
+            columns=[
+                "species_taxid",
+                "organism_name",
+                "old_count",
+                "new_count",
+                "delta",
+            ]
+        )
+        out = annotate_lost_genomes(
+            empty, pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
+        )
         assert out.empty
-        for col in ("redistributed_to_species_taxid", "redistributed_genome_count",
-                    "truly_lost_count", "likely_rename", "covered_by_hard_exclude"):
+        for col in (
+            "redistributed_to_species_taxid",
+            "redistributed_genome_count",
+            "truly_lost_count",
+            "likely_rename",
+            "covered_by_hard_exclude",
+        ):
             assert col in out.columns
 
 
@@ -592,6 +706,7 @@ class TestContentMetrics:
 
     def test_fasta_stats_handles_gzip(self, tmp_path) -> None:
         import gzip
+
         fa = tmp_path / "sample.fa.gz"
         with gzip.open(fa, "wt") as f:
             f.write(">a\nACGTACGT\n>b\nNN\n")
@@ -611,9 +726,12 @@ class TestContentMetrics:
 
 class TestRefStaleness:
     def test_parse_kraken_url_date(self) -> None:
-        assert parse_kraken_url_date(
-            "https://genome-idx.s3.amazonaws.com/kraken/k2_standard_20251015.tar.gz"
-        ) == "20251015"
+        assert (
+            parse_kraken_url_date(
+                "https://genome-idx.s3.amazonaws.com/kraken/k2_standard_20251015.tar.gz"
+            )
+            == "20251015"
+        )
         assert parse_kraken_url_date("https://example.com/foo.tar.gz") == ""
 
     def test_parse_silva_url_release(self) -> None:
@@ -642,8 +760,14 @@ class TestDetectBidirectionalFlips:
     needs to surface as its own callout (the Turlock virus case)."""
 
     def _changes_row(self, taxid, old_s, new_s, name="x", covered=""):
-        return {"taxid": taxid, "name": name, "rank": "species",
-                "old_status": old_s, "new_status": new_s, "covered_by": covered}
+        return {
+            "taxid": taxid,
+            "name": name,
+            "rank": "species",
+            "old_status": old_s,
+            "new_status": new_s,
+            "covered_by": covered,
+        }
 
     def test_detects_bidirectional_taxid(self) -> None:
         per_host = {
@@ -668,8 +792,12 @@ class TestDetectBidirectionalFlips:
     def test_covered_rows_are_excluded(self) -> None:
         # If both flips are covered by rules, they shouldn't surface.
         per_host = {
-            "human": pd.DataFrame([self._changes_row("100", "0", "1", covered="excluded")]),
-            "bird": pd.DataFrame([self._changes_row("100", "1", "0", covered="excluded")]),
+            "human": pd.DataFrame(
+                [self._changes_row("100", "0", "1", covered="excluded")]
+            ),
+            "bird": pd.DataFrame(
+                [self._changes_row("100", "1", "0", covered="excluded")]
+            ),
         }
         assert detect_bidirectional_flips(per_host).empty
 
@@ -682,8 +810,14 @@ class TestAnnotateCrossHostActionables:
     loss rather than VHDB drift."""
 
     def _row(self, taxid, old_s, new_s, name="x", covered=""):
-        return {"taxid": taxid, "name": name, "rank": "species",
-                "old_status": old_s, "new_status": new_s, "covered_by": covered}
+        return {
+            "taxid": taxid,
+            "name": name,
+            "rank": "species",
+            "old_status": old_s,
+            "new_status": new_s,
+            "covered_by": covered,
+        }
 
     def test_cross_host_lists_other_hosts_with_same_direction(self) -> None:
         per_host = {
@@ -707,13 +841,17 @@ class TestAnnotateCrossHostActionables:
 
     def test_driven_by_genome_loss_only_on_demotions(self) -> None:
         per_host = {
-            "mammal": pd.DataFrame([
-                self._row("100", "1", "0"),  # taxid in lost set
-                self._row("200", "1", "0"),  # taxid not in lost set
-                self._row("300", "0", "1"),  # promotion, not demotion
-            ]),
+            "mammal": pd.DataFrame(
+                [
+                    self._row("100", "1", "0"),  # taxid in lost set
+                    self._row("200", "1", "0"),  # taxid not in lost set
+                    self._row("300", "0", "1"),  # promotion, not demotion
+                ]
+            ),
         }
-        out = annotate_cross_host_actionables(per_host, species_lost_taxids={"100", "300"})
+        out = annotate_cross_host_actionables(
+            per_host, species_lost_taxids={"100", "300"}
+        )
         gloss = out["mammal"].set_index("taxid")["driven_by_genome_loss"]
         assert gloss["100"] == "yes"
         assert gloss["200"] == ""
@@ -738,6 +876,140 @@ class TestSummariseParamsChanges:
         out = summarise_params_changes({"k": "short"}, {"k": long_val})
         assert out.iloc[0]["new"].endswith("…")
         assert len(out.iloc[0]["new"]) <= 121
+
+
+class TestCategorizeLostGenomes:
+    """The lost-gid categorizer assigns each removed genome_id to the most
+    likely reason it was dropped. Categories are exclusive in priority order:
+    hard_excluded → infection_status_demotion → species_retired → other."""
+
+    @pytest.fixture
+    def base_removed(self) -> pd.DataFrame:
+        return pd.DataFrame(
+            [
+                {
+                    "genome_id": "G_HE",
+                    "taxid": "100",
+                    "species_taxid": "100",
+                    "organism_name": "Excluded sp.",
+                },
+                {
+                    "genome_id": "G_IS",
+                    "taxid": "200",
+                    "species_taxid": "200",
+                    "organism_name": "Demoted sp.",
+                },
+                {
+                    "genome_id": "G_RT",
+                    "taxid": "300",
+                    "species_taxid": "300",
+                    "organism_name": "Retired sp.",
+                },
+                {
+                    "genome_id": "G_OT",
+                    "taxid": "400",
+                    "species_taxid": "400",
+                    "organism_name": "Other sp.",
+                },
+            ]
+        )
+
+    def test_priority_classification(self, base_removed: pd.DataFrame) -> None:
+        # parent_map: 100 → 50 (excluded). 200, 400 → 1; 300 not in new_db.
+        new_db = pd.DataFrame(
+            [
+                {"taxid": "200", "name": "Demoted sp."},
+                {"taxid": "400", "name": "Other sp."},
+            ]
+        )
+        parent_map = {"100": "50", "200": "1", "400": "1"}
+        excluded = {"50"}
+        old_human = {"200": "1", "400": "0"}
+        new_human = {"200": "0", "400": "0"}
+        out = categorize_lost_genomes(
+            base_removed, new_db, parent_map, excluded, old_human, new_human
+        ).set_index("genome_id")
+        assert out.loc["G_HE", "reason"] == "hard_excluded"
+        assert out.loc["G_HE", "reason_taxid"] == "50"
+        assert out.loc["G_IS", "reason"] == "infection_status_demotion"
+        assert out.loc["G_RT", "reason"] == "species_retired"
+        assert out.loc["G_OT", "reason"] == "other"
+
+    def test_empty_input_has_columns(self) -> None:
+        empty = pd.DataFrame(
+            columns=["genome_id", "taxid", "species_taxid", "organism_name"]
+        )
+        out = categorize_lost_genomes(empty, pd.DataFrame(), {}, set(), {}, {})
+        assert "reason" in out.columns
+        assert "reason_taxid" in out.columns
+        assert out.empty
+
+
+class TestCategorizeGainedGenomes:
+    """The gained-gid categorizer assigns each new genome_id to the most likely
+    reason it was added. Categories in priority order: hard_included →
+    infection_status_promotion → newly_deposited_existing → species_new → other."""
+
+    @pytest.fixture
+    def base_added(self) -> pd.DataFrame:
+        return pd.DataFrame(
+            [
+                {
+                    "genome_id": "G_HI",
+                    "taxid": "100",
+                    "species_taxid": "100",
+                    "organism_name": "Included sp.",
+                },
+                {
+                    "genome_id": "G_IP",
+                    "taxid": "200",
+                    "species_taxid": "200",
+                    "organism_name": "Promoted sp.",
+                },
+                {
+                    "genome_id": "G_ND",
+                    "taxid": "300",
+                    "species_taxid": "300",
+                    "organism_name": "Already-infecting sp.",
+                },
+                {
+                    "genome_id": "G_SN",
+                    "taxid": "400",
+                    "species_taxid": "400",
+                    "organism_name": "Brand-new species",
+                },
+                {
+                    "genome_id": "G_OT",
+                    "taxid": "500",
+                    "species_taxid": "500",
+                    "organism_name": "Other sp.",
+                },
+            ]
+        )
+
+    def test_priority_classification(self, base_added: pd.DataFrame) -> None:
+        parent_map = {"100": "50", "200": "1", "300": "1", "400": "1", "500": "1"}
+        included = {"human": {"50"}}
+        old_human = {"200": "0", "300": "1", "500": "0"}
+        new_human = {"200": "1", "300": "1", "500": "0"}
+        old_taxids = {"100", "200", "300", "500"}  # 400 is new
+        out = categorize_gained_genomes(
+            base_added, parent_map, included, old_human, new_human, old_taxids
+        ).set_index("genome_id")
+        assert out.loc["G_HI", "reason"] == "hard_included"
+        assert out.loc["G_HI", "reason_taxid"] == "50"
+        assert out.loc["G_IP", "reason"] == "infection_status_promotion"
+        assert out.loc["G_ND", "reason"] == "newly_deposited_existing"
+        assert out.loc["G_SN", "reason"] == "species_new"
+        assert out.loc["G_OT", "reason"] == "other"
+
+    def test_empty_input_has_columns(self) -> None:
+        empty = pd.DataFrame(
+            columns=["genome_id", "taxid", "species_taxid", "organism_name"]
+        )
+        out = categorize_gained_genomes(empty, {}, {}, {}, {}, set())
+        assert "reason" in out.columns
+        assert out.empty
 
 
 if __name__ == "__main__":
