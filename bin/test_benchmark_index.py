@@ -984,7 +984,7 @@ class TestCategorizeGainedGenomes:
     """The gained-gid categorizer assigns each new genome_id to the most likely
     reason it was added. Categories in priority order: hard_included →
     change_in_assigned_taxid → newly_deposited_existing → infection_status_change
-    → other."""
+    → new_species_in_taxonomy → other (other should be unreachable)."""
 
     @pytest.fixture
     def base_added(self) -> pd.DataFrame:
@@ -1018,12 +1018,13 @@ class TestCategorizeGainedGenomes:
                     "species_taxid": "400",
                     "organism_name": "Newly-surveilled",
                 },
-                # New species 500 — brand new (not in old_db, not a restructure target).
+                # New species 500 — brand-new in NCBI taxonomy (not in old_db,
+                # not a restructure target).
                 {
-                    "genome_id": "G_OT",
+                    "genome_id": "G_NS",
                     "taxid": "500",
                     "species_taxid": "500",
-                    "organism_name": "Brand new",
+                    "organism_name": "Brand-new species",
                 },
             ]
         )
@@ -1050,7 +1051,23 @@ class TestCategorizeGainedGenomes:
         assert out.loc["G_CT", "reason"] == "change_in_assigned_taxid"
         assert out.loc["G_ND", "reason"] == "newly_deposited_existing"
         assert out.loc["G_IS", "reason"] == "infection_status_change"
-        assert out.loc["G_OT", "reason"] == "other"
+        assert out.loc["G_NS", "reason"] == "new_species_in_taxonomy"
+
+    def test_other_is_unreachable(self) -> None:
+        # With the new_species_in_taxonomy fallback, every gid lands in a
+        # specific bucket — "other" should never appear in real output.
+        added = pd.DataFrame(
+            [
+                {
+                    "genome_id": "G1",
+                    "taxid": "999",
+                    "species_taxid": "999",
+                    "organism_name": "anything",
+                }
+            ]
+        )
+        out = categorize_gained_genomes(added, {}, {}, set(), set(), set())
+        assert out.iloc[0]["reason"] == "new_species_in_taxonomy"
 
     def test_empty_input_has_columns(self) -> None:
         empty = pd.DataFrame(

@@ -494,6 +494,11 @@ def categorize_gained_genomes(
     - `newly_deposited_existing`: gid's new species_taxid was in old
       metadata (the species was already in the surveillance set). New
       data for an already-tracked species.
+    - `new_species_in_taxonomy`: gid's new species_taxid did not exist
+      in the old taxonomy DB at all (NCBI/ICTV minted a brand-new
+      species concept), and the new species_taxid is not a
+      redistribution destination — so it's a genuinely new species, not
+      a renamed existing one.
     - `other`: no rule applies. Should be rare; if there's a meaningful
       shared-fate group in `other`, surface it as a sub-bucket in §3.3
       manually.
@@ -533,8 +538,11 @@ def categorize_gained_genomes(
             reasons.append("infection_status_change")
             reason_taxids.append(sp)
             continue
-        reasons.append("other")
-        reason_taxids.append("")
+        # Species_taxid wasn't in old taxonomy DB at all and isn't a
+        # redistribution destination → it's a brand-new species concept
+        # NCBI/ICTV added between builds.
+        reasons.append("new_species_in_taxonomy")
+        reason_taxids.append(sp)
     out["reason"] = reasons
     out["reason_taxid"] = reason_taxids
     return out
@@ -1176,7 +1184,8 @@ def write_summary_md(  # noqa: C901, PLR0912, PLR0915 - long but linear report w
             "Newly deposited for existing included taxa",
             "A.9",
         ),
-        ("other", "Other", "A.10"),
+        ("new_species_in_taxonomy", "New species in NCBI taxonomy", "A.10"),
+        ("other", "Other", "A.11"),
     ]
     lines.append(f"- **Genome IDs lost: {loss_n:,}**")
     for key, label, appendix in loss_labels:
@@ -1237,11 +1246,11 @@ def write_summary_md(  # noqa: C901, PLR0912, PLR0915 - long but linear report w
                     lines.append(
                         f"    - {len(redistributed)} redistributed (genome_ids moved to a"
                         " different species_taxid via NCBI/ICTV taxonomy restructuring; the"
-                        " sequences remain in the index — see Appendix A.11)."
+                        " sequences remain in the index — see Appendix A.12)."
                     )
                     lines.append(
                         f"    - {len(true_losses)} true losses (genome_ids absent from the new"
-                        " metadata entirely — see Appendix A.11)."
+                        " metadata entirely — see Appendix A.12)."
                     )
 
     # §3.3 Gains discussion.
@@ -1276,7 +1285,7 @@ def write_summary_md(  # noqa: C901, PLR0912, PLR0915 - long but linear report w
             lines.append("")
             lines.append(
                 f"- {len(species_gained)} species went from 0 → nonzero genomes between builds"
-                " — see Appendix A.12."
+                " — see Appendix A.13."
             )
 
     # ---------- §4 Infection status
@@ -1332,7 +1341,7 @@ def write_summary_md(  # noqa: C901, PLR0912, PLR0915 - long but linear report w
         lines.append(
             f"| `{host}` | {len(species_promotions)} | {len(species_demotions)} |"
         )
-    # Keep the old name for backward-compat in the Appendix A.13 section
+    # Keep the old name for backward-compat in the Appendix A.14 section
     # below (per-host actionable transitions table).
     actionable_per_host: dict[str, dict[str, pd.DataFrame]] = {
         h: {
@@ -1365,7 +1374,7 @@ def write_summary_md(  # noqa: C901, PLR0912, PLR0915 - long but linear report w
                 f"- **{len(uncovered_pro)} unique promotion taxid(s) not covered by"
                 f" existing overrides/excludes** across"
                 f" {sum(len(h) for h in uncovered_pro.values())} host-rows"
-                " — these need a ship-as-is / regen decision. See Appendix A.13."
+                " — these need a ship-as-is / regen decision. See Appendix A.14."
             )
             for (taxid, name), hosts in sorted(
                 uncovered_pro.items(), key=lambda x: (-len(x[1]), x[0])
@@ -1432,8 +1441,8 @@ def write_summary_md(  # noqa: C901, PLR0912, PLR0915 - long but linear report w
         changed = params_changes[params_changes["kind"] == "changed"]
         lines.append(
             f"- **`index-params.json`**: {len(added)} keys added, {len(removed)} removed,"
-            f" {len(changed)} value-changed. See Appendix A.14 for the key-by-key table"
-            " and Appendix A.15 for the verbatim diff."
+            f" {len(changed)} value-changed. See Appendix A.15 for the key-by-key table"
+            " and Appendix A.16 for the verbatim diff."
         )
         # Single-line callouts for high-signal params.
         for _, row in changed.iterrows():
@@ -1483,10 +1492,10 @@ def write_summary_md(  # noqa: C901, PLR0912, PLR0915 - long but linear report w
     # ---------- Appendix
     lines += ["", "---", "", "## Appendix", ""]
 
-    # A.1–A.5: lost gid categories. A.6–A.10: gained gid categories. A.11:
-    # full lost-species inventory. A.12: full gained-species inventory.
-    # A.13: per-host actionable transitions. A.14: params changes table.
-    # A.15: verbatim params diff.
+    # A.1–A.5: lost gid categories. A.6–A.11: gained gid categories. A.12:
+    # full lost-species inventory. A.13: full gained-species inventory.
+    # A.14: per-host actionable transitions. A.15: params changes table.
+    # A.16: verbatim params diff.
     def _gid_appendix(
         label: str, reason_key: str, df: pd.DataFrame, head_n: int = 50
     ) -> list[str]:
@@ -1532,15 +1541,19 @@ def write_summary_md(  # noqa: C901, PLR0912, PLR0915 - long but linear report w
             "A.9. Gained gids — newly deposited for existing included taxa",
             "newly_deposited_existing",
         ),
-        ("A.10. Gained gids — other", "other"),
+        (
+            "A.10. Gained gids — new species in NCBI taxonomy",
+            "new_species_in_taxonomy",
+        ),
+        ("A.11. Gained gids — other", "other"),
     ]:
         lines += _gid_appendix(label, key, gained_categorized)
         lines.append("")
 
-    # A.11 — full lost-species inventory
+    # A.12 — full lost-species inventory
     if len(species_lost) > 0:
         lines += [
-            "### A.11. Full lost-species inventory",
+            "### A.12. Full lost-species inventory",
             "",
             f"All {len(species_lost)} species with new_count = 0 (sorted by old_count desc):",
             "",
@@ -1558,10 +1571,10 @@ def write_summary_md(  # noqa: C901, PLR0912, PLR0915 - long but linear report w
             )
         lines.append("")
 
-    # A.12 — full gained-species inventory (species that went 0 → nonzero)
+    # A.13 — full gained-species inventory (species that went 0 → nonzero)
     if species_gained is not None and not species_gained.empty:
         lines += [
-            "### A.12. Full gained-species inventory",
+            "### A.13. Full gained-species inventory",
             "",
             f"All {len(species_gained)} species with old_count = 0 and new_count > 0"
             " (sorted by new_count desc):",
@@ -1581,10 +1594,10 @@ def write_summary_md(  # noqa: C901, PLR0912, PLR0915 - long but linear report w
             )
         lines.append("")
 
-    # A.13 — per-host actionable transitions
+    # A.14 — per-host actionable transitions
     if coverage_available and actionable_per_host:
         lines += [
-            "### A.13. Per-host actionable transitions",
+            "### A.14. Per-host actionable transitions",
             "",
         ]
         for host, buckets in actionable_per_host.items():
@@ -1618,11 +1631,11 @@ def write_summary_md(  # noqa: C901, PLR0912, PLR0915 - long but linear report w
                         f"| `{row['taxid']}` | *{row['name']}* | {other} | {gloss} |"
                     )
 
-    # A.14 — params changes table
+    # A.15 — params changes table
     if not params_changes.empty:
         lines += [
             "",
-            "### A.14. `index-params.json` key-by-key changes",
+            "### A.15. `index-params.json` key-by-key changes",
             "",
             "| Key | Kind | Old | New |",
             "|---|---|---|---|",
@@ -1632,13 +1645,13 @@ def write_summary_md(  # noqa: C901, PLR0912, PLR0915 - long but linear report w
             new_s = row["new"] or "—"
             lines.append(f"| `{row['key']}` | {row['kind']} | {old_s} | {new_s} |")
 
-    # A.15 — verbatim params diff
+    # A.16 — verbatim params diff
     diff_path = out_dir / "params_diff.txt"
     if diff_path.exists():
         diff_text = diff_path.read_text()
         lines += [
             "",
-            "### A.15. Verbatim `index-params.json` diff",
+            "### A.16. Verbatim `index-params.json` diff",
             "",
             "```diff",
             diff_text.rstrip("\n"),
@@ -1945,7 +1958,7 @@ def main() -> None:
 
     # Cross-host actionable annotation + genome-loss-driven demotion flag.
     # These add two columns to each per-host DataFrame for the inline
-    # actionable tables (Appendix A.13) and re-persist the per-host TSVs.
+    # actionable tables (Appendix A.14) and re-persist the per-host TSVs.
     species_lost_taxids = set(species_lost["species_taxid"].astype(str))
     per_host_changes = annotate_cross_host_actionables(
         per_host_changes, species_lost_taxids
@@ -2039,7 +2052,7 @@ def main() -> None:
     )
 
     # Species that went from 0 → nonzero genomes (the gains counterpart to
-    # species_lost_all_genomes). Used in §3.3 and Appendix A.12.
+    # species_lost_all_genomes). Used in §3.3 and Appendix A.13.
     species_gained = (
         by_species[(by_species["old_count"] == 0) & (by_species["new_count"] > 0)]
         .sort_values("new_count", ascending=False)

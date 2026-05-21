@@ -60,7 +60,7 @@ Section map:
 | §3.3 Gains | Top-5 species per gain category. | Same shape as §3.2: prose discussion. If a meaningful sub-group lives in `other`, surface it as its own bullet. |
 | §4 Infection status | Per-host promotion / demotion counts (all species-rank transitions, matching the template literally — no "actionable" filter) + Findings bullets that de-duplicate cross-host taxids, flag override policy gaps, flag bidirectional flips, and call out mechanical (genome-loss-driven) demotions. | Prose framing for each uncovered-by-existing-rules taxid: what changed upstream, ship-as-is or regen with new rules. |
 | §5 Other notable changes | `index-params.json` change summary with high-signal callouts (kraken_db, viral_taxids_exclude_hard); virus taxonomy DB churn line. | Pipeline version range (from `output/logging/` in old/new indexes — see "Pipeline version" below); CHANGELOG narrative for substantive changes; `pipeline-min-index-version` coordination concerns. |
-| Appendix A.1–A.15 | Lost gids by category (A.1–A.5); gained gids by category (A.6–A.10); full lost-species inventory (A.11); full gained-species inventory (A.12); per-host actionable transitions (A.13); params changes key-by-key (A.14); verbatim params diff (A.15). | Carry through to REVIEW.md verbatim or trim to the most relevant if length is a concern. |
+| Appendix A.1–A.16 | Lost gids by category (A.1–A.5); gained gids by category (A.6–A.11); full lost-species inventory (A.12); full gained-species inventory (A.13); per-host actionable transitions (A.14); params changes key-by-key (A.15); verbatim params diff (A.16). | Copy through to REVIEW.md verbatim; don't worry about length. |
 
 **Categorization buckets** (what each label means — these are template categories with the script's specific semantics):
 
@@ -75,7 +75,8 @@ Section map:
   - `change_in_assigned_taxid`: gid's new species_taxid is the destination of an NCBI/ICTV restructure (some old species had its gids redistributed here). The taxid changed and the new assignment passes the filter.
   - `infection_status_change`: gid's new species was in the old taxonomy DB but NOT in old metadata (the species existed but failed the old filter); now it's in new metadata. The filter result flipped — the species is newly in the surveillance set.
   - `newly_deposited_existing`: gid's new species was already in old metadata (the species was already surveilled). New data for an already-tracked species.
-  - `other`: should be rare. If a meaningful shared-fate group ends up here, surface it as a sub-bullet in §3.3.
+  - `new_species_in_taxonomy`: gid's new species_taxid did NOT exist in the old taxonomy DB and isn't a redistribution destination — a brand-new species concept NCBI/ICTV added between builds.
+  - `other`: should be effectively empty under the categorisation above. If anything lands here, treat as a bug.
 
 ### Step 3 — VHDB cross-reference (optional, only for the uncovered subset)
 
@@ -96,7 +97,7 @@ For **1→0 human demotions**:
 For **0→1 promotions**:
 - Homo sapiens now in column 4 → upstream VHDB addition. Then ask: is the species name structurally a recognised pathogen, or generic/placeholder (Bacteriophage sp., "Human gut <foo>", Microviridae, Smacoviridae, Picobirnaviridae)? If the latter → recommend regenerating with the taxid (or a broader family/class) added to `viral_taxids_exclude_hard`.
 - No row at all → try grepping by name. The parent virus may carry the host annotations under a legacy taxid (e.g. *Orthobunyavirus turlockense* `3052452` returns nothing, but *Turlock virus* `35320` carries the host data). If the parent virus shows no Homo sapiens at any taxid, the promotion was carried by ancestor / descendant propagation rather than a direct VHDB Homo sapiens annotation — investigate before recommending an exclude.
-- **Cross-reference §3.1 / Appendix A.8** for a paired `infection_status_change` row on the gain side. If the same taxid shows a large gid count in §3.1 (e.g. 1,349 *Bacteriophage sp.*), the trigger is a pipeline-driven flood of accessions plus VHDB drift. Cite the causal link explicitly.
+- **Cross-reference §3.1 / Appendix A.8** for a paired `infection_status_change` row, or Appendix A.10 for `new_species_in_taxonomy`. If the same taxid shows a large gid count in §3.1 (e.g. 1,349 *Bacteriophage sp.*), the trigger is a pipeline-driven flood of accessions plus VHDB drift. Cite the causal link explicitly.
 
 **Bidirectional same-taxid flips.** When summary.md §4 surfaces a bidirectional flip (same taxid uncovered in both directions across different hosts), that's a fingerprint of upstream VHDB taxonomy churn. Investigate the upstream cause before recommending a `viral_taxids_exclude_hard` edit, since the latter would demote on every host including the legitimate ones.
 
@@ -119,7 +120,7 @@ Copy `review-template.md` to `<outdir>/REVIEW.md` and fill it in using data from
   **Consolidate recommendations as one regen plan.** Regen cost is per-build (~2 hours), not per-fix. If ANY finding warrants regenerating, the marginal cost of folding in additional fixes is essentially zero — so any "ship as-is unless we're regenerating anyway" recommendations should flip to "regenerate with" once the overall decision is to regen. The headline should be a single ship-or-regen call with the full set of fixes the regen will include; the per-finding entries below it explain each fix's individual justification.
 
   **Never recommend "fix in the next build"**; if a fix is warranted, the action is regen now.
-- **Appendix**: copy the appendix tables from `summary.md` (A.1 through A.15). Trim to the most relevant if length is a concern, but never replace with a pointer to another file — the report must stand alone.
+- **Appendix**: copy the appendix tables from `summary.md` (A.1 through A.16) verbatim. Don't worry about length; the appendix is meant to be exhaustive. Never replace a table with a pointer to another file — the report must stand alone.
 
 **Trust the script's annotations.** If a row has `covered_by_hard_exclude = 2169574`, write "covered by Smacoviridae hard-exclude" — don't guess a family without checking. Don't manually classify coverage / family / reason — copy what the script said.
 

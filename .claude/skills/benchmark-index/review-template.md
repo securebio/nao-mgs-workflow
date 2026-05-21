@@ -49,6 +49,7 @@
     - Newly deposited for existing included taxa: NNN (link to table in appendix)
     - Change in infection status: NNN (link to table in appendix)
     - Change in assigned taxid: NNN (link to table in appendix)
+    - New species in NCBI taxonomy: NNN (link to table in appendix)
     - [Other specific reason]: NNN
     - Other: NNN
 
