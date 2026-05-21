@@ -1030,12 +1030,12 @@ def write_summary_md(  # noqa: C901, PLR0912, PLR0915 - long but linear report w
         "",
         "## Summary",
         "",
-        "_To be filled in by the reviewer. Open with a one-line headline:_"
-        " **ready to release as-is** *or* **needs regeneration with [X]**."
-        " Follow with a tight bullet list (≤8 bullets) of top-level findings"
-        " drawn from the sections below, then a `**Recommendations:**`"
-        " sub-list restating the concrete actions. Don't link out to other"
-        " files or directory paths; the report should stand alone._",
+        "_To be filled in by the reviewer following the template literally:_"
+        " _a concise bullet list of top-level findings (≤5 bullets, each one"
+        " short sentence) followed by a `**Recommendations:**` sub-list"
+        " (≤5 bullets) restating the concrete actions from §Recommendations."
+        " The Summary is a glance-able overview, not a recap; no headlines,"
+        " no 'Decision:' framing — the agent recommends, the reviewer decides._",
         "",
         "---",
         "",
