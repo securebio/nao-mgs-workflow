@@ -1033,9 +1033,11 @@ def write_summary_md(  # noqa: C901, PLR0912, PLR0915 - long but linear report w
         "_To be filled in by the reviewer following the template literally:_"
         " _a concise bullet list of top-level findings (≤5 bullets, each one"
         " short sentence) followed by a `**Recommendations:**` sub-list"
-        " (≤5 bullets) restating the concrete actions from §Recommendations."
-        " The Summary is a glance-able overview, not a recap; no headlines,"
-        " no 'Decision:' framing — the agent recommends, the reviewer decides._",
+        " (≤5 bullets) mirroring §Recommendations. Each Recommendations"
+        " bullet is one specific candidate change (e.g. 'Add `38018` to"
+        " `viral_taxids_exclude_hard`'), not a kind-of-action label. The"
+        " Summary is a glance-able overview, not a recap; no headlines, no"
+        " 'Decision:' framing — the agent recommends, the reviewer decides._",
         "",
         "---",
         "",
@@ -1481,13 +1483,14 @@ def write_summary_md(  # noqa: C901, PLR0912, PLR0915 - long but linear report w
         "",
         "## Recommendations",
         "",
-        "_To be filled in by the reviewer based on findings above. The point of"
-        " each recommendation is a concrete suggestion to the reviewer about this index:"
-        " either ship it as-is or regenerate with a specific change applied. Don't defer"
-        " fixes to a hypothetical 'next build' — if something needs changing, the"
-        " recommended action is to regenerate now. Use the template's ordered list with"
-        " each entry's confidence level (`high` / `medium` / `low`, expressing how sure"
-        " you are the recommendation is correct — not the kind of action it is)._",
+        "_To be filled in by the reviewer. An ordered list of candidate"
+        " changes to consider applying before shipping the index. Each entry"
+        " is one specific change with a confidence level (`high` / `medium` /"
+        " `low`, expressing how sure you are the change is worth making). The"
+        " reviewer picks which to apply, typically folding multiple into a"
+        " single regen. Do not include 'ship as-is' entries (the default),"
+        " coordination notes (surface in §5 Findings), or scientist-prompt"
+        " entries that don't propose a specific change._",
     ]
 
     # ---------- Appendix
