@@ -1112,8 +1112,8 @@ def write_summary_md(  # noqa: C901, PLR0912, PLR0915 - long but linear report w
         for content in content_rows:
             old_dict = cast(dict[str, int], content.get("old", {}))
             new_dict = cast(dict[str, int], content.get("new", {}))
-            metrics_list = cast(list[tuple[str, object]], content.get("metrics", []))
-            for metric, _fmt in metrics_list:
+            metrics_list = cast(list[str], content.get("metrics", []))
+            for metric in metrics_list:
                 old_v = old_dict.get(metric, 0) or 0
                 new_v = new_dict.get(metric, 0) or 0
                 delta = new_v - old_v
@@ -1127,6 +1127,11 @@ def write_summary_md(  # noqa: C901, PLR0912, PLR0915 - long but linear report w
                 elif metric == "total_bp":
                     lines.append(
                         f"- `{name}` total bp: {_fmt_bp(old_v)} → {_fmt_bp(new_v)} "
+                        f"({_fmt_bp(delta, signed=True)})"
+                    )
+                elif metric == "n_bp":
+                    lines.append(
+                        f"- `{name}` masked bp: {_fmt_bp(old_v)} → {_fmt_bp(new_v)} "
                         f"({_fmt_bp(delta, signed=True)})"
                     )
                 elif metric == "rows":
@@ -1890,42 +1895,19 @@ def main() -> None:
                 "name": "virus-genomes-masked.fasta.gz",
                 "old": old_fasta_stats,
                 "new": new_fasta_stats,
-                "metrics": [
-                    (
-                        "records",
-                        lambda n, signed=False: (
-                            f"{'+' if signed and n > 0 else ''}{n:,}"
-                        ),
-                    ),
-                    ("total_bp", _fmt_bp),
-                    ("n_bp", _fmt_bp),
-                ],
+                "metrics": ["records", "total_bp", "n_bp"],
             },
             {
                 "name": "virus-genome-metadata-gid.tsv.gz",
                 "old": {"rows": tsv_row_count(old_meta_path)},
                 "new": {"rows": tsv_row_count(new_meta_path)},
-                "metrics": [
-                    (
-                        "rows",
-                        lambda n, signed=False: (
-                            f"{'+' if signed and n > 0 else ''}{n:,}"
-                        ),
-                    )
-                ],
+                "metrics": ["rows"],
             },
             {
                 "name": "total-virus-db-annotated.tsv.gz",
                 "old": {"rows": tsv_row_count(old_db_path)},
                 "new": {"rows": tsv_row_count(new_db_path)},
-                "metrics": [
-                    (
-                        "rows",
-                        lambda n, signed=False: (
-                            f"{'+' if signed and n > 0 else ''}{n:,}"
-                        ),
-                    )
-                ],
+                "metrics": ["rows"],
             },
         ]
 

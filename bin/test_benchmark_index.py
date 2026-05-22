@@ -754,6 +754,100 @@ class TestRefStaleness:
         assert {r["ref"] for r in rows} == {"human_url", "taxonomy_url"}
         assert all(r["status"] == "unknown" for r in rows)
 
+    @pytest.mark.parametrize(
+        "current_url,latest_return,expected_status",
+        [
+            # current_date matches latest_date → current
+            (
+                "https://genome-idx.s3.amazonaws.com/kraken/k2_standard_20260226.tar.gz",
+                ("20260226", "k2_standard_20260226.tar.gz"),
+                "current",
+            ),
+            # current_date older than latest_date → stale
+            (
+                "https://genome-idx.s3.amazonaws.com/kraken/k2_standard_20250714.tar.gz",
+                ("20260226", "k2_standard_20260226.tar.gz"),
+                "stale",
+            ),
+            # fetcher returned None (network blip / parse failure) → error
+            (
+                "https://genome-idx.s3.amazonaws.com/kraken/k2_standard_20260226.tar.gz",
+                None,
+                "error",
+            ),
+        ],
+    )
+    def test_check_ref_staleness_kraken_branches(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        current_url: str,
+        latest_return: tuple[str, str] | None,
+        expected_status: str,
+    ) -> None:
+        monkeypatch.setattr(
+            "benchmark_index.latest_kraken_release", lambda: latest_return
+        )
+        rows = check_ref_staleness({"kraken_db": current_url})
+        kraken_row = next(r for r in rows if r["ref"] == "kraken_db")
+        assert kraken_row["status"] == expected_status
+
+    @pytest.mark.parametrize(
+        "current_url,latest_return,expected_status",
+        [
+            # current matches latest → current
+            (
+                "https://www.arb-silva.de/.../release_138.2/Exports/x.gz",
+                "138.2",
+                "current",
+            ),
+            # current older than latest → stale
+            (
+                "https://www.arb-silva.de/.../release_138.1/Exports/x.gz",
+                "138.2",
+                "stale",
+            ),
+            # fetcher returned None → error
+            (
+                "https://www.arb-silva.de/.../release_138.2/Exports/x.gz",
+                None,
+                "error",
+            ),
+        ],
+    )
+    def test_check_ref_staleness_silva_branches(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        current_url: str,
+        latest_return: str | None,
+        expected_status: str,
+    ) -> None:
+        monkeypatch.setattr(
+            "benchmark_index.latest_silva_release", lambda: latest_return
+        )
+        rows = check_ref_staleness({"ssu_url": current_url})
+        silva_row = next(r for r in rows if r["ref"] == "ssu_url")
+        assert silva_row["status"] == expected_status
+
+    def test_check_ref_staleness_silva_call_hoisted(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # When both ssu_url and lsu_url are present, latest_silva_release()
+        # is called exactly once (the C3 hoist).
+        calls = {"n": 0}
+
+        def fake() -> str:
+            calls["n"] += 1
+            return "138.2"
+
+        monkeypatch.setattr("benchmark_index.latest_silva_release", fake)
+        check_ref_staleness(
+            {
+                "ssu_url": "https://www.arb-silva.de/.../release_138.2/Exports/ssu.gz",
+                "lsu_url": "https://www.arb-silva.de/.../release_138.2/Exports/lsu.gz",
+            }
+        )
+        assert calls["n"] == 1
+
 
 class TestDetectBidirectionalFlips:
     """A species_taxid that's actionable in BOTH directions across different
