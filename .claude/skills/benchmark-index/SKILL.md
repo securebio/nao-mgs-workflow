@@ -115,7 +115,7 @@ Copy `review-template.md` to `<outdir>/REVIEW.md` and fill it in using data from
   - "**Ship as-is**" — explicitly accept a finding.
   - "**Regenerate with [config change]**" — show the literal config diff that would fix the issue.
   - "**Coordination**" (for `pipeline-min-index-version` bumps or downstream consumer compatibility — these are about rolling out RUN, not changing the index itself).
-  - Confidence levels: `high` (clear evidence), `scientist judgement` (low-confidence sanity check), `policy` (decision required, no obvious right answer), `coordination`.
+  - Confidence is **how sure you are the recommendation is correct**, not what kind of action it is. Use `high` / `medium` / `low`. The kind-of-action (regen / ship as-is / coordination / scientist-review / policy question) lives in the action verb itself, not the confidence parenthetical.
 
   **Consolidate recommendations as one regen plan.** Regen cost is per-build (~2 hours), not per-fix. If ANY finding warrants regenerating, the marginal cost of folding in additional fixes is essentially zero — so any "ship as-is unless we're regenerating anyway" recommendations should flip to "regenerate with" once the overall decision is to regen. The headline should be a single ship-or-regen call with the full set of fixes the regen will include; the per-finding entries below it explain each fix's individual justification.
 

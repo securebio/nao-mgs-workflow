@@ -1482,11 +1482,12 @@ def write_summary_md(  # noqa: C901, PLR0912, PLR0915 - long but linear report w
         "## Recommendations",
         "",
         "_To be filled in by the reviewer based on findings above. The point of"
-        " each recommendation is a **decision about this index**: either ship it as-is"
-        " or regenerate with a specific change applied. Don't defer fixes to a"
-        " hypothetical 'next build' — if something needs changing, the decision is to"
-        " regenerate now. Use the template's ordered list with each entry's confidence"
-        " level (high / scientist judgement / policy / coordination)._",
+        " each recommendation is a concrete suggestion to the reviewer about this index:"
+        " either ship it as-is or regenerate with a specific change applied. Don't defer"
+        " fixes to a hypothetical 'next build' — if something needs changing, the"
+        " recommended action is to regenerate now. Use the template's ordered list with"
+        " each entry's confidence level (`high` / `medium` / `low`, expressing how sure"
+        " you are the recommendation is correct — not the kind of action it is)._",
     ]
 
     # ---------- Appendix
