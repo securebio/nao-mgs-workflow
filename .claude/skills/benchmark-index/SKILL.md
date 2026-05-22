@@ -68,9 +68,8 @@ Read each index's `output/logging/pyproject.toml` (or `pipeline-version.txt` for
 
 Copy `review-template.md` to `<outdir>/REVIEW.md` and fill it in. **Read the template's instructions for each section and follow them literally.** Use `summary.md` as the data source.
 
-Two reminders that aren't obvious from the template alone:
+One reminder that isn't obvious from the template alone:
 
-- **Recommendations are candidate changes only.** Each entry is one specific change to consider applying before shipping (e.g. "Add `38018` to `viral_taxids_exclude_hard`"), with a `high` / `medium` / `low` confidence level expressing how sure you are it's worth making. The reviewer picks which to apply. Don't include "ship as-is" entries (the default), coordination notes (those go in §5 Findings), or scientist-review prompts that don't propose a specific change.
 - **Trust the script's annotations.** If a row has `covered_by_hard_exclude = 2169574`, the script has verified the lineage; don't manually re-classify. The "Categorization buckets" glossary below explains what each script-emitted label means.
 
 ### Step 6 — Hand off
