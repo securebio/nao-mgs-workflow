@@ -1996,9 +1996,10 @@ def main() -> None:
     #     where most gids reappear under a different species_taxid in new
     #     metadata (NCBI/ICTV restructure target).
     #   - species_truly_lost: species that lost all old gids without
-    #     redistribution AND aren't covered by a hard-exclude. Their filter
-    #     result flipped (infection_status changed for at least one host in
-    #     host_taxa_screen) so all their gids drop out of the surveillance set.
+    #     redistribution AND aren't covered by a hard-exclude. Cause may be
+    #     a VHDB infection-status flip, every assembly failing the
+    #     `assembly_status == 'current'` filter, or NCBI retiring the
+    #     species — see the `species_dropped_from_metadata` bucket docs.
     #   - species_in_new_meta / species_in_old_meta: the surveillance set in
     #     each build (a species is in metadata iff it passed the filter).
     #   - species_in_old_db: every taxid in the old taxonomy DB; used to
