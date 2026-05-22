@@ -1030,14 +1030,8 @@ def write_summary_md(  # noqa: C901, PLR0912, PLR0915 - long but linear report w
         "",
         "## Summary",
         "",
-        "_To be filled in by the reviewer following the template literally:_"
-        " _a concise bullet list of top-level findings (≤5 bullets, each one"
-        " short sentence) followed by a `**Recommendations:**` sub-list"
-        " (≤5 bullets) mirroring §Recommendations. Each Recommendations"
-        " bullet is one specific candidate change (e.g. 'Add `38018` to"
-        " `viral_taxids_exclude_hard`'), not a kind-of-action label. The"
-        " Summary is a glance-able overview, not a recap; no headlines, no"
-        " 'Decision:' framing — the agent recommends, the reviewer decides._",
+        "_To be filled in following the `## Summary` instructions in"
+        " `review-template.md`._",
         "",
         "---",
         "",
@@ -1483,14 +1477,8 @@ def write_summary_md(  # noqa: C901, PLR0912, PLR0915 - long but linear report w
         "",
         "## Recommendations",
         "",
-        "_To be filled in by the reviewer. An ordered list of candidate"
-        " changes to consider applying before shipping the index. Each entry"
-        " is one specific change with a confidence level (`high` / `medium` /"
-        " `low`, expressing how sure you are the change is worth making). The"
-        " reviewer picks which to apply, typically folding multiple into a"
-        " single regen. Do not include 'ship as-is' entries (the default),"
-        " coordination notes (surface in §5 Findings), or scientist-prompt"
-        " entries that don't propose a specific change._",
+        "_To be filled in following the `## Recommendations` instructions in"
+        " `review-template.md`._",
     ]
 
     # ---------- Appendix
