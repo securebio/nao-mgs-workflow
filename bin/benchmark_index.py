@@ -1074,8 +1074,8 @@ def write_summary_md(  # noqa: C901, PLR0912, PLR0915 - long but linear report w
     if stale_refs:
         lines.append(
             f"- {len(stale_refs)} reference{'s' if len(stale_refs) != 1 else ''} stale:"
-            f" {', '.join(f'`{n}`' for n in stale_refs)}. The reviewer should decide whether to"
-            " ship this index as-is or regenerate it against the newer reference(s)."
+            f" {', '.join(f'`{n}`' for n in stale_refs)}. Each is a candidate change"
+            " for §Recommendations (bumping the reference to its latest version)."
         )
     else:
         lines.append("- All actively-checked references are current.")
@@ -1365,12 +1365,41 @@ def write_summary_md(  # noqa: C901, PLR0912, PLR0915 - long but linear report w
                 uncovered_pro[(row["taxid"], row["name"])].add(host)
             for _, row in buckets["demotions"].iterrows():
                 uncovered_dem[(row["taxid"], row["name"])].add(host)
+        # Per-host totals from the §4 table for accounting (covered =
+        # total - uncovered). The reader sees the per-host totals (e.g.
+        # 80 vertebrate demotions) and the uncovered-subset bullets;
+        # without an explicit account of the covered remainder they're
+        # left wondering where the bulk went.
+        total_pro_rows = sum(
+            len(b["promotions"]) for b in per_host_buckets.values()
+        )
+        total_dem_rows = sum(
+            len(b["demotions"]) for b in per_host_buckets.values()
+        )
+        uncovered_pro_rows = sum(len(h) for h in uncovered_pro.values())
+        uncovered_dem_rows = sum(len(h) for h in uncovered_dem.values())
+        covered_pro_rows = total_pro_rows - uncovered_pro_rows
+        covered_dem_rows = total_dem_rows - uncovered_dem_rows
+        if covered_pro_rows:
+            lines.append(
+                f"- {covered_pro_rows} of {total_pro_rows} promotion host-rows are"
+                " covered by existing `ref/host-infection-overrides.json` entries"
+                " (the include rules deliberately force these species to status `1`)."
+                " No action required."
+            )
+        if covered_dem_rows:
+            lines.append(
+                f"- {covered_dem_rows} of {total_dem_rows} demotion host-rows are"
+                " covered by existing `viral_taxids_exclude_hard` entries (the"
+                " exclude rules deliberately force these species to status `0`)."
+                " No action required."
+            )
         if uncovered_pro:
             lines.append(
                 f"- **{len(uncovered_pro)} unique promotion taxid(s) not covered by"
-                f" existing overrides/excludes** across"
-                f" {sum(len(h) for h in uncovered_pro.values())} host-rows"
-                " — these need a ship-as-is / regen decision. See Appendix A.14."
+                f" existing overrides/excludes** across {uncovered_pro_rows} host-rows."
+                " Each is a candidate for a `viral_taxids_exclude_hard` addition."
+                " See Appendix A.14."
             )
             for (taxid, name), hosts in sorted(
                 uncovered_pro.items(), key=lambda x: (-len(x[1]), x[0])
@@ -1394,8 +1423,7 @@ def write_summary_md(  # noqa: C901, PLR0912, PLR0915 - long but linear report w
             )
             lines.append(
                 f"- **{len(uncovered_dem)} unique demotion taxid(s) not covered by"
-                f" existing overrides/excludes** across"
-                f" {sum(len(h) for h in uncovered_dem.values())} host-rows."
+                f" existing overrides/excludes** across {uncovered_dem_rows} host-rows."
                 f" {genome_loss_count} of those host-rows are mechanically driven by §3.2"
                 " genome losses (no surviving genomes → no ancestor-propagation evidence"
                 " → demotion); the rest are upstream VHDB drift."
@@ -1404,8 +1432,8 @@ def write_summary_md(  # noqa: C901, PLR0912, PLR0915 - long but linear report w
                 lines.append(
                     f"- **{len(policy_gap_rows)} override policy gap(s)** — demotion(s)"
                     " whose species_taxid IS in `ref/host-infection-overrides.json` but"
-                    " only for *other* hosts. Reviewer should decide whether to widen the"
-                    " override entry's `hosts` list (and regen) or ship the drift as-is:"
+                    " only for *other* hosts. Each is a candidate for widening the"
+                    " override entry's `hosts` list:"
                 )
                 for host, row in policy_gap_rows:
                     lines.append(

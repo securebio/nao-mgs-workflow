@@ -68,9 +68,10 @@ Read each index's `output/logging/pyproject.toml` (or `pipeline-version.txt` for
 
 Copy `review-template.md` to `<outdir>/REVIEW.md` and fill it in. **Read the template's instructions for each section and follow them literally.** Use `summary.md` as the data source.
 
-One reminder that isn't obvious from the template alone:
+Two reminders that aren't obvious from the template alone:
 
 - **Trust the script's annotations.** If a row has `covered_by_hard_exclude = 2169574`, the script has verified the lineage; don't manually re-classify. The "Categorization buckets" glossary below explains what each script-emitted label means.
+- **Err on the side of inclusion in §Recommendations.** Every plausible candidate change should appear, even at `low` confidence — the reviewer is better placed to dismiss a noisy recommendation than to spot one you didn't surface. In particular: any stale reference in §1 Findings, every uncovered promotion in §4, and every override policy gap in §4 should each appear as a candidate change.
 
 ### Step 6 — Hand off
 
