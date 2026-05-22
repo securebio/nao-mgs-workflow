@@ -21,10 +21,10 @@ If the user is only asking for raw numbers (no written review), just run the scr
 
 - `--old <root>`: parent of `output/` for the old (reference) index. `s3://...` or local path. **Required.**
 - `--new <root>`: parent of `output/` for the new (target) index. **Required.**
-- `--out <dir>`: output directory. Use an absolute path so paths in the report are reader-portable.
-- `--repo-root <path>`: a mgs-workflow checkout. Without this, the script falls back to plain counts; with it you get the coverage / redistribution / categorization annotations that drive the report.
+- `--out <dir>`: output directory. Use an absolute path so paths in the report are reader-portable. **Required.**
+- `--repo-root <path>`: a mgs-workflow checkout. Optional in the script, but in practice always pass `--repo-root .` from a checkout — without it the script skips the coverage / redistribution / categorization annotations that drive the report, and the Edge cases section becomes load-bearing.
 
-If any of these is missing, ask the user — don't guess.
+If `--old`, `--new`, or `--out` is missing, ask the user — don't guess.
 
 ## Procedure
 
@@ -83,7 +83,7 @@ These are the labels the script writes into `genomes_lost_categorized.tsv`, `gen
 
 - `hard_excluded`: gid's old species_taxid (or ancestor) is in `viral_taxids_exclude_hard` in the new build. The new exclude rule drops the gid at the filter stage.
 - `change_in_assigned_taxid`: gid's old species had its gids redistributed to a different species_taxid (NCBI/ICTV restructure); the gid was dropped under the new assignment.
-- `infection_status_change`: gid's old species lost ALL its gids in new metadata AND wasn't redistributed. The species's `infection_status` filter result flipped (could be `human`, `vertebrate`, or any host the filter checks — not just human), so the species drops out of the surveillance set.
+- `species_dropped_from_metadata`: gid's old species lost ALL its gids in new metadata AND wasn't redistributed. The cause is one of: an upstream VHDB infection-status change, every assembly failing the `assembly_status == 'current'` filter, or NCBI retiring the species. The pipeline-derived `infection_status` will appear to flip in all three cases (it's computed from surviving gids), so this bucket stays cause-agnostic.
 - `non_current_genome_version`: gid is gone but its species_taxid still has surviving gids in new metadata. Almost always the `assembly_status == 'current'` filter dropping a superseded NCBI assembly version.
 - `other`: no rule applies. Should be rare.
 

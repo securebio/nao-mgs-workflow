@@ -36,7 +36,6 @@ from benchmark_index import (
     parse_kraken_url_date,
     parse_silva_url_release,
     summarise_params_changes,
-    tsv_header,
     tsv_row_count,
 )
 
@@ -710,11 +709,6 @@ class TestContentMetrics:
         t.write_text("a\tb\n1\t2\n3\t4\n5\t6\n")
         assert tsv_row_count(t) == 3
 
-    def test_tsv_header(self, tmp_path: Path) -> None:
-        t = tmp_path / "x.tsv"
-        t.write_text("col1\tcol2\tcol3\n1\t2\t3\n")
-        assert tsv_header(t) == ["col1", "col2", "col3"]
-
 
 class TestRefStaleness:
     @pytest.mark.parametrize(
@@ -934,8 +928,8 @@ class TestAncestorIn:
 class TestCategorizeLostGenomes:
     """The lost-gid categorizer assigns each removed genome_id to the most
     likely reason it was dropped. Categories are exclusive in priority order:
-    hard_excluded → change_in_assigned_taxid → infection_status_change →
-    non_current_genome_version → other."""
+    hard_excluded → change_in_assigned_taxid → species_dropped_from_metadata
+    → non_current_genome_version → other."""
 
     @pytest.fixture
     def base_removed(self) -> pd.DataFrame:
@@ -996,7 +990,7 @@ class TestCategorizeLostGenomes:
         [
             ("G_HE", "hard_excluded", "50"),
             ("G_CT", "change_in_assigned_taxid", "200"),
-            ("G_IS", "infection_status_change", "300"),
+            ("G_IS", "species_dropped_from_metadata", "300"),
             ("G_NC", "non_current_genome_version", "400"),
             ("G_OT", "other", ""),
         ],
@@ -1016,10 +1010,10 @@ class TestCategorizeLostGenomes:
         [
             # hard_excluded wins over change_in_assigned_taxid
             ({"50"}, {"100"}, set(), set(), "hard_excluded"),
-            # change_in_assigned_taxid wins over infection_status_change
+            # change_in_assigned_taxid wins over species_dropped_from_metadata
             (set(), {"100"}, {"100"}, set(), "change_in_assigned_taxid"),
-            # infection_status_change wins over non_current_genome_version
-            (set(), set(), {"100"}, {"100"}, "infection_status_change"),
+            # species_dropped_from_metadata wins over non_current_genome_version
+            (set(), set(), {"100"}, {"100"}, "species_dropped_from_metadata"),
         ],
     )
     def test_higher_priority_wins_when_multiple_apply(

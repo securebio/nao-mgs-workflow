@@ -416,11 +416,15 @@ def categorize_lost_genomes(
       redistributed to a different species_taxid (NCBI / ICTV taxonomy
       restructuring); this gid was dropped at the filter stage under the
       new assignment.
-    - `infection_status_change`: gid's old species lost all its genome_ids
-      between builds AND wasn't redistributed to a different taxid — the
-      species's `infection_status` filter result flipped (could be on
-      `human`, `vertebrate`, or any host the filter inspects), so the
-      species and all its gids drop out of the surveillance set.
+    - `species_dropped_from_metadata`: gid's old species lost all its
+      genome_ids between builds AND wasn't redistributed to a different
+      taxid. Possible causes include an upstream infection-status flip
+      (VHDB no longer annotates the species as infecting any host in
+      `host_taxa_screen`), every assembly being dropped by the
+      `assembly_status == 'current'` filter, or NCBI retiring the species
+      from the taxonomy entirely. The pipeline-derived `infection_status`
+      will appear to flip in all three cases (it's derived from surviving
+      gids), so this bucket name stays cause-agnostic.
     - `non_current_genome_version`: gid is gone but its species_taxid still
       has surviving gids in new metadata. The species itself is still
       surveilled; this specific gid was almost certainly dropped by the
@@ -451,11 +455,12 @@ def categorize_lost_genomes(
             reason_taxids.append(sp)
             continue
         if sp in species_truly_lost:
-            # Species lost all its gids without redistribution -> filter
-            # result flipped (infection_status changed for at least one
-            # host in host_taxa_screen). Reviewer's "Change in infection
-            # status" reads as the same-taxid filter-flip case.
-            reasons.append("infection_status_change")
+            # Species lost all its gids without redistribution. The cause
+            # may be an upstream VHDB host-annotation change, every
+            # assembly failing the `assembly_status == 'current'` filter,
+            # or NCBI retiring the species — we can't tell from here
+            # alone, so the bucket name stays cause-agnostic.
+            reasons.append("species_dropped_from_metadata")
             reason_taxids.append(sp)
             continue
         if sp in species_in_new_meta:
@@ -823,13 +828,6 @@ def tsv_row_count(path: Path) -> int:
     return max(rows - 1, 0)
 
 
-def tsv_header(path: Path) -> list[str]:
-    """Return the header columns of a (optionally gzipped) TSV."""
-    opener = gzip.open if str(path).endswith(".gz") else open
-    with opener(path, "rt") as f:  # type: ignore[arg-type]
-        return f.readline().rstrip("\n").split("\t")
-
-
 ######################
 # REFERENCE STALENESS #
 ######################
@@ -1167,7 +1165,7 @@ def write_summary_md(  # noqa: C901, PLR0912, PLR0915 - long but linear report w
     )
     loss_labels = [
         ("hard_excluded", "Hard-excluded", "A.1"),
-        ("infection_status_change", "Change in infection status", "A.2"),
+        ("species_dropped_from_metadata", "Species dropped from metadata", "A.2"),
         ("change_in_assigned_taxid", "Change in assigned taxid", "A.3"),
         ("non_current_genome_version", "Non-current genome version", "A.4"),
         ("other", "Other", "A.5"),
@@ -1542,7 +1540,10 @@ def write_summary_md(  # noqa: C901, PLR0912, PLR0915 - long but linear report w
 
     for label, key in [
         ("A.1. Lost gids — hard-excluded", "hard_excluded"),
-        ("A.2. Lost gids — change in infection status", "infection_status_change"),
+        (
+            "A.2. Lost gids — species dropped from metadata",
+            "species_dropped_from_metadata",
+        ),
         ("A.3. Lost gids — change in assigned taxid", "change_in_assigned_taxid"),
         ("A.4. Lost gids — non-current genome version", "non_current_genome_version"),
         ("A.5. Lost gids — other", "other"),

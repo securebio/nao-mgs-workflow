@@ -39,7 +39,7 @@
 
 - Genome IDs lost: NNN
     - Hard-excluded: NNN (link to table in appendix)
-    - Change in infection status: NNN (link to table in appendix)
+    - Species dropped from metadata: NNN (link to table in appendix)
     - Change in assigned taxid: NNN (link to table in appendix)
     - Non-current genome version: NNN (link to table in appendix)
     - [Other specific reason]: NNN
@@ -55,7 +55,7 @@
 
 #### 3.2. Losses
 
-- Bullet list summary of relevant losses, divided by category (hard-excluded, change in infection status, etc)
+- Bullet list summary of relevant losses, divided by category (hard-excluded, species dropped from metadata, etc)
 - Discuss species taxids that (a) are not hard-excluded but (b) drop to zero genomes 
 - Link to tables in appendix where appropriate
 
