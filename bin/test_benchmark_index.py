@@ -9,6 +9,8 @@ real index releases; this file covers the deterministic diff logic only.
 # IMPORTS #
 ###########
 
+from pathlib import Path
+
 import pandas as pd
 import pytest
 from benchmark_index import (
@@ -698,13 +700,13 @@ class TestAnnotateLostGenomes:
 
 
 class TestContentMetrics:
-    def test_fasta_stats_counts_records_bp_and_n(self, tmp_path) -> None:
+    def test_fasta_stats_counts_records_bp_and_n(self, tmp_path: Path) -> None:
         fa = tmp_path / "sample.fa"
         fa.write_text(">r1\nACGT\nNNNN\n>r2\nACgtN\n")
         stats = fasta_content_stats(fa)
         assert stats == {"records": 2, "total_bp": 13, "n_bp": 5}
 
-    def test_fasta_stats_handles_gzip(self, tmp_path) -> None:
+    def test_fasta_stats_handles_gzip(self, tmp_path: Path) -> None:
         import gzip
 
         fa = tmp_path / "sample.fa.gz"
@@ -713,12 +715,12 @@ class TestContentMetrics:
         stats = fasta_content_stats(fa)
         assert stats == {"records": 2, "total_bp": 10, "n_bp": 2}
 
-    def test_tsv_row_count_excludes_header(self, tmp_path) -> None:
+    def test_tsv_row_count_excludes_header(self, tmp_path: Path) -> None:
         t = tmp_path / "x.tsv"
         t.write_text("a\tb\n1\t2\n3\t4\n5\t6\n")
         assert tsv_row_count(t) == 3
 
-    def test_tsv_header(self, tmp_path) -> None:
+    def test_tsv_header(self, tmp_path: Path) -> None:
         t = tmp_path / "x.tsv"
         t.write_text("col1\tcol2\tcol3\n1\t2\t3\n")
         assert tsv_header(t) == ["col1", "col2", "col3"]
@@ -742,7 +744,9 @@ class TestRefStaleness:
         assert parse_silva_url_release(url) == "138.2"
         assert parse_silva_url_release("https://example.com/foo") == ""
 
-    def test_check_ref_staleness_passive_only(self, monkeypatch) -> None:
+    def test_check_ref_staleness_passive_only(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         # With no Kraken/SILVA URLs in params, only the passive refs should
         # appear (status=unknown), and no network calls are made.
         params = {
@@ -759,7 +763,14 @@ class TestDetectBidirectionalFlips:
     hosts is the upstream-VHDB-taxonomy-churn fingerprint that summary.md
     needs to surface as its own callout (the Turlock virus case)."""
 
-    def _changes_row(self, taxid, old_s, new_s, name="x", covered=""):
+    def _changes_row(
+        self,
+        taxid: str,
+        old_s: str,
+        new_s: str,
+        name: str = "x",
+        covered: str = "",
+    ) -> dict[str, str]:
         return {
             "taxid": taxid,
             "name": name,
@@ -809,7 +820,14 @@ class TestAnnotateCrossHostActionables:
     `driven_by_genome_loss` flags demotions whose cause is the §3.1 genome
     loss rather than VHDB drift."""
 
-    def _row(self, taxid, old_s, new_s, name="x", covered=""):
+    def _row(
+        self,
+        taxid: str,
+        old_s: str,
+        new_s: str,
+        name: str = "x",
+        covered: str = "",
+    ) -> dict[str, str]:
         return {
             "taxid": taxid,
             "name": name,

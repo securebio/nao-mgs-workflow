@@ -1370,12 +1370,8 @@ def write_summary_md(  # noqa: C901, PLR0912, PLR0915 - long but linear report w
         # 80 vertebrate demotions) and the uncovered-subset bullets;
         # without an explicit account of the covered remainder they're
         # left wondering where the bulk went.
-        total_pro_rows = sum(
-            len(b["promotions"]) for b in per_host_buckets.values()
-        )
-        total_dem_rows = sum(
-            len(b["demotions"]) for b in per_host_buckets.values()
-        )
+        total_pro_rows = sum(len(b["promotions"]) for b in per_host_buckets.values())
+        total_dem_rows = sum(len(b["demotions"]) for b in per_host_buckets.values())
         uncovered_pro_rows = sum(len(h) for h in uncovered_pro.values())
         uncovered_dem_rows = sum(len(h) for h in uncovered_dem.values())
         covered_pro_rows = total_pro_rows - uncovered_pro_rows
