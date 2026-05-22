@@ -1,6 +1,6 @@
 ---
 name: benchmark-index
-description: Compare two mgs-workflow index releases and produce a structured pre-rollout review report. Runs `bin/benchmark_index.py` (with `--repo-root` so it can annotate transitions with existing rule coverage, classify lost / gained genome IDs by reason, and check reference-DB freshness), then fills `review-template.md` with data from the script's `summary.md` to produce `REVIEW.md`. Use before promoting a new `s3://nao-mgs-index/<DATE>` build to production.
+description: Compare two mgs-workflow index releases and produce a structured pre-rollout review report. Runs `bin/benchmark_index.py` (with `--repo-root` so it can annotate transitions with existing rule coverage, classify lost / gained genome IDs by reason, and check Kraken2 / SILVA reference freshness; the human/taxonomy/VHDB URLs are not auto-checked), then fills `review-template.md` with data from the script's `summary.md` to produce `REVIEW.md`. Use before promoting a new `s3://nao-mgs-index/<DATE>` build to production.
 ---
 
 # Benchmark an index release

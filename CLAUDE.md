@@ -177,6 +177,10 @@ If your changes affect pipeline output files, use the **schema-checker** agent t
 
 When creating new schemas, always include `primaryKey` and `example` fields on every schema and field respectively, matching the conventions in existing schemas (e.g. `read_counts.schema.json`).
 
+## Vetting a new index release
+
+Before promoting a new `s3://nao-mgs-index/<DATE>` build to production, use the **`benchmark-index`** skill (`.claude/skills/benchmark-index/`). It runs `bin/benchmark_index.py` to compare the candidate against the current index (per-DB size deltas, genome add/drop/per-species deltas categorized by reason, infection-status transitions, params diff) and fills in `review-template.md` to produce a structured `REVIEW.md` covering ship-or-regen recommendations. Reach for it whenever an index rebuild has happened and a human needs to decide whether to ship it.
+
 ## Maintaining This File
 
 This file should be kept in sync with the repository's code and documentation. When making changes that affect workflows, conventions, or tooling described here, update this file as part of the same PR.

@@ -14,6 +14,7 @@ from pathlib import Path
 import pandas as pd
 import pytest
 from benchmark_index import (
+    _ancestor_in,
     annotate_changes_with_coverage,
     annotate_cross_host_actionables,
     annotate_lost_genomes,
@@ -294,39 +295,28 @@ class TestCoverageClassification:
     def included(self) -> dict[str, set[str]]:
         return {"human": {"10"}}
 
-    def test_classifies_excluded_ancestor(
+    @pytest.mark.parametrize(
+        "taxid,host,expected",
+        [
+            # taxid 4 is a descendant of excluded family 2
+            ("4", "human", ("excluded", "2")),
+            # taxid 10 is directly in the human-includes set
+            ("10", "human", ("included", "10")),
+            # taxid 1 (root) is neither excluded nor in any host's includes
+            ("1", "human", ("", "")),
+        ],
+    )
+    def test_classifies_lineage(
         self,
         parent_map: dict[str, str],
         excluded: set[str],
         included: dict[str, set[str]],
+        taxid: str,
+        host: str,
+        expected: tuple[str, str],
     ) -> None:
-        # taxid 4 is a descendant of excluded family 2
-        assert classify_coverage("4", parent_map, excluded, included, "human") == (
-            "excluded",
-            "2",
-        )
-
-    def test_classifies_included_self(
-        self,
-        parent_map: dict[str, str],
-        excluded: set[str],
-        included: dict[str, set[str]],
-    ) -> None:
-        assert classify_coverage("10", parent_map, excluded, included, "human") == (
-            "included",
-            "10",
-        )
-
-    def test_uncovered_returns_empty(
-        self,
-        parent_map: dict[str, str],
-        excluded: set[str],
-        included: dict[str, set[str]],
-    ) -> None:
-        # taxid 1 (root) is neither excluded nor in any host's includes
-        assert classify_coverage("1", parent_map, excluded, included, "human") == (
-            "",
-            "",
+        assert (
+            classify_coverage(taxid, parent_map, excluded, included, host) == expected
         )
 
     def test_excluded_wins_over_included_when_walking_up(
@@ -727,22 +717,35 @@ class TestContentMetrics:
 
 
 class TestRefStaleness:
-    def test_parse_kraken_url_date(self) -> None:
-        assert (
-            parse_kraken_url_date(
-                "https://genome-idx.s3.amazonaws.com/kraken/k2_standard_20251015.tar.gz"
-            )
-            == "20251015"
-        )
-        assert parse_kraken_url_date("https://example.com/foo.tar.gz") == ""
+    @pytest.mark.parametrize(
+        "url,expected",
+        [
+            (
+                "https://genome-idx.s3.amazonaws.com/kraken/k2_standard_20251015.tar.gz",
+                "20251015",
+            ),
+            ("https://example.com/foo.tar.gz", ""),
+        ],
+    )
+    def test_parse_kraken_url_date(self, url: str, expected: str) -> None:
+        assert parse_kraken_url_date(url) == expected
 
-    def test_parse_silva_url_release(self) -> None:
-        url = "https://www.arb-silva.de/fileadmin/silva_databases/release_138.2/Exports/x.gz"
-        assert parse_silva_url_release(url) == "138.2"
-        # underscore form
-        url = "https://ftp.arb-silva.de/release_138_2/Exports/x.gz"
-        assert parse_silva_url_release(url) == "138.2"
-        assert parse_silva_url_release("https://example.com/foo") == ""
+    @pytest.mark.parametrize(
+        "url,expected",
+        [
+            # dotted form
+            (
+                "https://www.arb-silva.de/fileadmin/silva_databases/release_138.2/Exports/x.gz",
+                "138.2",
+            ),
+            # underscore form (parses to same release identifier)
+            ("https://ftp.arb-silva.de/release_138_2/Exports/x.gz", "138.2"),
+            # no release token in URL
+            ("https://example.com/foo", ""),
+        ],
+    )
+    def test_parse_silva_url_release(self, url: str, expected: str) -> None:
+        assert parse_silva_url_release(url) == expected
 
     def test_check_ref_staleness_passive_only(
         self, monkeypatch: pytest.MonkeyPatch
@@ -896,6 +899,38 @@ class TestSummariseParamsChanges:
         assert len(out.iloc[0]["new"]) <= 121
 
 
+class TestAncestorIn:
+    """`_ancestor_in` is the load-bearing lineage walk for `hard_excluded`
+    and `hard_included` classification in the two categorizers below."""
+
+    @pytest.mark.parametrize(
+        "taxid,target,expected",
+        [
+            # Self-match: target hit at the starting taxid.
+            ("4", {"4"}, "4"),
+            # Ancestor match: target hit while walking up.
+            ("4", {"2"}, "2"),
+            # No match anywhere in lineage.
+            ("4", {"99"}, ""),
+            # Empty target set always misses.
+            ("4", set(), ""),
+        ],
+    )
+    def test_lineage_walk(self, taxid: str, target: set[str], expected: str) -> None:
+        # 4 -> 3 -> 2 -> 1 (root, self-loop).
+        parent_map = {"4": "3", "3": "2", "2": "1", "1": "1"}
+        assert _ancestor_in(taxid, parent_map, target) == expected
+
+    def test_terminates_on_self_loop_at_root(self) -> None:
+        # Root taxid's parent is itself ({"1": "1"}); the walk must terminate
+        # rather than spinning forever.
+        assert _ancestor_in("1", {"1": "1"}, {"99"}) == ""
+
+    def test_terminates_on_missing_parent(self) -> None:
+        # A taxid whose parent isn't in the map is treated as root.
+        assert _ancestor_in("4", {}, {"99"}) == ""
+
+
 class TestCategorizeLostGenomes:
     """The lost-gid categorizer assigns each removed genome_id to the most
     likely reason it was dropped. Categories are exclusive in priority order:
@@ -944,30 +979,59 @@ class TestCategorizeLostGenomes:
             ]
         )
 
-    def test_priority_classification(self, base_removed: pd.DataFrame) -> None:
+    @pytest.fixture
+    def categorized(self, base_removed: pd.DataFrame) -> pd.DataFrame:
         parent_map = {"100": "50", "200": "1", "300": "1", "400": "1", "500": "1"}
-        excluded = {"50"}
-        species_redistributed = {"200"}
-        species_truly_lost = {"300"}
-        species_in_new_meta = {"400"}
-        out = categorize_lost_genomes(
+        return categorize_lost_genomes(
             base_removed,
             parent_map,
-            excluded,
-            species_redistributed,
-            species_truly_lost,
-            species_in_new_meta,
+            excluded_taxids={"50"},
+            species_redistributed={"200"},
+            species_truly_lost={"300"},
+            species_in_new_meta={"400"},
         ).set_index("genome_id")
-        assert out.loc["G_HE", "reason"] == "hard_excluded"
-        assert out.loc["G_HE", "reason_taxid"] == "50"
-        assert out.loc["G_CT", "reason"] == "change_in_assigned_taxid"
-        assert out.loc["G_IS", "reason"] == "infection_status_change"
-        assert out.loc["G_NC", "reason"] == "non_current_genome_version"
-        assert out.loc["G_OT", "reason"] == "other"
 
-    def test_hard_exclude_wins_over_redistribution(self) -> None:
-        # If a species is both excluded and redistributed, hard_excluded wins
-        # (higher priority).
+    @pytest.mark.parametrize(
+        "gid,expected_reason,expected_reason_taxid",
+        [
+            ("G_HE", "hard_excluded", "50"),
+            ("G_CT", "change_in_assigned_taxid", "200"),
+            ("G_IS", "infection_status_change", "300"),
+            ("G_NC", "non_current_genome_version", "400"),
+            ("G_OT", "other", ""),
+        ],
+    )
+    def test_priority_classification(
+        self,
+        categorized: pd.DataFrame,
+        gid: str,
+        expected_reason: str,
+        expected_reason_taxid: str,
+    ) -> None:
+        assert categorized.loc[gid, "reason"] == expected_reason
+        assert categorized.loc[gid, "reason_taxid"] == expected_reason_taxid
+
+    @pytest.mark.parametrize(
+        "excluded,redistributed,truly_lost,in_new_meta,expected_reason",
+        [
+            # hard_excluded wins over change_in_assigned_taxid
+            ({"50"}, {"100"}, set(), set(), "hard_excluded"),
+            # change_in_assigned_taxid wins over infection_status_change
+            (set(), {"100"}, {"100"}, set(), "change_in_assigned_taxid"),
+            # infection_status_change wins over non_current_genome_version
+            (set(), set(), {"100"}, {"100"}, "infection_status_change"),
+        ],
+    )
+    def test_higher_priority_wins_when_multiple_apply(
+        self,
+        excluded: set[str],
+        redistributed: set[str],
+        truly_lost: set[str],
+        in_new_meta: set[str],
+        expected_reason: str,
+    ) -> None:
+        # Pin the priority order between adjacent categories so a refactor
+        # that swaps the if-blocks fails loudly.
         removed = pd.DataFrame(
             [
                 {
@@ -979,14 +1043,9 @@ class TestCategorizeLostGenomes:
             ]
         )
         out = categorize_lost_genomes(
-            removed,
-            {"100": "50"},
-            {"50"},
-            {"100"},
-            set(),
-            set(),
+            removed, {"100": "50"}, excluded, redistributed, truly_lost, in_new_meta
         )
-        assert out.iloc[0]["reason"] == "hard_excluded"
+        assert out.iloc[0]["reason"] == expected_reason
 
     def test_empty_input_has_columns(self) -> None:
         empty = pd.DataFrame(
@@ -1047,29 +1106,81 @@ class TestCategorizeGainedGenomes:
             ]
         )
 
-    def test_priority_classification(self, base_added: pd.DataFrame) -> None:
+    @pytest.fixture
+    def categorized(self, base_added: pd.DataFrame) -> pd.DataFrame:
         parent_map = {"100": "50", "200": "1", "300": "1", "400": "1", "500": "1"}
-        included = {"human": {"50"}}
-        species_in_old_meta = {"300"}
-        species_in_old_db = {
-            "300",
-            "400",
-        }  # 400 was in old taxonomy but not in metadata
-        species_redistribution_destinations = {"200"}
-        out = categorize_gained_genomes(
+        return categorize_gained_genomes(
             base_added,
             parent_map,
-            included,
-            species_in_old_meta,
-            species_in_old_db,
-            species_redistribution_destinations,
+            included_taxids={"human": {"50"}},
+            species_in_old_meta={"300"},
+            # 400 was in old taxonomy but not in metadata.
+            species_in_old_db={"300", "400"},
+            species_redistribution_destinations={"200"},
         ).set_index("genome_id")
-        assert out.loc["G_HI", "reason"] == "hard_included"
-        assert out.loc["G_HI", "reason_taxid"] == "50"
-        assert out.loc["G_CT", "reason"] == "change_in_assigned_taxid"
-        assert out.loc["G_ND", "reason"] == "newly_deposited_existing"
-        assert out.loc["G_IS", "reason"] == "infection_status_change"
-        assert out.loc["G_NS", "reason"] == "new_species_in_taxonomy"
+
+    @pytest.mark.parametrize(
+        "gid,expected_reason,expected_reason_taxid",
+        [
+            ("G_HI", "hard_included", "50"),
+            ("G_CT", "change_in_assigned_taxid", "200"),
+            ("G_ND", "newly_deposited_existing", "300"),
+            ("G_IS", "infection_status_change", "400"),
+            ("G_NS", "new_species_in_taxonomy", "500"),
+        ],
+    )
+    def test_priority_classification(
+        self,
+        categorized: pd.DataFrame,
+        gid: str,
+        expected_reason: str,
+        expected_reason_taxid: str,
+    ) -> None:
+        assert categorized.loc[gid, "reason"] == expected_reason
+        assert categorized.loc[gid, "reason_taxid"] == expected_reason_taxid
+
+    @pytest.mark.parametrize(
+        "included,in_old_meta,in_old_db,redistribution_destinations,expected_reason",
+        [
+            # hard_included wins over change_in_assigned_taxid
+            ({"human": {"50"}}, set(), set(), {"100"}, "hard_included"),
+            # change_in_assigned_taxid wins over newly_deposited_existing
+            ({}, {"100"}, {"100"}, {"100"}, "change_in_assigned_taxid"),
+            # newly_deposited_existing wins over infection_status_change
+            ({}, {"100"}, {"100"}, set(), "newly_deposited_existing"),
+            # infection_status_change wins over new_species_in_taxonomy
+            ({}, set(), {"100"}, set(), "infection_status_change"),
+        ],
+    )
+    def test_higher_priority_wins_when_multiple_apply(
+        self,
+        included: dict[str, set[str]],
+        in_old_meta: set[str],
+        in_old_db: set[str],
+        redistribution_destinations: set[str],
+        expected_reason: str,
+    ) -> None:
+        # Pin the priority order between adjacent categories so a refactor
+        # that swaps the if-blocks fails loudly.
+        added = pd.DataFrame(
+            [
+                {
+                    "genome_id": "G1",
+                    "taxid": "100",
+                    "species_taxid": "100",
+                    "organism_name": "x",
+                }
+            ]
+        )
+        out = categorize_gained_genomes(
+            added,
+            {"100": "50"},
+            included,
+            in_old_meta,
+            in_old_db,
+            redistribution_destinations,
+        )
+        assert out.iloc[0]["reason"] == expected_reason
 
     def test_other_is_unreachable(self) -> None:
         # With the new_species_in_taxonomy fallback, every gid lands in a

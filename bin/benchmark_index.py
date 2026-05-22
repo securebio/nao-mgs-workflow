@@ -412,15 +412,15 @@ def categorize_lost_genomes(
     - `hard_excluded`: gid's old species_taxid (or an ancestor) is in
       `viral_taxids_exclude_hard` in the new build — the new exclude rule
       explains the loss.
+    - `change_in_assigned_taxid`: gid's old species had its gids
+      redistributed to a different species_taxid (NCBI / ICTV taxonomy
+      restructuring); this gid was dropped at the filter stage under the
+      new assignment.
     - `infection_status_change`: gid's old species lost all its genome_ids
       between builds AND wasn't redistributed to a different taxid — the
       species's `infection_status` filter result flipped (could be on
       `human`, `vertebrate`, or any host the filter inspects), so the
       species and all its gids drop out of the surveillance set.
-    - `change_in_assigned_taxid`: gid's old species had its gids
-      redistributed to a different species_taxid (NCBI / ICTV taxonomy
-      restructuring); this gid was dropped at the filter stage under the
-      new assignment.
     - `non_current_genome_version`: gid is gone but its species_taxid still
       has surviving gids in new metadata. The species itself is still
       surveilled; this specific gid was almost certainly dropped by the
@@ -487,13 +487,13 @@ def categorize_gained_genomes(
       of an NCBI / ICTV restructure (some old species_taxid had its gids
       redistributed here). The gid's taxid changed and the new assignment
       passes the filter.
+    - `newly_deposited_existing`: gid's new species_taxid was in old
+      metadata (the species was already in the surveillance set). New
+      data for an already-tracked species.
     - `infection_status_change`: gid's new species_taxid was in the old
       taxonomy DB but NOT in old metadata (the species existed but failed
       the old infection-status filter); now it's in new metadata, so the
       filter result flipped — the species is newly in the surveillance set.
-    - `newly_deposited_existing`: gid's new species_taxid was in old
-      metadata (the species was already in the surveillance set). New
-      data for an already-tracked species.
     - `new_species_in_taxonomy`: gid's new species_taxid did not exist
       in the old taxonomy DB at all (NCBI/ICTV minted a brand-new
       species concept), and the new species_taxid is not a
@@ -760,7 +760,7 @@ def summarise_params_changes(old_params: dict, new_params: dict) -> pd.DataFrame
         else:
             kind = "changed"
         rows.append({"key": k, "kind": kind, "old": old_v, "new": new_v})
-    return pd.DataFrame(rows, columns=["key", "kind", "old", "new"])
+    return pd.DataFrame(rows, columns=["key", "kind", "old", "new"]).astype(str)
 
 
 def _stringify_param(v: object, max_len: int = 120) -> str:
@@ -941,12 +941,13 @@ def check_ref_staleness(new_params: dict) -> list[dict[str, str]]:
                 }
             )
 
-    for key in ("ssu_url", "lsu_url"):
-        url = new_params.get(key, "")
-        if not url:
-            continue
+    # Hoist the SILVA index fetch out of the per-URL loop — the FTP root
+    # listing is the same for ssu/lsu, so one HTTPS round-trip suffices.
+    silva_keys = [k for k in ("ssu_url", "lsu_url") if new_params.get(k)]
+    latest_rel = latest_silva_release() if silva_keys else None
+    for key in silva_keys:
+        url = new_params[key]
         cur_rel = parse_silva_url_release(url)
-        latest_rel = latest_silva_release()
         if latest_rel is None:
             rows.append(
                 {
@@ -965,7 +966,7 @@ def check_ref_staleness(new_params: dict) -> list[dict[str, str]]:
                     "ref": key,
                     "current": url,
                     "current_date": cur_rel,
-                    "latest": "",
+                    "latest": f"release_{latest_rel}",
                     "latest_date": latest_rel,
                     "status": status,
                 }
