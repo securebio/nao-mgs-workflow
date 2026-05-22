@@ -8,7 +8,7 @@
 
 ## Summary
 
-- Concise bullet list of top-level findings
+- Concise bullet list of top-level findings (one short sentence each)
 - Don't link out to other file or directory paths; the report should stand alone
 - **Recommendations:** bullet list mirroring §Recommendations — one bullet per candidate change with its confidence level
 
@@ -89,9 +89,9 @@ Gains or losses of viral species assigned to each host category, ignoring hard i
 
 ## Recommendations
 
-1. **Single candidate change to consider applying before shipping the index** (high | medium | low)
+1. **Single change to the index (config edit, override, etc.) to apply before shipping** (high | medium | low confidence)
     - Concise bullet summary of arguments for recommendation
-2. **Single candidate change to consider applying before shipping the index** (high | medium | low)
+2. **Single change to the index (config edit, override, etc.) to apply before shipping** (high | medium | low confidence)
     - Concise bullet summary of arguments for recommendation
 ---
 
