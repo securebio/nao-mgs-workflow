@@ -48,7 +48,7 @@ workflow VALIDATE_VIRAL_ASSIGNMENTS {
         split_ch = SPLIT_VIRAL_TSV_BY_SELECTED_TAXID(groups, db)
         // 2. Cluster sequences within species and obtain representatives of largest clusters
         cluster_ch = CLUSTER_VIRAL_ASSIGNMENTS(split_ch.fastq, params_map.validation_cluster_identity,
-            params_map.cluster_min_len, params_map.validation_n_clusters, Channel.of(params.platform == "ont"))
+            params_map.cluster_min_len, params_map.validation_n_clusters, channel.of(params.platform == "ont"))
         // Ensure [[label, [files]]] structure even if there is only one partition
         cluster_ch_fasta = cluster_ch.fasta.map { sample, files ->
             def file_list = files instanceof List ? files : [files]
@@ -82,8 +82,8 @@ workflow VALIDATE_VIRAL_ASSIGNMENTS {
         output_blast_ch = COPY_BLAST(blast_ch.blast, "validation_blast.tsv.gz")
 
         // 8. Create empty validation_hits files for groups that produced no output
-        input_groups = groups.map { label, _file -> label }.collect().ifEmpty([]).map { ["key", it] }
-        output_groups = output_hits_ch.map { label, _file -> label }.collect().ifEmpty([]).map { ["key", it] }
+        input_groups = groups.map { label, _file -> label }.collect().ifEmpty([]).map { labels -> ["key", labels] }
+        output_groups = output_hits_ch.map { label, _file -> label }.collect().ifEmpty([]).map { labels -> ["key", labels] }
         groups_without_output = input_groups.join(output_groups).map { _key, input_list, output_list ->
             (input_list as Set) - (output_list as Set)
         }
@@ -95,9 +95,9 @@ workflow VALIDATE_VIRAL_ASSIGNMENTS {
             platform,
             "validation_hits"
         )
-        all_hits_ch = output_hits_ch.mix(CREATE_EMPTY_GROUP_OUTPUTS.out.outputs.flatten().map {
-            def group = it.name.replace("_validation_hits.tsv.gz", "")
-            [group, it]
+        all_hits_ch = output_hits_ch.mix(CREATE_EMPTY_GROUP_OUTPUTS.out.outputs.flatten().map { f ->
+            def group = f.name.replace("_validation_hits.tsv.gz", "")
+            [group, f]
         })
     emit:
         // Main output

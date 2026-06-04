@@ -4,9 +4,7 @@
 
 from pathlib import Path
 
-import pytest
 import pandas as pd
-
 import raise_taxonomy_ranks
 
 
@@ -19,8 +17,19 @@ class TestRaiseTaxonomyRanks:
         input_data = {
             "taxid": ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10"],
             "parent_taxid": ["-1", "0", "1", "2", "3", "4", "5", "6", "7", "5", "5"],
-            "rank": ["acellular root", "kingdom", "phylum", "class", "order",
-                    "family", "genus", "species", "subspecies", "none", "species"],
+            "rank": [
+                "acellular root",
+                "kingdom",
+                "phylum",
+                "class",
+                "order",
+                "family",
+                "genus",
+                "species",
+                "subspecies",
+                "none",
+                "species",
+            ],
         }
 
         taxonomy_db = pd.DataFrame(input_data)
@@ -38,7 +47,9 @@ class TestRaiseTaxonomyRanks:
 
         # Verify structure
         assert result.shape[0] == len(input_data["taxid"])  # Same number of rows
-        assert result.shape[1] == original_col_count + len(target_ranks)  # 3 extra columns
+        assert result.shape[1] == original_col_count + len(
+            target_ranks
+        )  # 3 extra columns
 
         # Verify original columns are preserved
         for col in original_cols:
@@ -50,9 +61,45 @@ class TestRaiseTaxonomyRanks:
             assert new_col in result.columns
 
         # Verify expected values (based on test-taxonomy-ranked.tsv)
-        expected_species = [pd.NA, pd.NA, pd.NA, pd.NA, pd.NA, pd.NA, pd.NA, "7", "7", pd.NA, "10"]
-        expected_genus = [pd.NA, pd.NA, pd.NA, pd.NA, pd.NA, pd.NA, "6", "6", "6", pd.NA, pd.NA]
-        expected_family = [pd.NA, pd.NA, pd.NA, pd.NA, pd.NA, "5", "5", "5", "5", "5", "5"]
+        expected_species = [
+            pd.NA,
+            pd.NA,
+            pd.NA,
+            pd.NA,
+            pd.NA,
+            pd.NA,
+            pd.NA,
+            "7",
+            "7",
+            pd.NA,
+            "10",
+        ]
+        expected_genus = [
+            pd.NA,
+            pd.NA,
+            pd.NA,
+            pd.NA,
+            pd.NA,
+            pd.NA,
+            "6",
+            "6",
+            "6",
+            pd.NA,
+            pd.NA,
+        ]
+        expected_family = [
+            pd.NA,
+            pd.NA,
+            pd.NA,
+            pd.NA,
+            pd.NA,
+            "5",
+            "5",
+            "5",
+            "5",
+            "5",
+            "5",
+        ]
 
         # Convert pd.NA to string "NA" for comparison (matching CSV output)
         result_species = result["taxid_species"].fillna("NA").tolist()

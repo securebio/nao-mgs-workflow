@@ -35,7 +35,7 @@ workflow SPLIT_VIRAL_TSV_BY_SELECTED_TAXID {
         sort_seq_id_ch = SORT_SEQ_ID(groups, "seq_id").sorted
         check_ch = CHECK_TSV_DUPLICATES(sort_seq_id_ch, "seq_id").output
         // 1. Prepare taxonomy DB for joining
-        db_ch = Channel.of("db").combine(db)
+        db_ch = channel.of("db").combine(db)
         db_select_ch = SELECT_TSV_COLUMNS(db_ch, "taxid,taxid_species", "keep").output
         db_rehead_ch = REHEAD_TSV(db_select_ch, "taxid", "aligner_taxid_lca").output
         db_sorted_ch = SORT_DB_TAXID(db_rehead_ch, "aligner_taxid_lca").sorted
@@ -65,7 +65,7 @@ workflow SPLIT_VIRAL_TSV_BY_SELECTED_TAXID {
             def file_list = files instanceof List ? files : [files]
             def filtered = file_list.findAll { f -> !f.name.startsWith("partition_empty_") }
             [sample, filtered]
-        }.filter { sample, files -> files.size() > 0 }
+        }.filter { _sample, files -> files.size() > 0 }
         // 5. Extract into interleaved FASTQ format
         fastq_raw_ch = EXTRACT_FASTQ_LIST(part_filtered_ch, false).output
         // Again, ensure [label, [files]] structure even if there is only one partition

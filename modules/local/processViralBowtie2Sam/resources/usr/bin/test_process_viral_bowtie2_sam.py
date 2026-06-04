@@ -1,9 +1,7 @@
 #!/usr/bin/env python
 
-from pathlib import Path
-
-import pytest
 import gzip
+from pathlib import Path
 
 import process_viral_bowtie2_sam
 
@@ -31,12 +29,16 @@ class TestProcessViralBowtie2Sam:
         output = tmp_path / "output.tsv.gz"
 
         # Read metadata
-        genbank_metadata_dict = process_viral_bowtie2_sam.read_genbank_metadata(str(genbank_metadata))
+        genbank_metadata_dict = process_viral_bowtie2_sam.read_genbank_metadata(
+            str(genbank_metadata)
+        )
         viral_taxids = process_viral_bowtie2_sam.get_viral_taxids(str(virus_db))
 
         # Process the empty SAM file (paired mode)
         with gzip.open(sam_input, "rt") as inf, gzip.open(output, "wt") as outf:
-            process_viral_bowtie2_sam.process_paired_sam(inf, outf, genbank_metadata_dict, viral_taxids)
+            process_viral_bowtie2_sam.process_paired_sam(
+                inf, outf, genbank_metadata_dict, viral_taxids
+            )
 
         # Read output
         with gzip.open(output, "rt") as f:
@@ -49,9 +51,11 @@ class TestProcessViralBowtie2Sam:
         headers = lines[0].strip().split("\t")
         expected_headers = [
             "seq_id",
-            "genome_id", "genome_id_all",
-            "taxid", "taxid_all",
-            "fragment_length"
+            "genome_id",
+            "genome_id_all",
+            "taxid",
+            "taxid_all",
+            "fragment_length",
         ]
 
         # Verify all expected headers are present and in the right order

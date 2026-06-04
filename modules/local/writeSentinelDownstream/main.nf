@@ -6,6 +6,7 @@
 // this process does not run and no sentinel is produced.
 process WRITE_SENTINEL_DOWNSTREAM {
     executor 'local'
+    label "sentinel"
     tag "id=${group}"
     input:
         val(group)                     // Group name; drives per-group fan-out

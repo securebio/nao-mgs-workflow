@@ -14,7 +14,7 @@ process MASK_GENOME_FASTA {
 	script:
 	// Extract parameters from map
 	// Groovy runs first – build the poly-X literal once
-	def polyx = ['A','C','G','T'].collect { it * (params_map.polyx_len as int) }.join(',')
+	def polyx = ['A','C','G','T'].collect { base -> base * (params_map.polyx_len as int) }.join(',')
 	"""
 	# first pass – adapters + entropy
 	bbduk.sh \

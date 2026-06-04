@@ -9,8 +9,8 @@ process SORT_FASTQ {
         tuple val(sample), path("sorted_${fastq}"), emit: output
         tuple val(sample), path("input_${fastq}"), emit: input
     script:
-        def extractCmd = fastq.toString().endsWith(".gz") ? "zcat" : "cat"
-        def compressCmd = fastq.toString().endsWith(".gz") ? "gzip" : "cat"
+        def extractCmd = fastq.toString().endsWith(".gz") ? "pigz -dc -p ${task.cpus}" : "cat"
+        def compressCmd = fastq.toString().endsWith(".gz") ? "pigz -p ${task.cpus}" : "cat"
         """
         set -euo pipefail
         ${extractCmd} ${fastq} | paste - - - - | sort -k1,1 | \\

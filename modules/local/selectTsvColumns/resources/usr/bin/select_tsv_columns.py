@@ -7,37 +7,40 @@ return a new TSV containing either:
 2. All columns except the specified ones, with only the latter dropped ("drop" mode)
 """
 
-#=======================================================================
+# =======================================================================
 # Import modules
-#=======================================================================
+# =======================================================================
 
-import logging
-from datetime import datetime, timezone
 import argparse
-import time
 import gzip
-import io
+import logging
+import time
+from datetime import UTC, datetime
 from typing import IO, cast
 
-#=======================================================================
+# =======================================================================
 # Configure logging
-#=======================================================================
+# =======================================================================
+
 
 class UTCFormatter(logging.Formatter):
     def formatTime(self, record: logging.LogRecord, datefmt: str | None = None) -> str:
-        dt = datetime.fromtimestamp(record.created, timezone.utc)
-        return dt.strftime('%Y-%m-%d %H:%M:%S UTC')
+        dt = datetime.fromtimestamp(record.created, UTC)
+        return dt.strftime("%Y-%m-%d %H:%M:%S UTC")
+
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger()
 handler = logging.StreamHandler()
-formatter = UTCFormatter('[%(asctime)s] %(message)s')
+formatter = UTCFormatter("[%(asctime)s] %(message)s")
 handler.setFormatter(formatter)
 logger.handlers.clear()
 logger.addHandler(handler)
 
-#=======================================================================
+# =======================================================================
 # I/O functions
-#=======================================================================
+# =======================================================================
+
 
 def parse_args() -> argparse.Namespace:
     """Parse command-line arguments."""
@@ -52,12 +55,18 @@ def parse_args() -> argparse.Namespace:
     # Add arguments
     parser.add_argument("--input", "-i", help="Path to input TSV.")
     parser.add_argument("--output", "-o", help="Path to output TSV.")
-    parser.add_argument("--fields", "-f", help="Comma-separated list of fields to select.")
-    parser.add_argument("--mode", "-m", 
-                        choices=["keep", "drop"],
-                        help="Mode to select columns: 'keep' or 'drop'.")
+    parser.add_argument(
+        "--fields", "-f", help="Comma-separated list of fields to select."
+    )
+    parser.add_argument(
+        "--mode",
+        "-m",
+        choices=["keep", "drop"],
+        help="Mode to select columns: 'keep' or 'drop'.",
+    )
     # Return parsed arguments
     return parser.parse_args()
+
 
 def open_by_suffix(filename: str, mode: str = "r") -> IO[str]:
     """
@@ -71,20 +80,17 @@ def open_by_suffix(filename: str, mode: str = "r") -> IO[str]:
     logger.debug(f"\tOpening file object: {filename}")
     logger.debug(f"\tOpening mode: {mode}")
     logger.debug(f"\tGZIP mode: {filename.endswith('.gz')}")
-    if filename.endswith('.gz'):
-        return cast(IO[str], gzip.open(filename, mode + 't'))
-    else:
-        return open(filename, mode)
+    if filename.endswith(".gz"):
+        return cast(IO[str], gzip.open(filename, mode + "t"))
+    return open(filename, mode)
 
-#=======================================================================
+
+# =======================================================================
 # TSV processing functions
-#=======================================================================
+# =======================================================================
 
-def get_header_index(
-    headers: list[str],
-    field: str,
-    mode: str = "keep"
-) -> int | None:
+
+def get_header_index(headers: list[str], field: str, mode: str = "keep") -> int | None:
     """
     Get the index of a field in a header line. If the field is not found,
     raise an error (if mode is "keep") or raise a warning and return None
@@ -98,24 +104,28 @@ def get_header_index(
     """
     try:
         return headers.index(field)
-    except ValueError:
+    except ValueError as e:
         msg = f"Field not found in header: {field}"
         if mode == "keep":
             logger.error(msg)
-            raise ValueError(msg)
-        else:
-            logger.warning(msg)
-            return None
-    
+            raise ValueError(msg) from e
+        logger.warning(msg)
+        return None
+
+
 def join_line(inputs: list[str]) -> str:
     """Join a list of strings with tabs followed by a newline."""
     return "\t".join(inputs) + "\n"
+
 
 def subset_line(inputs: list[str], indices: list[int]) -> list[str]:
     """Subset a list of strings to a list of indices."""
     return [inputs[i] for i in indices]
 
-def select_columns(input_path: str, output_path: str, fields: list[str], mode: str) -> None:
+
+def select_columns(
+    input_path: str, output_path: str, fields: list[str], mode: str
+) -> None:
     """Select columns in TSV file."""
     with open_by_suffix(input_path) as inf, open_by_suffix(output_path, "w") as outf:
         # Read the header line
@@ -123,7 +133,9 @@ def select_columns(input_path: str, output_path: str, fields: list[str], mode: s
         logger.debug(f"Input header: {header_line}")
         if not header_line:
             # No header = empty file, log and create empty output
-            logger.warning("Input file is empty (no header). Creating empty output file.")
+            logger.warning(
+                "Input file is empty (no header). Creating empty output file."
+            )
             return
         headers_in = header_line.split("\t")
         # Get indices of selected fields
@@ -149,9 +161,11 @@ def select_columns(input_path: str, output_path: str, fields: list[str], mode: s
             line_split_subset = subset_line(line.split("\t"), indices_keep)
             outf.write(join_line(line_split_subset))
 
-#=======================================================================
+
+# =======================================================================
 # Main function
-#=======================================================================
+# =======================================================================
+
 
 def main() -> None:
     logger.info("Initializing script.")
@@ -178,6 +192,7 @@ def main() -> None:
     logger.info("Script completed successfully.")
     end_time = time.time()
     logger.info(f"Total time elapsed: {end_time - start_time} seconds")
+
 
 if __name__ == "__main__":
     main()

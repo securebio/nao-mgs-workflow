@@ -69,6 +69,10 @@ Runs our entire pytest suite across `bin`, `modules`, and `post-processing/tests
 
 Runs `mypy` on all Python code in `bin/` and `modules/local/`. Uses `dorny/paths-filter` to trivially succeed when no Python files have changed.
 
+### Ruff lint and format check (`ruff.yml`)
+
+Runs `ruff check .` (lint) and `ruff format --check .` (formatting verification) on the whole repo, using the `[tool.ruff]` configuration in `pyproject.toml`. Both checks are read-only — CI never auto-fixes; contributors must run `ruff check --fix .` and `ruff format .` locally and commit the results. Uses `dorny/paths-filter` to trivially succeed when no Python files, `pyproject.toml`, or the workflow itself have changed.
+
 ### Rust tools (`rust-tools.yml`)
 
 Runs Rust unit tests and builds the `nao-rust-tools` container when Rust source files change. This workflow runs on all PRs but uses `dorny/paths-filter` to trivially succeed (~10 seconds) when no Rust files have changed. When Rust files are modified, it runs `cargo test` and builds the container. On push to `dev` or `main`, it also pushes the container to ECR.
@@ -86,6 +90,13 @@ These checks run unconditionally (no path filtering) to ensure version consisten
 | `check-version.yml` | Runs `bin/check_version.py` to verify version numbers are consistent | all |
 | `check-nextflow-version.yml` | Runs `bin/check_nextflow_version.py` to ensure Nextflow version is current | all |
 | `check-changelog.yml` | Requires `CHANGELOG.md` update if non-documentation files changed | `dev`, `ci-test` only |
+
+The Nextflow version check compares the version pinned in `configs/profiles.config` against the highest-semver Nextflow release on GitHub, after filtering out any releases listed in `.nextflowignore` at the repo root. To suppress a specific upstream release (for example, a broken release we never want to pin to, or a major bump we are deferring until tooling catches up), add an entry to `.nextflowignore`:
+
+- `<X.Y.Z>` — permanent ignore.
+- `<X.Y.Z> exp:YYYY-MM-DD` — ignore until `YYYY-MM-DD`, after which the entry expires; expired entries print a warning to stderr and are treated as absent, so stale temporary ignores cannot accumulate silently.
+
+Lines beginning with `#` and blank lines are ignored; trailing `# ...` comments on entry lines are also stripped. The pinned version must equal the latest eligible release exactly: if the highest-semver upstream release is currently ignored, the check falls back to the next-highest non-ignored release. A mismatch typically means either `configs/profiles.config` needs to be bumped, or the new release needs an entry in `.nextflowignore` with a justification.
 
 ## Release tests
 
@@ -119,7 +130,7 @@ These tests run the pipeline on larger benchmark datasets to verify performance 
 
 ### Benchmark index age check (`check-index-age.yml`)
 
-Runs on PRs to `main` and `stable`. Checks the age of the benchmark index at `s3://nao-testing/mgs-workflow-test/index-latest/` against the `max-stable-index-age-days` setting in `pyproject.toml` (default: 90 days). If the index is too old, the check fails and the "Rebuild benchmark index" workflow should be run to update it.
+Runs on PRs to `main` and `stable`. Checks the age of the benchmark index at `s3://nao-testing/mgs-workflow-test/index-latest/` against the `max-stable-index-age-days` setting in `pyproject.toml` (default: 90 days). If the index is too old, the check fails and the index should be rebuilt manually: run the INDEX workflow against the latest reference configs, then upload the resulting index to `s3://nao-testing/mgs-workflow-test/index-latest/`. See [the installation guide](./installation.md) for instructions on building an index.
 
 ### Release readiness check (`check-release.yml`)
 
@@ -148,20 +159,16 @@ Triggered on push to `main`. After a release is merged, this workflow:
 
 This uses a GitHub App token for authentication to allow force pushes to protected branches.
 
-### Benchmark index management
+### Manual stable reset (`manual-reset.yml`)
 
-#### Rebuild benchmark index (`rebuild-benchmark-index.yml`)
+Manually triggered (`workflow_dispatch`). Resets the `stable` branch to match `main` via force push. Used when a non-point release (one that changes any of the first three version numbers) needs to be propagated to `stable`, since `reset-branches.yml` only auto-resets `stable` for point releases. See [`docs/developer.md`](./developer.md) for how this fits into the release process.
 
-Manually triggered (`workflow_dispatch`) workflow that rebuilds the benchmark index used by integration and benchmark tests. Only users with repo write access can trigger it, and it requires typing "rebuild index" as a confirmation string.
+The workflow is gated by two layers of protection:
 
-The workflow:
-1. Runs INDEX nf-tests as a preflight gate
-2. Deletes the old index (recoverable via S3 bucket versioning)
-3. Builds the full index to `s3://nao-testing/mgs-workflow-test/index-latest/`
-4. Cleans up the Nextflow work directory
-5. Verifies the new index passes the age check
+1. **`stable-reset` environment.** The `reset-stable` job runs in the `stable-reset` GitHub Actions [environment](https://docs.github.com/en/actions/how-tos/manage-workflow-runs/manage-environments-for-deployment), which is configured (in the repository settings) to be restricted to the `main` branch and to require human approval before any job in it can run. This is the primary gate.
+2. **Confirmation string.** The job additionally requires the user to type `reset stable` as a `workflow_dispatch` input, as defense-in-depth against accidental dispatch.
 
-The workflow always uses the branch it is dispatched from (ensuring preflight tests and the build use the same code) and accepts an optional AWS Batch job queue input. After a successful rebuild, the job summary includes instructions for archiving the index to the production bucket (`s3://nao-mgs-index/`), which is a separate manual step.
+When adding or modifying environment-gated workflows, both the environment configuration (in GitHub UI) and the `environment:` key in the workflow YAML need to be kept consistent.
 
 ### Label issues (`label-issues.yml`)
 

@@ -19,9 +19,9 @@ nextflow_workflow {
                 def short_params = [
                     aln_score_threshold: params.bt2_score_threshold,
                     adapters: params.adapters,
-                    min_kmer_hits: "1",
+                    minhits: "1",
                     k: "24",
-                    bbduk_suffix: "viral",
+                    kmer_suffix: "viral",
                     taxid_artificial: "81077",
                     db_download_timeout: params.db_download_timeout
                 ]
@@ -60,9 +60,9 @@ nextflow_workflow {
                 def short_params = [
                     aln_score_threshold: params.bt2_score_threshold,
                     adapters: params.adapters,
-                    min_kmer_hits: "1",
+                    minhits: "1",
                     k: "24",
-                    bbduk_suffix: "viral",
+                    kmer_suffix: "viral",
                     taxid_artificial: "81077",
                     db_download_timeout: params.db_download_timeout
                 ]
@@ -76,8 +76,8 @@ nextflow_workflow {
             assert workflow.success
             // FASTQ output files should be empty
             def fastq_files = [
-                path(workflow.out.bbduk_match[0][1]),
-                path(workflow.out.bbduk_trimmed[0][1]),
+                path(workflow.out.kmer_match[0][1]),
+                path(workflow.out.kmer_trimmed[0][1]),
                 path(workflow.out.test_reads[0][1])
             ]
             def fastqs = fastq_files.collect{ it.fastq }

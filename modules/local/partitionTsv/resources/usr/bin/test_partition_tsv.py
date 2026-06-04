@@ -2,14 +2,13 @@
 
 # TODO: Add unit tests for individual functions in a future pass
 
+import glob
+import os
 from pathlib import Path
 from typing import Any
 
-import pytest
-import os
-import glob
-
 import partition_tsv
+import pytest
 
 
 class TestPartitionTsv:
@@ -27,7 +26,9 @@ class TestPartitionTsv:
         input_content = "x\ty\tz\n0\t1\t2\n3\t4\t5\n"
         input_file = tsv_factory.create_plain("input.tsv", input_content)
 
-        with pytest.raises(ValueError, match="Required column is missing from header line: test"):
+        with pytest.raises(
+            ValueError, match="Required column is missing from header line: test"
+        ):
             partition_tsv.partition(input_file, "test")
 
     def test_unsorted_file_raises_error(self, tsv_factory: Any, tmp_path: Path) -> None:
@@ -41,7 +42,9 @@ class TestPartitionTsv:
         os.chdir(input_dir)
 
         try:
-            with pytest.raises(ValueError, match="Input file is not sorted by partition column"):
+            with pytest.raises(
+                ValueError, match="Input file is not sorted by partition column"
+            ):
                 partition_tsv.partition(os.path.basename(input_file), "x")
         finally:
             os.chdir(original_cwd)
@@ -84,7 +87,7 @@ class TestPartitionTsv:
             assert partition_files[0] == "partition_3_input.tsv"
 
             # Check that output matches input
-            with open(partition_files[0], "r") as f:
+            with open(partition_files[0]) as f:
                 content = f.read()
             assert content == input_content
         finally:
@@ -107,19 +110,23 @@ class TestPartitionTsv:
             partition_files = sorted(glob.glob("partition_*_input.tsv"))
             assert len(partition_files) == 3
 
-            expected_files = ["partition_0_input.tsv", "partition_3_input.tsv", "partition_6_input.tsv"]
+            expected_files = [
+                "partition_0_input.tsv",
+                "partition_3_input.tsv",
+                "partition_6_input.tsv",
+            ]
             assert partition_files == expected_files
 
             # Check content of each partition
-            with open("partition_0_input.tsv", "r") as f:
+            with open("partition_0_input.tsv") as f:
                 content_0 = f.read()
             assert content_0 == "x\ty\tz\n0\t1\t2\n"
 
-            with open("partition_3_input.tsv", "r") as f:
+            with open("partition_3_input.tsv") as f:
                 content_3 = f.read()
             assert content_3 == "x\ty\tz\n3\t4\t5\n3\t5\t6\n"
 
-            with open("partition_6_input.tsv", "r") as f:
+            with open("partition_6_input.tsv") as f:
                 content_6 = f.read()
             assert content_6 == "x\ty\tz\n6\t7\t8\n"
         finally:

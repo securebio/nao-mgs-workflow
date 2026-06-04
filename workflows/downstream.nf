@@ -49,9 +49,9 @@ workflow DOWNSTREAM {
                 "prim_align_pair_status", "prim_align_dup_exemplar"
             ].join(",")
             viral_hits_ch = PAD_ONT_COLUMNS(viral_hits_ch, pad_cols, "NA", "padded").output
-            dup_output_ch = Channel.empty()
-            clade_counts_ch = Channel.empty()
-            sim_dup_ch = Channel.empty()
+            dup_output_ch = channel.empty()
+            clade_counts_ch = channel.empty()
+            sim_dup_ch = channel.empty()
         }
         else {
             // Short-read: Mark duplicates based on alignment coordinates
@@ -68,9 +68,9 @@ workflow DOWNSTREAM {
         validate_ch = VALIDATE_VIRAL_ASSIGNMENTS(viral_hits_ch, viral_db, params.ref_dir, validation_params)
         // Prepare publishing channels
         params_str = groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(params))
-        params_ch = Channel.of(params_str).collectFile(name: "params-downstream.json")
-        pyproject_ch = COPY_PYPROJECT(Channel.fromPath(pipeline_pyproject_path), "pyproject.toml")
-        input_file_ch = COPY_INPUT(Channel.fromPath(params.input_file), "input_file.csv")
+        params_ch = channel.of(params_str).collectFile(name: "params-downstream.json")
+        pyproject_ch = COPY_PYPROJECT(channel.fromPath(pipeline_pyproject_path), "pyproject.toml")
+        input_file_ch = COPY_INPUT(channel.fromPath(params.input_file), "input_file.csv")
 
         // Pre-define publish-channel aggregates so we can both emit them and feed them into the sentinel barrier
         input_downstream_ch = params_ch.mix(input_file_ch)

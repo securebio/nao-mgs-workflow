@@ -17,7 +17,7 @@ process CONVERT_FASTQ_FASTA {
         }
         def extension = first_file.substring(first_file.indexOf('.') + 1)
         def check_str = ".${extension}"
-        def invalid_files = fastqs.findAll { !it.toString().endsWith(check_str) }
+        def invalid_files = fastqs.findAll { f -> !f.toString().endsWith(check_str) }
         if (invalid_files) {
             throw new Exception("Input files ${invalid_files} do not end with .${extension}")
         }

@@ -5,3 +5,5 @@ channels:
   - bioconda
 dependencies:
   - bioconda::multiqc=1.33
+  # Forces urllib3 2.7.0 (came in transitively at 2.6.3) to address CVE-2026-44431, CVE-2026-44432.
+  - conda-forge::urllib3=2.7.0

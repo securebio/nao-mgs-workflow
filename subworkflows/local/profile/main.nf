@@ -37,7 +37,7 @@ workflow PROFILE {
             noribo_in = ribo_ch.reads_unmapped
         } else {
             ribo_path = "${params_map.ref_dir}/results/ribo-ref-concat.fasta.gz"
-            ribo_bbduk_params = params_map + [interleaved: single_end.map{!it}]
+            ribo_bbduk_params = params_map + [interleaved: single_end.map { v -> !v }]
             ribo_ch = BBDUK(reads_ch, ribo_path, ribo_bbduk_params)
             ribo_in = ribo_ch.match
             noribo_in = ribo_ch.nomatch

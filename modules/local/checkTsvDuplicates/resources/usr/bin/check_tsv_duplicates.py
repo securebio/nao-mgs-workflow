@@ -6,44 +6,49 @@ every line in the file has a unique value of the specified column.
 If so, write the file to the output path. If not, throw an error.
 """
 
-#=======================================================================
+# =======================================================================
 # Import modules
-#=======================================================================
+# =======================================================================
 
-import logging
-from datetime import datetime, timezone
 import argparse
-import time
 import gzip
-import io
+import logging
+import time
+from datetime import UTC, datetime
 from typing import IO, cast
 
-#=======================================================================
+# =======================================================================
 # Configure logging
-#=======================================================================
+# =======================================================================
+
 
 class UTCFormatter(logging.Formatter):
     def formatTime(self, record: logging.LogRecord, datefmt: str | None = None) -> str:
-        dt = datetime.fromtimestamp(record.created, timezone.utc)
-        return dt.strftime('%Y-%m-%d %H:%M:%S UTC')
+        dt = datetime.fromtimestamp(record.created, UTC)
+        return dt.strftime("%Y-%m-%d %H:%M:%S UTC")
+
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger()
 handler = logging.StreamHandler()
-formatter = UTCFormatter('[%(asctime)s] %(message)s')
+formatter = UTCFormatter("[%(asctime)s] %(message)s")
 handler.setFormatter(formatter)
 logger.handlers.clear()
 logger.addHandler(handler)
 
-#=======================================================================
+# =======================================================================
 # I/O functions
-#=======================================================================
+# =======================================================================
+
 
 def parse_args() -> argparse.Namespace:
     """Parse command-line arguments."""
     # Create parser
-    desc = "Given a sorted TSV file with an initial header line, " \
-           "check that every line has a unique value of the specified column. " \
-           "If so, write the file to the output path. If not, throw an error."
+    desc = (
+        "Given a sorted TSV file with an initial header line, "
+        "check that every line has a unique value of the specified column. "
+        "If so, write the file to the output path. If not, throw an error."
+    )
     parser = argparse.ArgumentParser(description=desc)
     # Add arguments
     parser.add_argument("--input", "-i", help="Path to sorted input TSV.")
@@ -51,6 +56,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--field", "-f", help="Field to check for duplicates.")
     # Return parsed arguments
     return parser.parse_args()
+
 
 def open_by_suffix(filename: str, mode: str = "r") -> IO[str]:
     """
@@ -65,13 +71,14 @@ def open_by_suffix(filename: str, mode: str = "r") -> IO[str]:
     logger.debug(f"\tOpening mode: {mode}")
     logger.debug(f"\tGZIP mode: {filename.endswith('.gz')}")
     if filename.lower().endswith(".gz"):
-        return cast(IO[str], gzip.open(filename, mode + 't'))
-    else:
-        return open(filename, mode)
+        return cast(IO[str], gzip.open(filename, mode + "t"))
+    return open(filename, mode)
 
-#=======================================================================
+
+# =======================================================================
 # TSV processing functions
-#=======================================================================
+# =======================================================================
+
 
 def get_header_index(headers: list[str], field: str) -> int:
     """
@@ -84,8 +91,9 @@ def get_header_index(headers: list[str], field: str) -> int:
     """
     try:
         return headers.index(field)
-    except ValueError:
-        raise ValueError(f"Field not found in header: {field}")
+    except ValueError as e:
+        raise ValueError(f"Field not found in header: {field}") from e
+
 
 def process_header(header_line: str, field: str) -> int:
     """
@@ -104,9 +112,8 @@ def process_header(header_line: str, field: str) -> int:
     # Split header line into list of fields
     headers_in = header_line.split("\t")
     # Get index of selected field
-    index = get_header_index(headers_in, field)
-    # Return index
-    return index
+    return get_header_index(headers_in, field)
+
 
 def check_duplicates(input_path: str, output_path: str, field: str) -> None:
     """
@@ -137,7 +144,7 @@ def check_duplicates(input_path: str, output_path: str, field: str) -> None:
                 logger.error(msg)
                 raise ValueError(msg)
             # Check if field is duplicate with previous line
-            elif field_prev is not None and field_curr == field_prev:
+            if field_prev is not None and field_curr == field_prev:
                 msg = f"Duplicate value found in field {field}: {field_curr}"
                 logger.error(msg)
                 raise ValueError(msg)
@@ -146,9 +153,11 @@ def check_duplicates(input_path: str, output_path: str, field: str) -> None:
             # Update previous field
             field_prev = field_curr
 
-#=======================================================================
+
+# =======================================================================
 # Main function
-#=======================================================================
+# =======================================================================
+
 
 def main() -> None:
     logger.info("Initializing script.")
@@ -169,6 +178,7 @@ def main() -> None:
     logger.info("Script completed successfully.")
     end_time = time.time()
     logger.info(f"Total time elapsed: {end_time - start_time} seconds")
+
 
 if __name__ == "__main__":
     main()

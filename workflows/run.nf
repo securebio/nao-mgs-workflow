@@ -29,12 +29,12 @@ workflow RUN {
         // Results
         viral_ch = EXTRACT_VIRAL_READS(samplesheet_ch.samplesheet, params)
         count_ch = COUNT_READS(samplesheet_ch.samplesheet, samplesheet_ch.single_end)
-        subset_ch = SUBSET_TRIM(samplesheet_ch.samplesheet, samplesheet_ch.single_end, params)
+        subset_ch = SUBSET_TRIM(samplesheet_ch.samplesheet, count_ch.output, samplesheet_ch.single_end, params)
         qc_ch = RUN_QC(subset_ch.subset_reads, subset_ch.trimmed_subset_reads, samplesheet_ch.single_end)
         def profile_params = params + [min_kmer_fraction: "0.4", k: "27", ribo_suffix: "ribo"]
         profile_ch = PROFILE(subset_ch.trimmed_subset_reads, samplesheet_ch.single_end, profile_params)
         // Prepare output streams
-        input_log_ch = PREPARE_INPUT_LOGGING(params, compat_ch.index_pyproject_path, compat_ch.pipeline_pyproject_path, samplesheet_ch.start_time_str)
+        input_log_ch = PREPARE_INPUT_LOGGING(params, compat_ch.index_pyproject_path, compat_ch.pipeline_pyproject_path)
         qc_results_ch = count_ch.output.mix(qc_ch.pre_qc, qc_ch.post_qc, subset_ch.fastp_json)
         other_results_ch = viral_ch.hits_final.mix(profile_ch.bracken, profile_ch.kraken)
         // Validate published outputs and write sentinel
@@ -46,10 +46,10 @@ workflow RUN {
         input_run = input_log_ch.input_run
         logging_run = input_log_ch.logging_run
         intermediates_run = viral_ch.inter_lca.mix(viral_ch.inter_aligner)
-        reads_raw_viral = viral_ch.bbduk_match
-        reads_trimmed_viral = viral_ch.bbduk_trimmed
+        reads_raw_viral = viral_ch.kmer_match
+        reads_trimmed_viral = viral_ch.kmer_trimmed
         qc_results_run = qc_results_ch
         other_results_run = other_results_ch
-        experimental_run = Channel.empty()
-        sentinel_run = WRITE_SENTINEL_RUN.out.sentinel
+        experimental_run = channel.empty()
+        sentinel_run = sentinel_ch.sentinel
 }

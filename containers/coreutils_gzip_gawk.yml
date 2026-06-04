@@ -6,3 +6,4 @@ dependencies:
   - conda-forge::coreutils=9.5
   - conda-forge::gzip=1.14
   - conda-forge::gawk=5.3.1
+  - conda-forge::rapidgzip=0.15.2

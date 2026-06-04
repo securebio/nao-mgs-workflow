@@ -2,6 +2,7 @@
 """
 Scan container images from Nextflow config with Trivy.
 """
+
 import argparse
 import json
 import re
@@ -36,7 +37,16 @@ def scan_container(container: str, output_dir: Path) -> Path:
     output_file = output_dir / f"{container_safe}.json"
     print(f"Scanning {container}...")
     ignorefile = Path(__file__).resolve().parent.parent / ".trivyignore"
-    cmd = ["trivy", "image", "--scanners", "vuln", "--format", "json", "--output", str(output_file)]
+    cmd = [
+        "trivy",
+        "image",
+        "--scanners",
+        "vuln",
+        "--format",
+        "json",
+        "--output",
+        str(output_file),
+    ]
     if ignorefile.exists():
         cmd.extend(["--ignorefile", str(ignorefile)])
     cmd.append(container)
@@ -60,20 +70,25 @@ def aggregate_results(output_dir: Path) -> tuple[dict, dict, bool]:
         os_info = metadata.get("OS", {})
         os_family = os_info.get("Family", "unknown")
         os_name = os_info.get("Name", "unknown")
-        severity_counts = {"CRITICAL": 0, "HIGH": 0, "MEDIUM": 0, "LOW": 0, "UNKNOWN": 0}
+        severity_counts = {
+            "CRITICAL": 0,
+            "HIGH": 0,
+            "MEDIUM": 0,
+            "LOW": 0,
+            "UNKNOWN": 0,
+        }
         for result in data.get("Results", []):
             for vuln in result.get("Vulnerabilities", []):
                 severity = vuln.get("Severity", "UNKNOWN")
                 severity_counts[severity] = severity_counts.get(severity, 0) + 1
                 total_counts[severity] = total_counts.get(severity, 0) + 1
-        summary["containers"].append({
-            "name": container_name,
-            "os": {
-                "family": os_family,
-                "name": os_name
-            },
-            "vulnerabilities": severity_counts
-        })
+        summary["containers"].append(
+            {
+                "name": container_name,
+                "os": {"family": os_family, "name": os_name},
+                "vulnerabilities": severity_counts,
+            }
+        )
         if severity_counts["CRITICAL"] > 0 or severity_counts["HIGH"] > 0:
             has_critical_or_high = True
     summary_file = output_dir / "summary.json"
@@ -83,8 +98,14 @@ def aggregate_results(output_dir: Path) -> tuple[dict, dict, bool]:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Scan container images with Trivy")
-    parser.add_argument("--config", default="configs/containers.config", help="Path to Nextflow config file")
-    parser.add_argument("--output-dir", default="trivy_results", help="Directory for scan results")
+    parser.add_argument(
+        "--config",
+        default="configs/containers.config",
+        help="Path to Nextflow config file",
+    )
+    parser.add_argument(
+        "--output-dir", default="trivy_results", help="Directory for scan results"
+    )
     args = parser.parse_args()
     config_file = Path(args.config)
     output_dir = Path(args.output_dir)

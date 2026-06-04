@@ -10,6 +10,7 @@ process PREPARE_VIRAL_METADATA {
     output:
         path("ncbi_metadata.txt"), emit: metadata
         path("ncbi_genomes"), emit: genomes
+        path("ncbi_paths.txt"), emit: paths
     script:
         """
         prepare_viral_metadata.py \\
@@ -17,6 +18,7 @@ process PREPARE_VIRAL_METADATA {
             ${virus_db} \\
             . \\
             ncbi_metadata.txt \\
-            ncbi_genomes
+            ncbi_genomes \\
+            ncbi_paths.txt
         """
 }

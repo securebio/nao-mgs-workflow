@@ -1,6 +1,7 @@
 // Interleave paired FASTQ files into a single interleaved file
 
 process INTERLEAVE_FASTQ {
+    label "testing_only" // Process is currently only used for testing
     label "single"
     label "coreutils_gzip_gawk"
     tag "id=${sample}"

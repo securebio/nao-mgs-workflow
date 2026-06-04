@@ -9,9 +9,13 @@ CVE-2023-45853 exp:2026-06-30
 # (minor issue, requires attacker control of size+alignment args)
 CVE-2026-0861 exp:2026-06-30
 
-# quinn-proto Rust crate embedded in compiled Polars .so (multiqc dependency)
+# ── Rust crates embedded in compiled Polars .so (multiqc dependency) ──
+# quinn-proto: QUIC protocol DoS
 # No fix available until Polars releases a build with quinn-proto >= 0.11.14
 CVE-2026-31812 exp:2026-06-30
+# rustls-webpki: DoS via panic on malformed CRL BIT STRING.
+# No fix available until Polars releases a build with rustls-webpki >= 0.103.13.
+GHSA-82j2-j2ch-gfr8 exp:2026-06-30
 
 # linux-pam: directory traversal (no Debian fix available as of 2026-03-14)
 CVE-2025-6020 exp:2026-06-30
@@ -21,9 +25,9 @@ CVE-2025-68973 exp:2026-06-30
 
 # ── Go stdlib v1.23.4 in ncbi-datasets-cli 18.21.0 (ncbi_datasets container) ──
 # The NCBI datasets/dataformat binaries are pre-compiled Go executables distributed
-# via conda-forge. They ship Go stdlib v1.23.4; fixes require Go >= 1.24.6+.
+# via conda-forge. They ship Go stdlib v1.23.4.
+# Go ~= 1.25.10 or ~= 1.26.3 is required to address all vulnerabilities.
 # We cannot rebuild these — only NCBI can, by updating their Go toolchain.
-# As of 2026-03-25, conda-forge ncbi-datasets-cli 18.21.0 is the latest version.
 #
 # Risk assessment: these binaries run in an isolated container that only downloads
 # genome metadata from NCBI's API and writes local files. They do not serve TLS,
@@ -31,10 +35,10 @@ CVE-2025-68973 exp:2026-06-30
 # surface for these CVEs is minimal in our pipeline context.
 #
 # TODO: Remove these ignores when a newer ncbi-datasets-cli is available on
-# conda-forge built with Go >= 1.25.9. Check with:
+# conda-forge built with Go ~= 1.25.10 or ~= 1.26.3. Check with:
 #   conda search -c conda-forge ncbi-datasets-cli
 #   strings $(conda run -n <env> which datasets) | grep '^go1\.'
-# As of 2026-04-14, 18.23.0 still ships Go 1.23.4.
+# As of 2026-05-11, 18.25.1 still ships Go 1.23.4.
 #
 # crypto/tls: unexpected session resumption (CRITICAL)
 CVE-2025-68121 exp:2026-06-30
@@ -58,6 +62,16 @@ CVE-2026-32282 exp:2026-06-30
 CVE-2026-32281 exp:2026-06-30
 # crypto/tls: TLS 1.3 post-handshake key-update deadlock DoS (HIGH)
 CVE-2026-32283 exp:2026-06-30
+# net (cgo resolver): LookupCNAME mishandling of overlong CNAME responses (HIGH)
+CVE-2026-33811 exp:2026-06-30
+# net/http: HTTP/2 transport infinite loop on crafted SETTINGS frames (HIGH)
+CVE-2026-33814 exp:2026-06-30
+# net/mail: DoS via crafted ParseAddress/ParseAddressList/ParseDate inputs (HIGH)
+CVE-2026-39820 exp:2026-06-30
+# net: panic in Dial/LookupPort when handling NUL byte (HIGH)
+CVE-2026-39836 exp:2026-06-30
+# net/mail: DoS via pathological consumePhrase inputs (HIGH)
+CVE-2026-42499 exp:2026-06-30
 
 # ── Pillow in multiqc container (transitive dependency via matplotlib) ──
 # multiqc 1.33 (latest on bioconda) pulls Pillow 12.1.1; fix requires >= 12.2.0.
@@ -65,6 +79,9 @@ CVE-2026-32283 exp:2026-06-30
 # The vulnerability is a FITS GZIP decompression bomb — not a realistic attack
 # vector since multiqc only processes pipeline QC data, not untrusted FITS images.
 CVE-2026-40192 exp:2026-06-30
+# OOB write via integer overflow in PSD tile extents (HIGH): pipeline does not
+# generate or process PSD-format images.
+CVE-2026-42311 exp:2026-06-30
 
 # ── Debian bookworm base image: no fixes available ──
 # glibc: DoS via iconv() with specific character set conversions (fix_deferred)
@@ -95,9 +112,14 @@ CVE-2026-41989 exp:2026-06-30
 #   https://security-tracker.debian.org/tracker/CVE-2026-4878
 CVE-2026-4878 exp:2026-06-30
 
-# libgnutls30: DoS / out-of-bounds read in DTLS handshake fragment reassembly.
-# (No Debian fix available as of 2026-05-02). Our pipeline containers do not
-# run DTLS, only HTTPS, so we do not call the affected code.
-# Check for a Debian fix at:
-#   https://security-tracker.debian.org/tracker/CVE-2026-33845
-CVE-2026-33845 exp:2026-06-30
+# ── urllib3 2.6.3 transitive via awscli=2.34.9 in blast, bowtie2_samtools,
+# kraken2, minimap2_samtools ──
+# Our awscli usage is `update_blastdb.pl --source aws` and equivalents — HTTPS
+# to known NCBI/AWS endpoints, no proxy, no attacker-controlled compressed
+# streams; neither CVE is reachable. Fix exists in urllib3>=2.7.0 but every
+# current conda-forge awscli build pins urllib3<=2.6.3; re-eval when the
+# feedstock relaxes the cap.
+# CVE-2026-44431 (HIGH): cross-origin header leak in proxied low-level redirects.
+CVE-2026-44431 exp:2026-06-30
+# CVE-2026-44432 (HIGH): decompression-bomb safeguard bypass in streaming reads.
+CVE-2026-44432 exp:2026-06-30
