@@ -14,22 +14,28 @@ from check_process_tags import find_tag_violations, scan_modules
 # FIXTURES  #
 #############
 
-TAGGED = """\
-process FOO {
-    label "small"
-    tag "id=${sample}"
-    input:
-        path(x)
-    script:
-        "echo hi"
-}
-"""
+
+def _proc(tag_literal: str) -> str:
+    """A single-process file whose tag uses the given literal, with inputs
+    declaring the variables exercised by the format/variable tests."""
+    return (
+        "process FOO {\n"
+        f'    tag "{tag_literal}"\n'
+        "    input:\n"
+        "        tuple val(sample), val(group), val(taxid), val(stage_label)\n"
+        "    script:\n"
+        '        "a"\n'
+        "}\n"
+    )
+
+
+TAGGED = _proc("id=${sample}")
 
 UNTAGGED = """\
 process FOO {
     label "small"
     input:
-        path(x)
+        tuple val(sample), path(x)
     script:
         "echo hi"
 }
@@ -44,7 +50,7 @@ process FOO {
 }
 """
 
-# exec: body (sentinel-style) with a tag directive.
+# exec: body (sentinel-style) with a literal (no-variable) tag.
 EXEC_TAGGED = """\
 process FOO {
     executor 'local'
@@ -68,27 +74,27 @@ process BAR {
 }
 """
 
-# Tag directive present but the literal template is the wrong shape.
-MALFORMED_NO_ID = """\
+# Regression: dev renamed the input to `accession_chunk` but the tag still
+# interpolates the removed `taxid` variable. Well-formed, but unresolvable.
+TAG_UNKNOWN_VAR = """\
 process FOO {
-    tag "${sample}"
+    tag "id=index,name=${taxid}"
+    input:
+        path(accession_chunk)
     script:
         "a"
 }
 """
 
-MALFORMED_WRONG_KEY = """\
+TAG_RESOLVED_VAR = """\
 process FOO {
-    tag "sample=${x}"
+    tag "id=index,name=${accession_chunk.baseName}"
+    input:
+        path(accession_chunk)
     script:
         "a"
 }
 """
-
-
-def _name(content: str) -> str:
-    """Build a single-process file body with the given tag literal."""
-    return f'process FOO {{\n    tag "{content}"\n    script:\n        "a"\n}}\n'
 
 
 #######################################
@@ -101,11 +107,11 @@ def _name(content: str) -> str:
     [
         (TAGGED, []),
         (EXEC_TAGGED, []),
+        (TAG_RESOLVED_VAR, []),
         (UNTAGGED, ["FOO"]),
         (TAG_IN_SCRIPT_ONLY, ["FOO"]),
         (MULTI_MIXED, ["BAR"]),
-        (MALFORMED_NO_ID, ["FOO"]),
-        (MALFORMED_WRONG_KEY, ["FOO"]),
+        (TAG_UNKNOWN_VAR, ["FOO"]),
         ("", []),
     ],
 )
@@ -120,8 +126,9 @@ def test_find_tag_violations_names(content: str, expected_names: list[str]) -> N
         ("id=${group}", True),
         ("id=index", True),
         ("id=util", True),
-        ("id=index,name=${taxid}", True),
+        ("id=index,name=${taxid}", True),  # taxid declared as input in _proc
         ("id=${sample},stage=${stage_label}", True),
+        ("id=${params.foo}", True),  # params is an allowed global
         ("${sample}", False),  # missing id= prefix
         ("sample=${x}", False),  # first key is not id
         ("id", False),  # no value
@@ -131,13 +138,18 @@ def test_find_tag_violations_names(content: str, expected_names: list[str]) -> N
     ],
 )
 def test_find_tag_violations_format(literal: str, valid: bool) -> None:
-    violations = find_tag_violations(_name(literal))
+    violations = find_tag_violations(_proc(literal))
     assert (len(violations) == 0) == valid, violations
 
 
-def test_find_tag_violations_reports_reason() -> None:
-    [(name, reason)] = find_tag_violations(UNTAGGED)
+def test_unknown_variable_reason_names_the_variable() -> None:
+    [(name, reason)] = find_tag_violations(TAG_UNKNOWN_VAR)
     assert name == "FOO"
+    assert "taxid" in reason
+
+
+def test_missing_tag_reason() -> None:
+    [(_, reason)] = find_tag_violations(UNTAGGED)
     assert "missing" in reason
 
 
@@ -147,7 +159,7 @@ def test_find_tag_violations_preserves_declaration_order() -> None:
 
 
 def test_dynamic_tag_expression_is_accepted() -> None:
-    # A non-literal tag expression cannot be format-checked statically.
+    # A non-literal tag expression cannot be format- or variable-checked.
     body = "process FOO {\n    tag computeTag(sample)\n    script:\n        x\n}\n"
     assert find_tag_violations(body) == []
 

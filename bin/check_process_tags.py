@@ -6,23 +6,31 @@ and logs.
 
 Two complementary checks guard the tag invariant:
   - This static lint verifies, by scanning source, that every process declares
-    a `tag` directive and that its literal template is well-formed
-    (`id=<value>` optionally followed by `,<key>=<value>` components). It covers
-    every process, including orphaned ones never executed by any workflow.
+    a `tag` directive, that its literal template is well-formed
+    (`id=<value>` optionally followed by `,<key>=<value>` components), and that
+    every `${...}` variable it interpolates is a declared input of that process
+    (or a Nextflow global like `params`/`task`). It covers every process,
+    including orphaned ones never executed by any workflow.
   - The runtime `assertTraceTagsValid` helper in the workflow tests verifies the
     *rendered* tag values (post-interpolation, non-empty, correct grammar) for
     processes actually executed. Only execution can validate interpolated
-    `${...}` values, so that check remains necessary.
+    values, so that check remains necessary.
+
+The variable check catches a class of bug the others miss: a tag whose template
+references an input that a refactor renamed or removed (e.g. `name=${taxid}`
+after the input became `path(accession_chunk)`). Such a tag is well-formed and
+the process may never run in a test, yet it raises `MissingPropertyException`
+at trace-resolution time whenever it does run.
 
 A process is considered tagged if a `tag` directive appears in its directive
 section (before the first `input:`/`output:`/`when:`/`script:`/`shell:`/`exec:`
-label). When the directive's argument is a string literal, its template is also
-format-checked; non-literal (dynamic) tag expressions are accepted as present
-but not format-checked, since their value is only known at runtime.
+label). When the directive's argument is a string literal, its template and
+variables are checked; non-literal (dynamic) tag expressions are accepted as
+present but not further checked, since their value is only known at runtime.
 
 Exit codes:
-  0 - Every process declares a well-formed tag directive
-  1 - One or more processes have a missing or malformed tag directive
+  0 - Every process declares a well-formed, resolvable tag directive
+  1 - One or more processes have a missing, malformed, or unresolvable tag
 """
 
 ###########
@@ -62,7 +70,7 @@ logger.addHandler(handler)
 # CONSTANTS #
 #############
 
-# A process directive section ends at the first of these body labels.
+# A process directive/body section starts at one of these labels.
 BODY_LABEL = re.compile(r"\s*(input|output|when|script|shell|exec)\s*:")
 # Process declarations use UPPER_SNAKE_CASE names.
 PROCESS_START = re.compile(r"\s*process\s+([A-Z_][A-Z0-9_]*)\s*\{")
@@ -76,70 +84,123 @@ TAG_LITERAL = re.compile(r"""tag\s*\(?\s*['"]([^'"]*)['"]""")
 # mirrors the runtime grammar enforced by assertTraceTagsValid, modulo the
 # interpolated values that only execution can resolve.
 VALID_TAG = re.compile(r"id=[^=,\s]+(?:,[a-z_][a-z0-9_]*=[^=,\s]+)*")
+# Declared input names: the identifier inside val()/path()/env()/each(),
+# including those nested inside a `tuple` declaration.
+INPUT_DECL = re.compile(r"\b(?:val|path|env|each)\s*\(\s*([A-Za-z_][A-Za-z0-9_]*)")
+# The root variable of a `${...}` (or `$name`) interpolation in a tag template,
+# e.g. `${accession_chunk.baseName}` -> `accession_chunk`, `${sample}` -> sample.
+TAG_VAR = re.compile(r"\$\{?\s*([A-Za-z_][A-Za-z0-9_]*)")
+# Globals always in scope for a tag directive, so never "unresolved".
+ALLOWED_GLOBALS = frozenset({"params", "task", "workflow"})
 
 ####################
 # HELPER FUNCTIONS #
 ####################
 
 
-def find_tag_violations(content: str) -> list[tuple[str, str]]:
+def split_processes(content: str) -> list[tuple[str, list[str]]]:
     """
-    Find processes in a single module file with a missing or malformed tag.
-
-    Scans each `process NAME { ... }` declaration. A process is a violation if
-    its directive section contains no `tag` directive, or if the directive's
-    string-literal template is not well-formed (see VALID_TAG). Dynamic
-    (non-literal) tag expressions are accepted as present without format checks.
+    Split a module file into per-process bodies.
 
     Args:
         content: Full text of a Nextflow module file.
     Returns:
-        List of `(process_name, reason)` tuples in declaration order, one per
-        violating process. Empty if every process is well-formed.
+        List of `(process_name, body_lines)` in declaration order, where
+        `body_lines` are the lines after the `process NAME {` line up to (but
+        not including) the next process declaration.
+    """
+    processes: list[tuple[str, list[str]]] = []
+    name: str | None = None
+    body: list[str] = []
+    for line in content.splitlines():
+        start = PROCESS_START.match(line)
+        if start:
+            if name is not None:
+                processes.append((name, body))
+            name = start.group(1)
+            body = []
+            continue
+        if name is not None:
+            body.append(line)
+    if name is not None:
+        processes.append((name, body))
+    return processes
+
+
+def directive_tag_line(body_lines: list[str]) -> str | None:
+    """Return the `tag` directive line in the directive section, or None."""
+    for line in body_lines:
+        if BODY_LABEL.match(line):
+            return None  # reached the body before any tag directive
+        if TAG_DIRECTIVE.match(line):
+            return line
+    return None
+
+
+def input_names(body_lines: list[str]) -> set[str]:
+    """Collect declared input names from a process body's `input:` block."""
+    names: set[str] = set()
+    in_input = False
+    for line in body_lines:
+        label = BODY_LABEL.match(line)
+        if label:
+            in_input = label.group(1) == "input"
+            continue
+        if in_input:
+            names.update(INPUT_DECL.findall(line))
+    return names
+
+
+def find_tag_violations(content: str) -> list[tuple[str, str]]:
+    """
+    Find processes in a single module file with a missing, malformed, or
+    unresolvable tag directive.
+
+    For each `process NAME { ... }`, reports a violation when its directive
+    section has no `tag`, when the directive's string-literal template is not
+    well-formed (see VALID_TAG), or when the template interpolates a variable
+    that is neither a declared input nor a Nextflow global (ALLOWED_GLOBALS).
+    Dynamic (non-literal) tag expressions are accepted without further checks.
+
+    Args:
+        content: Full text of a Nextflow module file.
+    Returns:
+        List of `(process_name, reason)` tuples in declaration order, at most
+        one per violating process. Empty if every process is well-formed.
     """
     violations: list[tuple[str, str]] = []
-    current: str | None = None
-    in_directives = False
-    tag_line: str | None = None
-
-    def flush() -> None:
-        if current is None:
-            return
+    for name, body in split_processes(content):
+        tag_line = directive_tag_line(body)
         if tag_line is None:
-            violations.append((current, "missing tag directive"))
-            return
+            violations.append((name, "missing tag directive"))
+            continue
         match = TAG_LITERAL.search(tag_line)
         if match is None:
             # Dynamic tag expression; value is only known at runtime.
-            return
+            continue
         value = match.group(1)
         if not VALID_TAG.fullmatch(value):
             violations.append(
                 (
-                    current,
+                    name,
                     f'malformed tag "{value}" (expected id=<value>[,key=<value>...])',
                 )
             )
-
-    for line in content.splitlines():
-        start = PROCESS_START.match(line)
-        if start:
-            # A new process begins: finalize the previous one first.
-            flush()
-            current = start.group(1)
-            in_directives = True
-            tag_line = None
             continue
-        if current is None:
-            continue
-        if in_directives and BODY_LABEL.match(line):
-            # Directive section is over; the verdict for this process is fixed.
-            in_directives = False
-            continue
-        if in_directives and tag_line is None and TAG_DIRECTIVE.match(line):
-            tag_line = line
-
-    flush()
+        declared = input_names(body)
+        unresolved = [
+            var
+            for var in TAG_VAR.findall(value)
+            if var not in declared and var not in ALLOWED_GLOBALS
+        ]
+        if unresolved:
+            violations.append(
+                (
+                    name,
+                    f'tag references unknown variable "{unresolved[0]}" '
+                    "(not a declared input of the process)",
+                )
+            )
     return violations
 
 
@@ -198,10 +259,10 @@ def main() -> None:
                 logger.error("Process %s in %s: %s", name, path, reason)
         total = sum(len(v) for v in violations.values())
         raise ValueError(
-            f"{total} process(es) in {modules_dir} have a missing or malformed tag "
-            'directive. Every process must declare `tag "id=<value>"` (optionally '
-            "with `,<key>=<value>` components) for per-task cost attribution; see "
-            "the tag conventions in CLAUDE.md."
+            f"{total} process(es) in {modules_dir} have a missing, malformed, or "
+            'unresolvable tag directive. Every process must declare `tag "id=<value>"` '
+            "(optionally with `,<key>=<value>` components) referencing declared "
+            "inputs, for per-task cost attribution; see the tag conventions in CLAUDE.md."
         )
 
     n_files = len(list(modules_dir.glob("*/main.nf")))
