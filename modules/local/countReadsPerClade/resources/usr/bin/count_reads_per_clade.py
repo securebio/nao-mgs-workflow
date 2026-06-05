@@ -43,7 +43,10 @@ def read_tsv(file_path: str) -> Iterator[dict[str, str]]:
 
     """
     with open_by_suffix(file_path, mode="rt") as file:
-        reader = csv.DictReader(file, delimiter="\t")
+        # quoting=QUOTE_NONE: TSVs aren't CSV-quoted; a field starting with '"'
+        # would otherwise flip the reader into quoted mode and read across rows
+        # until it exceeds the field-size limit (#823).
+        reader = csv.DictReader(file, delimiter="\t", quoting=csv.QUOTE_NONE)
         yield from reader
 
 

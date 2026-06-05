@@ -106,6 +106,9 @@ class TestAddConditionalColumn:
         [
             'AAAA"BBBB',
             "AAAA'BBBB",
+            # Leading-quote case (#823): a field starting with '"' flips the
+            # default csv reader into quoted mode and corrupts the field.
+            '"STARTS_WITH_QUOTE',
         ],
     )
     def test_fields_with_quote_characters_not_escaped(
