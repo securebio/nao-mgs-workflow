@@ -7,12 +7,13 @@ name = "mgs-workflow"
 version = "3.2.2.0-dev"
 requires-python = ">=3.12"
 dependencies = [
-    "biopython>=1.85",
+    # biopython, jsonschema, pandas, pysam pinned to match the containers/*.yml conda pins.
+    "biopython==1.85",
     "boto3",
     "frictionless>=5.18.0",
-    "jsonschema>=4.20.0",
+    "jsonschema==4.25.0",
     "mypy>=1.18.1",
-    "pandas-stubs",
+    "pandas-stubs~=2.3.0",
     "types-PyYAML",
     "types-jsonschema",
     # Needed until https://github.com/securebio/nao-dedup/pull/12 has been
@@ -20,8 +21,8 @@ dependencies = [
     # no-python version.
     "networkx",
     "packaging>=24.0",
-    "pandas>=2.3.2",
-    "pysam>=0.23.3",
+    "pandas==2.3.3",
+    "pysam==0.23.3",
     "pytest>=8.4.2",
     "ruff>=0.13.0",
 ]
