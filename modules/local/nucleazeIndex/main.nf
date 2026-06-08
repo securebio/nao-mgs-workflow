@@ -3,6 +3,7 @@
 process NUCLEAZE_INDEX {
     label "small"
     label "rust_tools"
+    tag "id=index"
     input:
         path(ref_fasta)
         val(k)

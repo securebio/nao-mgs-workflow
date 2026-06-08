@@ -3,6 +3,7 @@
 process SORT_TSV {
     label "python"
     label "single_cpu_16GB_memory"
+    tag "id=${sample}"
     input:
         tuple val(sample), path(tsv)
         val(sort_field)

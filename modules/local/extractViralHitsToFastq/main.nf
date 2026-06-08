@@ -2,6 +2,7 @@
 process EXTRACT_VIRAL_HITS_TO_FASTQ {
     label "seqtk"
     label "single_cpu_16GB_memory"
+    tag "id=${sample}"
     input:
         tuple val(sample), path(hits_tsv), path(fastq)
     output:

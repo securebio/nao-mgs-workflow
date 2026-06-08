@@ -55,7 +55,7 @@ def filter_metadata(
         sequence IDs alongside the live record.
     """
     screen_cols = ["infection_status_" + t for t in host_taxa]
-    screen_status = (virus_db[screen_cols] == "1").max(1)
+    screen_status = (virus_db[screen_cols] == "1").max(axis=1)
     virus_taxids = virus_db[screen_status]["taxid"].reset_index(drop=True)
     # Roll the input taxid up to species level via virus_db so that strain-
     # level accessions whose taxid isn't directly host-infecting still match

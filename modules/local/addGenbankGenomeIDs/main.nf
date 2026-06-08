@@ -4,6 +4,7 @@ process ADD_GENBANK_GENOME_IDS {
     label "biopython"
     label "xsmall"
     label "use_scratch"
+    tag "id=index"
     input:
         path(genbank_metadata)
         path(genbank_genomes)

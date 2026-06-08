@@ -2,6 +2,7 @@
 process COPY_FILE {
     label "single"
     label "coreutils"
+    tag "id=${sample}"
     input:
         tuple val(sample), path(file)
         val(outname)
@@ -19,6 +20,7 @@ process COPY_FILE {
 process COPY_FILE_BARE {
     label "single"
     label "coreutils"
+    tag "id=util"
     input:
         path(file)
         val(outname)

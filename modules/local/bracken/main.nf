@@ -2,6 +2,7 @@
 process BRACKEN {
     label "bracken_plus_utils"
     label "single"
+    tag "id=${sample}"
     input:
         tuple val(sample), path(report)
         path db_path

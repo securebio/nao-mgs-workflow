@@ -2,6 +2,7 @@
 process CONCATENATE_FASTA_GZIPPED {
     label "single"
     label "coreutils"
+    tag "id=index"
     input:
         path(files)
         val(name)

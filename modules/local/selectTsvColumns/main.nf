@@ -8,6 +8,7 @@ return a new TSV containing either:
 process SELECT_TSV_COLUMNS {
     label "python"
     label "single"
+    tag "id=${sample}"
     input:
         tuple val(sample), path(tsv) // Input TSV
         val(fields) // Comma-separated list of fields to select

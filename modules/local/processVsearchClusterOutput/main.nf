@@ -3,6 +3,7 @@
 process PROCESS_VSEARCH_CLUSTER_OUTPUT_LIST {
     label "rust_tools"
     label "single"
+    tag "id=${sample}"
     input:
         tuple val(sample), path(summaries)
         val n_clusters // Return representative IDs of the N largest clusters

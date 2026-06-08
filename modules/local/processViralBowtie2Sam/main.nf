@@ -3,6 +3,7 @@
 process PROCESS_VIRAL_BOWTIE2_SAM {
     label "pysam_biopython"
     label "single"
+    tag "id=${sample}"
     input:
         tuple val(sample), path(sam)
         path genbank_metadata_path

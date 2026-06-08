@@ -2,6 +2,7 @@
 process EXTRACT_VERSIONS {
     label "single"
     label "python"
+    tag "id=util"
     input:
         path pipeline_pyproject, stageAs: "pipeline_pyproject.toml"
         path index_pyproject, stageAs: "index_pyproject.toml"

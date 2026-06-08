@@ -5,6 +5,7 @@
 process ADD_CONDITIONAL_TSV_COLUMN {
     label "python"
     label "single"
+    tag "id=${sample}"
     input:
         tuple val(sample), path(tsv)
         val(params_map)

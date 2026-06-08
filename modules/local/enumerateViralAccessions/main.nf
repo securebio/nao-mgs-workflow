@@ -6,6 +6,7 @@
 process ENUMERATE_VIRAL_ACCESSIONS {
     label "ncbi_datasets"
     label "single"
+    tag "id=index"
     input:
         val(taxid)
         val(assembly_source)

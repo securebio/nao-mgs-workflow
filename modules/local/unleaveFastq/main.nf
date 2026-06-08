@@ -4,6 +4,7 @@ process UNLEAVE_FASTQ {
     label "small"
     label "BBTools"
     label "testing_only" // Process is currently only used for testing
+    tag "id=${sample}"
     input:
         tuple val(sample), path(reads_interleaved)
     output:

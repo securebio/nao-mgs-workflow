@@ -2,6 +2,7 @@
 process MARK_SIMILARITY_DUPLICATES {
     label "single"
     label "rust_tools"
+    tag "id=${sample}"
     input:
         tuple val(sample), path(tsv)
     output:

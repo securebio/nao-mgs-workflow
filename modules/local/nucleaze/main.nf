@@ -5,6 +5,7 @@
 process NUCLEAZE {
     label "small"
     label "rust_tools"
+    tag "id=${sample}"
     input:
         tuple val(sample), path(reads)   // reads is [R1.fastq, R2.fastq]
         path(index)

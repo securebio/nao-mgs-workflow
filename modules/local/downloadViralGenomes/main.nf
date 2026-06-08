@@ -4,6 +4,7 @@ process DOWNLOAD_VIRAL_GENOMES {
     label "ncbi_datasets"
     label "large"
     label "use_scratch"
+    tag "id=index,name=${accession_chunk.baseName}"
     input:
         path(accession_chunk)
         val(assembly_source)
