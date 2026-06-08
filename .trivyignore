@@ -83,6 +83,9 @@ CVE-2026-39825 exp:2026-06-30
 # html/template: XSS via script type-attribute escaper bypass (HIGH); as above,
 # no server-side templating in these CLI tools.
 CVE-2026-39826 exp:2026-06-30
+# mime/net-mail: excessive CPU decoding crafted MIME headers with many invalid
+# encoded-words (HIGH); these CLIs fetch JSON from NCBI's API, never parse email/MIME.
+CVE-2026-42504 exp:2026-06-30
 
 # ── Pillow in multiqc container (transitive dependency via matplotlib) ──
 # multiqc 1.33 (latest on bioconda) pulls Pillow 12.1.1; fix requires >= 12.2.0.
