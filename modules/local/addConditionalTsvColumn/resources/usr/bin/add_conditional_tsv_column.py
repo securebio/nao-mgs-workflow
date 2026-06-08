@@ -72,9 +72,7 @@ def add_conditional_column(
     with open_by_suffix(input_path) as inf, open_by_suffix(out_path, "w") as outf:
         # Use DictReader for cleaner column access by name.
         # quoting=QUOTE_NONE: TSVs aren't CSV-quoted, and a query_qual field
-        # starting with '"' (Phred Q1) would otherwise flip the reader into
-        # quoted mode and accumulate across rows until it exceeds the field-size
-        # limit (#823).
+        # starting with '"' (Phred Q1) would otherwise be incorrectly parsed.
         reader = csv.DictReader(inf, delimiter="\t", quoting=csv.QUOTE_NONE)
 
         # Handle empty file
