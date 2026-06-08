@@ -88,7 +88,7 @@ These are the labels the script writes into `genomes_lost_categorized.tsv`, `gen
 - `infection_status_demotion`: build-time species_taxid equals the old species_taxid AND the species is no longer surveilled — an upstream VHDB host-annotation change demoted the taxon.
 - `other`: present, current, surveilled — yet absent from the new gid set. Should be ~0; if not, flags a downstream/sequence-level drop (`genome_patterns_exclude`, masking, dedup) worth investigating.
 
-If the target index predates the `virus-genome-metadata-raw.tsv.gz` output, the script falls back to a legacy species-rank forward-mapping approximation and `summary.md` carries a ⚠️ banner in §3.1; its lost buckets are the older `hard_excluded` / `species_dropped_from_metadata` / `change_in_assigned_taxid` / `non_current_genome_version` / `other` set. Rebuild the index to get exact attribution.
+The target index must publish `virus-genome-metadata-raw.tsv.gz` (the pre-filter assembly list). If it's missing, the script errors out rather than guessing — rebuild the index with a pipeline version that emits it.
 
 **Gained gid categories** (priority order):
 

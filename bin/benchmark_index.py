@@ -406,83 +406,6 @@ def _ancestor_in(taxid: str, parent_map: dict[str, str], target: set[str]) -> st
     return ""
 
 
-def categorize_lost_genomes(
-    removed: pd.DataFrame,
-    parent_map: dict[str, str],
-    excluded_taxids: set[str],
-    species_redistributed: set[str],
-    species_truly_lost: set[str],
-    species_in_new_meta: set[str],
-) -> pd.DataFrame:
-    """Classify each removed `genome_id` (gone from new metadata at the gid
-    level) by the most likely reason it was dropped from the surveillance
-    set. Categories, in priority order:
-
-    - `hard_excluded`: gid's old species_taxid (or an ancestor) is in
-      `viral_taxids_exclude_hard` in the new build — the new exclude rule
-      explains the loss.
-    - `change_in_assigned_taxid`: gid's old species had its gids
-      redistributed to a different species_taxid (NCBI / ICTV taxonomy
-      restructuring); this gid was dropped at the filter stage under the
-      new assignment.
-    - `species_dropped_from_metadata`: gid's old species lost all its
-      genome_ids between builds AND wasn't redistributed to a different
-      taxid. Possible causes include an upstream infection-status flip
-      (VHDB no longer annotates the species as infecting any host in
-      `host_taxa_screen`), every assembly being dropped by the
-      `assembly_status == 'current'` filter, or NCBI retiring the species
-      from the taxonomy entirely. The pipeline-derived `infection_status`
-      will appear to flip in all three cases (it's derived from surviving
-      gids), so this bucket name stays cause-agnostic.
-    - `non_current_genome_version`: gid is gone but its species_taxid still
-      has surviving gids in new metadata. The species itself is still
-      surveilled; this specific gid was almost certainly dropped by the
-      `assembly_status == 'current'` filter (it's a superseded NCBI
-      assembly version).
-    - `other`: no rule applies; a genuine upstream removal.
-
-    Returns the input DataFrame with `reason` and `reason_taxid` columns
-    appended. `reason_taxid` is the lineage taxid that matched
-    `hard_excluded`, the species_taxid for the other categories, or ""
-    for `other`."""
-    out = removed.copy()
-    if out.empty:
-        out["reason"] = pd.Series(dtype=str)
-        out["reason_taxid"] = pd.Series(dtype=str)
-        return out
-    reasons: list[str] = []
-    reason_taxids: list[str] = []
-    for _, row in out.iterrows():
-        sp = str(row["species_taxid"])
-        hard = _ancestor_in(sp, parent_map, excluded_taxids)
-        if hard:
-            reasons.append("hard_excluded")
-            reason_taxids.append(hard)
-            continue
-        if sp in species_redistributed:
-            reasons.append("change_in_assigned_taxid")
-            reason_taxids.append(sp)
-            continue
-        if sp in species_truly_lost:
-            # Species lost all its gids without redistribution. The cause
-            # may be an upstream VHDB host-annotation change, every
-            # assembly failing the `assembly_status == 'current'` filter,
-            # or NCBI retiring the species — we can't tell from here
-            # alone, so the bucket name stays cause-agnostic.
-            reasons.append("species_dropped_from_metadata")
-            reason_taxids.append(sp)
-            continue
-        if sp in species_in_new_meta:
-            reasons.append("non_current_genome_version")
-            reason_taxids.append(sp)
-            continue
-        reasons.append("other")
-        reason_taxids.append("")
-    out["reason"] = reasons
-    out["reason_taxid"] = reason_taxids
-    return out
-
-
 def surveilled_species(new_db: pd.DataFrame, screened_hosts: list[str]) -> set[str]:
     """Set of taxids whose `infection_status_<host>` is positive for any
     screened host in the new annotated virus DB — i.e. taxa that pass the
@@ -510,11 +433,11 @@ def categorize_lost_genomes_raw(
 ) -> pd.DataFrame:
     """Categorize each lost `genome_id` by joining its `assembly_accession` into
     the new index's pre-filter raw metadata to recover the genome's *build-time*
-    taxid + assembly_status, then reading the new annotated DB. This avoids the
-    no-drift assumption of the species-rank forward-mapping fallback
-    (`categorize_lost_genomes`). Categories, in priority order — assembly-
-    lifecycle reasons (the assembly itself is gone/superseded) before taxonomy /
-    policy reasons (the assembly is current but we stopped surveilling its taxon):
+    taxid + assembly_status, then reading the new annotated DB. Exact attribution
+    with no no-drift assumption and no live NCBI lookups. Categories, in priority
+    order — assembly-lifecycle reasons (the assembly itself is gone/superseded)
+    before taxonomy / policy reasons (the assembly is current but we stopped
+    surveilling its taxon):
 
     - `absent_from_ncbi`: assembly_accession absent from the new raw metadata
       entirely — NCBI suppressed or removed the assembly between builds, so there
@@ -1125,7 +1048,6 @@ def write_summary_md(  # noqa: C901, PLR0912, PLR0915 - long but linear report w
     coverage_available: bool,
     params_changes: pd.DataFrame,
     bidirectional_flips: pd.DataFrame,
-    lost_mode: str = "raw",
 ) -> None:
     """Write a self-contained `summary.md` following the structure of
     `.claude/skills/benchmark-index/review-template.md`. Data-only; the
@@ -1269,8 +1191,8 @@ def write_summary_md(  # noqa: C901, PLR0912, PLR0915 - long but linear report w
     lines += ["", "### 3. Virus genomes", "", "#### 3.1. Total", ""]
 
     # §3.1 categories match `review-template.md` literally. Labels are
-    # template strings; reorder for display only — the categorization
-    # priority lives in categorize_lost_genomes / categorize_gained_genomes.
+    # template strings; reorder for display only — the categorization priority
+    # lives in categorize_lost_genomes_raw / categorize_gained_genomes.
     loss_n = len(lost_categorized)
     gain_n = len(gained_categorized)
     loss_counts: dict[str, int] = (
@@ -1283,27 +1205,16 @@ def write_summary_md(  # noqa: C901, PLR0912, PLR0915 - long but linear report w
         if gain_n
         else {}
     )
-    # Lost-gid category labels depend on which categorizer ran. The `raw` path
-    # (build-time taxid recovered from the new index's pre-filter raw metadata)
-    # uses the exact 6-bucket scheme; `approx` is the legacy species-rank
-    # forward-mapping fallback used when the raw table is absent.
-    if lost_mode == "raw":
-        loss_label_specs = [
-            ("absent_from_ncbi", "Absent from NCBI (suppressed or removed)"),
-            ("non_current_genome_version", "Non-current assembly version"),
-            ("hard_excluded", "Hard-excluded"),
-            ("reassigned_to_excluded", "Reassigned to excluded taxon"),
-            ("infection_status_demotion", "Infection-status demotion"),
-            ("other", "Other (current, surveilled — yet absent)"),
-        ]
-    else:
-        loss_label_specs = [
-            ("hard_excluded", "Hard-excluded"),
-            ("species_dropped_from_metadata", "Species dropped from metadata"),
-            ("change_in_assigned_taxid", "Change in assigned taxid"),
-            ("non_current_genome_version", "Non-current genome version"),
-            ("other", "Other"),
-        ]
+    # Lost-gid categories: build-time taxid + assembly_status recovered from the
+    # target index's pre-filter raw metadata. Assembly-lifecycle reasons first.
+    loss_label_specs = [
+        ("absent_from_ncbi", "Absent from NCBI (suppressed or removed)"),
+        ("non_current_genome_version", "Non-current assembly version"),
+        ("hard_excluded", "Hard-excluded"),
+        ("reassigned_to_excluded", "Reassigned to excluded taxon"),
+        ("infection_status_demotion", "Infection-status demotion"),
+        ("other", "Other (current, surveilled — yet absent)"),
+    ]
     gain_label_specs = [
         ("hard_included", "Hard-included"),
         ("change_in_assigned_taxid", "Change in assigned taxid"),
@@ -1323,14 +1234,6 @@ def write_summary_md(  # noqa: C901, PLR0912, PLR0915 - long but linear report w
     a_perhost = next(_ap)
     a_params_table = next(_ap)
     a_params_diff = next(_ap)
-    if lost_mode == "approx":
-        lines += [
-            "> ⚠️ The target index lacks `virus-genome-metadata-raw.tsv.gz`, so"
-            " lost genomes are categorized by the **approximate** species-rank"
-            " forward-mapping heuristic, not their build-time taxid assignment."
-            " Rebuild the index to enable exact loss attribution.",
-            "",
-        ]
     lines.append(f"- **Genome IDs lost: {loss_n:,}**")
     for key, label, appendix in loss_labels:
         n = loss_counts.get(key, 0)
@@ -1381,25 +1284,6 @@ def write_summary_md(  # noqa: C901, PLR0912, PLR0915 - long but linear report w
                     f" being covered by a hard-exclude rule (see Appendix"
                     f" {a_lost_inventory})."
                 )
-                # The redistributed/true-loss split is the legacy forward-mapping
-                # heuristic; under the `raw` categorizer the §3.1 buckets already
-                # attribute losses precisely, so only surface it in `approx` mode.
-                if lost_mode == "approx" and "likely_rename" in uncovered_zeros.columns:
-                    redistributed = uncovered_zeros[
-                        uncovered_zeros["likely_rename"] == "yes"
-                    ]
-                    true_losses = uncovered_zeros[
-                        uncovered_zeros["likely_rename"] == "no"
-                    ]
-                    lines.append(
-                        f"    - {len(redistributed)} redistributed (genome_ids moved to a"
-                        " different species_taxid via NCBI/ICTV taxonomy restructuring; the"
-                        f" sequences remain in the index — see Appendix {a_lost_inventory})."
-                    )
-                    lines.append(
-                        f"    - {len(true_losses)} true losses (genome_ids absent from the new"
-                        f" metadata entirely — see Appendix {a_lost_inventory})."
-                    )
 
     # §3.3 Gains discussion.
     lines += ["", "#### 3.3. Gains", ""]
@@ -1936,25 +1820,22 @@ def main() -> None:
         old_meta = pd.read_csv(old_meta_path, sep="\t", dtype=str)
         new_meta = pd.read_csv(new_meta_path, sep="\t", dtype=str)
         # New index's pre-filter assembly metadata (accession -> build-time taxid
-        # + assembly_status). Published since the index workflow learned to emit
-        # it; older builds predate it, in which case lost-genome categorization
-        # falls back to the species-rank forward-mapping approximation.
+        # + assembly_status). Required for lost-genome categorization, which
+        # recovers each lost genome's build-time assignment from it.
         try:
             new_raw_path = fetch(
                 args.new,
                 "output/results/virus-genome-metadata-raw.tsv.gz",
                 td / "new",
             )
-            new_raw_meta: pd.DataFrame | None = pd.read_csv(
-                new_raw_path, sep="\t", dtype=str
-            )
-        except (subprocess.CalledProcessError, FileNotFoundError):
-            logger.warning(
-                "New index has no virus-genome-metadata-raw.tsv.gz; falling back to "
-                "the species-rank forward-mapping approximation for lost-genome "
-                "categorization (rebuild the index to enable exact attribution)."
-            )
-            new_raw_meta = None
+        except (subprocess.CalledProcessError, FileNotFoundError) as exc:
+            raise ValueError(
+                "Target index has no output/results/virus-genome-metadata-raw.tsv.gz,"
+                " which is required for lost-genome categorization. Rebuild the index"
+                " with a pipeline version that publishes the pre-filter assembly"
+                " metadata."
+            ) from exc
+        new_raw_meta = pd.read_csv(new_raw_path, sep="\t", dtype=str)
         # Schema diff (column-set change is a major driver of compressed-bytes
         # change independent of row count).
         old_meta_cols = list(old_meta.columns)
@@ -2124,51 +2005,18 @@ def main() -> None:
         )
 
     # Per-genome-id categorization for §3.1 (lost / gained gids by reason).
-    # Inputs derived from already-computed annotations:
-    #   - species_redistributed: species that lost all their old gids but
-    #     where most gids reappear under a different species_taxid in new
-    #     metadata (NCBI/ICTV restructure target).
-    #   - species_truly_lost: species that lost all old gids without
-    #     redistribution AND aren't covered by a hard-exclude. Cause may be
-    #     a VHDB infection-status flip, every assembly failing the
-    #     `assembly_status == 'current'` filter, or NCBI retiring the
-    #     species — see the `species_dropped_from_metadata` bucket docs.
-    #   - species_in_new_meta / species_in_old_meta: the surveillance set in
-    #     each build (a species is in metadata iff it passed the filter).
+    # Gained-side inputs derived from already-computed annotations:
+    #   - species_in_old_meta: the old surveillance set (species in old metadata).
     #   - species_in_old_db: every taxid in the old taxonomy DB; used to
     #     distinguish "filter flipped to surveilled" (was in old_db, not in
     #     old_meta) from genuinely-new species concepts.
-    #   - species_redistribution_destinations: new species_taxids that are
-    #     the target of a redistribution, indicating NCBI/ICTV restructure
-    #     rather than a brand-new species concept.
+    #   - species_redistribution_destinations: new species_taxids that are the
+    #     target of a redistribution, indicating NCBI/ICTV restructure rather
+    #     than a brand-new species concept.
     logger.info("Categorizing lost / gained genome IDs.")
     species_in_old_meta: set[str] = set(old_meta["species_taxid"].astype(str))
-    species_in_new_meta: set[str] = set(new_meta["species_taxid"].astype(str))
     species_in_old_db: set[str] = (
         set(old_db["taxid"].astype(str)) if "taxid" in old_db.columns else set()
-    )
-    species_redistributed: set[str] = (
-        set(
-            species_lost.loc[
-                species_lost["redistributed_genome_count"] > 0, "species_taxid"
-            ].astype(str)
-        )
-        if "redistributed_genome_count" in species_lost.columns
-        else set()
-    )
-    species_truly_lost: set[str] = (
-        set(
-            species_lost.loc[
-                (species_lost["redistributed_genome_count"] == 0)
-                & (species_lost["covered_by_hard_exclude"] == ""),
-                "species_taxid",
-            ].astype(str)
-        )
-        if {
-            "redistributed_genome_count",
-            "covered_by_hard_exclude",
-        }.issubset(species_lost.columns)
-        else set()
     )
     species_redistribution_destinations: set[str] = (
         set(
@@ -2180,31 +2028,18 @@ def main() -> None:
         if "redistributed_to_species_taxid" in species_lost.columns
         else set()
     )
-    # Lost-genome categorization. Preferred path joins each lost assembly into
-    # the new index's pre-filter raw metadata to recover its build-time taxid +
-    # assembly_status (exact, no no-drift assumption). Falls back to the
-    # species-rank forward-mapping approximation when the raw table is absent.
+    # Lost-genome categorization joins each lost assembly into the new index's
+    # pre-filter raw metadata to recover its build-time taxid + assembly_status
+    # (exact, no no-drift assumption). The raw table is required (fetched above).
     screened_hosts = new_params.get("host_taxa_screen", "").split()
-    if new_raw_meta is not None:
-        lost_mode = "raw"
-        lost_categorized = categorize_lost_genomes_raw(
-            removed_g,
-            new_raw_meta,
-            new_db,
-            parent_map,
-            excluded_taxids,
-            screened_hosts,
-        )
-    else:
-        lost_mode = "approx"
-        lost_categorized = categorize_lost_genomes(
-            removed_g,
-            parent_map,
-            excluded_taxids,
-            species_redistributed,
-            species_truly_lost,
-            species_in_new_meta,
-        )
+    lost_categorized = categorize_lost_genomes_raw(
+        removed_g,
+        new_raw_meta,
+        new_db,
+        parent_map,
+        excluded_taxids,
+        screened_hosts,
+    )
     gained_categorized = categorize_gained_genomes(
         added_g,
         parent_map,
@@ -2251,7 +2086,6 @@ def main() -> None:
         coverage_available,
         params_changes,
         bidirectional_flips,
-        lost_mode,
     )
     logger.info(f"Done. Outputs in {args.out.resolve()}")
 
