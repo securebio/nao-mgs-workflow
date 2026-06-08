@@ -21,6 +21,7 @@ from benchmark_index import (
     build_parent_map,
     categorize_gained_genomes,
     categorize_lost_genomes,
+    categorize_lost_genomes_raw,
     check_ref_staleness,
     classify_coverage,
     compare_size_listings,
@@ -36,6 +37,7 @@ from benchmark_index import (
     parse_kraken_url_date,
     parse_silva_url_release,
     summarise_params_changes,
+    surveilled_species,
     tsv_row_count,
 )
 
@@ -49,18 +51,21 @@ def old_genome_meta() -> pd.DataFrame:
     return pd.DataFrame(
         [
             {
+                "assembly_accession": "GCA_1",
                 "genome_id": "G1",
                 "taxid": "10",
                 "species_taxid": "100",
                 "organism_name": "A",
             },
             {
+                "assembly_accession": "GCA_2",
                 "genome_id": "G2",
                 "taxid": "10",
                 "species_taxid": "100",
                 "organism_name": "A",
             },
             {
+                "assembly_accession": "GCA_3",
                 "genome_id": "G3",
                 "taxid": "20",
                 "species_taxid": "200",
@@ -75,18 +80,21 @@ def new_genome_meta() -> pd.DataFrame:
     return pd.DataFrame(
         [
             {
+                "assembly_accession": "GCA_2",
                 "genome_id": "G2",
                 "taxid": "10",
                 "species_taxid": "100",
                 "organism_name": "A",
             },
             {
+                "assembly_accession": "GCA_4",
                 "genome_id": "G4",
                 "taxid": "20",
                 "species_taxid": "200",
                 "organism_name": "B",
             },
             {
+                "assembly_accession": "GCA_5",
                 "genome_id": "G5",
                 "taxid": "30",
                 "species_taxid": "300",
@@ -686,6 +694,181 @@ class TestAnnotateLostGenomes:
             "covered_by_hard_exclude",
         ):
             assert col in out.columns
+
+
+class TestSurveilledSpecies:
+    def test_positive_for_any_screened_host(self) -> None:
+        db = pd.DataFrame(
+            [
+                {
+                    "taxid": "1",
+                    "infection_status_vertebrate": "1",
+                    "infection_status_human": "0",
+                },
+                {
+                    "taxid": "2",
+                    "infection_status_vertebrate": "0",
+                    "infection_status_human": "1",
+                },
+                {
+                    "taxid": "3",
+                    "infection_status_vertebrate": "0",
+                    "infection_status_human": "0",
+                },
+            ]
+        )
+        assert surveilled_species(db, ["vertebrate", "human"]) == {"1", "2"}
+
+    def test_unscreened_host_ignored(self) -> None:
+        db = pd.DataFrame(
+            [
+                {
+                    "taxid": "1",
+                    "infection_status_vertebrate": "0",
+                    "infection_status_bird": "1",
+                }
+            ]
+        )
+        # bird is not in the screen -> taxid 1 is not surveilled
+        assert surveilled_species(db, ["vertebrate"]) == set()
+
+    def test_missing_columns_returns_empty(self) -> None:
+        assert (
+            surveilled_species(pd.DataFrame([{"taxid": "1"}]), ["vertebrate"]) == set()
+        )
+
+
+class TestCategorizeLostGenomesRaw:
+    """Exact lost-genome categorization keyed on the target index's pre-filter
+    raw metadata (build-time taxid + assembly_status)."""
+
+    @pytest.fixture
+    def new_db(self) -> pd.DataFrame:
+        # taxid 700 sits under excluded ancestor 70; 800 is an unsurveilled
+        # species (810 is a child leaf of it); 900 is a surveilled species.
+        return pd.DataFrame(
+            [
+                {
+                    "taxid": "1",
+                    "taxid_species": "",
+                    "parent_taxid": "1",
+                    "infection_status_vertebrate": "0",
+                },
+                {
+                    "taxid": "70",
+                    "taxid_species": "",
+                    "parent_taxid": "1",
+                    "infection_status_vertebrate": "0",
+                },
+                {
+                    "taxid": "700",
+                    "taxid_species": "700",
+                    "parent_taxid": "70",
+                    "infection_status_vertebrate": "0",
+                },
+                {
+                    "taxid": "800",
+                    "taxid_species": "800",
+                    "parent_taxid": "1",
+                    "infection_status_vertebrate": "0",
+                },
+                {
+                    "taxid": "810",
+                    "taxid_species": "800",
+                    "parent_taxid": "800",
+                    "infection_status_vertebrate": "0",
+                },
+                {
+                    "taxid": "900",
+                    "taxid_species": "900",
+                    "parent_taxid": "1",
+                    "infection_status_vertebrate": "1",
+                },
+            ]
+        )
+
+    @pytest.fixture
+    def raw_meta(self) -> pd.DataFrame:
+        cols = [
+            "assembly_accession",
+            "taxid",
+            "organism_name",
+            "source_database",
+            "assembly_status",
+        ]
+        rows = [
+            ("GCA_NC", "900", "X", "SOURCE_DATABASE_GENBANK", "suppressed"),
+            ("GCA_HE", "700", "X", "SOURCE_DATABASE_GENBANK", "current"),
+            ("GCA_RE", "810", "X", "SOURCE_DATABASE_GENBANK", "current"),
+            ("GCA_DE", "800", "X", "SOURCE_DATABASE_GENBANK", "current"),
+            ("GCA_OT", "900", "X", "SOURCE_DATABASE_GENBANK", "current"),
+        ]  # GCA_ABS deliberately absent
+        return pd.DataFrame(rows, columns=cols)
+
+    @pytest.fixture
+    def removed(self) -> pd.DataFrame:
+        cols = [
+            "assembly_accession",
+            "genome_id",
+            "taxid",
+            "species_taxid",
+            "organism_name",
+        ]
+        rows = [
+            ("GCA_ABS", "gA", "100", "100", "Absent"),
+            ("GCA_NC", "gN", "900", "900", "NonCurrent"),
+            ("GCA_HE", "gH", "700", "700", "HardExcl"),
+            ("GCA_RE", "gR", "200", "200", "Reassigned"),
+            ("GCA_DE", "gD", "800", "800", "Demoted"),
+            ("GCA_OT", "gO", "900", "900", "Other"),
+        ]
+        return pd.DataFrame(rows, columns=cols)
+
+    def test_assigns_each_category(
+        self, removed: pd.DataFrame, raw_meta: pd.DataFrame, new_db: pd.DataFrame
+    ) -> None:
+        out = categorize_lost_genomes_raw(
+            removed, raw_meta, new_db, build_parent_map(new_db), {"70"}, ["vertebrate"]
+        ).set_index("genome_id")
+        assert out.loc["gA", "reason"] == "absent_from_ncbi"
+        assert out.loc["gN", "reason"] == "non_current_genome_version"
+        assert out.loc["gH", "reason"] == "hard_excluded"
+        assert out.loc["gH", "reason_taxid"] == "70"
+        assert out.loc["gR", "reason"] == "reassigned_to_excluded"
+        assert out.loc["gR", "reason_taxid"] == "800"
+        assert out.loc["gD", "reason"] == "infection_status_demotion"
+        assert out.loc["gO", "reason"] == "other"
+
+    def test_non_current_outranks_taxonomy_reasons(
+        self, removed: pd.DataFrame, raw_meta: pd.DataFrame, new_db: pd.DataFrame
+    ) -> None:
+        # A hard-excludable assembly that is also non-current should report the
+        # assembly-lifecycle reason (non-current wins over hard-exclude).
+        raw_meta = raw_meta.copy()
+        raw_meta.loc[raw_meta["assembly_accession"] == "GCA_HE", "assembly_status"] = (
+            "suppressed"
+        )
+        out = categorize_lost_genomes_raw(
+            removed, raw_meta, new_db, build_parent_map(new_db), {"70"}, ["vertebrate"]
+        ).set_index("genome_id")
+        assert out.loc["gH", "reason"] == "non_current_genome_version"
+
+    def test_empty_input(self, raw_meta: pd.DataFrame, new_db: pd.DataFrame) -> None:
+        empty = pd.DataFrame(
+            columns=[
+                "assembly_accession",
+                "genome_id",
+                "taxid",
+                "species_taxid",
+                "organism_name",
+            ]
+        )
+        out = categorize_lost_genomes_raw(
+            empty, raw_meta, new_db, {}, set(), ["vertebrate"]
+        )
+        assert out.empty
+        assert "reason" in out.columns
+        assert "reason_taxid" in out.columns
 
 
 class TestContentMetrics:

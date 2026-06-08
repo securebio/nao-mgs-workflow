@@ -148,7 +148,16 @@ def diff_genome_metadata(
     """Return (added, removed, per_species_delta). 'added' and 'removed' index
     by genome_id with name + species_taxid context. 'per_species_delta' groups
     by species_taxid and shows old/new genome counts."""
-    common_cols = ["genome_id", "taxid", "species_taxid", "organism_name"]
+    # assembly_accession is the join key into the new index's pre-filter raw
+    # metadata (virus-genome-metadata-raw.tsv.gz), used to recover a lost
+    # genome's build-time taxid + assembly_status for loss categorization.
+    common_cols = [
+        "assembly_accession",
+        "genome_id",
+        "taxid",
+        "species_taxid",
+        "organism_name",
+    ]
     for df, label in [(old_meta, "old"), (new_meta, "new")]:
         missing = set(common_cols) - set(df.columns)
         if missing:
@@ -469,6 +478,111 @@ def categorize_lost_genomes(
             continue
         reasons.append("other")
         reason_taxids.append("")
+    out["reason"] = reasons
+    out["reason_taxid"] = reason_taxids
+    return out
+
+
+def surveilled_species(new_db: pd.DataFrame, screened_hosts: list[str]) -> set[str]:
+    """Set of taxids whose `infection_status_<host>` is positive for any
+    screened host in the new annotated virus DB — i.e. taxa that pass the
+    surveillance host screen (`host_taxa_screen`)."""
+    cols = [
+        f"infection_status_{h}"
+        for h in screened_hosts
+        if f"infection_status_{h}" in new_db.columns
+    ]
+    if not cols or "taxid" not in new_db.columns:
+        return set()
+    mask = pd.Series(False, index=new_db.index)
+    for c in cols:
+        mask = mask | (new_db[c] == "1")
+    return set(new_db.loc[mask, "taxid"].astype(str))
+
+
+def categorize_lost_genomes_raw(
+    removed: pd.DataFrame,
+    raw_meta: pd.DataFrame,
+    new_db: pd.DataFrame,
+    parent_map: dict[str, str],
+    excluded_taxids: set[str],
+    screened_hosts: list[str],
+) -> pd.DataFrame:
+    """Categorize each lost `genome_id` by joining its `assembly_accession` into
+    the new index's pre-filter raw metadata to recover the genome's *build-time*
+    taxid + assembly_status, then reading the new annotated DB. This avoids the
+    no-drift assumption of the species-rank forward-mapping fallback
+    (`categorize_lost_genomes`). Categories, in priority order — assembly-
+    lifecycle reasons (the assembly itself is gone/superseded) before taxonomy /
+    policy reasons (the assembly is current but we stopped surveilling its taxon):
+
+    - `absent_from_ncbi`: assembly_accession absent from the new raw metadata
+      entirely — NCBI suppressed or removed the assembly between builds, so there
+      is no build-time assignment to attribute anything else to.
+    - `non_current_genome_version`: assembly present but `assembly_status` is not
+      `current` (superseded, or suppressed-but-still-listed), dropped by the
+      build's `assembly_status == 'current'` filter.
+    - `hard_excluded`: build-time species_taxid (or an ancestor) is in
+      `viral_taxids_exclude_hard`.
+    - `reassigned_to_excluded`: build-time species_taxid differs from the old
+      species_taxid AND the new species is no longer surveilled (the taxid moved
+      to a taxon that fails the host-infection screen).
+    - `infection_status_demotion`: build-time species_taxid equals the old
+      species_taxid AND the species is no longer surveilled (upstream VHDB
+      host-annotation change demoted the taxon).
+    - `other`: present, current, surveilled — yet absent from the new gid set.
+      Should be ~0; if not, flags a downstream / sequence-level drop
+      (`genome_patterns_exclude`, masking, dedup) worth investigating.
+
+    Returns the input with `reason` and `reason_taxid` columns appended.
+    `reason_taxid` is the matched exclude taxid (`hard_excluded`) or the
+    build-time species_taxid (other present categories); "" when the assembly is
+    absent from NCBI or non-current."""
+    out = removed.copy()
+    if out.empty:
+        out["reason"] = pd.Series(dtype=str)
+        out["reason_taxid"] = pd.Series(dtype=str)
+        return out
+    raw_taxid = dict(
+        zip(raw_meta["assembly_accession"], raw_meta["taxid"], strict=False)
+    )
+    raw_status = dict(
+        zip(raw_meta["assembly_accession"], raw_meta["assembly_status"], strict=False)
+    )
+    species_of = (
+        dict(zip(new_db["taxid"], new_db["taxid_species"], strict=False))
+        if "taxid_species" in new_db.columns
+        else {}
+    )
+    surveilled = surveilled_species(new_db, screened_hosts)
+    reasons: list[str] = []
+    reason_taxids: list[str] = []
+    for _, row in out.iterrows():
+        acc = str(row["assembly_accession"])
+        s_old = str(row["species_taxid"])
+        if acc not in raw_taxid:
+            reasons.append("absent_from_ncbi")
+            reason_taxids.append("")
+            continue
+        if raw_status.get(acc) != "current":
+            reasons.append("non_current_genome_version")
+            reason_taxids.append("")
+            continue
+        leaf = str(raw_taxid[acc])
+        s_new = str(species_of.get(leaf, leaf))
+        hard = _ancestor_in(s_new, parent_map, excluded_taxids)
+        if hard:
+            reasons.append("hard_excluded")
+            reason_taxids.append(hard)
+        elif s_new not in surveilled and s_new != s_old:
+            reasons.append("reassigned_to_excluded")
+            reason_taxids.append(s_new)
+        elif s_new not in surveilled and s_new == s_old:
+            reasons.append("infection_status_demotion")
+            reason_taxids.append(s_new)
+        else:
+            reasons.append("other")
+            reason_taxids.append(s_new)
     out["reason"] = reasons
     out["reason_taxid"] = reason_taxids
     return out
@@ -1011,6 +1125,7 @@ def write_summary_md(  # noqa: C901, PLR0912, PLR0915 - long but linear report w
     coverage_available: bool,
     params_changes: pd.DataFrame,
     bidirectional_flips: pd.DataFrame,
+    lost_mode: str = "raw",
 ) -> None:
     """Write a self-contained `summary.md` following the structure of
     `.claude/skills/benchmark-index/review-template.md`. Data-only; the
@@ -1168,25 +1283,54 @@ def write_summary_md(  # noqa: C901, PLR0912, PLR0915 - long but linear report w
         if gain_n
         else {}
     )
-    loss_labels = [
-        ("hard_excluded", "Hard-excluded", "A.1"),
-        ("species_dropped_from_metadata", "Species dropped from metadata", "A.2"),
-        ("change_in_assigned_taxid", "Change in assigned taxid", "A.3"),
-        ("non_current_genome_version", "Non-current genome version", "A.4"),
-        ("other", "Other", "A.5"),
+    # Lost-gid category labels depend on which categorizer ran. The `raw` path
+    # (build-time taxid recovered from the new index's pre-filter raw metadata)
+    # uses the exact 6-bucket scheme; `approx` is the legacy species-rank
+    # forward-mapping fallback used when the raw table is absent.
+    if lost_mode == "raw":
+        loss_label_specs = [
+            ("absent_from_ncbi", "Absent from NCBI (suppressed or removed)"),
+            ("non_current_genome_version", "Non-current assembly version"),
+            ("hard_excluded", "Hard-excluded"),
+            ("reassigned_to_excluded", "Reassigned to excluded taxon"),
+            ("infection_status_demotion", "Infection-status demotion"),
+            ("other", "Other (current, surveilled — yet absent)"),
+        ]
+    else:
+        loss_label_specs = [
+            ("hard_excluded", "Hard-excluded"),
+            ("species_dropped_from_metadata", "Species dropped from metadata"),
+            ("change_in_assigned_taxid", "Change in assigned taxid"),
+            ("non_current_genome_version", "Non-current genome version"),
+            ("other", "Other"),
+        ]
+    gain_label_specs = [
+        ("hard_included", "Hard-included"),
+        ("change_in_assigned_taxid", "Change in assigned taxid"),
+        ("infection_status_change", "Change in infection status"),
+        ("newly_deposited_existing", "Newly deposited for existing included taxa"),
+        ("new_species_in_taxonomy", "New species in NCBI taxonomy"),
+        ("other", "Other"),
     ]
-    gain_labels = [
-        ("hard_included", "Hard-included", "A.6"),
-        ("change_in_assigned_taxid", "Change in assigned taxid", "A.7"),
-        ("infection_status_change", "Change in infection status", "A.8"),
-        (
-            "newly_deposited_existing",
-            "Newly deposited for existing included taxa",
-            "A.9",
-        ),
-        ("new_species_in_taxonomy", "New species in NCBI taxonomy", "A.10"),
-        ("other", "Other", "A.11"),
-    ]
+    # Assign sequential appendix ids: lost gid tables, then gained gid tables,
+    # then the fixed inventory / per-host / params appendices. Computed (not
+    # hardcoded) so the lost section having 5 or 6 buckets shifts the rest.
+    _ap = iter(f"A.{i}" for i in range(1, 100))
+    loss_labels = [(k, lbl, next(_ap)) for k, lbl in loss_label_specs]
+    gain_labels = [(k, lbl, next(_ap)) for k, lbl in gain_label_specs]
+    a_lost_inventory = next(_ap)
+    a_gained_inventory = next(_ap)
+    a_perhost = next(_ap)
+    a_params_table = next(_ap)
+    a_params_diff = next(_ap)
+    if lost_mode == "approx":
+        lines += [
+            "> ⚠️ The target index lacks `virus-genome-metadata-raw.tsv.gz`, so"
+            " lost genomes are categorized by the **approximate** species-rank"
+            " forward-mapping heuristic, not their build-time taxid assignment."
+            " Rebuild the index to enable exact loss attribution.",
+            "",
+        ]
     lines.append(f"- **Genome IDs lost: {loss_n:,}**")
     for key, label, appendix in loss_labels:
         n = loss_counts.get(key, 0)
@@ -1234,9 +1378,13 @@ def write_summary_md(  # noqa: C901, PLR0912, PLR0915 - long but linear report w
                 lines.append("")
                 lines.append(
                     f"- {len(uncovered_zeros)} species dropped to zero genomes without"
-                    " being covered by a hard-exclude rule. Of these:"
+                    f" being covered by a hard-exclude rule (see Appendix"
+                    f" {a_lost_inventory})."
                 )
-                if "likely_rename" in uncovered_zeros.columns:
+                # The redistributed/true-loss split is the legacy forward-mapping
+                # heuristic; under the `raw` categorizer the §3.1 buckets already
+                # attribute losses precisely, so only surface it in `approx` mode.
+                if lost_mode == "approx" and "likely_rename" in uncovered_zeros.columns:
                     redistributed = uncovered_zeros[
                         uncovered_zeros["likely_rename"] == "yes"
                     ]
@@ -1246,11 +1394,11 @@ def write_summary_md(  # noqa: C901, PLR0912, PLR0915 - long but linear report w
                     lines.append(
                         f"    - {len(redistributed)} redistributed (genome_ids moved to a"
                         " different species_taxid via NCBI/ICTV taxonomy restructuring; the"
-                        " sequences remain in the index — see Appendix A.12)."
+                        f" sequences remain in the index — see Appendix {a_lost_inventory})."
                     )
                     lines.append(
                         f"    - {len(true_losses)} true losses (genome_ids absent from the new"
-                        " metadata entirely — see Appendix A.12)."
+                        f" metadata entirely — see Appendix {a_lost_inventory})."
                     )
 
     # §3.3 Gains discussion.
@@ -1285,7 +1433,7 @@ def write_summary_md(  # noqa: C901, PLR0912, PLR0915 - long but linear report w
             lines.append("")
             lines.append(
                 f"- {len(species_gained)} species went from 0 → nonzero genomes between builds"
-                " — see Appendix A.13."
+                f" — see Appendix {a_gained_inventory}."
             )
 
     # ---------- §4 Infection status
@@ -1341,7 +1489,7 @@ def write_summary_md(  # noqa: C901, PLR0912, PLR0915 - long but linear report w
         lines.append(
             f"| `{host}` | {len(species_promotions)} | {len(species_demotions)} |"
         )
-    # Keep the old name for backward-compat in the Appendix A.14 section
+    # Keep the old name for backward-compat in the per-host actionable-transitions appendix
     # below (per-host actionable transitions table).
     actionable_per_host: dict[str, dict[str, pd.DataFrame]] = {
         h: {
@@ -1399,7 +1547,7 @@ def write_summary_md(  # noqa: C901, PLR0912, PLR0915 - long but linear report w
                 f"- **{len(uncovered_pro)} unique promotion taxid(s) not covered by"
                 f" existing overrides/excludes** across {uncovered_pro_rows} host-rows."
                 " Each is a candidate for a `viral_taxids_exclude_hard` addition."
-                " See Appendix A.14."
+                f" See Appendix {a_perhost}."
             )
             for (taxid, name), hosts in sorted(
                 uncovered_pro.items(), key=lambda x: (-len(x[1]), x[0])
@@ -1465,8 +1613,8 @@ def write_summary_md(  # noqa: C901, PLR0912, PLR0915 - long but linear report w
         changed = params_changes[params_changes["kind"] == "changed"]
         lines.append(
             f"- **`index-params.json`**: {len(added)} keys added, {len(removed)} removed,"
-            f" {len(changed)} value-changed. See Appendix A.15 for the key-by-key table"
-            " and Appendix A.16 for the verbatim diff."
+            f" {len(changed)} value-changed. See Appendix {a_params_table} for the"
+            f" key-by-key table and Appendix {a_params_diff} for the verbatim diff."
         )
         # Single-line callouts for high-signal params.
         for _, row in changed.iterrows():
@@ -1512,10 +1660,11 @@ def write_summary_md(  # noqa: C901, PLR0912, PLR0915 - long but linear report w
     # ---------- Appendix
     lines += ["", "---", "", "## Appendix", ""]
 
-    # A.1–A.5: lost gid categories. A.6–A.11: gained gid categories. A.12:
-    # full lost-species inventory. A.13: full gained-species inventory.
-    # A.14: per-host actionable transitions. A.15: params changes table.
-    # A.16: verbatim params diff.
+    # Lost gid categories, then gained gid categories, then full lost-species
+    # inventory, full gained-species inventory, per-host actionable transitions,
+    # params changes table, verbatim params diff. Appendix ids are computed
+    # above (a_lost_inventory … a_params_diff) so the count of lost buckets
+    # (5 or 6) shifts everything after it.
     def _gid_appendix(
         label: str, reason_key: str, df: pd.DataFrame, head_n: int = 50
     ) -> list[str]:
@@ -1543,40 +1692,22 @@ def write_summary_md(  # noqa: C901, PLR0912, PLR0915 - long but linear report w
             )
         return body
 
-    for label, key in [
-        ("A.1. Lost gids — hard-excluded", "hard_excluded"),
-        (
-            "A.2. Lost gids — species dropped from metadata",
-            "species_dropped_from_metadata",
-        ),
-        ("A.3. Lost gids — change in assigned taxid", "change_in_assigned_taxid"),
-        ("A.4. Lost gids — non-current genome version", "non_current_genome_version"),
-        ("A.5. Lost gids — other", "other"),
-    ]:
-        lines += _gid_appendix(label, key, lost_categorized)
+    for key, label, appendix in loss_labels:
+        lines += _gid_appendix(
+            f"{appendix}. Lost gids — {label}", key, lost_categorized
+        )
         lines.append("")
 
-    for label, key in [
-        ("A.6. Gained gids — hard-included", "hard_included"),
-        ("A.7. Gained gids — change in assigned taxid", "change_in_assigned_taxid"),
-        ("A.8. Gained gids — change in infection status", "infection_status_change"),
-        (
-            "A.9. Gained gids — newly deposited for existing included taxa",
-            "newly_deposited_existing",
-        ),
-        (
-            "A.10. Gained gids — new species in NCBI taxonomy",
-            "new_species_in_taxonomy",
-        ),
-        ("A.11. Gained gids — other", "other"),
-    ]:
-        lines += _gid_appendix(label, key, gained_categorized)
+    for key, label, appendix in gain_labels:
+        lines += _gid_appendix(
+            f"{appendix}. Gained gids — {label}", key, gained_categorized
+        )
         lines.append("")
 
-    # A.12 — full lost-species inventory
+    # Full lost-species inventory
     if len(species_lost) > 0:
         lines += [
-            "### A.12. Full lost-species inventory",
+            f"### {a_lost_inventory}. Full lost-species inventory",
             "",
             f"All {len(species_lost)} species with new_count = 0 (sorted by old_count desc):",
             "",
@@ -1594,10 +1725,10 @@ def write_summary_md(  # noqa: C901, PLR0912, PLR0915 - long but linear report w
             )
         lines.append("")
 
-    # A.13 — full gained-species inventory (species that went 0 → nonzero)
+    # Full gained-species inventory (species that went 0 → nonzero)
     if species_gained is not None and not species_gained.empty:
         lines += [
-            "### A.13. Full gained-species inventory",
+            f"### {a_gained_inventory}. Full gained-species inventory",
             "",
             f"All {len(species_gained)} species with old_count = 0 and new_count > 0"
             " (sorted by new_count desc):",
@@ -1617,10 +1748,10 @@ def write_summary_md(  # noqa: C901, PLR0912, PLR0915 - long but linear report w
             )
         lines.append("")
 
-    # A.14 — per-host actionable transitions
+    # Per-host actionable transitions
     if coverage_available and actionable_per_host:
         lines += [
-            "### A.14. Per-host actionable transitions",
+            f"### {a_perhost}. Per-host actionable transitions",
             "",
         ]
         for host, buckets in actionable_per_host.items():
@@ -1654,11 +1785,11 @@ def write_summary_md(  # noqa: C901, PLR0912, PLR0915 - long but linear report w
                         f"| `{row['taxid']}` | *{row['name']}* | {other} | {gloss} |"
                     )
 
-    # A.15 — params changes table
+    # Params changes table
     if not params_changes.empty:
         lines += [
             "",
-            "### A.15. `index-params.json` key-by-key changes",
+            f"### {a_params_table}. `index-params.json` key-by-key changes",
             "",
             "| Key | Kind | Old | New |",
             "|---|---|---|---|",
@@ -1668,13 +1799,13 @@ def write_summary_md(  # noqa: C901, PLR0912, PLR0915 - long but linear report w
             new_s = row["new"] or "—"
             lines.append(f"| `{row['key']}` | {row['kind']} | {old_s} | {new_s} |")
 
-    # A.16 — verbatim params diff
+    # Verbatim params diff
     diff_path = out_dir / "params_diff.txt"
     if diff_path.exists():
         diff_text = diff_path.read_text()
         lines += [
             "",
-            "### A.16. Verbatim `index-params.json` diff",
+            f"### {a_params_diff}. Verbatim `index-params.json` diff",
             "",
             "```diff",
             diff_text.rstrip("\n"),
@@ -1804,6 +1935,26 @@ def main() -> None:
         )
         old_meta = pd.read_csv(old_meta_path, sep="\t", dtype=str)
         new_meta = pd.read_csv(new_meta_path, sep="\t", dtype=str)
+        # New index's pre-filter assembly metadata (accession -> build-time taxid
+        # + assembly_status). Published since the index workflow learned to emit
+        # it; older builds predate it, in which case lost-genome categorization
+        # falls back to the species-rank forward-mapping approximation.
+        try:
+            new_raw_path = fetch(
+                args.new,
+                "output/results/virus-genome-metadata-raw.tsv.gz",
+                td / "new",
+            )
+            new_raw_meta: pd.DataFrame | None = pd.read_csv(
+                new_raw_path, sep="\t", dtype=str
+            )
+        except (subprocess.CalledProcessError, FileNotFoundError):
+            logger.warning(
+                "New index has no virus-genome-metadata-raw.tsv.gz; falling back to "
+                "the species-rank forward-mapping approximation for lost-genome "
+                "categorization (rebuild the index to enable exact attribution)."
+            )
+            new_raw_meta = None
         # Schema diff (column-set change is a major driver of compressed-bytes
         # change independent of row count).
         old_meta_cols = list(old_meta.columns)
@@ -1958,7 +2109,7 @@ def main() -> None:
 
     # Cross-host actionable annotation + genome-loss-driven demotion flag.
     # These add two columns to each per-host DataFrame for the inline
-    # actionable tables (Appendix A.14) and re-persist the per-host TSVs.
+    # actionable tables (per-host appendix) and re-persist the per-host TSVs.
     species_lost_taxids = set(species_lost["species_taxid"].astype(str))
     per_host_changes = annotate_cross_host_actionables(
         per_host_changes, species_lost_taxids
@@ -2029,14 +2180,31 @@ def main() -> None:
         if "redistributed_to_species_taxid" in species_lost.columns
         else set()
     )
-    lost_categorized = categorize_lost_genomes(
-        removed_g,
-        parent_map,
-        excluded_taxids,
-        species_redistributed,
-        species_truly_lost,
-        species_in_new_meta,
-    )
+    # Lost-genome categorization. Preferred path joins each lost assembly into
+    # the new index's pre-filter raw metadata to recover its build-time taxid +
+    # assembly_status (exact, no no-drift assumption). Falls back to the
+    # species-rank forward-mapping approximation when the raw table is absent.
+    screened_hosts = new_params.get("host_taxa_screen", "").split()
+    if new_raw_meta is not None:
+        lost_mode = "raw"
+        lost_categorized = categorize_lost_genomes_raw(
+            removed_g,
+            new_raw_meta,
+            new_db,
+            parent_map,
+            excluded_taxids,
+            screened_hosts,
+        )
+    else:
+        lost_mode = "approx"
+        lost_categorized = categorize_lost_genomes(
+            removed_g,
+            parent_map,
+            excluded_taxids,
+            species_redistributed,
+            species_truly_lost,
+            species_in_new_meta,
+        )
     gained_categorized = categorize_gained_genomes(
         added_g,
         parent_map,
@@ -2053,7 +2221,7 @@ def main() -> None:
     )
 
     # Species that went from 0 → nonzero genomes (the gains counterpart to
-    # species_lost_all_genomes). Used in §3.3 and Appendix A.13.
+    # species_lost_all_genomes). Used in §3.3 and the gained-species inventory appendix.
     species_gained = (
         by_species[(by_species["old_count"] == 0) & (by_species["new_count"] > 0)]
         .sort_values("new_count", ascending=False)
@@ -2083,6 +2251,7 @@ def main() -> None:
         coverage_available,
         params_changes,
         bidirectional_flips,
+        lost_mode,
     )
     logger.info(f"Done. Outputs in {args.out.resolve()}")
 

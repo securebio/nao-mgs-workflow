@@ -79,13 +79,16 @@ Don't `rm -rf` the outdir between iterations; the script overwrites its own file
 
 These are the labels the script writes into `genomes_lost_categorized.tsv`, `genomes_gained_categorized.tsv`, and the §3.1 counts in `summary.md`. The template uses them as the §3.1 row labels; this glossary explains the semantics.
 
-**Lost gid categories** (priority order; each gid gets the first applicable bucket):
+**Lost gid categories** (priority order; each gid gets the first applicable bucket). The `raw` categorizer recovers each lost genome's *build-time* taxid + assembly_status by joining its `assembly_accession` into the target index's `virus-genome-metadata-raw.tsv.gz` (the pre-filter assembly list), so attribution is exact — no NCBI lookups, no no-drift assumption. Assembly-lifecycle reasons are checked before taxonomy/policy reasons, so the policy buckets mean "current assemblies we stopped surveilling" and aren't inflated by routine version churn:
 
-- `hard_excluded`: gid's old species_taxid (or ancestor) is in `viral_taxids_exclude_hard` in the new build. The new exclude rule drops the gid at the filter stage.
-- `change_in_assigned_taxid`: gid's old species had its gids redistributed to a different species_taxid (NCBI/ICTV restructure); the gid was dropped under the new assignment.
-- `species_dropped_from_metadata`: gid's old species lost ALL its gids in new metadata AND wasn't redistributed. The cause is one of: an upstream VHDB infection-status change, every assembly failing the `assembly_status == 'current'` filter, or NCBI retiring the species. The pipeline-derived `infection_status` will appear to flip in all three cases (it's computed from surviving gids), so this bucket stays cause-agnostic.
-- `non_current_genome_version`: gid is gone but its species_taxid still has surviving gids in new metadata. Almost always the `assembly_status == 'current'` filter dropping a superseded NCBI assembly version.
-- `other`: no rule applies. Should be rare.
+- `absent_from_ncbi`: the lost genome's assembly is absent from the target index's raw metadata entirely — NCBI suppressed or removed the assembly between builds, so there's no build-time assignment to attribute anything else to. (Suppressed-vs-removed isn't sub-split; it would need per-accession NCBI lookups.)
+- `non_current_genome_version`: assembly present in raw but its `assembly_status` is not `current` (superseded, or suppressed-but-still-listed) — dropped by the `assembly_status == 'current'` filter. Read directly from the raw table, not inferred.
+- `hard_excluded`: build-time species_taxid (or ancestor) is in `viral_taxids_exclude_hard` in the new build.
+- `reassigned_to_excluded`: build-time species_taxid differs from the old species_taxid AND the new species is no longer surveilled — the genome's taxid moved (NCBI/ICTV restructure) to a taxon that fails the host-infection screen.
+- `infection_status_demotion`: build-time species_taxid equals the old species_taxid AND the species is no longer surveilled — an upstream VHDB host-annotation change demoted the taxon.
+- `other`: present, current, surveilled — yet absent from the new gid set. Should be ~0; if not, flags a downstream/sequence-level drop (`genome_patterns_exclude`, masking, dedup) worth investigating.
+
+If the target index predates the `virus-genome-metadata-raw.tsv.gz` output, the script falls back to a legacy species-rank forward-mapping approximation and `summary.md` carries a ⚠️ banner in §3.1; its lost buckets are the older `hard_excluded` / `species_dropped_from_metadata` / `change_in_assigned_taxid` / `non_current_genome_version` / `other` set. Rebuild the index to get exact attribution.
 
 **Gained gid categories** (priority order):
 
