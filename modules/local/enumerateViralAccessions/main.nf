@@ -12,7 +12,7 @@ process ENUMERATE_VIRAL_ACCESSIONS {
         val(assembly_source)
         val(extra_args)
     output:
-        path("metadata.tsv"), emit: metadata
+        path("virus-genome-metadata-raw.tsv"), emit: metadata
     script:
         """
         # 1. Enumerate all assemblies under ${taxid} via `datasets summary`.
@@ -31,8 +31,8 @@ process ENUMERATE_VIRAL_ACCESSIONS {
             --inputfile assembly_data_report.jsonl \\
             --fields accession,organism-tax-id,organism-name,source_database,assminfo-status \\
             | { printf 'assembly_accession\\ttaxid\\torganism_name\\tsource_database\\tassembly_status\\n'; tail -n +2; } \\
-            > metadata.tsv
+            > virus-genome-metadata-raw.tsv
         rm -f assembly_data_report.jsonl
-        echo "Enumerated \$((  \$(wc -l < metadata.tsv) - 1  )) assemblies for taxid ${taxid}"
+        echo "Enumerated \$((  \$(wc -l < virus-genome-metadata-raw.tsv) - 1  )) assemblies for taxid ${taxid}"
         """
 }

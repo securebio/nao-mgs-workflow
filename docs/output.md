@@ -93,6 +93,7 @@ Main heading represents the folder name, and subheadings describes the tool that
 #### General
 
 - `total-virus-db-annotated.tsv.gz`: Database generated from NCBI taxonomy and Virus-Host-DB giving taxonomy and host-infection information for each viral taxon.
+- `virus-genome-metadata-raw.tsv.gz`: Metadata for *every* viral assembly enumerated under the target taxon, before the host-infection and assembly-status filters are applied (columns: `assembly_accession`, `taxid`, `organism_name`, `source_database`, `assembly_status`). Records the taxid each assembly was assigned at build time, so downstream tooling can reconstruct why a genome was or wasn't included.
 - `taxonomy-nodes.dmp`: Taxonomy dump file from NCBI mapping between taxids and their parents in the NCBI taxonomy tree structure.
 - `taxonomy-names.dmp`: Taxonomy dump file from NCBI mapping between taxids and taxon names.
 

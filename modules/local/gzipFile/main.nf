@@ -18,7 +18,6 @@ process GZIP_FILE {
 process GZIP_FILE_BARE {
     label "single"
     label "coreutils"
-    label "testing_only" // Process is currently only used for testing
     tag "id=util"
     input:
         tuple path(file)
