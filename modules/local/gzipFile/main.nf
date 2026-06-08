@@ -20,7 +20,7 @@ process GZIP_FILE_BARE {
     label "coreutils"
     tag "id=util"
     input:
-        tuple path(file)
+        path(file)
     output:
         path("${file}.gz")
     script:
