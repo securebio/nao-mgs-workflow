@@ -1,5 +1,6 @@
 # v3.2.2.0-dev
 
+- Fix the `GET_TARBALL` process resource label, which referenced an undefined `huge_mem` label instead of `single_huge_mem`. The typo caused the process to silently fall back to default resource allocation, manifesting as exit code 140 (OOM kill) under strict resource allocation.
 - Add `tag "id=<value>"` directives to all `modules/local/` processes for per-task attribution in trace files and Nextflow logs.
     - Per-task processes use `id=${sample/group/label}`; index work uses `id=index` (with optional `,name=<x>` for fan-outs); workflow-level singletons use `id=util`; stage-qualified processes that run multiple times across pipeline stages append a `,stage=<x>` component.
     - Drop `env` from `trace.fields` in both logging configs (env values contain literal newlines that break TSV parsing).
