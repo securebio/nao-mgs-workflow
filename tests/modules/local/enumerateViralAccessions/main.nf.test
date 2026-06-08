@@ -21,7 +21,7 @@ nextflow_process {
         }
         then {
             assert process.success
-            // metadata.tsv should have the standardized column header
+            // the enumerated metadata should have the standardized column header
             def meta = path(process.out.metadata[0]).csv(sep: "\t")
             assert meta.columnNames == ["assembly_accession", "taxid", "organism_name", "source_database", "assembly_status"]
             assert meta.rowCount >= 1
