@@ -65,6 +65,12 @@
 - Discuss species taxids that (a) are not hard-included but (b) go from zero to nonzero genomes
 - Link to tables in appendix where appropriate
 
+#### 3.4. Reassignments (within the concern set)
+
+- Report the count/% of genomes present in both builds whose `species_taxid` changed (coverage unchanged — informational; only affects how RUN labels their hits)
+- Flag if the fraction is large (would indicate a mass re-assignment — taxonomy restructure or a pipeline bug); note the top old→new flows from the appendix
+- Usually a small %; a one-line note suffices unless it's anomalous
+
 ### 4. Infection status
 
 Gains or losses of viral species assigned to each host category, ignoring hard inclusions and exclusions:

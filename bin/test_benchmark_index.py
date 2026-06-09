@@ -27,6 +27,7 @@ from benchmark_index import (
     detect_bidirectional_flips,
     diff_genome_metadata,
     diff_params,
+    diff_reassignments,
     diff_taxonomy,
     fasta_content_stats,
     includes_for_other_hosts,
@@ -162,6 +163,40 @@ class TestDiffGenomeMetadata:
         )
         with pytest.raises(ValueError, match="missing required columns"):
             diff_genome_metadata(bad, good)
+
+
+class TestDiffReassignments:
+    def test_flags_species_change_in_intersection(self) -> None:
+        old = pd.DataFrame(
+            [
+                {"genome_id": "G1", "species_taxid": "100", "organism_name": "A"},
+                {"genome_id": "G2", "species_taxid": "100", "organism_name": "A"},
+                {"genome_id": "G3", "species_taxid": "200", "organism_name": "B"},
+            ]
+        )
+        new = pd.DataFrame(
+            [
+                # G1 reassigned 100 -> 300; G2 unchanged; G3 removed (not in new);
+                # G9 added (not in old). Only G1 should count.
+                {"genome_id": "G1", "species_taxid": "300", "organism_name": "A2"},
+                {"genome_id": "G2", "species_taxid": "100", "organism_name": "A"},
+                {"genome_id": "G9", "species_taxid": "400", "organism_name": "Z"},
+            ]
+        )
+        flows = diff_reassignments(old, new)
+        assert len(flows) == 1
+        row = flows.iloc[0]
+        assert row["old_species_taxid"] == "100"
+        assert row["new_species_taxid"] == "300"
+        assert int(row["n_genomes"]) == 1
+
+    def test_empty_when_no_reassignment(self) -> None:
+        meta = pd.DataFrame(
+            [{"genome_id": "G1", "species_taxid": "100", "organism_name": "A"}]
+        )
+        flows = diff_reassignments(meta, meta)
+        assert flows.empty
+        assert "n_genomes" in flows.columns
 
 
 class TestDiffTaxonomy:

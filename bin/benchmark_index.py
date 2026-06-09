@@ -191,6 +191,48 @@ def diff_genome_metadata(
     )
 
 
+def diff_reassignments(old_meta: pd.DataFrame, new_meta: pd.DataFrame) -> pd.DataFrame:
+    """Genome_ids present in BOTH builds whose `species_taxid` changed — i.e.
+    taxonomically reassigned while staying in the concern set. Coverage is
+    unchanged for these (they remain screened), so this is informational, not a
+    membership change: a value large relative to the kept set flags a mass
+    re-assignment (an upstream taxonomy restructure, or a pipeline bug).
+
+    Keyed on `species_taxid` (not the leaf taxon) because the question here is
+    whether the genome rolls up / is labelled differently downstream, which
+    species-level captures — including restructures that leave the leaf stable.
+
+    Returns a per-flow table (old_species_taxid, new_species_taxid,
+    organism_name, n_genomes) sorted by n_genomes desc; empty if none."""
+    o = old_meta[["genome_id", "species_taxid"]].rename(
+        columns={"species_taxid": "old_species_taxid"}
+    )
+    n = new_meta[["genome_id", "species_taxid", "organism_name"]].rename(
+        columns={"species_taxid": "new_species_taxid"}
+    )
+    merged = o.merge(n, on="genome_id")  # inner join = genome_ids in both builds
+    reassigned = merged[merged["old_species_taxid"] != merged["new_species_taxid"]]
+    if reassigned.empty:
+        return pd.DataFrame(
+            columns=[
+                "old_species_taxid",
+                "new_species_taxid",
+                "organism_name",
+                "n_genomes",
+            ]
+        )
+    flows = (
+        reassigned.groupby(["old_species_taxid", "new_species_taxid"], dropna=False)
+        .agg(n_genomes=("genome_id", "size"), organism_name=("organism_name", "first"))
+        .reset_index()
+        .sort_values("n_genomes", ascending=False)
+        .reset_index(drop=True)
+    )
+    return flows[
+        ["old_species_taxid", "new_species_taxid", "organism_name", "n_genomes"]
+    ]
+
+
 def diff_taxonomy(
     old_db: pd.DataFrame, new_db: pd.DataFrame
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
@@ -1081,6 +1123,8 @@ def write_summary_md(  # noqa: C901, PLR0912, PLR0915 - long but linear report w
     coverage_available: bool,
     params_changes: pd.DataFrame,
     bidirectional_flips: pd.DataFrame,
+    reassigned_flows: pd.DataFrame,
+    n_kept: int,
 ) -> None:
     """Write a self-contained `summary.md` following the structure of
     `.claude/skills/benchmark-index/review-template.md`. Data-only; the
@@ -1267,6 +1311,7 @@ def write_summary_md(  # noqa: C901, PLR0912, PLR0915 - long but linear report w
     gain_labels = [(k, lbl, next(_ap)) for k, lbl in gain_label_specs]
     a_lost_inventory = next(_ap)
     a_gained_inventory = next(_ap)
+    a_reassign = next(_ap)
     a_perhost = next(_ap)
     a_params_table = next(_ap)
     a_params_diff = next(_ap)
@@ -1388,6 +1433,26 @@ def write_summary_md(  # noqa: C901, PLR0912, PLR0915 - long but linear report w
                 f"- {len(species_gained)} species went from 0 → nonzero genomes between builds"
                 f" — see Appendix {a_gained_inventory}."
             )
+
+    # §3.4 Reassignments — genomes in both builds whose species_taxid changed.
+    # Coverage is unchanged (still screened); informational, mainly a sanity
+    # check that a large fraction hasn't been silently re-labelled.
+    n_reassigned = (
+        int(reassigned_flows["n_genomes"].sum()) if not reassigned_flows.empty else 0
+    )
+    lines += ["", "#### 3.4. Reassignments (within the concern set)", ""]
+    if n_reassigned == 0:
+        lines.append("- No genome IDs were reassigned within the concern set.")
+    else:
+        reassign_pct = (n_reassigned / n_kept * 100) if n_kept else float("nan")
+        lines.append(
+            f"- {n_reassigned:,} of {n_kept:,} genome IDs present in both builds"
+            f" ({reassign_pct:.1f}%) were taxonomically reassigned (species_taxid changed)."
+            " Coverage is unchanged — these remain screened — so this is"
+            " informational: it only shifts how RUN labels their hits. A large"
+            " fraction would flag a mass re-assignment (taxonomy restructure or a"
+            f" pipeline bug). Top old→new flows in Appendix {a_reassign}."
+        )
 
     # ---------- §4 Infection status
     lines += [
@@ -1701,6 +1766,30 @@ def write_summary_md(  # noqa: C901, PLR0912, PLR0915 - long but linear report w
             )
         lines.append("")
 
+    # Reassignment flows (within the concern set)
+    if not reassigned_flows.empty:
+        lines += [
+            f"### {a_reassign}. Reassignment flows (within the concern set)",
+            "",
+            "Genome IDs present in both builds whose `species_taxid` changed"
+            " (coverage unchanged), by old → new species:",
+            "",
+            "| old species_taxid | new species_taxid | Organism (new) | n_genomes |",
+            "|---|---|---|---:|",
+        ]
+        head_n = 50
+        for _, row in reassigned_flows.head(head_n).iterrows():
+            lines.append(
+                f"| `{row['old_species_taxid']}` | `{row['new_species_taxid']}` "
+                f"| *{row['organism_name']}* | {int(row['n_genomes']):,} |"
+            )
+        if len(reassigned_flows) > head_n:
+            lines.append(
+                f"_…and {len(reassigned_flows) - head_n:,} more flows (truncated to"
+                f" top {head_n} for readability)._"
+            )
+        lines.append("")
+
     # Per-host actionable transitions
     if coverage_available and actionable_per_host:
         lines += [
@@ -1917,6 +2006,13 @@ def main() -> None:
         added_g.to_csv(args.out / "genomes_added.tsv", sep="\t", index=False)
         removed_g.to_csv(args.out / "genomes_removed.tsv", sep="\t", index=False)
         by_species.to_csv(args.out / "genomes_by_species.tsv", sep="\t", index=False)
+        # Genomes present in both builds whose species_taxid changed (reassigned
+        # within the concern set; coverage unchanged — informational).
+        reassigned_flows = diff_reassignments(old_meta, new_meta)
+        n_kept = len(set(old_meta["genome_id"]) & set(new_meta["genome_id"]))
+        reassigned_flows.to_csv(
+            args.out / "genomes_reassigned.tsv", sep="\t", index=False
+        )
         species_lost = (
             by_species[(by_species["new_count"] == 0) & (by_species["old_count"] > 0)]
             .sort_values("old_count", ascending=False)
@@ -2144,6 +2240,8 @@ def main() -> None:
         coverage_available,
         params_changes,
         bidirectional_flips,
+        reassigned_flows,
+        n_kept,
     )
     logger.info(f"Done. Outputs in {args.out.resolve()}")
 
