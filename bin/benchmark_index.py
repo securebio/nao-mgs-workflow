@@ -541,23 +541,24 @@ def categorize_gained_genomes_raw(
 
     - `newly_deposited`: assembly `release_date` is after the old index build —
       genuinely deposited to NCBI since the previous build.
-    - `source_policy_pull_in`: assembly predates the old build and is RefSeq — it
-      existed then but was excluded only because the old build's
-      `assembly_source` didn't pull RefSeq (e.g. the GenBank-only → all switch).
-      A config artifact, not new biology.
     - `hard_included`: the genome's new leaf taxon (or an ancestor) is in
       `ref/host-infection-overrides.json`.
     - `new_taxon_in_taxonomy`: the genome's new leaf taxon did not exist in the
       old taxonomy DB at all (NCBI/ICTV minted it between builds).
     - `infection_status_promotion`: the leaf taxon was in the old DB but not
       surveilled then and is now — its lineage's infection status flipped 0→1.
-    - `other`: pre-existing GenBank genome of a taxon already surveilled in the
-      old build — newly passing an assembly-status filter, or reassigned in from
-      a previously-unsurveilled taxon. Should be small.
+    - `pre_existing_reincluded`: the assembly predates the old build and its taxon
+      was already eligible, yet it wasn't in the old surveillance set — so a
+      change in the index's *inclusion config* between builds surfaced it (e.g.
+      an `assembly_source` switch pulling in RefSeq, or a hard-exclude removal),
+      not new biology. The specific driver is surfaced as a §3.3 finding by
+      cross-referencing the params diff and the bucket's `source_database` mix.
+      Empty in steady state; populated whenever inclusion config changes.
+    - `other`: release_date missing/unknown — can't place it. Should be ~0.
 
-    Returns the input DataFrame with `reason` and `reason_taxid` columns
-    appended. `reason_taxid` is the matched override taxid (`hard_included`) or
-    the genome's new leaf taxon (other categories)."""
+    Returns the input DataFrame with `reason`, `reason_taxid`, and
+    `source_database` columns appended. `reason_taxid` is the matched override
+    taxid (`hard_included`) or the genome's new leaf taxon (other categories)."""
     out = added.copy()
     if out.empty:
         out["reason"] = pd.Series(dtype=str)
@@ -589,16 +590,15 @@ def categorize_gained_genomes_raw(
 
     reasons: list[str] = []
     reason_taxids: list[str] = []
+    sources: list[str] = []
     for _, row in out.iterrows():
         acc = str(row["assembly_accession"])
         new_leaf = str(row["taxid"])  # genome's assigned (leaf) taxon
         release = str(raw_release.get(acc, ""))
+        sources.append(str(raw_source.get(acc, "")))
         hard = _ancestor_in(new_leaf, parent_map, all_included)
         if release and release > old_build_date:
             reasons.append("newly_deposited")
-            reason_taxids.append(new_leaf)
-        elif raw_source.get(acc) == "SOURCE_DATABASE_REFSEQ":
-            reasons.append("source_policy_pull_in")
             reason_taxids.append(new_leaf)
         elif hard:
             reasons.append("hard_included")
@@ -609,11 +609,17 @@ def categorize_gained_genomes_raw(
         elif not _old_surveilled(new_leaf):
             reasons.append("infection_status_promotion")
             reason_taxids.append(new_leaf)
+        elif release:
+            # Pre-existing (released on/before the old build) and its taxon was
+            # already eligible -> surfaced by an inclusion-config change.
+            reasons.append("pre_existing_reincluded")
+            reason_taxids.append(new_leaf)
         else:
-            reasons.append("other")
+            reasons.append("other")  # release_date missing/unknown
             reason_taxids.append(new_leaf)
     out["reason"] = reasons
     out["reason_taxid"] = reason_taxids
+    out["source_database"] = sources
     return out
 
 
@@ -1244,11 +1250,14 @@ def write_summary_md(  # noqa: C901, PLR0912, PLR0915 - long but linear report w
     ]
     gain_label_specs = [
         ("newly_deposited", "Newly deposited since old build"),
-        ("source_policy_pull_in", "Pre-existing, pulled in by source-policy change"),
         ("hard_included", "Hard-included"),
         ("new_taxon_in_taxonomy", "New taxon in NCBI taxonomy"),
         ("infection_status_promotion", "Infection-status promotion"),
-        ("other", "Other (pre-existing, taxon already surveilled)"),
+        (
+            "pre_existing_reincluded",
+            "Pre-existing, re-included by an inclusion-config change",
+        ),
+        ("other", "Other (release date unknown)"),
     ]
     # Assign sequential appendix ids: lost gid tables, then gained gid tables,
     # then the fixed inventory / per-host / params appendices. Computed (not
@@ -1340,6 +1349,39 @@ def write_summary_md(  # noqa: C901, PLR0912, PLR0915 - long but linear report w
                     f"    - `{record.species_taxid}` *{record.organism_name}*:"
                     f" {int(cast(int, record.n_gids)):,} gids"
                 )
+        # Surface the likely driver of pre-existing re-inclusions: their source
+        # mix plus any inclusion-config change visible in the params diff. This
+        # is what makes a one-off like the GenBank→all RefSeq influx a data-driven
+        # finding rather than a hardcoded category.
+        reinc = gained_categorized[
+            gained_categorized["reason"] == "pre_existing_reincluded"
+        ]
+        if not reinc.empty and "source_database" in reinc.columns:
+            src_counts = reinc["source_database"].value_counts()
+            src_str = ", ".join(
+                f"{int(v):,} {str(k).replace('SOURCE_DATABASE_', '') or 'unknown'}"
+                for k, v in src_counts.items()
+            )
+            lines.append("")
+            lines.append(
+                f"- Pre-existing re-inclusions ({len(reinc):,} gids) by source:"
+                f" {src_str}. These existed at the old build under an already-eligible"
+                " taxon, so a change in the index's inclusion config surfaced them"
+                f" (not new biology) — cross-reference the params diff (Appendix"
+                f" {a_params_table})."
+            )
+            cfg_keys = {
+                "assembly_source",
+                "ncbi_viral_params",
+                "viral_taxids_exclude_hard",
+            }
+            if not params_changes.empty and "key" in params_changes.columns:
+                cfg_hits = params_changes[params_changes["key"].isin(cfg_keys)]
+                for _, pr in cfg_hits.iterrows():
+                    lines.append(
+                        f"    - `{pr['key']}` changed `{pr['old'] or '—'}` →"
+                        f" `{pr['new'] or '—'}` — a likely driver."
+                    )
         if species_gained is not None and not species_gained.empty:
             lines.append("")
             lines.append(

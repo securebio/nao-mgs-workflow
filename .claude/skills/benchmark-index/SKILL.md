@@ -93,11 +93,11 @@ The target index must publish `virus-genome-metadata-raw.tsv.gz` (the pre-filter
 **Gained gid categories** (priority order). Keyed on the genome's assigned (leaf) taxon, using the assembly's `release_date` + `source_database` (from the raw table) and the old annotated DB — no NCBI lookups. Genome-lifecycle reasons (is the genome itself new?) are checked before taxonomy/policy reasons:
 
 - `newly_deposited`: assembly `release_date` is after the old index build — genuinely deposited to NCBI since the previous build.
-- `source_policy_pull_in`: assembly predates the old build and is RefSeq — it existed then but the old build's `assembly_source` didn't pull RefSeq (e.g. the GenBank-only → all switch surfaced it). A config artifact, not new biology — frequently the *largest* gained bucket, so don't read gains as new sequence data without checking this.
 - `hard_included`: the genome's new leaf taxon (or ancestor) is in `ref/host-infection-overrides.json`.
 - `new_taxon_in_taxonomy`: the genome's new leaf taxon did NOT exist in the old taxonomy DB — a taxon NCBI/ICTV minted between builds.
 - `infection_status_promotion`: the leaf taxon was in the old DB but not surveilled then and is now — its lineage's infection status flipped 0→1.
-- `other`: pre-existing GenBank genome of a taxon already surveilled in the old build (newly passing an assembly-status filter, or reassigned in from a previously-unsurveilled taxon). Should be small.
+- `pre_existing_reincluded`: the assembly predates the old build and its taxon was already eligible, yet it wasn't in the old surveillance set — so a change in the index's *inclusion config* surfaced it (not new biology). The classic case is an `assembly_source` switch (GenBank-only → all) pulling in RefSeq; a hard-exclude removal is another. Empty in steady state, so frequently the *largest* gained bucket only when config changed — don't read a big number here as new sequence data. The §3.3 findings break it down by `source_database` and name the responsible params change, so the driver is data-driven, not assumed.
+- `other`: `release_date` missing/unknown, so the genome can't be placed. Should be ~0.
 
 Both lost and gained categorizers key on the genome's assigned **leaf** taxon, never a species-rank rollup; the species rollup appears only inside the surveillance predicate (leaf-positive OR species-positive), mirroring `filter_viral_genbank_metadata.py`.
 

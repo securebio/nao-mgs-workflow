@@ -46,10 +46,10 @@
     - Other: NNN
 - Genome IDs gained: NNN
     - Newly deposited since old build: NNN (link to table in appendix)
-    - Pre-existing, pulled in by source-policy change: NNN (link to table in appendix)
     - Hard-included: NNN (link to table in appendix)
     - New taxon in NCBI taxonomy: NNN (link to table in appendix)
     - Infection-status promotion: NNN (link to table in appendix)
+    - Pre-existing, re-included by an inclusion-config change: NNN (link to table in appendix)
     - Other: NNN
 
 #### 3.2. Losses
@@ -60,7 +60,8 @@
 
 #### 3.3. Gains
 
-- Bullet list summary of relevant genome gains, divided by category (newly deposited, pulled in by source-policy change, hard-included, new taxon, infection-status promotion)
+- Bullet list summary of relevant genome gains, divided by category (newly deposited, hard-included, new taxon, infection-status promotion, pre-existing re-included by a config change)
+- For pre-existing re-inclusions, note the source/params driver the script surfaces (e.g. a GenBank→all source switch surfacing RefSeq)
 - Discuss species taxids that (a) are not hard-included but (b) go from zero to nonzero genomes
 - Link to tables in appendix where appropriate
 

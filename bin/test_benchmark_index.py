@@ -1332,16 +1332,50 @@ class TestCategorizeGainedGenomesRaw:
             self.OLD_BUILD,
         ).set_index("genome_id")
         assert out.loc["gNEW", "reason"] == "newly_deposited"
-        assert out.loc["gRS", "reason"] == "source_policy_pull_in"
         assert out.loc["gHI", "reason"] == "hard_included"
         assert out.loc["gHI", "reason_taxid"] == "50"  # matched override ancestor
         assert out.loc["gNT", "reason"] == "new_taxon_in_taxonomy"
         assert out.loc["gPR", "reason"] == "infection_status_promotion"
-        assert out.loc["gOT", "reason"] == "other"
+        # Both the pre-existing RefSeq pull-in (gRS) and the pre-existing GenBank
+        # genome of an already-eligible taxon (gOT) are the same general bucket;
+        # source is recorded for the §3.3 driver annotation, not the category.
+        assert out.loc["gRS", "reason"] == "pre_existing_reincluded"
+        assert out.loc["gOT", "reason"] == "pre_existing_reincluded"
+        assert out.loc["gRS", "source_database"] == "SOURCE_DATABASE_REFSEQ"
 
-    def test_newly_deposited_outranks_source_policy(self, old_db: pd.DataFrame) -> None:
+    def test_missing_release_date_is_other(self, old_db: pd.DataFrame) -> None:
+        # Without a release date we can't place a pre-existing genome -> other.
+        added = pd.DataFrame(
+            [
+                {
+                    "assembly_accession": "GCA_U",
+                    "genome_id": "g",
+                    "taxid": "800",
+                    "species_taxid": "800",
+                    "organism_name": "x",
+                }
+            ]
+        )
+        raw = pd.DataFrame(
+            [
+                {
+                    "assembly_accession": "GCA_U",
+                    "taxid": "800",
+                    "organism_name": "x",
+                    "source_database": "SOURCE_DATABASE_GENBANK",
+                    "assembly_status": "current",
+                    "release_date": "",
+                }
+            ]
+        )
+        out = categorize_gained_genomes_raw(
+            added, raw, old_db, {}, {}, ["vertebrate"], self.OLD_BUILD
+        )
+        assert out.iloc[0]["reason"] == "other"
+
+    def test_newly_deposited_outranks_pre_existing(self, old_db: pd.DataFrame) -> None:
         # A RefSeq assembly released *after* the old build is a genuine new
-        # deposit, not a source-policy pull-in.
+        # deposit, not a pre-existing re-inclusion.
         added = pd.DataFrame(
             [
                 {
