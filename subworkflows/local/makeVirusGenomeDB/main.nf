@@ -35,9 +35,7 @@ workflow MAKE_VIRUS_GENOME_DB {
         // 1. Enumerate every assembly under the viral root in a single
         //    `datasets summary` call. No genome data is fetched here.
         enum_ch = ENUMERATE_VIRAL_ACCESSIONS(virus_taxid, assembly_source, other_params.datasets_summary_extra_args)
-        // 1b. Gzip the full pre-filter assembly metadata for publishing, so
-        //     downstream tooling (e.g. index benchmarking) can recover the
-        //     build-time taxid assignment of genomes the filter later drops.
+        // 1b. Publish the full pre-filter assembly metadata (gzipped).
         raw_metadata_ch = GZIP_FILE_BARE(enum_ch.metadata)
         // 2. Filter accessions by host infection status and assembly status
         //    (hard-excluded taxids are already absent from virus_db's
@@ -69,7 +67,5 @@ workflow MAKE_VIRUS_GENOME_DB {
     emit:
         fasta = mask_ch.masked
         metadata = gid_ch
-        // Full pre-filter assembly metadata (accession -> build-time taxid), for
-        // downstream index benchmarking / loss attribution.
-        raw_metadata = raw_metadata_ch
+        raw_metadata = raw_metadata_ch  // pre-filter assembly metadata, for benchmarking
 }

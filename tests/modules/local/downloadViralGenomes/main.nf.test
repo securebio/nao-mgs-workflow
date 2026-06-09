@@ -70,7 +70,7 @@ nextflow_process {
                 input[0] = file("${projectDir}/tests/modules/local/downloadViralGenomes/test_chunk_bad.txt")
                 input[1] = "refseq"
                 input[2] = ""
-                input[3] = 1  // 1 attempt: fail fast (no backoff) on a genuinely bad accession
+                input[3] = 1  // 1 attempt: fail fast on a bad accession
                 """
             }
         }

@@ -28,8 +28,7 @@ process ENUMERATE_VIRAL_ACCESSIONS {
         # non-current assemblies (the `datasets` `--assembly-version` does not allow
         # this when using `--assembly-source all`; see ncbi/datasets#576).
         # `assminfo-release-date` is carried through for downstream tooling (index
-        # benchmarking) to tell genomes genuinely deposited since the previous
-        # build from pre-existing ones surfaced by a config change.
+        # benchmarking) to date each assembly.
         dataformat tsv genome \\
             --inputfile assembly_data_report.jsonl \\
             --fields accession,organism-tax-id,organism-name,source_database,assminfo-status,assminfo-release-date \\

@@ -16,10 +16,8 @@ process DOWNLOAD_VIRAL_GENOMES {
         """
         CHUNK_ID=\$(basename ${accession_chunk} .txt)
 
-        # Retry a command with exponential backoff. Both the dehydrated download
-        # and the rehydrate hit transient NCBI HTTP/2 stream errors
-        # ("INTERNAL_ERROR; received from peer") under load; a few spaced attempts
-        # ride out the window where Nextflow's immediate task retry cannot.
+        # Retry with exponential backoff: both the download and rehydrate hit
+        # transient NCBI stream errors that Nextflow's immediate task retry can't.
         retry() {
             desc="\$1"; shift; backoff=10
             for attempt in \$(seq 1 ${max_attempts}); do
