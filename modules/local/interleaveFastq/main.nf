@@ -4,6 +4,7 @@ process INTERLEAVE_FASTQ {
     label "testing_only" // Process is currently only used for testing
     label "single"
     label "coreutils_gzip_gawk"
+    tag "id=${sample}"
     input:
         tuple val(sample), path(reads)
     output:

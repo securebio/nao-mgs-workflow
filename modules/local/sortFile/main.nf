@@ -3,6 +3,7 @@
 process SORT_FILE {
     label "coreutils"
     label "single"
+    tag "id=${sample}"
     input:
         tuple val(sample), path(file)
         val(sort_string)

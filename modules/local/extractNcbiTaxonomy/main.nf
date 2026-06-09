@@ -2,6 +2,7 @@
 process EXTRACT_NCBI_TAXONOMY {
     label "unzip"
     label "single"
+    tag "id=index"
     input:
         path(taxonomy_zip)
     output:

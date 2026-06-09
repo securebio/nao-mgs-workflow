@@ -2,6 +2,7 @@
 process DUSTMASKER_FASTA_GZIPPED {
     label "BLAST"
     label "single"
+    tag "id=index"
     input:
         path(fasta_gzipped)
     output:

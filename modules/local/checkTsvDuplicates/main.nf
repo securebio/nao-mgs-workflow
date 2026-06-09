@@ -7,6 +7,7 @@ If not, throw an error.
 process CHECK_TSV_DUPLICATES {
     label "python"
     label "single"
+    tag "id=${sample}"
     input:
         tuple val(sample), path(tsv) // Input TSV
         val(field) // Field to check for duplicates

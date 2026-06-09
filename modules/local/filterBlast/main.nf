@@ -3,6 +3,7 @@
 process FILTER_BLAST {
     label "python"
     label "single"
+    tag "id=${sample}"
     input:
         tuple val(sample), path(blast_hits_sorted) // Must be sorted on query ID (ascending) and bitscore (descending)
         val(max_rank) // Maximum bitscore rank to keep

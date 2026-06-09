@@ -2,6 +2,7 @@
 process BBDUK {
     label "small"
     label "BBTools"
+    tag "id=${sample}"
     input:
         tuple val(sample), path(reads) // Interleaved or single-end
         path(contaminant_ref)

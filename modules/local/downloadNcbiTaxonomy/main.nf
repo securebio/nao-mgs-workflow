@@ -2,6 +2,7 @@
 process DOWNLOAD_NCBI_TAXONOMY {
     label "BBTools"
     label "single"
+    tag "id=index"
     input:
         val(taxonomy_url)
     output:

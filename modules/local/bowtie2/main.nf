@@ -3,6 +3,7 @@
 process BOWTIE2 {
     label "bowtie2_samtools"
     label "small"
+    tag "id=${sample}"
     input:
         tuple val(sample), path(reads_interleaved)
         val(index_dir)
@@ -66,6 +67,7 @@ process BOWTIE2 {
 process BOWTIE2_INDEX {
     label "bowtie2_samtools"
     label "max"
+    tag "id=index,name=${outdir}"
     input:
         path(reference_fasta)
         val(outdir)

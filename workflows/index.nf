@@ -80,6 +80,7 @@ workflow INDEX {
             // Virus genome database
             MAKE_VIRUS_GENOME_DB.out.fasta,
             MAKE_VIRUS_GENOME_DB.out.metadata,
+            MAKE_VIRUS_GENOME_DB.out.raw_metadata,
             // Other reference files & directories
             JOIN_RIBO_REF.out.ribo_ref,
             blast_db_ch,

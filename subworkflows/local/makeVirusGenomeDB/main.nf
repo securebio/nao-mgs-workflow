@@ -10,6 +10,7 @@ include { ADD_GENBANK_GENOME_IDS } from "../../../modules/local/addGenbankGenome
 include { CONCATENATE_GENOME_FASTA } from "../../../modules/local/concatenateGenomeFasta"
 include { FILTER_GENOME_FASTA } from "../../../modules/local/filterGenomeFasta"
 include { MASK_GENOME_FASTA } from "../../../modules/local/maskGenomeFasta"
+include { GZIP_FILE_BARE } from "../../../modules/local/gzipFile"
 
 /***********
 | WORKFLOW |
@@ -34,6 +35,8 @@ workflow MAKE_VIRUS_GENOME_DB {
         // 1. Enumerate every assembly under the viral root in a single
         //    `datasets summary` call. No genome data is fetched here.
         enum_ch = ENUMERATE_VIRAL_ACCESSIONS(virus_taxid, assembly_source, other_params.datasets_summary_extra_args)
+        // 1b. Publish the full pre-filter assembly metadata (gzipped).
+        raw_metadata_ch = GZIP_FILE_BARE(enum_ch.metadata)
         // 2. Filter accessions by host infection status and assembly status
         //    (hard-excluded taxids are already absent from virus_db's
         //    infection_status_* columns), then chunk the kept accessions.
@@ -64,4 +67,5 @@ workflow MAKE_VIRUS_GENOME_DB {
     emit:
         fasta = mask_ch.masked
         metadata = gid_ch
+        raw_metadata = raw_metadata_ch  // pre-filter assembly metadata, for benchmarking
 }

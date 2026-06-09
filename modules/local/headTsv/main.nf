@@ -2,6 +2,7 @@
 process HEAD_TSV {
     label "python"
     label "single"
+    tag "id=${sample}"
     input:
         tuple val(sample), path(tsv)
         val(headers)

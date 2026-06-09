@@ -2,6 +2,7 @@
 process BBMERGE {
     label "BBTools"
     label "small"
+    tag "id=${sample}"
     input:
         tuple val(sample), path(reads_interleaved)
     output:
@@ -48,6 +49,7 @@ process BBMERGE {
 process BBMERGE_LIST {
     label "BBTools"
     label "small"
+    tag "id=${sample}"
     input:
         tuple val(sample), path(reads_interleaved)
     output:

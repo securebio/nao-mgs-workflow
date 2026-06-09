@@ -1,7 +1,8 @@
 // Download and extract a Gzipped tarball into a directory
 process GET_TARBALL {
     label "tar_wget"
-    label "huge_mem"
+    label "single_huge_mem"
+    tag "id=index,name=${outdir}"
     input:
         val(tarball_url)
         val(outdir)

@@ -2,6 +2,7 @@
 process PROCESS_VIRAL_MINIMAP2_SAM {
     label "pysam_biopython"
     label "single"
+    tag "id=${sample}"
     input:
         tuple val(sample), path(virus_sam), path(clean_reads)
         path genbank_metadata_path

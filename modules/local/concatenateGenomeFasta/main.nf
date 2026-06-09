@@ -4,6 +4,7 @@ process CONCATENATE_GENOME_FASTA {
     label "xsmall"
     label "seqkit"
     label "use_scratch"
+    tag "id=index"
     input:
         path(genome_dir)
         path(path_file)

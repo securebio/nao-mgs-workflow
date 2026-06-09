@@ -1,0 +1,22 @@
+name: Check process tags
+
+on:
+  pull_request: # Runs on all PRs
+
+permissions:
+  contents: read
+
+jobs:
+  check-process-tags:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Check all modules/local processes declare a tag directive
+        run: python bin/check_process_tags.py
