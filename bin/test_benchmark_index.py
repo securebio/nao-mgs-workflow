@@ -1427,8 +1427,10 @@ class TestCategorizeGainedGenomesRaw:
         assert out.loc["gOT", "reason"] == "pre_existing_reincluded"
         assert out.loc["gRS", "source_database"] == "SOURCE_DATABASE_REFSEQ"
 
-    def test_missing_release_date_is_other(self, old_db: pd.DataFrame) -> None:
-        # Without a release date we can't place a pre-existing genome -> other.
+    def test_missing_release_date_is_no_release_date(
+        self, old_db: pd.DataFrame
+    ) -> None:
+        # Without a release date the new-vs-pre-existing call can't be made.
         added = pd.DataFrame(
             [
                 {
@@ -1455,7 +1457,7 @@ class TestCategorizeGainedGenomesRaw:
         out = categorize_gained_genomes_raw(
             added, raw, old_db, {}, {}, ["vertebrate"], self.OLD_BUILD
         )
-        assert out.iloc[0]["reason"] == "other"
+        assert out.iloc[0]["reason"] == "no_release_date"
 
     def test_newly_deposited_outranks_pre_existing(self, old_db: pd.DataFrame) -> None:
         # A RefSeq assembly released *after* the old build is a genuine new

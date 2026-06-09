@@ -596,9 +596,11 @@ def categorize_gained_genomes_raw(
       not new biology. The specific driver is surfaced as a §3.3 finding by
       cross-referencing the params diff and the bucket's `source_database` mix.
       Empty in steady state; populated whenever inclusion config changes.
-    - `other`: the assembly has no `release_date` in the raw metadata, so the
-      newly-deposited-vs-pre-existing split can't be made. A data-gap catch-all;
-      should be ~0 (NCBI populates a release date for essentially every assembly).
+    - `no_release_date`: the assembly has no `release_date` in the raw metadata,
+      so the newly-deposited-vs-pre-existing split can't be made. The rest of the
+      tree is total, so this is the only un-decidable case — named explicitly
+      rather than lumped into a catch-all. Should be ~0 (NCBI populates a release
+      date for essentially every assembly).
 
     Returns the input DataFrame with `reason`, `reason_taxid`, and
     `source_database` columns appended. `reason_taxid` is the matched override
@@ -641,7 +643,13 @@ def categorize_gained_genomes_raw(
         release = str(raw_release.get(acc, ""))
         sources.append(str(raw_source.get(acc, "")))
         hard = _ancestor_in(new_leaf, parent_map, all_included)
-        if release and release > old_build_date:
+        if not release:
+            # Data gap: no release_date, so we can't make the newly-deposited vs
+            # pre-existing call. Explicit (not "other") because the rest of the
+            # tree is total — this is the only un-decidable case. Should be ~0.
+            reasons.append("no_release_date")
+            reason_taxids.append(new_leaf)
+        elif release > old_build_date:
             reasons.append("newly_deposited")
             reason_taxids.append(new_leaf)
         elif hard:
@@ -653,13 +661,10 @@ def categorize_gained_genomes_raw(
         elif not _old_surveilled(new_leaf):
             reasons.append("infection_status_promotion")
             reason_taxids.append(new_leaf)
-        elif release:
-            # Pre-existing (released on/before the old build) and its taxon was
-            # already eligible -> surfaced by an inclusion-config change.
-            reasons.append("pre_existing_reincluded")
-            reason_taxids.append(new_leaf)
         else:
-            reasons.append("other")  # no release_date in raw metadata
+            # Released on/before the old build, taxon already eligible -> the
+            # genuine residual: surfaced by an inclusion-config change.
+            reasons.append("pre_existing_reincluded")
             reason_taxids.append(new_leaf)
     out["reason"] = reasons
     out["reason_taxid"] = reason_taxids
@@ -1303,7 +1308,7 @@ def write_summary_md(  # noqa: C901, PLR0912, PLR0915 - long but linear report w
             "pre_existing_reincluded",
             "Pre-existing, re-included by an inclusion-config change",
         ),
-        ("other", "Other (assembly has no release date)"),
+        ("no_release_date", "Assembly has no release date (undecidable)"),
     ]
     # Assign sequential appendix ids: lost gid tables, then gained gid tables,
     # then the fixed inventory / per-host / params appendices. Computed (not
