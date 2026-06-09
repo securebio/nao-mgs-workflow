@@ -27,10 +27,13 @@ process ENUMERATE_VIRAL_ACCESSIONS {
         # `assminfo-status` is included so FILTER_VIRAL_GENBANK_METADATA can drop
         # non-current assemblies (the `datasets` `--assembly-version` does not allow
         # this when using `--assembly-source all`; see ncbi/datasets#576).
+        # `assminfo-release-date` is carried through for downstream tooling (index
+        # benchmarking) to tell genomes genuinely deposited since the previous
+        # build from pre-existing ones surfaced by a config change.
         dataformat tsv genome \\
             --inputfile assembly_data_report.jsonl \\
-            --fields accession,organism-tax-id,organism-name,source_database,assminfo-status \\
-            | { printf 'assembly_accession\\ttaxid\\torganism_name\\tsource_database\\tassembly_status\\n'; tail -n +2; } \\
+            --fields accession,organism-tax-id,organism-name,source_database,assminfo-status,assminfo-release-date \\
+            | { printf 'assembly_accession\\ttaxid\\torganism_name\\tsource_database\\tassembly_status\\trelease_date\\n'; tail -n +2; } \\
             > virus-genome-metadata-raw.tsv
         rm -f assembly_data_report.jsonl
         echo "Enumerated \$((  \$(wc -l < virus-genome-metadata-raw.tsv) - 1  )) assemblies for taxid ${taxid}"

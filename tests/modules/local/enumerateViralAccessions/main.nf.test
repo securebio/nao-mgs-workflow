@@ -23,7 +23,7 @@ nextflow_process {
             assert process.success
             // the enumerated metadata should have the standardized column header
             def meta = path(process.out.metadata[0]).csv(sep: "\t")
-            assert meta.columnNames == ["assembly_accession", "taxid", "organism_name", "source_database", "assembly_status"]
+            assert meta.columnNames == ["assembly_accession", "taxid", "organism_name", "source_database", "assembly_status", "release_date"]
             assert meta.rowCount >= 1
             // assembly_status should be populated for every row
             assert meta.columns["assembly_status"].every { it && it != "null" }
@@ -48,7 +48,7 @@ nextflow_process {
         then {
             assert process.success
             def meta = path(process.out.metadata[0]).csv(sep: "\t")
-            assert meta.columnNames == ["assembly_accession", "taxid", "organism_name", "source_database", "assembly_status"]
+            assert meta.columnNames == ["assembly_accession", "taxid", "organism_name", "source_database", "assembly_status", "release_date"]
             assert meta.rowCount >= 2
             // Both sources should be represented
             def sources = meta.columns["source_database"].toSet()
