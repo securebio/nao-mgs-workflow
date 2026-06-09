@@ -907,6 +907,55 @@ class TestCategorizeLostGenomesRaw:
         )
         assert out.iloc[0]["reason"] == "infection_status_demotion"
 
+    def test_surveilled_via_species_rollup(self) -> None:
+        # The surveillance predicate mirrors the inclusion filter: leaf positive
+        # OR its species rollup positive. Leaf 950 is itself infection-negative
+        # but rolls up to surveilled species 900, so it counts as surveilled ->
+        # a lost genome here is "other" (present/surveilled yet absent), NOT a
+        # demotion. Without the rollup it would be mislabelled a demotion.
+        new_db = pd.DataFrame(
+            [
+                {
+                    "taxid": "900",
+                    "taxid_species": "900",
+                    "parent_taxid": "1",
+                    "infection_status_vertebrate": "1",
+                },
+                {
+                    "taxid": "950",
+                    "taxid_species": "900",
+                    "parent_taxid": "900",
+                    "infection_status_vertebrate": "0",
+                },
+            ]
+        )
+        removed = pd.DataFrame(
+            [
+                {
+                    "assembly_accession": "GCA_Y",
+                    "genome_id": "gY",
+                    "taxid": "950",
+                    "species_taxid": "950",
+                    "organism_name": "strain",
+                }
+            ]
+        )
+        raw = pd.DataFrame(
+            [
+                {
+                    "assembly_accession": "GCA_Y",
+                    "taxid": "950",
+                    "organism_name": "x",
+                    "source_database": "SOURCE_DATABASE_GENBANK",
+                    "assembly_status": "current",
+                }
+            ]
+        )
+        out = categorize_lost_genomes_raw(
+            removed, raw, new_db, build_parent_map(new_db), set(), ["vertebrate"]
+        )
+        assert out.iloc[0]["reason"] == "other"
+
     def test_non_current_outranks_taxonomy_reasons(
         self, removed: pd.DataFrame, raw_meta: pd.DataFrame, new_db: pd.DataFrame
     ) -> None:
@@ -1438,6 +1487,54 @@ class TestCategorizeGainedGenomesRaw:
             added, raw, old_db, {}, {}, ["vertebrate"], self.OLD_BUILD
         )
         assert out.iloc[0]["reason"] == "newly_deposited"
+
+    def test_old_surveilled_via_species_rollup(self) -> None:
+        # The old-surveillance check mirrors the filter: leaf positive OR its old
+        # species rollup positive. Leaf 950 was infection-negative in the old DB
+        # but rolls up to surveilled species 900, so it was already surveilled
+        # then -> a pre-existing genome of it is NOT a promotion. Without the
+        # rollup it would be mislabelled an infection_status_promotion.
+        old_db = pd.DataFrame(
+            [
+                {
+                    "taxid": "900",
+                    "taxid_species": "900",
+                    "infection_status_vertebrate": "1",
+                },
+                {
+                    "taxid": "950",
+                    "taxid_species": "900",
+                    "infection_status_vertebrate": "0",
+                },
+            ]
+        )
+        added = pd.DataFrame(
+            [
+                {
+                    "assembly_accession": "GCA_Z",
+                    "genome_id": "gZ",
+                    "taxid": "950",
+                    "species_taxid": "950",
+                    "organism_name": "strain",
+                }
+            ]
+        )
+        raw = pd.DataFrame(
+            [
+                {
+                    "assembly_accession": "GCA_Z",
+                    "taxid": "950",
+                    "organism_name": "x",
+                    "source_database": "SOURCE_DATABASE_GENBANK",
+                    "assembly_status": "current",
+                    "release_date": "2010-01-01",
+                }
+            ]
+        )
+        out = categorize_gained_genomes_raw(
+            added, raw, old_db, {}, {}, ["vertebrate"], self.OLD_BUILD
+        )
+        assert out.iloc[0]["reason"] == "pre_existing_reincluded"
 
     def test_empty_input_has_columns(
         self, raw_meta: pd.DataFrame, old_db: pd.DataFrame
