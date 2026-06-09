@@ -43,14 +43,14 @@
     - Hard-excluded: NNN (link to table in appendix)
     - Reassigned to excluded taxon: NNN (link to table in appendix)
     - Infection-status demotion: NNN (link to table in appendix)
-    - Other: NNN
+    - Other (current, surveilled — yet absent): NNN (link to table in appendix)
 - Genome IDs gained: NNN
     - Newly deposited since old build: NNN (link to table in appendix)
     - Hard-included: NNN (link to table in appendix)
     - New taxon in NCBI taxonomy: NNN (link to table in appendix)
     - Infection-status promotion: NNN (link to table in appendix)
     - Pre-existing, re-included by an inclusion-config change: NNN (link to table in appendix)
-    - Other: NNN
+    - Other (release date unknown): NNN (link to table in appendix)
 
 #### 3.2. Losses
 
