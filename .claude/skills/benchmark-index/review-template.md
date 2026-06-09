@@ -45,12 +45,11 @@
     - Infection-status demotion: NNN (link to table in appendix)
     - Other: NNN
 - Genome IDs gained: NNN
+    - Newly deposited since old build: NNN (link to table in appendix)
+    - Pre-existing, pulled in by source-policy change: NNN (link to table in appendix)
     - Hard-included: NNN (link to table in appendix)
-    - Newly deposited for existing included taxa: NNN (link to table in appendix)
-    - Change in infection status: NNN (link to table in appendix)
-    - Change in assigned taxid: NNN (link to table in appendix)
-    - New species in NCBI taxonomy: NNN (link to table in appendix)
-    - [Other specific reason]: NNN
+    - New taxon in NCBI taxonomy: NNN (link to table in appendix)
+    - Infection-status promotion: NNN (link to table in appendix)
     - Other: NNN
 
 #### 3.2. Losses
@@ -61,7 +60,7 @@
 
 #### 3.3. Gains
 
-- Bullet list summary of relevant genome gains, divided by category (hard-included, newly-deposited, etc)
+- Bullet list summary of relevant genome gains, divided by category (newly deposited, pulled in by source-policy change, hard-included, new taxon, infection-status promotion)
 - Discuss species taxids that (a) are not hard-included but (b) go from zero to nonzero genomes
 - Link to tables in appendix where appropriate
 

@@ -90,14 +90,16 @@ These are the labels the script writes into `genomes_lost_categorized.tsv`, `gen
 
 The target index must publish `virus-genome-metadata-raw.tsv.gz` (the pre-filter assembly list). If it's missing, the script errors out rather than guessing — rebuild the index with a pipeline version that emits it.
 
-**Gained gid categories** (priority order):
+**Gained gid categories** (priority order). Keyed on the genome's assigned (leaf) taxon, using the assembly's `release_date` + `source_database` (from the raw table) and the old annotated DB — no NCBI lookups. Genome-lifecycle reasons (is the genome itself new?) are checked before taxonomy/policy reasons:
 
-- `hard_included`: gid's new species_taxid (or ancestor) is in `ref/host-infection-overrides.json`. The include rule explains why this gid lands in the surveillance set.
-- `change_in_assigned_taxid`: gid's new species_taxid is the destination of an NCBI/ICTV restructure (some old species had its gids redistributed here). The taxid changed and the new assignment passes the filter.
-- `newly_deposited_existing`: gid's new species was already in old metadata (the species was already surveilled). New data for an already-tracked species.
-- `infection_status_change`: gid's new species was in the old taxonomy DB but NOT in old metadata (the species existed but failed the old filter); now it's in new metadata. The filter result flipped — the species is newly in the surveillance set.
-- `new_species_in_taxonomy`: gid's new species_taxid did NOT exist in the old taxonomy DB and isn't a redistribution destination — a brand-new species concept NCBI/ICTV added between builds.
-- `other`: should be effectively empty under the categorization above. If anything lands here, treat as a bug.
+- `newly_deposited`: assembly `release_date` is after the old index build — genuinely deposited to NCBI since the previous build.
+- `source_policy_pull_in`: assembly predates the old build and is RefSeq — it existed then but the old build's `assembly_source` didn't pull RefSeq (e.g. the GenBank-only → all switch surfaced it). A config artifact, not new biology — frequently the *largest* gained bucket, so don't read gains as new sequence data without checking this.
+- `hard_included`: the genome's new leaf taxon (or ancestor) is in `ref/host-infection-overrides.json`.
+- `new_taxon_in_taxonomy`: the genome's new leaf taxon did NOT exist in the old taxonomy DB — a taxon NCBI/ICTV minted between builds.
+- `infection_status_promotion`: the leaf taxon was in the old DB but not surveilled then and is now — its lineage's infection status flipped 0→1.
+- `other`: pre-existing GenBank genome of a taxon already surveilled in the old build (newly passing an assembly-status filter, or reassigned in from a previously-unsurveilled taxon). Should be small.
+
+Both lost and gained categorizers key on the genome's assigned **leaf** taxon, never a species-rank rollup; the species rollup appears only inside the surveillance predicate (leaf-positive OR species-positive), mirroring `filter_viral_genbank_metadata.py`.
 
 ## Edge cases
 

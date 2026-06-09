@@ -521,80 +521,97 @@ def categorize_lost_genomes_raw(
     return out
 
 
-def categorize_gained_genomes(
+def categorize_gained_genomes_raw(
     added: pd.DataFrame,
+    raw_meta: pd.DataFrame,
+    old_db: pd.DataFrame,
     parent_map: dict[str, str],
     included_taxids: dict[str, set[str]],
-    species_in_old_meta: set[str],
-    species_in_old_db: set[str],
-    species_redistribution_destinations: set[str],
+    screened_hosts: list[str],
+    old_build_date: str,
 ) -> pd.DataFrame:
-    """Classify each newly-added `genome_id` by the most likely reason it
-    landed in the surveillance set. Categories, in priority order:
+    """Classify each newly-added `genome_id` by why it is newly in the
+    surveillance set, keyed on the genome's assigned (leaf) taxon — never a
+    species-rank rollup (the rollup appears only inside the surveillance
+    predicate, mirroring the inclusion filter). Uses the assembly's
+    `release_date` (from the raw metadata) and `source_database`, plus the old
+    annotated DB, so no live NCBI lookups are needed. Categories, in priority
+    order — genome-lifecycle reasons (is the genome itself actually new?) before
+    taxonomy / policy reasons (why the taxon is now surveilled):
 
-    - `hard_included`: gid's new species_taxid (or an ancestor) is in
-      `ref/host-infection-overrides.json` for any host — the include rule
-      explains why this gid lands in the surveillance set.
-    - `change_in_assigned_taxid`: gid's new species_taxid is a destination
-      of an NCBI / ICTV restructure (some old species_taxid had its gids
-      redistributed here). The gid's taxid changed and the new assignment
-      passes the filter.
-    - `newly_deposited_existing`: gid's new species_taxid was in old
-      metadata (the species was already in the surveillance set). New
-      data for an already-tracked species.
-    - `infection_status_change`: gid's new species_taxid was in the old
-      taxonomy DB but NOT in old metadata (the species existed but failed
-      the old infection-status filter); now it's in new metadata, so the
-      filter result flipped — the species is newly in the surveillance set.
-    - `new_species_in_taxonomy`: gid's new species_taxid did not exist
-      in the old taxonomy DB at all (NCBI/ICTV minted a brand-new
-      species concept), and the new species_taxid is not a
-      redistribution destination — so it's a genuinely new species, not
-      a renamed existing one.
-    - `other`: no rule applies. Should be rare; if there's a meaningful
-      shared-fate group in `other`, surface it as a sub-bucket in §3.3
-      manually.
+    - `newly_deposited`: assembly `release_date` is after the old index build —
+      genuinely deposited to NCBI since the previous build.
+    - `source_policy_pull_in`: assembly predates the old build and is RefSeq — it
+      existed then but was excluded only because the old build's
+      `assembly_source` didn't pull RefSeq (e.g. the GenBank-only → all switch).
+      A config artifact, not new biology.
+    - `hard_included`: the genome's new leaf taxon (or an ancestor) is in
+      `ref/host-infection-overrides.json`.
+    - `new_taxon_in_taxonomy`: the genome's new leaf taxon did not exist in the
+      old taxonomy DB at all (NCBI/ICTV minted it between builds).
+    - `infection_status_promotion`: the leaf taxon was in the old DB but not
+      surveilled then and is now — its lineage's infection status flipped 0→1.
+    - `other`: pre-existing GenBank genome of a taxon already surveilled in the
+      old build — newly passing an assembly-status filter, or reassigned in from
+      a previously-unsurveilled taxon. Should be small.
 
     Returns the input DataFrame with `reason` and `reason_taxid` columns
-    appended."""
+    appended. `reason_taxid` is the matched override taxid (`hard_included`) or
+    the genome's new leaf taxon (other categories)."""
     out = added.copy()
     if out.empty:
         out["reason"] = pd.Series(dtype=str)
         out["reason_taxid"] = pd.Series(dtype=str)
         return out
+    raw_release = dict(
+        zip(raw_meta["assembly_accession"], raw_meta["release_date"], strict=False)
+    )
+    raw_source = dict(
+        zip(raw_meta["assembly_accession"], raw_meta["source_database"], strict=False)
+    )
     all_included: set[str] = set()
     for taxids in included_taxids.values():
         all_included.update(taxids)
+    old_db_taxids = (
+        set(old_db["taxid"].astype(str)) if "taxid" in old_db.columns else set()
+    )
+    old_surv = surveilled_species(old_db, screened_hosts)
+    old_species_of = (
+        dict(zip(old_db["taxid"], old_db["taxid_species"], strict=False))
+        if "taxid_species" in old_db.columns
+        else {}
+    )
+
+    def _old_surveilled(taxon: str) -> bool:
+        # Was the genome's (leaf) taxon surveilled in the OLD build? Mirror the
+        # filter: leaf positive OR its old species-rollup positive.
+        return taxon in old_surv or old_species_of.get(taxon, "") in old_surv
+
     reasons: list[str] = []
     reason_taxids: list[str] = []
     for _, row in out.iterrows():
-        sp = str(row["species_taxid"])
-        hard = _ancestor_in(sp, parent_map, all_included)
-        if hard:
+        acc = str(row["assembly_accession"])
+        new_leaf = str(row["taxid"])  # genome's assigned (leaf) taxon
+        release = str(raw_release.get(acc, ""))
+        hard = _ancestor_in(new_leaf, parent_map, all_included)
+        if release and release > old_build_date:
+            reasons.append("newly_deposited")
+            reason_taxids.append(new_leaf)
+        elif raw_source.get(acc) == "SOURCE_DATABASE_REFSEQ":
+            reasons.append("source_policy_pull_in")
+            reason_taxids.append(new_leaf)
+        elif hard:
             reasons.append("hard_included")
             reason_taxids.append(hard)
-            continue
-        if sp in species_redistribution_destinations:
-            reasons.append("change_in_assigned_taxid")
-            reason_taxids.append(sp)
-            continue
-        if sp in species_in_old_meta:
-            reasons.append("newly_deposited_existing")
-            reason_taxids.append(sp)
-            continue
-        if sp in species_in_old_db:
-            # Species existed in old taxonomy DB but had no gids in old
-            # metadata (failed old filter). Now it does (passes new
-            # filter) -> infection_status flipped from not-surveilled to
-            # surveilled.
-            reasons.append("infection_status_change")
-            reason_taxids.append(sp)
-            continue
-        # Species_taxid wasn't in old taxonomy DB at all and isn't a
-        # redistribution destination → it's a brand-new species concept
-        # NCBI/ICTV added between builds.
-        reasons.append("new_species_in_taxonomy")
-        reason_taxids.append(sp)
+        elif new_leaf not in old_db_taxids:
+            reasons.append("new_taxon_in_taxonomy")
+            reason_taxids.append(new_leaf)
+        elif not _old_surveilled(new_leaf):
+            reasons.append("infection_status_promotion")
+            reason_taxids.append(new_leaf)
+        else:
+            reasons.append("other")
+            reason_taxids.append(new_leaf)
     out["reason"] = reasons
     out["reason_taxid"] = reason_taxids
     return out
@@ -1202,7 +1219,7 @@ def write_summary_md(  # noqa: C901, PLR0912, PLR0915 - long but linear report w
 
     # §3.1 categories match `review-template.md` literally. Labels are
     # template strings; reorder for display only — the categorization priority
-    # lives in categorize_lost_genomes_raw / categorize_gained_genomes.
+    # lives in categorize_lost_genomes_raw / categorize_gained_genomes_raw.
     loss_n = len(lost_categorized)
     gain_n = len(gained_categorized)
     loss_counts: dict[str, int] = (
@@ -1226,12 +1243,12 @@ def write_summary_md(  # noqa: C901, PLR0912, PLR0915 - long but linear report w
         ("other", "Other (current, surveilled — yet absent)"),
     ]
     gain_label_specs = [
+        ("newly_deposited", "Newly deposited since old build"),
+        ("source_policy_pull_in", "Pre-existing, pulled in by source-policy change"),
         ("hard_included", "Hard-included"),
-        ("change_in_assigned_taxid", "Change in assigned taxid"),
-        ("infection_status_change", "Change in infection status"),
-        ("newly_deposited_existing", "Newly deposited for existing included taxa"),
-        ("new_species_in_taxonomy", "New species in NCBI taxonomy"),
-        ("other", "Other"),
+        ("new_taxon_in_taxonomy", "New taxon in NCBI taxonomy"),
+        ("infection_status_promotion", "Infection-status promotion"),
+        ("other", "Other (pre-existing, taxon already surveilled)"),
     ]
     # Assign sequential appendix ids: lost gid tables, then gained gid tables,
     # then the fixed inventory / per-host / params appendices. Computed (not
@@ -2014,33 +2031,21 @@ def main() -> None:
             args.out / f"species_transitions_{host}.tsv", sep="\t", index=False
         )
 
-    # Per-genome-id categorization for §3.1 (lost / gained gids by reason).
-    # Gained-side inputs derived from already-computed annotations:
-    #   - species_in_old_meta: the old surveillance set (species in old metadata).
-    #   - species_in_old_db: every taxid in the old taxonomy DB; used to
-    #     distinguish "filter flipped to surveilled" (was in old_db, not in
-    #     old_meta) from genuinely-new species concepts.
-    #   - species_redistribution_destinations: new species_taxids that are the
-    #     target of a redistribution, indicating NCBI/ICTV restructure rather
-    #     than a brand-new species concept.
-    logger.info("Categorizing lost / gained genome IDs.")
-    species_in_old_meta: set[str] = set(old_meta["species_taxid"].astype(str))
-    species_in_old_db: set[str] = (
-        set(old_db["taxid"].astype(str)) if "taxid" in old_db.columns else set()
-    )
-    species_redistribution_destinations: set[str] = (
-        set(
-            species_lost.loc[
-                species_lost["redistributed_to_species_taxid"] != "",
-                "redistributed_to_species_taxid",
-            ].astype(str)
+    # Per-genome-id categorization for §3.1 (lost / gained gids by reason). Both
+    # sides key on the genome's assigned (leaf) taxon and the new index's
+    # pre-filter raw metadata (exact, no no-drift assumption, no live NCBI).
+    # The raw table is required (fetched above); gains additionally need its
+    # release_date column and the old build date.
+    if "release_date" not in new_raw_meta.columns:
+        raise ValueError(
+            "Target index's virus-genome-metadata-raw.tsv.gz lacks a release_date"
+            " column, which is required for gained-genome categorization. Rebuild"
+            " the index with a pipeline version that emits it."
         )
-        if "redistributed_to_species_taxid" in species_lost.columns
-        else set()
-    )
-    # Lost-genome categorization joins each lost assembly into the new index's
-    # pre-filter raw metadata to recover its build-time taxid + assembly_status
-    # (exact, no no-drift assumption). The raw table is required (fetched above).
+    # Old index build date (YYYY-MM-DD) from its params' trace timestamp, used to
+    # tell genomes deposited since the old build from pre-existing ones.
+    old_build_date = str(old_params.get("trace_timestamp", ""))[:10]
+    logger.info("Categorizing lost / gained genome IDs.")
     screened_hosts = new_params.get("host_taxa_screen", "").split()
     lost_categorized = categorize_lost_genomes_raw(
         removed_g,
@@ -2050,13 +2055,14 @@ def main() -> None:
         excluded_taxids,
         screened_hosts,
     )
-    gained_categorized = categorize_gained_genomes(
+    gained_categorized = categorize_gained_genomes_raw(
         added_g,
+        new_raw_meta,
+        old_db,
         parent_map,
         included_taxids,
-        species_in_old_meta,
-        species_in_old_db,
-        species_redistribution_destinations,
+        screened_hosts,
+        old_build_date,
     )
     lost_categorized.to_csv(
         args.out / "genomes_lost_categorized.tsv", sep="\t", index=False

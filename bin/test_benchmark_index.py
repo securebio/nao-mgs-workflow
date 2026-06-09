@@ -19,7 +19,7 @@ from benchmark_index import (
     annotate_cross_host_actionables,
     annotate_lost_genomes,
     build_parent_map,
-    categorize_gained_genomes,
+    categorize_gained_genomes_raw,
     categorize_lost_genomes_raw,
     check_ref_staleness,
     classify_coverage,
@@ -1235,152 +1235,156 @@ class TestAncestorIn:
         assert _ancestor_in("4", {}, {"99"}) == ""
 
 
-class TestCategorizeGainedGenomes:
-    """The gained-gid categorizer assigns each new genome_id to the most likely
-    reason it was added. Categories in priority order: hard_included →
-    change_in_assigned_taxid → newly_deposited_existing → infection_status_change
-    → new_species_in_taxonomy → other (other should be unreachable)."""
+class TestCategorizeGainedGenomesRaw:
+    """Leaf-keyed gained-gid categorizer: genome-lifecycle reasons (release date
+    / source) before taxonomy / policy reasons."""
+
+    OLD_BUILD = "2025-08-25"
 
     @pytest.fixture
-    def base_added(self) -> pd.DataFrame:
+    def old_db(self) -> pd.DataFrame:
+        # 400 present but unsurveilled (promotion); 800 present and surveilled
+        # (other); 300/100 present; 700 absent (new taxon).
         return pd.DataFrame(
             [
-                # New species 100 hard-included via parent 50.
                 {
-                    "genome_id": "G_HI",
                     "taxid": "100",
-                    "species_taxid": "100",
-                    "organism_name": "Included sp.",
+                    "taxid_species": "100",
+                    "infection_status_vertebrate": "1",
                 },
-                # New species 200 is destination of an old-species redistribution.
                 {
-                    "genome_id": "G_CT",
-                    "taxid": "200",
-                    "species_taxid": "200",
-                    "organism_name": "Restructure target",
-                },
-                # New species 300 was already in old metadata.
-                {
-                    "genome_id": "G_ND",
                     "taxid": "300",
-                    "species_taxid": "300",
-                    "organism_name": "Already-surveilled",
+                    "taxid_species": "300",
+                    "infection_status_vertebrate": "1",
                 },
-                # New species 400 was in old_db but NOT in old_meta (filter flipped).
                 {
-                    "genome_id": "G_IS",
                     "taxid": "400",
-                    "species_taxid": "400",
-                    "organism_name": "Newly-surveilled",
+                    "taxid_species": "400",
+                    "infection_status_vertebrate": "0",
                 },
-                # New species 500 — brand-new in NCBI taxonomy (not in old_db,
-                # not a restructure target).
                 {
-                    "genome_id": "G_NS",
-                    "taxid": "500",
-                    "species_taxid": "500",
-                    "organism_name": "Brand-new species",
+                    "taxid": "800",
+                    "taxid_species": "800",
+                    "infection_status_vertebrate": "1",
                 },
             ]
         )
 
     @pytest.fixture
-    def categorized(self, base_added: pd.DataFrame) -> pd.DataFrame:
-        parent_map = {"100": "50", "200": "1", "300": "1", "400": "1", "500": "1"}
-        return categorize_gained_genomes(
-            base_added,
-            parent_map,
-            included_taxids={"human": {"50"}},
-            species_in_old_meta={"300"},
-            # 400 was in old taxonomy but not in metadata.
-            species_in_old_db={"300", "400"},
-            species_redistribution_destinations={"200"},
+    def raw_meta(self) -> pd.DataFrame:
+        cols = [
+            "assembly_accession",
+            "taxid",
+            "organism_name",
+            "source_database",
+            "assembly_status",
+            "release_date",
+        ]
+        rows = [
+            ("GCA_NEW", "600", "x", "SOURCE_DATABASE_GENBANK", "current", "2026-01-01"),
+            ("GCA_RS", "300", "x", "SOURCE_DATABASE_REFSEQ", "current", "2010-01-01"),
+            ("GCA_HI", "100", "x", "SOURCE_DATABASE_GENBANK", "current", "2010-01-01"),
+            ("GCA_NT", "700", "x", "SOURCE_DATABASE_GENBANK", "current", "2010-01-01"),
+            ("GCA_PR", "400", "x", "SOURCE_DATABASE_GENBANK", "current", "2010-01-01"),
+            ("GCA_OT", "800", "x", "SOURCE_DATABASE_GENBANK", "current", "2010-01-01"),
+        ]
+        return pd.DataFrame(rows, columns=cols)
+
+    @pytest.fixture
+    def added(self) -> pd.DataFrame:
+        cols = [
+            "assembly_accession",
+            "genome_id",
+            "taxid",
+            "species_taxid",
+            "organism_name",
+        ]
+        rows = [
+            ("GCA_NEW", "gNEW", "600", "600", "new deposit"),
+            ("GCA_RS", "gRS", "300", "300", "refseq pull-in"),
+            ("GCA_HI", "gHI", "100", "100", "overridden"),
+            ("GCA_NT", "gNT", "700", "700", "new taxon"),
+            ("GCA_PR", "gPR", "400", "400", "promoted"),
+            ("GCA_OT", "gOT", "800", "800", "pre-existing surveilled"),
+        ]
+        return pd.DataFrame(rows, columns=cols)
+
+    # leaf 100 -> parent 50 (in overrides); everything else roots at 1
+    PARENT_MAP = {
+        "100": "50",
+        "50": "1",
+        "300": "1",
+        "400": "1",
+        "700": "1",
+        "800": "1",
+    }
+
+    def test_assigns_each_category(
+        self, added: pd.DataFrame, raw_meta: pd.DataFrame, old_db: pd.DataFrame
+    ) -> None:
+        out = categorize_gained_genomes_raw(
+            added,
+            raw_meta,
+            old_db,
+            self.PARENT_MAP,
+            {"host": {"50"}},
+            ["vertebrate"],
+            self.OLD_BUILD,
         ).set_index("genome_id")
+        assert out.loc["gNEW", "reason"] == "newly_deposited"
+        assert out.loc["gRS", "reason"] == "source_policy_pull_in"
+        assert out.loc["gHI", "reason"] == "hard_included"
+        assert out.loc["gHI", "reason_taxid"] == "50"  # matched override ancestor
+        assert out.loc["gNT", "reason"] == "new_taxon_in_taxonomy"
+        assert out.loc["gPR", "reason"] == "infection_status_promotion"
+        assert out.loc["gOT", "reason"] == "other"
 
-    @pytest.mark.parametrize(
-        "gid,expected_reason,expected_reason_taxid",
-        [
-            ("G_HI", "hard_included", "50"),
-            ("G_CT", "change_in_assigned_taxid", "200"),
-            ("G_ND", "newly_deposited_existing", "300"),
-            ("G_IS", "infection_status_change", "400"),
-            ("G_NS", "new_species_in_taxonomy", "500"),
-        ],
-    )
-    def test_priority_classification(
-        self,
-        categorized: pd.DataFrame,
-        gid: str,
-        expected_reason: str,
-        expected_reason_taxid: str,
-    ) -> None:
-        assert categorized.loc[gid, "reason"] == expected_reason
-        assert categorized.loc[gid, "reason_taxid"] == expected_reason_taxid
-
-    @pytest.mark.parametrize(
-        "included,in_old_meta,in_old_db,redistribution_destinations,expected_reason",
-        [
-            # hard_included wins over change_in_assigned_taxid
-            ({"human": {"50"}}, set(), set(), {"100"}, "hard_included"),
-            # change_in_assigned_taxid wins over newly_deposited_existing
-            ({}, {"100"}, {"100"}, {"100"}, "change_in_assigned_taxid"),
-            # newly_deposited_existing wins over infection_status_change
-            ({}, {"100"}, {"100"}, set(), "newly_deposited_existing"),
-            # infection_status_change wins over new_species_in_taxonomy
-            ({}, set(), {"100"}, set(), "infection_status_change"),
-        ],
-    )
-    def test_higher_priority_wins_when_multiple_apply(
-        self,
-        included: dict[str, set[str]],
-        in_old_meta: set[str],
-        in_old_db: set[str],
-        redistribution_destinations: set[str],
-        expected_reason: str,
-    ) -> None:
-        # Pin the priority order between adjacent categories so a refactor
-        # that swaps the if-blocks fails loudly.
+    def test_newly_deposited_outranks_source_policy(self, old_db: pd.DataFrame) -> None:
+        # A RefSeq assembly released *after* the old build is a genuine new
+        # deposit, not a source-policy pull-in.
         added = pd.DataFrame(
             [
                 {
-                    "genome_id": "G1",
-                    "taxid": "100",
-                    "species_taxid": "100",
+                    "assembly_accession": "GCA_A",
+                    "genome_id": "g",
+                    "taxid": "300",
+                    "species_taxid": "300",
                     "organism_name": "x",
                 }
             ]
         )
-        out = categorize_gained_genomes(
-            added,
-            {"100": "50"},
-            included,
-            in_old_meta,
-            in_old_db,
-            redistribution_destinations,
-        )
-        assert out.iloc[0]["reason"] == expected_reason
-
-    def test_other_is_unreachable(self) -> None:
-        # With the new_species_in_taxonomy fallback, every gid lands in a
-        # specific bucket — "other" should never appear in real output.
-        added = pd.DataFrame(
+        raw = pd.DataFrame(
             [
                 {
-                    "genome_id": "G1",
-                    "taxid": "999",
-                    "species_taxid": "999",
-                    "organism_name": "anything",
+                    "assembly_accession": "GCA_A",
+                    "taxid": "300",
+                    "organism_name": "x",
+                    "source_database": "SOURCE_DATABASE_REFSEQ",
+                    "assembly_status": "current",
+                    "release_date": "2026-02-02",
                 }
             ]
         )
-        out = categorize_gained_genomes(added, {}, {}, set(), set(), set())
-        assert out.iloc[0]["reason"] == "new_species_in_taxonomy"
-
-    def test_empty_input_has_columns(self) -> None:
-        empty = pd.DataFrame(
-            columns=["genome_id", "taxid", "species_taxid", "organism_name"]
+        out = categorize_gained_genomes_raw(
+            added, raw, old_db, {}, {}, ["vertebrate"], self.OLD_BUILD
         )
-        out = categorize_gained_genomes(empty, {}, {}, set(), set(), set())
+        assert out.iloc[0]["reason"] == "newly_deposited"
+
+    def test_empty_input_has_columns(
+        self, raw_meta: pd.DataFrame, old_db: pd.DataFrame
+    ) -> None:
+        empty = pd.DataFrame(
+            columns=[
+                "assembly_accession",
+                "genome_id",
+                "taxid",
+                "species_taxid",
+                "organism_name",
+            ]
+        )
+        out = categorize_gained_genomes_raw(
+            empty, raw_meta, old_db, {}, {}, ["vertebrate"], self.OLD_BUILD
+        )
         assert "reason" in out.columns
         assert out.empty
 
