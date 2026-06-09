@@ -1,5 +1,6 @@
 # v3.2.2.0-dev
 
+- Hard-exclude two plant/fungal viruses misflagged as vertebrate-infecting by Virus-Host-DB: add taxids `1266451` (Mulberry vein banding virus, a plant virus) and `1629671` (Botrytis cinerea negative-stranded RNA virus 1, a mycovirus) to `viral_taxids_exclude_hard` in all three INDEX configs (`configs/index.config`, `configs/index-for-run-test.config`, `tests/configs/index.config`), removing them from the surveilled set. Changes the annotated virus DB on next index rebuild; no schema or output-layout changes.
 - Fix the `GET_TARBALL` process resource label, which referenced an undefined `huge_mem` label instead of `single_huge_mem`. The typo caused the process to silently fall back to default resource allocation, manifesting as exit code 140 (OOM kill) under strict resource allocation.
 - Add `tag "id=<value>"` directives to all `modules/local/` processes for per-task attribution in trace files and Nextflow logs.
     - Per-task processes use `id=${sample/group/label}`; index work uses `id=index` (with optional `,name=<x>` for fan-outs); workflow-level singletons use `id=util`; stage-qualified processes that run multiple times across pipeline stages append a `,stage=<x>` component.
