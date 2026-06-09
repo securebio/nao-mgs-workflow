@@ -1459,6 +1459,63 @@ class TestCategorizeGainedGenomesRaw:
         )
         assert out.iloc[0]["reason"] == "no_release_date"
 
+    def test_missing_release_date_does_not_preempt_date_independent_reasons(
+        self, old_db: pd.DataFrame
+    ) -> None:
+        # A missing release date only blocks the newly-vs-pre-existing call. A
+        # genome that qualifies for a release-date-independent reason
+        # (hard_included via override 50; new_taxon via leaf absent from old DB)
+        # must still land there, NOT in no_release_date.
+        added = pd.DataFrame(
+            [
+                {
+                    "assembly_accession": "GCA_HI",
+                    "genome_id": "gHI",
+                    "taxid": "100",
+                    "species_taxid": "100",
+                    "organism_name": "overridden",
+                },
+                {
+                    "assembly_accession": "GCA_NT",
+                    "genome_id": "gNT",
+                    "taxid": "700",
+                    "species_taxid": "700",
+                    "organism_name": "new taxon",
+                },
+            ]
+        )
+        raw = pd.DataFrame(
+            [
+                {
+                    "assembly_accession": "GCA_HI",
+                    "taxid": "100",
+                    "organism_name": "x",
+                    "source_database": "SOURCE_DATABASE_GENBANK",
+                    "assembly_status": "current",
+                    "release_date": "",
+                },
+                {
+                    "assembly_accession": "GCA_NT",
+                    "taxid": "700",
+                    "organism_name": "x",
+                    "source_database": "SOURCE_DATABASE_GENBANK",
+                    "assembly_status": "current",
+                    "release_date": "",
+                },
+            ]
+        )
+        out = categorize_gained_genomes_raw(
+            added,
+            raw,
+            old_db,
+            self.PARENT_MAP,
+            {"host": {"50"}},
+            ["vertebrate"],
+            self.OLD_BUILD,
+        ).set_index("genome_id")
+        assert out.loc["gHI", "reason"] == "hard_included"
+        assert out.loc["gNT", "reason"] == "new_taxon_in_taxonomy"
+
     def test_newly_deposited_outranks_pre_existing(self, old_db: pd.DataFrame) -> None:
         # A RefSeq assembly released *after* the old build is a genuine new
         # deposit, not a pre-existing re-inclusion.
