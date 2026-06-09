@@ -433,11 +433,14 @@ def categorize_lost_genomes_raw(
 ) -> pd.DataFrame:
     """Categorize each lost `genome_id` by joining its `assembly_accession` into
     the new index's pre-filter raw metadata to recover the genome's *build-time*
-    taxid + assembly_status, then reading the new annotated DB. Exact attribution
-    with no no-drift assumption and no live NCBI lookups. Categories, in priority
-    order — assembly-lifecycle reasons (the assembly itself is gone/superseded)
-    before taxonomy / policy reasons (the assembly is current but we stopped
-    surveilling its taxon):
+    assigned (leaf) taxon + assembly_status, then reading the new annotated DB.
+    Exact attribution with no no-drift assumption and no live NCBI lookups.
+    Everything is keyed on the genome's assigned leaf taxon (whatever its rank),
+    not a species-rank rollup — the species rollup appears only inside the
+    surveillance predicate, mirroring the inclusion filter. Categories, in
+    priority order — assembly-lifecycle reasons (the assembly itself is
+    gone/superseded) before taxonomy / policy reasons (the assembly is current
+    but we stopped surveilling its taxon):
 
     - `absent_from_ncbi`: assembly_accession absent from the new raw metadata
       entirely — NCBI suppressed or removed the assembly between builds, so there
@@ -445,22 +448,22 @@ def categorize_lost_genomes_raw(
     - `non_current_genome_version`: assembly present but `assembly_status` is not
       `current` (superseded, or suppressed-but-still-listed), dropped by the
       build's `assembly_status == 'current'` filter.
-    - `hard_excluded`: build-time species_taxid (or an ancestor) is in
+    - `hard_excluded`: the genome's new leaf taxon (or an ancestor) is in
       `viral_taxids_exclude_hard`.
-    - `reassigned_to_excluded`: build-time species_taxid differs from the old
-      species_taxid AND the new species is no longer surveilled (the taxid moved
-      to a taxon that fails the host-infection screen).
-    - `infection_status_demotion`: build-time species_taxid equals the old
-      species_taxid AND the species is no longer surveilled (upstream VHDB
-      host-annotation change demoted the taxon).
+    - `reassigned_to_excluded`: the genome's leaf taxon changed between builds
+      (old leaf != new leaf) AND the new taxon is no longer surveilled — NCBI
+      re-pointed the accession to a taxon that fails the host-infection screen.
+    - `infection_status_demotion`: the genome's leaf taxon is unchanged (old leaf
+      == new leaf) AND it is no longer surveilled — its lineage's infection status
+      flipped (upstream VHDB change, or a restructure that moved its ancestors).
     - `other`: present, current, surveilled — yet absent from the new gid set.
       Should be ~0; if not, flags a downstream / sequence-level drop
       (`genome_patterns_exclude`, masking, dedup) worth investigating.
 
     Returns the input with `reason` and `reason_taxid` columns appended.
-    `reason_taxid` is the matched exclude taxid (`hard_excluded`) or the
-    build-time species_taxid (other present categories); "" when the assembly is
-    absent from NCBI or non-current."""
+    `reason_taxid` is the matched exclude taxid (`hard_excluded`) or the genome's
+    new leaf taxon (other present categories); "" when the assembly is absent from
+    NCBI or non-current."""
     out = removed.copy()
     if out.empty:
         out["reason"] = pd.Series(dtype=str)
@@ -477,12 +480,20 @@ def categorize_lost_genomes_raw(
         if "taxid_species" in new_db.columns
         else {}
     )
-    surveilled = surveilled_species(new_db, screened_hosts)
+    surv = surveilled_species(new_db, screened_hosts)
+
+    def _surveilled(taxon: str) -> bool:
+        # Mirror the inclusion filter (filter_viral_genbank_metadata.py): a genome
+        # is surveilled if its assigned (leaf) taxon is infection-positive OR its
+        # species-rollup is. The rollup is a fallback in the predicate only — it is
+        # NOT used as the genome's identity.
+        return taxon in surv or species_of.get(taxon, "") in surv
+
     reasons: list[str] = []
     reason_taxids: list[str] = []
     for _, row in out.iterrows():
         acc = str(row["assembly_accession"])
-        s_old = str(row["species_taxid"])
+        old_leaf = str(row["taxid"])  # genome's OLD assigned (leaf) taxon
         if acc not in raw_taxid:
             reasons.append("absent_from_ncbi")
             reason_taxids.append("")
@@ -491,21 +502,20 @@ def categorize_lost_genomes_raw(
             reasons.append("non_current_genome_version")
             reason_taxids.append("")
             continue
-        leaf = str(raw_taxid[acc])
-        s_new = str(species_of.get(leaf, leaf))
-        hard = _ancestor_in(s_new, parent_map, excluded_taxids)
+        new_leaf = str(raw_taxid[acc])  # genome's NEW assigned (leaf) taxon
+        hard = _ancestor_in(new_leaf, parent_map, excluded_taxids)
         if hard:
             reasons.append("hard_excluded")
             reason_taxids.append(hard)
-        elif s_new not in surveilled and s_new != s_old:
+        elif not _surveilled(new_leaf) and new_leaf != old_leaf:
             reasons.append("reassigned_to_excluded")
-            reason_taxids.append(s_new)
-        elif s_new not in surveilled and s_new == s_old:
+            reason_taxids.append(new_leaf)
+        elif not _surveilled(new_leaf) and new_leaf == old_leaf:
             reasons.append("infection_status_demotion")
-            reason_taxids.append(s_new)
+            reason_taxids.append(new_leaf)
         else:
             reasons.append("other")
-            reason_taxids.append(s_new)
+            reason_taxids.append(new_leaf)
     out["reason"] = reasons
     out["reason_taxid"] = reason_taxids
     return out

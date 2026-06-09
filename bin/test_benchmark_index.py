@@ -834,9 +834,43 @@ class TestCategorizeLostGenomesRaw:
         assert out.loc["gH", "reason"] == "hard_excluded"
         assert out.loc["gH", "reason_taxid"] == "70"
         assert out.loc["gR", "reason"] == "reassigned_to_excluded"
-        assert out.loc["gR", "reason_taxid"] == "800"
+        # reason_taxid is the new *leaf* taxon, not its species rollup (800)
+        assert out.loc["gR", "reason_taxid"] == "810"
         assert out.loc["gD", "reason"] == "infection_status_demotion"
         assert out.loc["gO", "reason"] == "other"
+
+    def test_keyed_on_leaf_not_species_rollup(self, new_db: pd.DataFrame) -> None:
+        # A genome whose leaf taxon is unchanged but whose species rollup moved
+        # (taxonomy restructure) is a DEMOTION (same assigned taxon, status
+        # flipped), not a reassignment. Species-keying would wrongly call it
+        # reassigned. Leaf 810 is stable old->new; only its species rollup (800)
+        # differs from the old species_taxid (200), and 810 is unsurveilled.
+        removed = pd.DataFrame(
+            [
+                {
+                    "assembly_accession": "GCA_X",
+                    "genome_id": "gX",
+                    "taxid": "810",
+                    "species_taxid": "200",
+                    "organism_name": "restructured",
+                }
+            ]
+        )
+        raw = pd.DataFrame(
+            [
+                {
+                    "assembly_accession": "GCA_X",
+                    "taxid": "810",
+                    "organism_name": "x",
+                    "source_database": "SOURCE_DATABASE_GENBANK",
+                    "assembly_status": "current",
+                }
+            ]
+        )
+        out = categorize_lost_genomes_raw(
+            removed, raw, new_db, build_parent_map(new_db), set(), ["vertebrate"]
+        )
+        assert out.iloc[0]["reason"] == "infection_status_demotion"
 
     def test_non_current_outranks_taxonomy_reasons(
         self, removed: pd.DataFrame, raw_meta: pd.DataFrame, new_db: pd.DataFrame
