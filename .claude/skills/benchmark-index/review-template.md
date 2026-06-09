@@ -50,7 +50,7 @@
     - New taxon in NCBI taxonomy: NNN (link to table in appendix)
     - Infection-status promotion: NNN (link to table in appendix)
     - Pre-existing, re-included by an inclusion-config change: NNN (link to table in appendix)
-    - Other (release date unknown): NNN (link to table in appendix)
+    - Other (assembly has no release date): NNN (link to table in appendix)
 
 #### 3.2. Losses
 

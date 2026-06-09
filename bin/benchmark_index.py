@@ -596,7 +596,9 @@ def categorize_gained_genomes_raw(
       not new biology. The specific driver is surfaced as a §3.3 finding by
       cross-referencing the params diff and the bucket's `source_database` mix.
       Empty in steady state; populated whenever inclusion config changes.
-    - `other`: release_date missing/unknown — can't place it. Should be ~0.
+    - `other`: the assembly has no `release_date` in the raw metadata, so the
+      newly-deposited-vs-pre-existing split can't be made. A data-gap catch-all;
+      should be ~0 (NCBI populates a release date for essentially every assembly).
 
     Returns the input DataFrame with `reason`, `reason_taxid`, and
     `source_database` columns appended. `reason_taxid` is the matched override
@@ -657,7 +659,7 @@ def categorize_gained_genomes_raw(
             reasons.append("pre_existing_reincluded")
             reason_taxids.append(new_leaf)
         else:
-            reasons.append("other")  # release_date missing/unknown
+            reasons.append("other")  # no release_date in raw metadata
             reason_taxids.append(new_leaf)
     out["reason"] = reasons
     out["reason_taxid"] = reason_taxids
@@ -1301,7 +1303,7 @@ def write_summary_md(  # noqa: C901, PLR0912, PLR0915 - long but linear report w
             "pre_existing_reincluded",
             "Pre-existing, re-included by an inclusion-config change",
         ),
-        ("other", "Other (release date unknown)"),
+        ("other", "Other (assembly has no release date)"),
     ]
     # Assign sequential appendix ids: lost gid tables, then gained gid tables,
     # then the fixed inventory / per-host / params appendices. Computed (not
