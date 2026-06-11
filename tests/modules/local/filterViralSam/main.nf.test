@@ -15,7 +15,7 @@ nextflow_process {
                 script "modules/local/gzipFile/main.nf"
                 process {
                     '''
-                    input[0] = Channel.of(tuple(file("${projectDir}/test-data/toy-data/filter-viral-sam/keep-all-reads.fastq")))
+                    input[0] = Channel.of(file("${projectDir}/test-data/toy-data/filter-viral-sam/keep-all-reads.fastq"))
                     '''
                 }
             }
@@ -23,7 +23,7 @@ nextflow_process {
                 script "modules/local/gzipFile/main.nf"
                 process {
                     '''
-                    input[0] = Channel.of(tuple(file("${projectDir}/test-data/toy-data/filter-viral-sam/filter-viral-sam-test.sam")))
+                    input[0] = Channel.of(file("${projectDir}/test-data/toy-data/filter-viral-sam/filter-viral-sam-test.sam"))
                     '''
                 }
             }
@@ -68,7 +68,7 @@ nextflow_process {
                 script "modules/local/gzipFile/main.nf"
                 process {
                     '''
-                    input[0] = Channel.of(tuple(file("${projectDir}/test-data/toy-data/filter-viral-sam/keep-up-reads.fastq")))
+                    input[0] = Channel.of(file("${projectDir}/test-data/toy-data/filter-viral-sam/keep-up-reads.fastq"))
                     '''
                 }
             }
@@ -76,7 +76,7 @@ nextflow_process {
                 script "modules/local/gzipFile/main.nf"
                 process {
                     '''
-                    input[0] = Channel.of(tuple(file("${projectDir}/test-data/toy-data/filter-viral-sam/filter-viral-sam-test.sam")))
+                    input[0] = Channel.of(file("${projectDir}/test-data/toy-data/filter-viral-sam/filter-viral-sam-test.sam"))
                     '''
                 }
             }

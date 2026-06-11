@@ -42,6 +42,10 @@ nextflow_pipeline {
             def fastaLines = path("${launchDir}/output/results/virus-genomes-masked.fasta.gz").linesGzip
             assert fastaLines.any { it.startsWith(">") } :
                 "Masked FASTA should contain at least one sequence header"
+            // Pre-filter assembly metadata is published with the enumerate schema.
+            def rawMeta = path("${launchDir}/output/results/virus-genome-metadata-raw.tsv.gz").csv(sep: "\t", decompress: true)
+            assert rawMeta.columnNames == ["assembly_accession", "taxid", "organism_name", "source_database", "assembly_status", "release_date"]
+            assert rawMeta.rowCount >= 1
         }
     }
 }
