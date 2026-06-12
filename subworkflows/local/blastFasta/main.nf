@@ -24,8 +24,7 @@ workflow BLAST_FASTA {
     take:
         query_fasta // Fasta of sequences to align
         ref_dir // Path to reference directory containing BLAST DB
-        params_map // Map containing other parameters: 
-                   // blast_db_prefix: Prefix for BLAST reference DB files (e.g. "nt")
+        params_map // Map containing other parameters:
                    // blast_perc_id: Minimum %ID required for BLAST to return an alignment
                    // blast_qcov_hsp_perc: Minimum query coverage required for BLAST to return an alignment
                    // blast_max_rank: Only keep alignments that are in the top-N for that query by bitscore
@@ -35,7 +34,8 @@ workflow BLAST_FASTA {
                    // db_download_timeout: Timeout in seconds for database downloads
     main:
         // Get reference paths
-        blast_db_dir = "${ref_dir}/results/${params_map.blast_db_prefix}"
+        // INDEX publishes the BLAST DB under the constant "blast-db" alias
+        blast_db_dir = "${ref_dir}/results/blast-db"
         nodes_db = "${ref_dir}/results/taxonomy-nodes.dmp"
         names_db = "${ref_dir}/results/taxonomy-names.dmp"
         // 1. Run BLAST

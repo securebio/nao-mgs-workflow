@@ -37,7 +37,6 @@ workflow VALIDATE_VIRAL_ASSIGNMENTS {
                    // - validation_cluster_identity: Identity threshold for VSEARCH clustering
                    // - cluster_min_len: Minimum sequence length for VSEARCH clustering
                    // - validation_n_clusters: Number of cluster representatives to validate for each specie
-                   // - blast_db_prefix: Prefix for BLAST reference DB files (e.g. "nt")
                    // - blast_perc_id: Minimum %ID required for BLAST to return an alignment
                    // - blast_qcov_hsp_perc: Minimum query coverage required for BLAST to return an alignment
                    // - blast_max_rank: Only keep alignments that are in the top-N for that query by bitscore
