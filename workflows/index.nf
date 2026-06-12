@@ -52,9 +52,6 @@ workflow INDEX {
         MAKE_CONTAMINANT_INDEX(params.genome_urls, params.contaminants)
         MAKE_RIBO_INDEX(JOIN_RIBO_REF.out.ribo_ref)
         // Other index files
-        // BLAST DB: published under a fixed results/blast-db/ (constant alias),
-        // independent of blast_db_name. DOWNLOAD_BLAST_DB handles both a tarball
-        // URL (tests) and an update_blastdb.pl name.
         DOWNLOAD_BLAST_DB(params.blast_db_name)
         blast_db_ch = DOWNLOAD_BLAST_DB.out.db
         GET_KRAKEN_DB(params.kraken_db, "kraken_db", true)

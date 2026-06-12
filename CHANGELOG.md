@@ -1,6 +1,9 @@
 # v3.2.2.0-dev
 
-- INDEX now publishes the BLAST database under a fixed `results/blast-db/` directory (an additive `blast-db.nal` alias built over the downloaded volume files, which keep their own names) instead of `results/<blast_db_name>/`, and DOWNSTREAM resolves it at that constant path. This decouples the downstream BLAST reference from the index `blast_db_name`, removing the drift risk between `configs/index.config` and the downstream configs. `DOWNLOAD_BLAST_DB` now handles both the tarball-URL (test) and `update_blastdb.pl` (production) paths and builds the alias, so `GET_TARBALL` is no longer used for BLAST. The now-redundant `blast_db_prefix` parameter is removed (the `blast` module and `blastFasta` reference the constant `blast-db` directly). Output-layout change: an index built by this version exposes the BLAST DB only at `results/blast-db/`, so a pre-`3.2.2.0` pipeline cannot read it — `index-min-pipeline-version` is bumped to `3.2.2.0` accordingly.
+- Publish BLAST database under a fixed `results/blast-db/` directory with a constant `blast-db` alias regardless of database name.
+    - Update `DOWNLOAD_BLAST_DB` to handle both the production named database and test tarball-URL paths.
+    - Remove the redundant `blast_db_prefix` parameter from `configs/downstream*.config` to avoid drift.
+    - Bump `index-min-pipeline-version` given INDEX output restructuring.
 - Hard-exclude taxids `1266451` (Mulberry vein banding virus, a plant virus) and `1629671` (Botrytis cinerea negative-stranded RNA virus 1, a mycovirus) from the surveillance set.
 - `DOWNLOAD_VIRAL_GENOMES` now retries the dehydrated `datasets download` step (not just rehydrate) with exponential backoff, so a transient NCBI stream error there no longer aborts the task.
 - INDEX now publishes `virus-genome-metadata-raw.tsv.gz`: every enumerated viral assembly before the host-infection and assembly-status filters, so tooling (e.g. index benchmarking) can attribute why a genome was or wasn't included. New output only; nothing existing changed.
