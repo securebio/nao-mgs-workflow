@@ -55,9 +55,6 @@ jobs:
         env:
           RUST_TOOLS_VERSION: ${{ steps.rust.outputs.rust-version }}
         run: bin/run-nf-test.sh --num-workers 16 tests/subworkflows --output-log test-logs-subworkflows.txt ${{ steps.rust.outputs.nextflow-args }}
-      - name: Report disk usage after tests
-        if: always() && steps.filter.outputs.subworkflows == 'true'
-        run: df -h
       - name: Upload test results
         if: failure() && steps.filter.outputs.subworkflows == 'true'
         uses: actions/upload-artifact@v4
