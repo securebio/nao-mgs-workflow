@@ -56,6 +56,9 @@ jobs:
         env:
           RUST_TOOLS_VERSION: ${{ steps.rust.outputs.rust-version }}
         run: bin/run-nf-test.sh --num-workers 4 tests/workflows/index.nf.test --output-log test-logs-workflows-index.txt ${{ steps.rust.outputs.nextflow-args }}
+      - name: Report disk usage after tests
+        if: always() && (github.event_name != 'pull_request' || steps.filter.outputs.index == 'true')
+        run: df -h
       - name: Upload test results
         if: failure() && (github.event_name != 'pull_request' || steps.filter.outputs.index == 'true')
         uses: actions/upload-artifact@v4

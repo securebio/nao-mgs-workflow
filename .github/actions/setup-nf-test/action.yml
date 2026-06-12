@@ -20,6 +20,8 @@ runs:
     - name: Maximize build space
       shell: bash
       run: |
+        echo "=== Disk usage BEFORE maximizing build space ==="
+        df -h
         sudo rm -rf /usr/share/dotnet
         sudo rm -rf /usr/local/lib/android
         sudo rm -rf /opt/ghc
@@ -29,6 +31,7 @@ runs:
         sudo apt-get remove -y '^aspnetcore-.*' '^dotnet-.*' '^llvm-.*' 'php.*' '^mongodb-.*' '^mysql-.*' azure-cli google-chrome-stable firefox powershell mono-devel libgl1-mesa-dri
         sudo apt-get autoremove -y
         sudo apt-get clean
+        echo "=== Disk usage AFTER maximizing build space ==="
         df -h
 
     - name: Configure AWS credentials
