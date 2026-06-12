@@ -289,7 +289,7 @@ To run the `DOWNSTREAM` workflow, you need:
         - `params.validation_cluster_identity`: Minimum sequence identity for cluster formation (default 0.95 for short-read, 1 for long-read)
         - `params.validation_n_clusters`: Maximum clusters per selected taxid to validate (default 20 for short-read, 1000000 for long-read[^max_clusters])
     - Parameters for BLAST validation:
-        - INDEX publishes the BLAST database to `results/blast-db` regardless of the database used, so refer to `params.blast_db_name` in the reference directory for the database used
+        - INDEX always publishes the BLAST database to `results/blast-db/`; the originally downloaded database is recorded via the index's `params.blast_db_name`
         - `params.blast_perc_id`: Percentage identity threshold for BLAST hits (default 60 for short-read, 0 for long-read)
         - `params.blast_qcov_hsp_perc`: Query coverage threshold for BLAST hits (30 for short-read, 0 for long-read)
         - `params.blast_max_rank`: Maximum rank for BLAST hits by bitscore (10 for short-read, 5 for long-read)
