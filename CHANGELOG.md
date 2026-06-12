@@ -1,6 +1,6 @@
 # v3.2.2.0-dev
 
-- Remove the unnecessary disk-cleanup ("Maximize build space") step from the nf-test setup action (`.github/actions/setup-nf-test/action.yml`). CI runners already have ample free space (~89 GB on `ubuntu-latest`, ~528 GB on the large runner before any cleanup); the step added ~5 min/job while reclaiming only ~22 GB that nothing uses.
+- CI: Removed the slow and unnecessary `Maximize build space` step from the nf-test setup action
 - Hard-exclude taxids `1266451` (Mulberry vein banding virus, a plant virus) and `1629671` (Botrytis cinerea negative-stranded RNA virus 1, a mycovirus) from the surveillance set.
 - `DOWNLOAD_VIRAL_GENOMES` now retries the dehydrated `datasets download` step (not just rehydrate) with exponential backoff, so a transient NCBI stream error there no longer aborts the task.
 - INDEX now publishes `virus-genome-metadata-raw.tsv.gz`: every enumerated viral assembly before the host-infection and assembly-status filters, so tooling (e.g. index benchmarking) can attribute why a genome was or wasn't included. New output only; nothing existing changed.
