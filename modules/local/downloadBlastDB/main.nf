@@ -1,5 +1,5 @@
 // Download a BLAST database into a fixed "blast-db" directory with the alias
-// // "blast-db", so consumers can used a fixed path independent of which database
+// "blast-db", so consumers can use a fixed path independent of which database
 // was downloaded.
 process DOWNLOAD_BLAST_DB {
     label "BLAST"
