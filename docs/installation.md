@@ -51,7 +51,7 @@ docker run hello-world
 Create a Seqera account to increase your API rate limits:
 
 1. Create a free Seqera account at [cloud.seqera.io](http://cloud.seqera.io/)
-2. Click on the user icon, then click the "User tokens" section
+2. Click on the user icon, then click the "Your tokens" section
 3. Click "Add Token" to create a token for your account. Name it whatever you want (e.g., "my-nextflow-token"). Copy the token and store it somewhere safe.
 4. Export your token as an environment variable before running the pipeline:
 
