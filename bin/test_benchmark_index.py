@@ -16,6 +16,7 @@ from pathlib import Path
 import pandas as pd
 import pytest
 from benchmark_index import (
+    Coverage,
     _ancestor_in,
     _content_stats,
     annotate_changes_with_coverage,
@@ -36,6 +37,7 @@ from benchmark_index import (
     infection_status_transitions,
     summarise_params_changes,
     surveilled_species,
+    write_genome_taxonomy_tables,
     write_metrics_table,
     write_staleness_table,
 )
@@ -1128,6 +1130,120 @@ class TestCategorizeGainedGenomesRaw:
         )
         assert "reason" in out.columns
         assert out.empty
+
+
+class TestWriteGenomeTaxonomyTables:
+    @staticmethod
+    def _frames() -> tuple[pd.DataFrame, ...]:
+        meta_cols = [
+            "assembly_accession",
+            "genome_id",
+            "taxid",
+            "species_taxid",
+            "organism_name",
+        ]
+        old_meta = pd.DataFrame(
+            [["GCA_1", "g1", "100", "100", "A"], ["GCA_2", "g2", "200", "200", "B"]],
+            columns=meta_cols,
+        )
+        new_meta = pd.DataFrame(
+            [["GCA_1", "g1", "100", "100", "A"], ["GCA_3", "g3", "300", "300", "C"]],
+            columns=meta_cols,
+        )
+        raw = pd.DataFrame(
+            [
+                [
+                    "GCA_2",
+                    "200",
+                    "B",
+                    "SOURCE_DATABASE_GENBANK",
+                    "current",
+                    "2020-01-01",
+                ],
+                [
+                    "GCA_3",
+                    "300",
+                    "C",
+                    "SOURCE_DATABASE_GENBANK",
+                    "current",
+                    "2026-01-01",
+                ],
+            ],
+            columns=[
+                "assembly_accession",
+                "taxid",
+                "organism_name",
+                "source_database",
+                "assembly_status",
+                "release_date",
+            ],
+        )
+        db_cols = [
+            "taxid",
+            "name",
+            "rank",
+            "parent_taxid",
+            "taxid_species",
+            "infection_status_vertebrate",
+        ]
+        old_db = pd.DataFrame(
+            [
+                ["100", "A", "species", "1", "100", "1"],
+                ["200", "B", "species", "1", "200", "1"],
+            ],
+            columns=db_cols,
+        )
+        new_db = pd.DataFrame(
+            [
+                ["100", "A", "species", "1", "100", "1"],
+                ["300", "C", "species", "1", "300", "1"],
+            ],
+            columns=db_cols,
+        )
+        return old_meta, new_meta, raw, old_db, new_db
+
+    def test_writes_kept_tables_and_returns_result(self, tmp_path: Path) -> None:
+        old_meta, new_meta, raw, old_db, new_db = self._frames()
+        gt = write_genome_taxonomy_tables(
+            tmp_path,
+            old_meta,
+            new_meta,
+            raw,
+            old_db,
+            new_db,
+            Coverage(False, {}, set(), {}),
+            ["vertebrate"],
+            "2025-01-01",
+        )
+        written = {p.name for p in tmp_path.glob("*.tsv")}
+        assert written == {
+            "genomes_reassigned.tsv",
+            "species_lost_all_genomes.tsv",
+            "species_gained_all_genomes.tsv",
+            "genomes_lost_categorized.tsv",
+            "genomes_gained_categorized.tsv",
+        }
+        # g2 lost, g3 gained, g1 kept; taxonomy 200 dropped, 300 added.
+        assert gt.n_kept == 1
+        assert gt.lost_categorized["genome_id"].tolist() == ["g2"]
+        assert gt.gained_categorized["reason"].tolist() == ["newly_deposited"]
+        assert gt.added_taxa["taxid"].tolist() == ["300"]
+        assert gt.removed_taxa["taxid"].tolist() == ["200"]
+
+    def test_missing_release_date_raises(self, tmp_path: Path) -> None:
+        old_meta, new_meta, raw, old_db, new_db = self._frames()
+        with pytest.raises(ValueError, match="release_date"):
+            write_genome_taxonomy_tables(
+                tmp_path,
+                old_meta,
+                new_meta,
+                raw.drop(columns="release_date"),
+                old_db,
+                new_db,
+                Coverage(False, {}, set(), {}),
+                ["vertebrate"],
+                "2025-01-01",
+            )
 
 
 if __name__ == "__main__":

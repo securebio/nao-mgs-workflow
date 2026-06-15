@@ -30,6 +30,7 @@ import subprocess
 import tempfile
 import urllib.request
 from collections import Counter, defaultdict
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -326,15 +327,24 @@ def write_metrics_table(
 ################################
 
 
+@dataclass
+class Coverage:
+    """Hard-exclude/include rule data for annotating genome and transition deltas.
+    Empty (and `available` False) when no --repo-root was given."""
+
+    available: bool
+    parent_map: dict[str, str]
+    excluded_taxids: set[str]
+    included_taxids: dict[str, set[str]]
+
+
 def diff_genome_metadata(
     old_meta: pd.DataFrame, new_meta: pd.DataFrame
 ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
-    """Return (added, removed, per_species_delta). 'added' and 'removed' index
-    by genome_id with name + species_taxid context. 'per_species_delta' groups
-    by species_taxid and shows old/new genome counts."""
-    # assembly_accession is the join key into the new index's pre-filter raw
-    # metadata (virus-genome-metadata-raw.tsv.gz), used to recover a lost
-    # genome's build-time taxid + assembly_status for loss categorization.
+    """Return (added, removed, per_species_delta): added/removed keyed on
+    genome_id, per_species_delta on species_taxid with old/new counts."""
+    # assembly_accession is the join key into the raw pre-filter metadata that
+    # the categorizers use to recover build-time taxid + assembly_status.
     common_cols = [
         "assembly_accession",
         "genome_id",
@@ -376,13 +386,9 @@ def diff_genome_metadata(
 
 
 def diff_reassignments(old_meta: pd.DataFrame, new_meta: pd.DataFrame) -> pd.DataFrame:
-    """Genome_ids present in BOTH builds whose `species_taxid` changed —
-    taxonomically reassigned while staying in the concern set. Coverage is
-    unchanged (still screened), so this is informational: a value large relative
-    to the kept set flags a mass re-assignment. Keyed on `species_taxid` (not the
-    leaf) since the question is whether the genome is labelled differently
-    downstream. Returns a per-flow table (old_species_taxid, new_species_taxid,
-    organism_name, n_genomes) sorted by n_genomes desc; empty if none."""
+    """Per-flow table of genome_ids in BOTH builds whose `species_taxid` changed
+    (informational — coverage is unchanged; a large value flags mass relabelling).
+    Columns: old_species_taxid, new_species_taxid, organism_name, n_genomes."""
     o = old_meta[["genome_id", "species_taxid"]].rename(
         columns={"species_taxid": "old_species_taxid"}
     )
@@ -446,9 +452,8 @@ def _ancestor_in(taxid: str, parent_map: dict[str, str], target: set[str]) -> st
 
 
 def surveilled_species(new_db: pd.DataFrame, screened_hosts: list[str]) -> set[str]:
-    """Set of taxids whose `infection_status_<host>` is positive for any
-    screened host in the new annotated virus DB — i.e. taxa that pass the
-    surveillance host screen (`host_taxa_screen`)."""
+    """Taxids positive for any screened host's `infection_status_<host>` — i.e.
+    taxa passing the surveillance host screen (`host_taxa_screen`)."""
     cols = [
         f"infection_status_{h}"
         for h in screened_hosts
@@ -591,6 +596,115 @@ def categorize_gained_genomes_raw(
     )
     out["source_database"] = out["source_database"].fillna("").astype(str)
     return out.drop(columns=["_release_date"])
+
+
+@dataclass
+class GenomeTaxonomyResult:
+    """Frames and counts produced by the section that facts.json needs."""
+
+    metadata_schema_diff: tuple[list[str], list[str]]
+    lost_categorized: pd.DataFrame
+    gained_categorized: pd.DataFrame
+    species_lost: pd.DataFrame
+    species_gained: pd.DataFrame
+    added_taxa: pd.DataFrame
+    removed_taxa: pd.DataFrame
+    reassigned_flows: pd.DataFrame
+    n_kept: int
+
+
+def write_genome_taxonomy_tables(
+    out_dir: Path,
+    old_meta: pd.DataFrame,
+    new_meta: pd.DataFrame,
+    new_raw_meta: pd.DataFrame,
+    old_db: pd.DataFrame,
+    new_db: pd.DataFrame,
+    coverage: Coverage,
+    screened_hosts: list[str],
+    old_build_date: str,
+) -> GenomeTaxonomyResult:
+    """Diff genome metadata + taxonomy, categorize lost/gained genome IDs, write
+    the per-genome and per-species tables, and return the frames/counts for
+    facts.json. Categorization keys on the pre-filter raw metadata."""
+    logger.info("Diffing genome metadata and taxonomy; categorizing genome IDs.")
+    if "release_date" not in new_raw_meta.columns:
+        raise ValueError(
+            "Target index's virus-genome-metadata-raw.tsv.gz lacks a release_date"
+            " column, required for gained-genome categorization. Rebuild the index"
+            " with a pipeline version that emits it."
+        )
+    new_cols, old_cols = set(new_meta.columns), set(old_meta.columns)
+    metadata_schema_diff = (
+        [c for c in old_meta.columns if c not in new_cols],
+        [c for c in new_meta.columns if c not in old_cols],
+    )
+
+    added_g, removed_g, by_species = diff_genome_metadata(old_meta, new_meta)
+    reassigned_flows = diff_reassignments(old_meta, new_meta)
+    n_kept = len(set(old_meta["genome_id"]) & set(new_meta["genome_id"]))
+    reassigned_flows.to_csv(out_dir / "genomes_reassigned.tsv", sep="\t", index=False)
+
+    species_lost = (
+        by_species[(by_species["new_count"] == 0) & (by_species["old_count"] > 0)]
+        .sort_values("old_count", ascending=False)
+        .reset_index(drop=True)
+    )
+    species_lost["covered_by_hard_exclude"] = (
+        species_lost["species_taxid"]
+        .astype(str)
+        .apply(lambda t: _ancestor_in(t, coverage.parent_map, coverage.excluded_taxids))
+        if coverage.available
+        else ""
+    )
+    species_lost.to_csv(out_dir / "species_lost_all_genomes.tsv", sep="\t", index=False)
+
+    species_gained = (
+        by_species[(by_species["old_count"] == 0) & (by_species["new_count"] > 0)]
+        .sort_values("new_count", ascending=False)
+        .reset_index(drop=True)
+    )
+    species_gained.to_csv(
+        out_dir / "species_gained_all_genomes.tsv", sep="\t", index=False
+    )
+
+    added_taxa, removed_taxa = diff_taxonomy(old_db, new_db)
+
+    lost_categorized = categorize_lost_genomes_raw(
+        removed_g,
+        new_raw_meta,
+        new_db,
+        coverage.parent_map,
+        coverage.excluded_taxids,
+        screened_hosts,
+    )
+    gained_categorized = categorize_gained_genomes_raw(
+        added_g,
+        new_raw_meta,
+        old_db,
+        coverage.parent_map,
+        coverage.included_taxids,
+        screened_hosts,
+        old_build_date,
+    )
+    lost_categorized.to_csv(
+        out_dir / "genomes_lost_categorized.tsv", sep="\t", index=False
+    )
+    gained_categorized.to_csv(
+        out_dir / "genomes_gained_categorized.tsv", sep="\t", index=False
+    )
+
+    return GenomeTaxonomyResult(
+        metadata_schema_diff=metadata_schema_diff,
+        lost_categorized=lost_categorized,
+        gained_categorized=gained_categorized,
+        species_lost=species_lost,
+        species_gained=species_gained,
+        added_taxa=added_taxa,
+        removed_taxa=removed_taxa,
+        reassigned_flows=reassigned_flows,
+        n_kept=n_kept,
+    )
 
 
 ###############################
@@ -809,12 +923,7 @@ def diff_params(old_params: dict, new_params: dict) -> str:
 OUTPUT_FILES = {
     "staleness": "staleness.tsv",
     "sizes": "sizes.tsv",
-    "genomes_added": "genomes_added.tsv",
-    "genomes_removed": "genomes_removed.tsv",
-    "genomes_by_species": "genomes_by_species.tsv",
     "genomes_reassigned": "genomes_reassigned.tsv",
-    "taxa_added": "taxa_added.tsv",
-    "taxa_removed": "taxa_removed.tsv",
     "species_lost_all_genomes": "species_lost_all_genomes.tsv",
     "species_gained_all_genomes": "species_gained_all_genomes.tsv",
     "infection_status_transitions": "infection_status_transitions.tsv",
@@ -1033,106 +1142,86 @@ def main() -> None:
         (td / "old").mkdir()
         (td / "new").mkdir()
 
-        # Genome metadata diff
-        logger.info("Diffing virus genome metadata.")
-        old_meta_path = fetch(
-            args.old, "output/results/virus-genome-metadata-gid.tsv.gz", td / "old"
+        # Stage genome metadata, the pre-filter raw metadata, the taxonomy DB,
+        # and params (the raw metadata is required by the categorizers).
+        logger.info("Staging genome metadata, taxonomy DB, and params.")
+        old_meta = pd.read_csv(
+            fetch(
+                args.old, "output/results/virus-genome-metadata-gid.tsv.gz", td / "old"
+            ),
+            sep="\t",
+            dtype=str,
         )
-        new_meta_path = fetch(
-            args.new, "output/results/virus-genome-metadata-gid.tsv.gz", td / "new"
+        new_meta = pd.read_csv(
+            fetch(
+                args.new, "output/results/virus-genome-metadata-gid.tsv.gz", td / "new"
+            ),
+            sep="\t",
+            dtype=str,
         )
-        old_meta = pd.read_csv(old_meta_path, sep="\t", dtype=str)
-        new_meta = pd.read_csv(new_meta_path, sep="\t", dtype=str)
-        # New index's pre-filter assembly metadata (accession -> build-time taxid
-        # + assembly_status). Required for lost-genome categorization, which
-        # recovers each lost genome's build-time assignment from it.
         try:
             new_raw_path = fetch(
-                args.new,
-                "output/results/virus-genome-metadata-raw.tsv.gz",
-                td / "new",
+                args.new, "output/results/virus-genome-metadata-raw.tsv.gz", td / "new"
             )
         except (subprocess.CalledProcessError, FileNotFoundError) as exc:
             raise ValueError(
                 "Target index has no output/results/virus-genome-metadata-raw.tsv.gz,"
-                " which is required for lost-genome categorization. Rebuild the index"
+                " which is required for genome-ID categorization. Rebuild the index"
                 " with a pipeline version that publishes the pre-filter assembly"
                 " metadata."
             ) from exc
         new_raw_meta = pd.read_csv(new_raw_path, sep="\t", dtype=str)
-        # Schema diff (column-set change is a major driver of compressed-bytes
-        # change independent of row count).
-        old_cols, new_cols = set(old_meta.columns), set(new_meta.columns)
-        metadata_schema_diff = (
-            [c for c in old_meta.columns if c not in new_cols],
-            [c for c in new_meta.columns if c not in old_cols],
+        old_db = pd.read_csv(
+            fetch(
+                args.old, "output/results/total-virus-db-annotated.tsv.gz", td / "old"
+            ),
+            sep="\t",
+            dtype=str,
         )
-        added_g, removed_g, by_species = diff_genome_metadata(old_meta, new_meta)
-        added_g.to_csv(args.out / "genomes_added.tsv", sep="\t", index=False)
-        removed_g.to_csv(args.out / "genomes_removed.tsv", sep="\t", index=False)
-        by_species.to_csv(args.out / "genomes_by_species.tsv", sep="\t", index=False)
-        # Genomes present in both builds whose species_taxid changed (reassigned
-        # within the concern set; coverage unchanged — informational).
-        reassigned_flows = diff_reassignments(old_meta, new_meta)
-        n_kept = len(set(old_meta["genome_id"]) & set(new_meta["genome_id"]))
-        reassigned_flows.to_csv(
-            args.out / "genomes_reassigned.tsv", sep="\t", index=False
+        new_db = pd.read_csv(
+            fetch(
+                args.new, "output/results/total-virus-db-annotated.tsv.gz", td / "new"
+            ),
+            sep="\t",
+            dtype=str,
         )
-        species_lost = (
-            by_species[(by_species["new_count"] == 0) & (by_species["old_count"] > 0)]
-            .sort_values("old_count", ascending=False)
-            .reset_index(drop=True)
+        old_params = json.loads(
+            fetch(args.old, "output/input/index-params.json", td / "old").read_text()
         )
-
-        # Taxonomy + infection-status diff
-        logger.info("Diffing virus taxonomy DB and infection-status annotations.")
-        old_db_path = fetch(
-            args.old, "output/results/total-virus-db-annotated.tsv.gz", td / "old"
+        new_params = json.loads(
+            fetch(args.new, "output/input/index-params.json", td / "new").read_text()
         )
-        new_db_path = fetch(
-            args.new, "output/results/total-virus-db-annotated.tsv.gz", td / "new"
-        )
-        old_db = pd.read_csv(old_db_path, sep="\t", dtype=str)
-        new_db = pd.read_csv(new_db_path, sep="\t", dtype=str)
-        added_t, removed_t = diff_taxonomy(old_db, new_db)
-        added_t.to_csv(args.out / "taxa_added.tsv", sep="\t", index=False)
-        removed_t.to_csv(args.out / "taxa_removed.tsv", sep="\t", index=False)
-
-        # Fetch params now so we can use new_params for coverage classification
-        # and for reference-staleness checks.
-        logger.info("Diffing index-params.json.")
-        old_params_path = fetch(args.old, "output/input/index-params.json", td / "old")
-        new_params_path = fetch(args.new, "output/input/index-params.json", td / "new")
-        old_params = json.loads(old_params_path.read_text())
-        new_params = json.loads(new_params_path.read_text())
         (args.out / "params_diff.txt").write_text(diff_params(old_params, new_params))
 
-        # Coverage data: hard-excluded taxids come from the new index's params;
-        # hard-included taxids come from the repo's overrides file (if --repo-root
-        # was given). Without --repo-root we skip the annotation entirely.
-        coverage_available = args.repo_root is not None
-        if coverage_available:
-            included_taxids = load_existing_overrides(args.repo_root)
-            excluded_taxids = set(
-                new_params.get("viral_taxids_exclude_hard", "").split()
+        # Coverage rule data: hard-exclude from the new params, hard-include from
+        # the repo overrides. Skipped (and empty) without --repo-root.
+        if args.repo_root is not None:
+            coverage = Coverage(
+                available=True,
+                parent_map=build_parent_map(new_db),
+                excluded_taxids=set(
+                    new_params.get("viral_taxids_exclude_hard", "").split()
+                ),
+                included_taxids=load_existing_overrides(args.repo_root),
             )
-            parent_map = build_parent_map(new_db)
         else:
-            included_taxids = {}
-            excluded_taxids = set()
-            parent_map = {}
+            coverage = Coverage(False, {}, set(), {})
+        screened_hosts = new_params.get("host_taxa_screen", "").split()
+        old_build_date = str(old_params.get("trace_timestamp", ""))[:10]
 
-        species_lost["covered_by_hard_exclude"] = (
-            species_lost["species_taxid"]
-            .astype(str)
-            .apply(lambda taxid: _ancestor_in(taxid, parent_map, excluded_taxids))
-            if coverage_available
-            else ""
-        )
-        species_lost.to_csv(
-            args.out / "species_lost_all_genomes.tsv", sep="\t", index=False
+        gt = write_genome_taxonomy_tables(
+            args.out,
+            old_meta,
+            new_meta,
+            new_raw_meta,
+            old_db,
+            new_db,
+            coverage,
+            screened_hosts,
+            old_build_date,
         )
 
+        # Infection-status transitions and per-host changes (section 4).
         per_host_changes: dict[str, pd.DataFrame] = {}
         host_cols = sorted(
             set(infection_status_columns(old_db))
@@ -1146,9 +1235,13 @@ def main() -> None:
                 trans.insert(0, "host", host)
                 all_transitions.append(trans)
             changes = infection_status_changes(old_db, new_db, col)
-            if coverage_available:
+            if coverage.available:
                 changes = annotate_changes_with_coverage(
-                    changes, host, parent_map, excluded_taxids, included_taxids
+                    changes,
+                    host,
+                    coverage.parent_map,
+                    coverage.excluded_taxids,
+                    coverage.included_taxids,
                 )
             per_host_changes[host] = changes
             # Per-host TSVs are written once below, after cross-host annotation.
@@ -1175,76 +1268,25 @@ def main() -> None:
             args.out / f"species_transitions_{host}.tsv", sep="\t", index=False
         )
 
-    # Per-genome-id categorization for §3.1 (lost / gained gids by reason). Both
-    # sides key on the genome's assigned (leaf) taxon and the new index's
-    # pre-filter raw metadata (exact, no no-drift assumption, no live NCBI).
-    # The raw table is required (fetched above); gains additionally need its
-    # release_date column and the old build date.
-    if "release_date" not in new_raw_meta.columns:
-        raise ValueError(
-            "Target index's virus-genome-metadata-raw.tsv.gz lacks a release_date"
-            " column, which is required for gained-genome categorization. Rebuild"
-            " the index with a pipeline version that emits it."
-        )
-    # Old index build date (YYYY-MM-DD) from its params' trace timestamp, used to
-    # tell genomes deposited since the old build from pre-existing ones.
-    old_build_date = str(old_params.get("trace_timestamp", ""))[:10]
-    logger.info("Categorizing lost / gained genome IDs.")
-    screened_hosts = new_params.get("host_taxa_screen", "").split()
-    lost_categorized = categorize_lost_genomes_raw(
-        removed_g,
-        new_raw_meta,
-        new_db,
-        parent_map,
-        excluded_taxids,
-        screened_hosts,
-    )
-    gained_categorized = categorize_gained_genomes_raw(
-        added_g,
-        new_raw_meta,
-        old_db,
-        parent_map,
-        included_taxids,
-        screened_hosts,
-        old_build_date,
-    )
-    lost_categorized.to_csv(
-        args.out / "genomes_lost_categorized.tsv", sep="\t", index=False
-    )
-    gained_categorized.to_csv(
-        args.out / "genomes_gained_categorized.tsv", sep="\t", index=False
-    )
-
-    # Species that went from 0 → nonzero genomes (the gains counterpart to
-    # species_lost_all_genomes). Used in §3.3 and the gained-species inventory appendix.
-    species_gained = (
-        by_species[(by_species["old_count"] == 0) & (by_species["new_count"] > 0)]
-        .sort_values("new_count", ascending=False)
-        .reset_index(drop=True)
-    )
-    species_gained.to_csv(
-        args.out / "species_gained_all_genomes.tsv", sep="\t", index=False
-    )
-
     # Compact facts for the review skill; detailed evidence stays in TSVs.
     write_facts_json(
         args.out,
         args.old,
         args.new,
         metrics,
-        metadata_schema_diff,
+        gt.metadata_schema_diff,
         staleness_rows,
-        lost_categorized,
-        gained_categorized,
-        species_lost,
-        species_gained,
-        added_t,
-        removed_t,
+        gt.lost_categorized,
+        gt.gained_categorized,
+        gt.species_lost,
+        gt.species_gained,
+        gt.added_taxa,
+        gt.removed_taxa,
         per_host_changes,
-        coverage_available,
+        coverage.available,
         params_changes,
-        reassigned_flows,
-        n_kept,
+        gt.reassigned_flows,
+        gt.n_kept,
     )
     logger.info(f"Done. Outputs in {args.out.resolve()}")
 
