@@ -177,15 +177,10 @@ def check_silva_staleness(new_params: dict) -> list[dict[str, str]]:
     return rows
 
 
-def check_reference_staleness(new_params: dict) -> list[dict[str, str]]:
-    """Combined Kraken2 + SILVA staleness rows for the new index's params."""
-    return [*check_kraken_staleness(new_params), *check_silva_staleness(new_params)]
-
-
 def write_staleness_table(new_params: dict, out_path: Path) -> list[dict[str, str]]:
     """Check Kraken2/SILVA freshness for the new index, write the rows, return them."""
     logger.info("Checking reference-DB staleness (Kraken2, SILVA).")
-    rows = check_reference_staleness(new_params)
+    rows = [*check_kraken_staleness(new_params), *check_silva_staleness(new_params)]
     pd.DataFrame(rows, columns=list(_staleness_row("", ""))).to_csv(
         out_path, sep="\t", index=False
     )
