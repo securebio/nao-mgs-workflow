@@ -32,8 +32,6 @@ from benchmark_index import (
     infection_status_changes,
     infection_status_columns,
     infection_status_transitions,
-    parse_kraken_url_date,
-    parse_silva_url_release,
     summarise_params_changes,
     surveilled_species,
     tsv_row_count,
@@ -715,36 +713,6 @@ class TestContentMetrics:
 
 
 class TestRefStaleness:
-    @pytest.mark.parametrize(
-        "url,expected",
-        [
-            (
-                "https://genome-idx.s3.amazonaws.com/kraken/k2_standard_20251015.tar.gz",
-                "20251015",
-            ),
-            ("https://example.com/foo.tar.gz", ""),
-        ],
-    )
-    def test_parse_kraken_url_date(self, url: str, expected: str) -> None:
-        assert parse_kraken_url_date(url) == expected
-
-    @pytest.mark.parametrize(
-        "url,expected",
-        [
-            # dotted form
-            (
-                "https://www.arb-silva.de/fileadmin/silva_databases/release_138.2/Exports/x.gz",
-                "138.2",
-            ),
-            # underscore form (parses to same release identifier)
-            ("https://ftp.arb-silva.de/release_138_2/Exports/x.gz", "138.2"),
-            # no release token in URL
-            ("https://example.com/foo", ""),
-        ],
-    )
-    def test_parse_silva_url_release(self, url: str, expected: str) -> None:
-        assert parse_silva_url_release(url) == expected
-
     def test_staleness_skips_unchecked_refs(self) -> None:
         params = {
             "human_url": "https://example.com/genome.fa.gz",
@@ -802,7 +770,7 @@ class TestRefStaleness:
             ),
             # current older than latest → stale
             (
-                "https://www.arb-silva.de/.../release_138.1/Exports/x.gz",
+                "https://www.arb-silva.de/.../release_138_1/Exports/x.gz",
                 "138.2",
                 "stale",
             ),

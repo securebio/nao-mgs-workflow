@@ -81,28 +81,13 @@ def fetch(prefix: str, subpath: str, local_dir: Path) -> Path:
 # 1. REFERENCE STALENESS #
 ##########################
 
-KRAKEN_BUCKET_LIST_CMD = [
-    "aws",
-    "s3",
-    "ls",
-    "s3://genome-idx/kraken/",
-    "--no-sign-request",
-]
-SILVA_FTP_INDEX = "https://ftp.arb-silva.de/"
-
-
-def parse_kraken_url_date(url: str) -> str:
-    """Extract YYYYMMDD from a Kraken2 standard-bundle URL, or '' if absent."""
-    m = re.search(r"k2_standard_(\d{8})\.tar\.gz", url)
-    return m.group(1) if m else ""
-
 
 def latest_kraken_release() -> tuple[str, str] | None:
     """Return (date_str, filename) of the most recent k2_standard_*.tar.gz bundle
     in the public Kraken2 S3 bucket, or None if the listing fails."""
     try:
         out = subprocess.run(
-            KRAKEN_BUCKET_LIST_CMD,
+            ["aws", "s3", "ls", "s3://genome-idx/kraken/", "--no-sign-request"],
             check=True,
             capture_output=True,
             text=True,
@@ -117,17 +102,11 @@ def latest_kraken_release() -> tuple[str, str] | None:
     return date, filename
 
 
-def parse_silva_url_release(url: str) -> str:
-    """Extract release identifier (e.g. '138.2') from a SILVA URL, or '' if absent."""
-    m = re.search(r"release_(\d+(?:[._]\d+)?)", url)
-    return m.group(1).replace("_", ".") if m else ""
-
-
 def latest_silva_release() -> str | None:
     """Return the highest-numbered release_NN[.M] directory in the SILVA FTP root,
     or None if the fetch fails. Compared as (major, minor) tuples."""
     try:
-        with urllib.request.urlopen(SILVA_FTP_INDEX, timeout=15) as resp:
+        with urllib.request.urlopen("https://ftp.arb-silva.de/", timeout=15) as resp:
             body = resp.read().decode("utf-8", errors="replace")
     except (urllib.error.URLError, OSError, TimeoutError):
         return None
@@ -163,21 +142,16 @@ def check_kraken_staleness(new_params: dict) -> list[dict[str, str]]:
     url = new_params.get("kraken_db", "")
     if not url:
         return []
-    current_date = parse_kraken_url_date(url)
+    m = re.search(r"k2_standard_(\d{8})\.tar\.gz", url)
+    current_date = m.group(1) if m else ""
     latest = latest_kraken_release()
     if latest is None:
         return [_staleness_row("kraken_db", url, current_date)]
 
     latest_date, latest_name = latest
+    status = "current" if current_date == latest_date else "stale"
     return [
-        _staleness_row(
-            "kraken_db",
-            url,
-            current_date,
-            latest_name,
-            latest_date,
-            "current" if current_date == latest_date else "stale",
-        )
+        _staleness_row("kraken_db", url, current_date, latest_name, latest_date, status)
     ]
 
 
@@ -192,18 +166,15 @@ def check_silva_staleness(new_params: dict) -> list[dict[str, str]]:
     rows: list[dict[str, str]] = []
     for key in keys:
         url = new_params[key]
-        current_release = parse_silva_url_release(url)
+        m = re.search(r"release_(\d+(?:[._]\d+)?)", url)
+        current_release = m.group(1).replace("_", ".") if m else ""
         if latest_rel is None:
             rows.append(_staleness_row(key, url, current_release))
             continue
+        status = "current" if current_release == latest_rel else "stale"
         rows.append(
             _staleness_row(
-                key,
-                url,
-                current_release,
-                f"release_{latest_rel}",
-                latest_rel,
-                "current" if current_release == latest_rel else "stale",
+                key, url, current_release, f"release_{latest_rel}", latest_rel, status
             )
         )
     return rows
