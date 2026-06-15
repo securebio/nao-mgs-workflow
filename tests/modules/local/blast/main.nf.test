@@ -65,7 +65,7 @@ nextflow_process {
         }
         then {
             assert process.failed
-            assert process.errorReport =~ /No alias or index file found/
+            assert process.errorReport =~ /BLAST Database error/
         }
     }
 
