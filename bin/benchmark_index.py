@@ -32,7 +32,7 @@ import urllib.request
 from collections import Counter, defaultdict
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import IO, Any
 
 import pandas as pd
 
@@ -183,12 +183,17 @@ def check_silva_staleness(new_params: dict) -> list[dict[str, str]]:
 ###################################
 
 
+def _open_text(path: Path) -> IO[str]:
+    """Open a (optionally gzipped) file in text mode."""
+    return (gzip.open if str(path).endswith(".gz") else open)(path, "rt")
+
+
 def list_recursive_sizes(prefix: str) -> dict[str, int]:
     """Return a mapping from top-level entry name under `prefix/output/results/`
     to total byte size. Top-level directories are summed across all files; files
     at `output/results/` itself are keyed by basename. Accepts s3:// or local."""
     base = f"{prefix.rstrip('/')}/output/results/"
-    bucket: dict[str, int] = {}
+    sizes: Counter[str] = Counter()
     if prefix.startswith("s3://"):
         out = subprocess.run(
             ["aws", "s3", "ls", "--recursive", base],
@@ -201,18 +206,14 @@ def list_recursive_sizes(prefix: str) -> dict[str, int]:
             parts = line.split()
             if len(parts) < 4 or parts[2] == "0":
                 continue
-            size, key = int(parts[2]), parts[3]
-            rel_str = key[len(prefix_key) :] if key.startswith(prefix_key) else key
-            top = rel_str.split("/", 1)[0] or rel_str
-            bucket[top] = bucket.get(top, 0) + size
+            rel = parts[3].removeprefix(prefix_key)
+            sizes[rel.split("/", 1)[0] or rel] += int(parts[2])
     else:
         base_path = Path(base)
         for f in base_path.rglob("*"):
-            if not f.is_file():
-                continue
-            top = f.relative_to(base_path).parts[0]
-            bucket[top] = bucket.get(top, 0) + f.stat().st_size
-    return bucket
+            if f.is_file():
+                sizes[f.relative_to(base_path).parts[0]] += f.stat().st_size
+    return dict(sizes)
 
 
 def compare_size_listings(
@@ -220,54 +221,41 @@ def compare_size_listings(
 ) -> pd.DataFrame:
     """Return a DataFrame with columns name, old_bytes, new_bytes, delta_bytes,
     pct_change. Sorted by absolute delta descending."""
-    rows: list[dict[str, int | str | float]] = []
-    for name in sorted(set(old_sizes) | set(new_sizes)):
-        o = old_sizes.get(name, 0)
-        n = new_sizes.get(name, 0)
-        pct = ((n - o) / o * 100) if o else float("nan")
+    rows = []
+    for name in set(old_sizes) | set(new_sizes):
+        o, n = old_sizes.get(name, 0), new_sizes.get(name, 0)
         rows.append(
             {
                 "name": name,
                 "old_bytes": o,
                 "new_bytes": n,
                 "delta_bytes": n - o,
-                "pct_change": round(pct, 2),
+                "pct_change": round((n - o) / o * 100, 2) if o else float("nan"),
             }
         )
     df = pd.DataFrame(rows)
-    df["_abs"] = df["delta_bytes"].abs()
-    return (
-        df.sort_values("_abs", ascending=False)
-        .drop(columns="_abs")
-        .reset_index(drop=True)
-    )
+    order = df["delta_bytes"].abs().sort_values(ascending=False).index
+    return df.reindex(order).reset_index(drop=True)
 
 
 def fasta_content_stats(path: Path) -> dict[str, int]:
     """Count records, total bp, and masked (N) bp in a (optionally gzipped) FASTA."""
-    opener = gzip.open if str(path).endswith(".gz") else open
-    records = 0
-    total_bp = 0
-    n_bp = 0
-    with opener(path, "rt") as f:  # type: ignore[arg-type]
+    records = total_bp = n_bp = 0
+    with _open_text(path) as f:
         for line in f:
             if line.startswith(">"):
                 records += 1
-                continue
-            seq = line.rstrip("\n")
-            total_bp += len(seq)
-            n_bp += seq.count("N") + seq.count("n")
+            else:
+                seq = line.rstrip("\n")
+                total_bp += len(seq)
+                n_bp += seq.count("N") + seq.count("n")
     return {"records": records, "total_bp": total_bp, "n_bp": n_bp}
 
 
 def tsv_row_count(path: Path) -> int:
     """Count data rows in a (optionally gzipped) TSV (excluding header)."""
-    opener = gzip.open if str(path).endswith(".gz") else open
-    rows = 0
-    with opener(path, "rt") as f:  # type: ignore[arg-type]
-        for _ in f:
-            rows += 1
-    return max(rows - 1, 0)
+    with _open_text(path) as f:
+        return max(sum(1 for _ in f) - 1, 0)
 
 
 ################################
