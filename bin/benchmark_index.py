@@ -178,6 +178,11 @@ def check_silva_staleness(new_params: dict) -> list[dict[str, str]]:
     return rows
 
 
+def check_reference_staleness(new_params: dict) -> list[dict[str, str]]:
+    """Combined Kraken2 + SILVA staleness rows for the new index's params."""
+    return [*check_kraken_staleness(new_params), *check_silva_staleness(new_params)]
+
+
 ###################################
 # 2. SIZE AND CONTENT COMPARISONS #
 ###################################
@@ -256,6 +261,58 @@ def tsv_row_count(path: Path) -> int:
     """Count data rows in a (optionally gzipped) TSV (excluding header)."""
     with _open_text(path) as f:
         return max(sum(1 for _ in f) - 1, 0)
+
+
+def compare_index_sizes(old_prefix: str, new_prefix: str) -> pd.DataFrame:
+    """List and compare per-DB output sizes between two index prefixes."""
+    return compare_size_listings(
+        list_recursive_sizes(old_prefix), list_recursive_sizes(new_prefix)
+    )
+
+
+def collect_content_metrics(
+    old_prefix: str,
+    new_prefix: str,
+    workdir_old: Path,
+    workdir_new: Path,
+    old_meta_path: Path,
+    new_meta_path: Path,
+    old_db_path: Path,
+    new_db_path: Path,
+) -> list[dict[str, object]]:
+    """Assemble content-metric rows for the masked virus FASTA and the staged
+    metadata + taxonomy-DB TSVs.
+
+    Compressed file sizes are misleading for gzipped FASTAs/TSVs because the gzip
+    ratio varies with content; these metrics let reviewers see whether the
+    underlying content actually grew or shrank. The FASTA is fetched here; the
+    TSVs are already staged for the genome/taxonomy diffs."""
+    old_fasta_path = fetch(
+        old_prefix, "output/results/virus-genomes-masked.fasta.gz", workdir_old
+    )
+    new_fasta_path = fetch(
+        new_prefix, "output/results/virus-genomes-masked.fasta.gz", workdir_new
+    )
+    return [
+        {
+            "name": "virus-genomes-masked.fasta.gz",
+            "old": fasta_content_stats(old_fasta_path),
+            "new": fasta_content_stats(new_fasta_path),
+            "metrics": ["records", "total_bp", "n_bp"],
+        },
+        {
+            "name": "virus-genome-metadata-gid.tsv.gz",
+            "old": {"rows": tsv_row_count(old_meta_path)},
+            "new": {"rows": tsv_row_count(new_meta_path)},
+            "metrics": ["rows"],
+        },
+        {
+            "name": "total-virus-db-annotated.tsv.gz",
+            "old": {"rows": tsv_row_count(old_db_path)},
+            "new": {"rows": tsv_row_count(new_db_path)},
+            "metrics": ["rows"],
+        },
+    ]
 
 
 ################################
@@ -979,9 +1036,7 @@ def main() -> None:
 
     # Per-DB sizes
     logger.info("Listing per-DB sizes.")
-    old_sizes = list_recursive_sizes(args.old)
-    new_sizes = list_recursive_sizes(args.new)
-    sizes = compare_size_listings(old_sizes, new_sizes)
+    sizes = compare_index_sizes(args.old, args.new)
     sizes.to_csv(args.out / "sizes.tsv", sep="\t", index=False)
 
     with tempfile.TemporaryDirectory() as td_str:
@@ -1089,40 +1144,18 @@ def main() -> None:
             args.out / "species_lost_all_genomes.tsv", sep="\t", index=False
         )
 
-        # Content metrics: stream the virus FASTA from S3/local (records + bp) and
-        # use the already-staged metadata + DB files for row counts. Compressed
-        # file sizes are misleading for gzipped FASTAs/TSVs because gzip ratio
-        # varies with content — content metrics let reviewers see whether the
-        # underlying content actually grew or shrank.
+        # Content metrics (FASTA records/bp + TSV row counts).
         logger.info("Computing FASTA / TSV content metrics.")
-        old_fasta_path = fetch(
-            args.old, "output/results/virus-genomes-masked.fasta.gz", td / "old"
+        content_rows = collect_content_metrics(
+            args.old,
+            args.new,
+            td / "old",
+            td / "new",
+            old_meta_path,
+            new_meta_path,
+            old_db_path,
+            new_db_path,
         )
-        new_fasta_path = fetch(
-            args.new, "output/results/virus-genomes-masked.fasta.gz", td / "new"
-        )
-        old_fasta_stats = fasta_content_stats(old_fasta_path)
-        new_fasta_stats = fasta_content_stats(new_fasta_path)
-        content_rows: list[dict[str, object]] = [
-            {
-                "name": "virus-genomes-masked.fasta.gz",
-                "old": old_fasta_stats,
-                "new": new_fasta_stats,
-                "metrics": ["records", "total_bp", "n_bp"],
-            },
-            {
-                "name": "virus-genome-metadata-gid.tsv.gz",
-                "old": {"rows": tsv_row_count(old_meta_path)},
-                "new": {"rows": tsv_row_count(new_meta_path)},
-                "metrics": ["rows"],
-            },
-            {
-                "name": "total-virus-db-annotated.tsv.gz",
-                "old": {"rows": tsv_row_count(old_db_path)},
-                "new": {"rows": tsv_row_count(new_db_path)},
-                "metrics": ["rows"],
-            },
-        ]
 
         per_host_changes: dict[str, pd.DataFrame] = {}
         host_cols = sorted(
@@ -1154,10 +1187,7 @@ def main() -> None:
 
     # Reference-DB staleness — outside the tempdir block; uses only new_params.
     logger.info("Checking reference-DB staleness (Kraken2, SILVA).")
-    staleness_rows = [
-        *check_kraken_staleness(new_params),
-        *check_silva_staleness(new_params),
-    ]
+    staleness_rows = check_reference_staleness(new_params)
 
     params_changes = summarise_params_changes(old_params, new_params)
 
