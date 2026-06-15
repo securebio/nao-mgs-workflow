@@ -14,6 +14,7 @@ process BLASTN {
         def extractCmd = fasta.toString().endsWith(".gz") ? "zcat" : "cat"
         def inputCmd = fasta.toString().endsWith(".gz") ? "ln -s ${fasta} ${sample}_in.fasta.gz" : "gzip -c ${fasta} > ${sample}_in.fasta.gz"
         """
+        set -euo pipefail
         # Download BLAST database if not already present
         db_local_path=\$(download_db.py "${blast_db_dir}" "${params_map.db_download_timeout}")
         # Set up command

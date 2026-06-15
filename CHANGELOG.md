@@ -1,5 +1,6 @@
 # v3.2.2.0-dev
 
+- Add `set -euo pipefail` to `BLASTN` module.
 - Publish BLAST database under a fixed `results/blast-db/` directory with a constant `blast-db` alias regardless of database name.
     - Update `DOWNLOAD_BLAST_DB` to handle both the production named database and test tarball-URL paths.
     - Remove the redundant `blast_db_prefix` parameter from `configs/downstream*.config` to avoid drift.
