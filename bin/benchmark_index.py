@@ -30,6 +30,7 @@ import subprocess
 import tempfile
 import urllib.request
 from collections import Counter, defaultdict
+from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import IO, Any
@@ -241,43 +242,35 @@ def tsv_row_count(path: Path) -> int:
         return max(sum(1 for _ in f) - 1, 0)
 
 
+# Output files measured beyond byte size, with the stat function for each.
+_CONTENT_STATS: dict[str, Callable[[Path], dict[str, int]]] = {
+    "virus-genomes-masked.fasta.gz": fasta_content_stats,
+    "virus-genome-metadata-gid.tsv.gz": lambda path: {"rows": tsv_row_count(path)},
+    "total-virus-db-annotated.tsv.gz": lambda path: {"rows": tsv_row_count(path)},
+}
+
+
 def collect_content_stats(
-    old_prefix: str,
-    new_prefix: str,
-    workdir_old: Path,
-    workdir_new: Path,
-    old_meta_path: Path,
-    new_meta_path: Path,
-    old_db_path: Path,
-    new_db_path: Path,
+    old_prefix: str, new_prefix: str, workdir: Path
 ) -> dict[str, tuple[dict[str, int], dict[str, int]]]:
-    """Per-file content stats keyed by output filename, for merging into the
-    metrics table.
+    """Fetch each content-bearing output file from both indexes into `workdir`
+    and return its old/new content stats, keyed by filename.
 
     Compressed file sizes are misleading for gzipped FASTAs/TSVs because the gzip
     ratio varies with content; these metrics let reviewers see whether the
-    underlying content actually grew or shrank. The FASTA is fetched here; the
-    TSVs are already staged for the genome/taxonomy diffs."""
-    old_fasta_path = fetch(
-        old_prefix, "output/results/virus-genomes-masked.fasta.gz", workdir_old
-    )
-    new_fasta_path = fetch(
-        new_prefix, "output/results/virus-genomes-masked.fasta.gz", workdir_new
-    )
-    return {
-        "virus-genomes-masked.fasta.gz": (
-            fasta_content_stats(old_fasta_path),
-            fasta_content_stats(new_fasta_path),
-        ),
-        "virus-genome-metadata-gid.tsv.gz": (
-            {"rows": tsv_row_count(old_meta_path)},
-            {"rows": tsv_row_count(new_meta_path)},
-        ),
-        "total-virus-db-annotated.tsv.gz": (
-            {"rows": tsv_row_count(old_db_path)},
-            {"rows": tsv_row_count(new_db_path)},
-        ),
-    }
+    underlying content actually grew or shrank."""
+    old_dir = workdir / "old"
+    new_dir = workdir / "new"
+    old_dir.mkdir(exist_ok=True)
+    new_dir.mkdir(exist_ok=True)
+    stats: dict[str, tuple[dict[str, int], dict[str, int]]] = {}
+    for name, stat_fn in _CONTENT_STATS.items():
+        subpath = f"output/results/{name}"
+        stats[name] = (
+            stat_fn(fetch(old_prefix, subpath, old_dir)),
+            stat_fn(fetch(new_prefix, subpath, new_dir)),
+        )
+    return stats
 
 
 def _metric_row(name: str, metric: str, old: int, new: int) -> dict[str, object]:
@@ -319,6 +312,26 @@ def compare_metrics(
         for metric in old_stat:
             rows.append(_metric_row(name, metric, old_stat[metric], new_stat[metric]))
     return pd.DataFrame(rows)
+
+
+def write_metrics_table(
+    old_prefix: str, new_prefix: str, out_path: Path
+) -> pd.DataFrame:
+    """Compare per-entry sizes and content metrics between two index prefixes,
+    write the long-format table to `out_path`, and return it for facts.json.
+
+    Self-contained: content files are staged in a private temporary directory,
+    so the only inputs are the two prefixes and the destination path."""
+    logger.info("Listing per-DB sizes and content metrics.")
+    with tempfile.TemporaryDirectory() as td:
+        content_stats = collect_content_stats(old_prefix, new_prefix, Path(td))
+    metrics = compare_metrics(
+        list_recursive_sizes(old_prefix),
+        list_recursive_sizes(new_prefix),
+        content_stats,
+    )
+    metrics.to_csv(out_path, sep="\t", index=False)
+    return metrics
 
 
 ################################
@@ -1039,6 +1052,8 @@ def main() -> None:
     args.out.mkdir(parents=True, exist_ok=True)
     logger.info(f"Benchmarking {args.old} -> {args.new}")
 
+    metrics = write_metrics_table(args.old, args.new, args.out / "sizes.tsv")
+
     with tempfile.TemporaryDirectory() as td_str:
         td = Path(td_str)
         (td / "old").mkdir()
@@ -1143,26 +1158,6 @@ def main() -> None:
         species_lost.to_csv(
             args.out / "species_lost_all_genomes.tsv", sep="\t", index=False
         )
-
-        # Per-entry sizes (every output entry) plus content metrics (FASTA
-        # records/bp + TSV row counts) for the files that have them.
-        logger.info("Listing per-DB sizes and content metrics.")
-        content_stats = collect_content_stats(
-            args.old,
-            args.new,
-            td / "old",
-            td / "new",
-            old_meta_path,
-            new_meta_path,
-            old_db_path,
-            new_db_path,
-        )
-        metrics = compare_metrics(
-            list_recursive_sizes(args.old),
-            list_recursive_sizes(args.new),
-            content_stats,
-        )
-        metrics.to_csv(args.out / "sizes.tsv", sep="\t", index=False)
 
         per_host_changes: dict[str, pd.DataFrame] = {}
         host_cols = sorted(

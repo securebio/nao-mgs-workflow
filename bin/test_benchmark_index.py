@@ -1,14 +1,16 @@
 #!/usr/bin/env python3
 """Pytest suite for the pure-function helpers in benchmark_index.py.
 
-I/O staging (S3/local) is exercised by running the script end-to-end against
-real index releases; this file covers the deterministic diff logic only.
+S3 staging is exercised by running the script end-to-end against real index
+releases; this file covers the deterministic diff logic plus local-filesystem
+staging.
 """
 
 ###########
 # IMPORTS #
 ###########
 
+import gzip
 from pathlib import Path
 
 import pandas as pd
@@ -35,6 +37,7 @@ from benchmark_index import (
     summarise_params_changes,
     surveilled_species,
     tsv_row_count,
+    write_metrics_table,
 )
 
 ###########
@@ -709,8 +712,6 @@ class TestContentMetrics:
         assert stats == {"records": 2, "total_bp": 13, "n_bp": 5}
 
     def test_fasta_stats_handles_gzip(self, tmp_path: Path) -> None:
-        import gzip
-
         fa = tmp_path / "sample.fa.gz"
         with gzip.open(fa, "wt") as f:
             f.write(">a\nACGTACGT\n>b\nNN\n")
@@ -721,6 +722,42 @@ class TestContentMetrics:
         t = tmp_path / "x.tsv"
         t.write_text("a\tb\n1\t2\n3\t4\n5\t6\n")
         assert tsv_row_count(t) == 3
+
+
+class TestWriteMetricsTable:
+    @staticmethod
+    def _make_index(root: Path, *, records: int, meta_rows: int, db_rows: int) -> None:
+        """Build a minimal index tree: the three content files plus one
+        bytes-only (directory) entry under output/results/."""
+        results = root / "output" / "results"
+        results.mkdir(parents=True)
+        with gzip.open(results / "virus-genomes-masked.fasta.gz", "wt") as f:
+            f.write("".join(f">r{i}\nACGT\n" for i in range(records)))
+        with gzip.open(results / "virus-genome-metadata-gid.tsv.gz", "wt") as f:
+            f.write("genome_id\n" + "g\n" * meta_rows)
+        with gzip.open(results / "total-virus-db-annotated.tsv.gz", "wt") as f:
+            f.write("taxid\n" + "t\n" * db_rows)
+        (results / "kraken_db").mkdir()
+        (results / "kraken_db" / "hash.k2d").write_bytes(b"x" * 16)
+
+    def test_writes_long_format_table(self, tmp_path: Path) -> None:
+        old, new = tmp_path / "old", tmp_path / "new"
+        self._make_index(old, records=2, meta_rows=3, db_rows=4)
+        self._make_index(new, records=5, meta_rows=8, db_rows=4)
+        out = tmp_path / "sizes.tsv"
+
+        df = write_metrics_table(str(old), str(new), out)
+
+        assert out.exists()
+        # Content metrics land as their own rows alongside the byte row.
+        gid = df[df["name"] == "virus-genome-metadata-gid.tsv.gz"]
+        rows_row = gid[gid["metric"] == "rows"].iloc[0]
+        assert (rows_row["old"], rows_row["new"], rows_row["delta"]) == (3, 8, 5)
+        fasta = df[df["name"] == "virus-genomes-masked.fasta.gz"]
+        assert "bytes" in set(fasta["metric"])
+        assert fasta[fasta["metric"] == "records"].iloc[0]["new"] == 5
+        # A non-content entry gets only a byte row.
+        assert list(df[df["name"] == "kraken_db"]["metric"]) == ["bytes"]
 
 
 class TestRefStaleness:
