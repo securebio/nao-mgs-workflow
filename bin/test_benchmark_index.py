@@ -11,6 +11,7 @@ staging.
 ###########
 
 import gzip
+import json
 from pathlib import Path
 
 import pandas as pd
@@ -762,11 +763,10 @@ class TestWriteMetricsTable:
         old, new = tmp_path / "old", tmp_path / "new"
         self._make_index(old, records=2, meta_rows=3, db_rows=4)
         self._make_index(new, records=5, meta_rows=8, db_rows=7)
-        out = tmp_path / "sizes.tsv"
 
-        df = write_metrics_table(str(old), str(new), out)
+        write_metrics_table(str(old), str(new), tmp_path)
 
-        assert out.exists()
+        df = pd.read_csv(tmp_path / "sizes.tsv", sep="\t")
         # Content metrics land as their own rows alongside the byte row.
         gid = df[df["name"] == "virus-genome-metadata-gid.tsv.gz"]
         rows_row = gid[gid["metric"] == "rows"].iloc[0]
@@ -780,6 +780,9 @@ class TestWriteMetricsTable:
         # A .dmp dump and a directory are size-only (not FASTA/TSV).
         assert list(df[df["name"] == "taxonomy-names.dmp"]["metric"]) == ["bytes"]
         assert list(df[df["name"] == "kraken_db"]["metric"]) == ["bytes"]
+        # Summary counts are precomputed for the skill.
+        summary = json.loads((tmp_path / "sizes_summary.json").read_text())
+        assert set(summary) == {"shrunk", "grown", "unchanged"}
 
 
 class TestRefStaleness:
@@ -894,16 +897,14 @@ class TestRefStaleness:
             lambda: ("20260226", "k2_standard_20260226.tar.gz"),
         )
         out = tmp_path / "staleness.tsv"
-        rows = write_staleness_table(
-            {"kraken_db": ".../k2_standard_20250714.tar.gz"}, out
-        )
-        assert rows[0]["status"] == "stale"
+        write_staleness_table({"kraken_db": ".../k2_standard_20250714.tar.gz"}, out)
         df = pd.read_csv(out, sep="\t")
         assert list(df["ref"]) == ["kraken_db"]
+        assert df.loc[0, "status"] == "stale"
 
     def test_write_staleness_table_empty_has_header(self, tmp_path: Path) -> None:
         out = tmp_path / "staleness.tsv"
-        assert write_staleness_table({}, out) == []
+        write_staleness_table({}, out)
         df = pd.read_csv(out, sep="\t")
         assert df.empty
         assert "status" in df.columns
@@ -1202,9 +1203,9 @@ class TestWriteGenomeTaxonomyTables:
         )
         return old_meta, new_meta, raw, old_db, new_db
 
-    def test_writes_kept_tables_and_returns_result(self, tmp_path: Path) -> None:
+    def test_writes_tables_and_summary(self, tmp_path: Path) -> None:
         old_meta, new_meta, raw, old_db, new_db = self._frames()
-        gt = write_genome_taxonomy_tables(
+        write_genome_taxonomy_tables(
             tmp_path,
             old_meta,
             new_meta,
@@ -1215,20 +1216,29 @@ class TestWriteGenomeTaxonomyTables:
             ["vertebrate"],
             "2025-01-01",
         )
-        written = {p.name for p in tmp_path.glob("*.tsv")}
-        assert written == {
+        assert {p.name for p in tmp_path.glob("*.tsv")} == {
             "genomes_reassigned.tsv",
             "species_lost_all_genomes.tsv",
             "species_gained_all_genomes.tsv",
             "genomes_lost_categorized.tsv",
             "genomes_gained_categorized.tsv",
+            "taxa_added.tsv",
+            "taxa_removed.tsv",
+            "metadata_schema_diff.tsv",
         }
         # g2 lost, g3 gained, g1 kept; taxonomy 200 dropped, 300 added.
-        assert gt.n_kept == 1
-        assert gt.lost_categorized["genome_id"].tolist() == ["g2"]
-        assert gt.gained_categorized["reason"].tolist() == ["newly_deposited"]
-        assert gt.added_taxa["taxid"].tolist() == ["300"]
-        assert gt.removed_taxa["taxid"].tolist() == ["200"]
+        lost = pd.read_csv(
+            tmp_path / "genomes_lost_categorized.tsv", sep="\t", dtype=str
+        )
+        assert lost["genome_id"].tolist() == ["g2"]
+        assert pd.read_csv(tmp_path / "taxa_added.tsv", sep="\t", dtype=str)[
+            "taxid"
+        ].tolist() == ["300"]
+        summary = json.loads((tmp_path / "genomes_summary.json").read_text())
+        assert summary["lost_total"] == 1
+        assert summary["kept_genomes"] == 1
+        assert summary["taxa_added"] == 1
+        assert summary["gained_by_reason"] == {"newly_deposited": 1}
 
     def test_missing_release_date_raises(self, tmp_path: Path) -> None:
         old_meta, new_meta, raw, old_db, new_db = self._frames()

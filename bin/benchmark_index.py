@@ -33,7 +33,6 @@ from collections import Counter, defaultdict
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
 
 import pandas as pd
 
@@ -76,6 +75,11 @@ def fetch(prefix: str, subpath: str, local_dir: Path) -> Path:
         logger.info(f"Copying {src} -> {dst}")
         shutil.copy(src, dst)
     return dst
+
+
+def _write_json(path: Path, obj: object) -> None:
+    """Write `obj` as pretty, key-sorted JSON."""
+    path.write_text(json.dumps(obj, indent=2, sort_keys=True) + "\n")
 
 
 ##########################
@@ -178,14 +182,13 @@ def check_silva_staleness(new_params: dict) -> list[dict[str, str]]:
     return rows
 
 
-def write_staleness_table(new_params: dict, out_path: Path) -> list[dict[str, str]]:
-    """Check Kraken2/SILVA freshness for the new index, write the rows, return them."""
+def write_staleness_table(new_params: dict, out_path: Path) -> None:
+    """Check Kraken2/SILVA freshness for the new index and write staleness.tsv."""
     logger.info("Checking reference-DB staleness (Kraken2, SILVA).")
     rows = [*check_kraken_staleness(new_params), *check_silva_staleness(new_params)]
     pd.DataFrame(rows, columns=list(_staleness_row("", ""))).to_csv(
         out_path, sep="\t", index=False
     )
-    return rows
 
 
 ###################################
@@ -303,11 +306,10 @@ def compare_metrics(
     return pd.DataFrame(rows)
 
 
-def write_metrics_table(
-    old_prefix: str, new_prefix: str, out_path: Path
-) -> pd.DataFrame:
-    """Build the long-format size + content table (content files discovered from
-    the listing: FASTA/TSV entries in both indexes), write it, and return it."""
+def write_metrics_table(old_prefix: str, new_prefix: str, out_dir: Path) -> None:
+    """Write the long-format size + content table (sizes.tsv; content files
+    discovered as FASTA/TSV entries in both indexes) plus a sizes_summary.json
+    count of shrunk / grown / unchanged entries."""
     logger.info("Listing per-DB sizes and content metrics.")
     old_sizes = list_recursive_sizes(old_prefix)
     new_sizes = list_recursive_sizes(new_prefix)
@@ -318,8 +320,16 @@ def write_metrics_table(
     )
     content_stats = collect_content_stats(old_prefix, new_prefix, content_files)
     metrics = compare_metrics(old_sizes, new_sizes, content_stats)
-    metrics.to_csv(out_path, sep="\t", index=False)
-    return metrics
+    metrics.to_csv(out_dir / "sizes.tsv", sep="\t", index=False)
+    byte_delta = metrics.loc[metrics["metric"] == "bytes", "delta"]
+    _write_json(
+        out_dir / "sizes_summary.json",
+        {
+            "shrunk": int((byte_delta < 0).sum()),
+            "grown": int((byte_delta > 0).sum()),
+            "unchanged": int((byte_delta == 0).sum()),
+        },
+    )
 
 
 ################################
@@ -598,19 +608,23 @@ def categorize_gained_genomes_raw(
     return out.drop(columns=["_release_date"])
 
 
-@dataclass
-class GenomeTaxonomyResult:
-    """Frames and counts produced by the section that facts.json needs."""
+def _reason_counts(df: pd.DataFrame) -> dict[str, int]:
+    """Count of genome IDs per `reason` value, or {} if none."""
+    if df.empty or "reason" not in df.columns:
+        return {}
+    return {str(k): int(v) for k, v in df["reason"].value_counts().items()}
 
-    metadata_schema_diff: tuple[list[str], list[str]]
-    lost_categorized: pd.DataFrame
-    gained_categorized: pd.DataFrame
-    species_lost: pd.DataFrame
-    species_gained: pd.DataFrame
-    added_taxa: pd.DataFrame
-    removed_taxa: pd.DataFrame
-    reassigned_flows: pd.DataFrame
-    n_kept: int
+
+def _species_crossing(
+    by_species: pd.DataFrame, zero: str, present: str
+) -> pd.DataFrame:
+    """Species whose `zero` count is 0 and `present` count > 0, sorted by `present`
+    descending (the lost/gained-everything subsets)."""
+    return (
+        by_species[(by_species[zero] == 0) & (by_species[present] > 0)]
+        .sort_values(present, ascending=False)
+        .reset_index(drop=True)
+    )
 
 
 def write_genome_taxonomy_tables(
@@ -623,10 +637,10 @@ def write_genome_taxonomy_tables(
     coverage: Coverage,
     screened_hosts: list[str],
     old_build_date: str,
-) -> GenomeTaxonomyResult:
-    """Diff genome metadata + taxonomy, categorize lost/gained genome IDs, write
-    the per-genome and per-species tables, and return the frames/counts for
-    facts.json. Categorization keys on the pre-filter raw metadata."""
+) -> None:
+    """Diff genome metadata + taxonomy, categorize lost/gained genome IDs, and
+    write the detail tables plus genomes_summary.json and metadata_schema_diff.tsv.
+    Categorization keys on the pre-filter raw metadata."""
     logger.info("Diffing genome metadata and taxonomy; categorizing genome IDs.")
     if "release_date" not in new_raw_meta.columns:
         raise ValueError(
@@ -635,21 +649,22 @@ def write_genome_taxonomy_tables(
             " with a pipeline version that emits it."
         )
     new_cols, old_cols = set(new_meta.columns), set(old_meta.columns)
-    metadata_schema_diff = (
-        [c for c in old_meta.columns if c not in new_cols],
-        [c for c in new_meta.columns if c not in old_cols],
+    schema_rows = [
+        {"change": "removed", "column": c}
+        for c in old_meta.columns
+        if c not in new_cols
+    ] + [
+        {"change": "added", "column": c} for c in new_meta.columns if c not in old_cols
+    ]
+    pd.DataFrame(schema_rows, columns=["change", "column"]).to_csv(
+        out_dir / "metadata_schema_diff.tsv", sep="\t", index=False
     )
 
     added_g, removed_g, by_species = diff_genome_metadata(old_meta, new_meta)
-    reassigned_flows = diff_reassignments(old_meta, new_meta)
-    n_kept = len(set(old_meta["genome_id"]) & set(new_meta["genome_id"]))
-    reassigned_flows.to_csv(out_dir / "genomes_reassigned.tsv", sep="\t", index=False)
+    reassigned = diff_reassignments(old_meta, new_meta)
+    reassigned.to_csv(out_dir / "genomes_reassigned.tsv", sep="\t", index=False)
 
-    species_lost = (
-        by_species[(by_species["new_count"] == 0) & (by_species["old_count"] > 0)]
-        .sort_values("old_count", ascending=False)
-        .reset_index(drop=True)
-    )
+    species_lost = _species_crossing(by_species, "new_count", "old_count")
     species_lost["covered_by_hard_exclude"] = (
         species_lost["species_taxid"]
         .astype(str)
@@ -658,19 +673,16 @@ def write_genome_taxonomy_tables(
         else ""
     )
     species_lost.to_csv(out_dir / "species_lost_all_genomes.tsv", sep="\t", index=False)
-
-    species_gained = (
-        by_species[(by_species["old_count"] == 0) & (by_species["new_count"] > 0)]
-        .sort_values("new_count", ascending=False)
-        .reset_index(drop=True)
-    )
+    species_gained = _species_crossing(by_species, "old_count", "new_count")
     species_gained.to_csv(
         out_dir / "species_gained_all_genomes.tsv", sep="\t", index=False
     )
 
     added_taxa, removed_taxa = diff_taxonomy(old_db, new_db)
+    added_taxa.to_csv(out_dir / "taxa_added.tsv", sep="\t", index=False)
+    removed_taxa.to_csv(out_dir / "taxa_removed.tsv", sep="\t", index=False)
 
-    lost_categorized = categorize_lost_genomes_raw(
+    lost = categorize_lost_genomes_raw(
         removed_g,
         new_raw_meta,
         new_db,
@@ -678,7 +690,7 @@ def write_genome_taxonomy_tables(
         coverage.excluded_taxids,
         screened_hosts,
     )
-    gained_categorized = categorize_gained_genomes_raw(
+    gained = categorize_gained_genomes_raw(
         added_g,
         new_raw_meta,
         old_db,
@@ -687,23 +699,27 @@ def write_genome_taxonomy_tables(
         screened_hosts,
         old_build_date,
     )
-    lost_categorized.to_csv(
-        out_dir / "genomes_lost_categorized.tsv", sep="\t", index=False
-    )
-    gained_categorized.to_csv(
-        out_dir / "genomes_gained_categorized.tsv", sep="\t", index=False
-    )
+    lost.to_csv(out_dir / "genomes_lost_categorized.tsv", sep="\t", index=False)
+    gained.to_csv(out_dir / "genomes_gained_categorized.tsv", sep="\t", index=False)
 
-    return GenomeTaxonomyResult(
-        metadata_schema_diff=metadata_schema_diff,
-        lost_categorized=lost_categorized,
-        gained_categorized=gained_categorized,
-        species_lost=species_lost,
-        species_gained=species_gained,
-        added_taxa=added_taxa,
-        removed_taxa=removed_taxa,
-        reassigned_flows=reassigned_flows,
-        n_kept=n_kept,
+    _write_json(
+        out_dir / "genomes_summary.json",
+        {
+            "lost_total": len(lost),
+            "gained_total": len(gained),
+            "lost_by_reason": _reason_counts(lost),
+            "gained_by_reason": _reason_counts(gained),
+            "species_lost_all_genomes": len(species_lost),
+            "species_gained_all_genomes": len(species_gained),
+            "reassigned_genomes": int(reassigned["n_genomes"].sum())
+            if not reassigned.empty
+            else 0,
+            "kept_genomes": len(
+                set(old_meta["genome_id"]) & set(new_meta["genome_id"])
+            ),
+            "taxa_added": len(added_taxa),
+            "taxa_removed": len(removed_taxa),
+        },
     )
 
 
@@ -859,6 +875,110 @@ def annotate_changes_with_coverage(
     return out
 
 
+def _zero_species_transition_counts() -> dict[str, int]:
+    return {
+        "species_promotions": 0,
+        "uncovered_species_promotions": 0,
+        "species_demotions": 0,
+        "uncovered_species_demotions": 0,
+        "override_scope_gaps": 0,
+    }
+
+
+def _species_transition_counts(
+    per_host_changes: dict[str, pd.DataFrame],
+    coverage_available: bool,
+) -> dict[str, dict[str, int]]:
+    host_counts: dict[str, dict[str, int]] = {}
+    for host, df in sorted(per_host_changes.items()):
+        if not {"rank", "old_status", "new_status"}.issubset(df.columns):
+            host_counts[host] = _zero_species_transition_counts()
+            continue
+        species = df[df["rank"] == "species"]
+        promotions = species[
+            (species["old_status"].astype(str) == "0")
+            & (species["new_status"].astype(str) == "1")
+        ]
+        demotions = species[
+            (species["old_status"].astype(str) == "1")
+            & (species["new_status"].astype(str) == "0")
+        ]
+
+        if coverage_available and "covered_by" in species.columns:
+            actionable_promotions = promotions[promotions["covered_by"] == ""]
+            actionable_demotions = demotions[demotions["covered_by"] == ""]
+        else:
+            actionable_promotions = promotions
+            actionable_demotions = demotions
+
+        if "included_for_other_hosts" in actionable_demotions.columns:
+            policy_gaps = actionable_demotions[
+                actionable_demotions["included_for_other_hosts"] != ""
+            ]
+        else:
+            policy_gaps = actionable_demotions.iloc[0:0]
+
+        host_counts[host] = {
+            "species_promotions": len(promotions),
+            "uncovered_species_promotions": len(actionable_promotions),
+            "species_demotions": len(demotions),
+            "uncovered_species_demotions": len(actionable_demotions),
+            "override_scope_gaps": len(policy_gaps),
+        }
+    return host_counts
+
+
+def write_infection_status_tables(
+    out_dir: Path, old_db: pd.DataFrame, new_db: pd.DataFrame, coverage: Coverage
+) -> None:
+    """Write per-host infection-status transitions/changes tables plus
+    infection_status_summary.json."""
+    logger.info("Diffing infection-status annotations.")
+    host_cols = sorted(
+        set(infection_status_columns(old_db)) & set(infection_status_columns(new_db))
+    )
+    per_host_changes: dict[str, pd.DataFrame] = {}
+    transitions = []
+    for col in host_cols:
+        host = col.removeprefix("infection_status_")
+        trans = infection_status_transitions(old_db, new_db, col)
+        if not trans.empty:
+            trans.insert(0, "host", host)
+            transitions.append(trans)
+        changes = infection_status_changes(old_db, new_db, col)
+        if coverage.available:
+            changes = annotate_changes_with_coverage(
+                changes,
+                host,
+                coverage.parent_map,
+                coverage.excluded_taxids,
+                coverage.included_taxids,
+            )
+        per_host_changes[host] = changes
+    if transitions:
+        pd.concat(transitions, ignore_index=True).to_csv(
+            out_dir / "infection_status_transitions.tsv", sep="\t", index=False
+        )
+    else:
+        (out_dir / "infection_status_transitions.tsv").write_text(
+            "host\told\tnew\tcount\n"
+        )
+    for host, df in per_host_changes.items():
+        df.to_csv(
+            out_dir / f"infection_status_changes_{host}.tsv", sep="\t", index=False
+        )
+        df[df["rank"] == "species"].to_csv(
+            out_dir / f"species_transitions_{host}.tsv", sep="\t", index=False
+        )
+    _write_json(
+        out_dir / "infection_status_summary.json",
+        {
+            "coverage_available": coverage.available,
+            "hosts": _species_transition_counts(per_host_changes, coverage.available),
+        },
+    )
+
+
 ##################
 # 5. PARAMS DIFF #
 ##################
@@ -916,183 +1036,6 @@ def diff_params(old_params: dict, new_params: dict) -> str:
     )
 
 
-###############
-# FACTS WRITER #
-###############
-
-OUTPUT_FILES = {
-    "staleness": "staleness.tsv",
-    "sizes": "sizes.tsv",
-    "genomes_reassigned": "genomes_reassigned.tsv",
-    "species_lost_all_genomes": "species_lost_all_genomes.tsv",
-    "species_gained_all_genomes": "species_gained_all_genomes.tsv",
-    "infection_status_transitions": "infection_status_transitions.tsv",
-    "infection_status_changes_pattern": "infection_status_changes_<host>.tsv",
-    "species_transitions_pattern": "species_transitions_<host>.tsv",
-    "genomes_lost_categorized": "genomes_lost_categorized.tsv",
-    "genomes_gained_categorized": "genomes_gained_categorized.tsv",
-    "params_diff": "params_diff.txt",
-    "facts": "facts.json",
-}
-
-
-def _reason_counts(df: pd.DataFrame) -> dict[str, int]:
-    if df.empty or "reason" not in df.columns:
-        return {}
-    return {str(k): int(v) for k, v in df["reason"].value_counts().items()}
-
-
-def _json_ready(value: Any) -> Any:
-    if isinstance(value, dict):
-        return {str(k): _json_ready(v) for k, v in value.items()}
-    if isinstance(value, list | tuple):
-        return [_json_ready(v) for v in value]
-    try:
-        if pd.isna(value):
-            return None
-    except (TypeError, ValueError):
-        pass
-    if hasattr(value, "item"):
-        return _json_ready(value.item())
-    return value
-
-
-def _records(df: pd.DataFrame) -> list[dict[str, object]]:
-    return [
-        {str(k): _json_ready(v) for k, v in record.items()}
-        for record in df.to_dict(orient="records")
-    ]
-
-
-def _zero_species_transition_counts() -> dict[str, int]:
-    return {
-        "species_promotions": 0,
-        "uncovered_species_promotions": 0,
-        "species_demotions": 0,
-        "uncovered_species_demotions": 0,
-        "override_scope_gaps": 0,
-    }
-
-
-def _species_transition_counts(
-    per_host_changes: dict[str, pd.DataFrame],
-    coverage_available: bool,
-) -> dict[str, dict[str, int]]:
-    host_counts: dict[str, dict[str, int]] = {}
-    for host, df in sorted(per_host_changes.items()):
-        if not {"rank", "old_status", "new_status"}.issubset(df.columns):
-            host_counts[host] = _zero_species_transition_counts()
-            continue
-        species = df[df["rank"] == "species"]
-        promotions = species[
-            (species["old_status"].astype(str) == "0")
-            & (species["new_status"].astype(str) == "1")
-        ]
-        demotions = species[
-            (species["old_status"].astype(str) == "1")
-            & (species["new_status"].astype(str) == "0")
-        ]
-
-        if coverage_available and "covered_by" in species.columns:
-            actionable_promotions = promotions[promotions["covered_by"] == ""]
-            actionable_demotions = demotions[demotions["covered_by"] == ""]
-        else:
-            actionable_promotions = promotions
-            actionable_demotions = demotions
-
-        if "included_for_other_hosts" in actionable_demotions.columns:
-            policy_gaps = actionable_demotions[
-                actionable_demotions["included_for_other_hosts"] != ""
-            ]
-        else:
-            policy_gaps = actionable_demotions.iloc[0:0]
-
-        host_counts[host] = {
-            "species_promotions": len(promotions),
-            "uncovered_species_promotions": len(actionable_promotions),
-            "species_demotions": len(demotions),
-            "uncovered_species_demotions": len(actionable_demotions),
-            "override_scope_gaps": len(policy_gaps),
-        }
-    return host_counts
-
-
-def write_facts_json(
-    out_dir: Path,
-    old: str,
-    new: str,
-    metrics: pd.DataFrame,
-    metadata_schema_diff: tuple[list[str], list[str]],
-    staleness_rows: list[dict[str, str]],
-    lost_categorized: pd.DataFrame,
-    gained_categorized: pd.DataFrame,
-    species_lost: pd.DataFrame,
-    species_gained: pd.DataFrame,
-    added_taxa: pd.DataFrame,
-    removed_taxa: pd.DataFrame,
-    per_host_changes: dict[str, pd.DataFrame],
-    coverage_available: bool,
-    params_changes: pd.DataFrame,
-    reassigned_flows: pd.DataFrame,
-    n_kept: int,
-) -> None:
-    """Write compact facts consumed by the review skill.
-
-    Detailed evidence stays in TSVs. This file only carries stable counts,
-    metadata, and filenames so report prose does not live in the script.
-    """
-    removed_cols, added_cols = metadata_schema_diff
-    n_reassigned = (
-        int(reassigned_flows["n_genomes"].sum()) if not reassigned_flows.empty else 0
-    )
-    size_rows = metrics[metrics["metric"] == "bytes"]
-    size_changed = size_rows[size_rows["delta"] != 0].drop(columns="metric")
-    facts = {
-        "old": old,
-        "new": new,
-        "generated_at_utc": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
-        "outputs": OUTPUT_FILES,
-        "staleness": staleness_rows,
-        "database_sizes": {
-            "shrunk": int((size_rows["delta"] < 0).sum()),
-            "grown": int((size_rows["delta"] > 0).sum()),
-            "unchanged": int((size_rows["delta"] == 0).sum()),
-            "changed_entries": _records(size_changed),
-        },
-        "metadata_schema_diff": {
-            "removed": removed_cols,
-            "added": added_cols,
-        },
-        "genomes": {
-            "lost_total": len(lost_categorized),
-            "gained_total": len(gained_categorized),
-            "lost_by_reason": _reason_counts(lost_categorized),
-            "gained_by_reason": _reason_counts(gained_categorized),
-            "species_lost_all_genomes": len(species_lost),
-            "species_gained_all_genomes": len(species_gained),
-            "reassigned_genomes": n_reassigned,
-            "kept_genomes": n_kept,
-        },
-        "taxonomy": {
-            "taxa_added": len(added_taxa),
-            "taxa_removed": len(removed_taxa),
-        },
-        "infection_status": {
-            "coverage_available": coverage_available,
-            "hosts": _species_transition_counts(
-                per_host_changes, coverage_available=coverage_available
-            ),
-        },
-        "params": {
-            "changes": _records(params_changes),
-            "diff": OUTPUT_FILES["params_diff"],
-        },
-    }
-    (out_dir / "facts.json").write_text(
-        json.dumps(_json_ready(facts), allow_nan=False, indent=2, sort_keys=True) + "\n"
-    )
-
-
 ########
 # MAIN #
 ########
@@ -1135,33 +1078,27 @@ def main() -> None:
     args.out.mkdir(parents=True, exist_ok=True)
     logger.info(f"Benchmarking {args.old} -> {args.new}")
 
-    metrics = write_metrics_table(args.old, args.new, args.out / "sizes.tsv")
+    write_metrics_table(args.old, args.new, args.out)
 
     with tempfile.TemporaryDirectory() as td_str:
         td = Path(td_str)
         (td / "old").mkdir()
         (td / "new").mkdir()
 
-        # Stage genome metadata, the pre-filter raw metadata, the taxonomy DB,
-        # and params (the raw metadata is required by the categorizers).
+        def stage(prefix: str, subpath: str, side: str) -> Path:
+            return fetch(prefix, subpath, td / side)
+
+        # Stage genome metadata, the pre-filter raw metadata (required by the
+        # categorizers), the taxonomy DB, and params.
         logger.info("Staging genome metadata, taxonomy DB, and params.")
-        old_meta = pd.read_csv(
-            fetch(
-                args.old, "output/results/virus-genome-metadata-gid.tsv.gz", td / "old"
-            ),
-            sep="\t",
-            dtype=str,
-        )
-        new_meta = pd.read_csv(
-            fetch(
-                args.new, "output/results/virus-genome-metadata-gid.tsv.gz", td / "new"
-            ),
-            sep="\t",
-            dtype=str,
-        )
+        gid = "output/results/virus-genome-metadata-gid.tsv.gz"
+        db = "output/results/total-virus-db-annotated.tsv.gz"
+        params = "output/input/index-params.json"
+        old_meta = pd.read_csv(stage(args.old, gid, "old"), sep="\t", dtype=str)
+        new_meta = pd.read_csv(stage(args.new, gid, "new"), sep="\t", dtype=str)
         try:
-            new_raw_path = fetch(
-                args.new, "output/results/virus-genome-metadata-raw.tsv.gz", td / "new"
+            raw_path = stage(
+                args.new, "output/results/virus-genome-metadata-raw.tsv.gz", "new"
             )
         except (subprocess.CalledProcessError, FileNotFoundError) as exc:
             raise ValueError(
@@ -1170,28 +1107,15 @@ def main() -> None:
                 " with a pipeline version that publishes the pre-filter assembly"
                 " metadata."
             ) from exc
-        new_raw_meta = pd.read_csv(new_raw_path, sep="\t", dtype=str)
-        old_db = pd.read_csv(
-            fetch(
-                args.old, "output/results/total-virus-db-annotated.tsv.gz", td / "old"
-            ),
-            sep="\t",
-            dtype=str,
-        )
-        new_db = pd.read_csv(
-            fetch(
-                args.new, "output/results/total-virus-db-annotated.tsv.gz", td / "new"
-            ),
-            sep="\t",
-            dtype=str,
-        )
-        old_params = json.loads(
-            fetch(args.old, "output/input/index-params.json", td / "old").read_text()
-        )
-        new_params = json.loads(
-            fetch(args.new, "output/input/index-params.json", td / "new").read_text()
-        )
+        new_raw_meta = pd.read_csv(raw_path, sep="\t", dtype=str)
+        old_db = pd.read_csv(stage(args.old, db, "old"), sep="\t", dtype=str)
+        new_db = pd.read_csv(stage(args.new, db, "new"), sep="\t", dtype=str)
+        old_params = json.loads(stage(args.old, params, "old").read_text())
+        new_params = json.loads(stage(args.new, params, "new").read_text())
         (args.out / "params_diff.txt").write_text(diff_params(old_params, new_params))
+        summarise_params_changes(old_params, new_params).to_csv(
+            args.out / "params_changes.tsv", sep="\t", index=False
+        )
 
         # Coverage rule data: hard-exclude from the new params, hard-include from
         # the repo overrides. Skipped (and empty) without --repo-root.
@@ -1206,10 +1130,8 @@ def main() -> None:
             )
         else:
             coverage = Coverage(False, {}, set(), {})
-        screened_hosts = new_params.get("host_taxa_screen", "").split()
-        old_build_date = str(old_params.get("trace_timestamp", ""))[:10]
 
-        gt = write_genome_taxonomy_tables(
+        write_genome_taxonomy_tables(
             args.out,
             old_meta,
             new_meta,
@@ -1217,77 +1139,12 @@ def main() -> None:
             old_db,
             new_db,
             coverage,
-            screened_hosts,
-            old_build_date,
+            new_params.get("host_taxa_screen", "").split(),
+            str(old_params.get("trace_timestamp", ""))[:10],
         )
+        write_infection_status_tables(args.out, old_db, new_db, coverage)
+        write_staleness_table(new_params, args.out / "staleness.tsv")
 
-        # Infection-status transitions and per-host changes (section 4).
-        per_host_changes: dict[str, pd.DataFrame] = {}
-        host_cols = sorted(
-            set(infection_status_columns(old_db))
-            & set(infection_status_columns(new_db))
-        )
-        all_transitions = []
-        for col in host_cols:
-            host = col.removeprefix("infection_status_")
-            trans = infection_status_transitions(old_db, new_db, col)
-            if not trans.empty:
-                trans.insert(0, "host", host)
-                all_transitions.append(trans)
-            changes = infection_status_changes(old_db, new_db, col)
-            if coverage.available:
-                changes = annotate_changes_with_coverage(
-                    changes,
-                    host,
-                    coverage.parent_map,
-                    coverage.excluded_taxids,
-                    coverage.included_taxids,
-                )
-            per_host_changes[host] = changes
-            # Per-host TSVs are written once below, after cross-host annotation.
-        if all_transitions:
-            pd.concat(all_transitions, ignore_index=True).to_csv(
-                args.out / "infection_status_transitions.tsv", sep="\t", index=False
-            )
-        else:
-            (args.out / "infection_status_transitions.tsv").write_text(
-                "host\told\tnew\tcount\n"
-            )
-
-    # Reference-DB staleness — outside the tempdir block; uses only new_params.
-    staleness_rows = write_staleness_table(new_params, args.out / "staleness.tsv")
-
-    params_changes = summarise_params_changes(old_params, new_params)
-
-    for host, df in per_host_changes.items():
-        df.to_csv(
-            args.out / f"infection_status_changes_{host}.tsv", sep="\t", index=False
-        )
-        species_changes = df[df["rank"] == "species"]
-        species_changes.to_csv(
-            args.out / f"species_transitions_{host}.tsv", sep="\t", index=False
-        )
-
-    # Compact facts for the review skill; detailed evidence stays in TSVs.
-    write_facts_json(
-        args.out,
-        args.old,
-        args.new,
-        metrics,
-        gt.metadata_schema_diff,
-        staleness_rows,
-        gt.lost_categorized,
-        gt.gained_categorized,
-        gt.species_lost,
-        gt.species_gained,
-        gt.added_taxa,
-        gt.removed_taxa,
-        per_host_changes,
-        coverage.available,
-        params_changes,
-        gt.reassigned_flows,
-        gt.n_kept,
-    )
     logger.info(f"Done. Outputs in {args.out.resolve()}")
 
 
