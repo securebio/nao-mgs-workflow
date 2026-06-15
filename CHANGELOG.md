@@ -1,6 +1,6 @@
 # v3.2.2.0-dev
 
-- CI: Fix the CHANGELOG gate wrongly failing docs-only PRs. Add `predicate-quantifier: every` to the `dorny/paths-filter` step in `.github/workflows/check-changelog.yml` so the `!**/*.md` / `!docs/**` negation patterns are actually applied; under the default `some` quantifier every file matched `**`, so the gate never recognized a docs-only change.
+- CI: Fix the CHANGELOG CI check wrongly failing docs-only PRs that don't update CHANGELOG.md.
 - CI: Removed the slow and unnecessary `Maximize build space` step from the nf-test setup action
 - Hard-exclude taxids `1266451` (Mulberry vein banding virus, a plant virus) and `1629671` (Botrytis cinerea negative-stranded RNA virus 1, a mycovirus) from the surveillance set.
 - `DOWNLOAD_VIRAL_GENOMES` now retries the dehydrated `datasets download` step (not just rehydrate) with exponential backoff, so a transient NCBI stream error there no longer aborts the task.
