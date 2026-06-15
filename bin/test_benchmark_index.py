@@ -22,7 +22,7 @@ from benchmark_index import (
     check_kraken_staleness,
     check_silva_staleness,
     classify_coverage,
-    compare_size_listings,
+    compare_metrics,
     diff_genome_metadata,
     diff_params,
     diff_reassignments,
@@ -105,24 +105,35 @@ def new_genome_meta() -> pd.DataFrame:
 ###########
 
 
-class TestCompareSizeListings:
-    def test_grown_shrunk_unchanged_and_pct(self) -> None:
-        result = compare_size_listings(
+class TestCompareMetrics:
+    def test_byte_rows_grown_shrunk_unchanged_and_pct(self) -> None:
+        result = compare_metrics(
             {"alpha": 100, "beta": 200, "gamma": 50},
             {"alpha": 150, "beta": 200, "delta": 80},
+            {},
         )
-        result = result.set_index("name")
-        assert result.loc["alpha", "delta_bytes"] == 50
-        assert result.loc["alpha", "pct_change"] == 50.0
-        assert result.loc["beta", "delta_bytes"] == 0
+        bytes_rows = result[result["metric"] == "bytes"].set_index("name")
+        assert bytes_rows.loc["alpha", "delta"] == 50
+        assert bytes_rows.loc["alpha", "pct_change"] == 50.0
+        assert bytes_rows.loc["beta", "delta"] == 0
         # gamma vanished; delta is new
-        assert result.loc["gamma", "delta_bytes"] == -50
-        assert result.loc["delta", "old_bytes"] == 0
-        assert pd.isna(result.loc["delta", "pct_change"])  # no old size
+        assert bytes_rows.loc["gamma", "delta"] == -50
+        assert bytes_rows.loc["delta", "old"] == 0
+        assert pd.isna(bytes_rows.loc["delta", "pct_change"])  # no old size
 
-    def test_sorted_by_absolute_delta(self) -> None:
-        result = compare_size_listings({"a": 100, "b": 100}, {"a": 200, "b": 105})
+    def test_sorted_by_absolute_byte_delta(self) -> None:
+        result = compare_metrics({"a": 100, "b": 100}, {"a": 200, "b": 105}, {})
         assert list(result["name"]) == ["a", "b"]  # +100 sorted before +5
+
+    def test_content_metrics_follow_their_byte_row(self) -> None:
+        content = {"a": ({"records": 10, "rows": 5}, {"records": 12, "rows": 9})}
+        result = compare_metrics({"a": 100, "b": 100}, {"a": 200, "b": 105}, content)
+        # 'a' has the larger byte delta, so its block leads: bytes then content.
+        block = result[result["name"] == "a"]
+        assert list(block["metric"]) == ["bytes", "records", "rows"]
+        records = block[block["metric"] == "records"].iloc[0]
+        assert records["delta"] == 2
+        assert records["pct_change"] == 20.0
 
 
 class TestDiffGenomeMetadata:

@@ -221,28 +221,6 @@ def list_recursive_sizes(prefix: str) -> dict[str, int]:
     return dict(sizes)
 
 
-def compare_size_listings(
-    old_sizes: dict[str, int], new_sizes: dict[str, int]
-) -> pd.DataFrame:
-    """Return a DataFrame with columns name, old_bytes, new_bytes, delta_bytes,
-    pct_change. Sorted by absolute delta descending."""
-    rows = []
-    for name in set(old_sizes) | set(new_sizes):
-        o, n = old_sizes.get(name, 0), new_sizes.get(name, 0)
-        rows.append(
-            {
-                "name": name,
-                "old_bytes": o,
-                "new_bytes": n,
-                "delta_bytes": n - o,
-                "pct_change": round((n - o) / o * 100, 2) if o else float("nan"),
-            }
-        )
-    df = pd.DataFrame(rows)
-    order = df["delta_bytes"].abs().sort_values(ascending=False).index
-    return df.reindex(order).reset_index(drop=True)
-
-
 def fasta_content_stats(path: Path) -> dict[str, int]:
     """Count records, total bp, and masked (N) bp in a (optionally gzipped) FASTA."""
     records = total_bp = n_bp = 0
@@ -263,14 +241,7 @@ def tsv_row_count(path: Path) -> int:
         return max(sum(1 for _ in f) - 1, 0)
 
 
-def compare_index_sizes(old_prefix: str, new_prefix: str) -> pd.DataFrame:
-    """List and compare per-DB output sizes between two index prefixes."""
-    return compare_size_listings(
-        list_recursive_sizes(old_prefix), list_recursive_sizes(new_prefix)
-    )
-
-
-def collect_content_metrics(
+def collect_content_stats(
     old_prefix: str,
     new_prefix: str,
     workdir_old: Path,
@@ -279,9 +250,9 @@ def collect_content_metrics(
     new_meta_path: Path,
     old_db_path: Path,
     new_db_path: Path,
-) -> list[dict[str, object]]:
-    """Assemble content-metric rows for the masked virus FASTA and the staged
-    metadata + taxonomy-DB TSVs.
+) -> dict[str, tuple[dict[str, int], dict[str, int]]]:
+    """Per-file content stats keyed by output filename, for merging into the
+    metrics table.
 
     Compressed file sizes are misleading for gzipped FASTAs/TSVs because the gzip
     ratio varies with content; these metrics let reviewers see whether the
@@ -293,26 +264,61 @@ def collect_content_metrics(
     new_fasta_path = fetch(
         new_prefix, "output/results/virus-genomes-masked.fasta.gz", workdir_new
     )
-    return [
-        {
-            "name": "virus-genomes-masked.fasta.gz",
-            "old": fasta_content_stats(old_fasta_path),
-            "new": fasta_content_stats(new_fasta_path),
-            "metrics": ["records", "total_bp", "n_bp"],
-        },
-        {
-            "name": "virus-genome-metadata-gid.tsv.gz",
-            "old": {"rows": tsv_row_count(old_meta_path)},
-            "new": {"rows": tsv_row_count(new_meta_path)},
-            "metrics": ["rows"],
-        },
-        {
-            "name": "total-virus-db-annotated.tsv.gz",
-            "old": {"rows": tsv_row_count(old_db_path)},
-            "new": {"rows": tsv_row_count(new_db_path)},
-            "metrics": ["rows"],
-        },
-    ]
+    return {
+        "virus-genomes-masked.fasta.gz": (
+            fasta_content_stats(old_fasta_path),
+            fasta_content_stats(new_fasta_path),
+        ),
+        "virus-genome-metadata-gid.tsv.gz": (
+            {"rows": tsv_row_count(old_meta_path)},
+            {"rows": tsv_row_count(new_meta_path)},
+        ),
+        "total-virus-db-annotated.tsv.gz": (
+            {"rows": tsv_row_count(old_db_path)},
+            {"rows": tsv_row_count(new_db_path)},
+        ),
+    }
+
+
+def _metric_row(name: str, metric: str, old: int, new: int) -> dict[str, object]:
+    """One long-format comparison row: old/new values, delta, and pct_change."""
+    delta = new - old
+    return {
+        "name": name,
+        "metric": metric,
+        "old": old,
+        "new": new,
+        "delta": delta,
+        "pct_change": round(delta / old * 100, 2) if old else float("nan"),
+    }
+
+
+def compare_metrics(
+    old_sizes: dict[str, int],
+    new_sizes: dict[str, int],
+    content_stats: dict[str, tuple[dict[str, int], dict[str, int]]],
+) -> pd.DataFrame:
+    """Long-format per-entry comparison with columns name, metric, old, new,
+    delta, pct_change.
+
+    Byte sizes (metric "bytes") are emitted for every top-level output entry;
+    files in `content_stats` additionally get their content metrics (FASTA
+    records/bp, TSV row counts). Entries are ordered by absolute byte delta
+    descending, with each file's content rows following its byte row."""
+    names = sorted(
+        set(old_sizes) | set(new_sizes),
+        key=lambda name: abs(new_sizes.get(name, 0) - old_sizes.get(name, 0)),
+        reverse=True,
+    )
+    rows: list[dict[str, object]] = []
+    for name in names:
+        rows.append(
+            _metric_row(name, "bytes", old_sizes.get(name, 0), new_sizes.get(name, 0))
+        )
+        old_stat, new_stat = content_stats.get(name, ({}, {}))
+        for metric in old_stat:
+            rows.append(_metric_row(name, metric, old_stat[metric], new_stat[metric]))
+    return pd.DataFrame(rows)
 
 
 ################################
@@ -919,8 +925,7 @@ def write_facts_json(
     out_dir: Path,
     old: str,
     new: str,
-    sizes: pd.DataFrame,
-    content_rows: list[dict[str, object]],
+    metrics: pd.DataFrame,
     metadata_schema_diff: tuple[list[str], list[str]],
     staleness_rows: list[dict[str, str]],
     lost_categorized: pd.DataFrame,
@@ -944,7 +949,8 @@ def write_facts_json(
     n_reassigned = (
         int(reassigned_flows["n_genomes"].sum()) if not reassigned_flows.empty else 0
     )
-    size_changed = sizes[sizes["delta_bytes"] != 0]
+    size_rows = metrics[metrics["metric"] == "bytes"]
+    size_changed = size_rows[size_rows["delta"] != 0].drop(columns="metric")
     facts = {
         "old": old,
         "new": new,
@@ -952,12 +958,11 @@ def write_facts_json(
         "outputs": OUTPUT_FILES,
         "staleness": staleness_rows,
         "database_sizes": {
-            "shrunk": int((sizes["delta_bytes"] < 0).sum()),
-            "grown": int((sizes["delta_bytes"] > 0).sum()),
-            "unchanged": int((sizes["delta_bytes"] == 0).sum()),
+            "shrunk": int((size_rows["delta"] < 0).sum()),
+            "grown": int((size_rows["delta"] > 0).sum()),
+            "unchanged": int((size_rows["delta"] == 0).sum()),
             "changed_entries": _records(size_changed),
         },
-        "content_metrics": content_rows,
         "metadata_schema_diff": {
             "removed": removed_cols,
             "added": added_cols,
@@ -1033,11 +1038,6 @@ def main() -> None:
     args = parse_arguments()
     args.out.mkdir(parents=True, exist_ok=True)
     logger.info(f"Benchmarking {args.old} -> {args.new}")
-
-    # Per-DB sizes
-    logger.info("Listing per-DB sizes.")
-    sizes = compare_index_sizes(args.old, args.new)
-    sizes.to_csv(args.out / "sizes.tsv", sep="\t", index=False)
 
     with tempfile.TemporaryDirectory() as td_str:
         td = Path(td_str)
@@ -1144,9 +1144,10 @@ def main() -> None:
             args.out / "species_lost_all_genomes.tsv", sep="\t", index=False
         )
 
-        # Content metrics (FASTA records/bp + TSV row counts).
-        logger.info("Computing FASTA / TSV content metrics.")
-        content_rows = collect_content_metrics(
+        # Per-entry sizes (every output entry) plus content metrics (FASTA
+        # records/bp + TSV row counts) for the files that have them.
+        logger.info("Listing per-DB sizes and content metrics.")
+        content_stats = collect_content_stats(
             args.old,
             args.new,
             td / "old",
@@ -1156,6 +1157,12 @@ def main() -> None:
             old_db_path,
             new_db_path,
         )
+        metrics = compare_metrics(
+            list_recursive_sizes(args.old),
+            list_recursive_sizes(args.new),
+            content_stats,
+        )
+        metrics.to_csv(args.out / "sizes.tsv", sep="\t", index=False)
 
         per_host_changes: dict[str, pd.DataFrame] = {}
         host_cols = sorted(
@@ -1256,8 +1263,7 @@ def main() -> None:
         args.out,
         args.old,
         args.new,
-        sizes,
-        content_rows,
+        metrics,
         metadata_schema_diff,
         staleness_rows,
         lost_categorized,

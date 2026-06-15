@@ -59,13 +59,13 @@ are current.
 ### Step 2 - Read facts and TSVs
 
 Read `<outdir>/facts.json` first. It contains compact counts and filenames:
-Kraken2/SILVA staleness rows, size-change counts, content metrics, metadata schema changes,
+Kraken2/SILVA staleness rows, size-change counts, metadata schema changes,
 lost/gained genome reason counts, taxonomy counts, per-host infection-status
 counts, and top-level params changes.
 
 Then read the detailed TSVs needed by the template:
 
-- `sizes.tsv`, `params_diff.txt`, and `facts.json.params.changes` for §2 and §5.
+- `sizes.tsv`, `params_diff.txt`, and `facts.json.params.changes` for §2 and §5. `sizes.tsv` is long-format (one row per `name`, `metric`): rows with `metric == bytes` are the per-entry byte sizes for the §2 size table; the other metrics (`records`, `total_bp`, `n_bp` for the masked FASTA; `rows` for the gid metadata and annotated-DB TSVs) are the content metrics for the §2 content findings (e.g. compressed bytes shrank while row count grew).
 - `genomes_lost_categorized.tsv`, `genomes_gained_categorized.tsv`, `species_lost_all_genomes.tsv`, `species_gained_all_genomes.tsv`, and `genomes_reassigned.tsv` for §3 and appendices.
 - `species_transitions_*.tsv` and `infection_status_transitions.tsv` for §4.
 
