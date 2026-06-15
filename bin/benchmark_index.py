@@ -259,21 +259,23 @@ def _content_stats(path: Path) -> dict[str, int] | None:
 
 
 def collect_content_stats(
-    old_prefix: str, new_prefix: str, names: list[str], workdir: Path
+    old_prefix: str, new_prefix: str, names: list[str]
 ) -> dict[str, tuple[dict[str, int], dict[str, int]]]:
-    """Fetch each named output file from both indexes into `workdir` and return
-    its old/new content stats (FASTA records/bp, TSV rows), keyed by filename."""
-    old_dir = workdir / "old"
-    new_dir = workdir / "new"
-    old_dir.mkdir(exist_ok=True)
-    new_dir.mkdir(exist_ok=True)
+    """Fetch each named output file from both indexes (staging into a private
+    temporary directory) and return its old/new content stats (FASTA records/bp,
+    TSV rows), keyed by filename."""
     stats: dict[str, tuple[dict[str, int], dict[str, int]]] = {}
-    for name in names:
-        subpath = f"output/results/{name}"
-        old_stat = _content_stats(fetch(old_prefix, subpath, old_dir))
-        new_stat = _content_stats(fetch(new_prefix, subpath, new_dir))
-        if old_stat is not None and new_stat is not None:
-            stats[name] = (old_stat, new_stat)
+    with tempfile.TemporaryDirectory() as td:
+        old_dir = Path(td) / "old"
+        new_dir = Path(td) / "new"
+        old_dir.mkdir()
+        new_dir.mkdir()
+        for name in names:
+            subpath = f"output/results/{name}"
+            old_stat = _content_stats(fetch(old_prefix, subpath, old_dir))
+            new_stat = _content_stats(fetch(new_prefix, subpath, new_dir))
+            if old_stat is not None and new_stat is not None:
+                stats[name] = (old_stat, new_stat)
     return stats
 
 
@@ -335,10 +337,7 @@ def write_metrics_table(
         for name in set(old_sizes) & set(new_sizes)
         if name.endswith(_FASTA_SUFFIXES + _TSV_SUFFIXES)
     )
-    with tempfile.TemporaryDirectory() as td:
-        content_stats = collect_content_stats(
-            old_prefix, new_prefix, content_files, Path(td)
-        )
+    content_stats = collect_content_stats(old_prefix, new_prefix, content_files)
     metrics = compare_metrics(old_sizes, new_sizes, content_stats)
     metrics.to_csv(out_path, sep="\t", index=False)
     return metrics
