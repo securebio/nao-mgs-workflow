@@ -1,5 +1,6 @@
 # v3.2.2.0-dev
 
+- Add `set -euo pipefail` to `BLASTN` module.
 - Add `pigz` to the `python` container so Python processes can use parallel (de)compression.
 - CI: Fix the CHANGELOG CI check wrongly failing docs-only PRs that don't update CHANGELOG.md.
 - Publish BLAST database under a fixed `results/blast_db/` directory with a constant `blast_db` alias regardless of database name.
