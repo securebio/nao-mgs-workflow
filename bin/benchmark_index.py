@@ -104,7 +104,7 @@ def latest_kraken_release() -> tuple[str, str] | None:
 
 def latest_silva_release() -> str | None:
     """Return the highest-numbered release_NN[.M] directory in the SILVA FTP root,
-    or None if the fetch fails. Compared as (major, minor) tuples."""
+    or None if the fetch fails."""
     try:
         with urllib.request.urlopen("https://ftp.arb-silva.de/", timeout=15) as resp:
             body = resp.read().decode("utf-8", errors="replace")
@@ -139,6 +139,7 @@ def _staleness_row(
 
 
 def check_kraken_staleness(new_params: dict) -> list[dict[str, str]]:
+    """Compare the index's Kraken2 DB against the latest available release."""
     url = new_params.get("kraken_db", "")
     if not url:
         return []
@@ -147,7 +148,6 @@ def check_kraken_staleness(new_params: dict) -> list[dict[str, str]]:
     latest = latest_kraken_release()
     if latest is None:
         return [_staleness_row("kraken_db", url, current_date)]
-
     latest_date, latest_name = latest
     status = "current" if current_date == latest_date else "stale"
     return [
@@ -156,12 +156,10 @@ def check_kraken_staleness(new_params: dict) -> list[dict[str, str]]:
 
 
 def check_silva_staleness(new_params: dict) -> list[dict[str, str]]:
+    """Compare the index's SILVA SSU/LSU refs against the latest release."""
     keys = [key for key in ("ssu_url", "lsu_url") if new_params.get(key)]
     if not keys:
         return []
-
-    # Hoist the SILVA index fetch out of the per-URL loop — the FTP root
-    # listing is the same for ssu/lsu, so one HTTPS round-trip suffices.
     latest_rel = latest_silva_release()
     rows: list[dict[str, str]] = []
     for key in keys:
