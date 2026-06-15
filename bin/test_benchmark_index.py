@@ -19,7 +19,8 @@ from benchmark_index import (
     build_parent_map,
     categorize_gained_genomes_raw,
     categorize_lost_genomes_raw,
-    check_ref_staleness,
+    check_kraken_staleness,
+    check_silva_staleness,
     classify_coverage,
     compare_size_listings,
     diff_genome_metadata,
@@ -744,18 +745,14 @@ class TestRefStaleness:
     def test_parse_silva_url_release(self, url: str, expected: str) -> None:
         assert parse_silva_url_release(url) == expected
 
-    def test_check_ref_staleness_passive_only(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        # With no Kraken/SILVA URLs in params, only the passive refs should
-        # appear (status=unknown), and no network calls are made.
+    def test_staleness_skips_unchecked_refs(self) -> None:
         params = {
             "human_url": "https://example.com/genome.fa.gz",
             "taxonomy_url": "https://ftp.ncbi.nlm.nih.gov/.../new_taxdump.zip",
+            "virus_host_db_url": "https://example.com/virushostdb.tsv",
         }
-        rows = check_ref_staleness(params)
-        assert {r["ref"] for r in rows} == {"human_url", "taxonomy_url"}
-        assert all(r["status"] == "unknown" for r in rows)
+        assert check_kraken_staleness(params) == []
+        assert check_silva_staleness(params) == []
 
     @pytest.mark.parametrize(
         "current_url,latest_return,expected_status",
@@ -780,7 +777,7 @@ class TestRefStaleness:
             ),
         ],
     )
-    def test_check_ref_staleness_kraken_branches(
+    def test_check_kraken_staleness_branches(
         self,
         monkeypatch: pytest.MonkeyPatch,
         current_url: str,
@@ -790,7 +787,7 @@ class TestRefStaleness:
         monkeypatch.setattr(
             "benchmark_index.latest_kraken_release", lambda: latest_return
         )
-        rows = check_ref_staleness({"kraken_db": current_url})
+        rows = check_kraken_staleness({"kraken_db": current_url})
         kraken_row = next(r for r in rows if r["ref"] == "kraken_db")
         assert kraken_row["status"] == expected_status
 
@@ -817,7 +814,7 @@ class TestRefStaleness:
             ),
         ],
     )
-    def test_check_ref_staleness_silva_branches(
+    def test_check_silva_staleness_branches(
         self,
         monkeypatch: pytest.MonkeyPatch,
         current_url: str,
@@ -827,11 +824,11 @@ class TestRefStaleness:
         monkeypatch.setattr(
             "benchmark_index.latest_silva_release", lambda: latest_return
         )
-        rows = check_ref_staleness({"ssu_url": current_url})
+        rows = check_silva_staleness({"ssu_url": current_url})
         silva_row = next(r for r in rows if r["ref"] == "ssu_url")
         assert silva_row["status"] == expected_status
 
-    def test_check_ref_staleness_silva_call_hoisted(
+    def test_check_silva_staleness_call_hoisted(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         # When both ssu_url and lsu_url are present, latest_silva_release()
@@ -843,7 +840,7 @@ class TestRefStaleness:
             return "138.2"
 
         monkeypatch.setattr("benchmark_index.latest_silva_release", fake)
-        check_ref_staleness(
+        check_silva_staleness(
             {
                 "ssu_url": "https://www.arb-silva.de/.../release_138.2/Exports/ssu.gz",
                 "lsu_url": "https://www.arb-silva.de/.../release_138.2/Exports/lsu.gz",

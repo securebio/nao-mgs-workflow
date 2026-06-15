@@ -110,19 +110,11 @@ def latest_kraken_release() -> tuple[str, str] | None:
         ).stdout
     except (subprocess.SubprocessError, OSError):
         return None
-    dated: list[tuple[str, str]] = []
-    for line in out.splitlines():
-        parts = line.split()
-        if len(parts) < 4:
-            continue
-        name = parts[-1]
-        m = re.match(r"k2_standard_(\d{8})\.tar\.gz$", name)
-        if m:
-            dated.append((m.group(1), name))
-    if not dated:
+    bundles = re.findall(r"\b(k2_standard_(\d{8})\.tar\.gz)\b", out)
+    if not bundles:
         return None
-    dated.sort()
-    return dated[-1]
+    filename, date = max(bundles, key=lambda bundle: bundle[1])
+    return date, filename
 
 
 def parse_silva_url_release(url: str) -> str:
@@ -139,99 +131,80 @@ def latest_silva_release() -> str | None:
             body = resp.read().decode("utf-8", errors="replace")
     except (urllib.error.URLError, OSError, TimeoutError):
         return None
-    releases: set[tuple[int, int]] = set()
-    for m in re.finditer(r"release_(\d+)(?:[._](\d+))?", body):
-        major = int(m.group(1))
-        minor = int(m.group(2)) if m.group(2) else 0
-        releases.add((major, minor))
+    releases = {
+        (int(m.group(1)), int(m.group(2) or 0))
+        for m in re.finditer(r"release_(\d+)(?:[._](\d+))?", body)
+    }
     if not releases:
         return None
-    top = max(releases)
-    return f"{top[0]}.{top[1]}" if top[1] else str(top[0])
+    major, minor = max(releases)
+    return f"{major}.{minor}" if minor else str(major)
 
 
-def check_ref_staleness(new_params: dict) -> list[dict[str, str]]:
-    """Build a list of {ref_name, current, current_date, latest, latest_date, status}
-    rows describing each external reference's freshness.
+def _staleness_row(
+    ref: str,
+    current: str,
+    current_date: str = "",
+    latest: str = "",
+    latest_date: str = "",
+    status: str = "error",
+) -> dict[str, str]:
+    return {
+        "ref": ref,
+        "current": current,
+        "current_date": current_date,
+        "latest": latest,
+        "latest_date": latest_date,
+        "status": status,
+    }
 
-    `status` is one of: "current" (matches latest available), "stale" (newer
-    available), "unknown" (no automated check available; reviewer should confirm
-    manually), or "error" (check attempted but failed)."""
-    rows: list[dict[str, str]] = []
 
-    kraken_url = new_params.get("kraken_db", "")
-    if kraken_url:
-        cur_date = parse_kraken_url_date(kraken_url)
-        latest = latest_kraken_release()
-        if latest is None:
-            rows.append(
-                {
-                    "ref": "kraken_db",
-                    "current": kraken_url,
-                    "current_date": cur_date,
-                    "latest": "",
-                    "latest_date": "",
-                    "status": "error",
-                }
-            )
-        else:
-            latest_date, latest_name = latest
-            status = "current" if cur_date == latest_date else "stale"
-            rows.append(
-                {
-                    "ref": "kraken_db",
-                    "current": kraken_url,
-                    "current_date": cur_date,
-                    "latest": latest_name,
-                    "latest_date": latest_date,
-                    "status": status,
-                }
-            )
+def check_kraken_staleness(new_params: dict) -> list[dict[str, str]]:
+    url = new_params.get("kraken_db", "")
+    if not url:
+        return []
+    current_date = parse_kraken_url_date(url)
+    latest = latest_kraken_release()
+    if latest is None:
+        return [_staleness_row("kraken_db", url, current_date)]
+
+    latest_date, latest_name = latest
+    return [
+        _staleness_row(
+            "kraken_db",
+            url,
+            current_date,
+            latest_name,
+            latest_date,
+            "current" if current_date == latest_date else "stale",
+        )
+    ]
+
+
+def check_silva_staleness(new_params: dict) -> list[dict[str, str]]:
+    keys = [key for key in ("ssu_url", "lsu_url") if new_params.get(key)]
+    if not keys:
+        return []
 
     # Hoist the SILVA index fetch out of the per-URL loop — the FTP root
     # listing is the same for ssu/lsu, so one HTTPS round-trip suffices.
-    silva_keys = [k for k in ("ssu_url", "lsu_url") if new_params.get(k)]
-    latest_rel = latest_silva_release() if silva_keys else None
-    for key in silva_keys:
+    latest_rel = latest_silva_release()
+    rows: list[dict[str, str]] = []
+    for key in keys:
         url = new_params[key]
-        cur_rel = parse_silva_url_release(url)
+        current_release = parse_silva_url_release(url)
         if latest_rel is None:
-            rows.append(
-                {
-                    "ref": key,
-                    "current": url,
-                    "current_date": cur_rel,
-                    "latest": "",
-                    "latest_date": "",
-                    "status": "error",
-                }
-            )
-        else:
-            status = "current" if cur_rel == latest_rel else "stale"
-            rows.append(
-                {
-                    "ref": key,
-                    "current": url,
-                    "current_date": cur_rel,
-                    "latest": f"release_{latest_rel}",
-                    "latest_date": latest_rel,
-                    "status": status,
-                }
-            )
-
-    for key in ("human_url", "taxonomy_url", "virus_host_db_url"):
-        url = new_params.get(key, "")
-        if not url:
+            rows.append(_staleness_row(key, url, current_release))
             continue
         rows.append(
-            {
-                "ref": key,
-                "current": url,
-                "current_date": "",
-                "latest": "",
-                "latest_date": "",
-                "status": "unknown",
-            }
+            _staleness_row(
+                key,
+                url,
+                current_release,
+                f"release_{latest_rel}",
+                latest_rel,
+                "current" if current_release == latest_rel else "stale",
+            )
         )
     return rows
 
@@ -1224,7 +1197,10 @@ def main() -> None:
 
     # Reference-DB staleness — outside the tempdir block; uses only new_params.
     logger.info("Checking reference-DB staleness (Kraken2, SILVA).")
-    staleness_rows = check_ref_staleness(new_params)
+    staleness_rows = [
+        *check_kraken_staleness(new_params),
+        *check_silva_staleness(new_params),
+    ]
 
     params_changes = summarise_params_changes(old_params, new_params)
 
