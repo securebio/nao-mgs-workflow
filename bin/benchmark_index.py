@@ -64,6 +64,183 @@ logger.addHandler(handler)
 ###########
 
 
+def fetch(prefix: str, subpath: str, local_dir: Path) -> Path:
+    """Stage `prefix/subpath` to `local_dir/<basename>` and return the local path."""
+    src = f"{prefix.rstrip('/')}/{subpath}"
+    dst = local_dir / Path(subpath).name
+    if src.startswith("s3://"):
+        logger.info(f"Downloading {src} -> {dst}")
+        subprocess.run(["aws", "s3", "cp", src, str(dst)], check=True)
+    else:
+        logger.info(f"Copying {src} -> {dst}")
+        shutil.copy(src, dst)
+    return dst
+
+
+##########################
+# 1. REFERENCE STALENESS #
+##########################
+
+KRAKEN_BUCKET_LIST_CMD = [
+    "aws",
+    "s3",
+    "ls",
+    "s3://genome-idx/kraken/",
+    "--no-sign-request",
+]
+SILVA_FTP_INDEX = "https://ftp.arb-silva.de/"
+
+
+def parse_kraken_url_date(url: str) -> str:
+    """Extract YYYYMMDD from a Kraken2 standard-bundle URL, or '' if absent."""
+    m = re.search(r"k2_standard_(\d{8})\.tar\.gz", url)
+    return m.group(1) if m else ""
+
+
+def latest_kraken_release() -> tuple[str, str] | None:
+    """Return (date_str, filename) of the most recent k2_standard_*.tar.gz bundle
+    in the public Kraken2 S3 bucket, or None if the listing fails."""
+    try:
+        out = subprocess.run(
+            KRAKEN_BUCKET_LIST_CMD,
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=15,
+        ).stdout
+    except (subprocess.SubprocessError, OSError):
+        return None
+    dated: list[tuple[str, str]] = []
+    for line in out.splitlines():
+        parts = line.split()
+        if len(parts) < 4:
+            continue
+        name = parts[-1]
+        m = re.match(r"k2_standard_(\d{8})\.tar\.gz$", name)
+        if m:
+            dated.append((m.group(1), name))
+    if not dated:
+        return None
+    dated.sort()
+    return dated[-1]
+
+
+def parse_silva_url_release(url: str) -> str:
+    """Extract release identifier (e.g. '138.2') from a SILVA URL, or '' if absent."""
+    m = re.search(r"release_(\d+(?:[._]\d+)?)", url)
+    return m.group(1).replace("_", ".") if m else ""
+
+
+def latest_silva_release() -> str | None:
+    """Return the highest-numbered release_NN[.M] directory in the SILVA FTP root,
+    or None if the fetch fails. Compared as (major, minor) tuples."""
+    try:
+        with urllib.request.urlopen(SILVA_FTP_INDEX, timeout=15) as resp:
+            body = resp.read().decode("utf-8", errors="replace")
+    except (urllib.error.URLError, OSError, TimeoutError):
+        return None
+    releases: set[tuple[int, int]] = set()
+    for m in re.finditer(r"release_(\d+)(?:[._](\d+))?", body):
+        major = int(m.group(1))
+        minor = int(m.group(2)) if m.group(2) else 0
+        releases.add((major, minor))
+    if not releases:
+        return None
+    top = max(releases)
+    return f"{top[0]}.{top[1]}" if top[1] else str(top[0])
+
+
+def check_ref_staleness(new_params: dict) -> list[dict[str, str]]:
+    """Build a list of {ref_name, current, current_date, latest, latest_date, status}
+    rows describing each external reference's freshness.
+
+    `status` is one of: "current" (matches latest available), "stale" (newer
+    available), "unknown" (no automated check available; reviewer should confirm
+    manually), or "error" (check attempted but failed)."""
+    rows: list[dict[str, str]] = []
+
+    kraken_url = new_params.get("kraken_db", "")
+    if kraken_url:
+        cur_date = parse_kraken_url_date(kraken_url)
+        latest = latest_kraken_release()
+        if latest is None:
+            rows.append(
+                {
+                    "ref": "kraken_db",
+                    "current": kraken_url,
+                    "current_date": cur_date,
+                    "latest": "",
+                    "latest_date": "",
+                    "status": "error",
+                }
+            )
+        else:
+            latest_date, latest_name = latest
+            status = "current" if cur_date == latest_date else "stale"
+            rows.append(
+                {
+                    "ref": "kraken_db",
+                    "current": kraken_url,
+                    "current_date": cur_date,
+                    "latest": latest_name,
+                    "latest_date": latest_date,
+                    "status": status,
+                }
+            )
+
+    # Hoist the SILVA index fetch out of the per-URL loop — the FTP root
+    # listing is the same for ssu/lsu, so one HTTPS round-trip suffices.
+    silva_keys = [k for k in ("ssu_url", "lsu_url") if new_params.get(k)]
+    latest_rel = latest_silva_release() if silva_keys else None
+    for key in silva_keys:
+        url = new_params[key]
+        cur_rel = parse_silva_url_release(url)
+        if latest_rel is None:
+            rows.append(
+                {
+                    "ref": key,
+                    "current": url,
+                    "current_date": cur_rel,
+                    "latest": "",
+                    "latest_date": "",
+                    "status": "error",
+                }
+            )
+        else:
+            status = "current" if cur_rel == latest_rel else "stale"
+            rows.append(
+                {
+                    "ref": key,
+                    "current": url,
+                    "current_date": cur_rel,
+                    "latest": f"release_{latest_rel}",
+                    "latest_date": latest_rel,
+                    "status": status,
+                }
+            )
+
+    for key in ("human_url", "taxonomy_url", "virus_host_db_url"):
+        url = new_params.get(key, "")
+        if not url:
+            continue
+        rows.append(
+            {
+                "ref": key,
+                "current": url,
+                "current_date": "",
+                "latest": "",
+                "latest_date": "",
+                "status": "unknown",
+            }
+        )
+    return rows
+
+
+###################################
+# 2. SIZE AND CONTENT COMPARISONS #
+###################################
+
+
 def list_recursive_sizes(prefix: str) -> dict[str, int]:
     """Return a mapping from top-level entry name under `prefix/output/results/`
     to total byte size. Top-level directories are summed across all files; files
@@ -96,24 +273,6 @@ def list_recursive_sizes(prefix: str) -> dict[str, int]:
     return bucket
 
 
-def fetch(prefix: str, subpath: str, local_dir: Path) -> Path:
-    """Stage `prefix/subpath` to `local_dir/<basename>` and return the local path."""
-    src = f"{prefix.rstrip('/')}/{subpath}"
-    dst = local_dir / Path(subpath).name
-    if src.startswith("s3://"):
-        logger.info(f"Downloading {src} -> {dst}")
-        subprocess.run(["aws", "s3", "cp", src, str(dst)], check=True)
-    else:
-        logger.info(f"Copying {src} -> {dst}")
-        shutil.copy(src, dst)
-    return dst
-
-
-###############
-# COMPARISONS #
-###############
-
-
 def compare_size_listings(
     old_sizes: dict[str, int], new_sizes: dict[str, int]
 ) -> pd.DataFrame:
@@ -140,6 +299,38 @@ def compare_size_listings(
         .drop(columns="_abs")
         .reset_index(drop=True)
     )
+
+
+def fasta_content_stats(path: Path) -> dict[str, int]:
+    """Count records, total bp, and masked (N) bp in a (optionally gzipped) FASTA."""
+    opener = gzip.open if str(path).endswith(".gz") else open
+    records = 0
+    total_bp = 0
+    n_bp = 0
+    with opener(path, "rt") as f:  # type: ignore[arg-type]
+        for line in f:
+            if line.startswith(">"):
+                records += 1
+                continue
+            seq = line.rstrip("\n")
+            total_bp += len(seq)
+            n_bp += seq.count("N") + seq.count("n")
+    return {"records": records, "total_bp": total_bp, "n_bp": n_bp}
+
+
+def tsv_row_count(path: Path) -> int:
+    """Count data rows in a (optionally gzipped) TSV (excluding header)."""
+    opener = gzip.open if str(path).endswith(".gz") else open
+    rows = 0
+    with opener(path, "rt") as f:  # type: ignore[arg-type]
+        for _ in f:
+            rows += 1
+    return max(rows - 1, 0)
+
+
+################################
+# 3. GENOME AND TAXONOMY DELTA #
+################################
 
 
 def diff_genome_metadata(
@@ -240,43 +431,6 @@ def diff_taxonomy(
         drop=True
     )
     return added, removed
-
-
-def infection_status_columns(db: pd.DataFrame) -> list[str]:
-    return [c for c in db.columns if c.startswith("infection_status_")]
-
-
-def infection_status_transitions(
-    old_db: pd.DataFrame, new_db: pd.DataFrame, column: str
-) -> pd.DataFrame:
-    """Return a DataFrame of (old, new, count) for shared taxa whose status changed
-    in `column`."""
-    shared = old_db.merge(
-        new_db[["taxid", column]], on="taxid", suffixes=("_old", "_new")
-    )
-    old_col = f"{column}_old" if f"{column}_old" in shared.columns else column
-    new_col = f"{column}_new"
-    changes = shared[shared[old_col] != shared[new_col]]
-    counts = Counter(zip(changes[old_col], changes[new_col], strict=False))
-    rows: list[dict[str, object]] = [
-        {"old": o, "new": n, "count": c} for (o, n), c in counts.most_common()
-    ]
-    return pd.DataFrame(rows)
-
-
-def infection_status_changes(
-    old_db: pd.DataFrame, new_db: pd.DataFrame, column: str
-) -> pd.DataFrame:
-    """Return per-taxon status changes in `column` (taxid, name, rank, old, new)."""
-    shared = old_db[["taxid", "name", "rank", column]].merge(
-        new_db[["taxid", column]], on="taxid", suffixes=("_old", "_new")
-    )
-    old_col = f"{column}_old"
-    new_col = f"{column}_new"
-    changes = shared[shared[old_col] != shared[new_col]].rename(
-        columns={old_col: "old_status", new_col: "new_status"}
-    )
-    return changes.reset_index(drop=True)
 
 
 def build_parent_map(new_db: pd.DataFrame) -> dict[str, str]:
@@ -460,6 +614,65 @@ def categorize_gained_genomes_raw(
     return out.drop(columns=["_release_date"])
 
 
+###############################
+# 4. INFECTION STATUS CHANGES #
+###############################
+
+
+def load_existing_overrides(repo_root: Path) -> dict[str, set[str]]:
+    """Read ref/host-infection-overrides.json and return host -> set of taxids."""
+    path = repo_root / "ref" / "host-infection-overrides.json"
+    out: dict[str, set[str]] = defaultdict(set)
+    if not path.exists():
+        logger.warning(
+            f"No overrides file at {path}; coverage will treat all transitions as uncovered."
+        )
+        return dict(out)
+    data = json.loads(path.read_text())
+    for entry in data.get("overrides", []):
+        taxid = str(entry["taxid"])
+        for host in entry["hosts"]:
+            out[host].add(taxid)
+    return dict(out)
+
+
+def infection_status_columns(db: pd.DataFrame) -> list[str]:
+    return [c for c in db.columns if c.startswith("infection_status_")]
+
+
+def infection_status_transitions(
+    old_db: pd.DataFrame, new_db: pd.DataFrame, column: str
+) -> pd.DataFrame:
+    """Return a DataFrame of (old, new, count) for shared taxa whose status changed
+    in `column`."""
+    shared = old_db.merge(
+        new_db[["taxid", column]], on="taxid", suffixes=("_old", "_new")
+    )
+    old_col = f"{column}_old" if f"{column}_old" in shared.columns else column
+    new_col = f"{column}_new"
+    changes = shared[shared[old_col] != shared[new_col]]
+    counts = Counter(zip(changes[old_col], changes[new_col], strict=False))
+    rows: list[dict[str, object]] = [
+        {"old": o, "new": n, "count": c} for (o, n), c in counts.most_common()
+    ]
+    return pd.DataFrame(rows)
+
+
+def infection_status_changes(
+    old_db: pd.DataFrame, new_db: pd.DataFrame, column: str
+) -> pd.DataFrame:
+    """Return per-taxon status changes in `column` (taxid, name, rank, old, new)."""
+    shared = old_db[["taxid", "name", "rank", column]].merge(
+        new_db[["taxid", column]], on="taxid", suffixes=("_old", "_new")
+    )
+    old_col = f"{column}_old"
+    new_col = f"{column}_new"
+    changes = shared[shared[old_col] != shared[new_col]].rename(
+        columns={old_col: "old_status", new_col: "new_status"}
+    )
+    return changes.reset_index(drop=True)
+
+
 def classify_coverage(
     taxid: str,
     parent_map: dict[str, str],
@@ -553,6 +766,11 @@ def annotate_changes_with_coverage(
     return out
 
 
+##################
+# 5. PARAMS DIFF #
+##################
+
+
 def summarise_params_changes(old_params: dict, new_params: dict) -> pd.DataFrame:
     """Top-level key-by-key change summary for `index-params.json`. Each row
     describes one key with kind ∈ {added, removed, changed} and short string
@@ -603,197 +821,6 @@ def diff_params(old_params: dict, new_params: dict) -> str:
             tofile="new/index-params.json",
         )
     )
-
-
-####################
-# CONTENT METRICS  #
-####################
-
-
-def fasta_content_stats(path: Path) -> dict[str, int]:
-    """Count records, total bp, and masked (N) bp in a (optionally gzipped) FASTA."""
-    opener = gzip.open if str(path).endswith(".gz") else open
-    records = 0
-    total_bp = 0
-    n_bp = 0
-    with opener(path, "rt") as f:  # type: ignore[arg-type]
-        for line in f:
-            if line.startswith(">"):
-                records += 1
-                continue
-            seq = line.rstrip("\n")
-            total_bp += len(seq)
-            n_bp += seq.count("N") + seq.count("n")
-    return {"records": records, "total_bp": total_bp, "n_bp": n_bp}
-
-
-def tsv_row_count(path: Path) -> int:
-    """Count data rows in a (optionally gzipped) TSV (excluding header)."""
-    opener = gzip.open if str(path).endswith(".gz") else open
-    rows = 0
-    with opener(path, "rt") as f:  # type: ignore[arg-type]
-        for _ in f:
-            rows += 1
-    return max(rows - 1, 0)
-
-
-######################
-# REFERENCE STALENESS #
-######################
-
-KRAKEN_BUCKET_LIST_CMD = [
-    "aws",
-    "s3",
-    "ls",
-    "s3://genome-idx/kraken/",
-    "--no-sign-request",
-]
-SILVA_FTP_INDEX = "https://ftp.arb-silva.de/"
-
-
-def parse_kraken_url_date(url: str) -> str:
-    """Extract YYYYMMDD from a Kraken2 standard-bundle URL, or '' if absent."""
-    m = re.search(r"k2_standard_(\d{8})\.tar\.gz", url)
-    return m.group(1) if m else ""
-
-
-def latest_kraken_release() -> tuple[str, str] | None:
-    """Return (date_str, filename) of the most recent k2_standard_*.tar.gz bundle
-    in the public Kraken2 S3 bucket, or None if the listing fails."""
-    try:
-        out = subprocess.run(
-            KRAKEN_BUCKET_LIST_CMD,
-            check=True,
-            capture_output=True,
-            text=True,
-            timeout=15,
-        ).stdout
-    except (subprocess.SubprocessError, OSError):
-        return None
-    dated: list[tuple[str, str]] = []
-    for line in out.splitlines():
-        parts = line.split()
-        if len(parts) < 4:
-            continue
-        name = parts[-1]
-        m = re.match(r"k2_standard_(\d{8})\.tar\.gz$", name)
-        if m:
-            dated.append((m.group(1), name))
-    if not dated:
-        return None
-    dated.sort()
-    return dated[-1]
-
-
-def parse_silva_url_release(url: str) -> str:
-    """Extract release identifier (e.g. '138.2') from a SILVA URL, or '' if absent."""
-    m = re.search(r"release_(\d+(?:[._]\d+)?)", url)
-    return m.group(1).replace("_", ".") if m else ""
-
-
-def latest_silva_release() -> str | None:
-    """Return the highest-numbered release_NN[.M] directory in the SILVA FTP root,
-    or None if the fetch fails. Compared as (major, minor) tuples."""
-    try:
-        with urllib.request.urlopen(SILVA_FTP_INDEX, timeout=15) as resp:
-            body = resp.read().decode("utf-8", errors="replace")
-    except (urllib.error.URLError, OSError, TimeoutError):
-        return None
-    releases: set[tuple[int, int]] = set()
-    for m in re.finditer(r"release_(\d+)(?:[._](\d+))?", body):
-        major = int(m.group(1))
-        minor = int(m.group(2)) if m.group(2) else 0
-        releases.add((major, minor))
-    if not releases:
-        return None
-    top = max(releases)
-    return f"{top[0]}.{top[1]}" if top[1] else str(top[0])
-
-
-def check_ref_staleness(new_params: dict) -> list[dict[str, str]]:
-    """Build a list of {ref_name, current, current_date, latest, latest_date, status}
-    rows describing each external reference's freshness.
-
-    `status` is one of: "current" (matches latest available), "stale" (newer
-    available), "unknown" (no automated check available; reviewer should confirm
-    manually), or "error" (check attempted but failed)."""
-    rows: list[dict[str, str]] = []
-
-    kraken_url = new_params.get("kraken_db", "")
-    if kraken_url:
-        cur_date = parse_kraken_url_date(kraken_url)
-        latest = latest_kraken_release()
-        if latest is None:
-            rows.append(
-                {
-                    "ref": "kraken_db",
-                    "current": kraken_url,
-                    "current_date": cur_date,
-                    "latest": "",
-                    "latest_date": "",
-                    "status": "error",
-                }
-            )
-        else:
-            latest_date, latest_name = latest
-            status = "current" if cur_date == latest_date else "stale"
-            rows.append(
-                {
-                    "ref": "kraken_db",
-                    "current": kraken_url,
-                    "current_date": cur_date,
-                    "latest": latest_name,
-                    "latest_date": latest_date,
-                    "status": status,
-                }
-            )
-
-    # Hoist the SILVA index fetch out of the per-URL loop — the FTP root
-    # listing is the same for ssu/lsu, so one HTTPS round-trip suffices.
-    silva_keys = [k for k in ("ssu_url", "lsu_url") if new_params.get(k)]
-    latest_rel = latest_silva_release() if silva_keys else None
-    for key in silva_keys:
-        url = new_params[key]
-        cur_rel = parse_silva_url_release(url)
-        if latest_rel is None:
-            rows.append(
-                {
-                    "ref": key,
-                    "current": url,
-                    "current_date": cur_rel,
-                    "latest": "",
-                    "latest_date": "",
-                    "status": "error",
-                }
-            )
-        else:
-            status = "current" if cur_rel == latest_rel else "stale"
-            rows.append(
-                {
-                    "ref": key,
-                    "current": url,
-                    "current_date": cur_rel,
-                    "latest": f"release_{latest_rel}",
-                    "latest_date": latest_rel,
-                    "status": status,
-                }
-            )
-
-    for key in ("human_url", "taxonomy_url", "virus_host_db_url"):
-        url = new_params.get(key, "")
-        if not url:
-            continue
-        rows.append(
-            {
-                "ref": key,
-                "current": url,
-                "current_date": "",
-                "latest": "",
-                "latest_date": "",
-                "status": "unknown",
-            }
-        )
-    return rows
 
 
 ###############
@@ -1013,23 +1040,6 @@ def parse_arguments() -> argparse.Namespace:
         "which existing rule (if any) covers them.",
     )
     return parser.parse_args()
-
-
-def load_existing_overrides(repo_root: Path) -> dict[str, set[str]]:
-    """Read ref/host-infection-overrides.json and return host -> set of taxids."""
-    path = repo_root / "ref" / "host-infection-overrides.json"
-    out: dict[str, set[str]] = defaultdict(set)
-    if not path.exists():
-        logger.warning(
-            f"No overrides file at {path}; coverage will treat all transitions as uncovered."
-        )
-        return dict(out)
-    data = json.loads(path.read_text())
-    for entry in data.get("overrides", []):
-        taxid = str(entry["taxid"])
-        for host in entry["hosts"]:
-            out[host].add(taxid)
-    return dict(out)
 
 
 def main() -> None:
