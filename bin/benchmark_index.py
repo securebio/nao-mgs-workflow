@@ -83,8 +83,8 @@ def fetch(prefix: str, subpath: str, local_dir: Path) -> Path:
 
 
 def latest_kraken_release() -> tuple[str, str] | None:
-    """Return (date_str, filename) of the most recent k2_standard_*.tar.gz bundle
-    in the public Kraken2 S3 bucket, or None if the listing fails."""
+    """(date, filename) of the newest k2_standard_*.tar.gz in the public Kraken2
+    bucket, or None on failure."""
     try:
         out = subprocess.run(
             ["aws", "s3", "ls", "s3://genome-idx/kraken/", "--no-sign-request"],
@@ -103,8 +103,7 @@ def latest_kraken_release() -> tuple[str, str] | None:
 
 
 def latest_silva_release() -> str | None:
-    """Return the highest-numbered release_NN[.M] directory in the SILVA FTP root,
-    or None if the fetch fails."""
+    """Highest release_NN[.M] directory in the SILVA FTP root, or None on failure."""
     try:
         with urllib.request.urlopen("https://ftp.arb-silva.de/", timeout=15) as resp:
             body = resp.read().decode("utf-8", errors="replace")
@@ -183,15 +182,24 @@ def check_reference_staleness(new_params: dict) -> list[dict[str, str]]:
     return [*check_kraken_staleness(new_params), *check_silva_staleness(new_params)]
 
 
+def write_staleness_table(new_params: dict, out_path: Path) -> list[dict[str, str]]:
+    """Check Kraken2/SILVA freshness for the new index, write the rows, return them."""
+    logger.info("Checking reference-DB staleness (Kraken2, SILVA).")
+    rows = check_reference_staleness(new_params)
+    pd.DataFrame(rows, columns=list(_staleness_row("", ""))).to_csv(
+        out_path, sep="\t", index=False
+    )
+    return rows
+
+
 ###################################
 # 2. SIZE AND CONTENT COMPARISONS #
 ###################################
 
 
 def list_recursive_sizes(prefix: str) -> dict[str, int]:
-    """Return a mapping from top-level entry name under `prefix/output/results/`
-    to total byte size. Top-level directories are summed across all files; files
-    at `output/results/` itself are keyed by basename. Accepts s3:// or local."""
+    """Map each top-level entry under `prefix/output/results/` to its total bytes
+    (directories summed; files keyed by basename). Accepts s3:// or local."""
     base = f"{prefix.rstrip('/')}/output/results/"
     sizes: Counter[str] = Counter()
     if prefix.startswith("s3://"):
@@ -216,18 +224,15 @@ def list_recursive_sizes(prefix: str) -> dict[str, int]:
     return dict(sizes)
 
 
-# Output files we measure beyond byte size, dispatched by suffix. FASTAs get
-# record/bp counts; TSVs get row counts. Anything else (.dmp, .bin, indexes) is
-# size-only. Compressed sizes are misleading for gzipped FASTAs/TSVs because the
-# gzip ratio varies with content, so these expose real content growth/shrinkage.
+# Suffixes that get content metrics beyond byte size; gzip ratio varies with
+# content, so compressed bytes alone can mislead.
 _FASTA_SUFFIXES = (".fasta.gz", ".fasta", ".fa.gz", ".fa")
 _TSV_SUFFIXES = (".tsv.gz", ".tsv")
 
 
 def _content_stats(path: Path) -> dict[str, int] | None:
-    """Content stats for an (optionally gzipped) output file, dispatched by
-    suffix: FASTA record/total-bp/masked-(N)-bp counts, TSV data-row count
-    (excluding header), or None for anything else (size-only)."""
+    """FASTA (records/bp/masked-bp) or TSV (data rows) stats for an optionally
+    gzipped file; None for non-content suffixes."""
     name = path.name
     if not name.endswith(_FASTA_SUFFIXES + _TSV_SUFFIXES):
         return None
@@ -248,9 +253,8 @@ def _content_stats(path: Path) -> dict[str, int] | None:
 def collect_content_stats(
     old_prefix: str, new_prefix: str, names: list[str]
 ) -> dict[str, tuple[dict[str, int], dict[str, int]]]:
-    """Fetch each named output file from both indexes (staging into a private
-    temporary directory) and return its old/new content stats (FASTA records/bp,
-    TSV rows), keyed by filename."""
+    """Fetch each named file from both indexes (into a temp dir) and return its
+    old/new content stats, keyed by filename."""
     stats: dict[str, tuple[dict[str, int], dict[str, int]]] = {}
     with tempfile.TemporaryDirectory() as td:
         old_dir = Path(td) / "old"
@@ -284,13 +288,9 @@ def compare_metrics(
     new_sizes: dict[str, int],
     content_stats: dict[str, tuple[dict[str, int], dict[str, int]]],
 ) -> pd.DataFrame:
-    """Long-format per-entry comparison with columns name, metric, old, new,
-    delta, pct_change.
-
-    Byte sizes (metric "bytes") are emitted for every top-level output entry;
-    files in `content_stats` additionally get their content metrics (FASTA
-    records/bp, TSV row counts). Entries are ordered by absolute byte delta
-    descending, with each file's content rows following its byte row."""
+    """Long-format comparison (columns: name, metric, old, new, delta, pct_change):
+    a "bytes" row per output entry, ordered by absolute byte delta, with each
+    file's content-metric rows following its byte row."""
     names = sorted(
         set(old_sizes) | set(new_sizes),
         key=lambda name: abs(new_sizes.get(name, 0) - old_sizes.get(name, 0)),
@@ -310,12 +310,8 @@ def compare_metrics(
 def write_metrics_table(
     old_prefix: str, new_prefix: str, out_path: Path
 ) -> pd.DataFrame:
-    """Compare per-entry sizes and content metrics between two index prefixes,
-    write the long-format table to `out_path`, and return it for facts.json.
-
-    Self-contained: content files are discovered from the output listing
-    (FASTA/TSV entries present in both indexes) and staged in a private temporary
-    directory, so the only inputs are the two prefixes and the destination path."""
+    """Build the long-format size + content table (content files discovered from
+    the listing: FASTA/TSV entries in both indexes), write it, and return it."""
     logger.info("Listing per-DB sizes and content metrics.")
     old_sizes = list_recursive_sizes(old_prefix)
     new_sizes = list_recursive_sizes(new_prefix)
@@ -830,6 +826,7 @@ def diff_params(old_params: dict, new_params: dict) -> str:
 ###############
 
 OUTPUT_FILES = {
+    "staleness": "staleness.tsv",
     "sizes": "sizes.tsv",
     "genomes_added": "genomes_added.tsv",
     "genomes_removed": "genomes_removed.tsv",
@@ -1184,8 +1181,7 @@ def main() -> None:
             )
 
     # Reference-DB staleness — outside the tempdir block; uses only new_params.
-    logger.info("Checking reference-DB staleness (Kraken2, SILVA).")
-    staleness_rows = check_reference_staleness(new_params)
+    staleness_rows = write_staleness_table(new_params, args.out / "staleness.tsv")
 
     params_changes = summarise_params_changes(old_params, new_params)
 

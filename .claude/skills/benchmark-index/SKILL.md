@@ -65,6 +65,7 @@ counts, and top-level params changes.
 
 Then read the detailed TSVs needed by the template:
 
+- `staleness.tsv` for §1 (same rows as `facts.json.staleness`).
 - `sizes.tsv`, `params_diff.txt`, and `facts.json.params.changes` for §2 and §5. `sizes.tsv` is long-format (one row per `name`, `metric`): rows with `metric == bytes` are the per-entry byte sizes for the §2 size table; the other metrics are content metrics for the §2 content findings (`records`, `total_bp`, `n_bp` for each FASTA output; `rows` for each TSV output, for every FASTA/TSV present in both indexes). These let you flag cases where compressed bytes moved opposite to actual content (e.g. bytes shrank while row count grew).
 - `genomes_lost_categorized.tsv`, `genomes_gained_categorized.tsv`, `species_lost_all_genomes.tsv`, `species_gained_all_genomes.tsv`, and `genomes_reassigned.tsv` for §3 and appendices.
 - `species_transitions_*.tsv` and `infection_status_transitions.tsv` for §4.

@@ -37,6 +37,7 @@ from benchmark_index import (
     summarise_params_changes,
     surveilled_species,
     write_metrics_table,
+    write_staleness_table,
 )
 
 ###########
@@ -871,6 +872,28 @@ class TestRefStaleness:
             }
         )
         assert calls["n"] == 1
+
+    def test_write_staleness_table_writes_rows(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(
+            "benchmark_index.latest_kraken_release",
+            lambda: ("20260226", "k2_standard_20260226.tar.gz"),
+        )
+        out = tmp_path / "staleness.tsv"
+        rows = write_staleness_table(
+            {"kraken_db": ".../k2_standard_20250714.tar.gz"}, out
+        )
+        assert rows[0]["status"] == "stale"
+        df = pd.read_csv(out, sep="\t")
+        assert list(df["ref"]) == ["kraken_db"]
+
+    def test_write_staleness_table_empty_has_header(self, tmp_path: Path) -> None:
+        out = tmp_path / "staleness.tsv"
+        assert write_staleness_table({}, out) == []
+        df = pd.read_csv(out, sep="\t")
+        assert df.empty
+        assert "status" in df.columns
 
 
 class TestSummariseParamsChanges:
