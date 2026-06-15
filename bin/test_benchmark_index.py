@@ -683,8 +683,19 @@ class TestCategorizeLostGenomesRaw:
             "gS": "other",
         }
         assert out["reason"].to_dict() == expected
-        assert out.loc["gH", "reason_taxid"] == "70"
-        assert out.loc["gR", "reason_taxid"] == "810"  # new leaf, not species rollup
+        # reason_taxid: "" for the pre-taxon rules, else the relevant taxon.
+        assert out["reason_taxid"].to_dict() == {
+            "gA": "",  # absent_from_ncbi
+            "gN": "",  # non_current_genome_version
+            "gH": "70",  # hard-exclude ancestor, not the leaf
+            "gR": "810",  # new leaf, not species rollup
+            "gD": "800",  # demotion → new leaf
+            "gO": "900",  # other → new leaf
+            "gL": "810",
+            "gS": "950",
+        }
+        # Temp join columns must not leak into the output.
+        assert not {"_new_leaf", "_new_status"} & set(out.columns)
 
     def test_empty_input(self, raw_meta: pd.DataFrame, new_db: pd.DataFrame) -> None:
         empty = pd.DataFrame(
@@ -1084,8 +1095,21 @@ class TestCategorizeGainedGenomesRaw:
             "gS": "pre_existing_reincluded",
         }
         assert out["reason"].to_dict() == expected
-        assert out.loc["gHI", "reason_taxid"] == "50"  # matched override ancestor
+        # reason_taxid: hard-include ancestor for overrides, else the new leaf.
+        assert out["reason_taxid"].to_dict() == {
+            "gNEW": "600",
+            "gRS": "300",
+            "gHI": "50",  # matched override ancestor
+            "gNT": "700",
+            "gPR": "400",
+            "gOT": "800",
+            "gU": "800",
+            "gHI_U": "50",
+            "gNT_U": "700",
+            "gS": "950",
+        }
         assert out.loc["gRS", "source_database"] == "SOURCE_DATABASE_REFSEQ"
+        assert "_release_date" not in out.columns
 
     def test_empty_input_has_columns(
         self, raw_meta: pd.DataFrame, old_db: pd.DataFrame
