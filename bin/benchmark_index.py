@@ -32,7 +32,7 @@ import urllib.request
 from collections import Counter, defaultdict
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import IO, Any
+from typing import Any
 
 import pandas as pd
 
@@ -188,11 +188,6 @@ def check_reference_staleness(new_params: dict) -> list[dict[str, str]]:
 ###################################
 
 
-def _open_text(path: Path) -> IO[str]:
-    """Open a (optionally gzipped) file in text mode."""
-    return (gzip.open if str(path).endswith(".gz") else open)(path, "rt")
-
-
 def list_recursive_sizes(prefix: str) -> dict[str, int]:
     """Return a mapping from top-level entry name under `prefix/output/results/`
     to total byte size. Top-level directories are summed across all files; files
@@ -221,26 +216,6 @@ def list_recursive_sizes(prefix: str) -> dict[str, int]:
     return dict(sizes)
 
 
-def fasta_content_stats(path: Path) -> dict[str, int]:
-    """Count records, total bp, and masked (N) bp in a (optionally gzipped) FASTA."""
-    records = total_bp = n_bp = 0
-    with _open_text(path) as f:
-        for line in f:
-            if line.startswith(">"):
-                records += 1
-            else:
-                seq = line.rstrip("\n")
-                total_bp += len(seq)
-                n_bp += seq.count("N") + seq.count("n")
-    return {"records": records, "total_bp": total_bp, "n_bp": n_bp}
-
-
-def tsv_row_count(path: Path) -> int:
-    """Count data rows in a (optionally gzipped) TSV (excluding header)."""
-    with _open_text(path) as f:
-        return max(sum(1 for _ in f) - 1, 0)
-
-
 # Output files we measure beyond byte size, dispatched by suffix. FASTAs get
 # record/bp counts; TSVs get row counts. Anything else (.dmp, .bin, indexes) is
 # size-only. Compressed sizes are misleading for gzipped FASTAs/TSVs because the
@@ -250,12 +225,24 @@ _TSV_SUFFIXES = (".tsv.gz", ".tsv")
 
 
 def _content_stats(path: Path) -> dict[str, int] | None:
-    """FASTA records/bp or TSV row count for an output file, or None if neither."""
-    if path.name.endswith(_FASTA_SUFFIXES):
-        return fasta_content_stats(path)
-    if path.name.endswith(_TSV_SUFFIXES):
-        return {"rows": tsv_row_count(path)}
-    return None
+    """Content stats for an (optionally gzipped) output file, dispatched by
+    suffix: FASTA record/total-bp/masked-(N)-bp counts, TSV data-row count
+    (excluding header), or None for anything else (size-only)."""
+    name = path.name
+    if not name.endswith(_FASTA_SUFFIXES + _TSV_SUFFIXES):
+        return None
+    with gzip.open(path, "rt") if name.endswith(".gz") else open(path) as f:
+        if name.endswith(_TSV_SUFFIXES):
+            return {"rows": max(sum(1 for _ in f) - 1, 0)}
+        records = total_bp = n_bp = 0
+        for line in f:
+            if line.startswith(">"):
+                records += 1
+            else:
+                seq = line.rstrip("\n")
+                total_bp += len(seq)
+                n_bp += seq.count("N") + seq.count("n")
+        return {"records": records, "total_bp": total_bp, "n_bp": n_bp}
 
 
 def collect_content_stats(

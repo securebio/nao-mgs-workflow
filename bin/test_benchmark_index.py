@@ -17,6 +17,7 @@ import pandas as pd
 import pytest
 from benchmark_index import (
     _ancestor_in,
+    _content_stats,
     annotate_changes_with_coverage,
     build_parent_map,
     categorize_gained_genomes_raw,
@@ -29,14 +30,12 @@ from benchmark_index import (
     diff_params,
     diff_reassignments,
     diff_taxonomy,
-    fasta_content_stats,
     includes_for_other_hosts,
     infection_status_changes,
     infection_status_columns,
     infection_status_transitions,
     summarise_params_changes,
     surveilled_species,
-    tsv_row_count,
     write_metrics_table,
 )
 
@@ -704,24 +703,27 @@ class TestCategorizeLostGenomesRaw:
         assert "reason_taxid" in out.columns
 
 
-class TestContentMetrics:
-    def test_fasta_stats_counts_records_bp_and_n(self, tmp_path: Path) -> None:
+class TestContentStats:
+    def test_fasta_counts_records_bp_and_n(self, tmp_path: Path) -> None:
         fa = tmp_path / "sample.fa"
         fa.write_text(">r1\nACGT\nNNNN\n>r2\nACgtN\n")
-        stats = fasta_content_stats(fa)
-        assert stats == {"records": 2, "total_bp": 13, "n_bp": 5}
+        assert _content_stats(fa) == {"records": 2, "total_bp": 13, "n_bp": 5}
 
-    def test_fasta_stats_handles_gzip(self, tmp_path: Path) -> None:
+    def test_handles_gzip(self, tmp_path: Path) -> None:
         fa = tmp_path / "sample.fa.gz"
         with gzip.open(fa, "wt") as f:
             f.write(">a\nACGTACGT\n>b\nNN\n")
-        stats = fasta_content_stats(fa)
-        assert stats == {"records": 2, "total_bp": 10, "n_bp": 2}
+        assert _content_stats(fa) == {"records": 2, "total_bp": 10, "n_bp": 2}
 
     def test_tsv_row_count_excludes_header(self, tmp_path: Path) -> None:
         t = tmp_path / "x.tsv"
         t.write_text("a\tb\n1\t2\n3\t4\n5\t6\n")
-        assert tsv_row_count(t) == 3
+        assert _content_stats(t) == {"rows": 3}
+
+    def test_non_content_suffix_returns_none(self, tmp_path: Path) -> None:
+        p = tmp_path / "taxonomy-names.dmp"
+        p.write_text("a\nb\nc\n")
+        assert _content_stats(p) is None
 
 
 class TestWriteMetricsTable:
