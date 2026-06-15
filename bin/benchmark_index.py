@@ -460,6 +460,53 @@ def surveilled_species(new_db: pd.DataFrame, screened_hosts: list[str]) -> set[s
     return set(new_db.loc[mask, "taxid"].astype(str))
 
 
+def _empty_categorized(df: pd.DataFrame, *cols: str) -> pd.DataFrame:
+    """Copy `df` and add empty string columns (the empty-input case)."""
+    out = df.copy()
+    for col in cols:
+        out[col] = pd.Series(dtype=str)
+    return out
+
+
+def _surveilled_predicate(
+    leaf: pd.Series, db: pd.DataFrame, screened_hosts: list[str]
+) -> pd.Series:
+    """Per-leaf mask: surveilled if the leaf or its species rollup is positive in
+    `db`, matching `filter_viral_genbank_metadata.py`'s leaf-OR-species rule."""
+    surveilled = surveilled_species(db, screened_hosts)
+    species_of = (
+        dict(
+            zip(db["taxid"].astype(str), db["taxid_species"].astype(str), strict=False)
+        )
+        if "taxid_species" in db.columns
+        else {}
+    )
+    return leaf.isin(surveilled) | leaf.map(species_of).isin(surveilled)
+
+
+def _lineage_match(
+    leaf: pd.Series, parent_map: dict[str, str], targets: set[str]
+) -> pd.Series:
+    """Per-leaf first ancestor (or self) in `targets`, else "" (see _ancestor_in)."""
+    return leaf.apply(lambda t: _ancestor_in(t, parent_map, targets) if t else "")
+
+
+def _assign_first_match(
+    index: pd.Index, rules: list[tuple[pd.Series, str, pd.Series | str]]
+) -> tuple[pd.Series, pd.Series]:
+    """Apply (mask, reason, reason_taxid) rules in priority order — each row takes
+    the first rule whose mask holds. reason_taxid is a per-row Series or a constant."""
+    reason = pd.Series("", index=index, dtype=str)
+    reason_taxid = pd.Series("", index=index, dtype=str)
+    for mask, label, taxids in rules:
+        target = mask & (reason == "")
+        reason.loc[target] = label
+        reason_taxid.loc[target] = (
+            taxids.loc[target] if isinstance(taxids, pd.Series) else taxids
+        )
+    return reason, reason_taxid
+
+
 def categorize_lost_genomes_raw(
     removed: pd.DataFrame,
     raw_meta: pd.DataFrame,
@@ -468,74 +515,41 @@ def categorize_lost_genomes_raw(
     excluded_taxids: set[str],
     screened_hosts: list[str],
 ) -> pd.DataFrame:
-    """Categorize lost genome IDs by first matching rule in the decision tree.
-
-    The genome identity is the assigned leaf taxon. The species rollup is used
-    only by the surveillance predicate, matching `filter_viral_genbank_metadata.py`.
-    """
-    out = removed.copy()
-    if out.empty:
-        out["reason"] = pd.Series(dtype=str)
-        out["reason_taxid"] = pd.Series(dtype=str)
-        return out
-
+    """Categorize lost genome IDs by first matching rule. Identity is the assigned
+    leaf taxon; the species rollup feeds only the surveillance predicate."""
+    if removed.empty:
+        return _empty_categorized(removed, "reason", "reason_taxid")
     raw = raw_meta[["assembly_accession", "taxid", "assembly_status"]].rename(
         columns={"taxid": "_new_leaf", "assembly_status": "_new_status"}
     )
-    out = out.merge(raw, on="assembly_accession", how="left", sort=False)
+    out = removed.merge(raw, on="assembly_accession", how="left", sort=False)
     old_leaf = out["taxid"].astype(str)
     new_leaf = out["_new_leaf"].fillna("").astype(str)
     raw_present = out["_new_leaf"].notna()
     current = out["_new_status"] == "current"
-
-    species_of = (
-        dict(
-            zip(
-                new_db["taxid"].astype(str),
-                new_db["taxid_species"].astype(str),
-                strict=False,
-            )
-        )
-        if "taxid_species" in new_db.columns
-        else {}
-    )
-    surveilled = surveilled_species(new_db, screened_hosts)
-    new_surveilled = new_leaf.isin(surveilled) | new_leaf.map(species_of).isin(
-        surveilled
-    )
-    hard_exclude = new_leaf.apply(
-        lambda taxid: _ancestor_in(taxid, parent_map, excluded_taxids) if taxid else ""
-    )
-
-    reason = pd.Series("", index=out.index, dtype=str)
-    reason_taxid = pd.Series("", index=out.index, dtype=str)
-
-    def assign(mask: pd.Series, label: str, taxids: pd.Series | str = "") -> None:
-        target = mask & (reason == "")
-        reason.loc[target] = label
-        if isinstance(taxids, pd.Series):
-            reason_taxid.loc[target] = taxids.loc[target]
-        else:
-            reason_taxid.loc[target] = taxids
-
     present_current = raw_present & current
-    assign(~raw_present, "absent_from_ncbi")
-    assign(raw_present & ~current, "non_current_genome_version")
-    assign(present_current & (hard_exclude != ""), "hard_excluded", hard_exclude)
-    assign(
-        present_current & ~new_surveilled & (new_leaf != old_leaf),
-        "reassigned_to_excluded",
-        new_leaf,
-    )
-    assign(
-        present_current & ~new_surveilled & (new_leaf == old_leaf),
-        "infection_status_demotion",
-        new_leaf,
-    )
-    assign(reason == "", "other", new_leaf)
+    surveilled = _surveilled_predicate(new_leaf, new_db, screened_hosts)
+    hard_exclude = _lineage_match(new_leaf, parent_map, excluded_taxids)
 
-    out["reason"] = reason
-    out["reason_taxid"] = reason_taxid
+    out["reason"], out["reason_taxid"] = _assign_first_match(
+        out.index,
+        [
+            (~raw_present, "absent_from_ncbi", ""),
+            (raw_present & ~current, "non_current_genome_version", ""),
+            (present_current & (hard_exclude != ""), "hard_excluded", hard_exclude),
+            (
+                present_current & ~surveilled & (new_leaf != old_leaf),
+                "reassigned_to_excluded",
+                new_leaf,
+            ),
+            (
+                present_current & ~surveilled & (new_leaf == old_leaf),
+                "infection_status_demotion",
+                new_leaf,
+            ),
+            (pd.Series(True, index=out.index), "other", new_leaf),
+        ],
+    )
     return out.drop(columns=["_new_leaf", "_new_status"])
 
 
@@ -549,60 +563,32 @@ def categorize_gained_genomes_raw(
     old_build_date: str,
 ) -> pd.DataFrame:
     """Categorize gained genome IDs by first matching rule in the decision tree."""
-    out = added.copy()
-    if out.empty:
-        out["reason"] = pd.Series(dtype=str)
-        out["reason_taxid"] = pd.Series(dtype=str)
-        out["source_database"] = pd.Series(dtype=str)
-        return out
-
+    if added.empty:
+        return _empty_categorized(added, "reason", "reason_taxid", "source_database")
     raw = raw_meta[["assembly_accession", "release_date", "source_database"]].rename(
         columns={"release_date": "_release_date"}
     )
-    out = out.merge(raw, on="assembly_accession", how="left", sort=False)
+    out = added.merge(raw, on="assembly_accession", how="left", sort=False)
     new_leaf = out["taxid"].astype(str)
     release = out["_release_date"].fillna("").astype(str)
-
     all_included = set().union(*included_taxids.values()) if included_taxids else set()
-    hard_include = new_leaf.apply(
-        lambda taxid: _ancestor_in(taxid, parent_map, all_included) if taxid else ""
-    )
+    hard_include = _lineage_match(new_leaf, parent_map, all_included)
     old_db_taxids = (
         set(old_db["taxid"].astype(str)) if "taxid" in old_db.columns else set()
     )
-    old_surv = surveilled_species(old_db, screened_hosts)
-    old_species_of = (
-        dict(
-            zip(
-                old_db["taxid"].astype(str),
-                old_db["taxid_species"].astype(str),
-                strict=False,
-            )
-        )
-        if "taxid_species" in old_db.columns
-        else {}
+    old_surveilled = _surveilled_predicate(new_leaf, old_db, screened_hosts)
+
+    out["reason"], out["reason_taxid"] = _assign_first_match(
+        out.index,
+        [
+            ((release != "") & (release > old_build_date), "newly_deposited", new_leaf),
+            (hard_include != "", "hard_included", hard_include),
+            (~new_leaf.isin(old_db_taxids), "new_taxon_in_taxonomy", new_leaf),
+            (~old_surveilled, "infection_status_promotion", new_leaf),
+            (release != "", "pre_existing_reincluded", new_leaf),
+            (pd.Series(True, index=out.index), "no_release_date", new_leaf),
+        ],
     )
-    old_surveilled = new_leaf.isin(old_surv) | new_leaf.map(old_species_of).isin(
-        old_surv
-    )
-
-    reason = pd.Series("", index=out.index, dtype=str)
-    reason_taxid = pd.Series("", index=out.index, dtype=str)
-
-    def assign(mask: pd.Series, label: str, taxids: pd.Series) -> None:
-        target = mask & (reason == "")
-        reason.loc[target] = label
-        reason_taxid.loc[target] = taxids.loc[target]
-
-    assign((release != "") & (release > old_build_date), "newly_deposited", new_leaf)
-    assign(hard_include != "", "hard_included", hard_include)
-    assign(~new_leaf.isin(old_db_taxids), "new_taxon_in_taxonomy", new_leaf)
-    assign(~old_surveilled, "infection_status_promotion", new_leaf)
-    assign(release != "", "pre_existing_reincluded", new_leaf)
-    assign(reason == "", "no_release_date", new_leaf)
-
-    out["reason"] = reason
-    out["reason_taxid"] = reason_taxid
     out["source_database"] = out["source_database"].fillna("").astype(str)
     return out.drop(columns=["_release_date"])
 
