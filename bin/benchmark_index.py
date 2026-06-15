@@ -30,7 +30,6 @@ import subprocess
 import tempfile
 import urllib.request
 from collections import Counter, defaultdict
-from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import IO, Any
@@ -242,34 +241,39 @@ def tsv_row_count(path: Path) -> int:
         return max(sum(1 for _ in f) - 1, 0)
 
 
-# Output files measured beyond byte size, with the stat function for each.
-_CONTENT_STATS: dict[str, Callable[[Path], dict[str, int]]] = {
-    "virus-genomes-masked.fasta.gz": fasta_content_stats,
-    "virus-genome-metadata-gid.tsv.gz": lambda path: {"rows": tsv_row_count(path)},
-    "total-virus-db-annotated.tsv.gz": lambda path: {"rows": tsv_row_count(path)},
-}
+# Output files we measure beyond byte size, dispatched by suffix. FASTAs get
+# record/bp counts; TSVs get row counts. Anything else (.dmp, .bin, indexes) is
+# size-only. Compressed sizes are misleading for gzipped FASTAs/TSVs because the
+# gzip ratio varies with content, so these expose real content growth/shrinkage.
+_FASTA_SUFFIXES = (".fasta.gz", ".fasta", ".fa.gz", ".fa")
+_TSV_SUFFIXES = (".tsv.gz", ".tsv")
+
+
+def _content_stats(path: Path) -> dict[str, int] | None:
+    """FASTA records/bp or TSV row count for an output file, or None if neither."""
+    if path.name.endswith(_FASTA_SUFFIXES):
+        return fasta_content_stats(path)
+    if path.name.endswith(_TSV_SUFFIXES):
+        return {"rows": tsv_row_count(path)}
+    return None
 
 
 def collect_content_stats(
-    old_prefix: str, new_prefix: str, workdir: Path
+    old_prefix: str, new_prefix: str, names: list[str], workdir: Path
 ) -> dict[str, tuple[dict[str, int], dict[str, int]]]:
-    """Fetch each content-bearing output file from both indexes into `workdir`
-    and return its old/new content stats, keyed by filename.
-
-    Compressed file sizes are misleading for gzipped FASTAs/TSVs because the gzip
-    ratio varies with content; these metrics let reviewers see whether the
-    underlying content actually grew or shrank."""
+    """Fetch each named output file from both indexes into `workdir` and return
+    its old/new content stats (FASTA records/bp, TSV rows), keyed by filename."""
     old_dir = workdir / "old"
     new_dir = workdir / "new"
     old_dir.mkdir(exist_ok=True)
     new_dir.mkdir(exist_ok=True)
     stats: dict[str, tuple[dict[str, int], dict[str, int]]] = {}
-    for name, stat_fn in _CONTENT_STATS.items():
+    for name in names:
         subpath = f"output/results/{name}"
-        stats[name] = (
-            stat_fn(fetch(old_prefix, subpath, old_dir)),
-            stat_fn(fetch(new_prefix, subpath, new_dir)),
-        )
+        old_stat = _content_stats(fetch(old_prefix, subpath, old_dir))
+        new_stat = _content_stats(fetch(new_prefix, subpath, new_dir))
+        if old_stat is not None and new_stat is not None:
+            stats[name] = (old_stat, new_stat)
     return stats
 
 
@@ -320,16 +324,22 @@ def write_metrics_table(
     """Compare per-entry sizes and content metrics between two index prefixes,
     write the long-format table to `out_path`, and return it for facts.json.
 
-    Self-contained: content files are staged in a private temporary directory,
-    so the only inputs are the two prefixes and the destination path."""
+    Self-contained: content files are discovered from the output listing
+    (FASTA/TSV entries present in both indexes) and staged in a private temporary
+    directory, so the only inputs are the two prefixes and the destination path."""
     logger.info("Listing per-DB sizes and content metrics.")
-    with tempfile.TemporaryDirectory() as td:
-        content_stats = collect_content_stats(old_prefix, new_prefix, Path(td))
-    metrics = compare_metrics(
-        list_recursive_sizes(old_prefix),
-        list_recursive_sizes(new_prefix),
-        content_stats,
+    old_sizes = list_recursive_sizes(old_prefix)
+    new_sizes = list_recursive_sizes(new_prefix)
+    content_files = sorted(
+        name
+        for name in set(old_sizes) & set(new_sizes)
+        if name.endswith(_FASTA_SUFFIXES + _TSV_SUFFIXES)
     )
+    with tempfile.TemporaryDirectory() as td:
+        content_stats = collect_content_stats(
+            old_prefix, new_prefix, content_files, Path(td)
+        )
+    metrics = compare_metrics(old_sizes, new_sizes, content_stats)
     metrics.to_csv(out_path, sep="\t", index=False)
     return metrics
 

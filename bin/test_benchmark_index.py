@@ -727,23 +727,25 @@ class TestContentMetrics:
 class TestWriteMetricsTable:
     @staticmethod
     def _make_index(root: Path, *, records: int, meta_rows: int, db_rows: int) -> None:
-        """Build a minimal index tree: the three content files plus one
-        bytes-only (directory) entry under output/results/."""
+        """Build a minimal index tree under output/results/: a virus FASTA and
+        TSV (content files), a ribo reference FASTA (also content), a taxonomy
+        .dmp and a directory (both size-only)."""
         results = root / "output" / "results"
         results.mkdir(parents=True)
         with gzip.open(results / "virus-genomes-masked.fasta.gz", "wt") as f:
             f.write("".join(f">r{i}\nACGT\n" for i in range(records)))
         with gzip.open(results / "virus-genome-metadata-gid.tsv.gz", "wt") as f:
             f.write("genome_id\n" + "g\n" * meta_rows)
-        with gzip.open(results / "total-virus-db-annotated.tsv.gz", "wt") as f:
-            f.write("taxid\n" + "t\n" * db_rows)
+        with gzip.open(results / "ribo-ref-concat.fasta.gz", "wt") as f:
+            f.write("".join(f">s{i}\nACGT\n" for i in range(db_rows)))
+        (results / "taxonomy-names.dmp").write_text("x\n" * 99)
         (results / "kraken_db").mkdir()
         (results / "kraken_db" / "hash.k2d").write_bytes(b"x" * 16)
 
     def test_writes_long_format_table(self, tmp_path: Path) -> None:
         old, new = tmp_path / "old", tmp_path / "new"
         self._make_index(old, records=2, meta_rows=3, db_rows=4)
-        self._make_index(new, records=5, meta_rows=8, db_rows=4)
+        self._make_index(new, records=5, meta_rows=8, db_rows=7)
         out = tmp_path / "sizes.tsv"
 
         df = write_metrics_table(str(old), str(new), out)
@@ -756,7 +758,11 @@ class TestWriteMetricsTable:
         fasta = df[df["name"] == "virus-genomes-masked.fasta.gz"]
         assert "bytes" in set(fasta["metric"])
         assert fasta[fasta["metric"] == "records"].iloc[0]["new"] == 5
-        # A non-content entry gets only a byte row.
+        # The ribo reference FASTA is discovered by suffix and gets record stats.
+        ribo = df[df["name"] == "ribo-ref-concat.fasta.gz"]
+        assert ribo[ribo["metric"] == "records"].iloc[0]["new"] == 7
+        # A .dmp dump and a directory are size-only (not FASTA/TSV).
+        assert list(df[df["name"] == "taxonomy-names.dmp"]["metric"]) == ["bytes"]
         assert list(df[df["name"] == "kraken_db"]["metric"]) == ["bytes"]
 
 
