@@ -94,7 +94,7 @@ target-version = "py312"
 # Base image digest (amd64) for container builds — update this to pick up OS-level security patches
 container-base-image = "mambaorg/micromamba@sha256:c9ee7065e7652c1d8c5029fbb453601a19de7d95afdcfe4ad5489023ffd3bc2b"
 # Minimum pipeline version required to use indexes built with this pipeline version
-index-min-pipeline-version = "3.2.2.0"
+index-min-pipeline-version = "2.8.1.2"
 # Minimum index version required by this pipeline version
 pipeline-min-index-version = "3.2.2.0"
 # Maximum age (in days) for the benchmark index before CI flags it as stale

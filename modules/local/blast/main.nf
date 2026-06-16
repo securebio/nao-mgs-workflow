@@ -17,7 +17,7 @@ process BLASTN {
         # Download BLAST database if not already present
         db_local_path=\$(download_db.py "${blast_db_dir}" "${params_map.db_download_timeout}")
         # Set up command
-        io="-db \${db_local_path}/blast-db"  # INDEX publishes the DB under the constant "blast-db" alias
+        io="-db \${db_local_path}/blast_db"
         par="-perc_identity ${params_map.blast_perc_id} -max_hsps 5 -num_alignments 250 -qcov_hsp_perc ${params_map.blast_qcov_hsp_perc} -num_threads ${task.cpus}"
         fmt="6 qseqid sseqid sgi staxid qlen evalue bitscore qcovs length pident mismatch gapopen sstrand qstart qend sstart send"
         # Run BLAST

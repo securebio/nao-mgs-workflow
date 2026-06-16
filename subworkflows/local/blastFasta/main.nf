@@ -34,8 +34,8 @@ workflow BLAST_FASTA {
                    // db_download_timeout: Timeout in seconds for database downloads
     main:
         // Get reference paths
-        // INDEX publishes the BLAST DB under the constant "blast-db" alias
-        blast_db_dir = "${ref_dir}/results/blast-db"
+        // INDEX publishes the BLAST DB under the constant "blast_db" alias
+        blast_db_dir = "${ref_dir}/results/blast_db"
         nodes_db = "${ref_dir}/results/taxonomy-nodes.dmp"
         names_db = "${ref_dir}/results/taxonomy-names.dmp"
         // 1. Run BLAST

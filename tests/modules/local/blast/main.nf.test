@@ -22,7 +22,7 @@ nextflow_process {
                 ]
                 input[0] = Channel.of("test")
                     | combine(Channel.of("${projectDir}/test-data/tiny-index/reads/R1.fasta"))
-                input[1] = "${params.ref_dir}/results/blast-db"
+                input[1] = "${params.ref_dir}/results/blast_db"
                 input[2] = blast_params
                 '''
             }
