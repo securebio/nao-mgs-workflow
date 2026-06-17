@@ -1,5 +1,6 @@
 # v3.2.2.0-dev
 
+- Add `pigz` to the `python` container so Python processes can use parallel (de)compression.
 - CI: Fix the CHANGELOG CI check wrongly failing docs-only PRs that don't update CHANGELOG.md.
 - CI: Removed the slow and unnecessary `Maximize build space` step from the nf-test setup action
 - Hard-exclude taxids `1266451` (Mulberry vein banding virus, a plant virus) and `1629671` (Botrytis cinerea negative-stranded RNA virus 1, a mycovirus) from the surveillance set.
