@@ -1,6 +1,9 @@
 # v3.2.2.0-dev
 
 - CI: Fix the CHANGELOG CI check wrongly failing docs-only PRs that don't update CHANGELOG.md.
+- Publish BLAST database under a fixed `results/blast_db/` directory with a constant `blast_db` alias regardless of database name.
+    - Update `DOWNLOAD_BLAST_DB` to handle both the production named database and test tarball-URL paths.
+    - Remove the redundant `blast_db_prefix` parameter from `configs/downstream*.config` to avoid drift.
 - CI: Removed the slow and unnecessary `Maximize build space` step from the nf-test setup action
 - Hard-exclude taxids `1266451` (Mulberry vein banding virus, a plant virus) and `1629671` (Botrytis cinerea negative-stranded RNA virus 1, a mycovirus) from the surveillance set.
 - `DOWNLOAD_VIRAL_GENOMES` now retries the dehydrated `datasets download` step (not just rehydrate) with exponential backoff, so a transient NCBI stream error there no longer aborts the task.
