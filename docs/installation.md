@@ -10,11 +10,11 @@ This page describes how to install the pipeline and configure your computing env
 To run this workflow with full functionality, you need access to the following dependencies:
 
 1. **SDKMAN!:** To install the SDKMAN! Java SDK manager, follow the installation instructions available [here](https://sdkman.io/install).
-2. **Nextflow:** To install the workflow management framework, follow the installation instructions available [here](https://www.nextflow.io/docs/latest/getstarted.html), beginning by installing a recommended Java distribution through SDKMAN!. Pipeline version 2.10.0+ requires Nextflow version 25.04.0+.
+2. **Nextflow:** To install the workflow management framework, follow the installation instructions available [here](https://docs.seqera.io/nextflow/install), beginning by installing a recommended Java distribution through SDKMAN!. See [`configs/profiles.config`](./../configs/profiles.config) for the enforced minimum Nextflow version and set that as the runtime version with `export NXF_VER=<X.Y.Z>`.
 2. **Docker:** To install Docker Engine for command-line use, follow the installation instructions available [here](https://docs.docker.com/engine/install/) (or [here](https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/install-docker.html) for installation on an AWS EC2 instance).
 3. **AWS CLI:** If not already installed, install the AWS CLI by following the instructions available [here](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html).
 4. **Git:** To install the Git version control tool, follow the installation instructions available [here](https://git-scm.com/book/en/v2/Getting-Started-Installing-Git).
-5. **nf-test**: To install nf-test, follow the install instructions available [here](https://www.nf-test.com/installation/).
+5. **nf-test**: To install nf-test, follow the install instructions available [here](https://www.nf-test.com/installation/#install-a-specific-version), making sure to install the same version installed by the [`setup-nf-test`](https://github.com/securebio/nao-mgs-workflow/blob/main/.github/actions/setup-nf-test/action.yml) GitHub Action.
 
 ## 2. Configure AWS & Docker
 
@@ -51,7 +51,7 @@ docker run hello-world
 Create a Seqera account to increase your API rate limits:
 
 1. Create a free Seqera account at [cloud.seqera.io](http://cloud.seqera.io/)
-2. Click on the user icon, then click the "User tokens" section
+2. Click on the user icon, then click the "Your tokens" section
 3. Click "Add Token" to create a token for your account. Name it whatever you want (e.g., "my-nextflow-token"). Copy the token and store it somewhere safe.
 4. Export your token as an environment variable before running the pipeline:
 
