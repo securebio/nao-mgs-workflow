@@ -1,5 +1,6 @@
 # v3.2.2.0-dev
 
+- Speed up `COUNT_READS_PER_CLADE` and eliminate its peak-memory OOM kills by propagating each directly-assigned taxid's counts upward through its ancestor chain, instead of doing a full depth-first traversal of the entire (~2.5M-node) NCBI taxonomy; work now scales with the number of taxids the sample actually hit. Outputs are byte-for-byte identical to the previous implementation (no schema or output-format change). Off-tree reads (assigned to taxids absent from the taxonomy) are still dropped, but now emit a stderr warning with a count instead of being silently discarded.
 - Add `set -euo pipefail` to `BLASTN` module.
 - Add `pigz` to the `python` container so Python processes can use parallel (de)compression.
 - CI: Fix the CHANGELOG CI check wrongly failing docs-only PRs that don't update CHANGELOG.md.

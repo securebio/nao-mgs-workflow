@@ -5,6 +5,11 @@ Take a table of reads with LCA assignments and a table of (child, parent) taxid 
 and output a table of taxids with counts of reads that are directly assigned to
 the taxid and all reads that are assigned to the clade descended from the taxid.
 Output both deduplicated and total (non-deduplicated) counts.
+
+Clade counts are computed by propagating each directly-assigned taxid's counts
+*upward* through its ancestor chain, so the work scales with the number of taxids
+the sample actually hit rather than the size of the taxonomy (which is ~2.5M nodes
+for the full NCBI taxonomy).
 """
 
 import argparse
@@ -18,8 +23,10 @@ from typing import IO, cast
 TaxId = int
 # NCBI taxonomy root node - has itself as parent
 ROOT: TaxId = 1
-# Tree as adjacency list mapping parents to children
-Tree = defaultdict[TaxId, set[TaxId]]
+# Mapping from each taxid to its parent taxid
+ParentMap = dict[TaxId, TaxId]
+# Sparse parent -> children adjacency, holding only nodes touched by the sample
+SparseTree = defaultdict[TaxId, set[TaxId]]
 
 
 def open_by_suffix(filename: str, mode: str = "r") -> IO[str]:
@@ -99,12 +106,16 @@ def count_direct_reads_per_taxid(
     return total, dedup
 
 
-def build_tree(
+def build_parent_map(
     tax_data: Iterator[dict[str, str]],
     child_field: str = "taxid",
     parent_field: str = "parent_taxid",
-) -> Tree:
-    """Build a taxonomic tree from taxonomy data.
+) -> ParentMap:
+    """Build a child -> parent lookup from taxonomy data.
+
+    Unlike a parent -> children adjacency, this flat map lets us reconstruct any
+    taxid's lineage on demand by following parent pointers, which is all the clade
+    counting needs. It is cheap to build and trivially serializable.
 
     Args:
         tax_data: Iterator of taxonomy records as dictionaries
@@ -112,105 +123,111 @@ def build_tree(
         parent_field: Field name containing parent taxonomic ID
 
     Returns:
-        Dictionary mapping parent IDs to sets of child IDs
+        Dictionary mapping each taxid to its parent taxid
+
+    Raises:
+        ValueError: if a child taxid appears more than once
+        KeyError: if a required column is missing
 
     """
-    tree = defaultdict(set)
-    children = set()
+    parent_map: ParentMap = {}
     for taxon in tax_data:
         child = int(taxon[child_field])
         parent = int(taxon[parent_field])
-        if child in children:
+        if child in parent_map:
             msg = f"Child taxid {child} appears multiple times in taxdb"
             raise ValueError(msg)
-        children.add(child)
-        # Handle NCBI root: ROOT has itself as parent, don't add it as a child of itself
-        if not (child == ROOT and parent == ROOT):
-            tree[parent].add(child)
-    if detect_cycle(tree):
-        msg = "Cycle detected in taxdb"
-        raise ValueError(msg)
-    return tree
+        parent_map[child] = parent
+    return parent_map
 
 
-def detect_cycle(tree: Tree) -> bool:
-    """Return True if the tree contains a cycle, False otherwise."""
-    visited: set[TaxId] = set()
-    current_path: set[TaxId] = set()
+def ancestors(taxid: TaxId, parent_map: ParentMap) -> Iterator[TaxId]:
+    """Yield a taxid followed by each of its ancestors up to (and including) its root.
 
-    # Visit all the nodes, using depth-first search
-    def dfs(node: TaxId) -> bool:
-        if node in current_path:
-            return True
-        if node in visited:
-            return False
-        visited.add(node)
-        current_path.add(node)
-        if node in tree:
-            for child in tree[node]:
-                if dfs(child):
-                    return True
-        current_path.remove(node)
-        return False
-
-    return any(dfs(node) for node in tree)
-
-
-def parents(tree: Tree) -> set[TaxId]:
-    """Get all parent nodes from a tree."""
-    return set(tree.keys())
-
-
-def children(tree: Tree) -> set[TaxId]:
-    """Get all child nodes from a tree."""
-    return set.union(*tree.values()) if tree else set()
-
-
-def nodes(tree: Tree) -> set[TaxId]:
-    """Get all nodes (parents and children) from a tree."""
-    return parents(tree) | children(tree)
-
-
-def roots(tree: Tree) -> set[TaxId]:
-    """Find root nodes of a tree (parent nodes that are not also child nodes)."""
-    return parents(tree) - children(tree)
-
-
-def get_clade_counts(direct_counts: Counter[TaxId], tree: Tree) -> Counter[TaxId]:
-    """Aggregate read counts for each clade (node and all its descendants).
+    The walk stops at a root, identified either as a node that is its own parent
+    (the NCBI convention, e.g. taxid 1) or a node with no parent entry of its own.
+    Cycle-safety comes for free: revisiting a node mid-walk means the lineage loops.
 
     Args:
-        direct_counts: Counter of directly-assigned reads per taxonomic ID
-        tree: Taxonomic tree structure
+        taxid: Taxid to start from. Must be present in the taxonomy (a key or a
+            value of parent_map); callers should drop off-tree taxids beforehand.
+        parent_map: Child -> parent lookup
 
-    Returns:
-        Counter mapping taxonomic IDs to their clade counts
+    Yields:
+        The taxid itself, then its parent, grandparent, ... up to the root
+
+    Raises:
+        ValueError: if a cycle is detected in the lineage
 
     """
-    clade_counts: Counter[TaxId] = Counter()
+    node = taxid
+    seen: set[TaxId] = set()
+    while True:
+        yield node
+        seen.add(node)
+        parent = parent_map.get(node)
+        # A self-parent (e.g. ROOT) or a node with no parent row is a root: stop.
+        if parent is None or parent == node:
+            return
+        if parent in seen:
+            msg = "Cycle detected in taxdb"
+            raise ValueError(msg)
+        node = parent
 
-    # Depth-first search of the tree, store results as you go
-    def dfs(node: TaxId) -> int:
-        # Start with this node's own count
-        total = direct_counts[node]
 
-        # Add counts from all descendants
-        for child in tree[node]:
-            total += dfs(child)
+def accumulate_clade_counts(
+    direct_total: Counter[TaxId],
+    direct_dedup: Counter[TaxId],
+    parent_map: ParentMap,
+) -> tuple[Counter[TaxId], Counter[TaxId], SparseTree, int]:
+    """Propagate direct per-taxid counts upward into clade counts.
 
-        clade_counts[node] = total
-        return total
+    For each directly-assigned taxid, walk its ancestor chain and add its counts to
+    every node on the way to the root. This touches only nodes on a path from an
+    observed taxid up to a root, so cost scales with the data, not the taxonomy.
 
-    for root in roots(tree):
-        dfs(root)
+    Reads assigned to taxids absent from the taxonomy are dropped (and tallied),
+    matching the documented behaviour of the module.
 
-    return clade_counts
+    Args:
+        direct_total: Total directly-assigned read counts per taxid
+        direct_dedup: Deduplicated directly-assigned read counts per taxid
+        parent_map: Child -> parent lookup
+
+    Returns:
+        Tuple of (clade_total, clade_dedup, sparse_tree, dropped_reads) where
+        sparse_tree is the parent -> children adjacency restricted to touched nodes
+        and dropped_reads is the number of (total) reads on off-tree taxids.
+
+    """
+    valid_nodes = set(parent_map.keys()) | set(parent_map.values())
+    clade_total: Counter[TaxId] = Counter()
+    clade_dedup: Counter[TaxId] = Counter()
+    sparse_tree: SparseTree = defaultdict(set)
+    dropped_reads = 0
+
+    for taxid, n_total in direct_total.items():
+        if taxid not in valid_nodes:
+            dropped_reads += n_total
+            continue
+        n_dedup = direct_dedup.get(taxid, 0)
+        child: TaxId | None = None
+        for node in ancestors(taxid, parent_map):
+            clade_total[node] += n_total
+            clade_dedup[node] += n_dedup
+            if child is not None:
+                # `node` is the parent of the previously-yielded `child`
+                sparse_tree[node].add(child)
+            child = node
+
+    return clade_total, clade_dedup, sparse_tree, dropped_reads
 
 
 def write_output_tsv(
     output_path: str,
     group: str,
-    tree: Tree,
+    parent_map: ParentMap,
+    sparse_tree: SparseTree,
     direct_counts_total: Counter[TaxId],
     direct_counts_dedup: Counter[TaxId],
     clade_counts_total: Counter[TaxId],
@@ -218,16 +235,30 @@ def write_output_tsv(
 ) -> None:
     """Write taxonomic read counts to a TSV file.
 
+    Rows are emitted in sorted pre-order over the sparse tree of touched nodes,
+    which reproduces the ordering of a sorted pre-order traversal of the full
+    taxonomy restricted to nodes with a non-zero clade count.
+
     Args:
         output_path: Path to output TSV file
         group: Group identifier to include in output
-        tree: Taxonomic tree structure
+        parent_map: Child -> parent lookup
+        sparse_tree: Parent -> children adjacency restricted to touched nodes
         direct_counts_total: Total directly assigned read counts per taxonomic ID
         direct_counts_dedup: Deduplicated directly assigned read counts per taxonomic ID
         clade_counts_total: Total clade counts per taxonomic ID
         clade_counts_dedup: Deduplicated clade counts per taxonomic ID
 
     """
+    # Every touched node has a positive clade total, and the roots of the sparse
+    # tree are the touched nodes whose parent is a root (self-parent or absent).
+    touched = set(clade_counts_total)
+    sparse_roots = {
+        node
+        for node in touched
+        if parent_map.get(node) is None or parent_map[node] == node
+    }
+
     with open_by_suffix(output_path, "w") as outfile:
         fieldnames = [
             "group",
@@ -241,27 +272,23 @@ def write_output_tsv(
         writer = csv.DictWriter(outfile, fieldnames=fieldnames, delimiter="\t")
         writer.writeheader()
 
-        # Write rows in depth-first order
-        # If a node does not have a parent, set it to be ROOT: the root of the
-        # NCBI taxonomy
-        def dfs(node: TaxId, parent: TaxId = ROOT) -> None:
-            clade_total = clade_counts_total[node]
+        # Write rows in depth-first order.
+        # If a node has no parent in the taxonomy, report it as ROOT.
+        def dfs(node: TaxId) -> None:
             row: dict[str, str | int] = {
                 "group": group,
                 "taxid": node,
-                "parent_taxid": parent,
+                "parent_taxid": parent_map.get(node, ROOT),
                 "reads_direct_total": direct_counts_total[node],
                 "reads_direct_dedup": direct_counts_dedup[node],
-                "reads_clade_total": clade_total,
+                "reads_clade_total": clade_counts_total[node],
                 "reads_clade_dedup": clade_counts_dedup[node],
             }
-            # Only print clades that have some reads
-            if clade_total > 0:
-                writer.writerow(row)
-            for child in sorted(tree[node]):
-                dfs(child, parent=node)
+            writer.writerow(row)
+            for child in sorted(sparse_tree[node]):
+                dfs(child)
 
-        for root in sorted(roots(tree)):
+        for root in sorted(sparse_roots):
             dfs(root)
 
 
@@ -305,7 +332,7 @@ def main() -> None:
         sys.exit(1)
 
     try:
-        tree = build_tree(read_tsv(args.taxdb))
+        parent_map = build_parent_map(read_tsv(args.taxdb))
     except KeyError as e:
         missing_column = e.args[0]
         print(
@@ -318,12 +345,21 @@ def main() -> None:
         )
         sys.exit(1)
 
-    clade_counts_total = get_clade_counts(direct_counts_total, tree)
-    clade_counts_dedup = get_clade_counts(direct_counts_dedup, tree)
+    clade_counts_total, clade_counts_dedup, sparse_tree, dropped_reads = (
+        accumulate_clade_counts(direct_counts_total, direct_counts_dedup, parent_map)
+    )
+    if dropped_reads:
+        print(
+            f"Warning: {dropped_reads} read(s) assigned to taxids not present in the "
+            "taxonomy were not counted.",
+            file=sys.stderr,
+        )
+
     write_output_tsv(
         args.output,
         args.group,
-        tree,
+        parent_map,
+        sparse_tree,
         direct_counts_total,
         direct_counts_dedup,
         clade_counts_total,
