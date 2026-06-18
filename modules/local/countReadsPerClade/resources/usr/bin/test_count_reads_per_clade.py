@@ -3,14 +3,12 @@ from typing import Any
 
 import pytest
 from count_reads_per_clade import (
-    build_tree,
-    children,
+    accumulate_clade_counts,
+    ancestors,
+    build_parent_map,
     count_direct_reads_per_taxid,
-    get_clade_counts,
     is_duplicate,
-    parents,
     read_tsv,
-    roots,
     write_output_tsv,
 )
 
@@ -35,236 +33,6 @@ def test_is_duplicate() -> None:
     # Test KeyError when both fields are missing
     with pytest.raises(KeyError):
         is_duplicate({})
-
-
-def test_parents() -> None:
-    # Test with a simple tree: 1->2, 1->3, 2->4
-    # Parents should be: {1, 2} (nodes that have children)
-    tax_data = [
-        {"taxid": "2", "parent_taxid": "1"},
-        {"taxid": "3", "parent_taxid": "1"},
-        {"taxid": "4", "parent_taxid": "2"},
-    ]
-    tree = build_tree(iter(tax_data))
-    result = parents(tree)
-    expected = {1, 2}
-    assert result == expected
-
-    # Test with empty tree
-    empty_tree = build_tree(iter([]))
-    result = parents(empty_tree)
-    assert result == set()
-
-    # Test with single parent-child relationship
-    tax_data = [{"taxid": "20", "parent_taxid": "10"}]
-    single_tree = build_tree(iter(tax_data))
-    result = parents(single_tree)
-    assert result == {10}
-
-    # Test return type is set
-    tax_data = [{"taxid": "2", "parent_taxid": "1"}]
-    tree = build_tree(iter(tax_data))
-    result = parents(tree)
-    assert isinstance(result, set)
-
-
-def test_children() -> None:
-    # Test with a simple tree: 1->2, 1->3, 2->4
-    # Children should be: {2, 3, 4} (nodes that are children of other nodes)
-    tax_data = [
-        {"taxid": "2", "parent_taxid": "1"},
-        {"taxid": "3", "parent_taxid": "1"},
-        {"taxid": "4", "parent_taxid": "2"},
-    ]
-    tree = build_tree(iter(tax_data))
-    result = children(tree)
-    expected = {2, 3, 4}
-    assert result == expected
-
-    # Test with empty tree
-    empty_tree = build_tree(iter([]))
-    result = children(empty_tree)
-    assert result == set()
-
-    # Test with single parent-child relationship
-    tax_data = [{"taxid": "20", "parent_taxid": "10"}]
-    single_tree = build_tree(iter(tax_data))
-    result = children(single_tree)
-    assert result == {20}
-
-    # Test return type is set
-    tax_data = [{"taxid": "2", "parent_taxid": "1"}]
-    tree = build_tree(iter(tax_data))
-    result = children(tree)
-    assert isinstance(result, set)
-
-
-def test_roots() -> None:
-    # Test with a simple tree: 1->2, 1->3, 2->4
-    # Root should be: {1} (parent that is never a child)
-    tax_data = [
-        {"taxid": "2", "parent_taxid": "1"},
-        {"taxid": "3", "parent_taxid": "1"},
-        {"taxid": "4", "parent_taxid": "2"},
-    ]
-    tree = build_tree(iter(tax_data))
-    result = roots(tree)
-    expected = {1}
-    assert result == expected
-
-    # Test with empty tree
-    empty_tree = build_tree(iter([]))
-    result = roots(empty_tree)
-    assert result == set()
-
-    # Test with multiple roots (forest): 1->2, 3->4
-    tax_data = [
-        {"taxid": "2", "parent_taxid": "1"},
-        {"taxid": "4", "parent_taxid": "3"},
-    ]
-    forest = build_tree(iter(tax_data))
-    result = roots(forest)
-    expected = {1, 3}
-    assert result == expected
-
-    # Test with single parent-child relationship
-    tax_data = [{"taxid": "20", "parent_taxid": "10"}]
-    single_tree = build_tree(iter(tax_data))
-    result = roots(single_tree)
-    assert result == {10}
-
-    # Test return type is set
-    tax_data = [{"taxid": "2", "parent_taxid": "1"}]
-    tree = build_tree(iter(tax_data))
-    result = roots(tree)
-    assert isinstance(result, set)
-
-
-def test_build_tree() -> None:
-    # Test basic tree building
-    tax_data = [
-        {"taxid": "2", "parent_taxid": "1"},
-        {"taxid": "3", "parent_taxid": "1"},
-        {"taxid": "4", "parent_taxid": "2"},
-    ]
-    result = build_tree(iter(tax_data))
-    expected = {1: {2, 3}, 2: {4}}
-    assert result == expected
-
-    # Test with custom field names
-    tax_data = [
-        {"child_id": "10", "parent_id": "5"},
-        {"child_id": "11", "parent_id": "5"},
-    ]
-    result = build_tree(
-        iter(tax_data), child_field="child_id", parent_field="parent_id"
-    )
-    expected = {5: {10, 11}}
-    assert result == expected
-
-    # Test with empty data
-    result = build_tree(iter([]))
-    assert result == {}
-
-    # Test string to int conversion
-    tax_data = [{"taxid": "100", "parent_taxid": "50"}]
-    result = build_tree(iter(tax_data))
-    # Keys and values should be integers
-    assert 50 in result
-    assert 100 in result[50]
-
-
-def test_build_tree_duplicate_child_error() -> None:
-    """Test that build_tree raises an error when a child has multiple parents."""
-    # Child taxid 2 appears with two different parents
-    tax_data = [
-        {"taxid": "2", "parent_taxid": "1"},
-        {"taxid": "2", "parent_taxid": "3"},  # same child, different parent
-    ]
-    with pytest.raises(
-        ValueError, match="Child taxid 2 appears multiple times in taxdb"
-    ):
-        build_tree(iter(tax_data))
-
-    # Test with more complex case
-    tax_data = [
-        {"taxid": "10", "parent_taxid": "5"},
-        {"taxid": "20", "parent_taxid": "5"},
-        {"taxid": "10", "parent_taxid": "6"},  # duplicate child, different parent
-    ]
-    with pytest.raises(
-        ValueError, match="Child taxid 10 appears multiple times in taxdb"
-    ):
-        build_tree(iter(tax_data))
-
-    # Exact duplicate relationship
-    tax_data = [
-        {"taxid": "2", "parent_taxid": "1"},
-        {"taxid": "2", "parent_taxid": "1"},  # exact duplicate
-    ]
-    with pytest.raises(
-        ValueError, match="Child taxid 2 appears multiple times in taxdb"
-    ):
-        build_tree(iter(tax_data))
-
-    # Exact duplicate mixed with valid relationships
-    tax_data = [
-        {"taxid": "2", "parent_taxid": "1"},
-        {"taxid": "3", "parent_taxid": "1"},  # valid
-        {"taxid": "2", "parent_taxid": "1"},  # duplicate of first
-    ]
-    with pytest.raises(
-        ValueError, match="Child taxid 2 appears multiple times in taxdb"
-    ):
-        build_tree(iter(tax_data))
-
-
-def test_build_tree_cycle_error() -> None:
-    """Test that build_tree raises an error when there are cycles in the tree."""
-    # NCBI root (taxid 1 with parent_taxid 1) should NOT raise an error
-    tax_data = [
-        {"taxid": "1", "parent_taxid": "1"},
-    ]
-    # This should work without raising an error
-    result = build_tree(iter(tax_data))
-    # Root should have no children since it doesn't add itself as a child
-    assert result == {}
-
-    # Self-loop with non-root taxid should still be an error
-    tax_data = [
-        {"taxid": "2", "parent_taxid": "2"},
-    ]
-    with pytest.raises(ValueError, match="Cycle detected in taxdb"):
-        build_tree(iter(tax_data))
-
-    # Two-node cycle
-    tax_data = [
-        {"taxid": "1", "parent_taxid": "2"},
-        {"taxid": "2", "parent_taxid": "1"},
-    ]
-    with pytest.raises(ValueError, match="Cycle detected in taxdb"):
-        build_tree(iter(tax_data))
-
-    # Three-node cycle
-    tax_data = [
-        {"taxid": "1", "parent_taxid": "2"},
-        {"taxid": "2", "parent_taxid": "3"},
-        {"taxid": "3", "parent_taxid": "1"},
-    ]
-    with pytest.raises(ValueError, match="Cycle detected in taxdb"):
-        build_tree(iter(tax_data))
-
-    # Complex case with valid tree plus cycle
-    tax_data = [
-        {"taxid": "2", "parent_taxid": "1"},  # valid
-        {"taxid": "3", "parent_taxid": "1"},  # valid
-        {"taxid": "4", "parent_taxid": "2"},  # valid
-        {"taxid": "5", "parent_taxid": "6"},  # start of cycle
-        {"taxid": "6", "parent_taxid": "7"},
-        {"taxid": "7", "parent_taxid": "5"},  # completes cycle
-    ]
-    with pytest.raises(ValueError, match="Cycle detected in taxdb"):
-        build_tree(iter(tax_data))
 
 
 def test_count_direct_reads_per_taxid() -> None:
@@ -371,71 +139,145 @@ def test_count_direct_reads_per_taxid_group_validation() -> None:
         count_direct_reads_per_taxid(iter(read_data_mixed), "correct_group")
 
 
-def test_build_tree_ncbi_root() -> None:
-    """Test that build_tree handles NCBI root (taxid 1, parent_taxid 1) correctly."""
-    # Test NCBI root with children
-    tax_data = [
-        {"taxid": "1", "parent_taxid": "1"},  # NCBI root
-        {"taxid": "2", "parent_taxid": "1"},  # Child of root
-        {"taxid": "3", "parent_taxid": "1"},  # Another child of root
-    ]
-    result = build_tree(iter(tax_data))
-    expected = {1: {2, 3}}
-    assert result == expected
-
-    # Test that root is correctly identified
-    root_nodes = roots(result)
-    assert root_nodes == {1}
-
-
-def test_get_clade_counts() -> None:
-    # Test with simple tree: 1->2, 1->3, 2->4
-    # If node counts are: {1:5, 2:10, 3:7, 4:3}
-    # Then clade counts should be:
-    # - Node 4: 3 (only itself)
-    # - Node 3: 7 (only itself)
-    # - Node 2: 13 (10 + 3 from child 4)
-    # - Node 1: 25 (5 + 10 + 3 + 7 from all descendants)
+def test_build_parent_map() -> None:
+    # Test basic map building: 1->2, 1->3, 2->4
     tax_data = [
         {"taxid": "2", "parent_taxid": "1"},
         {"taxid": "3", "parent_taxid": "1"},
         {"taxid": "4", "parent_taxid": "2"},
     ]
-    tree = build_tree(iter(tax_data))
-    node_counts = Counter({1: 5, 2: 10, 3: 7, 4: 3})
-
-    result = get_clade_counts(node_counts, tree)
-    expected = Counter({1: 25, 2: 13, 3: 7, 4: 3})
+    result = build_parent_map(iter(tax_data))
+    expected = {2: 1, 3: 1, 4: 2}
     assert result == expected
 
-    # Test with nodes that have zero counts
-    tax_data = [{"taxid": "2", "parent_taxid": "1"}]
-    tree = build_tree(iter(tax_data))
-    node_counts = Counter({1: 5})  # node 2 has 0 count
-    result = get_clade_counts(node_counts, tree)
-    expected = Counter({1: 5, 2: 0})
+    # Test with custom field names
+    tax_data = [
+        {"child_id": "10", "parent_id": "5"},
+        {"child_id": "11", "parent_id": "5"},
+    ]
+    result = build_parent_map(
+        iter(tax_data), child_field="child_id", parent_field="parent_id"
+    )
+    expected = {10: 5, 11: 5}
     assert result == expected
 
-    # Test with empty tree
-    tree = build_tree(iter([]))
-    node_counts = Counter({1: 5})  # node 1 not in tree
-    result = get_clade_counts(node_counts, tree)
-    expected = Counter({})  # empty result since no nodes in tree
-    assert result == expected
+    # Test with empty data
+    result = build_parent_map(iter([]))
+    assert result == {}
 
-    # Test with node_counts containing nodes not in tree (should be ignored)
-    tax_data = [{"taxid": "2", "parent_taxid": "1"}]
-    tree = build_tree(iter(tax_data))
-    node_counts = Counter({1: 3, 2: 7, 999: 100})  # 999 not in tree
-    result = get_clade_counts(node_counts, tree)
-    expected = Counter({1: 10, 2: 7})  # 999 ignored
+    # Test string to int conversion (keys and values are integers)
+    tax_data = [{"taxid": "100", "parent_taxid": "50"}]
+    result = build_parent_map(iter(tax_data))
+    assert result == {100: 50}
 
-    # Test return type is Counter
-    tax_data = [{"taxid": "2", "parent_taxid": "1"}]
-    tree = build_tree(iter(tax_data))
-    node_counts = Counter({1: 1})
-    result = get_clade_counts(node_counts, tree)
-    assert isinstance(result, Counter)
+
+def test_build_parent_map_ncbi_root() -> None:
+    """Test that build_parent_map handles NCBI root (taxid 1, parent_taxid 1)."""
+    tax_data = [
+        {"taxid": "1", "parent_taxid": "1"},  # NCBI root
+        {"taxid": "2", "parent_taxid": "1"},  # Child of root
+        {"taxid": "3", "parent_taxid": "1"},  # Another child of root
+    ]
+    result = build_parent_map(iter(tax_data))
+    assert result == {1: 1, 2: 1, 3: 1}
+
+
+def test_build_parent_map_duplicate_child_error() -> None:
+    """Test that build_parent_map raises when a child taxid appears twice."""
+    # Child taxid 2 appears with two different parents
+    tax_data = [
+        {"taxid": "2", "parent_taxid": "1"},
+        {"taxid": "2", "parent_taxid": "3"},  # same child, different parent
+    ]
+    with pytest.raises(
+        ValueError, match="Child taxid 2 appears multiple times in taxdb"
+    ):
+        build_parent_map(iter(tax_data))
+
+    # Exact duplicate relationship
+    tax_data = [
+        {"taxid": "2", "parent_taxid": "1"},
+        {"taxid": "2", "parent_taxid": "1"},  # exact duplicate
+    ]
+    with pytest.raises(
+        ValueError, match="Child taxid 2 appears multiple times in taxdb"
+    ):
+        build_parent_map(iter(tax_data))
+
+
+def test_ancestors() -> None:
+    # Lineage walk from a leaf up to an implicit root (taxid 1 has no row of its own)
+    parent_map = {2: 1, 3: 1, 4: 2}
+    assert list(ancestors(4, parent_map)) == [4, 2, 1]
+    assert list(ancestors(3, parent_map)) == [3, 1]
+    # An implicit root (appears only as a parent) yields just itself
+    assert list(ancestors(1, parent_map)) == [1]
+
+    # Explicit NCBI root (self-parent) terminates the walk
+    parent_map = {1: 1, 2: 1, 4: 2}
+    assert list(ancestors(4, parent_map)) == [4, 2, 1]
+    assert list(ancestors(1, parent_map)) == [1]
+
+    # A self-parent node is treated as a root (yields just itself, no error)
+    assert list(ancestors(2, {2: 2})) == [2]
+
+
+def test_ancestors_cycle_error() -> None:
+    """Test that a cyclic lineage is detected while walking ancestors."""
+    # Two-node cycle
+    with pytest.raises(ValueError, match="Cycle detected in taxdb"):
+        list(ancestors(1, {1: 2, 2: 1}))
+
+    # Three-node cycle
+    with pytest.raises(ValueError, match="Cycle detected in taxdb"):
+        list(ancestors(1, {1: 2, 2: 3, 3: 1}))
+
+
+def test_accumulate_clade_counts() -> None:
+    # Tree: 1->2, 1->3, 2->4 (taxid 1 is an implicit root)
+    # Direct counts {1:5, 2:10, 3:7, 4:3} give clade counts:
+    # - Node 4: 3, Node 3: 7, Node 2: 13 (10+3), Node 1: 25 (5+10+7+3)
+    parent_map = {2: 1, 3: 1, 4: 2}
+    direct_total = Counter({1: 5, 2: 10, 3: 7, 4: 3})
+    clade_total, clade_dedup, sparse_tree, dropped = accumulate_clade_counts(
+        direct_total, Counter(), parent_map
+    )
+    assert clade_total == Counter({1: 25, 2: 13, 3: 7, 4: 3})
+    assert clade_dedup == Counter()  # no dedup counts supplied
+    assert dropped == 0
+    # Sparse tree should hold only the touched edges
+    assert dict(sparse_tree) == {1: {2, 3}, 2: {4}}
+
+    # Total and dedup counters are propagated independently in a single pass
+    clade_total, clade_dedup, _, _ = accumulate_clade_counts(
+        Counter({4: 3}), Counter({4: 2}), {2: 1, 4: 2}
+    )
+    assert clade_total == Counter({4: 3, 2: 3, 1: 3})
+    assert clade_dedup == Counter({4: 2, 2: 2, 1: 2})
+
+    # Reads on taxids not present in the taxonomy are dropped and tallied
+    direct_total = Counter({1: 3, 2: 7, 999: 100})
+    clade_total, _, _, dropped = accumulate_clade_counts(
+        direct_total, Counter(), {2: 1}
+    )
+    assert clade_total == Counter({1: 10, 2: 7})  # 999 ignored
+    assert dropped == 100
+
+    # Empty input yields empty results
+    clade_total, clade_dedup, sparse_tree, dropped = accumulate_clade_counts(
+        Counter(), Counter(), {2: 1}
+    )
+    assert clade_total == Counter()
+    assert clade_dedup == Counter()
+    assert dict(sparse_tree) == {}
+    assert dropped == 0
+
+    # Return types
+    clade_total, clade_dedup, _, _ = accumulate_clade_counts(
+        Counter({1: 1}), Counter({1: 1}), {2: 1}
+    )
+    assert isinstance(clade_total, Counter)
+    assert isinstance(clade_dedup, Counter)
 
 
 # Integration tests covering nf-test scenarios
@@ -485,7 +327,7 @@ def test_missing_taxonomy_columns(tsv_factory: Any, missing_column: str) -> None
 
     # Should raise KeyError for missing column
     with pytest.raises(KeyError, match=missing_column):
-        build_tree(read_tsv(tax_file))
+        build_parent_map(read_tsv(tax_file))
 
 
 def test_group_mismatch_error(tsv_factory: Any) -> None:
@@ -515,14 +357,23 @@ def test_header_only_reads_file(tsv_factory: Any) -> None:
     direct_total, direct_dedup = count_direct_reads_per_taxid(
         read_tsv(reads_file), "test"
     )
-    tree = build_tree(read_tsv(tax_file))
-    clade_total = get_clade_counts(direct_total, tree)
-    clade_dedup = get_clade_counts(direct_dedup, tree)
+    parent_map = build_parent_map(read_tsv(tax_file))
+    clade_total, clade_dedup, sparse_tree, dropped = accumulate_clade_counts(
+        direct_total, direct_dedup, parent_map
+    )
+    assert dropped == 0
 
     # Write output
     output_file = tsv_factory.get_path("output.tsv.gz")
     write_output_tsv(
-        output_file, "test", tree, direct_total, direct_dedup, clade_total, clade_dedup
+        output_file,
+        "test",
+        parent_map,
+        sparse_tree,
+        direct_total,
+        direct_dedup,
+        clade_total,
+        clade_dedup,
     )
 
     # Read and verify output is header-only
