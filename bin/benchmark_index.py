@@ -124,22 +124,13 @@ def latest_silva_release() -> str | None:
     return f"{major}.{minor}" if minor else str(major)
 
 
-def _staleness_row(
-    ref: str,
-    current: str,
-    current_date: str = "",
-    latest: str = "",
-    latest_date: str = "",
-    status: str = "error",
-) -> dict[str, str]:
-    return {
-        "ref": ref,
-        "current": current,
-        "current_date": current_date,
-        "latest": latest,
-        "latest_date": latest_date,
-        "status": status,
-    }
+STALENESS_COLS = "ref", "current", "current_date", "latest", "latest_date", "status"
+
+
+def _stale(ref, current, current_date="", latest="", latest_date="", status="error"):
+    """Return one staleness.tsv row with stable column names."""
+    values = ref, current, current_date, latest, latest_date, status
+    return dict(zip(STALENESS_COLS, values, strict=False))
 
 
 def check_kraken_staleness(new_params: dict) -> list[dict[str, str]]:
@@ -151,12 +142,10 @@ def check_kraken_staleness(new_params: dict) -> list[dict[str, str]]:
     current_date = m.group(1) if m else ""
     latest = latest_kraken_release()
     if latest is None:
-        return [_staleness_row("kraken_db", url, current_date)]
+        return [_stale("kraken_db", url, current_date)]
     latest_date, latest_name = latest
     status = "current" if current_date == latest_date else "stale"
-    return [
-        _staleness_row("kraken_db", url, current_date, latest_name, latest_date, status)
-    ]
+    return [_stale("kraken_db", url, current_date, latest_name, latest_date, status)]
 
 
 def check_silva_staleness(new_params: dict) -> list[dict[str, str]]:
@@ -164,21 +153,17 @@ def check_silva_staleness(new_params: dict) -> list[dict[str, str]]:
     keys = [key for key in ("ssu_url", "lsu_url") if new_params.get(key)]
     if not keys:
         return []
-    latest_rel = latest_silva_release()
+    latest = latest_silva_release()
     rows: list[dict[str, str]] = []
     for key in keys:
         url = new_params[key]
         m = re.search(r"release_(\d+(?:[._]\d+)?)", url)
-        current_release = m.group(1).replace("_", ".") if m else ""
-        if latest_rel is None:
-            rows.append(_staleness_row(key, url, current_release))
+        current = m.group(1).replace("_", ".") if m else ""
+        if latest is None:
+            rows.append(_stale(key, url, current))
             continue
-        status = "current" if current_release == latest_rel else "stale"
-        rows.append(
-            _staleness_row(
-                key, url, current_release, f"release_{latest_rel}", latest_rel, status
-            )
-        )
+        status = "current" if current == latest else "stale"
+        rows.append(_stale(key, url, current, f"release_{latest}", latest, status))
     return rows
 
 
@@ -186,9 +171,7 @@ def write_staleness_table(new_params: dict, out_path: Path) -> None:
     """Check Kraken2/SILVA freshness for the new index and write staleness.tsv."""
     logger.info("Checking reference-DB staleness (Kraken2, SILVA).")
     rows = [*check_kraken_staleness(new_params), *check_silva_staleness(new_params)]
-    pd.DataFrame(rows, columns=list(_staleness_row("", ""))).to_csv(
-        out_path, sep="\t", index=False
-    )
+    pd.DataFrame(rows, columns=STALENESS_COLS).to_csv(out_path, sep="\t", index=False)
 
 
 ###################################
@@ -256,30 +239,14 @@ def collect_content_stats(
     old/new content stats, keyed by filename."""
     stats: dict[str, tuple[dict[str, int], dict[str, int]]] = {}
     with tempfile.TemporaryDirectory() as td:
-        old_dir = Path(td) / "old"
-        new_dir = Path(td) / "new"
-        old_dir.mkdir()
-        new_dir.mkdir()
+        temp_dir = Path(td)
         for name in names:
             subpath = f"output/results/{name}"
-            old_stat = _content_stats(fetch(old_prefix, subpath, old_dir))
-            new_stat = _content_stats(fetch(new_prefix, subpath, new_dir))
+            old_stat = _content_stats(fetch(old_prefix, subpath, temp_dir))
+            new_stat = _content_stats(fetch(new_prefix, subpath, temp_dir))
             if old_stat is not None and new_stat is not None:
                 stats[name] = (old_stat, new_stat)
     return stats
-
-
-def _metric_row(name: str, metric: str, old: int, new: int) -> dict[str, object]:
-    """One long-format comparison row: old/new values, delta, and pct_change."""
-    delta = new - old
-    return {
-        "name": name,
-        "metric": metric,
-        "old": old,
-        "new": new,
-        "delta": delta,
-        "pct_change": round(delta / old * 100, 2) if old else float("nan"),
-    }
 
 
 def compare_metrics(
@@ -295,15 +262,17 @@ def compare_metrics(
         key=lambda name: abs(new_sizes.get(name, 0) - old_sizes.get(name, 0)),
         reverse=True,
     )
-    rows: list[dict[str, object]] = []
+    rows: list[tuple[str, str, int, int]] = []
     for name in names:
-        rows.append(
-            _metric_row(name, "bytes", old_sizes.get(name, 0), new_sizes.get(name, 0))
-        )
+        rows.append((name, "bytes", old_sizes.get(name, 0), new_sizes.get(name, 0)))
         old_stat, new_stat = content_stats.get(name, ({}, {}))
         for metric in old_stat:
-            rows.append(_metric_row(name, metric, old_stat[metric], new_stat[metric]))
-    return pd.DataFrame(rows)
+            rows.append((name, metric, old_stat[metric], new_stat[metric]))
+    out = pd.DataFrame(rows, columns=["name", "metric", "old", "new"])
+    out["delta"] = out["new"] - out["old"]
+    out["pct_change"] = (out["delta"] / out["old"] * 100).round(2)
+    out.loc[out["old"].eq(0), "pct_change"] = float("nan")
+    return out
 
 
 def write_metrics_table(old_prefix: str, new_prefix: str, out_dir: Path) -> None:
