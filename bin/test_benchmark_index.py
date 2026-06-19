@@ -20,24 +20,22 @@ from benchmark_index import (
     Coverage,
     _ancestor_in,
     _content_stats,
+    _coverage_match,
+    _included_for_other_hosts,
     annotate_changes_with_coverage,
     build_parent_map,
-    categorize_gained_genomes_raw,
-    categorize_lost_genomes_raw,
+    categorize_gain,
+    categorize_loss,
     check_kraken_staleness,
     check_silva_staleness,
-    classify_coverage,
     compare_metrics,
-    diff_genome_metadata,
     diff_params,
-    diff_reassignments,
-    diff_taxonomy,
-    includes_for_other_hosts,
     infection_status_changes,
     infection_status_columns,
     infection_status_transitions,
+    metadata_deltas,
     summarise_params_changes,
-    surveilled_species,
+    surveilled_taxids,
     write_genome_taxonomy_tables,
     write_metrics_table,
     write_staleness_table,
@@ -142,31 +140,31 @@ class TestCompareMetrics:
         assert records["pct_change"] == 20.0
 
 
-class TestDiffGenomeMetadata:
+class TestMetadataDeltas:
     def test_added_and_removed_genome_ids(
         self, old_genome_meta: pd.DataFrame, new_genome_meta: pd.DataFrame
     ) -> None:
-        added, removed, _ = diff_genome_metadata(old_genome_meta, new_genome_meta)
-        assert set(added["genome_id"]) == {"G4", "G5"}
-        assert set(removed["genome_id"]) == {"G1", "G3"}
+        lost, gained, shared, *_ = metadata_deltas(old_genome_meta, new_genome_meta)
+        assert set(gained["genome_id"]) == {"G4", "G5"}
+        assert set(lost["genome_id"]) == {"G1", "G3"}
+        assert shared == {"G2"}
 
-    def test_per_species_delta(
+    def test_species_zero_crossings(
         self, old_genome_meta: pd.DataFrame, new_genome_meta: pd.DataFrame
     ) -> None:
-        _, _, species = diff_genome_metadata(old_genome_meta, new_genome_meta)
-        species = species.set_index("species_taxid")
-        # species 100 had 2 in old, 1 in new -> delta -1
-        assert species.loc["100", "delta"] == -1
-        # species 200 had 1 in old, 1 in new (different genome_id) -> delta 0
-        assert species.loc["200", "delta"] == 0
-        # species 300 is new -> delta +1
-        assert species.loc["300", "delta"] == 1
+        *_, species_lost, species_gained, _ = metadata_deltas(
+            old_genome_meta, new_genome_meta
+        )
+        assert species_lost.empty
+        assert species_gained["species_taxid"].tolist() == ["300"]
+        assert species_gained["delta"].tolist() == [1]
 
     def test_rejects_missing_columns(self) -> None:
         bad = pd.DataFrame([{"genome_id": "X"}])
         good = pd.DataFrame(
             [
                 {
+                    "assembly_accession": "GCA_Y",
                     "genome_id": "Y",
                     "taxid": "1",
                     "species_taxid": "1",
@@ -175,28 +173,64 @@ class TestDiffGenomeMetadata:
             ]
         )
         with pytest.raises(ValueError, match="missing required columns"):
-            diff_genome_metadata(bad, good)
+            metadata_deltas(bad, good)
 
 
 class TestDiffReassignments:
     def test_flags_species_change_in_intersection(self) -> None:
         old = pd.DataFrame(
             [
-                {"genome_id": "G1", "species_taxid": "100", "organism_name": "A"},
-                {"genome_id": "G2", "species_taxid": "100", "organism_name": "A"},
-                {"genome_id": "G3", "species_taxid": "200", "organism_name": "B"},
+                {
+                    "assembly_accession": "GCA_1",
+                    "genome_id": "G1",
+                    "taxid": "10",
+                    "species_taxid": "100",
+                    "organism_name": "A",
+                },
+                {
+                    "assembly_accession": "GCA_2",
+                    "genome_id": "G2",
+                    "taxid": "10",
+                    "species_taxid": "100",
+                    "organism_name": "A",
+                },
+                {
+                    "assembly_accession": "GCA_3",
+                    "genome_id": "G3",
+                    "taxid": "20",
+                    "species_taxid": "200",
+                    "organism_name": "B",
+                },
             ]
         )
         new = pd.DataFrame(
             [
                 # G1 reassigned 100 -> 300; G2 unchanged; G3 removed (not in new);
                 # G9 added (not in old). Only G1 should count.
-                {"genome_id": "G1", "species_taxid": "300", "organism_name": "A2"},
-                {"genome_id": "G2", "species_taxid": "100", "organism_name": "A"},
-                {"genome_id": "G9", "species_taxid": "400", "organism_name": "Z"},
+                {
+                    "assembly_accession": "GCA_1",
+                    "genome_id": "G1",
+                    "taxid": "30",
+                    "species_taxid": "300",
+                    "organism_name": "A2",
+                },
+                {
+                    "assembly_accession": "GCA_2",
+                    "genome_id": "G2",
+                    "taxid": "10",
+                    "species_taxid": "100",
+                    "organism_name": "A",
+                },
+                {
+                    "assembly_accession": "GCA_9",
+                    "genome_id": "G9",
+                    "taxid": "40",
+                    "species_taxid": "400",
+                    "organism_name": "Z",
+                },
             ]
         )
-        flows = diff_reassignments(old, new)
+        *_, flows = metadata_deltas(old, new)
         assert len(flows) == 1
         row = flows.iloc[0]
         assert row["old_species_taxid"] == "100"
@@ -205,30 +239,19 @@ class TestDiffReassignments:
 
     def test_empty_when_no_reassignment(self) -> None:
         meta = pd.DataFrame(
-            [{"genome_id": "G1", "species_taxid": "100", "organism_name": "A"}]
+            [
+                {
+                    "assembly_accession": "GCA_1",
+                    "genome_id": "G1",
+                    "taxid": "10",
+                    "species_taxid": "100",
+                    "organism_name": "A",
+                }
+            ]
         )
-        flows = diff_reassignments(meta, meta)
+        *_, flows = metadata_deltas(meta, meta)
         assert flows.empty
         assert "n_genomes" in flows.columns
-
-
-class TestDiffTaxonomy:
-    def test_returns_added_and_removed(self) -> None:
-        old = pd.DataFrame(
-            [
-                {"taxid": "1", "name": "Alpha", "rank": "species"},
-                {"taxid": "2", "name": "Beta", "rank": "species"},
-            ]
-        )
-        new = pd.DataFrame(
-            [
-                {"taxid": "2", "name": "Beta", "rank": "species"},
-                {"taxid": "3", "name": "Gamma", "rank": "species"},
-            ]
-        )
-        added, removed = diff_taxonomy(old, new)
-        assert list(added["taxid"]) == ["3"]
-        assert list(removed["taxid"]) == ["1"]
 
 
 class TestInfectionStatus:
@@ -349,6 +372,15 @@ class TestCoverageClassification:
     def included(self) -> dict[str, set[str]]:
         return {"human": {"10"}}
 
+    @pytest.fixture
+    def cov(
+        self,
+        parent_map: dict[str, str],
+        excluded: set[str],
+        included: dict[str, set[str]],
+    ) -> Coverage:
+        return Coverage(True, parent_map, excluded, included)
+
     @pytest.mark.parametrize(
         "taxid,host,expected",
         [
@@ -362,20 +394,15 @@ class TestCoverageClassification:
     )
     def test_classifies_lineage(
         self,
-        parent_map: dict[str, str],
-        excluded: set[str],
-        included: dict[str, set[str]],
+        cov: Coverage,
         taxid: str,
         host: str,
         expected: tuple[str, str],
     ) -> None:
-        assert (
-            classify_coverage(taxid, parent_map, excluded, included, host) == expected
-        )
+        assert _coverage_match(taxid, host, cov) == expected
 
     def test_excluded_wins_over_included_when_walking_up(
         self,
-        parent_map: dict[str, str],
         included: dict[str, set[str]],
     ) -> None:
         # If a closer ancestor is excluded, that's reported first (we walk from
@@ -383,20 +410,20 @@ class TestCoverageClassification:
         # explanation rather than skipping past it.
         excluded = {"3"}  # genus
         # walk: 4 -> not in set; 3 -> excluded; never reaches 10
-        assert classify_coverage(
-            "4", {"4": "3", "3": "2", "2": "1", "10": "1"}, excluded, included, "human"
+        assert _coverage_match(
+            "4",
+            "human",
+            Coverage(
+                True, {"4": "3", "3": "2", "2": "1", "10": "1"}, excluded, included
+            ),
         ) == ("excluded", "3")
 
     def test_other_host_not_matched(
         self,
-        parent_map: dict[str, str],
-        excluded: set[str],
-        included: dict[str, set[str]],
+        cov: Coverage,
     ) -> None:
         # taxid 10 is included for "human" but not "vertebrate"
-        assert classify_coverage(
-            "10", parent_map, excluded, included, "vertebrate"
-        ) == (
+        assert _coverage_match("10", "vertebrate", cov) == (
             "",
             "",
         )
@@ -442,7 +469,7 @@ class TestCoverageClassification:
             ]
         )
         out = annotate_changes_with_coverage(
-            changes, "human", parent_map, excluded, included
+            changes, "human", Coverage(True, parent_map, excluded, included)
         )
         assert list(out["covered_by"]) == ["excluded", "included", ""]
         assert list(out["covered_rule_taxid"]) == ["2", "10", ""]
@@ -451,7 +478,9 @@ class TestCoverageClassification:
         empty = pd.DataFrame(
             columns=["taxid", "name", "rank", "old_status", "new_status"]
         )
-        out = annotate_changes_with_coverage(empty, "human", {}, set(), {})
+        out = annotate_changes_with_coverage(
+            empty, "human", Coverage(False, {}, set(), {})
+        )
         assert "covered_by" in out.columns
         assert "covered_rule_taxid" in out.columns
         assert "included_for_other_hosts" in out.columns
@@ -459,25 +488,24 @@ class TestCoverageClassification:
 
     def test_includes_for_other_hosts_flags_policy_gap(self) -> None:
         # taxid 5 is included for human + vertebrate but not primate.
-        # When we ask about primate, includes_for_other_hosts should return
-        # ['human', 'vertebrate']; when we ask about human, it returns [].
+        # When we ask about primate, _included_for_other_hosts should return
+        # "human,vertebrate"; when we ask about human, it returns "vertebrate".
         parent_map = {"5": "1", "1": "0"}
         included = {"human": {"5"}, "vertebrate": {"5"}, "primate": set()}
-        assert includes_for_other_hosts("5", parent_map, included, "primate") == [
-            "human",
-            "vertebrate",
-        ]
-        assert includes_for_other_hosts("5", parent_map, included, "human") == [
-            "vertebrate"
-        ]
+        cov = Coverage(True, parent_map, set(), included)
+        assert _included_for_other_hosts("5", "primate", cov) == "human,vertebrate"
+        assert _included_for_other_hosts("5", "human", cov) == "vertebrate"
 
     def test_includes_for_other_hosts_walks_lineage(self) -> None:
         # Ancestor 1 is included for human; descendant 5 should report that.
         parent_map = {"5": "3", "3": "1", "1": "0"}
         included = {"human": {"1"}}
-        assert includes_for_other_hosts("5", parent_map, included, "primate") == [
-            "human"
-        ]
+        assert (
+            _included_for_other_hosts(
+                "5", "primate", Coverage(True, parent_map, set(), included)
+            )
+            == "human"
+        )
 
     def test_annotate_adds_other_hosts_column(self) -> None:
         # Banzi-virus-style case: taxid 5 is overridden for human + vertebrate.
@@ -497,7 +525,7 @@ class TestCoverageClassification:
             ]
         )
         out = annotate_changes_with_coverage(
-            changes, "primate", parent_map, set(), included
+            changes, "primate", Coverage(True, parent_map, set(), included)
         )
         assert out["covered_by"].iloc[0] == ""
         assert out["included_for_other_hosts"].iloc[0] == "human,vertebrate"
@@ -519,13 +547,13 @@ class TestCoverageClassification:
             ]
         )
         out = annotate_changes_with_coverage(
-            changes, "human", parent_map, set(), included
+            changes, "human", Coverage(True, parent_map, set(), included)
         )
         assert out["covered_by"].iloc[0] == "included"
         assert out["included_for_other_hosts"].iloc[0] == ""
 
 
-class TestSurveilledSpecies:
+class TestSurveilledTaxids:
     def test_positive_for_any_screened_host(self) -> None:
         db = pd.DataFrame(
             [
@@ -546,7 +574,7 @@ class TestSurveilledSpecies:
                 },
             ]
         )
-        assert surveilled_species(db, ["vertebrate", "human"]) == {"1", "2"}
+        assert surveilled_taxids(db, ["vertebrate", "human"]) == {"1", "2"}
 
     def test_unscreened_host_ignored(self) -> None:
         db = pd.DataFrame(
@@ -559,11 +587,11 @@ class TestSurveilledSpecies:
             ]
         )
         # bird is not in the screen -> taxid 1 is not surveilled
-        assert surveilled_species(db, ["vertebrate"]) == set()
+        assert surveilled_taxids(db, ["vertebrate"]) == set()
 
     def test_missing_columns_returns_empty(self) -> None:
         assert (
-            surveilled_species(pd.DataFrame([{"taxid": "1"}]), ["vertebrate"]) == set()
+            surveilled_taxids(pd.DataFrame([{"taxid": "1"}]), ["vertebrate"]) == set()
         )
 
 
@@ -669,8 +697,12 @@ class TestCategorizeLostGenomesRaw:
     def test_assigns_expected_reason_by_first_matching_rule(
         self, removed: pd.DataFrame, raw_meta: pd.DataFrame, new_db: pd.DataFrame
     ) -> None:
-        out = categorize_lost_genomes_raw(
-            removed, raw_meta, new_db, build_parent_map(new_db), {"70"}, ["vertebrate"]
+        out = categorize_loss(
+            removed,
+            raw_meta,
+            new_db,
+            Coverage(True, build_parent_map(new_db), {"70"}, {}),
+            ["vertebrate"],
         ).set_index("genome_id")
         expected = {
             "gA": "absent_from_ncbi",
@@ -710,8 +742,8 @@ class TestCategorizeLostGenomesRaw:
                 "organism_name",
             ]
         )
-        out = categorize_lost_genomes_raw(
-            empty, raw_meta, new_db, {}, set(), ["vertebrate"]
+        out = categorize_loss(
+            empty, raw_meta, new_db, Coverage(False, {}, set(), {}), ["vertebrate"]
         )
         assert out.empty
         assert "reason" in out.columns
@@ -1073,12 +1105,11 @@ class TestCategorizeGainedGenomesRaw:
     def test_assigns_expected_reason_by_first_matching_rule(
         self, added: pd.DataFrame, raw_meta: pd.DataFrame, old_db: pd.DataFrame
     ) -> None:
-        out = categorize_gained_genomes_raw(
+        out = categorize_gain(
             added,
             raw_meta,
             old_db,
-            self.PARENT_MAP,
-            {"host": {"50"}},
+            Coverage(True, self.PARENT_MAP, set(), {"host": {"50"}}),
             ["vertebrate"],
             self.OLD_BUILD,
         ).set_index("genome_id")
@@ -1126,8 +1157,13 @@ class TestCategorizeGainedGenomesRaw:
                 "organism_name",
             ]
         )
-        out = categorize_gained_genomes_raw(
-            empty, raw_meta, old_db, {}, {}, ["vertebrate"], self.OLD_BUILD
+        out = categorize_gain(
+            empty,
+            raw_meta,
+            old_db,
+            Coverage(False, {}, set(), {}),
+            ["vertebrate"],
+            self.OLD_BUILD,
         )
         assert "reason" in out.columns
         assert out.empty
@@ -1147,10 +1183,12 @@ class TestWriteGenomeTaxonomyTables:
             [["GCA_1", "g1", "100", "100", "A"], ["GCA_2", "g2", "200", "200", "B"]],
             columns=meta_cols,
         )
+        old_meta["old_only"] = "x"
         new_meta = pd.DataFrame(
             [["GCA_1", "g1", "100", "100", "A"], ["GCA_3", "g3", "300", "300", "C"]],
             columns=meta_cols,
         )
+        new_meta["new_only"] = "x"
         raw = pd.DataFrame(
             [
                 [
@@ -1203,56 +1241,87 @@ class TestWriteGenomeTaxonomyTables:
         )
         return old_meta, new_meta, raw, old_db, new_db
 
+    @staticmethod
+    def _write_index(root: Path, gid: pd.DataFrame, raw: pd.DataFrame | None) -> None:
+        results = root / "output" / "results"
+        results.mkdir(parents=True)
+        gid.to_csv(
+            results / "virus-genome-metadata-gid.tsv.gz",
+            sep="\t",
+            index=False,
+            compression="gzip",
+        )
+        if raw is not None:
+            raw.to_csv(
+                results / "virus-genome-metadata-raw.tsv.gz",
+                sep="\t",
+                index=False,
+                compression="gzip",
+            )
+
     def test_writes_tables_and_summary(self, tmp_path: Path) -> None:
         old_meta, new_meta, raw, old_db, new_db = self._frames()
+        old_root = tmp_path / "old-index"
+        new_root = tmp_path / "new-index"
+        out_dir = tmp_path / "out"
+        out_dir.mkdir()
+        self._write_index(old_root, old_meta, None)
+        self._write_index(new_root, new_meta, raw)
         write_genome_taxonomy_tables(
-            tmp_path,
-            old_meta,
-            new_meta,
-            raw,
+            out_dir,
+            str(old_root),
+            str(new_root),
             old_db,
             new_db,
             Coverage(False, {}, set(), {}),
-            ["vertebrate"],
-            "2025-01-01",
+            {"trace_timestamp": "2025-01-01T00:00:00Z"},
+            {"host_taxa_screen": "vertebrate"},
+            tmp_path / "work",
         )
-        assert {p.name for p in tmp_path.glob("*.tsv")} == {
+        assert {p.name for p in out_dir.glob("*.tsv")} == {
             "genomes_reassigned.tsv",
             "species_lost_all_genomes.tsv",
             "species_gained_all_genomes.tsv",
             "genomes_lost_categorized.tsv",
             "genomes_gained_categorized.tsv",
-            "taxa_added.tsv",
-            "taxa_removed.tsv",
             "metadata_schema_diff.tsv",
         }
         # g2 lost, g3 gained, g1 kept; taxonomy 200 dropped, 300 added.
         lost = pd.read_csv(
-            tmp_path / "genomes_lost_categorized.tsv", sep="\t", dtype=str
+            out_dir / "genomes_lost_categorized.tsv", sep="\t", dtype=str
         )
         assert lost["genome_id"].tolist() == ["g2"]
-        assert pd.read_csv(tmp_path / "taxa_added.tsv", sep="\t", dtype=str)[
-            "taxid"
-        ].tolist() == ["300"]
-        summary = json.loads((tmp_path / "genomes_summary.json").read_text())
+        schema = pd.read_csv(out_dir / "metadata_schema_diff.tsv", sep="\t", dtype=str)
+        assert {
+            tuple(row)
+            for row in schema[["change", "column"]].itertuples(index=False, name=None)
+        } == {("removed", "old_only"), ("added", "new_only")}
+        summary = json.loads((out_dir / "genomes_summary.json").read_text())
         assert summary["lost_total"] == 1
         assert summary["kept_genomes"] == 1
         assert summary["taxa_added"] == 1
+        assert summary["taxa_removed"] == 1
         assert summary["gained_by_reason"] == {"newly_deposited": 1}
 
     def test_missing_release_date_raises(self, tmp_path: Path) -> None:
         old_meta, new_meta, raw, old_db, new_db = self._frames()
+        old_root = tmp_path / "old-index"
+        new_root = tmp_path / "new-index"
+        out_dir = tmp_path / "out"
+        out_dir.mkdir()
+        self._write_index(old_root, old_meta, None)
+        self._write_index(new_root, new_meta, raw.drop(columns="release_date"))
         with pytest.raises(ValueError, match="release_date"):
             write_genome_taxonomy_tables(
-                tmp_path,
-                old_meta,
-                new_meta,
-                raw.drop(columns="release_date"),
+                out_dir,
+                str(old_root),
+                str(new_root),
                 old_db,
                 new_db,
                 Coverage(False, {}, set(), {}),
-                ["vertebrate"],
-                "2025-01-01",
+                {"trace_timestamp": "2025-01-01T00:00:00Z"},
+                {"host_taxa_screen": "vertebrate"},
+                tmp_path / "work",
             )
 
 
