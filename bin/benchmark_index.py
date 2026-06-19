@@ -1,11 +1,23 @@
 #!/usr/bin/env python3
-DESC = """Compare two mgs-workflow index releases before promotion.
+DESC = """
+Compare two mgs-workflow index releases and emit per-DB size diffs, genome
+add/drop/per-species deltas, infection-status transitions, and a params diff.
+Intended to be run before promoting a new index to production so reviewers can
+spot regressions driven by upstream Virus-Host-DB or NCBI taxonomy drift.
 
-Accepts s3:// URIs or local directories for --old and --new, each pointing at
-the root of an index release (the parent of `output/`).
+Accepts s3:// URIs or local directories for both --old and --new, each pointing
+at the *root* of an index release (the parent of `output/`).
+
+Usage:
+    python bin/benchmark_index.py \\
+        --old s3://nao-mgs-index/20250825 \\
+        --new s3://nao-mgs-index/20260518 \\
+        --out ./bench-20250825-vs-20260518/
 """
 
-# Imports
+###########
+# IMPORTS #
+###########
 
 import argparse
 import difflib
@@ -18,14 +30,15 @@ import subprocess
 import tempfile
 import urllib.request
 from collections import Counter, defaultdict
-from collections.abc import Iterator
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
 import pandas as pd
 
-# Logging
+###########
+# LOGGING #
+###########
 
 
 class UTCFormatter(logging.Formatter):
@@ -46,7 +59,9 @@ logger.handlers.clear()
 logger.addHandler(handler)
 
 
-# Staging
+###########
+# STAGING #
+###########
 
 
 def fetch(prefix: str, subpath: str, local_dir: Path) -> Path:
@@ -67,14 +82,22 @@ def _write_json(path: Path, obj: object) -> None:
     path.write_text(json.dumps(obj, indent=2, sort_keys=True) + "\n")
 
 
-# 1. Reference Staleness
+##########################
+# 1. REFERENCE STALENESS #
+##########################
 
 
 def latest_kraken_release() -> tuple[str, str] | None:
     """(date, filename) of the newest k2_standard_*.tar.gz in the public Kraken2
     bucket, or None on failure."""
     try:
-        out = subprocess.run(["aws", "s3", "ls", "s3://genome-idx/kraken/", "--no-sign-request"], check=True, capture_output=True, text=True, timeout=15).stdout
+        out = subprocess.run(
+            ["aws", "s3", "ls", "s3://genome-idx/kraken/", "--no-sign-request"],
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=15,
+        ).stdout
     except (subprocess.SubprocessError, OSError):
         return None
     bundles = re.findall(r"\b(k2_standard_(\d{8})\.tar\.gz)\b", out)
@@ -109,8 +132,14 @@ def _staleness_row(
     latest_date: str = "",
     status: str = "error",
 ) -> dict[str, str]:
-    """Build one reference-staleness output row."""
-    return {"ref": ref, "current": current, "current_date": current_date, "latest": latest, "latest_date": latest_date, "status": status}
+    return {
+        "ref": ref,
+        "current": current,
+        "current_date": current_date,
+        "latest": latest,
+        "latest_date": latest_date,
+        "status": status,
+    }
 
 
 def check_kraken_staleness(new_params: dict) -> list[dict[str, str]]:
@@ -145,7 +174,11 @@ def check_silva_staleness(new_params: dict) -> list[dict[str, str]]:
             rows.append(_staleness_row(key, url, current_release))
             continue
         status = "current" if current_release == latest_rel else "stale"
-        rows.append(_staleness_row(key, url, current_release, f"release_{latest_rel}", latest_rel, status))
+        rows.append(
+            _staleness_row(
+                key, url, current_release, f"release_{latest_rel}", latest_rel, status
+            )
+        )
     return rows
 
 
@@ -153,10 +186,14 @@ def write_staleness_table(new_params: dict, out_path: Path) -> None:
     """Check Kraken2/SILVA freshness for the new index and write staleness.tsv."""
     logger.info("Checking reference-DB staleness (Kraken2, SILVA).")
     rows = [*check_kraken_staleness(new_params), *check_silva_staleness(new_params)]
-    pd.DataFrame(rows, columns=list(_staleness_row("", ""))).to_csv(out_path, sep="\t", index=False)
+    pd.DataFrame(rows, columns=list(_staleness_row("", ""))).to_csv(
+        out_path, sep="\t", index=False
+    )
 
 
-# 2. Size And Content Comparisons
+###################################
+# 2. SIZE AND CONTENT COMPARISONS #
+###################################
 
 
 def list_recursive_sizes(prefix: str) -> dict[str, int]:
@@ -165,7 +202,12 @@ def list_recursive_sizes(prefix: str) -> dict[str, int]:
     base = f"{prefix.rstrip('/')}/output/results/"
     sizes: Counter[str] = Counter()
     if prefix.startswith("s3://"):
-        out = subprocess.run(["aws", "s3", "ls", "--recursive", base], check=True, capture_output=True, text=True).stdout
+        out = subprocess.run(
+            ["aws", "s3", "ls", "--recursive", base],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout
         prefix_key = base.split("/", 3)[-1]  # strip "s3://bucket/"
         for line in out.splitlines():
             parts = line.split()
@@ -255,7 +297,9 @@ def compare_metrics(
     )
     rows: list[dict[str, object]] = []
     for name in names:
-        rows.append(_metric_row(name, "bytes", old_sizes.get(name, 0), new_sizes.get(name, 0)))
+        rows.append(
+            _metric_row(name, "bytes", old_sizes.get(name, 0), new_sizes.get(name, 0))
+        )
         old_stat, new_stat = content_stats.get(name, ({}, {}))
         for metric in old_stat:
             rows.append(_metric_row(name, metric, old_stat[metric], new_stat[metric]))
@@ -269,7 +313,11 @@ def write_metrics_table(old_prefix: str, new_prefix: str, out_dir: Path) -> None
     logger.info("Listing per-DB sizes and content metrics.")
     old_sizes = list_recursive_sizes(old_prefix)
     new_sizes = list_recursive_sizes(new_prefix)
-    content_files = sorted(name for name in set(old_sizes) & set(new_sizes) if name.endswith(_FASTA_SUFFIXES + _TSV_SUFFIXES))
+    content_files = sorted(
+        name
+        for name in set(old_sizes) & set(new_sizes)
+        if name.endswith(_FASTA_SUFFIXES + _TSV_SUFFIXES)
+    )
     content_stats = collect_content_stats(old_prefix, new_prefix, content_files)
     metrics = compare_metrics(old_sizes, new_sizes, content_stats)
     metrics.to_csv(out_dir / "sizes.tsv", sep="\t", index=False)
@@ -284,225 +332,121 @@ def write_metrics_table(old_prefix: str, new_prefix: str, out_dir: Path) -> None
     )
 
 
-# 3. Genome And Taxonomy Delta
+################################
+# 3. GENOME AND TAXONOMY DELTA #
+################################
 
-
-GENOME_META_COLS = [
-    "assembly_accession",
-    "genome_id",
-    "taxid",
-    "species_taxid",
-    "organism_name",
-]
-
+GENOME_META_COLS = ["assembly_accession", "genome_id", "taxid", "species_taxid", "organism_name"]
 
 @dataclass
 class Coverage:
     """Rule context used to explain genome and infection-status changes."""
-
     available: bool
     parent_map: dict[str, str]
     excluded_taxids: set[str]
     included_taxids: dict[str, set[str]]
 
 
-def _lineage(taxid: str, parent_map: dict[str, str]) -> Iterator[str]:
-    """Yield taxid and ancestors until the root, a missing parent, or a self-loop."""
-    while taxid:
-        yield taxid
-        parent = parent_map.get(taxid)
-        if parent is None or parent == taxid:
-            break
-        taxid = parent
+def build_parent_map(new_db: pd.DataFrame) -> dict[str, str]:
+    """Return taxid -> parent_taxid lookup from the annotated taxonomy DB."""
+    return dict(zip(new_db["taxid"], new_db["parent_taxid"], strict=False))
 
 
 def _ancestor_in(taxid: str, parent_map: dict[str, str], target: set[str]) -> str:
     """Return the first taxid or ancestor found in target, or an empty string."""
-    return next((cur for cur in _lineage(taxid, parent_map) if cur in target), "")
+    while taxid:
+        if taxid in target:
+            return taxid
+        parent = parent_map.get(taxid)
+        if parent is None or parent == taxid:
+            break
+        taxid = parent
+    return ""
 
 
 def surveilled_taxids(db: pd.DataFrame, screened_hosts: list[str]) -> set[str]:
     """Return taxids passing any screened host, including species-rollup matches."""
-    cols = [
-        f"infection_status_{h}"
-        for h in screened_hosts
-        if f"infection_status_{h}" in db.columns
-    ]
+    cols = [f"infection_status_{h}" for h in screened_hosts if f"infection_status_{h}" in db.columns]
     if not cols or "taxid" not in db.columns:
         return set()
     positive = set(db.loc[(db[cols] == "1").any(axis=1), "taxid"].astype(str))
     if "taxid_species" in db.columns:
-        positive |= set(
-            db.loc[db["taxid_species"].astype(str).isin(positive), "taxid"].astype(str)
-        )
+        positive |= set(db.loc[db["taxid_species"].astype(str).isin(positive), "taxid"].astype(str))
     return positive
 
 
-def genome_deltas(
-    old_meta: pd.DataFrame, new_meta: pd.DataFrame
-) -> tuple[pd.DataFrame, pd.DataFrame, set[str]]:
+def genome_deltas(old_meta: pd.DataFrame, new_meta: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame, set[str]]:
     """Return lost genomes, gained genomes, and genome IDs shared by both builds."""
     for df, label in [(old_meta, "old"), (new_meta, "new")]:
         missing = set(GENOME_META_COLS) - set(df.columns)
         if missing:
             raise ValueError(f"{label} metadata missing required columns: {missing}")
-
-    old_ids = set(old_meta["genome_id"])
-    new_ids = set(new_meta["genome_id"])
+    old_ids, new_ids = set(old_meta["genome_id"]), set(new_meta["genome_id"])
     lost = old_meta.loc[~old_meta["genome_id"].isin(new_ids), GENOME_META_COLS]
     gained = new_meta.loc[~new_meta["genome_id"].isin(old_ids), GENOME_META_COLS]
-    return (
-        lost.sort_values("organism_name").reset_index(drop=True),
-        gained.sort_values("organism_name").reset_index(drop=True),
-        old_ids & new_ids,
-    )
+    return lost.sort_values("organism_name").reset_index(drop=True), gained.sort_values("organism_name").reset_index(drop=True), old_ids & new_ids
 
 
-def species_zero_crossings(
-    old_meta: pd.DataFrame, new_meta: pd.DataFrame
-) -> tuple[pd.DataFrame, pd.DataFrame]:
+def species_zero_crossings(old_meta: pd.DataFrame, new_meta: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Return species that lost all genomes, and species that gained any genomes."""
-    species_counts = (
-        pd.concat(
-            {
-                "old_count": old_meta["species_taxid"].value_counts(),
-                "new_count": new_meta["species_taxid"].value_counts(),
-            },
-            axis=1,
-        )
-        .fillna(0)
-        .astype(int)
-        .assign(delta=lambda df: df["new_count"] - df["old_count"])
-        .rename_axis("species_taxid")
-        .reset_index()
-    )
-    species_names = (
-        pd.concat([old_meta, new_meta])
-        .drop_duplicates("species_taxid", keep="last")
-        .set_index("species_taxid")["organism_name"]
-    )
-    species_counts.insert(
-        1, "organism_name", species_counts["species_taxid"].map(species_names)
-    )
-    lost = (
-        species_counts.query("new_count == 0 and old_count > 0")
-        .sort_values("old_count", ascending=False)
-        .reset_index(drop=True)
-    )
-    gained = (
-        species_counts.query("old_count == 0 and new_count > 0")
-        .sort_values("new_count", ascending=False)
-        .reset_index(drop=True)
-    )
+    counts = pd.concat({"old_count": old_meta["species_taxid"].value_counts(), "new_count": new_meta["species_taxid"].value_counts()}, axis=1).fillna(0).astype(int)
+    counts["delta"] = counts["new_count"] - counts["old_count"]
+    counts = counts.rename_axis("species_taxid").reset_index()
+    names = pd.concat([old_meta, new_meta]).drop_duplicates("species_taxid", keep="last").set_index("species_taxid")["organism_name"]
+    counts.insert(1, "organism_name", counts["species_taxid"].map(names))
+    lost = counts.query("new_count == 0 and old_count > 0").sort_values("old_count", ascending=False).reset_index(drop=True)
+    gained = counts.query("old_count == 0 and new_count > 0").sort_values("new_count", ascending=False).reset_index(drop=True)
     return lost, gained
 
 
 def reassignment_flows(old_meta: pd.DataFrame, new_meta: pd.DataFrame) -> pd.DataFrame:
     """Return old->new species assignment flows for genomes present in both builds."""
-    reassigned = old_meta[["genome_id", "species_taxid"]].merge(
-        new_meta[["genome_id", "species_taxid", "organism_name"]],
-        on="genome_id",
-        suffixes=("_old", "_new"),
-    )
-    reassigned = reassigned[
-        reassigned["species_taxid_old"] != reassigned["species_taxid_new"]
-    ]
-    return (
-        reassigned.groupby(["species_taxid_old", "species_taxid_new"], dropna=False)
-        .agg(n_genomes=("genome_id", "size"), organism_name=("organism_name", "first"))
-        .reset_index()
-        .rename(
-            columns={
-                "species_taxid_old": "old_species_taxid",
-                "species_taxid_new": "new_species_taxid",
-            }
-        )
-        .sort_values("n_genomes", ascending=False)
-        .reset_index(drop=True)
-        [["old_species_taxid", "new_species_taxid", "organism_name", "n_genomes"]]
-    )
+    reassigned = old_meta[["genome_id", "species_taxid"]].merge(new_meta[["genome_id", "species_taxid", "organism_name"]], on="genome_id", suffixes=("_old", "_new"))
+    reassigned = reassigned[reassigned["species_taxid_old"] != reassigned["species_taxid_new"]]
+    flows = reassigned.groupby(["species_taxid_old", "species_taxid_new"], dropna=False).agg(n_genomes=("genome_id", "size"), organism_name=("organism_name", "first"))
+    return flows.reset_index().rename(columns={"species_taxid_old": "old_species_taxid", "species_taxid_new": "new_species_taxid"}).sort_values("n_genomes", ascending=False).reset_index(drop=True)[["old_species_taxid", "new_species_taxid", "organism_name", "n_genomes"]]
 
 
-def set_reason(
-    out: pd.DataFrame, mask: pd.Series, label: str, taxids: pd.Series | str = ""
-) -> None:
+def set_reason(out: pd.DataFrame, mask: pd.Series, label: str, taxids: pd.Series | str = "") -> None:
     """Assign a categorization reason and reason_taxid to matching rows."""
     out.loc[mask, "reason"] = label
-    out.loc[mask, "reason_taxid"] = (
-        taxids.loc[mask] if isinstance(taxids, pd.Series) else taxids
-    )
+    out.loc[mask, "reason_taxid"] = taxids.loc[mask] if isinstance(taxids, pd.Series) else taxids
 
 
-def categorize_lost_genomes_raw(
-    removed: pd.DataFrame,
-    raw_meta: pd.DataFrame,
-    new_db: pd.DataFrame,
-    coverage: Coverage,
-    screened_hosts: list[str],
-) -> pd.DataFrame:
+def categorize_lost_genomes_raw(removed: pd.DataFrame, raw_meta: pd.DataFrame, new_db: pd.DataFrame, coverage: Coverage, screened_hosts: list[str]) -> pd.DataFrame:
     """Categorize genomes lost from the filtered metadata using target raw metadata."""
-    raw = raw_meta[["assembly_accession", "taxid", "assembly_status"]].rename(
-        columns={"taxid": "_new_leaf", "assembly_status": "_new_status"}
-    )
+    raw = raw_meta[["assembly_accession", "taxid", "assembly_status"]].rename(columns={"taxid": "_new_leaf", "assembly_status": "_new_status"})
     out = removed.merge(raw, on="assembly_accession", how="left", sort=False)
-    old_leaf = out["taxid"].astype(str)
-    new_leaf = out["_new_leaf"].fillna("").astype(str)
-    raw_present = out["_new_leaf"].notna()
-    current = out["_new_status"] == "current"
+    old_leaf, new_leaf = out["taxid"].astype(str), out["_new_leaf"].fillna("").astype(str)
+    raw_present, current = out["_new_leaf"].notna(), out["_new_status"] == "current"
     present_current = raw_present & current
     surveilled = new_leaf.isin(surveilled_taxids(new_db, screened_hosts))
-    hard_exclude = new_leaf.map(
-        lambda t: _ancestor_in(t, coverage.parent_map, coverage.excluded_taxids) if t else ""
-    )
+    hard_exclude = new_leaf.map(lambda t: _ancestor_in(t, coverage.parent_map, coverage.excluded_taxids) if t else "")
     unsurveilled = present_current & ~surveilled
-
-    out["reason"] = "other"
-    out["reason_taxid"] = new_leaf
-    set_reason(
-        out, unsurveilled & (new_leaf == old_leaf), "infection_status_demotion", new_leaf
-    )
-    set_reason(
-        out, unsurveilled & (new_leaf != old_leaf), "reassigned_to_excluded", new_leaf
-    )
+    out["reason"], out["reason_taxid"] = "other", new_leaf
+    set_reason(out, unsurveilled & (new_leaf == old_leaf), "infection_status_demotion", new_leaf)
+    set_reason(out, unsurveilled & (new_leaf != old_leaf), "reassigned_to_excluded", new_leaf)
     set_reason(out, present_current & (hard_exclude != ""), "hard_excluded", hard_exclude)
     set_reason(out, raw_present & ~current, "non_current_genome_version")
     set_reason(out, ~raw_present, "absent_from_ncbi")
     return out.drop(columns=["_new_leaf", "_new_status"])
 
 
-def categorize_gained_genomes_raw(
-    added: pd.DataFrame,
-    raw_meta: pd.DataFrame,
-    old_db: pd.DataFrame,
-    coverage: Coverage,
-    screened_hosts: list[str],
-    old_build_date: str,
-) -> pd.DataFrame:
+def categorize_gained_genomes_raw(added: pd.DataFrame, raw_meta: pd.DataFrame, old_db: pd.DataFrame, coverage: Coverage, screened_hosts: list[str], old_build_date: str) -> pd.DataFrame:
     """Categorize genomes gained in the filtered metadata using target raw metadata."""
-    raw = raw_meta[["assembly_accession", "release_date", "source_database"]].rename(
-        columns={"release_date": "_release_date"}
-    )
+    raw = raw_meta[["assembly_accession", "release_date", "source_database"]].rename(columns={"release_date": "_release_date"})
     out = added.merge(raw, on="assembly_accession", how="left", sort=False)
-    new_leaf = out["taxid"].fillna("").astype(str)
-    release = out["_release_date"].fillna("").astype(str)
+    new_leaf, release = out["taxid"].fillna("").astype(str), out["_release_date"].fillna("").astype(str)
     all_included = set().union(*coverage.included_taxids.values()) if coverage.included_taxids else set()
-    hard_include = new_leaf.map(
-        lambda t: _ancestor_in(t, coverage.parent_map, all_included) if t else ""
-    )
-    old_db_taxids = (
-        set(old_db["taxid"].astype(str)) if "taxid" in old_db.columns else set()
-    )
+    hard_include = new_leaf.map(lambda t: _ancestor_in(t, coverage.parent_map, all_included) if t else "")
+    old_db_taxids = set(old_db["taxid"].astype(str)) if "taxid" in old_db.columns else set()
     old_surveilled = new_leaf.isin(surveilled_taxids(old_db, screened_hosts))
-
-    out["reason"] = "no_release_date"
-    out["reason_taxid"] = new_leaf
+    out["reason"], out["reason_taxid"] = "no_release_date", new_leaf
     set_reason(out, release != "", "pre_existing_reincluded", new_leaf)
     set_reason(out, ~old_surveilled, "infection_status_promotion", new_leaf)
     set_reason(out, ~new_leaf.isin(old_db_taxids), "new_taxon_in_taxonomy", new_leaf)
     set_reason(out, hard_include != "", "hard_included", hard_include)
-    set_reason(
-        out, (release != "") & (release > old_build_date), "newly_deposited", new_leaf
-    )
+    set_reason(out, (release != "") & (release > old_build_date), "newly_deposited", new_leaf)
     out["source_database"] = out["source_database"].fillna("").astype(str)
     return out.drop(columns=["_release_date"])
 
@@ -512,74 +456,27 @@ def _reason_counts(df: pd.DataFrame) -> dict[str, int]:
     return {} if df.empty else {str(k): int(v) for k, v in df["reason"].value_counts().items()}
 
 
-def write_genome_taxonomy_tables(
-    out_dir: Path,
-    old_meta: pd.DataFrame,
-    new_meta: pd.DataFrame,
-    new_raw_meta: pd.DataFrame,
-    old_db: pd.DataFrame,
-    new_db: pd.DataFrame,
-    coverage: Coverage,
-    screened_hosts: list[str],
-    old_build_date: str,
-) -> None:
+def write_genome_taxonomy_tables(out_dir: Path, old_meta: pd.DataFrame, new_meta: pd.DataFrame, new_raw_meta: pd.DataFrame, old_db: pd.DataFrame, new_db: pd.DataFrame, coverage: Coverage, screened_hosts: list[str], old_build_date: str) -> None:
     """Write genome lost/gained categorization tables and summary counts."""
     logger.info("Diffing genome metadata and taxonomy; categorizing genome IDs.")
     if "release_date" not in new_raw_meta.columns:
-        raise ValueError(
-            "Target index raw metadata lacks release_date, required for gained-genome"
-            " categorization."
-        )
-
+        raise ValueError("Target index raw metadata lacks release_date, required for gained-genome categorization.")
     lost_g, gained_g, shared_genomes = genome_deltas(old_meta, new_meta)
     species_lost, species_gained = species_zero_crossings(old_meta, new_meta)
-    species_lost["covered_by_hard_exclude"] = (
-        species_lost["species_taxid"]
-        .astype(str)
-        .apply(lambda t: _ancestor_in(t, coverage.parent_map, coverage.excluded_taxids))
-        if coverage.available
-        else ""
-    )
+    species_lost["covered_by_hard_exclude"] = species_lost["species_taxid"].astype(str).apply(lambda t: _ancestor_in(t, coverage.parent_map, coverage.excluded_taxids)) if coverage.available else ""
     species_lost.to_csv(out_dir / "species_lost_all_genomes.tsv", sep="\t", index=False)
-    species_gained.to_csv(
-        out_dir / "species_gained_all_genomes.tsv", sep="\t", index=False
-    )
-
+    species_gained.to_csv(out_dir / "species_gained_all_genomes.tsv", sep="\t", index=False)
     reassigned = reassignment_flows(old_meta, new_meta)
     reassigned.to_csv(out_dir / "genomes_reassigned.tsv", sep="\t", index=False)
-
-    old_taxids = set(old_db["taxid"].astype(str))
-    new_taxids = set(new_db["taxid"].astype(str))
-
-    lost = categorize_lost_genomes_raw(
-        lost_g, new_raw_meta, new_db, coverage, screened_hosts
-    )
-    gained = categorize_gained_genomes_raw(
-        gained_g, new_raw_meta, old_db, coverage, screened_hosts, old_build_date
-    )
+    old_taxids, new_taxids = set(old_db["taxid"].astype(str)), set(new_db["taxid"].astype(str))
+    lost = categorize_lost_genomes_raw(lost_g, new_raw_meta, new_db, coverage, screened_hosts)
+    gained = categorize_gained_genomes_raw(gained_g, new_raw_meta, old_db, coverage, screened_hosts, old_build_date)
     lost.to_csv(out_dir / "genomes_lost_categorized.tsv", sep="\t", index=False)
     gained.to_csv(out_dir / "genomes_gained_categorized.tsv", sep="\t", index=False)
-
-    _write_json(
-        out_dir / "genomes_summary.json",
-        {
-            "lost_total": len(lost),
-            "gained_total": len(gained),
-            "lost_by_reason": _reason_counts(lost),
-            "gained_by_reason": _reason_counts(gained),
-            "species_lost_all_genomes": len(species_lost),
-            "species_gained_all_genomes": len(species_gained),
-            "reassigned_genomes": int(reassigned["n_genomes"].sum())
-            if not reassigned.empty
-            else 0,
-            "kept_genomes": len(shared_genomes),
-            "taxa_added": len(new_taxids - old_taxids),
-            "taxa_removed": len(old_taxids - new_taxids),
-        },
-    )
-
-
-# 4. Infection Status Changes
+    _write_json(out_dir / "genomes_summary.json", {"lost_total": len(lost), "gained_total": len(gained), "lost_by_reason": _reason_counts(lost), "gained_by_reason": _reason_counts(gained), "species_lost_all_genomes": len(species_lost), "species_gained_all_genomes": len(species_gained), "reassigned_genomes": int(reassigned["n_genomes"].sum()) if not reassigned.empty else 0, "kept_genomes": len(shared_genomes), "taxa_added": len(new_taxids - old_taxids), "taxa_removed": len(old_taxids - new_taxids)})
+###############################
+# 4. INFECTION STATUS CHANGES #
+###############################
 
 
 def load_existing_overrides(repo_root: Path) -> dict[str, set[str]]:
@@ -600,7 +497,6 @@ def load_existing_overrides(repo_root: Path) -> dict[str, set[str]]:
 
 
 def infection_status_columns(db: pd.DataFrame) -> list[str]:
-    """Return infection-status annotation columns in a taxonomy DB."""
     return [c for c in db.columns if c.startswith("infection_status_")]
 
 
@@ -650,11 +546,16 @@ def classify_coverage(
 
     `included_taxids` is host -> set of taxids that are hard-included for that host."""
     host_includes = included_taxids.get(host, set())
-    for cur in _lineage(taxid, parent_map):
+    cur: str | None = taxid
+    while cur:
         if cur in excluded_taxids:
             return "excluded", cur
         if cur in host_includes:
             return "included", cur
+        parent = parent_map.get(cur)
+        if parent is None or parent == cur:
+            break
+        cur = parent
     return "", ""
 
 
@@ -668,11 +569,20 @@ def includes_for_other_hosts(
     in the include rules. Used to flag policy/scope issues — e.g. a primate
     demotion of a taxid that we DID override for human/vertebrate. Empty list
     if no other host has this taxid included."""
-    return sorted(
-        h
-        for h, taxids in included_taxids.items()
-        if h != host and any(cur in taxids for cur in _lineage(taxid, parent_map))
-    )
+    other_hosts: list[str] = []
+    for h, taxids in included_taxids.items():
+        if h == host:
+            continue
+        cur: str | None = taxid
+        while cur:
+            if cur in taxids:
+                other_hosts.append(h)
+                break
+            parent = parent_map.get(cur)
+            if parent is None or parent == cur:
+                break
+            cur = parent
+    return sorted(other_hosts)
 
 
 def annotate_changes_with_coverage(
@@ -717,7 +627,6 @@ def annotate_changes_with_coverage(
 
 
 def _zero_species_transition_counts() -> dict[str, int]:
-    """Return an all-zero species transition summary."""
     return {
         "species_promotions": 0,
         "uncovered_species_promotions": 0,
@@ -731,7 +640,6 @@ def _species_transition_counts(
     per_host_changes: dict[str, pd.DataFrame],
     coverage_available: bool,
 ) -> dict[str, dict[str, int]]:
-    """Summarize species-level promotion, demotion, and coverage counts by host."""
     host_counts: dict[str, dict[str, int]] = {}
     for host, df in sorted(per_host_changes.items()):
         if not {"rank", "old_status", "new_status"}.issubset(df.columns):
@@ -772,10 +680,7 @@ def _species_transition_counts(
 
 
 def write_infection_status_tables(
-    out_dir: Path,
-    old_db: pd.DataFrame,
-    new_db: pd.DataFrame,
-    coverage: Coverage,
+    out_dir: Path, old_db: pd.DataFrame, new_db: pd.DataFrame, coverage: Coverage
 ) -> None:
     """Write per-host infection-status transitions/changes tables plus
     infection_status_summary.json."""
@@ -825,7 +730,9 @@ def write_infection_status_tables(
     )
 
 
-# 5. Params Diff
+##################
+# 5. PARAMS DIFF #
+##################
 
 
 def summarise_params_changes(old_params: dict, new_params: dict) -> pd.DataFrame:
@@ -880,21 +787,44 @@ def diff_params(old_params: dict, new_params: dict) -> str:
     )
 
 
-# Main
+########
+# MAIN #
+########
 
 
 def parse_arguments() -> argparse.Namespace:
-    """Parse command-line arguments."""
-    parser = argparse.ArgumentParser(description=DESC, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--old", required=True, help="Old index root, parent of output/.")
-    parser.add_argument("--new", required=True, help="New index root, parent of output/.")
-    parser.add_argument("--out", type=Path, required=True, help="Output directory.")
-    parser.add_argument("--repo-root", type=Path, default=None, help="mgs-workflow checkout for coverage annotations.")
+    parser = argparse.ArgumentParser(
+        description=DESC, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+    parser.add_argument(
+        "--old",
+        required=True,
+        help="Old index root (s3://... or local path), parent of output/.",
+    )
+    parser.add_argument(
+        "--new",
+        required=True,
+        help="New index root (s3://... or local path), parent of output/.",
+    )
+    parser.add_argument(
+        "--out",
+        type=Path,
+        required=True,
+        help="Output directory for TSVs and facts.json.",
+    )
+    parser.add_argument(
+        "--repo-root",
+        type=Path,
+        default=None,
+        help="Path to a mgs-workflow checkout. When given, the script reads "
+        "ref/host-infection-overrides.json and uses the new index's "
+        "viral_taxids_exclude_hard to annotate per-species transitions with "
+        "which existing rule (if any) covers them.",
+    )
     return parser.parse_args()
 
 
 def main() -> None:
-    """Run the benchmark comparison and write output tables."""
     args = parse_arguments()
     args.out.mkdir(parents=True, exist_ok=True)
     logger.info(f"Benchmarking {args.old} -> {args.new}")
@@ -907,7 +837,6 @@ def main() -> None:
         (td / "new").mkdir()
 
         def stage(prefix: str, subpath: str, side: str) -> Path:
-            """Fetch one index artifact into the temporary side directory."""
             return fetch(prefix, subpath, td / side)
 
         # Stage genome metadata, the pre-filter raw metadata (required by the
@@ -941,16 +870,17 @@ def main() -> None:
 
         # Coverage rule data: hard-exclude from the new params, hard-include from
         # the repo overrides. Skipped (and empty) without --repo-root.
-        coverage = Coverage(
-            available=args.repo_root is not None,
-            parent_map=dict(zip(new_db["taxid"], new_db["parent_taxid"], strict=False)),
-            excluded_taxids=set(new_params.get("viral_taxids_exclude_hard", "").split())
-            if args.repo_root is not None
-            else set(),
-            included_taxids=load_existing_overrides(args.repo_root)
-            if args.repo_root is not None
-            else {},
-        )
+        if args.repo_root is not None:
+            coverage = Coverage(
+                available=True,
+                parent_map=build_parent_map(new_db),
+                excluded_taxids=set(
+                    new_params.get("viral_taxids_exclude_hard", "").split()
+                ),
+                included_taxids=load_existing_overrides(args.repo_root),
+            )
+        else:
+            coverage = Coverage(False, {}, set(), {})
 
         write_genome_taxonomy_tables(
             args.out,
