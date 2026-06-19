@@ -36,7 +36,7 @@ and surface the output directory plus the relevant summary files; do not write
 - `--old <root>`: parent of `output/` for the old (reference) index. `s3://...` or local path. **Required.**
 - `--new <root>`: parent of `output/` for the new (target) index. **Required.**
 - `--out <dir>`: output directory. Use an absolute path so paths are reader-portable. **Required.**
-- `--repo-root <path>`: a mgs-workflow checkout. Optional in the script, but in practice always pass `--repo-root .` from a checkout. Coverage annotations read the host-infection overrides and `viral_taxids_exclude_hard` from this checkout, **not** from the index artifacts, so it must be the same checkout/config used to build the target (`--new`) index — a newer or older local override set will silently skew the coverage columns. Without it the script skips coverage annotations, and the Edge cases section becomes load-bearing.
+- `--repo-root <path>`: a mgs-workflow checkout. Optional in the script, but in practice always pass `--repo-root .` from a checkout. Coverage annotations read the host-infection overrides from this checkout (the hard-exclude list `viral_taxids_exclude_hard` comes from the target index's own params), so the checkout must carry the same host-infection overrides used to build the target (`--new`) index — a newer or older local override set will silently skew the coverage columns. Without it the script skips coverage annotations, and the Edge cases section becomes load-bearing.
 
 If `--old`, `--new`, or `--out` is missing, ask the user; do not guess.
 
