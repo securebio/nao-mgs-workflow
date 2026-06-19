@@ -1,23 +1,11 @@
 #!/usr/bin/env python3
-DESC = """
-Compare two mgs-workflow index releases and emit per-DB size diffs, genome
-add/drop/per-species deltas, infection-status transitions, and a params diff.
-Intended to be run before promoting a new index to production so reviewers can
-spot regressions driven by upstream Virus-Host-DB or NCBI taxonomy drift.
+DESC = """Compare two mgs-workflow index releases before promotion.
 
-Accepts s3:// URIs or local directories for both --old and --new, each pointing
-at the *root* of an index release (the parent of `output/`).
-
-Usage:
-    python bin/benchmark_index.py \\
-        --old s3://nao-mgs-index/20250825 \\
-        --new s3://nao-mgs-index/20260518 \\
-        --out ./bench-20250825-vs-20260518/
+Accepts s3:// URIs or local directories for --old and --new, each pointing at
+the root of an index release (the parent of `output/`).
 """
 
-###########
-# IMPORTS #
-###########
+# Imports
 
 import argparse
 import difflib
@@ -37,9 +25,7 @@ from pathlib import Path
 
 import pandas as pd
 
-###########
-# LOGGING #
-###########
+# Logging
 
 
 class UTCFormatter(logging.Formatter):
@@ -60,9 +46,7 @@ logger.handlers.clear()
 logger.addHandler(handler)
 
 
-###########
-# STAGING #
-###########
+# Staging
 
 
 def fetch(prefix: str, subpath: str, local_dir: Path) -> Path:
@@ -83,22 +67,14 @@ def _write_json(path: Path, obj: object) -> None:
     path.write_text(json.dumps(obj, indent=2, sort_keys=True) + "\n")
 
 
-##########################
-# 1. REFERENCE STALENESS #
-##########################
+# 1. Reference Staleness
 
 
 def latest_kraken_release() -> tuple[str, str] | None:
     """(date, filename) of the newest k2_standard_*.tar.gz in the public Kraken2
     bucket, or None on failure."""
     try:
-        out = subprocess.run(
-            ["aws", "s3", "ls", "s3://genome-idx/kraken/", "--no-sign-request"],
-            check=True,
-            capture_output=True,
-            text=True,
-            timeout=15,
-        ).stdout
+        out = subprocess.run(["aws", "s3", "ls", "s3://genome-idx/kraken/", "--no-sign-request"], check=True, capture_output=True, text=True, timeout=15).stdout
     except (subprocess.SubprocessError, OSError):
         return None
     bundles = re.findall(r"\b(k2_standard_(\d{8})\.tar\.gz)\b", out)
@@ -134,14 +110,7 @@ def _staleness_row(
     status: str = "error",
 ) -> dict[str, str]:
     """Build one reference-staleness output row."""
-    return {
-        "ref": ref,
-        "current": current,
-        "current_date": current_date,
-        "latest": latest,
-        "latest_date": latest_date,
-        "status": status,
-    }
+    return {"ref": ref, "current": current, "current_date": current_date, "latest": latest, "latest_date": latest_date, "status": status}
 
 
 def check_kraken_staleness(new_params: dict) -> list[dict[str, str]]:
@@ -176,11 +145,7 @@ def check_silva_staleness(new_params: dict) -> list[dict[str, str]]:
             rows.append(_staleness_row(key, url, current_release))
             continue
         status = "current" if current_release == latest_rel else "stale"
-        rows.append(
-            _staleness_row(
-                key, url, current_release, f"release_{latest_rel}", latest_rel, status
-            )
-        )
+        rows.append(_staleness_row(key, url, current_release, f"release_{latest_rel}", latest_rel, status))
     return rows
 
 
@@ -188,14 +153,10 @@ def write_staleness_table(new_params: dict, out_path: Path) -> None:
     """Check Kraken2/SILVA freshness for the new index and write staleness.tsv."""
     logger.info("Checking reference-DB staleness (Kraken2, SILVA).")
     rows = [*check_kraken_staleness(new_params), *check_silva_staleness(new_params)]
-    pd.DataFrame(rows, columns=list(_staleness_row("", ""))).to_csv(
-        out_path, sep="\t", index=False
-    )
+    pd.DataFrame(rows, columns=list(_staleness_row("", ""))).to_csv(out_path, sep="\t", index=False)
 
 
-###################################
-# 2. SIZE AND CONTENT COMPARISONS #
-###################################
+# 2. Size And Content Comparisons
 
 
 def list_recursive_sizes(prefix: str) -> dict[str, int]:
@@ -204,12 +165,7 @@ def list_recursive_sizes(prefix: str) -> dict[str, int]:
     base = f"{prefix.rstrip('/')}/output/results/"
     sizes: Counter[str] = Counter()
     if prefix.startswith("s3://"):
-        out = subprocess.run(
-            ["aws", "s3", "ls", "--recursive", base],
-            check=True,
-            capture_output=True,
-            text=True,
-        ).stdout
+        out = subprocess.run(["aws", "s3", "ls", "--recursive", base], check=True, capture_output=True, text=True).stdout
         prefix_key = base.split("/", 3)[-1]  # strip "s3://bucket/"
         for line in out.splitlines():
             parts = line.split()
@@ -299,9 +255,7 @@ def compare_metrics(
     )
     rows: list[dict[str, object]] = []
     for name in names:
-        rows.append(
-            _metric_row(name, "bytes", old_sizes.get(name, 0), new_sizes.get(name, 0))
-        )
+        rows.append(_metric_row(name, "bytes", old_sizes.get(name, 0), new_sizes.get(name, 0)))
         old_stat, new_stat = content_stats.get(name, ({}, {}))
         for metric in old_stat:
             rows.append(_metric_row(name, metric, old_stat[metric], new_stat[metric]))
@@ -315,11 +269,7 @@ def write_metrics_table(old_prefix: str, new_prefix: str, out_dir: Path) -> None
     logger.info("Listing per-DB sizes and content metrics.")
     old_sizes = list_recursive_sizes(old_prefix)
     new_sizes = list_recursive_sizes(new_prefix)
-    content_files = sorted(
-        name
-        for name in set(old_sizes) & set(new_sizes)
-        if name.endswith(_FASTA_SUFFIXES + _TSV_SUFFIXES)
-    )
+    content_files = sorted(name for name in set(old_sizes) & set(new_sizes) if name.endswith(_FASTA_SUFFIXES + _TSV_SUFFIXES))
     content_stats = collect_content_stats(old_prefix, new_prefix, content_files)
     metrics = compare_metrics(old_sizes, new_sizes, content_stats)
     metrics.to_csv(out_dir / "sizes.tsv", sep="\t", index=False)
@@ -334,9 +284,7 @@ def write_metrics_table(old_prefix: str, new_prefix: str, out_dir: Path) -> None
     )
 
 
-################################
-# 3. GENOME AND TAXONOMY DELTA #
-################################
+# 3. Genome And Taxonomy Delta
 
 
 GENOME_META_COLS = [
@@ -356,11 +304,6 @@ class Coverage:
     parent_map: dict[str, str]
     excluded_taxids: set[str]
     included_taxids: dict[str, set[str]]
-
-
-def build_parent_map(new_db: pd.DataFrame) -> dict[str, str]:
-    """Return a taxid -> parent_taxid lookup from the annotated taxonomy DB."""
-    return dict(zip(new_db["taxid"], new_db["parent_taxid"], strict=False))
 
 
 def _lineage(taxid: str, parent_map: dict[str, str]) -> Iterator[str]:
@@ -509,9 +452,7 @@ def categorize_lost_genomes_raw(
     present_current = raw_present & current
     surveilled = new_leaf.isin(surveilled_taxids(new_db, screened_hosts))
     hard_exclude = new_leaf.map(
-        lambda t: _ancestor_in(t, coverage.parent_map, coverage.excluded_taxids)
-        if t
-        else ""
+        lambda t: _ancestor_in(t, coverage.parent_map, coverage.excluded_taxids) if t else ""
     )
     unsurveilled = present_current & ~surveilled
 
@@ -544,11 +485,7 @@ def categorize_gained_genomes_raw(
     out = added.merge(raw, on="assembly_accession", how="left", sort=False)
     new_leaf = out["taxid"].fillna("").astype(str)
     release = out["_release_date"].fillna("").astype(str)
-    all_included = (
-        set().union(*coverage.included_taxids.values())
-        if coverage.included_taxids
-        else set()
-    )
+    all_included = set().union(*coverage.included_taxids.values()) if coverage.included_taxids else set()
     hard_include = new_leaf.map(
         lambda t: _ancestor_in(t, coverage.parent_map, all_included) if t else ""
     )
@@ -572,11 +509,7 @@ def categorize_gained_genomes_raw(
 
 def _reason_counts(df: pd.DataFrame) -> dict[str, int]:
     """Return reason value counts as a JSON-serializable dict."""
-    return (
-        {}
-        if df.empty
-        else {str(k): int(v) for k, v in df["reason"].value_counts().items()}
-    )
+    return {} if df.empty else {str(k): int(v) for k, v in df["reason"].value_counts().items()}
 
 
 def write_genome_taxonomy_tables(
@@ -646,9 +579,7 @@ def write_genome_taxonomy_tables(
     )
 
 
-###############################
-# 4. INFECTION STATUS CHANGES #
-###############################
+# 4. Infection Status Changes
 
 
 def load_existing_overrides(repo_root: Path) -> dict[str, set[str]]:
@@ -894,9 +825,7 @@ def write_infection_status_tables(
     )
 
 
-##################
-# 5. PARAMS DIFF #
-##################
+# 5. Params Diff
 
 
 def summarise_params_changes(old_params: dict, new_params: dict) -> pd.DataFrame:
@@ -951,41 +880,16 @@ def diff_params(old_params: dict, new_params: dict) -> str:
     )
 
 
-########
-# MAIN #
-########
+# Main
 
 
 def parse_arguments() -> argparse.Namespace:
     """Parse command-line arguments."""
-    parser = argparse.ArgumentParser(
-        description=DESC, formatter_class=argparse.RawDescriptionHelpFormatter
-    )
-    parser.add_argument(
-        "--old",
-        required=True,
-        help="Old index root (s3://... or local path), parent of output/.",
-    )
-    parser.add_argument(
-        "--new",
-        required=True,
-        help="New index root (s3://... or local path), parent of output/.",
-    )
-    parser.add_argument(
-        "--out",
-        type=Path,
-        required=True,
-        help="Output directory for TSVs and facts.json.",
-    )
-    parser.add_argument(
-        "--repo-root",
-        type=Path,
-        default=None,
-        help="Path to a mgs-workflow checkout. When given, the script reads "
-        "ref/host-infection-overrides.json and uses the new index's "
-        "viral_taxids_exclude_hard to annotate per-species transitions with "
-        "which existing rule (if any) covers them.",
-    )
+    parser = argparse.ArgumentParser(description=DESC, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("--old", required=True, help="Old index root, parent of output/.")
+    parser.add_argument("--new", required=True, help="New index root, parent of output/.")
+    parser.add_argument("--out", type=Path, required=True, help="Output directory.")
+    parser.add_argument("--repo-root", type=Path, default=None, help="mgs-workflow checkout for coverage annotations.")
     return parser.parse_args()
 
 
@@ -1039,7 +943,7 @@ def main() -> None:
         # the repo overrides. Skipped (and empty) without --repo-root.
         coverage = Coverage(
             available=args.repo_root is not None,
-            parent_map=build_parent_map(new_db),
+            parent_map=dict(zip(new_db["taxid"], new_db["parent_taxid"], strict=False)),
             excluded_taxids=set(new_params.get("viral_taxids_exclude_hard", "").split())
             if args.repo_root is not None
             else set(),
