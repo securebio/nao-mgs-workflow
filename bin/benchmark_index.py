@@ -68,6 +68,7 @@ def fetch(prefix: str, subpath: str, local_dir: Path) -> Path:
     """Stage `prefix/subpath` to `local_dir/<basename>` and return the local path."""
     src = f"{prefix.rstrip('/')}/{subpath}"
     dst = local_dir / Path(subpath).name
+    local_dir.mkdir(parents=True, exist_ok=True)
     if src.startswith("s3://"):
         logger.info(f"Downloading {src} -> {dst}")
         subprocess.run(["aws", "s3", "cp", src, str(dst)], check=True)
@@ -456,18 +457,32 @@ def categorize_gain(added, raw_meta, old_db, cov, hosts, old_date):
 
 
 def write_genome_taxonomy_tables(
-    out_dir: Path,
-    old_meta: pd.DataFrame,
-    new_meta: pd.DataFrame,
-    new_raw_meta: pd.DataFrame,
-    old_db: pd.DataFrame,
-    new_db: pd.DataFrame,
-    cov: Coverage,
-    hosts: list[str],
-    old_date: str,
+    out_dir,
+    old,
+    new,
+    old_db,
+    new_db,
+    cov,
+    old_params,
+    new_params,
+    work_dir,
 ) -> None:
-    """Write genome lost/gained categorization tables and summary counts."""
+    """Stage genome metadata and write genome/taxonomy delta outputs."""
     logger.info("Diffing genome metadata and taxonomy; categorizing genome IDs.")
+    gid = "output/results/virus-genome-metadata-gid.tsv.gz"
+    raw = "output/results/virus-genome-metadata-raw.tsv.gz"
+    old_meta = pd.read_csv(fetch(old, gid, work_dir / "old"), sep="\t", dtype=str)
+    new_meta = pd.read_csv(fetch(new, gid, work_dir / "new"), sep="\t", dtype=str)
+    try:
+        raw_path = fetch(new, raw, work_dir / "new")
+    except (subprocess.CalledProcessError, FileNotFoundError) as exc:
+        raise ValueError(
+            "Target index has no output/results/virus-genome-metadata-raw.tsv.gz,"
+            " which is required for genome-ID categorization. Rebuild the index"
+            " with a pipeline version that publishes the pre-filter assembly"
+            " metadata."
+        ) from exc
+    new_raw_meta = pd.read_csv(raw_path, sep="\t", dtype=str)
     if "release_date" not in new_raw_meta.columns:
         raise ValueError(
             "Target index raw metadata lacks release_date, required for gained-genome categorization."
@@ -485,6 +500,8 @@ def write_genome_taxonomy_tables(
     species_lost["covered_by_hard_exclude"] = lost_species.map(
         lambda t: _ancestor_in(t, cov.parent_map, excluded)
     )
+    hosts = new_params.get("host_taxa_screen", "").split()
+    old_date = str(old_params.get("trace_timestamp", ""))[:10]
     lost = categorize_loss(lost_g, new_raw_meta, new_db, cov, hosts)
     gained = categorize_gain(gained_g, new_raw_meta, old_db, cov, hosts, old_date)
     for filename, df in [
@@ -535,6 +552,22 @@ def load_existing_overrides(repo_root: Path) -> dict[str, set[str]]:
         for host in entry["hosts"]:
             out[host].add(taxid)
     return dict(out)
+
+
+def load_taxonomy_context(old_prefix, new_prefix, new_params, repo_root, work_dir):
+    """Stage taxonomy DBs and build the coverage context."""
+    db = "output/results/total-virus-db-annotated.tsv.gz"
+    old_db = pd.read_csv(fetch(old_prefix, db, work_dir / "old"), sep="\t", dtype=str)
+    new_db = pd.read_csv(fetch(new_prefix, db, work_dir / "new"), sep="\t", dtype=str)
+    if repo_root is None:
+        return old_db, new_db, Coverage(False, {}, set(), {})
+    coverage = Coverage(
+        available=True,
+        parent_map=build_parent_map(new_db),
+        excluded_taxids=set(new_params.get("viral_taxids_exclude_hard", "").split()),
+        included_taxids=load_existing_overrides(repo_root),
+    )
+    return old_db, new_db, coverage
 
 
 def infection_status_columns(db: pd.DataFrame) -> list[str]:
@@ -733,12 +766,25 @@ def diff_params(old_params: dict, new_params: dict) -> str:
     return "".join(diff)
 
 
+def write_params_tables(out_dir, old_prefix, new_prefix, work_dir):
+    """Stage params JSON, write params outputs, and return parsed params."""
+    params = "output/input/index-params.json"
+    old_params = json.loads(fetch(old_prefix, params, work_dir / "old").read_text())
+    new_params = json.loads(fetch(new_prefix, params, work_dir / "new").read_text())
+    (out_dir / "params_diff.txt").write_text(diff_params(old_params, new_params))
+    summarise_params_changes(old_params, new_params).to_csv(
+        out_dir / "params_changes.tsv", sep="\t", index=False
+    )
+    return old_params, new_params
+
+
 ########
 # MAIN #
 ########
 
 
 def parse_arguments() -> argparse.Namespace:
+    """Parse benchmark script CLI arguments."""
     parser = argparse.ArgumentParser(
         description=DESC, formatter_class=argparse.RawDescriptionHelpFormatter
     )
@@ -771,6 +817,7 @@ def parse_arguments() -> argparse.Namespace:
 
 
 def main() -> None:
+    """Run the index benchmark report pipeline."""
     args = parse_arguments()
     args.out.mkdir(parents=True, exist_ok=True)
     logger.info(f"Benchmarking {args.old} -> {args.new}")
@@ -778,66 +825,24 @@ def main() -> None:
     write_metrics_table(args.old, args.new, args.out)
 
     with tempfile.TemporaryDirectory() as td_str:
-        td = Path(td_str)
-        (td / "old").mkdir()
-        (td / "new").mkdir()
-
-        def stage(prefix: str, subpath: str, side: str) -> Path:
-            return fetch(prefix, subpath, td / side)
-
-        # Stage genome metadata, the pre-filter raw metadata (required by the
-        # categorizers), the taxonomy DB, and params.
-        logger.info("Staging genome metadata, taxonomy DB, and params.")
-        gid = "output/results/virus-genome-metadata-gid.tsv.gz"
-        db = "output/results/total-virus-db-annotated.tsv.gz"
-        params = "output/input/index-params.json"
-        old_meta = pd.read_csv(stage(args.old, gid, "old"), sep="\t", dtype=str)
-        new_meta = pd.read_csv(stage(args.new, gid, "new"), sep="\t", dtype=str)
-        try:
-            raw_path = stage(
-                args.new, "output/results/virus-genome-metadata-raw.tsv.gz", "new"
-            )
-        except (subprocess.CalledProcessError, FileNotFoundError) as exc:
-            raise ValueError(
-                "Target index has no output/results/virus-genome-metadata-raw.tsv.gz,"
-                " which is required for genome-ID categorization. Rebuild the index"
-                " with a pipeline version that publishes the pre-filter assembly"
-                " metadata."
-            ) from exc
-        new_raw_meta = pd.read_csv(raw_path, sep="\t", dtype=str)
-        old_db = pd.read_csv(stage(args.old, db, "old"), sep="\t", dtype=str)
-        new_db = pd.read_csv(stage(args.new, db, "new"), sep="\t", dtype=str)
-        old_params = json.loads(stage(args.old, params, "old").read_text())
-        new_params = json.loads(stage(args.new, params, "new").read_text())
-        (args.out / "params_diff.txt").write_text(diff_params(old_params, new_params))
-        summarise_params_changes(old_params, new_params).to_csv(
-            args.out / "params_changes.tsv", sep="\t", index=False
+        work_dir = Path(td_str)
+        old_params, new_params = write_params_tables(
+            args.out, args.old, args.new, work_dir
         )
-
-        # Coverage rule data: hard-exclude from the new params, hard-include from
-        # the repo overrides. Skipped (and empty) without --repo-root.
-        if args.repo_root is not None:
-            coverage = Coverage(
-                available=True,
-                parent_map=build_parent_map(new_db),
-                excluded_taxids=set(
-                    new_params.get("viral_taxids_exclude_hard", "").split()
-                ),
-                included_taxids=load_existing_overrides(args.repo_root),
-            )
-        else:
-            coverage = Coverage(False, {}, set(), {})
+        old_db, new_db, coverage = load_taxonomy_context(
+            args.old, args.new, new_params, args.repo_root, work_dir
+        )
 
         write_genome_taxonomy_tables(
             args.out,
-            old_meta,
-            new_meta,
-            new_raw_meta,
+            args.old,
+            args.new,
             old_db,
             new_db,
             coverage,
-            new_params.get("host_taxa_screen", "").split(),
-            str(old_params.get("trace_timestamp", ""))[:10],
+            old_params,
+            new_params,
+            work_dir,
         )
         write_infection_status_tables(args.out, old_db, new_db, coverage)
         write_staleness_table(new_params, args.out / "staleness.tsv")
