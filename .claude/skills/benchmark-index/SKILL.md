@@ -56,8 +56,7 @@ python bin/benchmark_index.py \
 Use **absolute** paths for `--out` (e.g. `/tmp/bench-...`). Takes about 60
 seconds. If `<outdir>` already contains benchmark outputs, reuse them only if
 the user asked you to avoid rerunning; otherwise rerun so the reference
-freshness checks are current. Ignore any stale `facts.json` left by older
-script versions; the current script does not write it.
+freshness checks are current.
 
 ### Step 2 - Read summaries and TSVs
 
@@ -90,10 +89,6 @@ Then read the detailed TSVs needed by the template:
   content (e.g. bytes shrank while row count grew).
 - `genomes_lost_categorized.tsv`, `genomes_gained_categorized.tsv`, `species_lost_all_genomes.tsv`, `species_gained_all_genomes.tsv`, and `genomes_reassigned.tsv` for §3 and appendices.
 - `species_transitions_*.tsv` and `infection_status_transitions.tsv` for §4.
-
-Do not expect `taxa_added.tsv` or `taxa_removed.tsv`; the script no longer
-writes taxonomy detail lists. Use `genomes_summary.json.taxa_added` and
-`genomes_summary.json.taxa_removed` for taxonomy counts.
 
 For appendix tables, paste Markdown tables generated from the TSV rows. For
 large category tables, include the top rows requested by the template and state
