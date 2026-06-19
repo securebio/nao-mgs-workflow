@@ -1296,12 +1296,34 @@ class TestWriteGenomeTaxonomyTables:
             tuple(row)
             for row in schema[["change", "column"]].itertuples(index=False, name=None)
         } == {("removed", "old_only"), ("added", "new_only")}
+        schema_summary = json.loads(
+            (out_dir / "metadata_schema_summary.json").read_text()
+        )
+        assert schema_summary == {"added": 1, "removed": 1}
         summary = json.loads((out_dir / "genomes_summary.json").read_text())
         assert summary["lost_total"] == 1
+        assert summary["gained_total"] == 1
+        assert summary["net_genome_delta"] == 0
         assert summary["kept_genomes"] == 1
+        assert summary["reassigned_pct_of_kept"] == 0.0
         assert summary["taxa_added"] == 1
         assert summary["taxa_removed"] == 1
-        assert summary["gained_by_reason"] == {"newly_deposited": 1}
+        assert summary["lost_by_reason"] == {
+            "absent_from_ncbi": 0,
+            "non_current_genome_version": 0,
+            "hard_excluded": 0,
+            "reassigned_to_excluded": 0,
+            "infection_status_demotion": 1,
+            "other": 0,
+        }
+        assert summary["gained_by_reason"] == {
+            "newly_deposited": 1,
+            "hard_included": 0,
+            "new_taxon_in_taxonomy": 0,
+            "infection_status_promotion": 0,
+            "pre_existing_reincluded": 0,
+            "no_release_date": 0,
+        }
 
     def test_missing_release_date_raises(self, tmp_path: Path) -> None:
         old_meta, new_meta, raw, old_db, new_db = self._frames()

@@ -65,13 +65,15 @@ Read the compact script-produced summaries before interpreting detail rows:
 - `sizes_summary.json`: counts of top-level output entries that grew, shrank,
   or stayed unchanged.
 - `genomes_summary.json`: lost/gained genome totals, reason counts, all-lost /
-  all-gained species counts, reassigned genome count, kept genome count, and
-  `taxa_added` / `taxa_removed` counts.
+  all-gained species counts, reassigned genome count and percentage of kept
+  genomes, net genome delta, kept genome count, and `taxa_added` /
+  `taxa_removed` counts.
 - `infection_status_summary.json`: per-host species promotion/demotion counts,
   uncovered counts, override scope-gap counts, and whether coverage annotations
   were available.
 - `params_changes.tsv`: compact top-level params changes (`key`, `kind`, `old`,
   `new`).
+- `metadata_schema_summary.json`: counts of metadata columns added and removed.
 - `metadata_schema_diff.tsv`: metadata column additions/removals (`change`,
   `column`). This is the only schema-diff output.
 
@@ -80,13 +82,14 @@ Then read the detailed TSVs needed by the template:
 - `staleness.tsv` for §1 (`ref`, `current`, `current_date`, `latest`,
   `latest_date`, `status`).
 - `sizes.tsv`, `sizes_summary.json`, `params_changes.tsv`, `params_diff.txt`,
-  and `metadata_schema_diff.tsv` for §2 and §5. `sizes.tsv` is long-format
-  (one row per `name`, `metric`): rows with `metric == bytes` are the per-entry
-  byte sizes for the §2 size table; the other metrics are content metrics for
-  the §2 content findings (`records`, `total_bp`, `n_bp` for each FASTA output;
-  `rows` for each TSV output, for every FASTA/TSV present in both indexes).
-  These let you flag cases where compressed bytes moved opposite to actual
-  content (e.g. bytes shrank while row count grew).
+  `metadata_schema_summary.json`, and `metadata_schema_diff.tsv` for §2 and §5.
+  `sizes.tsv` is long-format (one row per `name`, `metric`): rows with
+  `metric == bytes` are the per-entry byte sizes for the §2 size table; the
+  other metrics are content metrics for the §2 content findings (`records`,
+  `total_bp`, `n_bp` for each FASTA output; `rows` for each TSV output, for
+  every FASTA/TSV present in both indexes). These let you flag cases where
+  compressed bytes moved opposite to actual content (e.g. bytes shrank while row
+  count grew).
 - `genomes_lost_categorized.tsv`, `genomes_gained_categorized.tsv`, `species_lost_all_genomes.tsv`, `species_gained_all_genomes.tsv`, and `genomes_reassigned.tsv` for §3 and appendices.
 - `species_transitions_*.tsv` and `infection_status_transitions.tsv` for §4.
 

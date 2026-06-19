@@ -315,6 +315,22 @@ def write_metrics_table(old_prefix: str, new_prefix: str, out_dir: Path) -> None
 ################################
 
 META_COLS = "assembly_accession", "genome_id", "taxid", "species_taxid", "organism_name"
+LOSS_REASONS = (
+    "absent_from_ncbi",
+    "non_current_genome_version",
+    "hard_excluded",
+    "reassigned_to_excluded",
+    "infection_status_demotion",
+    "other",
+)
+GAIN_REASONS = (
+    "newly_deposited",
+    "hard_included",
+    "new_taxon_in_taxonomy",
+    "infection_status_promotion",
+    "pre_existing_reincluded",
+    "no_release_date",
+)
 
 
 @dataclass
@@ -434,6 +450,12 @@ def set_reason(
     )
 
 
+def reason_counts(out: pd.DataFrame, labels: tuple[str, ...]) -> dict[str, int]:
+    """Return reason counts with explicit zeroes for absent categories."""
+    counts = out["reason"].value_counts()
+    return {label: int(counts.get(label, 0)) for label in labels}
+
+
 def categorize_loss(
     removed: pd.DataFrame,
     raw_meta: pd.DataFrame,
@@ -527,6 +549,11 @@ def write_genome_taxonomy_tables(
     pd.DataFrame(schema_rows, columns=["change", "column"]).to_csv(
         out_dir / "metadata_schema_diff.tsv", sep="\t", index=False
     )
+    schema_counts = Counter(change for change, _ in schema_rows)
+    _write_json(
+        out_dir / "metadata_schema_summary.json",
+        {"added": schema_counts["added"], "removed": schema_counts["removed"]},
+    )
     if "release_date" not in new_raw_meta.columns:
         raise ValueError(
             "Target index raw metadata lacks release_date, required for gained-genome categorization."
@@ -558,17 +585,25 @@ def write_genome_taxonomy_tables(
         df.to_csv(out_dir / filename, sep="\t", index=False)
     old_taxids = set(old_db["taxid"].astype(str))
     new_taxids = set(new_db["taxid"].astype(str))
+    reassigned_genomes = int(reassigned["n_genomes"].sum())
+    kept_genomes = len(shared_genomes)
     _write_json(
         out_dir / "genomes_summary.json",
         {
             "lost_total": len(lost),
             "gained_total": len(gained),
-            "lost_by_reason": lost["reason"].value_counts().astype(int).to_dict(),
-            "gained_by_reason": gained["reason"].value_counts().astype(int).to_dict(),
+            "net_genome_delta": len(gained) - len(lost),
+            "lost_by_reason": reason_counts(lost, LOSS_REASONS),
+            "gained_by_reason": reason_counts(gained, GAIN_REASONS),
             "species_lost_all_genomes": len(species_lost),
             "species_gained_all_genomes": len(species_gained),
-            "reassigned_genomes": int(reassigned["n_genomes"].sum()),
-            "kept_genomes": len(shared_genomes),
+            "reassigned_genomes": reassigned_genomes,
+            "kept_genomes": kept_genomes,
+            "reassigned_pct_of_kept": (
+                round(reassigned_genomes / kept_genomes * 100, 2)
+                if kept_genomes
+                else 0.0
+            ),
             "taxa_added": len(new_taxids - old_taxids),
             "taxa_removed": len(old_taxids - new_taxids),
         },
