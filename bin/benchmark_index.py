@@ -693,13 +693,9 @@ def write_infection_status_tables(out_dir, old_db, new_db, cov):
 
 
 def summarise_params_changes(old_params: dict, new_params: dict) -> pd.DataFrame:
-    """Top-level key-by-key change summary for `index-params.json`. Each row
-    describes one key with kind ∈ {added, removed, changed} and short string
-    representations of the values. Nested dict/list values are JSON-stringified
-    for display; long values are truncated."""
-    rows: list[dict[str, str]] = []
-    all_keys = sorted(set(old_params) | set(new_params))
-    for k in all_keys:
+    """Return changed top-level params as key/kind/old/new rows."""
+    rows: list[tuple[str, str, str, str]] = []
+    for k in sorted(set(old_params) | set(new_params)):
         in_old = k in old_params
         in_new = k in new_params
         if in_old and in_new and old_params[k] == new_params[k]:
@@ -712,7 +708,7 @@ def summarise_params_changes(old_params: dict, new_params: dict) -> pd.DataFrame
             kind = "removed"
         else:
             kind = "changed"
-        rows.append({"key": k, "kind": kind, "old": old_v, "new": new_v})
+        rows.append((k, kind, old_v, new_v))
     return pd.DataFrame(rows, columns=["key", "kind", "old", "new"]).astype(str)
 
 
@@ -721,27 +717,20 @@ def _stringify_param(v: object, max_len: int = 120) -> str:
     if v is None:
         return ""
     s = json.dumps(v, sort_keys=True) if isinstance(v, dict | list) else str(v)
-    if len(s) > max_len:
-        s = s[: max_len - 1] + "…"
-    return s
+    return s if len(s) <= max_len else s[: max_len - 1] + "…"
 
 
 def diff_params(old_params: dict, new_params: dict) -> str:
     """Return a unified diff between two pretty-printed params dicts."""
-    old_lines = json.dumps(old_params, indent=2, sort_keys=True).splitlines(
-        keepends=True
+    old_lines = json.dumps(old_params, indent=2, sort_keys=True).splitlines(True)
+    new_lines = json.dumps(new_params, indent=2, sort_keys=True).splitlines(True)
+    diff = difflib.unified_diff(
+        old_lines,
+        new_lines,
+        fromfile="old/index-params.json",
+        tofile="new/index-params.json",
     )
-    new_lines = json.dumps(new_params, indent=2, sort_keys=True).splitlines(
-        keepends=True
-    )
-    return "".join(
-        difflib.unified_diff(
-            old_lines,
-            new_lines,
-            fromfile="old/index-params.json",
-            tofile="new/index-params.json",
-        )
-    )
+    return "".join(diff)
 
 
 ########
