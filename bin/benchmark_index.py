@@ -479,7 +479,7 @@ def categorize_loss(
     out["reason"], out["reason_taxid"] = "other", new
     set_reason(out, unsurveilled & new.eq(old), "infection_status_demotion", new)
     set_reason(out, unsurveilled & new.ne(old), "reassigned_to_excluded", new)
-    set_reason(out, present & excluded.ne(""), "hard_excluded", excluded)
+    set_reason(out, unsurveilled & excluded.ne(""), "hard_excluded", excluded)
     set_reason(out, in_raw & ~current, "non_current_genome_version")
     set_reason(out, ~in_raw, "absent_from_ncbi")
     return out.drop(columns=["_new_leaf", "_new_status"])
@@ -694,12 +694,19 @@ COVERAGE_COLS = "covered_by", "covered_rule_taxid", "included_for_other_hosts"
 
 
 def _coverage_match(taxid: str, host: str, cov: Coverage) -> tuple[str, str]:
-    """Return (coverage kind, matched rule taxid) for one transition taxid."""
+    """Return (coverage kind, matched rule taxid) for one transition taxid.
+
+    Includes are checked before excludes so an include rule anywhere in the
+    lineage wins, matching the production annotator's exclude-then-include
+    ordering (a taxid in both lists is surveilled)."""
     included = cov.included_taxids.get(host, set())
-    rule = _ancestor_in(taxid, cov.parent_map, cov.excluded_taxids | included)
-    if not rule:
-        return "", ""
-    return ("excluded" if rule in cov.excluded_taxids else "included", rule)
+    inc_rule = _ancestor_in(taxid, cov.parent_map, included)
+    if inc_rule:
+        return "included", inc_rule
+    exc_rule = _ancestor_in(taxid, cov.parent_map, cov.excluded_taxids)
+    if exc_rule:
+        return "excluded", exc_rule
+    return "", ""
 
 
 def _included_for_other_hosts(taxid: str, host: str, cov: Coverage) -> str:

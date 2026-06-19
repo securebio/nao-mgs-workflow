@@ -401,15 +401,13 @@ class TestCoverageClassification:
     ) -> None:
         assert _coverage_match(taxid, host, cov) == expected
 
-    def test_excluded_wins_over_included_when_walking_up(
+    def test_excluded_reported_when_include_is_on_other_branch(
         self,
         included: dict[str, set[str]],
     ) -> None:
-        # If a closer ancestor is excluded, that's reported first (we walk from
-        # the leaf upward). This makes the coverage column show the *nearest*
-        # explanation rather than skipping past it.
+        # The include (taxid 10) is not in taxid 4's lineage, so it cannot
+        # rescue it; the nearest excluded ancestor (genus 3) is reported.
         excluded = {"3"}  # genus
-        # walk: 4 -> not in set; 3 -> excluded; never reaches 10
         assert _coverage_match(
             "4",
             "human",
@@ -417,6 +415,18 @@ class TestCoverageClassification:
                 True, {"4": "3", "3": "2", "2": "1", "10": "1"}, excluded, included
             ),
         ) == ("excluded", "3")
+
+    def test_include_wins_over_exclude_at_same_taxid(self) -> None:
+        # A taxid in both the exclude list and the host's include set is
+        # surveilled (production applies includes after hard excludes).
+        cov = Coverage(True, {"4": "3", "3": "2", "2": "1"}, {"4"}, {"human": {"4"}})
+        assert _coverage_match("4", "human", cov) == ("included", "4")
+
+    def test_include_ancestor_wins_over_closer_exclude(self) -> None:
+        # Closer ancestor excluded (genus 3), farther ancestor included
+        # (family 2): the include wins anywhere in the lineage.
+        cov = Coverage(True, {"4": "3", "3": "2", "2": "1"}, {"3"}, {"human": {"2"}})
+        assert _coverage_match("4", "human", cov) == ("included", "2")
 
     def test_other_host_not_matched(
         self,
@@ -731,6 +741,55 @@ class TestCategorizeLostGenomesRaw:
         }
         # Temp join columns must not leak into the output.
         assert not {"_new_leaf", "_new_status"} & set(out.columns)
+
+    def test_surveilled_via_include_is_not_hard_excluded(self) -> None:
+        # Taxid 900 sits under an excluded ancestor but is still surveilled in
+        # the new DB (infection_status 1, e.g. restored by an include override).
+        # It must not be reported as hard_excluded.
+        new_db = pd.DataFrame(
+            [
+                {
+                    "taxid": "1",
+                    "taxid_species": "",
+                    "parent_taxid": "1",
+                    "infection_status_vertebrate": "0",
+                },
+                {
+                    "taxid": "900",
+                    "taxid_species": "900",
+                    "parent_taxid": "1",
+                    "infection_status_vertebrate": "1",
+                },
+            ]
+        )
+        raw_meta = pd.DataFrame(
+            [("GCA_S", "900", "X", "SOURCE_DATABASE_GENBANK", "current")],
+            columns=[
+                "assembly_accession",
+                "taxid",
+                "organism_name",
+                "source_database",
+                "assembly_status",
+            ],
+        )
+        removed = pd.DataFrame(
+            [("GCA_S", "gS", "900", "900", "Surveilled")],
+            columns=[
+                "assembly_accession",
+                "genome_id",
+                "taxid",
+                "species_taxid",
+                "organism_name",
+            ],
+        )
+        out = categorize_loss(
+            removed,
+            raw_meta,
+            new_db,
+            Coverage(True, build_parent_map(new_db), {"900"}, {}),
+            ["vertebrate"],
+        ).set_index("genome_id")
+        assert out.loc["gS", "reason"] == "other"
 
     def test_empty_input(self, raw_meta: pd.DataFrame, new_db: pd.DataFrame) -> None:
         empty = pd.DataFrame(

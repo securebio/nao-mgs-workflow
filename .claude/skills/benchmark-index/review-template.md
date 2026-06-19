@@ -28,6 +28,7 @@
 ### 2. Database size
 
 | DB | Size in reference index | Size in target index | Δ |
+|---|---|---|---|
 | `db_name` | old size | new size | absolute change (relative change in %) |
 
 **Findings:**
@@ -76,6 +77,7 @@
 Gains or losses of viral species assigned to each host category, ignoring hard inclusions and exclusions:
 
 | Host | Promotions | Demotions |
+|---|---|---|
 | `human` | NNN | NNN |
 | `primate` | NNN | NNN |
 | `mammal` | NNN | NNN |
@@ -106,10 +108,12 @@ Gains or losses of viral species assigned to each host category, ignoring hard i
 ### A.1. Table subject
 
 | Table header | Table header |
+|---|---|
 | table body | Table body |
 
 ### A.2. Table subject
 
 | Table header | Table header |
+|---|---|
 | table body | Table body |
 
