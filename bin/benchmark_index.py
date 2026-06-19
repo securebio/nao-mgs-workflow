@@ -538,6 +538,7 @@ def load_existing_overrides(repo_root: Path) -> dict[str, set[str]]:
 
 
 def infection_status_columns(db: pd.DataFrame) -> list[str]:
+    """Return infection-status annotation columns from an annotated taxonomy DB."""
     return [c for c in db.columns if c.startswith("infection_status_")]
 
 
@@ -553,10 +554,8 @@ def infection_status_transitions(
     new_col = f"{column}_new"
     changes = shared[shared[old_col] != shared[new_col]]
     counts = Counter(zip(changes[old_col], changes[new_col], strict=False))
-    rows: list[dict[str, object]] = [
-        {"old": o, "new": n, "count": c} for (o, n), c in counts.most_common()
-    ]
-    return pd.DataFrame(rows)
+    rows = [(old, new, count) for (old, new), count in counts.most_common()]
+    return pd.DataFrame(rows, columns=["old", "new", "count"])
 
 
 def infection_status_changes(
@@ -574,155 +573,78 @@ def infection_status_changes(
     return changes.reset_index(drop=True)
 
 
-def classify_coverage(
-    taxid: str,
-    parent_map: dict[str, str],
-    excluded_taxids: set[str],
-    included_taxids: dict[str, set[str]],
-    host: str,
-) -> tuple[str, str]:
-    """For one transition, walk the taxid up its lineage and return (covered_by,
-    rule_taxid) — "excluded"/"included"/"" — describing whether an existing
-    config rule already explains the observed status change for `host`.
-
-    `included_taxids` is host -> set of taxids that are hard-included for that host."""
-    host_includes = included_taxids.get(host, set())
-    cur: str | None = taxid
-    while cur:
-        if cur in excluded_taxids:
-            return "excluded", cur
-        if cur in host_includes:
-            return "included", cur
-        parent = parent_map.get(cur)
-        if parent is None or parent == cur:
-            break
-        cur = parent
-    return "", ""
+COVERAGE_COLS = "covered_by", "covered_rule_taxid", "included_for_other_hosts"
 
 
-def includes_for_other_hosts(
-    taxid: str,
-    parent_map: dict[str, str],
-    included_taxids: dict[str, set[str]],
-    host: str,
-) -> list[str]:
-    """Return the list of *other* hosts for which the taxid (or any ancestor) is
-    in the include rules. Used to flag policy/scope issues — e.g. a primate
-    demotion of a taxid that we DID override for human/vertebrate. Empty list
-    if no other host has this taxid included."""
-    other_hosts: list[str] = []
-    for h, taxids in included_taxids.items():
-        if h == host:
-            continue
-        cur: str | None = taxid
-        while cur:
-            if cur in taxids:
-                other_hosts.append(h)
-                break
-            parent = parent_map.get(cur)
-            if parent is None or parent == cur:
-                break
-            cur = parent
-    return sorted(other_hosts)
+def _coverage_match(taxid, host, cov):
+    """Return (coverage kind, matched rule taxid) for one transition taxid."""
+    included = cov.included_taxids.get(host, set())
+    rule = _ancestor_in(taxid, cov.parent_map, cov.excluded_taxids | included)
+    if not rule:
+        return "", ""
+    return ("excluded" if rule in cov.excluded_taxids else "included", rule)
 
 
-def annotate_changes_with_coverage(
-    changes: pd.DataFrame,
-    host: str,
-    parent_map: dict[str, str],
-    excluded_taxids: set[str],
-    included_taxids: dict[str, set[str]],
-) -> pd.DataFrame:
-    """Add three columns:
-    - `covered_by` ("excluded" | "included" | "")
-    - `covered_rule_taxid` (the lineage taxid matched by the rule, or "")
-    - `included_for_other_hosts` (comma-separated host names where the same
-      taxid IS in include rules, when covered_by != "included" — flags policy
-      gaps like a primate demotion of a taxid we overrode for human only)
-    """
+def _included_for_other_hosts(taxid, host, cov):
+    """Return comma-separated other hosts whose include rules cover taxid."""
+    hosts = (
+        h
+        for h, taxids in cov.included_taxids.items()
+        if h != host and _ancestor_in(taxid, cov.parent_map, taxids)
+    )
+    return ",".join(sorted(hosts))
+
+
+def annotate_changes_with_coverage(changes, host, cov):
+    """Add coverage rule columns to per-taxon infection-status changes."""
     out = changes.copy()
     if out.empty:
-        for col in ("covered_by", "covered_rule_taxid", "included_for_other_hosts"):
+        for col in COVERAGE_COLS:
             out[col] = pd.Series(dtype=str)
         return out
-    coverage = out["taxid"].apply(
-        lambda t: classify_coverage(
-            t, parent_map, excluded_taxids, included_taxids, host
-        )
+    matched = out["taxid"].map(lambda t: _coverage_match(t, host, cov))
+    out[["covered_by", "covered_rule_taxid"]] = pd.DataFrame(
+        matched.tolist(), index=out.index
     )
-    out["covered_by"] = coverage.apply(lambda x: x[0])
-    out["covered_rule_taxid"] = coverage.apply(lambda x: x[1])
-    out["included_for_other_hosts"] = out.apply(
-        lambda row: (
-            ",".join(
-                includes_for_other_hosts(
-                    row["taxid"], parent_map, included_taxids, host
-                )
-            )
-            if row["covered_by"] != "included"
-            else ""
-        ),
-        axis=1,
+    out["included_for_other_hosts"] = out["taxid"].map(
+        lambda t: _included_for_other_hosts(t, host, cov)
     )
+    out.loc[out["covered_by"].eq("included"), "included_for_other_hosts"] = ""
     return out
 
 
-def _zero_species_transition_counts() -> dict[str, int]:
-    return {
-        "species_promotions": 0,
-        "uncovered_species_promotions": 0,
-        "species_demotions": 0,
-        "uncovered_species_demotions": 0,
-        "override_scope_gaps": 0,
-    }
-
-
-def _species_transition_counts(
-    per_host_changes: dict[str, pd.DataFrame],
-    coverage_available: bool,
-) -> dict[str, dict[str, int]]:
-    host_counts: dict[str, dict[str, int]] = {}
+def _species_transition_counts(per_host_changes):
+    """Return per-host species promotion/demotion counts for summary JSON."""
+    host_counts = {}
     for host, df in sorted(per_host_changes.items()):
-        if not {"rank", "old_status", "new_status"}.issubset(df.columns):
-            host_counts[host] = _zero_species_transition_counts()
-            continue
         species = df[df["rank"] == "species"]
-        promotions = species[
-            (species["old_status"].astype(str) == "0")
-            & (species["new_status"].astype(str) == "1")
-        ]
-        demotions = species[
-            (species["old_status"].astype(str) == "1")
-            & (species["new_status"].astype(str) == "0")
-        ]
+        old_status = species["old_status"].astype(str)
+        new_status = species["new_status"].astype(str)
+        promotions = species[old_status.eq("0") & new_status.eq("1")]
+        demotions = species[old_status.eq("1") & new_status.eq("0")]
 
-        if coverage_available and "covered_by" in species.columns:
-            actionable_promotions = promotions[promotions["covered_by"] == ""]
-            actionable_demotions = demotions[demotions["covered_by"] == ""]
-        else:
-            actionable_promotions = promotions
-            actionable_demotions = demotions
-
-        if "included_for_other_hosts" in actionable_demotions.columns:
-            policy_gaps = actionable_demotions[
-                actionable_demotions["included_for_other_hosts"] != ""
-            ]
-        else:
-            policy_gaps = actionable_demotions.iloc[0:0]
+        uncovered_promotions = promotions
+        uncovered_demotions = demotions
+        if "covered_by" in species:
+            uncovered_promotions = promotions[promotions["covered_by"] == ""]
+            uncovered_demotions = demotions[demotions["covered_by"] == ""]
+        policy_gaps = 0
+        if "included_for_other_hosts" in uncovered_demotions:
+            policy_gaps = int(
+                uncovered_demotions["included_for_other_hosts"].ne("").sum()
+            )
 
         host_counts[host] = {
             "species_promotions": len(promotions),
-            "uncovered_species_promotions": len(actionable_promotions),
+            "uncovered_species_promotions": len(uncovered_promotions),
             "species_demotions": len(demotions),
-            "uncovered_species_demotions": len(actionable_demotions),
-            "override_scope_gaps": len(policy_gaps),
+            "uncovered_species_demotions": len(uncovered_demotions),
+            "override_scope_gaps": policy_gaps,
         }
     return host_counts
 
 
-def write_infection_status_tables(
-    out_dir: Path, old_db: pd.DataFrame, new_db: pd.DataFrame, coverage: Coverage
-) -> None:
+def write_infection_status_tables(out_dir, old_db, new_db, cov):
     """Write per-host infection-status transitions/changes tables plus
     infection_status_summary.json."""
     logger.info("Diffing infection-status annotations.")
@@ -738,14 +660,8 @@ def write_infection_status_tables(
             trans.insert(0, "host", host)
             transitions.append(trans)
         changes = infection_status_changes(old_db, new_db, col)
-        if coverage.available:
-            changes = annotate_changes_with_coverage(
-                changes,
-                host,
-                coverage.parent_map,
-                coverage.excluded_taxids,
-                coverage.included_taxids,
-            )
+        if cov.available:
+            changes = annotate_changes_with_coverage(changes, host, cov)
         per_host_changes[host] = changes
     if transitions:
         pd.concat(transitions, ignore_index=True).to_csv(
@@ -765,8 +681,8 @@ def write_infection_status_tables(
     _write_json(
         out_dir / "infection_status_summary.json",
         {
-            "coverage_available": coverage.available,
-            "hosts": _species_transition_counts(per_host_changes, coverage.available),
+            "coverage_available": cov.available,
+            "hosts": _species_transition_counts(per_host_changes),
         },
     )
 
