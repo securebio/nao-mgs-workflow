@@ -33,6 +33,7 @@ from collections import Counter, defaultdict
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 import pandas as pd
 
@@ -128,7 +129,14 @@ def latest_silva_release() -> str | None:
 STALENESS_COLS = "ref", "current", "current_date", "latest", "latest_date", "status"
 
 
-def _stale(ref, current, current_date="", latest="", latest_date="", status="error"):
+def _stale(
+    ref: str,
+    current: str,
+    current_date: str = "",
+    latest: str = "",
+    latest_date: str = "",
+    status: str = "error",
+) -> dict[str, str]:
     """Return one staleness.tsv row with stable column names."""
     values = ref, current, current_date, latest, latest_date, status
     return dict(zip(STALENESS_COLS, values, strict=False))
@@ -324,7 +332,7 @@ def build_parent_map(new_db: pd.DataFrame) -> dict[str, str]:
     return dict(zip(new_db["taxid"], new_db["parent_taxid"], strict=False))
 
 
-def _ancestor_in(taxid, parent_map, target):
+def _ancestor_in(taxid: str, parent_map: dict[str, str], target: set[str]) -> str:
     """Return the first taxid or ancestor found in target, or an empty string."""
     while taxid:
         if taxid in target:
@@ -336,7 +344,7 @@ def _ancestor_in(taxid, parent_map, target):
     return ""
 
 
-def surveilled_taxids(db, hosts):
+def surveilled_taxids(db: pd.DataFrame, hosts: list[str]) -> set[str]:
     """Return taxids passing any screened host, including species-rollup matches."""
     cols = [f"infection_status_{h}" for h in hosts]
     cols = [c for c in cols if c in db]
@@ -349,7 +357,11 @@ def surveilled_taxids(db, hosts):
     return positive
 
 
-def metadata_deltas(old_meta, new_meta):
+def metadata_deltas(
+    old_meta: pd.DataFrame, new_meta: pd.DataFrame
+) -> tuple[
+    pd.DataFrame, pd.DataFrame, set[str], pd.DataFrame, pd.DataFrame, pd.DataFrame
+]:
     """Return genome, species, and reassignment deltas from metadata tables."""
     for label, df in {"old": old_meta, "new": new_meta}.items():
         missing = set(META_COLS) - set(df.columns)
@@ -382,33 +394,53 @@ def metadata_deltas(old_meta, new_meta):
     reassigned = reassigned[
         reassigned["species_taxid_old"] != reassigned["species_taxid_new"]
     ]
+    reassigned = reassigned.rename(
+        columns={
+            "species_taxid_old": "old_species_taxid",
+            "species_taxid_new": "new_species_taxid",
+        }
+    )
     reassigned = (
-        reassigned.groupby(["species_taxid_old", "species_taxid_new"], dropna=False)
+        reassigned.groupby(["old_species_taxid", "new_species_taxid"], dropna=False)
         .agg(n_genomes=("genome_id", "size"), organism_name=("organism_name", "first"))
         .reset_index()
         .sort_values("n_genomes", ascending=False)
     )
-    reassigned.columns = [
+    reassigned_cols = [
         "old_species_taxid",
         "new_species_taxid",
-        "n_genomes",
         "organism_name",
+        "n_genomes",
     ]
-    reassigned.insert(2, "organism_name", reassigned.pop("organism_name"))
     lost = lost.sort_values("organism_name")
     gained = gained.sort_values("organism_name")
-    return lost, gained, old_ids & new_ids, species_lost, species_gained, reassigned
+    return (
+        lost,
+        gained,
+        old_ids & new_ids,
+        species_lost,
+        species_gained,
+        reassigned[reassigned_cols],
+    )
 
 
-def set_reason(out, mask, label, taxids=""):
-    """Assign a categorization reason and reason_taxid to matching rows."""
+def set_reason(
+    out: pd.DataFrame, mask: pd.Series, label: str, taxids: pd.Series | str = ""
+) -> None:
+    """Assign reason; later calls overwrite earlier lower-priority matches."""
     out.loc[mask, "reason"] = label
     out.loc[mask, "reason_taxid"] = (
         taxids.loc[mask] if isinstance(taxids, pd.Series) else taxids
     )
 
 
-def categorize_loss(removed, raw_meta, new_db, cov, hosts):
+def categorize_loss(
+    removed: pd.DataFrame,
+    raw_meta: pd.DataFrame,
+    new_db: pd.DataFrame,
+    cov: Coverage,
+    hosts: list[str],
+) -> pd.DataFrame:
     """Categorize genomes lost from the filtered metadata using target raw metadata."""
     raw = raw_meta[["assembly_accession", "taxid", "assembly_status"]].rename(
         columns={"taxid": "_new_leaf", "assembly_status": "_new_status"}
@@ -431,7 +463,14 @@ def categorize_loss(removed, raw_meta, new_db, cov, hosts):
     return out.drop(columns=["_new_leaf", "_new_status"])
 
 
-def categorize_gain(added, raw_meta, old_db, cov, hosts, old_date):
+def categorize_gain(
+    added: pd.DataFrame,
+    raw_meta: pd.DataFrame,
+    old_db: pd.DataFrame,
+    cov: Coverage,
+    hosts: list[str],
+    old_date: str,
+) -> pd.DataFrame:
     """Categorize genomes gained in the filtered metadata using target raw metadata."""
     raw = raw_meta[["assembly_accession", "release_date", "source_database"]].rename(
         columns={"release_date": "_release_date"}
@@ -454,15 +493,15 @@ def categorize_gain(added, raw_meta, old_db, cov, hosts, old_date):
 
 
 def write_genome_taxonomy_tables(
-    out_dir,
-    old,
-    new,
-    old_db,
-    new_db,
-    cov,
-    old_params,
-    new_params,
-    work_dir,
+    out_dir: Path,
+    old: str,
+    new: str,
+    old_db: pd.DataFrame,
+    new_db: pd.DataFrame,
+    cov: Coverage,
+    old_params: dict[str, Any],
+    new_params: dict[str, Any],
+    work_dir: Path,
 ) -> None:
     """Stage genome metadata and write genome/taxonomy delta outputs."""
     logger.info("Diffing genome metadata and taxonomy; categorizing genome IDs.")
@@ -480,6 +519,14 @@ def write_genome_taxonomy_tables(
             " metadata."
         ) from exc
     new_raw_meta = pd.read_csv(raw_path, sep="\t", dtype=str)
+    old_cols = set(old_meta.columns)
+    new_cols = set(new_meta.columns)
+    schema_rows = [
+        ("removed", col) for col in old_meta.columns if col not in new_cols
+    ] + [("added", col) for col in new_meta.columns if col not in old_cols]
+    pd.DataFrame(schema_rows, columns=["change", "column"]).to_csv(
+        out_dir / "metadata_schema_diff.tsv", sep="\t", index=False
+    )
     if "release_date" not in new_raw_meta.columns:
         raise ValueError(
             "Target index raw metadata lacks release_date, required for gained-genome categorization."
@@ -550,7 +597,13 @@ def load_existing_overrides(repo_root: Path) -> dict[str, set[str]]:
     return dict(out)
 
 
-def load_taxonomy_context(old_prefix, new_prefix, new_params, repo_root, work_dir):
+def load_taxonomy_context(
+    old_prefix: str,
+    new_prefix: str,
+    new_params: dict[str, Any],
+    repo_root: Path | None,
+    work_dir: Path,
+) -> tuple[pd.DataFrame, pd.DataFrame, Coverage]:
     """Stage taxonomy DBs and build the coverage context."""
     db = "output/results/total-virus-db-annotated.tsv.gz"
     old_db = pd.read_csv(fetch(old_prefix, db, work_dir / "old"), sep="\t", dtype=str)
@@ -605,7 +658,7 @@ def infection_status_changes(
 COVERAGE_COLS = "covered_by", "covered_rule_taxid", "included_for_other_hosts"
 
 
-def _coverage_match(taxid, host, cov):
+def _coverage_match(taxid: str, host: str, cov: Coverage) -> tuple[str, str]:
     """Return (coverage kind, matched rule taxid) for one transition taxid."""
     included = cov.included_taxids.get(host, set())
     rule = _ancestor_in(taxid, cov.parent_map, cov.excluded_taxids | included)
@@ -614,7 +667,7 @@ def _coverage_match(taxid, host, cov):
     return ("excluded" if rule in cov.excluded_taxids else "included", rule)
 
 
-def _included_for_other_hosts(taxid, host, cov):
+def _included_for_other_hosts(taxid: str, host: str, cov: Coverage) -> str:
     """Return comma-separated other hosts whose include rules cover taxid."""
     hosts = (
         h
@@ -624,7 +677,9 @@ def _included_for_other_hosts(taxid, host, cov):
     return ",".join(sorted(hosts))
 
 
-def annotate_changes_with_coverage(changes, host, cov):
+def annotate_changes_with_coverage(
+    changes: pd.DataFrame, host: str, cov: Coverage
+) -> pd.DataFrame:
     """Add coverage rule columns to per-taxon infection-status changes."""
     out = changes.copy()
     if out.empty:
@@ -642,7 +697,9 @@ def annotate_changes_with_coverage(changes, host, cov):
     return out
 
 
-def _species_transition_counts(per_host_changes):
+def _species_transition_counts(
+    per_host_changes: dict[str, pd.DataFrame],
+) -> dict[str, dict[str, int]]:
     """Return per-host species promotion/demotion counts for summary JSON."""
     host_counts = {}
     for host, df in sorted(per_host_changes.items()):
@@ -671,7 +728,9 @@ def _species_transition_counts(per_host_changes):
     return host_counts
 
 
-def write_infection_status_tables(out_dir, old_db, new_db, cov):
+def write_infection_status_tables(
+    out_dir: Path, old_db: pd.DataFrame, new_db: pd.DataFrame, cov: Coverage
+) -> None:
     """Write per-host infection-status transitions/changes tables plus
     infection_status_summary.json."""
     logger.info("Diffing infection-status annotations.")
@@ -760,7 +819,9 @@ def diff_params(old_params: dict, new_params: dict) -> str:
     return "".join(diff)
 
 
-def write_params_tables(out_dir, old_prefix, new_prefix, work_dir):
+def write_params_tables(
+    out_dir: Path, old_prefix: str, new_prefix: str, work_dir: Path
+) -> tuple[dict[str, Any], dict[str, Any]]:
     """Stage params JSON, write params outputs, and return parsed params."""
     params = "output/input/index-params.json"
     old_params = json.loads(fetch(old_prefix, params, work_dir / "old").read_text())
@@ -796,7 +857,7 @@ def parse_arguments() -> argparse.Namespace:
         "--out",
         type=Path,
         required=True,
-        help="Output directory for TSVs and facts.json.",
+        help="Output directory for benchmark tables and summaries.",
     )
     parser.add_argument(
         "--repo-root",
