@@ -355,11 +355,9 @@ def metadata_deltas(old_meta, new_meta):
         missing = set(META_COLS) - set(df.columns)
         if missing:
             raise ValueError(f"{label} metadata missing required columns: {missing}")
-
     old_ids, new_ids = set(old_meta["genome_id"]), set(new_meta["genome_id"])
     lost = old_meta.loc[~old_meta["genome_id"].isin(new_ids), META_COLS]
     gained = new_meta.loc[~new_meta["genome_id"].isin(old_ids), META_COLS]
-
     old_counts = old_meta["species_taxid"].value_counts()
     new_counts = new_meta["species_taxid"].value_counts()
     species = pd.concat([old_counts, new_counts], axis=1).fillna(0).astype(int)
@@ -376,7 +374,6 @@ def metadata_deltas(old_meta, new_meta):
     species_lost = species_lost.sort_values("old_count", ascending=False)
     species_gained = species[species["old_count"].eq(0) & species["new_count"].gt(0)]
     species_gained = species_gained.sort_values("new_count", ascending=False)
-
     reassigned = old_meta[["genome_id", "species_taxid"]].merge(
         new_meta[["genome_id", "species_taxid", "organism_name"]],
         on="genome_id",
@@ -512,7 +509,6 @@ def write_genome_taxonomy_tables(
         ("genomes_gained_categorized.tsv", gained),
     ]:
         df.to_csv(out_dir / filename, sep="\t", index=False)
-
     old_taxids = set(old_db["taxid"].astype(str))
     new_taxids = set(new_db["taxid"].astype(str))
     _write_json(
@@ -655,7 +651,6 @@ def _species_transition_counts(per_host_changes):
         new_status = species["new_status"].astype(str)
         promotions = species[old_status.eq("0") & new_status.eq("1")]
         demotions = species[old_status.eq("1") & new_status.eq("0")]
-
         uncovered_promotions = promotions
         uncovered_demotions = demotions
         if "covered_by" in species:
@@ -666,7 +661,6 @@ def _species_transition_counts(per_host_changes):
             policy_gaps = int(
                 uncovered_demotions["included_for_other_hosts"].ne("").sum()
             )
-
         host_counts[host] = {
             "species_promotions": len(promotions),
             "uncovered_species_promotions": len(uncovered_promotions),
@@ -821,9 +815,7 @@ def main() -> None:
     args = parse_arguments()
     args.out.mkdir(parents=True, exist_ok=True)
     logger.info(f"Benchmarking {args.old} -> {args.new}")
-
     write_metrics_table(args.old, args.new, args.out)
-
     with tempfile.TemporaryDirectory() as td_str:
         work_dir = Path(td_str)
         old_params, new_params = write_params_tables(
@@ -832,7 +824,6 @@ def main() -> None:
         old_db, new_db, coverage = load_taxonomy_context(
             args.old, args.new, new_params, args.repo_root, work_dir
         )
-
         write_genome_taxonomy_tables(
             args.out,
             args.old,
@@ -846,7 +837,6 @@ def main() -> None:
         )
         write_infection_status_tables(args.out, old_db, new_db, coverage)
         write_staleness_table(new_params, args.out / "staleness.tsv")
-
     logger.info(f"Done. Outputs in {args.out.resolve()}")
 
 
