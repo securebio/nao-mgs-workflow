@@ -2,6 +2,7 @@ import gzip
 from pathlib import Path
 
 import kraken_domain_summary
+import pytest
 
 
 def write_report(path: Path, rows: list[str]) -> None:
@@ -13,6 +14,31 @@ def read_output(path: Path) -> list[str]:
         with gzip.open(path, "rt") as output_file:
             return output_file.read().splitlines()
     return path.read_text().splitlines()
+
+
+@pytest.mark.parametrize(
+    ("reads_to_allocate", "domain_reads", "expected"),
+    [
+        # Exact division leaves no remainder.
+        (100, [60, 40], [60, 40]),
+        # Largest-remainder distributes the leftover; ties break by index order.
+        (10, [1, 1, 1], [4, 3, 3]),
+        # Nothing to allocate, or no weight to allocate against, yields zeros.
+        (0, [5, 5], [0, 0]),
+        (10, [0, 0], [0, 0]),
+        # A zero-weight domain receives nothing; the rest absorb the remainder.
+        (10, [7, 3, 0], [7, 3, 0]),
+    ],
+)
+def test_allocate_reads_proportionally(
+    reads_to_allocate: int, domain_reads: list[int], expected: list[int]
+) -> None:
+    allocation = kraken_domain_summary.allocate_reads_proportionally(
+        reads_to_allocate, domain_reads
+    )
+    assert allocation == expected
+    # Allocations are integers that sum exactly to the pool when there is weight.
+    assert sum(allocation) == (reads_to_allocate if sum(domain_reads) > 0 else 0)
 
 
 def test_create_domain_summary_without_above_domain_reads(tmp_path: Path) -> None:
@@ -169,3 +195,47 @@ def test_create_domain_summary_with_no_domain_reads_writes_empty_output(
     kraken_domain_summary.create_domain_summary(report, output)
 
     assert output.read_text() == ""
+
+
+def test_create_domain_summary_with_no_root_writes_empty_output(
+    tmp_path: Path,
+) -> None:
+    # A report missing the root (taxid 1) row cannot be normalized, so the
+    # output is empty rather than wrong.
+    report = tmp_path / "kraken.report"
+    output = tmp_path / "domain.tsv"
+    write_report(
+        report,
+        [
+            "60.00\t15\t0\t550\t308\tD\t10239\t  Viruses",
+        ],
+    )
+
+    kraken_domain_summary.create_domain_summary(report, output)
+
+    assert output.read_text() == ""
+
+
+def test_create_domain_summary_reads_gzipped_report(tmp_path: Path) -> None:
+    # The input report may itself be gzipped (open_by_suffix handles both).
+    report = tmp_path / "kraken.report.gz"
+    output = tmp_path / "domain.tsv"
+    with gzip.open(report, "wt") as report_file:
+        report_file.write(
+            "\n".join(
+                [
+                    "100.00\t25\t0\t915\t552\tR\t1\troot",
+                    "60.00\t15\t0\t550\t308\tD\t10239\t  Viruses",
+                    "40.00\t10\t0\t207\t141\tD\t2\t  Bacteria",
+                ]
+            )
+            + "\n"
+        )
+
+    kraken_domain_summary.create_domain_summary(report, output)
+
+    assert read_output(output) == [
+        "name\ttaxid\trank\tkraken2_assigned_reads\tadded_reads\tnew_est_reads\tfraction_total_reads",
+        "Viruses\t10239\tD\t15\t0\t15\t0.60000",
+        "Bacteria\t2\tD\t10\t0\t10\t0.40000",
+    ]

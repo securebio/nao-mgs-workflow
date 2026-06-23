@@ -7,26 +7,35 @@ nextflow_process {
     tag "module"
     tag "kraken_domain_summary"
 
-    test("Should derive a domain summary from a Kraken2 report without failures") {
+    test("Should derive a two-level domain summary, robust to non-D rank codes") {
         tag "expect_success"
         when {
             params {}
             process {
+                // Toy report uses post-2024 taxonomy rank codes (R1/R2, no "D")
+                // and has reads above the domains both at "cellular organisms"
+                // (taxid 131567) and at the root, so it exercises the full
+                // taxid-keyed two-level proration in-container.
                 '''
                 input[0] = Channel.of("test")
-                    | combine(Channel.of("${projectDir}/test-data/toy-data/bracken/kraken.report"))
+                    | combine(Channel.of("${projectDir}/test-data/toy-data/kraken-domain-summary/kraken.report"))
                 '''
             }
         }
         then {
             // Should run without failures
             assert process.success
-            // Output should be a gzipped TSV with the Bracken-compatible header
             def rows = path(process.out.output[0][1]).linesGzip
-            assert rows[0] == "name\ttaxid\trank\tkraken2_assigned_reads\tadded_reads\tnew_est_reads\tfraction_total_reads"
-            // The toy report is entirely viral, so the only domain row is Viruses (taxid 10239)
-            assert rows.size() == 2
-            assert rows[1].startsWith("Viruses\t10239\t")
+            // The "cellular organisms" residual goes only to the cellular domains;
+            // Viruses receives just its share of the small root-level residual
+            // (20), not the cellular residual it would get under naive proration.
+            assert rows == [
+                "name\ttaxid\trank\tkraken2_assigned_reads\tadded_reads\tnew_est_reads\tfraction_total_reads",
+                "Bacteria\t2\tR2\t400\t80\t480\t0.33803",
+                "Archaea\t2157\tR2\t400\t80\t480\t0.33803",
+                "Eukaryota\t2759\tR2\t200\t40\t240\t0.16901",
+                "Viruses\t10239\tR1\t200\t20\t220\t0.15493",
+            ]
         }
     }
 

@@ -120,8 +120,10 @@ def parse_kraken_report_line(line: str) -> KrakenReportRow | None:
         line: One tab-separated Kraken2 report line.
 
     Returns:
-        Parsed report row, or None for a header row.
+        Parsed report row, or None for a header or blank line.
     """
+    if not line.strip():
+        return None
     fields = line.rstrip("\n").split("\t")
     if fields[0] == "pc_reads_total":
         return None
@@ -223,7 +225,12 @@ def summarize_domains(rows: list[KrakenReportRow]) -> list[DomainSummaryRow]:
         logger.warning("Kraken report has no root row. Creating empty output.")
         return []
 
-    domain_rows = [row for row in rows if row.taxid in DOMAIN_TAXIDS]
+    # One row per domain taxid, in report order. A well-formed Kraken report has
+    # no duplicate taxids; dedupe defensively so a malformed report can't
+    # double-count (the dict keeps the last row per taxid, matching rows_by_taxid).
+    domain_rows = list(
+        {row.taxid: row for row in rows if row.taxid in DOMAIN_TAXIDS}.values()
+    )
     if sum(row.reads_clade for row in domain_rows) == 0:
         logger.warning("Kraken report has no recognized domain reads.")
         return []

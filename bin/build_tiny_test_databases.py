@@ -178,7 +178,6 @@ def build_kraken_database(
 ) -> None:
     """
     Build tiny Kraken2 database using provided sequences.
-    Also builds Bracken k-mer distribution files (stored within Kraken2 database directory).
     Args:
         output_dir (Path): Kraken2 database output directory
         sequences (list[tuple[str, str | Path, int]]): List of (filename, source, taxid) tuples where source is URL or Path
