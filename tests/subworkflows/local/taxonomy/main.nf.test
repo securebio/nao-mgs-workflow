@@ -16,8 +16,6 @@ nextflow_workflow {
             workflow {
                 '''
                 def taxonomy_params = [
-                    classification_level: "D", 
-                    bracken_threshold: 5, 
                     db_download_timeout: params.db_download_timeout
                 ]
                 input[0] = Channel.of("test")
@@ -48,7 +46,7 @@ nextflow_workflow {
             def kraken_headers_exp = ["pc_reads_total", "n_reads_clade", "n_reads_direct", "n_minimizers_total", "n_minimizers_distinct", "rank","taxid", "name", "sample"]
             assert kraken_report_tab.columnCount == 9
             assert kraken_report_tab.columnNames == kraken_headers_exp
-            // Bracken output should have expected fields
+            // Domain abundance output should have expected fields
             def bracken_tab = path(workflow.out.bracken[0][1]).csv(sep: "\t", decompress: true)
             def bracken_headers_exp = ["name", "taxid", "rank", "kraken2_assigned_reads", "added_reads", "new_est_reads", "fraction_total_reads", "sample"]
             assert bracken_tab.columnCount == 8
@@ -70,8 +68,6 @@ nextflow_workflow {
             workflow {
                 '''
                 def taxonomy_params = [
-                    classification_level: "D",
-                    bracken_threshold: 5,
                     db_download_timeout: params.db_download_timeout
                 ]
                 input[0] = Channel.of("test")
@@ -103,7 +99,7 @@ nextflow_workflow {
             def kraken_headers_exp = ["pc_reads_total", "n_reads_clade", "n_reads_direct", "n_minimizers_total", "n_minimizers_distinct", "rank","taxid", "name", "sample"]
             assert kraken_report_tab.columnCount == 9
             assert kraken_report_tab.columnNames == kraken_headers_exp
-            // Bracken output should have expected fields
+            // Domain abundance output should have expected fields
             def bracken_tab = path(workflow.out.bracken[0][1]).csv(sep: "\t", decompress: true)
             def bracken_headers_exp = ["name", "taxid", "rank", "kraken2_assigned_reads", "added_reads", "new_est_reads", "fraction_total_reads", "sample"]
             assert bracken_tab.columnCount == 8
@@ -122,8 +118,6 @@ nextflow_workflow {
             workflow {
                 '''
                 def taxonomy_params = [
-                    classification_level: "D",
-                    bracken_threshold: 5,
                     db_download_timeout: params.db_download_timeout
                 ]
                 input[0] = Channel.of("test_empty")
@@ -157,7 +151,7 @@ nextflow_workflow {
             def kraken_headers_exp = ["pc_reads_total", "n_reads_clade", "n_reads_direct", "n_minimizers_total", "n_minimizers_distinct", "rank","taxid", "name", "sample"]
             assert kraken_headers.size() == kraken_headers_exp.size()
 
-            // Bracken output should be completely empty
+            // Domain abundance output should be completely empty
             def bracken_file = path(workflow.out.bracken[0][1])
             assert bracken_file.linesGzip.size() == 0
         }

@@ -1,7 +1,7 @@
 {
   "$schema": "https://datapackage.org/profiles/2.0/tableschema.json",
-  "title": "Bracken Abundance Estimates Per Sample",
-  "description": "Bracken abundance estimates for each sample within a group, as produced by the RUN workflow and concatenated by the DOWNSTREAM workflow. Classification is performed on a configurable number of subsampled reads per sample (default 1 million; controlled by params.n_reads_profile in the RUN configuration, recorded in input/params-run.json in the output directory). Reads are split into putative ribosomal and non-ribosomal sets before classification; the ribosomal column indicates which set each row's results come from.",
+  "title": "Kraken Domain Abundance Estimates Per Sample",
+  "description": "Domain-level abundance estimates for each sample within a group, derived directly from Kraken2 clade counts by the RUN workflow and concatenated by the DOWNSTREAM workflow. Classification is performed on a configurable number of subsampled reads per sample (default 1 million; controlled by params.n_reads_profile in the RUN configuration, recorded in input/params-run.json in the output directory). Reads are split into putative ribosomal and non-ribosomal sets before classification; the ribosomal column indicates which set each row's results come from.",
   "missingValues": ["NA"],
   "primaryKey": ["group", "sample", "taxid", "ribosomal"],
   "fields": [
@@ -30,7 +30,7 @@
     {
       "name": "rank",
       "title": "Taxonomic Rank",
-      "description": "Taxonomic rank code (e.g. D for domain, S for species).",
+      "description": "Kraken2 taxonomic rank code reported for the domain-level taxon. This may vary across Kraken2 database taxonomy versions.",
       "type": "string",
       "constraints": {
         "required": true,
@@ -41,7 +41,7 @@
     {
       "name": "kraken2_assigned_reads",
       "title": "Kraken2 Assigned Reads",
-      "description": "Number of reads assigned to this taxon by Kraken2 before Bracken redistribution.",
+      "description": "Number of reads assigned to this domain-level taxon's clade by Kraken2.",
       "type": "integer",
       "constraints": {
         "required": true,
@@ -52,7 +52,7 @@
     {
       "name": "added_reads",
       "title": "Added Reads",
-      "description": "Number of reads redistributed to this taxon by Bracken.",
+      "description": "Number of reads assigned above the domain rows in the Kraken2 report, pooled at the tree-of-life root, and prorated to this taxon based on Kraken2 domain clade counts. Unclassified reads are not redistributed.",
       "type": "integer",
       "constraints": {
         "required": true
@@ -62,7 +62,7 @@
     {
       "name": "new_est_reads",
       "title": "New Estimated Reads",
-      "description": "New estimated number of reads after Bracken redistribution.",
+      "description": "Estimated number of reads after adding the prorated above-domain reads to Kraken2 domain clade counts.",
       "type": "integer",
       "constraints": {
         "required": true,
@@ -73,7 +73,7 @@
     {
       "name": "fraction_total_reads",
       "title": "Fraction of Total Reads",
-      "description": "Fraction of total reads assigned to this taxon after Bracken redistribution.",
+      "description": "Fraction of classified reads assigned to this taxon after prorating reads above the domain rows. Unclassified reads are excluded.",
       "type": "number",
       "constraints": {
         "required": true,

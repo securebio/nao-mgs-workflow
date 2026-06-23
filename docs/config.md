@@ -20,7 +20,6 @@ This configuration file controls the pipeline's main RUN workflow. Its options a
 - `params.adapters` [str]: Path to the adapter file for adapter trimming (default [`ref/adapters.fasta`](./ref/adapters.fasta).
 - `params.n_reads_profile` [int]: The number of reads per sample to run through taxonomic profiling (default 1 million).
 - `params.bt2_score_threshold` [float]: The length-normalized Bowtie2 score threshold above which a read is considered a valid hit for a host-infecting virus (typically 15 or 20).
-- `params.bracken_threshold` [int]: Minimum number of reads that must be assigned to a taxon for Bracken to include it. (default 1)
 - `params.host_taxon` [str]: Host taxon to use for host-infecting virus identification with Kraken2. (default "vertebrate")
 - `params.random_seed` [str]: Seed for non-deterministic processes. If left blank; a random seed will be chosen; we generally recommend setting a value for reproducibility.
 - `params.queue` [str]: The [AWS Batch job queue](./batch.md) to use for this pipeline run. For [spot instance fallback](./batch.md#spot-instance-fallback) using a Groovy closure, edit `process.queue` directly in the config file.

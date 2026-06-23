@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 DESC = """
-Build tiny reference databases for testing: taxonomy, Kraken2, Bracken, and BLAST.
+Build tiny reference databases for testing: taxonomy, Kraken2, and BLAST.
 """
 
 ###########
@@ -208,31 +208,6 @@ def build_kraken_database(
         logger.error("Failed to build Kraken2 database")
         logger.error(result.stderr)
         raise subprocess.CalledProcessError(result.returncode, result.args)
-
-    # Build Bracken k-mer distribution files (stored within Kraken2 database directory)
-    logger.info("Building Bracken k-mer distribution files...")
-    for read_len in [100, 150]:  # Common Illumina read lengths
-        result = subprocess.run(
-            [
-                "bracken-build",
-                "-d",
-                str(output_dir),
-                "-t",
-                "4",
-                "-k",
-                "25",
-                "-l",
-                str(read_len),
-            ],
-            capture_output=True,
-            text=True,
-        )
-        if result.returncode != 0:
-            logger.error(
-                f"Failed to build Bracken distribution for read length {read_len}"
-            )
-            logger.error(result.stderr)
-            raise subprocess.CalledProcessError(result.returncode, result.args)
 
     # Clean up temporary directory
     subprocess.run(
