@@ -90,7 +90,10 @@ output {
         tags nextflow_file_class: "publish", "nextflow.io/temporary": "false"
     }
     experimental_run {
-        path "experimental"
+        // Publish the RUN domain-abundance table (emitted as profile_ch.bracken,
+        // a (sample, file) tuple) under an honest name without a copy process, by
+        // renaming on publish with the `>>` operator.
+        path { sample, file -> file >> "experimental/${sample}_kraken_domains.tsv.gz" }
         tags nextflow_file_class: "publish", "nextflow.io/temporary": "false"
     }
     sentinel_run {

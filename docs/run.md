@@ -154,7 +154,7 @@ style I fill:#000,color:#fff,stroke:#000
 
 1. Input read pairs are processed with [BBMerge](https://jgi.doe.gov/data-and-tools/software-tools/bbtools/bb-tools-user-guide/bbmerge-guide/)[^merge] to create single sequences. Any pairs that cannot be merged are joined end-to-end with an "N" base between them.
 2. Reads are taxonomically classified using [Kraken2](https://ccb.jhu.edu/software/kraken2/) with the reference database from the index workflow. 
-3. Kraken2 clade counts are summarized at the domain level. Reads assigned to clades above the domain rows are pooled at the tree-of-life root and prorated across observed domains based on Kraken2 domain clade counts; unclassified reads are not redistributed.
+3. Kraken2 clade counts are summarized at the domain level, keyed on stable NCBI taxids (Bacteria 2, Archaea 2157, Eukaryota 2759, Viruses 10239) rather than rank codes. Reads classified above the domain rows are redistributed down the taxonomy in proportion to domain clade counts, respecting the tree: reads at "cellular organisms" (taxid 131567) are prorated among the cellular domains only (never Viruses), and the remaining root-level reads across all four domains. Unclassified reads are not redistributed.
 4. Finally, the Kraken2 report and domain abundance outputs are processed and combined into well-formatted TSVs for downstream processing.
 
 [^merge]: Which aligns and merges read pairs with significant overlap.

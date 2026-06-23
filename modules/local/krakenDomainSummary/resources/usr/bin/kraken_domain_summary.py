@@ -41,7 +41,15 @@ logger.addHandler(handler)
 # CONSTANTS #
 #############
 
-DOMAIN_TAXIDS = frozenset({2, 2157, 2759, 10239})
+# Domains are identified by stable NCBI taxid rather than by Kraken rank code,
+# so the summary is immune to the taxonomy-version rank-code shifts (e.g. domains
+# losing rank code "D") that motivated replacing Bracken.
+VIRUS_TAXID = 10239
+# Bacteria, Archaea, Eukaryota — the cellular superkingdoms, all nested under the
+# stable "cellular organisms" node (taxid 131567) in the NCBI taxonomy.
+CELLULAR_DOMAIN_TAXIDS = frozenset({2, 2157, 2759})
+DOMAIN_TAXIDS = CELLULAR_DOMAIN_TAXIDS | {VIRUS_TAXID}
+CELLULAR_ORGANISMS_TAXID = 131567
 OUTPUT_FIELDS = [
     "name",
     "taxid",
@@ -186,41 +194,91 @@ def summarize_domains(rows: list[KrakenReportRow]) -> list[DomainSummaryRow]:
     """
     Create Bracken-shaped domain abundance rows from a Kraken2 report.
 
+    Reads classified above the domain rows are redistributed down the taxonomy in
+    two levels that respect the tree, mirroring how Bracken's k-mer model
+    behaves:
+
+    1. Reads sitting at "cellular organisms" (taxid 131567), above the three
+       cellular superkingdoms, can only belong to cellular life. They are split
+       among Bacteria/Archaea/Eukaryota in proportion to their clade counts and
+       are never assigned to Viruses.
+    2. The remaining root-level residual (reads directly at the root, plus any
+       other non-cellular, non-viral root children) is split across all four
+       domains in proportion to their clade counts.
+
+    Naively prorating the whole above-domain residual across all four domains
+    instead systematically over-assigns the rare Viruses domain, because the bulk
+    of that residual is cellular-organisms reads that Bracken never routes to
+    Viruses.
+
     Args:
         rows: Parsed Kraken2 report rows.
 
     Returns:
         Domain abundance summary rows.
     """
-    root_row = next((row for row in rows if row.taxid == ROOT_TAXID), None)
+    rows_by_taxid = {row.taxid: row for row in rows}
+    root_row = rows_by_taxid.get(ROOT_TAXID)
     if root_row is None:
         logger.warning("Kraken report has no root row. Creating empty output.")
         return []
 
     domain_rows = [row for row in rows if row.taxid in DOMAIN_TAXIDS]
-    total_domain_reads = sum(row.reads_clade for row in domain_rows)
-    if total_domain_reads == 0:
+    if sum(row.reads_clade for row in domain_rows) == 0:
         logger.warning("Kraken report has no recognized domain reads.")
         return []
 
-    root_clade_reads = root_row.reads_clade
-    above_domain_reads = max(root_clade_reads - total_domain_reads, 0)
-    added_reads = allocate_reads_proportionally(
-        above_domain_reads, [row.reads_clade for row in domain_rows]
-    )
-    total_estimated_reads = root_clade_reads
+    added: dict[int, int] = {}
+
+    # Level 1: residual within "cellular organisms" -> cellular domains only.
+    cellular_present = [
+        row for row in domain_rows if row.taxid in CELLULAR_DOMAIN_TAXIDS
+    ]
+    cellular_clade_sum = sum(row.reads_clade for row in cellular_present)
+    cellular_organisms_row = rows_by_taxid.get(CELLULAR_ORGANISMS_TAXID)
+    # Anchor the cellular subtree at the "cellular organisms" clade when that node
+    # and at least one cellular domain are present; otherwise treat all residual
+    # as root-level so the allocation degrades gracefully.
+    if cellular_organisms_row is not None and cellular_present:
+        cellular_anchor = cellular_organisms_row.reads_clade
+    else:
+        cellular_anchor = cellular_clade_sum
+    cellular_residual = max(cellular_anchor - cellular_clade_sum, 0)
+    for row, allocation in zip(
+        cellular_present,
+        allocate_reads_proportionally(
+            cellular_residual, [row.reads_clade for row in cellular_present]
+        ),
+        strict=True,
+    ):
+        added[row.taxid] = allocation
+
+    # Level 2: remaining root-level residual -> all domains.
+    virus_row = rows_by_taxid.get(VIRUS_TAXID)
+    virus_clade = virus_row.reads_clade if virus_row else 0
+    root_residual = max(root_row.reads_clade - cellular_anchor - virus_clade, 0)
+    for row, allocation in zip(
+        domain_rows,
+        allocate_reads_proportionally(
+            root_residual, [row.reads_clade for row in domain_rows]
+        ),
+        strict=True,
+    ):
+        added[row.taxid] = added.get(row.taxid, 0) + allocation
+
     summary_rows = []
-    for domain_row, added in zip(domain_rows, added_reads, strict=True):
-        new_est_reads = domain_row.reads_clade + added
+    for domain_row in domain_rows:
+        domain_added = added.get(domain_row.taxid, 0)
+        new_est_reads = domain_row.reads_clade + domain_added
         summary_rows.append(
             DomainSummaryRow(
                 name=domain_row.name,
                 taxid=domain_row.taxid,
                 rank=domain_row.rank,
                 kraken2_assigned_reads=domain_row.reads_clade,
-                added_reads=added,
+                added_reads=domain_added,
                 new_est_reads=new_est_reads,
-                fraction_total_reads=new_est_reads / total_estimated_reads,
+                fraction_total_reads=new_est_reads / root_row.reads_clade,
             )
         )
     return summary_rows

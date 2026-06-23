@@ -5,7 +5,9 @@
 - CI: Extend the deferred `26.04.0`–`3` `.nextflowignore` entries to `2026-07-31` and add `26.04.4`, keeping `check-nextflow-version` green on dev (pinned Nextflow `25.10.4` unchanged).
 - Scale `MARK_ALIGNMENT_DUPLICATES` and `VSEARCH_CLUSTER` memory by input size via per-label tier closures (~1.5× headroom) to address OOM issues on large samples.
 - Replace Bracken with Kraken2-derived domain abundance estimates for taxonomic profiling, avoiding empty `{sample}_bracken.tsv.gz` outputs when newer Kraken2 standard databases encode domain-level taxa with non-`D` rank codes.
-    - The compatibility filename and columns are retained; `added_reads` now prorates reads assigned above the Kraken2 domain rows by pooling them at the tree-of-life root, while unclassified reads remain excluded.
+    - Domains are identified by stable NCBI taxid rather than Kraken rank code, so the summary is immune to the taxonomy-version rank-code shift that broke Bracken.
+    - The compatibility filename and columns are retained. `added_reads` redistributes reads classified above the domain rows down the taxonomy in two levels: reads at "cellular organisms" (taxid 131567) are prorated among the cellular domains (Bacteria/Archaea/Eukaryota) only, and the remaining root-level reads across all four domains, both proportional to Kraken clade counts. This respects the tree and avoids over-assigning the rare Viruses domain. Unclassified reads remain excluded.
+    - Additionally publish the same table under an honest name, `experimental/{sample}_kraken_domains.tsv.gz`, as a migration target away from the legacy `bracken` filename (experimental outputs carry no stability guarantees).
 - Exclude five viral genome records with rRNA contamination from the genome reference via `ref/hv_patterns_exclude.txt`.
 - Add `set -euo pipefail` to `BLASTN` module.
 - Add `pigz` to the `python` container so Python processes can use parallel (de)compression.

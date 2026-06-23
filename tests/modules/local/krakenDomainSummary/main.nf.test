@@ -1,0 +1,33 @@
+nextflow_process {
+
+    name "Test process KRAKEN_DOMAIN_SUMMARY"
+    script "modules/local/krakenDomainSummary/main.nf"
+    process "KRAKEN_DOMAIN_SUMMARY"
+    config "tests/configs/run.config"
+    tag "module"
+    tag "kraken_domain_summary"
+
+    test("Should derive a domain summary from a Kraken2 report without failures") {
+        tag "expect_success"
+        when {
+            params {}
+            process {
+                '''
+                input[0] = Channel.of("test")
+                    | combine(Channel.of("${projectDir}/test-data/toy-data/bracken/kraken.report"))
+                '''
+            }
+        }
+        then {
+            // Should run without failures
+            assert process.success
+            // Output should be a gzipped TSV with the Bracken-compatible header
+            def rows = path(process.out.output[0][1]).linesGzip
+            assert rows[0] == "name\ttaxid\trank\tkraken2_assigned_reads\tadded_reads\tnew_est_reads\tfraction_total_reads"
+            // The toy report is entirely viral, so the only domain row is Viruses (taxid 10239)
+            assert rows.size() == 2
+            assert rows[1].startsWith("Viruses\t10239\t")
+        }
+    }
+
+}

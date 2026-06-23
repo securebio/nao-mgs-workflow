@@ -38,7 +38,76 @@ def test_create_domain_summary_without_above_domain_reads(tmp_path: Path) -> Non
     ]
 
 
-def test_create_domain_summary_prorates_all_reads_above_domain(tmp_path: Path) -> None:
+def test_create_domain_summary_excludes_viruses_from_cellular_residual(
+    tmp_path: Path,
+) -> None:
+    # The 90 reads sitting at "cellular organisms" above the cellular domains are
+    # split among Bacteria/Archaea/Eukaryota only (60/20/10). Viruses, which is
+    # not a cellular organism, receives none of them; here the root residual is
+    # zero, so Viruses keeps exactly its Kraken clade count.
+    report = tmp_path / "kraken.report"
+    output = tmp_path / "domain.tsv"
+    write_report(
+        report,
+        [
+            "100.00\t1000\t0\t100\t80\tR\t1\troot",
+            "99.00\t990\t90\t90\t70\tR1\t131567\t  cellular organisms",
+            "60.00\t600\t0\t60\t40\tD\t2\t    Bacteria",
+            "20.00\t200\t0\t20\t15\tD\t2157\t    Archaea",
+            "10.00\t100\t0\t10\t8\tD\t2759\t    Eukaryota",
+            "1.00\t10\t0\t5\t4\tD\t10239\t  Viruses",
+        ],
+    )
+
+    kraken_domain_summary.create_domain_summary(report, output)
+
+    assert read_output(output) == [
+        "name\ttaxid\trank\tkraken2_assigned_reads\tadded_reads\tnew_est_reads\tfraction_total_reads",
+        "Bacteria\t2\tD\t600\t60\t660\t0.66000",
+        "Archaea\t2157\tD\t200\t20\t220\t0.22000",
+        "Eukaryota\t2759\tD\t100\t10\t110\t0.11000",
+        "Viruses\t10239\tD\t10\t0\t10\t0.01000",
+    ]
+
+
+def test_create_domain_summary_splits_residual_across_both_levels(
+    tmp_path: Path,
+) -> None:
+    # Two residuals compose: 100 reads inside "cellular organisms" split among the
+    # cellular domains only (40/40/20), and 120 root-level reads (root clade minus
+    # the cellular-organisms clade minus the Viruses clade) split across all four
+    # domains (40/40/20/20). Viruses only receives the root-level share.
+    report = tmp_path / "kraken.report"
+    output = tmp_path / "domain.tsv"
+    write_report(
+        report,
+        [
+            "100.00\t1420\t0\t100\t80\tR\t1\troot",
+            "77.46\t1100\t100\t90\t70\tR1\t131567\t  cellular organisms",
+            "28.17\t400\t0\t60\t40\tD\t2\t    Bacteria",
+            "28.17\t400\t0\t40\t30\tD\t2157\t    Archaea",
+            "14.08\t200\t0\t20\t15\tD\t2759\t    Eukaryota",
+            "14.08\t200\t0\t10\t8\tD\t10239\t  Viruses",
+        ],
+    )
+
+    kraken_domain_summary.create_domain_summary(report, output)
+
+    assert read_output(output) == [
+        "name\ttaxid\trank\tkraken2_assigned_reads\tadded_reads\tnew_est_reads\tfraction_total_reads",
+        "Bacteria\t2\tD\t400\t80\t480\t0.33803",
+        "Archaea\t2157\tD\t400\t80\t480\t0.33803",
+        "Eukaryota\t2759\tD\t200\t40\t240\t0.16901",
+        "Viruses\t10239\tD\t200\t20\t220\t0.15493",
+    ]
+
+
+def test_create_domain_summary_falls_back_without_cellular_organisms_node(
+    tmp_path: Path,
+) -> None:
+    # When the report has no "cellular organisms" node, the whole above-domain
+    # residual is treated as root-level and split across all four domains via
+    # largest-remainder allocation.
     report = tmp_path / "kraken.report"
     output = tmp_path / "domain.tsv.gz"
     write_report(
