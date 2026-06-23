@@ -1,5 +1,6 @@
 # v3.2.2.0-dev
 
+- Replace per-profile `errorStrategy`/`maxRetries` settings with a single universal dynamic error strategy (retry up to `maxRetries`, then `finish`) so a failed task no longer terminates the whole run after retries are exhausted.
 - Add `set -euo pipefail` to `BLASTN` module.
 - Add `pigz` to the `python` container so Python processes can use parallel (de)compression.
 - CI: Fix the CHANGELOG CI check wrongly failing docs-only PRs that don't update CHANGELOG.md.
