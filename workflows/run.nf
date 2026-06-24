@@ -50,10 +50,10 @@ workflow RUN {
         reads_trimmed_viral = viral_ch.kmer_trimmed
         qc_results_run = qc_results_ch
         other_results_run = other_results_ch
-        // Bridge: additionally publish the domain-abundance table under an honest
-        // name in experimental/ (renamed on publish, no copy — see the experimental_run
-        // output block in main.nf) as the migration target away from the legacy
-        // "bracken" filename. Identical content to results/{sample}_bracken.tsv.gz.
+        // Also publish the domain-abundance table in experimental/ under a name
+        // reflecting its Kraken2 source (renamed on publish, no copy — see the
+        // experimental_run block in main.nf), as the migration target away from
+        // the legacy "bracken" filename. Same content as results/{sample}_bracken.tsv.gz.
         experimental_run = profile_ch.bracken
         sentinel_run = sentinel_ch.sentinel
 }

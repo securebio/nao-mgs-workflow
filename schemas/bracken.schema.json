@@ -52,7 +52,7 @@
     {
       "name": "added_reads",
       "title": "Added Reads",
-      "description": "Number of reads classified above the domain rows in the Kraken2 report and redistributed to this domain. Reads at 'cellular organisms' (taxid 131567) are prorated among the cellular domains (Bacteria, Archaea, Eukaryota) only; the remaining root-level reads are prorated across all four domains. Proration is proportional to Kraken2 domain clade counts, so the rare Viruses domain is not over-assigned cellular reads. Unclassified reads are not redistributed.",
+      "description": "Number of reads classified above the domain rows in the Kraken2 report and redistributed to this domain, in proportion to domain clade counts. Unclassified reads are not redistributed.",
       "type": "integer",
       "constraints": {
         "required": true
