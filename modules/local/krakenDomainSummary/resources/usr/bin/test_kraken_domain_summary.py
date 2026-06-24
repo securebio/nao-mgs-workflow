@@ -17,28 +17,19 @@ def read_output(path: Path) -> list[str]:
 
 
 @pytest.mark.parametrize(
-    ("reads_to_allocate", "domain_reads", "expected"),
+    ("residual", "weights", "expected"),
     [
-        # Exact division leaves no remainder.
+        # Proportional split; exact division leaves no remainder.
         (100, [60, 40], [60, 40]),
-        # Largest-remainder distributes the leftover; ties break by index order.
-        (10, [1, 1, 1], [4, 3, 3]),
+        # Floor division may leave a small remainder unallocated (here, 1 read).
+        (300, [650, 5, 40, 5], [278, 2, 17, 2]),
         # Nothing to allocate, or no weight to allocate against, yields zeros.
         (0, [5, 5], [0, 0]),
         (10, [0, 0], [0, 0]),
-        # A zero-weight domain receives nothing; the rest absorb the remainder.
-        (10, [7, 3, 0], [7, 3, 0]),
     ],
 )
-def test_allocate_reads_proportionally(
-    reads_to_allocate: int, domain_reads: list[int], expected: list[int]
-) -> None:
-    allocation = kraken_domain_summary.allocate_reads_proportionally(
-        reads_to_allocate, domain_reads
-    )
-    assert allocation == expected
-    # Allocations are integers that sum exactly to the pool when there is weight.
-    assert sum(allocation) == (reads_to_allocate if sum(domain_reads) > 0 else 0)
+def test_prorate(residual: int, weights: list[int], expected: list[int]) -> None:
+    assert kraken_domain_summary.prorate(residual, weights) == expected
 
 
 def test_create_domain_summary_without_above_domain_reads(tmp_path: Path) -> None:
@@ -133,7 +124,7 @@ def test_create_domain_summary_falls_back_without_cellular_organisms_node(
 ) -> None:
     # When the report has no "cellular organisms" node, the whole above-domain
     # residual is treated as root-level and split across all four domains via
-    # largest-remainder allocation.
+    # floor-proportional allocation (here one read is left unallocated).
     report = tmp_path / "kraken.report"
     output = tmp_path / "domain.tsv.gz"
     write_report(
@@ -151,7 +142,7 @@ def test_create_domain_summary_falls_back_without_cellular_organisms_node(
 
     assert read_output(output) == [
         "name\ttaxid\trank\tkraken2_assigned_reads\tadded_reads\tnew_est_reads\tfraction_total_reads",
-        "Bacteria\t2\tR2\t650\t279\t929\t0.92900",
+        "Bacteria\t2\tR2\t650\t278\t928\t0.92800",
         "Viruses\t10239\tR2\t5\t2\t7\t0.00700",
         "Eukaryota\t2759\tR2\t40\t17\t57\t0.05700",
         "Archaea\t2157\tR2\t5\t2\t7\t0.00700",

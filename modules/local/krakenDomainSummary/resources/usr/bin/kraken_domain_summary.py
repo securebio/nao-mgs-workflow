@@ -1,6 +1,24 @@
 #!/usr/bin/env python3
 DESC = """
 Create a domain-level abundance table from a Kraken2 report.
+
+Kraken2 clade counts already give the reads assigned at or below each domain.
+Reads classified *above* the domain rows are redistributed down the taxonomy in
+two levels that respect the tree, mirroring how Bracken behaves:
+
+1. Reads sitting at "cellular organisms" (taxid 131567) can only belong to
+   cellular life, so they are split among Bacteria/Archaea/Eukaryota in
+   proportion to their clade counts and never assigned to Viruses.
+2. The remaining root-level residual is split across all four domains in
+   proportion to their clade counts.
+
+Naively prorating the whole above-domain residual across all four domains would
+systematically over-assign the rare Viruses domain, since most of that residual
+is cellular-organisms reads that Bracken never routes to Viruses.
+
+Domains are identified by stable NCBI taxid rather than Kraken rank code, so the
+summary is immune to the taxonomy-version rank-code shifts (e.g. domains losing
+rank code "D") that motivated replacing Bracken.
 """
 
 ###########
@@ -41,15 +59,14 @@ logger.addHandler(handler)
 # CONSTANTS #
 #############
 
-# Domains are identified by stable NCBI taxid rather than by Kraken rank code,
-# so the summary is immune to the taxonomy-version rank-code shifts (e.g. domains
-# losing rank code "D") that motivated replacing Bracken.
 VIRUS_TAXID = 10239
 # Bacteria, Archaea, Eukaryota — the cellular superkingdoms, all nested under the
 # stable "cellular organisms" node (taxid 131567) in the NCBI taxonomy.
 CELLULAR_DOMAIN_TAXIDS = frozenset({2, 2157, 2759})
 DOMAIN_TAXIDS = CELLULAR_DOMAIN_TAXIDS | {VIRUS_TAXID}
 CELLULAR_ORGANISMS_TAXID = 131567
+ROOT_TAXID = 1
+KRAKEN_FIELD_COUNT = 8
 OUTPUT_FIELDS = [
     "name",
     "taxid",
@@ -59,8 +76,6 @@ OUTPUT_FIELDS = [
     "new_est_reads",
     "fraction_total_reads",
 ]
-KRAKEN_FIELD_COUNT = 8
-ROOT_TAXID = 1
 
 ###############
 # DATA MODELS #
@@ -68,26 +83,13 @@ ROOT_TAXID = 1
 
 
 @dataclass(frozen=True)
-class KrakenReportRow:
-    """One row from a Kraken2 report."""
+class KrakenRow:
+    """The fields we use from one Kraken2 report row."""
 
     reads_clade: int
     rank: str
     taxid: int
     name: str
-
-
-@dataclass(frozen=True)
-class DomainSummaryRow:
-    """One row in the domain-level abundance table."""
-
-    name: str
-    taxid: int
-    rank: str
-    kraken2_assigned_reads: int
-    added_reads: int
-    new_est_reads: int
-    fraction_total_reads: float
 
 
 ####################
@@ -112,210 +114,136 @@ def open_by_suffix(filename: str | Path, mode: str = "r") -> IO[str]:
     return open(filename_str, mode)
 
 
-def parse_kraken_report_line(line: str) -> KrakenReportRow | None:
+def read_kraken_report(report_path: str | Path) -> list[KrakenRow]:
     """
-    Parse a single Kraken2 report line.
-
-    Args:
-        line: One tab-separated Kraken2 report line.
-
-    Returns:
-        Parsed report row, or None for a header or blank line.
-    """
-    if not line.strip():
-        return None
-    fields = line.rstrip("\n").split("\t")
-    if fields[0] == "pc_reads_total":
-        return None
-    if len(fields) < KRAKEN_FIELD_COUNT:
-        raise ValueError(
-            f"Expected at least {KRAKEN_FIELD_COUNT} Kraken report fields, got {len(fields)}: "
-            f"{line.rstrip()}"
-        )
-    return KrakenReportRow(
-        reads_clade=int(fields[1]),
-        rank=fields[5],
-        taxid=int(fields[6]),
-        name=fields[7].strip(),
-    )
-
-
-def read_kraken_report(report_path: str | Path) -> list[KrakenReportRow]:
-    """
-    Read a Kraken2 report.
+    Read the rows we need from a plain or gzipped Kraken2 report.
 
     Args:
         report_path: Path to a plain or gzipped Kraken2 report.
 
     Returns:
-        Parsed report rows.
+        Parsed report rows, skipping blank and header lines.
     """
-    rows: list[KrakenReportRow] = []
+    rows: list[KrakenRow] = []
     with open_by_suffix(report_path) as report_file:
         for line in report_file:
-            if row := parse_kraken_report_line(line):
-                rows.append(row)
+            fields = line.rstrip("\n").split("\t")
+            # Skip blank lines and a header row (which starts with "pc_reads_total").
+            if len(fields) < KRAKEN_FIELD_COUNT or fields[0] == "pc_reads_total":
+                continue
+            rows.append(
+                KrakenRow(int(fields[1]), fields[5], int(fields[6]), fields[7].strip())
+            )
     return rows
 
 
-def allocate_reads_proportionally(
-    reads_to_allocate: int, domain_reads: list[int]
-) -> list[int]:
+def prorate(residual: int, weights: list[int]) -> list[int]:
     """
-    Allocate reads across domains in proportion to observed domain counts.
+    Split `residual` reads across domains in proportion to their clade counts.
 
-    Uses largest-remainder integer allocation so the output read counts remain
-    integers and the allocations sum exactly to reads_to_allocate.
+    Uses floor division, so a small remainder (at most one read per domain) may
+    go unallocated; this is an abundance estimate, not an exact partition.
 
     Args:
-        reads_to_allocate: Number of reads assigned above recognized domains.
-        domain_reads: Kraken clade counts for recognized domains.
+        residual: Reads to distribute (a no-op when non-positive).
+        weights: Domain clade counts to distribute in proportion to.
 
     Returns:
-        Integer read allocations in the same order as domain_reads.
+        Per-domain integer allocations, in the same order as `weights`.
     """
-    total_domain_reads = sum(domain_reads)
-    if reads_to_allocate <= 0 or total_domain_reads <= 0:
-        return [0 for _ in domain_reads]
-
-    allocations = [
-        reads_to_allocate * reads // total_domain_reads for reads in domain_reads
-    ]
-    remainders = [
-        reads_to_allocate * reads % total_domain_reads for reads in domain_reads
-    ]
-    remaining_reads = reads_to_allocate - sum(allocations)
-    for index in sorted(
-        range(len(domain_reads)), key=lambda i: (-remainders[i], -domain_reads[i], i)
-    )[:remaining_reads]:
-        allocations[index] += 1
-    return allocations
+    total = sum(weights)
+    if residual <= 0 or total <= 0:
+        return [0] * len(weights)
+    return [residual * weight // total for weight in weights]
 
 
-def summarize_domains(rows: list[KrakenReportRow]) -> list[DomainSummaryRow]:
+def summarize_domains(rows: list[KrakenRow]) -> list[list[str]]:
     """
-    Create Bracken-shaped domain abundance rows from a Kraken2 report.
+    Build the domain abundance table from Kraken2 report rows.
 
-    Reads classified above the domain rows are redistributed down the taxonomy in
-    two levels that respect the tree, mirroring how Bracken's k-mer model
-    behaves:
-
-    1. Reads sitting at "cellular organisms" (taxid 131567), above the three
-       cellular superkingdoms, can only belong to cellular life. They are split
-       among Bacteria/Archaea/Eukaryota in proportion to their clade counts and
-       are never assigned to Viruses.
-    2. The remaining root-level residual (reads directly at the root, plus any
-       other non-cellular, non-viral root children) is split across all four
-       domains in proportion to their clade counts.
-
-    Naively prorating the whole above-domain residual across all four domains
-    instead systematically over-assigns the rare Viruses domain, because the bulk
-    of that residual is cellular-organisms reads that Bracken never routes to
-    Viruses.
+    See the module docstring for the two-level redistribution scheme.
 
     Args:
         rows: Parsed Kraken2 report rows.
 
     Returns:
-        Domain abundance summary rows.
+        Output rows as stringified fields in OUTPUT_FIELDS order, or an empty
+        list when the report has no root row or no recognized domain reads.
     """
-    rows_by_taxid = {row.taxid: row for row in rows}
-    root_row = rows_by_taxid.get(ROOT_TAXID)
-    if root_row is None:
-        logger.warning("Kraken report has no root row. Creating empty output.")
+    clade = {row.taxid: row.reads_clade for row in rows}
+    if ROOT_TAXID not in clade:
+        logger.warning("Kraken report has no root row; writing empty output.")
         return []
-
-    # One row per domain taxid, in report order. A well-formed Kraken report has
-    # no duplicate taxids; dedupe defensively so a malformed report can't
-    # double-count (the dict keeps the last row per taxid, matching rows_by_taxid).
-    domain_rows = list(
-        {row.taxid: row for row in rows if row.taxid in DOMAIN_TAXIDS}.values()
-    )
+    # One row per domain taxid in report order (a well-formed report has no dupes).
+    domain_rows = [row for row in rows if row.taxid in DOMAIN_TAXIDS]
     if sum(row.reads_clade for row in domain_rows) == 0:
-        logger.warning("Kraken report has no recognized domain reads.")
+        logger.warning(
+            "Kraken report has no recognized domain reads; writing empty output."
+        )
         return []
 
-    added: dict[int, int] = {}
+    added = {row.taxid: 0 for row in domain_rows}
 
-    # Level 1: residual within "cellular organisms" -> cellular domains only.
-    cellular_present = [
-        row for row in domain_rows if row.taxid in CELLULAR_DOMAIN_TAXIDS
-    ]
-    cellular_clade_sum = sum(row.reads_clade for row in cellular_present)
-    cellular_organisms_row = rows_by_taxid.get(CELLULAR_ORGANISMS_TAXID)
-    # Anchor the cellular subtree at the "cellular organisms" clade when that node
-    # and at least one cellular domain are present; otherwise treat all residual
-    # as root-level so the allocation degrades gracefully.
-    if cellular_organisms_row is not None and cellular_present:
-        cellular_anchor = cellular_organisms_row.reads_clade
-    else:
-        cellular_anchor = cellular_clade_sum
-    cellular_residual = max(cellular_anchor - cellular_clade_sum, 0)
-    for row, allocation in zip(
-        cellular_present,
-        allocate_reads_proportionally(
-            cellular_residual, [row.reads_clade for row in cellular_present]
+    # Level 1: residual inside "cellular organisms" -> cellular domains only.
+    cellular_rows = [row for row in domain_rows if row.taxid in CELLULAR_DOMAIN_TAXIDS]
+    cellular_clade = sum(row.reads_clade for row in cellular_rows)
+    # Anchor on the "cellular organisms" clade when that node is present; otherwise
+    # fall back to the cellular domains themselves so the report degrades to level 2.
+    cellular_anchor = (
+        clade.get(CELLULAR_ORGANISMS_TAXID, cellular_clade)
+        if cellular_rows
+        else cellular_clade
+    )
+    for row, share in zip(
+        cellular_rows,
+        prorate(
+            cellular_anchor - cellular_clade, [r.reads_clade for r in cellular_rows]
         ),
         strict=True,
     ):
-        added[row.taxid] = allocation
+        added[row.taxid] += share
 
     # Level 2: remaining root-level residual -> all domains.
-    virus_row = rows_by_taxid.get(VIRUS_TAXID)
-    virus_clade = virus_row.reads_clade if virus_row else 0
-    root_residual = max(root_row.reads_clade - cellular_anchor - virus_clade, 0)
-    for row, allocation in zip(
+    root_residual = clade[ROOT_TAXID] - cellular_anchor - clade.get(VIRUS_TAXID, 0)
+    for row, share in zip(
         domain_rows,
-        allocate_reads_proportionally(
-            root_residual, [row.reads_clade for row in domain_rows]
-        ),
+        prorate(root_residual, [r.reads_clade for r in domain_rows]),
         strict=True,
     ):
-        added[row.taxid] = added.get(row.taxid, 0) + allocation
+        added[row.taxid] += share
 
-    summary_rows = []
-    for domain_row in domain_rows:
-        domain_added = added.get(domain_row.taxid, 0)
-        new_est_reads = domain_row.reads_clade + domain_added
-        summary_rows.append(
-            DomainSummaryRow(
-                name=domain_row.name,
-                taxid=domain_row.taxid,
-                rank=domain_row.rank,
-                kraken2_assigned_reads=domain_row.reads_clade,
-                added_reads=domain_added,
-                new_est_reads=new_est_reads,
-                fraction_total_reads=new_est_reads / root_row.reads_clade,
-            )
+    total_reads = clade[ROOT_TAXID]
+    summary = []
+    for row in domain_rows:
+        new_est_reads = row.reads_clade + added[row.taxid]
+        summary.append(
+            [
+                row.name,
+                str(row.taxid),
+                row.rank,
+                str(row.reads_clade),
+                str(added[row.taxid]),
+                str(new_est_reads),
+                f"{new_est_reads / total_reads:.5f}",
+            ]
         )
-    return summary_rows
+    return summary
 
 
-def write_summary(rows: list[DomainSummaryRow], output_path: str | Path) -> None:
+def write_summary(rows: list[list[str]], output_path: str | Path) -> None:
     """
-    Write domain abundance rows.
+    Write the domain abundance table (header + rows), or an empty file if no rows.
 
     Args:
-        rows: Domain abundance summary rows.
+        rows: Output rows from summarize_domains.
         output_path: Path to the output TSV, optionally gzipped.
     """
     with open_by_suffix(output_path, "w") as output_file:
         if not rows:
-            output_file.write("")
             return
-
         output_file.write("\t".join(OUTPUT_FIELDS) + "\n")
         for row in rows:
-            fields = [
-                row.name,
-                str(row.taxid),
-                row.rank,
-                str(row.kraken2_assigned_reads),
-                str(row.added_reads),
-                str(row.new_est_reads),
-                f"{row.fraction_total_reads:.5f}",
-            ]
-            output_file.write("\t".join(fields) + "\n")
+            output_file.write("\t".join(row) + "\n")
 
 
 def create_domain_summary(report_path: str | Path, output_path: str | Path) -> None:
@@ -326,14 +254,12 @@ def create_domain_summary(report_path: str | Path, output_path: str | Path) -> N
         report_path: Path to a plain or gzipped Kraken2 report.
         output_path: Path to write the output TSV.
     """
-    rows = read_kraken_report(report_path)
-    summary_rows = summarize_domains(rows)
-    write_summary(summary_rows, output_path)
+    write_summary(summarize_domains(read_kraken_report(report_path)), output_path)
 
 
-#########################
+##########################
 # COMMAND-LINE INTERFACE #
-#########################
+##########################
 
 
 def parse_arguments() -> argparse.Namespace:
@@ -353,9 +279,8 @@ def main() -> None:
     """Run the command-line entry point."""
     args = parse_arguments()
     logger.info("Reading Kraken2 report: %s", args.report)
-    logger.info("Writing domain summary: %s", args.output)
     create_domain_summary(args.report, args.output)
-    logger.info("Done.")
+    logger.info("Wrote domain summary: %s", args.output)
 
 
 if __name__ == "__main__":
