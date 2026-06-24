@@ -164,14 +164,17 @@ nextflow_process {
             def fasta_map = path(process.out.masked[0]).fasta
             assert fasta_map.size() == 1
             // rRNA pass: a U-containing ref must mask the matching T genome region.
-            // The 40 bp insert is the only contamination, so only it should be
-            // masked. This also pins BBDuk's U == T behavior so a future BBDuk
-            // change can't silently disable rRNA masking.
-            // The range tolerates BBDuk masking a few extra bases at the k-mer
-            // boundary (and any version-to-version drift in that edge behavior);
-            // the lower bound pins that the full insert is masked.
-            def n = fasta_map['toy_genome_rrna'].count('N')
-            assert n >= 40 && n < 48
+            // This also pins BBDuk's U == T behavior so a future BBDuk change
+            // can't silently disable rRNA masking.
+            // The toy genome is a 50 bp random flank + the 40 bp rRNA insert
+            // (offset 50) + a 50 bp random flank. Assert masking coincides with
+            // the insert: the flanks share no k-mers with the ref and must stay
+            // unmasked, so this pins *where* masking happens, not just how much.
+            def seq = fasta_map['toy_genome_rrna']
+            assert seq.length() == 140
+            assert seq.substring(0, 50).count('N') == 0
+            assert seq.substring(90).count('N') == 0
+            assert seq.substring(50, 90).count('N') == 40
         }
     }
 }
