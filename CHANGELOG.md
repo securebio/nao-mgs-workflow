@@ -1,6 +1,6 @@
 # v3.2.2.0-dev
 
-- Exclude four viral genome records with embedded host rRNA contamination from the genome reference via `ref/hv_patterns_exclude.txt` (`NC_018464.1` Shamonda virus, `ON075053.1` Bovine kobuvirus, `NC_075989.1` Chicken chapparvovirus, `MT123292.2` SARS-CoV-2). Each has a clean close relative retained in the reference, so the virus stays detectable; changes `EXTRACT_VIRAL_READS` results on the next index rebuild.
+- Exclude five viral genome records with rRNA contamination from the genome reference via `ref/hv_patterns_exclude.txt`.
 - Add `set -euo pipefail` to `BLASTN` module.
 - Add `pigz` to the `python` container so Python processes can use parallel (de)compression.
 - CI: Fix the CHANGELOG CI check wrongly failing docs-only PRs that don't update CHANGELOG.md.
