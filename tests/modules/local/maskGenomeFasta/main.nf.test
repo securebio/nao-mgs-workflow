@@ -26,6 +26,7 @@ nextflow_process {
                     hdist: 3,
                     entropy: 0.5,
                     polyx_len: 10,
+                    nucleaze_k: 24,
                     name_pattern: "test-genomes"
                 ]
             }
@@ -88,6 +89,7 @@ nextflow_process {
                     hdist: 3,
                     entropy: 0,
                     polyx_len: 20,
+                    nucleaze_k: 24,
                     name_pattern: "param-test"
                 ]
             }
@@ -145,6 +147,7 @@ nextflow_process {
                     hdist: 3,
                     entropy: 0.5,
                     polyx_len: 10,
+                    nucleaze_k: 24,
                     name_pattern: "rrna-test"
                 ]
             }

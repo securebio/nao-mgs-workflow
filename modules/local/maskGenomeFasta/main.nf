@@ -7,7 +7,7 @@ process MASK_GENOME_FASTA {
         path(filtered_genomes)
         path(adapters)
         path(ribo_ref)
-        val(params_map) // k, hdist, entropy, polyx_len, name_pattern
+        val(params_map) // k, hdist, entropy, polyx_len, nucleaze_k, name_pattern
     output:
         path("${params_map.name_pattern}-masked.fasta.gz"), emit: masked
 		path("${params_map.name_pattern}-mask-adapters-entropy.stats.txt"), emit: log1
@@ -38,14 +38,16 @@ process MASK_GENOME_FASTA {
 		-Xmx${task.memory.toGiga()}g
 
 	# third pass – host rRNA (ribo-ref used directly; BBDuk treats U as T).
-	# k=24 matches the EXTRACT_VIRAL_READS k-mer screen (nucleaze_k) so masked
-	# inserts can't slip back into the screen index.
+	# k is the EXTRACT_VIRAL_READS k-mer screen size (nucleaze_k): masking at the
+	# screen's k removes exactly the rRNA k-mers it would otherwise index, while a
+	# smaller k would over-mask (also eroding the bowtie2/minimap2 alignment ref).
+	# hdist=0 (exact) keeps masking to genuine rRNA matches.
 	bbduk.sh \
 		in=intermediate-masking-polyx.fasta.gz \
 		out=${params_map.name_pattern}-masked.fasta.gz \
 		ref=${ribo_ref} \
 		stats=${params_map.name_pattern}-mask-rrna.stats.txt \
-		k=24 hdist=0 mm=f mask=N rcomp=t \
+		k=${params_map.nucleaze_k} hdist=0 mm=f mask=N rcomp=t \
 		-Xmx${task.memory.toGiga()}g
 	"""
 }
