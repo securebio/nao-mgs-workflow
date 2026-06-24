@@ -171,36 +171,22 @@ def test_create_domain_summary_accepts_labeled_kraken_reports(
     ]
 
 
-def test_create_domain_summary_with_no_domain_reads_writes_empty_output(
-    tmp_path: Path,
+@pytest.mark.parametrize(
+    "report_rows",
+    [
+        # Root present but no recognized domain rows: nothing to summarize.
+        pytest.param(["100.00\t5\t5\t100\t80\tR\t1\troot"], id="no-domain-reads"),
+        # No root (taxid 1) row: the report cannot be normalized, so the output
+        # is empty rather than wrong.
+        pytest.param(["60.00\t15\t0\t550\t308\tD\t10239\t  Viruses"], id="no-root-row"),
+    ],
+)
+def test_create_domain_summary_writes_empty_output_when_unusable(
+    tmp_path: Path, report_rows: list[str]
 ) -> None:
     report = tmp_path / "kraken.report"
     output = tmp_path / "domain.tsv"
-    write_report(
-        report,
-        [
-            "100.00\t5\t5\t100\t80\tR\t1\troot",
-        ],
-    )
-
-    kraken_domain_summary.create_domain_summary(report, output)
-
-    assert output.read_text() == ""
-
-
-def test_create_domain_summary_with_no_root_writes_empty_output(
-    tmp_path: Path,
-) -> None:
-    # A report missing the root (taxid 1) row cannot be normalized, so the
-    # output is empty rather than wrong.
-    report = tmp_path / "kraken.report"
-    output = tmp_path / "domain.tsv"
-    write_report(
-        report,
-        [
-            "60.00\t15\t0\t550\t308\tD\t10239\t  Viruses",
-        ],
-    )
+    write_report(report, report_rows)
 
     kraken_domain_summary.create_domain_summary(report, output)
 

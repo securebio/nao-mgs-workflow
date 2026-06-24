@@ -184,6 +184,12 @@ def summarize_domains(rows: list[KrakenRow]) -> list[list[str]]:
 
     added = {row.taxid: 0 for row in domain_rows}
 
+    def add_prorated(target_rows: list[KrakenRow], residual: int) -> None:
+        """Prorate `residual` across `target_rows` by clade count and bank it."""
+        weights = [row.reads_clade for row in target_rows]
+        for row, share in zip(target_rows, prorate(residual, weights), strict=True):
+            added[row.taxid] += share
+
     # Level 1: residual inside "cellular organisms" -> cellular domains only.
     cellular_rows = [row for row in domain_rows if row.taxid in CELLULAR_DOMAIN_TAXIDS]
     cellular_clade = sum(row.reads_clade for row in cellular_rows)
@@ -194,23 +200,11 @@ def summarize_domains(rows: list[KrakenRow]) -> list[list[str]]:
         if cellular_rows
         else cellular_clade
     )
-    for row, share in zip(
-        cellular_rows,
-        prorate(
-            cellular_anchor - cellular_clade, [r.reads_clade for r in cellular_rows]
-        ),
-        strict=True,
-    ):
-        added[row.taxid] += share
+    add_prorated(cellular_rows, cellular_anchor - cellular_clade)
 
     # Level 2: remaining root-level residual -> all domains.
     root_residual = clade[ROOT_TAXID] - cellular_anchor - clade.get(VIRUS_TAXID, 0)
-    for row, share in zip(
-        domain_rows,
-        prorate(root_residual, [r.reads_clade for r in domain_rows]),
-        strict=True,
-    ):
-        added[row.taxid] += share
+    add_prorated(domain_rows, root_residual)
 
     total_reads = clade[ROOT_TAXID]
     summary = []
