@@ -51,6 +51,9 @@ nextflow_process {
             // Log files should be created with expected names
             assert process.out.log1[0].toString().contains('test-genomes-mask-adapters-entropy.stats.txt')
             assert process.out.log2[0].toString().contains('test-genomes-mask-polyx.stats.txt')
+            // The rRNA ref (input[2]) shares no k-mers with these random
+            // genomes, so the new rRNA pass runs (log3 above) but masks no extra
+            // bases — the unchanged N-counts below confirm no false positives.
             // Check expected number of masked bases (N's)
             def fasta_map = path(process.out.masked[0]).fasta
             assert fasta_map.size() == 2
@@ -108,6 +111,8 @@ nextflow_process {
             assert path(process.out.log3[0]).exists()
             // Output should contain expected name pattern
             assert process.out.masked[0].toString().contains('param-test-masked.fasta.gz')
+            // As above, the rRNA ref (input[2]) does not match these random
+            // genomes, so the rRNA pass adds no masking here.
             // Check expected number of masked bases (N's) with different parameters
             def fasta_map = path(process.out.masked[0]).fasta
             assert fasta_map.size() == 2
@@ -162,6 +167,9 @@ nextflow_process {
             // The 40 bp insert is the only contamination, so only it should be
             // masked. This also pins BBDuk's U == T behavior so a future BBDuk
             // change can't silently disable rRNA masking.
+            // The range tolerates BBDuk masking a few extra bases at the k-mer
+            // boundary (and any version-to-version drift in that edge behavior);
+            // the lower bound pins that the full insert is masked.
             def n = fasta_map['toy_genome_rrna'].count('N')
             assert n >= 40 && n < 48
         }
