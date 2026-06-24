@@ -1,5 +1,6 @@
 # v3.2.2.0-dev
 
+- Exclude five viral genome records with rRNA contamination from the genome reference via `ref/hv_patterns_exclude.txt`.
 - Add `set -euo pipefail` to `BLASTN` module.
 - Add `pigz` to the `python` container so Python processes can use parallel (de)compression.
 - CI: Fix the CHANGELOG CI check wrongly failing docs-only PRs that don't update CHANGELOG.md.
