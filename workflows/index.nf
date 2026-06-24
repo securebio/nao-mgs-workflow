@@ -33,6 +33,11 @@ workflow INDEX {
             params.host_taxon_db, params.virus_taxid,
             params.viral_taxids_exclude_hard,
             params.host_infection_overrides)
+        // Download and concatenate ribosomal references (also used to mask host
+        // rRNA contamination out of the viral genome DB below).
+        WGET_SSU(params.ssu_url, "ssu_ref.fasta.gz")
+        WGET_LSU(params.lsu_url, "lsu_ref.fasta.gz")
+        JOIN_RIBO_REF(WGET_SSU.out.file, WGET_LSU.out.file)
         // Get reference DB of viral genomes of interest
         virus_genome_params = params.collectEntries { k, v -> [k, v] }
         virus_genome_params.putAll([k: "20", hdist: "3", entropy: "0.5", polyx_len: "10"])
@@ -40,13 +45,10 @@ workflow INDEX {
             params.download_virus_taxid ?: params.virus_taxid,
             params.assembly_source,
             MAKE_VIRUS_TAXONOMY_DB.out.db,
+            JOIN_RIBO_REF.out.ribo_ref,
             virus_genome_params
         )
-        // Download ribosomal references
-        WGET_SSU(params.ssu_url, "ssu_ref.fasta.gz")
-        WGET_LSU(params.lsu_url, "lsu_ref.fasta.gz")
         // Build alignment indices
-        JOIN_RIBO_REF(WGET_SSU.out.file, WGET_LSU.out.file)
         MAKE_VIRUS_INDEX(MAKE_VIRUS_GENOME_DB.out.fasta, params.nucleaze_k)
         MAKE_HUMAN_INDEX(params.human_url)
         MAKE_CONTAMINANT_INDEX(params.genome_urls, params.contaminants)

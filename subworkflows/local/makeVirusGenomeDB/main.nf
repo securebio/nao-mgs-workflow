@@ -21,6 +21,7 @@ workflow MAKE_VIRUS_GENOME_DB {
         virus_taxid // Top-level taxid to enumerate viral assemblies for
         assembly_source // Assembly source: "genbank", "refseq", or "all"
         virus_db // TSV giving taxonomic structure and host infection status of virus taxids
+        ribo_ref // Concatenated ribosomal reference (ribo-ref-concat.fasta.gz) for rRNA masking
         other_params // Map containing:
                      // - datasets_summary_extra_args: Additional args for `datasets summary genome taxon`
                      // - datasets_download_extra_args: Additional args for `datasets download genome accession`
@@ -61,9 +62,9 @@ workflow MAKE_VIRUS_GENOME_DB {
         // 7. Filter to remove undesired/contaminated genomes by sequence-header
         //    pattern (genome_patterns_exclude only matchable post-download).
         filter_genome_ch = FILTER_GENOME_FASTA(genome_concat_ch, other_params.genome_patterns_exclude, "virus-genomes-filtered")
-        // 8. Mask to remove adapters, low-entropy regions, and polyX.
+        // 8. Mask to remove adapters, low-entropy regions, polyX, and host rRNA.
         mask_params = other_params + [name_pattern: "virus-genomes"]
-        mask_ch = MASK_GENOME_FASTA(filter_genome_ch, other_params.adapters, mask_params)
+        mask_ch = MASK_GENOME_FASTA(filter_genome_ch, other_params.adapters, ribo_ref, mask_params)
     emit:
         fasta = mask_ch.masked
         metadata = gid_ch

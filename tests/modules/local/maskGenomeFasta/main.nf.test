@@ -33,7 +33,8 @@ nextflow_process {
                 '''
                 input[0] = GZIP_FILE_BARE.out
                 input[1] = "${projectDir}/ref/adapters.fasta"
-                input[2] = params.params_map
+                input[2] = "${projectDir}/test-data/toy-data/test-rrna-ref.fasta"
+                input[3] = params.params_map
                 '''
             }
         }
@@ -44,6 +45,7 @@ nextflow_process {
             assert path(process.out.masked[0]).exists()
             assert path(process.out.log1[0]).exists()
             assert path(process.out.log2[0]).exists()
+            assert path(process.out.log3[0]).exists()
             // Output should be gzipped FASTA
             assert process.out.masked[0].toString().contains('test-genomes-masked.fasta.gz')
             // Log files should be created with expected names
@@ -91,7 +93,8 @@ nextflow_process {
 
                 input[0] = GZIP_FILE_BARE.out
                 input[1] = "${projectDir}/ref/adapters.fasta"
-                input[2] = params.params_map
+                input[2] = "${projectDir}/test-data/toy-data/test-rrna-ref.fasta"
+                input[3] = params.params_map
                 '''
             }
         }
@@ -102,6 +105,7 @@ nextflow_process {
             assert path(process.out.masked[0]).exists()
             assert path(process.out.log1[0]).exists()
             assert path(process.out.log2[0]).exists()
+            assert path(process.out.log3[0]).exists()
             // Output should contain expected name pattern
             assert process.out.masked[0].toString().contains('param-test-masked.fasta.gz')
             // Check expected number of masked bases (N's) with different parameters
@@ -113,6 +117,53 @@ nextflow_process {
             def n_count = fasta_map['toy_genome_entropy_adapter'].count('N')
             assert n_count >= 33
             assert n_count <= 38
+        }
+    }
+
+    test("Should mask host rRNA regions matching the ribo reference") {
+        tag "expect_success"
+        config "tests/configs/index.config"
+        setup {
+            run("GZIP_FILE_BARE") {
+                script "modules/local/gzipFile/main.nf"
+                process {
+                    '''
+                    input[0] = Channel.of("${projectDir}/test-data/toy-data/test-rrna-for-genomemask.fasta")
+                    '''
+                }
+            }
+        }
+        when {
+            params {
+                params_map = [
+                    k: 20,
+                    hdist: 3,
+                    entropy: 0.5,
+                    polyx_len: 10,
+                    name_pattern: "rrna-test"
+                ]
+            }
+            process {
+                '''
+                input[0] = GZIP_FILE_BARE.out
+                input[1] = "${projectDir}/ref/adapters.fasta"
+                input[2] = "${projectDir}/test-data/toy-data/test-rrna-ref.fasta"
+                input[3] = params.params_map
+                '''
+            }
+        }
+        then {
+            assert process.success
+            assert path(process.out.log3[0]).exists()
+            assert process.out.log3[0].toString().contains('rrna-test-mask-rrna.stats.txt')
+            def fasta_map = path(process.out.masked[0]).fasta
+            assert fasta_map.size() == 1
+            // rRNA pass: a U-containing ref must mask the matching T genome region.
+            // The 40 bp insert is the only contamination, so only it should be
+            // masked. This also pins BBDuk's U == T behavior so a future BBDuk
+            // change can't silently disable rRNA masking.
+            def n = fasta_map['toy_genome_rrna'].count('N')
+            assert n >= 40 && n < 48
         }
     }
 }
