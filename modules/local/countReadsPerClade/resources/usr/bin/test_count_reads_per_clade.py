@@ -15,6 +15,18 @@ from count_reads_per_clade import (
 )
 
 
+def test_read_tsv_leading_quote_field(tsv_factory: Any) -> None:
+    """A field starting with '"' must not flip the reader into quoted mode (#823)."""
+    leading_quote = '"' + "I" * 50
+    content = f"seq_id\tquery_qual\nread1\t{leading_quote}\nread2\tplain\n"
+    tsv_file = tsv_factory.create_plain("reads.tsv", content)
+    rows = list(read_tsv(tsv_file))
+    assert rows == [
+        {"seq_id": "read1", "query_qual": leading_quote},
+        {"seq_id": "read2", "query_qual": "plain"},
+    ]
+
+
 def test_is_duplicate() -> None:
     # Test case where read is not a duplicate (seq_id matches exemplar)
     read_not_duplicate = {"seq_id": "read123", "prim_align_dup_exemplar": "read123"}

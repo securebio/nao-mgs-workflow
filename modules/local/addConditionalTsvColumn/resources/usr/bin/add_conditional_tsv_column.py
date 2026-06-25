@@ -70,8 +70,10 @@ def add_conditional_column(
 ) -> None:
     """Add conditional column to TSV file based on check column value."""
     with open_by_suffix(input_path) as inf, open_by_suffix(out_path, "w") as outf:
-        # Use DictReader for cleaner column access by name
-        reader = csv.DictReader(inf, delimiter="\t")
+        # Use DictReader for cleaner column access by name.
+        # quoting=QUOTE_NONE: TSVs aren't CSV-quoted, and a query_qual field
+        # starting with '"' (Phred Q1) would otherwise be incorrectly parsed.
+        reader = csv.DictReader(inf, delimiter="\t", quoting=csv.QUOTE_NONE)
 
         # Handle empty file
         if reader.fieldnames is None:

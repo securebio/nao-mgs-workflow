@@ -43,7 +43,9 @@ def read_tsv(file_path: str) -> Iterator[dict[str, str]]:
 
     """
     with open_by_suffix(file_path, mode="rt") as file:
-        reader = csv.DictReader(file, delimiter="\t")
+        # quoting=QUOTE_NONE: TSVs aren't CSV-quoted, and a query_qual field
+        # starting with '"' (Phred Q1) would otherwise be incorrectly parsed.
+        reader = csv.DictReader(file, delimiter="\t", quoting=csv.QUOTE_NONE)
         yield from reader
 
 
