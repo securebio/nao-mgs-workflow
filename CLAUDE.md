@@ -179,7 +179,7 @@ When creating new schemas, always include `primaryKey` and `example` fields on e
 
 ## Vetting a new index release
 
-Before promoting a new `s3://nao-mgs-index/<DATE>` build to production, use the **`benchmark-index`** skill (`.claude/skills/benchmark-index/`). It runs `bin/benchmark_index.py` to compare the candidate against the current index (per-DB size deltas, genome add/drop/per-species deltas categorized by reason, infection-status transitions, params diff) and fills in `review-template.md` to produce a structured `REVIEW.md` covering ship-or-regen recommendations. Reach for it whenever an index rebuild has happened and a human needs to decide whether to ship it.
+After building a new `s3://nao-mgs-index/<DATE>` index, use the **`benchmark-index`** skill (`.claude/skills/benchmark-index/`) to vet it before adopting it for runs. It runs `bin/benchmark_index.py` to compare the new index against the previous one (per-DB size deltas, genome add/drop/per-species deltas categorized by reason, infection-status transitions, params diff) and fills in `review-template.md` to produce a structured `REVIEW.md` covering adopt-or-regenerate recommendations. Reach for it whenever an index rebuild has happened and a human needs to decide whether to adopt it.
 
 ## Maintaining This File
 

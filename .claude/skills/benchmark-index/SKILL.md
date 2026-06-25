@@ -1,6 +1,6 @@
 ---
 name: benchmark-index
-description: Compare two mgs-workflow index releases and produce a structured pre-rollout review report (`REVIEW.md`). Use before promoting a new dated `s3://nao-mgs-index/` build to production.
+description: Compare two mgs-workflow index releases and produce a structured review report (`REVIEW.md`). Use to vet a newly built dated `s3://nao-mgs-index/` index before adopting it for runs.
 ---
 
 # Benchmark an index release
@@ -19,7 +19,7 @@ pasted naively from TSVs — self-containment matters more than polish.
 
 ## When to use
 
-- The user wants to vet a new index release before promoting it to production.
+- The user wants to vet a newly built index before adopting it for runs.
 - The user has two `s3://nao-mgs-index/<DATE>` URIs (or local paths) and asks for a comparison.
 - The user references "index benchmark", "index review", "index rollout check", or similar.
 
