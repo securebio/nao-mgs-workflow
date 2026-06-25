@@ -33,15 +33,13 @@ and surface the output directory plus the relevant summary files; do not write
 
 ## Inputs
 
-- `--old <root>`: parent of `output/` for the old (reference) index. `s3://...` or local path. **Required.**
-- `--new <root>`: parent of `output/` for the new (target) index. **Required.**
-- `--out <dir>`: output directory. Use an absolute path so paths are reader-portable. **Required.**
+- `new_index` (required): the new (candidate) index to vet — an `s3://nao-mgs-index/<DATE>` URI or a local path (the root containing `output/`).
+- `old_index` (required): the old (reference) index to compare against, same form.
+- `out_dir` (required): directory for the report and tables; use an absolute path.
 
-Coverage annotations read their rules from the `--new` index itself: the
-host-infection overrides from `output/input/host-infection-overrides.json` and
-the hard-exclude list `viral_taxids_exclude_hard` from `output/input/index-params.json`.
-
-If `--old`, `--new`, or `--out` is missing, ask the user; do not guess.
+If any is missing, ask the user; do not guess. These map to the script's `--new`,
+`--old`, and `--out` (Step 1). Coverage annotations are derived from `new_index`
+itself, so no repo checkout is needed.
 
 ## Procedure
 
@@ -49,8 +47,9 @@ If `--old`, `--new`, or `--out` is missing, ask the user; do not guess.
 
 ```bash
 python bin/benchmark_index.py \
-  --old <old> --new <new> \
-  --out <outdir>
+  --old <reference-index-root> \
+  --new <candidate-index-root> \
+  --out <output-dir>
 ```
 
 Use **absolute** paths for `--out` (e.g. `/tmp/bench-...`). Takes about 60
@@ -67,7 +66,8 @@ Read the compact script-produced summaries before interpreting detail rows:
 - `genomes_summary.json`: lost/gained genome totals, reason counts, all-lost /
   all-gained species counts, reassigned genome count and percentage of kept
   genomes, net genome delta, kept genome count, and `taxa_added` /
-  `taxa_removed` counts.
+  `taxa_removed` counts. If `lost_total` or `gained_total` is zero, §3.2 / §3.3
+  collapse to "No genome IDs lost/gained".
 - `infection_status_summary.json`: per-host species promotion/demotion counts,
   uncovered counts, and override scope-gap counts.
 - `params_changes.tsv`: compact top-level params changes (`key`, `kind`, `old`,
@@ -79,7 +79,8 @@ Read the compact script-produced summaries before interpreting detail rows:
 Then read the detailed TSVs needed by the template:
 
 - `staleness.tsv` for §1 (`ref`, `current`, `current_date`, `latest`,
-  `latest_date`, `status`).
+  `latest_date`, `status`). A `status` of `error` means the freshness check
+  could not run; note the inability to verify in §1 and continue.
 - `sizes.tsv`, `sizes_summary.json`, `params_changes.tsv`, `params_diff.txt`,
   `metadata_schema_summary.json`, and `metadata_schema_diff.tsv` for §2 and §5.
   `sizes.tsv` is long-format (one row per `name`, `metric`): rows with
@@ -186,7 +187,3 @@ never a species-rank rollup; the species rollup appears only inside the
 surveillance predicate (leaf-positive OR species-positive), mirroring
 `filter_viral_genbank_metadata.py`.
 
-## Edge cases
-
-- **A reference check errors out**: `staleness.tsv.status` is `error` for that row. Note the inability to verify in §1 and continue.
-- **Empty genome loss/gain tables**: `genomes_summary.json.lost_total` or `gained_total` is zero; §3.2 / §3.3 collapse to "No genome IDs lost/gained".
