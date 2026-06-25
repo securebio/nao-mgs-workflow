@@ -268,8 +268,10 @@ def compare_metrics(
     file's content-metric rows following its byte row."""
     names = sorted(
         set(old_sizes) | set(new_sizes),
-        key=lambda name: abs(new_sizes.get(name, 0) - old_sizes.get(name, 0)),
-        reverse=True,
+        # Descending by absolute byte delta, with name as a deterministic
+        # tiebreaker so equal-delta rows (e.g. unchanged entries) keep a stable
+        # order across runs.
+        key=lambda name: (-abs(new_sizes.get(name, 0) - old_sizes.get(name, 0)), name),
     )
     rows: list[tuple[str, str, int, int]] = []
     for name in names:

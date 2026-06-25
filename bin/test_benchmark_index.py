@@ -130,6 +130,13 @@ class TestCompareMetrics:
         result = compare_metrics({"a": 100, "b": 100}, {"a": 200, "b": 105}, {})
         assert list(result["name"]) == ["a", "b"]  # +100 sorted before +5
 
+    def test_equal_delta_rows_break_ties_by_name(self) -> None:
+        # Equal (here zero) byte deltas must order by name, not set-iteration
+        # order, so the table is byte-for-byte reproducible across runs.
+        sizes = {"gamma": 1, "alpha": 1, "beta": 1}
+        result = compare_metrics(sizes, dict(sizes), {})
+        assert list(result["name"]) == ["alpha", "beta", "gamma"]
+
     def test_content_metrics_follow_their_byte_row(self) -> None:
         content = {"a": ({"records": 10, "rows": 5}, {"records": 12, "rows": 9})}
         result = compare_metrics({"a": 100, "b": 100}, {"a": 200, "b": 105}, content)
