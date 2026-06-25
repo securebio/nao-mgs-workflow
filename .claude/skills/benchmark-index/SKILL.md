@@ -1,6 +1,6 @@
 ---
 name: benchmark-index
-description: Compare two mgs-workflow index releases and produce a structured pre-rollout review report. Runs `bin/benchmark_index.py` (with `--repo-root` so it can annotate transitions with existing rule coverage, classify lost / gained genome IDs by reason, and check Kraken2 / SILVA reference freshness), then fills `review-template.md` with data from the summary JSON files and TSV outputs to produce a standalone `REVIEW.md`. Use before promoting a new dated `s3://nao-mgs-index/` build to production.
+description: Compare two mgs-workflow index releases and produce a structured pre-rollout review report. Runs `bin/benchmark_index.py` to annotate transitions with existing rule coverage (read from the new index's own published overrides and params), classify lost / gained genome IDs by reason, and check Kraken2 / SILVA reference freshness, then fills `review-template.md` with data from the summary JSON files and TSV outputs to produce a standalone `REVIEW.md`. Use before promoting a new dated `s3://nao-mgs-index/` build to production.
 ---
 
 # Benchmark an index release
@@ -36,7 +36,10 @@ and surface the output directory plus the relevant summary files; do not write
 - `--old <root>`: parent of `output/` for the old (reference) index. `s3://...` or local path. **Required.**
 - `--new <root>`: parent of `output/` for the new (target) index. **Required.**
 - `--out <dir>`: output directory. Use an absolute path so paths are reader-portable. **Required.**
-- `--repo-root <path>`: a mgs-workflow checkout. Optional in the script, but in practice always pass `--repo-root .` from a checkout. Coverage annotations read the host-infection overrides from this checkout (the hard-exclude list `viral_taxids_exclude_hard` comes from the target index's own params), so the checkout must carry the same host-infection overrides used to build the target (`--new`) index — a newer or older local override set will silently skew the coverage columns. Without it the script skips coverage annotations, and the Edge cases section becomes load-bearing.
+
+Coverage annotations read their rules from the `--new` index itself: the
+host-infection overrides from `output/input/host-infection-overrides.json` and
+the hard-exclude list `viral_taxids_exclude_hard` from `output/input/index-params.json`.
 
 If `--old`, `--new`, or `--out` is missing, ask the user; do not guess.
 
@@ -44,13 +47,10 @@ If `--old`, `--new`, or `--out` is missing, ask the user; do not guess.
 
 ### Step 1 - Run the script
 
-`cd` into a mgs-workflow checkout, then:
-
 ```bash
-cd /path/to/mgs-workflow
 python bin/benchmark_index.py \
   --old <old> --new <new> \
-  --out <outdir> --repo-root .
+  --out <outdir>
 ```
 
 Use **absolute** paths for `--out` (e.g. `/tmp/bench-...`). Takes about 60
@@ -69,8 +69,7 @@ Read the compact script-produced summaries before interpreting detail rows:
   genomes, net genome delta, kept genome count, and `taxa_added` /
   `taxa_removed` counts.
 - `infection_status_summary.json`: per-host species promotion/demotion counts,
-  uncovered counts, override scope-gap counts, and whether coverage annotations
-  were available.
+  uncovered counts, and override scope-gap counts.
 - `params_changes.tsv`: compact top-level params changes (`key`, `kind`, `old`,
   `new`).
 - `metadata_schema_summary.json`: counts of metadata columns added and removed.
@@ -176,7 +175,7 @@ taxon, using the assembly's `release_date` and `source_database` from the raw
 table plus the old annotated DB:
 
 - `newly_deposited`: assembly `release_date` is after the old index build.
-- `hard_included`: the genome's new leaf taxon or an ancestor is in `ref/host-infection-overrides.json`.
+- `hard_included`: the genome's new leaf taxon or an ancestor is in the `--new` index's published host-infection overrides.
 - `new_taxon_in_taxonomy`: the genome's new leaf taxon did not exist in the old taxonomy DB.
 - `infection_status_promotion`: the leaf taxon was in the old DB but not surveilled then and is now.
 - `pre_existing_reincluded`: the assembly predates the old build and its taxon was already eligible, yet it was not in the old surveillance set. Break this down by `source_database` from `genomes_gained_categorized.tsv` and cross-reference params changes for likely drivers such as `assembly_source`.
@@ -189,6 +188,5 @@ surveillance predicate (leaf-positive OR species-positive), mirroring
 
 ## Edge cases
 
-- **`--repo-root` skipped**: the script falls back to no coverage annotation. Re-run with `--repo-root .` from a mgs-workflow checkout.
 - **A reference check errors out**: `staleness.tsv.status` is `error` for that row. Note the inability to verify in §1 and continue.
 - **Empty genome loss/gain tables**: `genomes_summary.json.lost_total` or `gained_total` is zero; §3.2 / §3.3 collapse to "No genome IDs lost/gained".

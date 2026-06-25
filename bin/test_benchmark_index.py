@@ -33,6 +33,7 @@ from benchmark_index import (
     infection_status_changes,
     infection_status_columns,
     infection_status_transitions,
+    load_overrides,
     metadata_deltas,
     summarise_params_changes,
     surveilled_taxids,
@@ -356,6 +357,30 @@ class TestDiffParams:
         assert "added" in diff
 
 
+class TestLoadOverrides:
+    def test_maps_each_host_to_its_taxids(self, tmp_path: Path) -> None:
+        path = tmp_path / "host-infection-overrides.json"
+        path.write_text(
+            json.dumps(
+                {
+                    "overrides": [
+                        {"taxid": 100, "hosts": ["human", "vertebrate"]},
+                        {"taxid": 200, "hosts": ["human"]},
+                    ]
+                }
+            )
+        )
+        assert load_overrides(path) == {
+            "human": {"100", "200"},
+            "vertebrate": {"100"},
+        }
+
+    def test_empty_overrides(self, tmp_path: Path) -> None:
+        path = tmp_path / "host-infection-overrides.json"
+        path.write_text(json.dumps({"overrides": []}))
+        assert load_overrides(path) == {}
+
+
 class TestCoverageClassification:
     """A small DB: 1 (root) -> 2 (family Smacoviridae) -> 3 (genus) -> 4 (species);
     1 -> 10 (species WNV-like, in overrides for "human")."""
@@ -379,7 +404,7 @@ class TestCoverageClassification:
         excluded: set[str],
         included: dict[str, set[str]],
     ) -> Coverage:
-        return Coverage(True, parent_map, excluded, included)
+        return Coverage(parent_map, excluded, included)
 
     @pytest.mark.parametrize(
         "taxid,host,expected",
@@ -411,21 +436,19 @@ class TestCoverageClassification:
         assert _coverage_match(
             "4",
             "human",
-            Coverage(
-                True, {"4": "3", "3": "2", "2": "1", "10": "1"}, excluded, included
-            ),
+            Coverage({"4": "3", "3": "2", "2": "1", "10": "1"}, excluded, included),
         ) == ("excluded", "3")
 
     def test_include_wins_over_exclude_at_same_taxid(self) -> None:
         # A taxid in both the exclude list and the host's include set is
         # surveilled (production applies includes after hard excludes).
-        cov = Coverage(True, {"4": "3", "3": "2", "2": "1"}, {"4"}, {"human": {"4"}})
+        cov = Coverage({"4": "3", "3": "2", "2": "1"}, {"4"}, {"human": {"4"}})
         assert _coverage_match("4", "human", cov) == ("included", "4")
 
     def test_include_ancestor_wins_over_closer_exclude(self) -> None:
         # Closer ancestor excluded (genus 3), farther ancestor included
         # (family 2): the include wins anywhere in the lineage.
-        cov = Coverage(True, {"4": "3", "3": "2", "2": "1"}, {"3"}, {"human": {"2"}})
+        cov = Coverage({"4": "3", "3": "2", "2": "1"}, {"3"}, {"human": {"2"}})
         assert _coverage_match("4", "human", cov) == ("included", "2")
 
     def test_other_host_not_matched(
@@ -479,7 +502,7 @@ class TestCoverageClassification:
             ]
         )
         out = annotate_changes_with_coverage(
-            changes, "human", Coverage(True, parent_map, excluded, included)
+            changes, "human", Coverage(parent_map, excluded, included)
         )
         assert list(out["covered_by"]) == ["excluded", "included", ""]
         assert list(out["covered_rule_taxid"]) == ["2", "10", ""]
@@ -488,9 +511,7 @@ class TestCoverageClassification:
         empty = pd.DataFrame(
             columns=["taxid", "name", "rank", "old_status", "new_status"]
         )
-        out = annotate_changes_with_coverage(
-            empty, "human", Coverage(False, {}, set(), {})
-        )
+        out = annotate_changes_with_coverage(empty, "human", Coverage({}, set(), {}))
         assert "covered_by" in out.columns
         assert "covered_rule_taxid" in out.columns
         assert "included_for_other_hosts" in out.columns
@@ -502,7 +523,7 @@ class TestCoverageClassification:
         # "human,vertebrate"; when we ask about human, it returns "vertebrate".
         parent_map = {"5": "1", "1": "0"}
         included = {"human": {"5"}, "vertebrate": {"5"}, "primate": set()}
-        cov = Coverage(True, parent_map, set(), included)
+        cov = Coverage(parent_map, set(), included)
         assert _included_for_other_hosts("5", "primate", cov) == "human,vertebrate"
         assert _included_for_other_hosts("5", "human", cov) == "vertebrate"
 
@@ -512,7 +533,7 @@ class TestCoverageClassification:
         included = {"human": {"1"}}
         assert (
             _included_for_other_hosts(
-                "5", "primate", Coverage(True, parent_map, set(), included)
+                "5", "primate", Coverage(parent_map, set(), included)
             )
             == "human"
         )
@@ -535,7 +556,7 @@ class TestCoverageClassification:
             ]
         )
         out = annotate_changes_with_coverage(
-            changes, "primate", Coverage(True, parent_map, set(), included)
+            changes, "primate", Coverage(parent_map, set(), included)
         )
         assert out["covered_by"].iloc[0] == ""
         assert out["included_for_other_hosts"].iloc[0] == "human,vertebrate"
@@ -557,7 +578,7 @@ class TestCoverageClassification:
             ]
         )
         out = annotate_changes_with_coverage(
-            changes, "human", Coverage(True, parent_map, set(), included)
+            changes, "human", Coverage(parent_map, set(), included)
         )
         assert out["covered_by"].iloc[0] == "included"
         assert out["included_for_other_hosts"].iloc[0] == ""
@@ -711,7 +732,7 @@ class TestCategorizeLostGenomesRaw:
             removed,
             raw_meta,
             new_db,
-            Coverage(True, build_parent_map(new_db), {"70"}, {}),
+            Coverage(build_parent_map(new_db), {"70"}, {}),
             ["vertebrate"],
         ).set_index("genome_id")
         expected = {
@@ -786,7 +807,7 @@ class TestCategorizeLostGenomesRaw:
             removed,
             raw_meta,
             new_db,
-            Coverage(True, build_parent_map(new_db), {"900"}, {}),
+            Coverage(build_parent_map(new_db), {"900"}, {}),
             ["vertebrate"],
         ).set_index("genome_id")
         assert out.loc["gS", "reason"] == "other"
@@ -802,7 +823,7 @@ class TestCategorizeLostGenomesRaw:
             ]
         )
         out = categorize_loss(
-            empty, raw_meta, new_db, Coverage(False, {}, set(), {}), ["vertebrate"]
+            empty, raw_meta, new_db, Coverage({}, set(), {}), ["vertebrate"]
         )
         assert out.empty
         assert "reason" in out.columns
@@ -1168,7 +1189,7 @@ class TestCategorizeGainedGenomesRaw:
             added,
             raw_meta,
             old_db,
-            Coverage(True, self.PARENT_MAP, set(), {"host": {"50"}}),
+            Coverage(self.PARENT_MAP, set(), {"host": {"50"}}),
             ["vertebrate"],
             self.OLD_BUILD,
         ).set_index("genome_id")
@@ -1220,7 +1241,7 @@ class TestCategorizeGainedGenomesRaw:
             empty,
             raw_meta,
             old_db,
-            Coverage(False, {}, set(), {}),
+            Coverage({}, set(), {}),
             ["vertebrate"],
             self.OLD_BUILD,
         )
@@ -1332,7 +1353,7 @@ class TestWriteGenomeTaxonomyTables:
             str(new_root),
             old_db,
             new_db,
-            Coverage(False, {}, set(), {}),
+            Coverage({}, set(), {}),
             {"trace_timestamp": "2025-01-01T00:00:00Z"},
             {"host_taxa_screen": "vertebrate"},
             tmp_path / "work",
@@ -1399,7 +1420,7 @@ class TestWriteGenomeTaxonomyTables:
                 str(new_root),
                 old_db,
                 new_db,
-                Coverage(False, {}, set(), {}),
+                Coverage({}, set(), {}),
                 {"trace_timestamp": "2025-01-01T00:00:00Z"},
                 {"host_taxa_screen": "vertebrate"},
                 tmp_path / "work",

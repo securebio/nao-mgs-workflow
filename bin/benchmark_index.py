@@ -337,7 +337,6 @@ GAIN_REASONS = (
 class Coverage:
     """Rule context used to explain genome and infection-status changes."""
 
-    available: bool
     parent_map: dict[str, str]
     excluded_taxids: set[str]
     included_taxids: dict[str, set[str]]
@@ -566,7 +565,7 @@ def write_genome_taxonomy_tables(
         species_gained,
         reassigned,
     ) = metadata_deltas(old_meta, new_meta)
-    excluded = cov.excluded_taxids if cov.available else set()
+    excluded = cov.excluded_taxids
     lost_species = species_lost["species_taxid"].astype(str)
     species_lost["covered_by_hard_exclude"] = lost_species.map(
         lambda t: _ancestor_in(t, cov.parent_map, excluded)
@@ -615,15 +614,9 @@ def write_genome_taxonomy_tables(
 ###############################
 
 
-def load_existing_overrides(repo_root: Path) -> dict[str, set[str]]:
-    """Read ref/host-infection-overrides.json and return host -> set of taxids."""
-    path = repo_root / "ref" / "host-infection-overrides.json"
+def load_overrides(path: Path) -> dict[str, set[str]]:
+    """Read a host-infection-overrides.json file and return host -> set of taxids."""
     out: dict[str, set[str]] = defaultdict(set)
-    if not path.exists():
-        logger.warning(
-            f"No overrides file at {path}; coverage will treat all transitions as uncovered."
-        )
-        return dict(out)
     data = json.loads(path.read_text())
     for entry in data.get("overrides", []):
         taxid = str(entry["taxid"])
@@ -636,20 +629,20 @@ def load_taxonomy_context(
     old_prefix: str,
     new_prefix: str,
     new_params: dict[str, Any],
-    repo_root: Path | None,
     work_dir: Path,
 ) -> tuple[pd.DataFrame, pd.DataFrame, Coverage]:
-    """Stage taxonomy DBs and build the coverage context."""
+    """Stage taxonomy DBs and build the coverage context from the new index's own
+    published host-infection overrides and hard-exclude params."""
     db = "output/results/total-virus-db-annotated.tsv.gz"
     old_db = pd.read_csv(fetch(old_prefix, db, work_dir / "old"), sep="\t", dtype=str)
     new_db = pd.read_csv(fetch(new_prefix, db, work_dir / "new"), sep="\t", dtype=str)
-    if repo_root is None:
-        return old_db, new_db, Coverage(False, {}, set(), {})
+    overrides = fetch(
+        new_prefix, "output/input/host-infection-overrides.json", work_dir / "new"
+    )
     coverage = Coverage(
-        available=True,
         parent_map=build_parent_map(new_db),
         excluded_taxids=set(new_params.get("viral_taxids_exclude_hard", "").split()),
-        included_taxids=load_existing_overrides(repo_root),
+        included_taxids=load_overrides(overrides),
     )
     return old_db, new_db, coverage
 
@@ -788,8 +781,7 @@ def write_infection_status_tables(
             trans.insert(0, "host", host)
             transitions.append(trans)
         changes = infection_status_changes(old_db, new_db, col)
-        if cov.available:
-            changes = annotate_changes_with_coverage(changes, host, cov)
+        changes = annotate_changes_with_coverage(changes, host, cov)
         per_host_changes[host] = changes
     if transitions:
         pd.concat(transitions, ignore_index=True).to_csv(
@@ -809,7 +801,6 @@ def write_infection_status_tables(
     _write_json(
         out_dir / "infection_status_summary.json",
         {
-            "coverage_available": cov.available,
             "hosts": _species_transition_counts(per_host_changes),
         },
     )
@@ -901,15 +892,6 @@ def parse_arguments() -> argparse.Namespace:
         required=True,
         help="Output directory for benchmark tables and summaries.",
     )
-    parser.add_argument(
-        "--repo-root",
-        type=Path,
-        default=None,
-        help="Path to a mgs-workflow checkout. When given, the script reads "
-        "ref/host-infection-overrides.json and uses the new index's "
-        "viral_taxids_exclude_hard to annotate per-species transitions with "
-        "which existing rule (if any) covers them.",
-    )
     return parser.parse_args()
 
 
@@ -925,7 +907,7 @@ def main() -> None:
             args.out, args.old, args.new, work_dir
         )
         old_db, new_db, coverage = load_taxonomy_context(
-            args.old, args.new, new_params, args.repo_root, work_dir
+            args.old, args.new, new_params, work_dir
         )
         write_genome_taxonomy_tables(
             args.out,
