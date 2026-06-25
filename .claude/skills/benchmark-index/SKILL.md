@@ -1,25 +1,21 @@
 ---
 name: benchmark-index
-description: Compare two mgs-workflow index releases and produce a structured pre-rollout review report. Runs `bin/benchmark_index.py` to annotate transitions with existing rule coverage (read from the new index's own published overrides and params), classify lost / gained genome IDs by reason, and check Kraken2 / SILVA reference freshness, then fills `review-template.md` with data from the summary JSON files and TSV outputs to produce a standalone `REVIEW.md`. Use before promoting a new dated `s3://nao-mgs-index/` build to production.
+description: Compare two mgs-workflow index releases and produce a structured pre-rollout review report (`REVIEW.md`). Use before promoting a new dated `s3://nao-mgs-index/` build to production.
 ---
 
 # Benchmark an index release
 
-The point of the report is to help the reviewer decide whether to ship this
-index as-is or change something first. The script does deterministic data
-extraction; you fill in `review-template.md` from the summary JSON files and
-TSVs.
+The report helps the reviewer decide whether to ship this index as-is or change
+something first. `bin/benchmark_index.py` does the deterministic data extraction;
+you fill in `review-template.md` from its summary JSON and TSV outputs.
 
-**`review-template.md` is the source of truth for report structure.** Open it,
-read it, fill it in literally. This skill provides procedural support and a
-small glossary of script-specific category labels. When the template and the
-skill seem to disagree, the template wins.
+**`review-template.md` is the source of truth for report structure** — open it
+and fill it in literally; the skill only adds procedural support and a category
+glossary. If the template and skill disagree, the template wins.
 
-`REVIEW.md` must be standalone. Use the script outputs as inputs, but do not
-leave the final report saying "see genomes_summary.json" or
-"see species_transitions.tsv" instead of embedding the needed table or fact.
-Appendix tables can be embedded naively from TSVs; polish is less important
-than keeping the report self-contained.
+`REVIEW.md` must stand alone: embed the needed tables and facts rather than
+pointing at output files ("see genomes_summary.json"). Appendix tables can be
+pasted naively from TSVs — self-containment matters more than polish.
 
 ## When to use
 
@@ -63,10 +59,9 @@ Read the compact script-produced summaries before interpreting detail rows:
 
 - `sizes_summary.json`: counts of top-level output entries that grew, shrank,
   or stayed unchanged.
-- `genomes_summary.json`: lost/gained genome totals, reason counts, all-lost /
-  all-gained species counts, reassigned genome count and percentage of kept
-  genomes, net genome delta, kept genome count, and `taxa_added` /
-  `taxa_removed` counts. If `lost_total` or `gained_total` is zero, §3.2 / §3.3
+- `genomes_summary.json`: headline genome/taxonomy counts — lost/gained totals,
+  per-reason counts, all-lost / all-gained species, reassignments, net delta, and
+  taxa added/removed. If `lost_total` or `gained_total` is zero, §3.2 / §3.3
   collapse to "No genome IDs lost/gained".
 - `infection_status_summary.json`: per-host species promotion/demotion counts,
   uncovered counts, and override scope-gap counts.
@@ -83,13 +78,11 @@ Then read the detailed TSVs needed by the template:
   could not run; note the inability to verify in §1 and continue.
 - `sizes.tsv`, `sizes_summary.json`, `params_changes.tsv`, `params_diff.txt`,
   `metadata_schema_summary.json`, and `metadata_schema_diff.tsv` for §2 and §5.
-  `sizes.tsv` is long-format (one row per `name`, `metric`): rows with
-  `metric == bytes` are the per-entry byte sizes for the §2 size table; the
-  other metrics are content metrics for the §2 content findings (`records`,
-  `total_bp`, `n_bp` for each FASTA output; `rows` for each TSV output, for
-  every FASTA/TSV present in both indexes). These let you flag cases where
-  compressed bytes moved opposite to actual content (e.g. bytes shrank while row
-  count grew).
+  `sizes.tsv` is long-format (one row per `name`, `metric`): `metric == bytes`
+  rows give per-entry byte sizes for the §2 size table; the content metrics
+  (`records`, `total_bp`, `n_bp` for FASTAs; `rows` for TSVs) feed the §2 content
+  findings and let you flag bytes moving opposite to content (e.g. bytes shrank
+  while rows grew).
 - `genomes_lost_categorized.tsv`, `genomes_gained_categorized.tsv`, `species_lost_all_genomes.tsv`, `species_gained_all_genomes.tsv`, and `genomes_reassigned.tsv` for §3 and appendices.
 - `species_transitions_*.tsv` and `infection_status_transitions.tsv` for §4.
 
@@ -154,12 +147,11 @@ These are the labels the script writes into `genomes_lost_categorized.tsv`,
 objects. The template uses them as the §3.1 row labels.
 
 **Lost gid categories** (priority order; each gid gets the first applicable
-bucket). The raw categorizer recovers each lost genome's build-time taxid and
-assembly_status by joining its `assembly_accession` into the target index's
-`virus-genome-metadata-raw.tsv.gz`, so attribution is exact: no NCBI lookups and
-no no-drift assumption. Assembly-lifecycle reasons are checked before
-taxonomy/policy reasons, so the policy buckets mean "current assemblies we
-stopped surveilling" and are not inflated by routine version churn:
+bucket). The categorizer recovers each lost genome's build-time taxid and
+`assembly_status` by joining its `assembly_accession` into the target index's
+`virus-genome-metadata-raw.tsv.gz`, so attribution is exact. Assembly-lifecycle
+reasons are checked before taxonomy/policy reasons, so the policy buckets mean
+"current assemblies we stopped surveilling", not routine version churn:
 
 - `absent_from_ncbi`: the lost genome's assembly is absent from the target index's raw metadata entirely.
 - `non_current_genome_version`: assembly present in raw but its `assembly_status` is not `current`.
@@ -167,9 +159,6 @@ stopped surveilling" and are not inflated by routine version churn:
 - `reassigned_to_excluded`: build-time leaf taxid differs from the old leaf taxid and the new leaf/species rollup is no longer surveilled.
 - `infection_status_demotion`: build-time leaf taxid equals the old leaf taxid and the leaf/species rollup is no longer surveilled.
 - `other`: present, current, surveilled, yet absent from the new gid set. Should be near zero; if not, investigate downstream sequence-level filtering.
-
-The target index must publish `virus-genome-metadata-raw.tsv.gz`. If it is
-missing, the script errors out rather than guessing.
 
 **Gained gid categories** (priority order). Keyed on the genome's assigned leaf
 taxon, using the assembly's `release_date` and `source_database` from the raw
