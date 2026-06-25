@@ -1,6 +1,6 @@
 # v3.2.2.0-dev
 
-- Scale `MARK_ALIGNMENT_DUPLICATES` and `VSEARCH_CLUSTER` memory by input size via per-label tier closures (mirroring `bbmask_resources`), replacing their fixed `large` (32 GB) label. Large viral-hit groups previously OOM-killed both processes at 32 GB; tiers now allocate 32/64/128 GB based on the grouped_hits TSV size (MARK) and the largest per-species merged-reads FASTQ (VSEARCH), leaving normal groups at 32 GB.
+- Scale `MARK_ALIGNMENT_DUPLICATES` and `VSEARCH_CLUSTER` memory by input size via per-label tier closures to address OOM issues on large samples.
 - Exclude five viral genome records with rRNA contamination from the genome reference via `ref/hv_patterns_exclude.txt`.
 - Add `set -euo pipefail` to `BLASTN` module.
 - Add `pigz` to the `python` container so Python processes can use parallel (de)compression.
