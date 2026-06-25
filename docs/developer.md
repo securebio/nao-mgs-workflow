@@ -276,14 +276,11 @@ Only pipeline maintainers should author a new release. The process for going thr
 [^refs]: For reference genomes, check for updated releases for human, cow, pig, and mouse; do not update carp; update *E. coli* if there is a new release for the same strain. Check [SILVA](https://www.arb-silva.de/download/archive/) for rRNA databases and [here](https://benlangmead.github.io/aws-indexes/k2) for Kraken2 databases.
 [^approval]: Note that, to streamline the release process, we no longer require an approving review for PRs into `main`. (We still require an approving review for `release` PRs into `dev`.)
 
-## Building a new production index
+## Benchmarking a new production index
 
-The INDEX workflow's reference data (NCBI taxonomy, Virus-Host-DB, Kraken2, SILVA, host/contaminant genomes) drifts over time, so a new dated index is built under `s3://nao-mgs-index/<DATE>` periodically:
+The INDEX workflow's reference data (NCBI taxonomy, Virus-Host-DB, Kraken2, SILVA, host/contaminant genomes) drifts over time, so a new dated index is built under `s3://nao-mgs-index/<DATE>` periodically (see [Run index/reference workflow](./installation.md#7-run-indexreference-workflow)). After building a new production index, it's important to benchmark it against the previous one to check for regressions; the easiest way to do this is to execute the `benchmark-index` skill (`.claude/skills/benchmark-index/`) within Claude Code or another coding agent, then read the `REVIEW.md` file produced.
 
-1. Run the INDEX workflow against the current `configs/index.config`, writing the output to a new dated prefix under `s3://nao-mgs-index/` (see [Run index/reference workflow](./installation.md#7-run-indexreference-workflow)).
-2. **Benchmark the new index against the previous one before using it for runs.** This catches regressions from upstream reference drift — per-DB size/content deltas, genomes and species gained/lost (categorized by reason), and infection-status transitions. With Claude Code, the `benchmark-index` skill (`.claude/skills/benchmark-index/`) runs the comparison and fills in a `REVIEW.md` with recommendations; otherwise run `bin/benchmark_index.py` directly. The report informs a human decision: adopt the new index, or fix configs and rebuild.
-
-`benchmark_index.py` diffs whatever two index roots it is given, so it is not pinned to a fixed index schema; it does require the newer (`--new`) index to publish `virus-genome-metadata-raw.tsv.gz` and `input/host-infection-overrides.json`. New index outputs are not reflected in the report until comparison logic is added to the script.
+The `benchmark-index` skill calls the `benchmark_index.py` script to carry out deterministic comparisons between the indices specified. This script diffs whatever two index roots it is given, so it is not pinned to a fixed index schema; it does require the newer (`--new`) index to publish `virus-genome-metadata-raw.tsv.gz` and `input/host-infection-overrides.json`. New index outputs are not reflected in the report until comparison logic is added to the script.
 
 ## Schemas
 
