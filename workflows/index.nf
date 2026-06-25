@@ -17,8 +17,8 @@ include { MAKE_CONTAMINANT_INDEX } from "../subworkflows/local/makeContaminantIn
 include { MAKE_VIRUS_INDEX } from "../subworkflows/local/makeVirusIndex"
 include { MAKE_RIBO_INDEX } from "../subworkflows/local/makeRiboIndex"
 include { GET_TARBALL as GET_KRAKEN_DB } from "../modules/local/getTarball"
-include { GET_TARBALL as GET_BLAST_DB } from "../modules/local/getTarball"
 include { COPY_FILE_BARE as COPY_PYPROJECT } from "../modules/local/copyFile"
+include { COPY_FILE_BARE as COPY_OVERRIDES } from "../modules/local/copyFile"
 
 /****************
 | MAIN WORKFLOW |
@@ -53,15 +53,8 @@ workflow INDEX {
         MAKE_CONTAMINANT_INDEX(params.genome_urls, params.contaminants)
         MAKE_RIBO_INDEX(JOIN_RIBO_REF.out.ribo_ref)
         // Other index files
-        if (params.blast_db_name.startsWith("http://") || params.blast_db_name.startsWith("https://")) {
-            // Extract database name from URL (e.g., "tiny_blast_db" from "tiny_blast_db.tar.gz")
-            blast_db_name = params.blast_db_name.split("/")[-1].replaceAll(/\.tar\.gz$/, "")
-            GET_BLAST_DB(params.blast_db_name, blast_db_name, false)
-            blast_db_ch = GET_BLAST_DB.out
-        } else {
-            DOWNLOAD_BLAST_DB(params.blast_db_name)
-            blast_db_ch = DOWNLOAD_BLAST_DB.out.db
-        }
+        DOWNLOAD_BLAST_DB(params.blast_db_name)
+        blast_db_ch = DOWNLOAD_BLAST_DB.out.db
         GET_KRAKEN_DB(params.kraken_db, "kraken_db", true)
         // Prepare results for publishing
         params_str = groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(params))
@@ -69,9 +62,14 @@ workflow INDEX {
         time_ch = channel.of(start_time_str + "\n").collectFile(name: "time.txt")
         pipeline_pyproject_path = file("${projectDir}/pyproject.toml")
         pyproject_ch = COPY_PYPROJECT(channel.fromPath(pipeline_pyproject_path), "pyproject.toml")
+        // Publish the host-infection overrides alongside the params so index
+        // outputs record the surveillance rules used to build them.
+        overrides_ch = COPY_OVERRIDES(
+            channel.fromPath(file(params.host_infection_overrides)),
+            "host-infection-overrides.json")
 
     emit:
-        input_index = params_ch
+        input_index = params_ch.mix(overrides_ch)
         logging_index = time_ch.mix(pyproject_ch)
         // Lots of results; split across 2 channels (reference databases and bowtie2/minimap2 indexes)
         ref_dbs = MAKE_VIRUS_TAXONOMY_DB.out.db.mix( // Taxonomy and virus databases

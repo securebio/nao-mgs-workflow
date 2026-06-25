@@ -46,6 +46,12 @@ nextflow_pipeline {
             def rawMeta = path("${launchDir}/output/results/virus-genome-metadata-raw.tsv.gz").csv(sep: "\t", decompress: true)
             assert rawMeta.columnNames == ["assembly_accession", "taxid", "organism_name", "source_database", "assembly_status", "release_date"]
             assert rawMeta.rowCount >= 1
+
+            // === Surveillance-rule inputs republished alongside index-params.json ===
+            def overrides = path("${launchDir}/output/input/host-infection-overrides.json")
+            assert overrides.exists() : "host-infection-overrides.json should be published under input/"
+            assert overrides.json.containsKey("overrides") :
+                "Published overrides should retain the overrides JSON structure"
         }
     }
 }
