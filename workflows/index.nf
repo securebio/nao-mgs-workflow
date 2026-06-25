@@ -18,6 +18,7 @@ include { MAKE_VIRUS_INDEX } from "../subworkflows/local/makeVirusIndex"
 include { MAKE_RIBO_INDEX } from "../subworkflows/local/makeRiboIndex"
 include { GET_TARBALL as GET_KRAKEN_DB } from "../modules/local/getTarball"
 include { COPY_FILE_BARE as COPY_PYPROJECT } from "../modules/local/copyFile"
+include { COPY_FILE_BARE as COPY_OVERRIDES } from "../modules/local/copyFile"
 
 /****************
 | MAIN WORKFLOW |
@@ -61,9 +62,14 @@ workflow INDEX {
         time_ch = channel.of(start_time_str + "\n").collectFile(name: "time.txt")
         pipeline_pyproject_path = file("${projectDir}/pyproject.toml")
         pyproject_ch = COPY_PYPROJECT(channel.fromPath(pipeline_pyproject_path), "pyproject.toml")
+        // Publish the host-infection overrides alongside the params so index
+        // outputs record the surveillance rules used to build them.
+        overrides_ch = COPY_OVERRIDES(
+            channel.fromPath(file(params.host_infection_overrides)),
+            "host-infection-overrides.json")
 
     emit:
-        input_index = params_ch
+        input_index = params_ch.mix(overrides_ch)
         logging_index = time_ch.mix(pyproject_ch)
         // Lots of results; split across 2 channels (reference databases and bowtie2/minimap2 indexes)
         ref_dbs = MAKE_VIRUS_TAXONOMY_DB.out.db.mix( // Taxonomy and virus databases

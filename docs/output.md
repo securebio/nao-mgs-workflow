@@ -81,6 +81,7 @@ Main heading represents the folder name, and subheadings describes the tool that
 ### `input/`
 
 - `index-params.json`: JSON file giving all the parameters passed to the pipeline (useful for trying to reproduce someone else's results).
+- `host-infection-overrides.json`: the per-host taxid overrides applied when annotating the virus DB, copied verbatim from the build inputs so the index records the surveillance rules used to build it.
 
 ### `logging/`
 

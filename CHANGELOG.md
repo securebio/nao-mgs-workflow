@@ -11,6 +11,7 @@
 - Hard-exclude taxids `1266451` (Mulberry vein banding virus, a plant virus) and `1629671` (Botrytis cinerea negative-stranded RNA virus 1, a mycovirus) from the surveillance set.
 - `DOWNLOAD_VIRAL_GENOMES` now retries the dehydrated `datasets download` step (not just rehydrate) with exponential backoff, so a transient NCBI stream error there no longer aborts the task.
 - INDEX now publishes `virus-genome-metadata-raw.tsv.gz`: every enumerated viral assembly before the host-infection and assembly-status filters, so tooling (e.g. index benchmarking) can attribute why a genome was or wasn't included. New output only; nothing existing changed.
+- INDEX now publishes the host-infection overrides file to `input/host-infection-overrides.json`. New output only; nothing existing changed.
 - Fix the `GET_TARBALL` process resource label, which referenced an undefined `huge_mem` label instead of `single_huge_mem`. The typo caused the process to silently fall back to default resource allocation, manifesting as exit code 140 (OOM kill) under strict resource allocation.
 - Add `tag "id=<value>"` directives to all `modules/local/` processes for per-task attribution in trace files and Nextflow logs.
     - Per-task processes use `id=${sample/group/label}`; index work uses `id=index` (with optional `,name=<x>` for fan-outs); workflow-level singletons use `id=util`; stage-qualified processes that run multiple times across pipeline stages append a `,stage=<x>` component.
