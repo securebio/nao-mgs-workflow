@@ -86,7 +86,9 @@ workflow DOWNSTREAM {
             .map { _label, _sample, group -> group }
             .unique()
         sentinel_params = params + [output_dir: "${params.base_dir}/output", pyproject_path: "${projectDir}/pyproject.toml", sentinel_utils_path: "${projectDir}/lib/SentinelUtils.groovy"]
-        // Per-group sentinel: one {group}_sentinel.json per group validating expected DOWNSTREAM outputs
+        // Per-group sentinel: one {group}_sentinel.json per group validating expected DOWNSTREAM outputs.
+        // Note: if groups_only_ch is empty (e.g. a groups TSV with only a header), WRITE_SENTINEL
+        // does not run for any group and no sentinel is produced.
         ds_keys = params.platform == "ont" ? ["downstream-ont"] : ["downstream"]
         sentinel_spec = groups_only_ch.map { group -> [group, "${group}_sentinel.json", [group]] }
         WRITE_SENTINEL(
