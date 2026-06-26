@@ -151,8 +151,10 @@ def discover_side(results_dir: Path) -> dm.SideManifest:
 
     Groups are enumerated from `*_validation_hits.tsv.gz` (one per group), then
     every file is attributed to a group and file type. Platform is inferred per
-    group from the presence of the short-read-only clade-count file. Row counts
-    and columns are read for TSVs; JSON files are recorded as present only.
+    group from file presence: a group is ONT only if it has none of the
+    short-read-only output types (SHORTREAD_ONLY_TYPES), so a short-read group
+    merely missing one of them is not mislabelled ONT. Row counts and columns are
+    read for TSVs; JSON files are recorded as present only.
 
     Args:
         results_dir: Local `results_downstream/` directory.
@@ -495,9 +497,7 @@ def main() -> None:
     # Focus 4: schema-driven file/column inventory. Pass the platform-expected
     # output types so a file missing from BOTH runs still surfaces as a row.
     expected_types = expected_downstream_types(args.pyproject)
-    inventory = dm.compare_file_inventory(
-        main_manifest, dev_manifest, expected_types
-    )
+    inventory = dm.compare_file_inventory(main_manifest, dev_manifest, expected_types)
     write_tsv(inventory, args.out / "file_inventory.tsv")
     columns = dm.compare_columns_to_schema(main_manifest, dev_manifest, schema_columns)
     write_tsv(columns, args.out / "column_conformance.tsv")

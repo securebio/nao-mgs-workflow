@@ -262,6 +262,18 @@ def _build_downstream_tree(root: Path, side: str) -> None:
             ["G_ILL", 10, 5, 80, 80, 80, 80],  # species
         ],
     )
+    # A header-only (zero data row) file, to exercise the empty-table path
+    # end-to-end. duplicate_stats is also a short-read-only marker.
+    _write_tsv_gz(
+        root / "results_downstream" / "G_ILL_duplicate_stats.tsv.gz",
+        [
+            "prim_align_genome_id_all",
+            "prim_align_dup_exemplar",
+            "prim_align_dup_count",
+            "prim_align_dup_pairwise_match_frac",
+        ],
+        [],
+    )
 
 
 def _build_index(root: Path) -> None:
@@ -339,9 +351,20 @@ def test_main_end_to_end(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Non
     assert len(brk) == 1
     assert not bool(brk.iloc[0].in_main) and not bool(brk.iloc[0].in_dev)
 
+    # Header-only file is handled end-to-end: present with zero data rows.
+    dup = inv[(inv.group == "G_ILL") & (inv.file_type == "duplicate_stats")]
+    assert len(dup) == 1
+    assert bool(dup.iloc[0].in_main) and dup.iloc[0].n_rows_main == 0
+
     # The dev reassignment (read r2: 10 -> 20, same family) is captured.
     status = pd.read_csv(out / "viral_read_status.tsv", sep="\t")
     gil = status[(status.group == "G_ILL") & (status.scope == "vertebrate")].iloc[0]
     assert gil.n_reassigned == 1
     buckets = pd.read_csv(out / "viral_reassignment_buckets.tsv", sep="\t")
     assert (buckets.bucket == "same-family").any()
+
+    # Flag contents: 50% reassignment (> 10% threshold) is flagged for G_ILL.
+    flags = pd.read_csv(out / "flags.tsv", sep="\t")
+    assert not flags.empty
+    reassign_flags = flags[flags.metric.str.contains("reassigned")]
+    assert any("G_ILL" in k for k in reassign_flags.key)

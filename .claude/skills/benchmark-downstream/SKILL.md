@@ -139,7 +139,11 @@ contents are AWS-derived data.
 - `shared-higher-taxon` — share an ancestor only above the standard ranks (e.g.
   both under `Viruses` but different realms, or one reassigned up to `Viruses`).
 - `cross-root` — share only the tree root (e.g. a viral read reassigned to a
-  cellular organism). The most severe.
+  cellular organism). The most severe *biological* reassignment.
+- `unresolved-taxid` — one of the taxids is absent from the dev taxonomy
+  (merged/deleted across index versions). A versioning artifact of unknown
+  biological severity, **not** part of the same-species→cross-root gradient;
+  assess it separately rather than treating it as more severe than cross-root.
 
 **Bray-Curtis** (Focus 2) — total variation distance between two relative-
 abundance vectors at a rank; 0 = identical profiles, 1 = disjoint.

@@ -76,6 +76,22 @@ class TestCompareFileInventory:
         assert row.in_main and row.in_dev
         assert pd.isna(row.n_rows_main) and pd.isna(row.row_delta)
 
+    def test_platform_mismatch_unions_expected_types(self) -> None:
+        # Illumina on main, ONT on dev (degraded): report the mismatch and still
+        # surface Illumina-only expected types missing on both sides.
+        main = _manifest(
+            {"G": ("illumina", {"clade_counts": _entry(n_rows=1, columns=["t"])})}
+        )
+        dev = _manifest({"G": ("ont", {"kraken": _entry(n_rows=1, columns=["t"])})})
+        expected = {
+            "illumina": {"clade_counts", "kraken", "bracken"},
+            "ont": {"kraken"},
+        }
+        df = dm.compare_file_inventory(main, dev, expected)
+        assert "mismatch" in df.iloc[0].platform
+        # bracken is illumina-expected and absent on both sides -> still a row.
+        assert (df.file_type == "bracken").any()
+
 
 #####################################
 # FOCUS 4: compare_columns_to_schema #

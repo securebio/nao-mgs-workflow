@@ -97,12 +97,24 @@ def compare_file_inventory(
     for group in groups:
         gm_main = main.get(group)
         gm_dev = dev.get(group)
-        gm_any = gm_dev or gm_main
-        platform = gm_any.platform if gm_any else ""
+        # Use BOTH sides' platforms: if they disagree (e.g. a group is Illumina
+        # on main but degraded to ONT on dev), flag the mismatch and union the
+        # expected types from both so no platform's expected outputs are dropped.
+        platforms = [gm.platform for gm in (gm_main, gm_dev) if gm]
+        unique = sorted(set(platforms))
+        if len(unique) == 1:
+            platform = unique[0]
+        elif not unique:
+            platform = ""
+        else:
+            platform = "/".join(unique) + " (mismatch)"
+        expected_union: set[str] = set()
+        for p in unique:
+            expected_union |= expected_types.get(p, set())
         file_types = sorted(
             (set(gm_main.files) if gm_main else set())
             | (set(gm_dev.files) if gm_dev else set())
-            | expected_types.get(platform, set())
+            | expected_union
         )
         for ft in file_types:
             fe_main = gm_main.files.get(ft) if gm_main else None
@@ -830,12 +842,16 @@ def bucket_summary(reassignment_detail: pd.DataFrame) -> pd.DataFrame:
     Returns:
         DataFrame: scope, bucket, n_reads, ordered identical->cross-superkingdom.
     """
+    # unresolved-taxid is a taxonomy-versioning artifact of unknown biological
+    # severity, so it sits at the FRONT, outside the same-species -> cross-root
+    # severity gradient (placing it after cross-root would wrongly read as the
+    # most severe category).
     order = [
+        UNRESOLVED_TAXID,
         "identical",
         *(f"same-{r}" for r in ORDERED_RANKS),
         SHARED_HIGHER,
         CROSS_ROOT,
-        UNRESOLVED_TAXID,
     ]
     if reassignment_detail.empty:
         return pd.DataFrame(columns=["scope", "bucket", "n_reads"])

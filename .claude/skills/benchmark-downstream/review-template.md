@@ -52,17 +52,20 @@ assigned taxid is `infection_status_vertebrate == 1` in the **dev** index
 
 | Divergence bucket | Reassigned reads |
 |---|---|
-| identical | — |
 | same-species | NNN |
 | same-genus | NNN |
 | same-family | NNN |
 | ... | |
 | shared-higher-taxon | NNN |
 | cross-root | NNN |
+| unresolved-taxid (versioning artifact — not a severity level) | NNN |
 
 - Edge-distance distribution (mean/median/max). Call out cross-root or
   shared-higher-taxon reassignments (a viral read no longer placed within a
   specific viral clade) with example taxid pairs.
+- Report `unresolved-taxid` counts separately — these are taxids absent from the
+  dev taxonomy (merged/deleted across index versions), not a biological
+  reassignment; do not rank them as the most severe bucket.
 
 #### 1.3. Clade-count high-level breakdown (Illumina only)
 
