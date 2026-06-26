@@ -191,9 +191,10 @@ def _build_downstream_tree(root: Path, side: str) -> None:
     """Write a tiny synthetic results_downstream/ tree for one side.
 
     One short-read group (G_ILL) and one ONT group (G_ONT), with wholly invented
-    taxids/names. bracken/duplicate_stats/fastp are omitted so the run also
-    exercises the 'expected output missing on both sides' path. `side` ('main'
-    or 'dev') tweaks one read's assignment to create a reassignment in dev.
+    taxids/names. bracken and fastp are omitted so the run exercises the
+    'expected output missing on both sides' path; duplicate_stats is written
+    header-only to exercise the zero-row path. `side` ('main' or 'dev') tweaks
+    one read's assignment to create a reassignment in dev.
     """
     d = root / "results_downstream"
     d.mkdir(parents=True, exist_ok=True)
