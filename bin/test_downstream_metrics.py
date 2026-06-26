@@ -320,6 +320,19 @@ class TestKrakenBrayCurtis:
         out = dm.kraken_bray_curtis(main, dev, ranks=("S",))
         assert abs(out.iloc[0].bray_curtis - 0.3) < 1e-9
 
+    def test_one_sided_set_gives_one_not_half(self) -> None:
+        # A (group, ribosomal) set present on only one side: Bray-Curtis must be
+        # 1.0 (disjoint), not 0.5 from a naive 0.5*L1 on an all-zero other side.
+        main = pd.DataFrame([_kr("G1", False, "S", 1, "a", 100)])
+        dev = pd.DataFrame(
+            [_kr("G1", False, "S", 1, "a", 100), _kr("G1", True, "S", 2, "b", 50)]
+        )
+        out = dm.kraken_bray_curtis(main, dev, ranks=("S",))
+        rib = out[out.ribosomal].iloc[0]
+        assert rib.bray_curtis == 1.0
+        nonrib = out[~out.ribosomal].iloc[0]
+        assert nonrib.bray_curtis == 0.0
+
 
 class TestKrakenTopMovers:
     def test_orders_by_abs_change_and_signs_delta(self) -> None:
@@ -420,6 +433,12 @@ class TestTaxonomyTree:
     def test_cross_root_virus_to_cellular(self) -> None:
         # 401 (virus) vs 600 (bacterial species) meet only at root.
         assert self.tax.divergence_bucket(401, 600) == dm.CROSS_ROOT
+
+    def test_unresolved_taxid_when_absent_from_tree(self) -> None:
+        # 999 is not in the taxonomy (e.g. merged/deleted across index versions):
+        # an unresolved-taxid bucket, NOT a severe cross-root reassignment.
+        assert self.tax.divergence_bucket(401, 999) == dm.UNRESOLVED_TAXID
+        assert self.tax.edge_distance(401, 999) is None
 
     def test_edge_distance_via_lca(self) -> None:
         # realmA and realmB sit under Viruses, so 401 and 500 meet at 10239:
@@ -570,6 +589,16 @@ class TestMadOutlierMask:
         s = pd.Series([5.0, 5.0, 5.0, 5.0])
         assert not dm.mad_outlier_mask(s).any()
 
+    def test_one_sided_ignores_low_outlier(self) -> None:
+        # An unusually LOW value is a two-sided outlier but not an upper-tail one.
+        s = pd.Series([10.0, 10.1, 9.9, 10.0, 1.0])
+        assert dm.mad_outlier_mask(s, two_sided=True).iloc[-1]
+        assert not dm.mad_outlier_mask(s, two_sided=False).iloc[-1]
+
+    def test_one_sided_still_flags_high_outlier(self) -> None:
+        s = pd.Series([1.0, 1.1, 0.9, 1.0, 10.0])
+        assert dm.mad_outlier_mask(s, two_sided=False).iloc[-1]
+
 
 class TestBuildFlags:
     def test_fixed_threshold_on_bray_curtis(self) -> None:
@@ -600,6 +629,20 @@ class TestBuildFlags:
             }
         )
         flags = dm.build_flags({"qc_numeric": qc})
+        assert flags.empty
+
+    def test_low_bray_curtis_not_flagged_as_cohort_outlier(self) -> None:
+        # pos metric: an unusually LOW Bray-Curtis (above the magnitude floor but
+        # below the fixed threshold) must not be flagged as a cohort regression.
+        bc = pd.DataFrame(
+            {
+                "group": [f"G{i}" for i in range(5)],
+                "rank": ["S"] * 5,
+                "ribosomal": [False] * 5,
+                "bray_curtis": [0.10, 0.11, 0.09, 0.10, 0.04],
+            }
+        )
+        flags = dm.build_flags({"kraken_bray_curtis": bc})
         assert flags.empty
 
     def test_cohort_outlier_flagged_when_magnitude_meaningful(self) -> None:

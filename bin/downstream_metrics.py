@@ -66,15 +66,24 @@ SideManifest = dict[str, GroupManifest]
 ##################################################
 
 
-def compare_file_inventory(main: SideManifest, dev: SideManifest) -> pd.DataFrame:
+def compare_file_inventory(
+    main: SideManifest,
+    dev: SideManifest,
+    expected_types: dict[str, set[str]] | None = None,
+) -> pd.DataFrame:
     """Compare presence and row counts of every per-group output file.
 
-    Generic over file types: it simply walks whatever file-type keys appear in
-    either manifest, so new outputs are picked up without code changes.
+    Generic over file types: it walks whatever file-type keys appear in either
+    manifest, so new outputs are picked up without code changes. When
+    `expected_types` is given, each group's platform-expected types are also
+    included, so an output absent from BOTH sides still shows up as a row with
+    in_main = in_dev = False (rather than being silently invisible).
 
     Args:
         main: Side manifest for the reference (main) run.
         dev: Side manifest for the candidate (dev) run.
+        expected_types: Optional {platform: {file_type, ...}} of expected
+            per-group outputs, used to surface types missing on both sides.
 
     Returns:
         Long-format DataFrame with one row per (group, file_type), columns:
@@ -82,6 +91,7 @@ def compare_file_inventory(main: SideManifest, dev: SideManifest) -> pd.DataFram
         row_delta, row_pct_change. n_rows_* are <NA> for JSON/unreadable files;
         row_delta/row_pct_change are <NA> unless both sides have a row count.
     """
+    expected_types = expected_types or {}
     groups = sorted(set(main) | set(dev))
     records: list[dict[str, object]] = []
     for group in groups:
@@ -92,6 +102,7 @@ def compare_file_inventory(main: SideManifest, dev: SideManifest) -> pd.DataFram
         file_types = sorted(
             (set(gm_main.files) if gm_main else set())
             | (set(gm_dev.files) if gm_dev else set())
+            | expected_types.get(platform, set())
         )
         for ft in file_types:
             fe_main = gm_main.files.get(ft) if gm_main else None
@@ -454,12 +465,19 @@ def kraken_bray_curtis(
         merged = _merge_abundance(main, dev, rank)
         grouped = merged.groupby(["group", "ribosomal"])
         for (group, ribosomal), sub in grouped:
+            # Bray-Curtis = sum|x_i - y_i| / (sum x + sum y). When both sides sum
+            # to 1 (the usual case) this is 0.5 * L1; but if a (group, ribosomal)
+            # set has reads on only one side the other side sums to 0, and this
+            # general form correctly yields 1.0 (disjoint) rather than 0.5. Both
+            # sides empty -> undefined (NaN).
+            denom = sub["rel_main"].sum() + sub["rel_dev"].sum()
+            bc = sub["abs_diff"].sum() / denom if denom > 0 else float("nan")
             records.append(
                 {
                     "group": group,
                     "ribosomal": ribosomal,
                     "rank": rank,
-                    "bray_curtis": 0.5 * sub["abs_diff"].sum(),
+                    "bray_curtis": bc,
                     "n_taxa_union": len(sub),
                 }
             )
@@ -538,6 +556,11 @@ ROOT_TAXID = 1
 # ancestor is the tree root (e.g. a virus reassigned to a cellular organism).
 SHARED_HIGHER = "shared-higher-taxon"
 CROSS_ROOT = "cross-root"
+# A taxid that is not present in the (dev) taxonomy at all — e.g. a main-side
+# assignment whose taxid was merged or deleted by the time of the dev taxonomy.
+# This is a taxonomy-versioning artifact, NOT a severe biological reassignment,
+# so it gets its own bucket rather than being lumped into cross-root.
+UNRESOLVED_TAXID = "unresolved-taxid"
 
 
 class TaxonomyTree:
@@ -605,10 +628,14 @@ class TaxonomyTree:
         (e.g. both under `Viruses` but different realms, or one is an ancestor of
         the other at an unranked node) returns 'shared-higher-taxon'. When their
         only common ancestor is the tree root (e.g. a virus reassigned to a
-        cellular organism) returns 'cross-root'.
+        cellular organism) returns 'cross-root'. When either taxid is absent from
+        the taxonomy entirely (merged/deleted across index versions) returns
+        'unresolved-taxid' — a versioning artifact, distinct from cross-root.
         """
         if a == b:
             return "identical"
+        if a not in self.parent or b not in self.parent:
+            return UNRESOLVED_TAXID
         ra = self.rank_ancestors(a)
         rb = self.rank_ancestors(b)
         for rank in ORDERED_RANKS:
@@ -808,6 +835,7 @@ def bucket_summary(reassignment_detail: pd.DataFrame) -> pd.DataFrame:
         *(f"same-{r}" for r in ORDERED_RANKS),
         SHARED_HIGHER,
         CROSS_ROOT,
+        UNRESOLVED_TAXID,
     ]
     if reassignment_detail.empty:
         return pd.DataFrame(columns=["scope", "bucket", "n_reads"])
@@ -1014,7 +1042,9 @@ MAD_THRESHOLD = 3.5
 COHORT_MIN_FRACTION = 0.25
 
 
-def mad_outlier_mask(values: pd.Series, threshold: float = MAD_THRESHOLD) -> pd.Series:
+def mad_outlier_mask(
+    values: pd.Series, threshold: float = MAD_THRESHOLD, two_sided: bool = True
+) -> pd.Series:
     """Boolean mask of robust (MAD-based) outliers in `values`.
 
     Uses the modified z-score 0.6745*(x - median)/MAD. When the MAD is zero
@@ -1024,6 +1054,12 @@ def mad_outlier_mask(values: pd.Series, threshold: float = MAD_THRESHOLD) -> pd.
     Args:
         values: Numeric series (a cohort of comparable measurements).
         threshold: Modified-z cutoff above which a value is an outlier.
+        two_sided: If True, flag both high and low outliers (|z| > threshold) —
+            appropriate for signed deltas where either direction is notable. If
+            False, flag only upper-tail outliers (z > threshold) — appropriate
+            for positive-only "worse = larger" metrics (a dissimilarity, a loss
+            %, an agreement-rate drop), so an unusually *low* value is not
+            flagged as a regression.
 
     Returns:
         Boolean Series aligned to `values`.
@@ -1034,7 +1070,7 @@ def mad_outlier_mask(values: pd.Series, threshold: float = MAD_THRESHOLD) -> pd.
     if not mad or pd.isna(mad):
         return pd.Series(False, index=values.index)
     robust_z = 0.6745 * (v - med) / mad
-    return robust_z.abs() > threshold
+    return robust_z.abs() > threshold if two_sided else robust_z > threshold
 
 
 def _flag_records(
@@ -1071,15 +1107,18 @@ def _flag_records(
     vals = pd.to_numeric(work[value_col], errors="coerce")
     compare = vals.abs() if direction == "abs" else vals
     fixed = (compare > threshold).fillna(False)
+    # Positive-only metrics get an upper-tail MAD test, so an unusually LOW value
+    # (e.g. a low Bray-Curtis or loss %) is not flagged as a cohort regression.
+    two_sided = direction == "abs"
     if cohort_cols is None:
         cohort = pd.Series(False, index=work.index)
     elif cohort_cols:
         cohort = work.groupby(cohort_cols)[value_col].transform(
-            lambda s: mad_outlier_mask(s)
+            lambda s: mad_outlier_mask(s, two_sided=two_sided)
         )
         cohort = cohort.fillna(False).astype(bool)
     else:
-        cohort = mad_outlier_mask(vals)
+        cohort = mad_outlier_mask(vals, two_sided=two_sided)
     # Magnitude floor: a cohort outlier in a near-constant cohort can have a huge
     # robust-z yet a trivial magnitude. Require it to also clear a fraction of the
     # fixed threshold so we don't flag sub-noise differences.

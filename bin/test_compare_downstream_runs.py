@@ -9,6 +9,7 @@ import gzip
 from pathlib import Path
 
 import compare_downstream_runs as cdr
+import pytest
 
 
 def _write_tsv_gz(path: Path, header: list[str], rows: list[list]) -> None:
@@ -23,19 +24,25 @@ def _write_tsv_gz(path: Path, header: list[str], rows: list[list]) -> None:
 ###########################
 
 
+# Wholly invented group identifiers (no real site/date data) that still exercise
+# the underscore- and hyphen-containing group-name parsing.
+_USCORE_GROUP = "Demo_Site_19990101"
+_HYPHEN_GROUP = "XX-000000-Demo-NAS-P1"
+
+
 class TestStripGroupPrefix:
-    GROUPS = ["CA_Riverside_20250814", "PZ-251126-Copl-NAS-P1"]
+    GROUPS = [_USCORE_GROUP, _HYPHEN_GROUP]
 
     def test_underscore_group_matched_by_longest(self) -> None:
         # Group names contain underscores; must not split naively.
         got = cdr._strip_group_prefix(
-            "CA_Riverside_20250814_qc_basic_stats_raw.tsv.gz", self.GROUPS
+            f"{_USCORE_GROUP}_qc_basic_stats_raw.tsv.gz", self.GROUPS
         )
-        assert got == ("CA_Riverside_20250814", "qc_basic_stats_raw")
+        assert got == (_USCORE_GROUP, "qc_basic_stats_raw")
 
     def test_json_suffix_stripped(self) -> None:
-        got = cdr._strip_group_prefix("PZ-251126-Copl-NAS-P1_fastp.json", self.GROUPS)
-        assert got == ("PZ-251126-Copl-NAS-P1", "fastp")
+        got = cdr._strip_group_prefix(f"{_HYPHEN_GROUP}_fastp.json", self.GROUPS)
+        assert got == (_HYPHEN_GROUP, "fastp")
 
     def test_unknown_prefix_returns_none(self) -> None:
         assert cdr._strip_group_prefix("stray_file.tsv.gz", self.GROUPS) is None
@@ -173,3 +180,168 @@ def test_read_tsv_handles_leading_quote(tmp_path: Path) -> None:
     path.write_text('a\tb\n"x\ty\n')
     df = cdr.read_tsv(path)
     assert df.iloc[0]["a"] == '"x'
+
+
+###########################
+# end-to-end main()       #
+###########################
+
+
+def _build_downstream_tree(root: Path, side: str) -> None:
+    """Write a tiny synthetic results_downstream/ tree for one side.
+
+    One short-read group (G_ILL) and one ONT group (G_ONT), with wholly invented
+    taxids/names. bracken/duplicate_stats/fastp are omitted so the run also
+    exercises the 'expected output missing on both sides' path. `side` ('main'
+    or 'dev') tweaks one read's assignment to create a reassignment in dev.
+    """
+    d = root / "results_downstream"
+    d.mkdir(parents=True, exist_ok=True)
+    seq2_taxid = 10 if side == "main" else 20  # dev reassigns read 2: 10 -> 20
+
+    for group in ("G_ILL", "G_ONT"):
+        _write_tsv_gz(
+            d / f"{group}_validation_hits.tsv.gz",
+            [
+                "seq_id",
+                "sample",
+                "aligner_taxid_lca",
+                "group",
+                "validation_distance_aligner",
+            ],
+            [
+                ["r1", group, 10, group, 0],
+                ["r2", group, seq2_taxid, group, 1],
+            ],
+        )
+        _write_tsv_gz(
+            d / f"{group}_kraken.tsv.gz",
+            ["group", "ribosomal", "rank", "taxid", "name", "n_reads_clade"],
+            [
+                [group, "FALSE", "S", 10, "sp10", 80 if side == "main" else 60],
+                [group, "FALSE", "S", 20, "sp20", 20 if side == "main" else 40],
+                [group, "TRUE", "S", 10, "sp10", 50],
+            ],
+        )
+        for stage in ("raw", "cleaned"):
+            _write_tsv_gz(
+                d / f"{group}_qc_basic_stats_{stage}.tsv.gz",
+                [
+                    "percent_gc",
+                    "mean_seq_len",
+                    "n_reads_single",
+                    "n_read_pairs",
+                    "percent_duplicates",
+                    "n_bases_approx",
+                    "per_base_sequence_quality",
+                    "stage",
+                    "sample",
+                    "group",
+                ],
+                [[45, 150, 1000, 500, 10.0, 150000, "pass", stage, group, group]],
+            )
+        _write_tsv_gz(
+            d / f"{group}_read_counts.tsv.gz",
+            ["sample", "n_reads_single", "n_read_pairs", "group"],
+            [[group, 1000, 500, group]],
+        )
+    # clade_counts only for the short-read group (marks it Illumina).
+    _write_tsv_gz(
+        root / "results_downstream" / "G_ILL_clade_counts.tsv.gz",
+        [
+            "group",
+            "taxid",
+            "parent_taxid",
+            "reads_direct_total",
+            "reads_direct_dedup",
+            "reads_clade_total",
+            "reads_clade_dedup",
+        ],
+        [
+            ["G_ILL", 5, 10239, 0, 0, 100, 100],  # family FamX
+            ["G_ILL", 10, 5, 80, 80, 80, 80],  # species
+        ],
+    )
+
+
+def _build_index(root: Path) -> None:
+    """Write a tiny synthetic index (taxonomy-nodes.dmp + annotated viral DB)."""
+    res = root / "output" / "results"
+    res.mkdir(parents=True, exist_ok=True)
+    (res / "taxonomy-nodes.dmp").write_text(
+        "1\t|\t1\t|\tno rank\t|\tXX\t|\n"
+        "10239\t|\t1\t|\tacellular root\t|\tXX\t|\n"
+        "5\t|\t10239\t|\tfamily\t|\tXX\t|\n"
+        "10\t|\t5\t|\tspecies\t|\tXX\t|\n"
+        "20\t|\t5\t|\tspecies\t|\tXX\t|\n"
+    )
+    import gzip as _gz
+
+    ann = res / "total-virus-db-annotated.tsv.gz"
+    header = ["taxid", "name", "rank", "taxid_species", "infection_status_vertebrate"]
+    rows = [
+        [5, "FamX", "family", 5, 1],
+        [10, "sp10", "species", 10, 1],
+        [20, "sp20", "species", 20, 1],
+    ]
+    with _gz.open(ann, "wt") as fh:
+        fh.write("\t".join(header) + "\n")
+        for r in rows:
+            fh.write("\t".join(str(v) for v in r) + "\n")
+
+
+def test_main_end_to_end(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    import sys
+
+    main_root = tmp_path / "main"
+    dev_root = tmp_path / "dev"
+    index_root = tmp_path / "index"
+    out = tmp_path / "out"
+    _build_downstream_tree(main_root, "main")
+    _build_downstream_tree(dev_root, "dev")
+    _build_index(index_root)
+
+    argv = [
+        "compare_downstream_runs.py",
+        "--main",
+        str(main_root),
+        "--dev",
+        str(dev_root),
+        "--index",
+        str(index_root),
+        "--out",
+        str(out),
+    ]
+    monkeypatch.setattr(sys, "argv", argv)
+    cdr.main()
+
+    import pandas as pd
+
+    # Core outputs exist.
+    for name in (
+        "flags.tsv",
+        "file_inventory.tsv",
+        "column_conformance.tsv",
+        "qc_numeric.tsv",
+        "kraken_bray_curtis.tsv",
+        "viral_read_status.tsv",
+        "viral_reassignment_buckets.tsv",
+        "clade_rank_shares.tsv",
+    ):
+        assert (out / name).exists(), f"missing {name}"
+
+    inv = pd.read_csv(out / "file_inventory.tsv", sep="\t")
+    # Platform inference: G_ILL short-read, G_ONT ONT.
+    assert inv[inv.group == "G_ILL"].platform.iloc[0] == "illumina"
+    assert inv[inv.group == "G_ONT"].platform.iloc[0] == "ont"
+    # C2: bracken is expected for Illumina but absent on BOTH sides -> still a row.
+    brk = inv[(inv.group == "G_ILL") & (inv.file_type == "bracken")]
+    assert len(brk) == 1
+    assert not bool(brk.iloc[0].in_main) and not bool(brk.iloc[0].in_dev)
+
+    # The dev reassignment (read r2: 10 -> 20, same family) is captured.
+    status = pd.read_csv(out / "viral_read_status.tsv", sep="\t")
+    gil = status[(status.group == "G_ILL") & (status.scope == "vertebrate")].iloc[0]
+    assert gil.n_reassigned == 1
+    buckets = pd.read_csv(out / "viral_reassignment_buckets.tsv", sep="\t")
+    assert (buckets.bucket == "same-family").any()

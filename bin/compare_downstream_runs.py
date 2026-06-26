@@ -65,9 +65,12 @@ handler.setFormatter(formatter)
 logger.handlers.clear()
 logger.addHandler(handler)
 
-# File-type key used to decide a group is short-read (Illumina/Aviti) rather
-# than ONT: only short-read DOWNSTREAM runs emit clade counts.
-SHORTREAD_MARKER = "clade_counts"
+# File-type keys emitted only by short-read (Illumina/Aviti) DOWNSTREAM runs,
+# never by ONT. A group is classified ONT only when it has NONE of these, so a
+# short-read group that is merely *missing* one of them (e.g. a dropped
+# clade_counts) is still treated as short-read and the gap is surfaced as a
+# missing expected output rather than silently relabelled ONT.
+SHORTREAD_ONLY_TYPES = ("clade_counts", "duplicate_stats", "fastp")
 
 
 ###########
@@ -97,8 +100,10 @@ def stage_results(root: str, local_dir: Path) -> Path:
     local_dir.mkdir(parents=True, exist_ok=True)
     if src.startswith("s3://"):
         logger.info(f"Syncing {src} -> {local_dir}")
+        # --delete mirrors the source, so a re-run into the same out dir cannot
+        # retain files that were removed from the source between runs.
         subprocess.run(
-            ["aws", "s3", "sync", src, str(local_dir), "--no-progress"],
+            ["aws", "s3", "sync", src, str(local_dir), "--no-progress", "--delete"],
             check=True,
         )
         return local_dir
@@ -181,9 +186,12 @@ def discover_side(results_dir: Path) -> dm.SideManifest:
             entry = dm.FileEntry(present=True, n_rows=None, columns=None)
         manifest[group].files[file_type] = entry
 
-    # Infer platform from file presence (short-read emits clade counts).
+    # Infer platform from file presence: a group is ONT only if it has NONE of
+    # the short-read-only output types (so a short-read group missing just one of
+    # them is still short-read, and the missing file is surfaced in Focus 4).
     for gm in manifest.values():
-        gm.platform = "illumina" if SHORTREAD_MARKER in gm.files else "ont"
+        has_shortread_only = any(t in gm.files for t in SHORTREAD_ONLY_TYPES)
+        gm.platform = "illumina" if has_shortread_only else "ont"
     return manifest
 
 
@@ -463,6 +471,11 @@ def main() -> None:
     """Run the DOWNSTREAM comparison and write tables to the output directory."""
     args = parse_arguments()
     args.out.mkdir(parents=True, exist_ok=True)
+    # Clear this script's own output tables from any prior run so a skipped focus
+    # (e.g. no --index) cannot leave stale tables behind. REVIEW.md (the human's
+    # artifact) is *.md and is left untouched.
+    for stale in args.out.glob("*.tsv"):
+        stale.unlink()
     stage_dir = args.out / "_staged"
     logger.info(f"Comparing DOWNSTREAM output: main={args.main} dev={args.dev}")
 
@@ -479,8 +492,12 @@ def main() -> None:
     # Quantitative tables that feed the consolidated flags (Focus 1-3).
     outputs: dict[str, pd.DataFrame] = {}
 
-    # Focus 4: schema-driven file/column inventory.
-    inventory = dm.compare_file_inventory(main_manifest, dev_manifest)
+    # Focus 4: schema-driven file/column inventory. Pass the platform-expected
+    # output types so a file missing from BOTH runs still surfaces as a row.
+    expected_types = expected_downstream_types(args.pyproject)
+    inventory = dm.compare_file_inventory(
+        main_manifest, dev_manifest, expected_types
+    )
     write_tsv(inventory, args.out / "file_inventory.tsv")
     columns = dm.compare_columns_to_schema(main_manifest, dev_manifest, schema_columns)
     write_tsv(columns, args.out / "column_conformance.tsv")
