@@ -19,7 +19,7 @@ These guidelines represent best practices to implement in new code, though some 
     - We use a workflow of workflows organization (`main.nf` -> workflow -> subworkflow -> process). 
     - Aim for one process per module, in a `main.nf` file.
     - Avoid creating duplicate processes. If you need a slight variation on existing behavior, parameterize or otherwise tweak an existing process.
-    - Shared Groovy helpers used by multiple `exec:` blocks live in top-level `lib/*.groovy` files (auto-loaded by Nextflow). See `lib/SentinelUtils.groovy` for an example.
+    - Shared Groovy helpers used by multiple `exec:` blocks live in top-level `lib/*.groovy` files. Nextflow auto-loads these for the project's own `exec:` blocks; alternatively a helper can be loaded explicitly with `new GroovyClassLoader().parseClass(file(...))` so it resolves regardless of which project is the Nextflow entrypoint. `lib/SentinelUtils.groovy` (used by `modules/local/writeSentinel`) is loaded the explicit way.
     - Avoid very large `script` or `shell` blocks in Nextflow processes where possible.
         - If the block gets bigger than about 20 lines, we probably want to split it into multiple processes, or move functionality into a Rust or Python script. 
 - Documentation

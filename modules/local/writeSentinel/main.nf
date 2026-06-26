@@ -31,6 +31,9 @@ process WRITE_SENTINEL {
             pyproject_text, expected_keys as List<String>, wildcard as String, wildcard_values as List<String>)
         sentinel_utils.waitForFiles(expected, params_map.output_dir as String,
             sentinel_utils.resolveMaxWaitMins(params_map)) { p -> file(p).exists() }
+        // A blank schema_prefix yields generic startedAt/completedAt field names; this
+        // keeps the module's marker schema reusable by callers that don't want the
+        // workflow-prefixed names that run/downstream use.
         def started_field = schema_prefix ? "${schema_prefix}StartedAt" : "startedAt"
         def completed_field = schema_prefix ? "${schema_prefix}CompletedAt" : "completedAt"
         def sentinel_content = [
