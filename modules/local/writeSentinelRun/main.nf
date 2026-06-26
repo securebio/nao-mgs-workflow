@@ -17,7 +17,7 @@ process WRITE_SENTINEL_RUN {
         def pyprojectText = file(params_map.pyproject_path).text
         def keys = ["run"]
         if (params_map.platform == "illumina") keys.add("run-shortread-extra")
-        def expected = SentinelUtils.getExpectedOutputs(pyprojectText, keys, "SAMPLE", sample_names as List<String>)
+        def expected = SentinelUtils.getExpectedOutputs(pyprojectText, keys, "SAMPLE", sample_names as List)
         SentinelUtils.waitForFiles(expected, params_map.output_dir as String, SentinelUtils.resolveMaxWaitMins(params_map)) { p -> file(p).exists() }
         def sentinelContent = [
             runStartedAt: start_time,
