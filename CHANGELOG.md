@@ -2,6 +2,7 @@
 
 - Replace channel-operator `.splitCsv(header: true)` with the `flatMap { f -> f.splitCsv(header: true) }` Path-method form in the loadSampleSheet (x2) and loadDownstreamData (x1) subworkflows, preparing for static typing (the channel-operator `splitCsv` is non-statically-typed). Mechanical refactor; no behavioral change.
 - Replace process/subworkflow `.out` property access (`PROCESS.out.name`) with named invocation results (`var = PROCESS(...); var.name`) across main.nf, INDEX/DOWNSTREAM workflows, and the extractViralReads/checkVersionCompatibility/validateViralAssignments subworkflows, preparing channels for static typing (typed channels don't support `.out` property access). Mechanical refactor; no behavioral change.
+- Add `bin/compare_downstream_runs.py` / `bin/downstream_metrics.py` and the paired `benchmark-downstream` agent skill for comparing two DOWNSTREAM runs (e.g. across a pipeline change) from their existing output files. Developer/agent tooling only: reads existing DOWNSTREAM outputs and adds no new pipeline outputs, behavior, or schema changes.
 - CI: Extend the deferred `26.04.0`–`3` `.nextflowignore` entries to `2026-07-31` and add `26.04.4`, keeping `check-nextflow-version` green on dev (pinned Nextflow `25.10.4` unchanged).
 - Scale `MARK_ALIGNMENT_DUPLICATES` and `VSEARCH_CLUSTER` memory by input size via per-label tier closures (~1.5× headroom) to address OOM issues on large samples.
 - Exclude five viral genome records with rRNA contamination from the genome reference via `ref/hv_patterns_exclude.txt`.

@@ -8,7 +8,11 @@ import downstream_metrics as dm
 import pandas as pd
 
 
-def _entry(present=True, n_rows=None, columns=None) -> dm.FileEntry:
+def _entry(
+    present: bool = True,
+    n_rows: int | None = None,
+    columns: list[str] | None = None,
+) -> dm.FileEntry:
     return dm.FileEntry(present=present, n_rows=n_rows, columns=columns)
 
 
@@ -26,7 +30,7 @@ def _manifest(spec: dict[str, tuple[str, dict[str, dm.FileEntry]]]) -> dm.SideMa
 
 
 class TestCompareFileInventory:
-    def test_row_delta_and_pct(self):
+    def test_row_delta_and_pct(self) -> None:
         main = _manifest(
             {"G1": ("illumina", {"validation_hits": _entry(n_rows=100, columns=["a"])})}
         )
@@ -39,7 +43,7 @@ class TestCompareFileInventory:
         assert row.row_pct_change == 50.0
         assert row.in_main and row.in_dev
 
-    def test_presence_mismatch_one_side(self):
+    def test_presence_mismatch_one_side(self) -> None:
         main = _manifest({"G1": ("ont", {"kraken": _entry(n_rows=10, columns=["t"])})})
         dev = _manifest(
             {
@@ -54,7 +58,7 @@ class TestCompareFileInventory:
         # No row count on the absent side -> delta is null, not a spurious number.
         assert pd.isna(g2.row_delta)
 
-    def test_zero_rows_main_gives_null_pct_not_divide_by_zero(self):
+    def test_zero_rows_main_gives_null_pct_not_divide_by_zero(self) -> None:
         main = _manifest(
             {"G1": ("illumina", {"bracken": _entry(n_rows=0, columns=[])})}
         )
@@ -64,7 +68,7 @@ class TestCompareFileInventory:
         assert row.row_delta == 3
         assert pd.isna(row.row_pct_change)
 
-    def test_json_file_has_null_rows(self):
+    def test_json_file_has_null_rows(self) -> None:
         main = _manifest({"G1": ("illumina", {"fastp": _entry(n_rows=None)})})
         dev = _manifest({"G1": ("illumina", {"fastp": _entry(n_rows=None)})})
         df = dm.compare_file_inventory(main, dev)
@@ -79,7 +83,7 @@ class TestCompareFileInventory:
 
 
 class TestCompareColumnsToSchema:
-    def test_conformant_columns_report_clean(self):
+    def test_conformant_columns_report_clean(self) -> None:
         cols = ["seq_id", "group"]
         man = _manifest({"G1": ("illumina", {"validation_hits": _entry(columns=cols)})})
         df = dm.compare_columns_to_schema(man, man, {"validation_hits": cols})
@@ -89,7 +93,7 @@ class TestCompareColumnsToSchema:
         assert row.cols_only_in_main == ""
         assert not row.order_changed
 
-    def test_empty_file_reports_empty_marker_not_full_schema(self):
+    def test_empty_file_reports_empty_marker_not_full_schema(self) -> None:
         man = _manifest({"G1": ("illumina", {"bracken": _entry(n_rows=0, columns=[])})})
         df = dm.compare_columns_to_schema(
             man, man, {"bracken": ["taxid", "name", "fraction_total_reads"]}
@@ -98,7 +102,7 @@ class TestCompareColumnsToSchema:
         assert row.missing_vs_schema_main == "(empty file)"
         assert row.missing_vs_schema_dev == "(empty file)"
 
-    def test_column_added_in_dev_is_flagged(self):
+    def test_column_added_in_dev_is_flagged(self) -> None:
         main = _manifest({"G1": ("illumina", {"kraken": _entry(columns=["taxid"])})})
         dev = _manifest(
             {"G1": ("illumina", {"kraken": _entry(columns=["taxid", "new_col"])})}
@@ -109,7 +113,7 @@ class TestCompareColumnsToSchema:
         assert row.cols_only_in_main == ""
         assert row.extra_vs_schema_dev == "new_col"
 
-    def test_reorder_only_sets_order_changed(self):
+    def test_reorder_only_sets_order_changed(self) -> None:
         main = _manifest({"G1": ("illumina", {"kraken": _entry(columns=["a", "b"])})})
         dev = _manifest({"G1": ("illumina", {"kraken": _entry(columns=["b", "a"])})})
         df = dm.compare_columns_to_schema(main, dev, {"kraken": ["a", "b"]})
@@ -117,7 +121,7 @@ class TestCompareColumnsToSchema:
         assert row.order_changed
         assert row.cols_only_in_main == "" and row.cols_only_in_dev == ""
 
-    def test_file_type_without_schema_still_reported(self):
+    def test_file_type_without_schema_still_reported(self) -> None:
         man = _manifest({"G1": ("illumina", {"mystery": _entry(columns=["x"])})})
         df = dm.compare_columns_to_schema(man, man, {})
         row = df[df.file_type == "mystery"].iloc[0]
@@ -132,14 +136,19 @@ class TestCompareColumnsToSchema:
 ###############################
 
 
-def _qc_row(group, sample, stage, platform, **vals) -> dict:
-    base = {"group": group, "sample": sample, "stage": stage, "platform": platform}
+def _qc_row(group: str, sample: str, stage: str, platform: str, **vals: object) -> dict:
+    base: dict[str, object] = {
+        "group": group,
+        "sample": sample,
+        "stage": stage,
+        "platform": platform,
+    }
     base.update(vals)
     return base
 
 
 class TestCompareQcNumeric:
-    def test_delta_and_pct_per_key(self):
+    def test_delta_and_pct_per_key(self) -> None:
         main = pd.DataFrame(
             [
                 _qc_row(
@@ -171,7 +180,7 @@ class TestCompareQcNumeric:
         gc = out[out.metric == "percent_gc"].iloc[0]
         assert gc.delta == 1.0
 
-    def test_na_metric_yields_na_delta(self):
+    def test_na_metric_yields_na_delta(self) -> None:
         # ONT: n_read_pairs is NA on both sides.
         main = pd.DataFrame(
             [_qc_row("G1", "S1", "raw", "ont", n_read_pairs=None, n_reads_single=500)]
@@ -185,7 +194,7 @@ class TestCompareQcNumeric:
         single = out[out.metric == "n_reads_single"].iloc[0]
         assert single.delta == -20
 
-    def test_zero_main_gives_na_pct(self):
+    def test_zero_main_gives_na_pct(self) -> None:
         main = pd.DataFrame([_qc_row("G1", "S1", "raw", "illumina", n_reads_single=0)])
         dev = pd.DataFrame([_qc_row("G1", "S1", "raw", "illumina", n_reads_single=5)])
         out = dm.compare_qc_numeric(main, dev, metrics=("n_reads_single",))
@@ -196,7 +205,7 @@ class TestCompareQcNumeric:
 class TestCompareQcFlags:
     FLAGS = ["per_base_sequence_quality", "per_tile_sequence_quality"]
 
-    def test_only_changed_flags_returned(self):
+    def test_only_changed_flags_returned(self) -> None:
         main = pd.DataFrame(
             [
                 {
@@ -223,7 +232,7 @@ class TestCompareQcFlags:
         assert list(out.check) == ["per_base_sequence_quality"]
         assert out.iloc[0].main_flag == "pass" and out.iloc[0].dev_flag == "fail"
 
-    def test_na_vs_na_not_flagged(self):
+    def test_na_vs_na_not_flagged(self) -> None:
         # Both sides NA must NOT register as a change (the float-NaN bug).
         main = pd.DataFrame(
             [
@@ -254,7 +263,7 @@ class TestCompareQcFlags:
 ###############################
 
 
-def _kr(group, ribosomal, rank, taxid, name, n) -> dict:
+def _kr(group: str, ribosomal: bool, rank: str, taxid: int, name: str, n: int) -> dict:
     return {
         "group": group,
         "ribosomal": ribosomal,
@@ -266,7 +275,7 @@ def _kr(group, ribosomal, rank, taxid, name, n) -> dict:
 
 
 class TestKrakenRelativeAbundance:
-    def test_filters_rank_and_aggregates_samples_to_fraction(self):
+    def test_filters_rank_and_aggregates_samples_to_fraction(self) -> None:
         # Two species at rank S (plus a genus row that must be ignored).
         df = pd.DataFrame(
             [
@@ -280,27 +289,27 @@ class TestKrakenRelativeAbundance:
         rel = dict(zip(out.taxid, out.rel, strict=True))
         assert rel[1] == 0.75 and rel[2] == 0.25
 
-    def test_zero_total_set_dropped(self):
+    def test_zero_total_set_dropped(self) -> None:
         df = pd.DataFrame([_kr("G1", False, "S", 1, "sp1", 0)])
         out = dm.kraken_relative_abundance(df, "S")
         assert out.empty
 
 
 class TestKrakenBrayCurtis:
-    def test_identical_profiles_give_zero(self):
+    def test_identical_profiles_give_zero(self) -> None:
         df = pd.DataFrame(
             [_kr("G1", False, "S", 1, "a", 50), _kr("G1", False, "S", 2, "b", 50)]
         )
         out = dm.kraken_bray_curtis(df, df, ranks=("S",))
         assert out.iloc[0].bray_curtis == 0.0
 
-    def test_disjoint_profiles_give_one(self):
+    def test_disjoint_profiles_give_one(self) -> None:
         main = pd.DataFrame([_kr("G1", False, "S", 1, "a", 100)])
         dev = pd.DataFrame([_kr("G1", False, "S", 2, "b", 100)])
         out = dm.kraken_bray_curtis(main, dev, ranks=("S",))
         assert out.iloc[0].bray_curtis == 1.0
 
-    def test_known_intermediate_value(self):
+    def test_known_intermediate_value(self) -> None:
         # main 80/20, dev 50/50 -> TVD = 0.5*(|.8-.5|+|.2-.5|) = 0.3
         main = pd.DataFrame(
             [_kr("G1", False, "S", 1, "a", 80), _kr("G1", False, "S", 2, "b", 20)]
@@ -313,7 +322,7 @@ class TestKrakenBrayCurtis:
 
 
 class TestKrakenTopMovers:
-    def test_orders_by_abs_change_and_signs_delta(self):
+    def test_orders_by_abs_change_and_signs_delta(self) -> None:
         main = pd.DataFrame(
             [_kr("G1", False, "S", 1, "a", 90), _kr("G1", False, "S", 2, "b", 10)]
         )
@@ -385,44 +394,44 @@ def _synthetic_tree() -> dm.TaxonomyTree:
 
 
 class TestTaxonomyTree:
-    def setup_method(self):
+    def setup_method(self) -> None:
         self.tax = _synthetic_tree()
 
-    def test_identical(self):
+    def test_identical(self) -> None:
         assert self.tax.divergence_bucket(401, 401) == "identical"
 
-    def test_same_genus_siblings(self):
+    def test_same_genus_siblings(self) -> None:
         # 401 and 402 share genus 300.
         assert self.tax.divergence_bucket(401, 402) == "same-genus"
         assert self.tax.edge_distance(401, 402) == 2
 
-    def test_same_family_different_genus(self):
+    def test_same_family_different_genus(self) -> None:
         # 401 (under genus 300/family 200) vs 410 (family 210) share realm 100.
         assert self.tax.divergence_bucket(401, 410) == "same-realm"
 
-    def test_same_realm(self):
+    def test_same_realm(self) -> None:
         # 401 (realm 100) vs 500 (realm 110) -> only share Viruses root.
         assert self.tax.divergence_bucket(401, 500) == dm.SHARED_HIGHER
 
-    def test_reassigned_up_to_viral_root(self):
+    def test_reassigned_up_to_viral_root(self) -> None:
         # A specific species reassigned to Viruses (10239) shares the viral root.
         assert self.tax.divergence_bucket(401, 10239) == dm.SHARED_HIGHER
 
-    def test_cross_root_virus_to_cellular(self):
+    def test_cross_root_virus_to_cellular(self) -> None:
         # 401 (virus) vs 600 (bacterial species) meet only at root.
         assert self.tax.divergence_bucket(401, 600) == dm.CROSS_ROOT
 
-    def test_edge_distance_via_lca(self):
+    def test_edge_distance_via_lca(self) -> None:
         # realmA and realmB sit under Viruses, so 401 and 500 meet at 10239:
         # 401->300->200->100->10239 (4 up); 500->110->10239 (2 up); total 6.
         assert self.tax.edge_distance(401, 500) == 6
 
 
 class TestJoinReadAssignments:
-    def _vh(self, rows):
+    def _vh(self, rows: list[list]) -> pd.DataFrame:
         return pd.DataFrame(rows, columns=["group", "seq_id", "aligner_taxid_lca"])
 
-    def test_lost_gained_same_reassigned(self):
+    def test_lost_gained_same_reassigned(self) -> None:
         main = self._vh([["G", "r1", 401], ["G", "r2", 401], ["G", "r3", 401]])
         dev = self._vh([["G", "r1", 401], ["G", "r2", 402], ["G", "r4", 500]])
         out = dm.join_read_assignments(main, dev)
@@ -434,7 +443,7 @@ class TestJoinReadAssignments:
 
 
 class TestSummariseAndBuckets:
-    def _joined(self):
+    def _joined(self) -> pd.DataFrame:
         main = pd.DataFrame(
             [["G", "r1", 401], ["G", "r2", 401], ["G", "r3", 600]],
             columns=["group", "seq_id", "aligner_taxid_lca"],
@@ -445,7 +454,7 @@ class TestSummariseAndBuckets:
         )
         return dm.join_read_assignments(main, dev)
 
-    def test_vertebrate_scope_filters(self):
+    def test_vertebrate_scope_filters(self) -> None:
         joined = self._joined()
         # 401/402 vertebrate; 600 (bacterial) not.
         summ = dm.summarize_read_status(joined, vert={401, 402})
@@ -455,7 +464,7 @@ class TestSummariseAndBuckets:
         all_ = summ[summ.scope == "all"].iloc[0]
         assert all_.n_lost == 1
 
-    def test_bucket_summary_ordered(self):
+    def test_bucket_summary_ordered(self) -> None:
         joined = self._joined()
         tax = _synthetic_tree()
         detail = dm.reassignment_distances(joined, tax, vert={401, 402})
@@ -475,12 +484,12 @@ class TestCladeRankShares:
         ]
     )
 
-    def _clade(self, rows):
+    def _clade(self, rows: list[list]) -> pd.DataFrame:
         return pd.DataFrame(
             rows, columns=["group", "taxid", "reads_clade_total", "reads_clade_dedup"]
         )
 
-    def test_family_shares_and_delta(self):
+    def test_family_shares_and_delta(self) -> None:
         main = self._clade([["G", 200, 75, 75], ["G", 210, 25, 25], ["G", 300, 99, 99]])
         dev = self._clade([["G", 200, 50, 50], ["G", 210, 50, 50], ["G", 300, 99, 99]])
         out = dm.clade_rank_shares(
@@ -496,7 +505,7 @@ class TestCladeRankShares:
         assert abs(fx.share_dev - 0.50) < 1e-9
         assert abs(fx.delta_pp - (-25.0)) < 1e-9
 
-    def test_family_dropped_in_dev(self):
+    def test_family_dropped_in_dev(self) -> None:
         main = self._clade([["G", 200, 50, 50], ["G", 210, 50, 50]])
         dev = self._clade([["G", 200, 100, 100]])
         out = dm.clade_rank_shares(
@@ -512,7 +521,7 @@ class TestCladeRankShares:
 
 
 class TestValidationAgreement:
-    def test_counts_and_rates(self):
+    def test_counts_and_rates(self) -> None:
         vh = pd.DataFrame(
             {
                 "group": ["G", "G", "G", "G"],
@@ -528,13 +537,13 @@ class TestValidationAgreement:
 
 
 class TestVertebrateStatusFlips:
-    def _ann(self, rows):
+    def _ann(self, rows: list[list]) -> pd.DataFrame:
         return pd.DataFrame(
             rows,
             columns=["taxid", "taxid_species", "name", "infection_status_vertebrate"],
         )
 
-    def test_gained_and_lost(self):
+    def test_gained_and_lost(self) -> None:
         old = self._ann([[1, 1, "a", "1"], [2, 2, "b", "0"], [3, 3, "c", "1"]])
         new = self._ann([[1, 1, "a", "1"], [2, 2, "b", "1"], [3, 3, "c", "0"]])
         out = dm.vertebrate_status_flips(old, new)
@@ -550,20 +559,20 @@ class TestVertebrateStatusFlips:
 
 
 class TestMadOutlierMask:
-    def test_flags_clear_outlier(self):
+    def test_flags_clear_outlier(self) -> None:
         s = pd.Series([1.0, 1.1, 0.9, 1.0, 10.0])
         mask = dm.mad_outlier_mask(s)
         assert mask.iloc[-1]
         assert not mask.iloc[0]
 
-    def test_zero_mad_flags_nothing(self):
+    def test_zero_mad_flags_nothing(self) -> None:
         # All identical -> MAD 0 -> no robust spread -> no flags.
         s = pd.Series([5.0, 5.0, 5.0, 5.0])
         assert not dm.mad_outlier_mask(s).any()
 
 
 class TestBuildFlags:
-    def test_fixed_threshold_on_bray_curtis(self):
+    def test_fixed_threshold_on_bray_curtis(self) -> None:
         bc = pd.DataFrame(
             {
                 "group": ["A", "B"],
@@ -577,7 +586,7 @@ class TestBuildFlags:
         assert "B" in flags.iloc[0].key
         assert "fixed" in flags.iloc[0].flag_type
 
-    def test_cohort_outlier_suppressed_below_magnitude_floor(self):
+    def test_cohort_outlier_suppressed_below_magnitude_floor(self) -> None:
         # mean_seq_len pct_change near zero everywhere; one slightly higher but
         # still trivial -> must NOT flag despite being a statistical outlier.
         qc = pd.DataFrame(
@@ -593,7 +602,7 @@ class TestBuildFlags:
         flags = dm.build_flags({"qc_numeric": qc})
         assert flags.empty
 
-    def test_cohort_outlier_flagged_when_magnitude_meaningful(self):
+    def test_cohort_outlier_flagged_when_magnitude_meaningful(self) -> None:
         # One group's reassignment rate is a clear, sizable cohort outlier.
         status = pd.DataFrame(
             {

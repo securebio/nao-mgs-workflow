@@ -26,18 +26,18 @@ def _write_tsv_gz(path: Path, header: list[str], rows: list[list]) -> None:
 class TestStripGroupPrefix:
     GROUPS = ["CA_Riverside_20250814", "PZ-251126-Copl-NAS-P1"]
 
-    def test_underscore_group_matched_by_longest(self):
+    def test_underscore_group_matched_by_longest(self) -> None:
         # Group names contain underscores; must not split naively.
         got = cdr._strip_group_prefix(
             "CA_Riverside_20250814_qc_basic_stats_raw.tsv.gz", self.GROUPS
         )
         assert got == ("CA_Riverside_20250814", "qc_basic_stats_raw")
 
-    def test_json_suffix_stripped(self):
+    def test_json_suffix_stripped(self) -> None:
         got = cdr._strip_group_prefix("PZ-251126-Copl-NAS-P1_fastp.json", self.GROUPS)
         assert got == ("PZ-251126-Copl-NAS-P1", "fastp")
 
-    def test_unknown_prefix_returns_none(self):
+    def test_unknown_prefix_returns_none(self) -> None:
         assert cdr._strip_group_prefix("stray_file.tsv.gz", self.GROUPS) is None
 
 
@@ -61,7 +61,7 @@ class TestDiscoverSide:
             _write_tsv_gz(d / f"{g}_clade_counts.tsv.gz", ["taxid", "group"], [[1, g]])
         return d
 
-    def test_illumina_inferred_from_clade_counts(self, tmp_path):
+    def test_illumina_inferred_from_clade_counts(self, tmp_path: Path) -> None:
         results = self._make_results(tmp_path / "ill", with_clade=True)
         manifest = cdr.discover_side(results)
         assert manifest["G1"].platform == "illumina"
@@ -72,12 +72,12 @@ class TestDiscoverSide:
             "aligner_taxid_lca",
         ]
 
-    def test_ont_inferred_when_no_clade_counts(self, tmp_path):
+    def test_ont_inferred_when_no_clade_counts(self, tmp_path: Path) -> None:
         results = self._make_results(tmp_path / "ont", with_clade=False)
         manifest = cdr.discover_side(results)
         assert manifest["G1"].platform == "ont"
 
-    def test_no_validation_hits_raises(self, tmp_path):
+    def test_no_validation_hits_raises(self, tmp_path: Path) -> None:
         d = tmp_path / "empty"
         d.mkdir()
         _write_tsv_gz(d / "G1_kraken.tsv.gz", ["taxid"], [[1]])
@@ -93,7 +93,7 @@ class TestDiscoverSide:
 ###########################
 
 
-def test_parse_taxonomy_nodes(tmp_path):
+def test_parse_taxonomy_nodes(tmp_path: Path) -> None:
     dmp = tmp_path / "nodes.dmp"
     # Real nodes.dmp rows carry further '\t|\t'-separated fields after rank
     # (embl code, division, ...) then a trailing '\t|'; include one so rank is
@@ -114,7 +114,7 @@ def test_parse_taxonomy_nodes(tmp_path):
 ###########################
 
 
-def test_load_schema_columns(tmp_path):
+def test_load_schema_columns(tmp_path: Path) -> None:
     schema_dir = tmp_path / "schemas"
     schema_dir.mkdir()
     (schema_dir / "kraken.schema.json").write_text(
@@ -124,7 +124,7 @@ def test_load_schema_columns(tmp_path):
     assert cols["kraken"] == ["taxid", "name"]
 
 
-def test_expected_downstream_types(tmp_path):
+def test_expected_downstream_types(tmp_path: Path) -> None:
     pyproject = tmp_path / "pyproject.toml"
     pyproject.write_text(
         "[tool.mgs-workflow]\n"
@@ -147,7 +147,7 @@ def test_expected_downstream_types(tmp_path):
 ###########################
 
 
-def test_load_qc_basic_stats_adds_platform(tmp_path):
+def test_load_qc_basic_stats_adds_platform(tmp_path: Path) -> None:
     d = tmp_path / "res"
     d.mkdir()
     _write_tsv_gz(
@@ -167,7 +167,7 @@ def test_load_qc_basic_stats_adds_platform(tmp_path):
     assert qc.iloc[0]["platform"] == "illumina"
 
 
-def test_read_tsv_handles_leading_quote(tmp_path):
+def test_read_tsv_handles_leading_quote(tmp_path: Path) -> None:
     # Quoting disabled: a field beginning with a quote must not be swallowed.
     path = tmp_path / "q.tsv"
     path.write_text('a\tb\n"x\ty\n')
