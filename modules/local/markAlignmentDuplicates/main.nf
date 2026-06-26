@@ -1,6 +1,6 @@
 // Tool source: rust-tools/mark_duplicates/
 process MARK_ALIGNMENT_DUPLICATES {
-    label "large"
+    label "mark_alignment_duplicates_resources"
     label "rust_tools"
     tag "id=${sample}"
     input:
