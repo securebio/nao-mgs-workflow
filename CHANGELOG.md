@@ -1,6 +1,7 @@
 # v3.2.2.0-dev
 
 - Replace channel-operator `.splitCsv(header: true)` with the `flatMap { f -> f.splitCsv(header: true) }` Path-method form in the loadSampleSheet (x2) and loadDownstreamData (x1) subworkflows, preparing for static typing (the channel-operator `splitCsv` is non-statically-typed). Mechanical refactor; no behavioral change.
+- CI: Extend the deferred `26.04.0`–`3` `.nextflowignore` entries to `2026-07-31` and add `26.04.4`, keeping `check-nextflow-version` green on dev (pinned Nextflow `25.10.4` unchanged).
 - Scale `MARK_ALIGNMENT_DUPLICATES` and `VSEARCH_CLUSTER` memory by input size via per-label tier closures (~1.5× headroom) to address OOM issues on large samples.
 - Exclude five viral genome records with rRNA contamination from the genome reference via `ref/hv_patterns_exclude.txt`.
 - Add `set -euo pipefail` to `BLASTN` module.
