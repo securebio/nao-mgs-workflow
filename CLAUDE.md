@@ -181,6 +181,10 @@ When creating new schemas, always include `primaryKey` and `example` fields on e
 
 After building a new `s3://nao-mgs-index/<DATE>` index, use the **`benchmark-index`** skill (`.claude/skills/benchmark-index/`) to vet it before adopting it for runs. It runs `bin/benchmark_index.py` to compare the new index against the previous one (per-DB size deltas, genome add/drop/per-species deltas categorized by reason, infection-status transitions, params diff) and fills in `review-template.md` to produce a structured `REVIEW.md` covering adopt-or-regenerate recommendations. Reach for it whenever an index rebuild has happened and a human needs to decide whether to adopt it.
 
+## Comparing DOWNSTREAM output before a release
+
+Before promoting `dev` to `main`, use the **`benchmark-downstream`** skill (`.claude/skills/benchmark-downstream/`) to diff the DOWNSTREAM output of the two runs and flag regressions for human review. It runs `bin/compare_downstream_runs.py` (munging/IO) with the per-metric calculations in `bin/downstream_metrics.py`, comparing both platforms across four focuses: viral assignments (read-level lost/gained/reassigned on `(group, seq_id)`, taxonomic-distance buckets, family/order clade-share breakdown, BLAST-validation agreement, vertebrate-status flips), kraken abundances (Bray-Curtis + top movers per ribosomal set), QC metrics, and a schema-driven file/column overview. It writes per-focus TSVs plus a consolidated `flags.tsv` (fixed thresholds + MAD cohort outliers); you fill in `review-template.md` to produce `REVIEW.md`. This is a holistic release diff (code + index + QC differ at once): it surfaces and flags differences for a human, makes no causal claim, and renders no verdict. The generated `REVIEW.md` and extracted tables are AWS-derived data and must not be committed.
+
 ## Maintaining This File
 
 This file should be kept in sync with the repository's code and documentation. When making changes that affect workflows, conventions, or tooling described here, update this file as part of the same PR.
