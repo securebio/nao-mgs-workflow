@@ -1,0 +1,330 @@
+nextflow_process {
+
+    name "Test process WRITE_SENTINEL"
+    script "modules/local/writeSentinel/main.nf"
+    process "WRITE_SENTINEL"
+    config "tests/configs/run.config"
+    tag "module"
+    tag "write_sentinel"
+
+    // ---- Whole-run sentinels (empty filename prefix, "run" schema, SAMPLE wildcard) ----
+
+    test("Should write run sentinel when all expected outputs exist") {
+        tag "expect_success"
+        when {
+            params {}
+            process {
+                '''
+                input[0] = ["done"]
+                input[1] = ["util", "sentinel.json", ["sample1"]]
+                input[2] = ["run", "run-shortread-extra"]
+                input[3] = "SAMPLE"
+                input[4] = "2026-01-01 00:00:00 UTC (+0000)"
+                input[5] = "run"
+                input[6] = [
+                    output_dir: "${projectDir}/test-data/writeSentinel/run/output_shortread",
+                    pyproject_path: "${projectDir}/test-data/writeSentinel/run/pyproject.toml",
+                    sentinel_utils_path: "${projectDir}/lib/SentinelUtils.groovy",
+                    sentinel_max_wait_mins: 1
+                ]
+                '''
+            }
+        }
+        then {
+            assert process.success
+            assert path(process.out.sentinel[0]).toFile().name == "sentinel.json"
+            def sentinel = new groovy.json.JsonSlurper().parse(
+                path(process.out.sentinel[0]).toFile()
+            )
+            assert sentinel.runStartedAt == "2026-01-01 00:00:00 UTC (+0000)"
+            assert sentinel.runCompletedAt != null
+            assert sentinel.runCompletedAt.contains("UTC")
+        }
+    }
+
+    test("Should write run sentinel for ONT (no shortread-extra patterns)") {
+        tag "expect_success"
+        when {
+            params {}
+            process {
+                '''
+                // ONT output dir has no shortread-extra files (no extra.json); the
+                // caller omits the run-shortread-extra key for ONT.
+                input[0] = ["done"]
+                input[1] = ["util", "sentinel.json", ["sample1"]]
+                input[2] = ["run"]
+                input[3] = "SAMPLE"
+                input[4] = "2026-01-01 00:00:00 UTC (+0000)"
+                input[5] = "run"
+                input[6] = [
+                    output_dir: "${projectDir}/test-data/writeSentinel/run/output_ont",
+                    pyproject_path: "${projectDir}/test-data/writeSentinel/run/pyproject.toml",
+                    sentinel_utils_path: "${projectDir}/lib/SentinelUtils.groovy",
+                    sentinel_max_wait_mins: 1
+                ]
+                '''
+            }
+        }
+        then {
+            assert process.success
+            def sentinel = new groovy.json.JsonSlurper().parse(
+                path(process.out.sentinel[0]).toFile()
+            )
+            assert sentinel.runStartedAt == "2026-01-01 00:00:00 UTC (+0000)"
+            assert sentinel.runCompletedAt != null
+        }
+    }
+
+    test("Should write generic startedAt/completedAt when schema_prefix is blank") {
+        tag "expect_success"
+        when {
+            params {}
+            process {
+                '''
+                input[0] = ["done"]
+                input[1] = ["util", "sentinel.json", ["sample1"]]
+                input[2] = ["run", "run-shortread-extra"]
+                input[3] = "SAMPLE"
+                input[4] = "2026-01-01 00:00:00 UTC (+0000)"
+                input[5] = ""
+                input[6] = [
+                    output_dir: "${projectDir}/test-data/writeSentinel/run/output_shortread",
+                    pyproject_path: "${projectDir}/test-data/writeSentinel/run/pyproject.toml",
+                    sentinel_utils_path: "${projectDir}/lib/SentinelUtils.groovy",
+                    sentinel_max_wait_mins: 1
+                ]
+                '''
+            }
+        }
+        then {
+            assert process.success
+            def sentinel = new groovy.json.JsonSlurper().parse(
+                path(process.out.sentinel[0]).toFile()
+            )
+            assert sentinel.startedAt == "2026-01-01 00:00:00 UTC (+0000)"
+            assert sentinel.completedAt != null
+            assert sentinel.runStartedAt == null
+        }
+    }
+
+    test("Should write run sentinel when output directory is on S3") {
+        tag "expect_success"
+        when {
+            params {}
+            process {
+                '''
+                // Uses existing files in the nao-testing bucket with a fixture
+                // pyproject that has patterns matching those files (no {SAMPLE} expansion)
+                input[0] = ["done"]
+                input[1] = ["util", "sentinel.json", []]
+                input[2] = ["run", "run-shortread-extra"]
+                input[3] = "SAMPLE"
+                input[4] = "2026-01-01 00:00:00 UTC (+0000)"
+                input[5] = "run"
+                input[6] = [
+                    output_dir: "s3://nao-testing/tiny-test",
+                    pyproject_path: "${projectDir}/test-data/writeSentinel/run/pyproject_s3.toml",
+                    sentinel_utils_path: "${projectDir}/lib/SentinelUtils.groovy",
+                    sentinel_max_wait_mins: 1
+                ]
+                '''
+            }
+        }
+        then {
+            assert process.success
+            def sentinel = new groovy.json.JsonSlurper().parse(
+                path(process.out.sentinel[0]).toFile()
+            )
+            assert sentinel.runStartedAt == "2026-01-01 00:00:00 UTC (+0000)"
+            assert sentinel.runCompletedAt != null
+        }
+    }
+
+    test("Should fail when expected run outputs are missing") {
+        tag "expect_fail"
+        when {
+            params {}
+            process {
+                '''
+                // Point at a directory that exists but has no expected output files
+                input[0] = ["done"]
+                input[1] = ["util", "sentinel.json", ["sample1"]]
+                input[2] = ["run", "run-shortread-extra"]
+                input[3] = "SAMPLE"
+                input[4] = "2026-01-01 00:00:00 UTC (+0000)"
+                input[5] = "run"
+                input[6] = [
+                    output_dir: "${projectDir}/test-data/writeSentinel/run",
+                    pyproject_path: "${projectDir}/test-data/writeSentinel/run/pyproject.toml",
+                    sentinel_utils_path: "${projectDir}/lib/SentinelUtils.groovy",
+                    sentinel_max_wait_mins: 0
+                ]
+                '''
+            }
+        }
+        then {
+            assert process.failed
+            assert process.errorReport.contains("Timed out after 0 minutes waiting for")
+            assert process.errorReport.contains("published output file(s)")
+        }
+    }
+
+    // ---- Per-group sentinels ({group}_ filename prefix, "downstream" schema, GROUP wildcard) ----
+
+    test("Should write downstream sentinel when all expected outputs exist") {
+        tag "expect_success"
+        when {
+            params {}
+            process {
+                '''
+                input[0] = ["done"]
+                input[1] = ["tt1", "tt1_sentinel.json", ["tt1"]]
+                input[2] = ["downstream"]
+                input[3] = "GROUP"
+                input[4] = "2026-01-01 00:00:00 UTC (+0000)"
+                input[5] = "downstream"
+                input[6] = [
+                    output_dir: "${projectDir}/test-data/writeSentinel/downstream/output_shortread",
+                    pyproject_path: "${projectDir}/test-data/writeSentinel/downstream/pyproject.toml",
+                    sentinel_utils_path: "${projectDir}/lib/SentinelUtils.groovy",
+                    sentinel_max_wait_mins: 1
+                ]
+                '''
+            }
+        }
+        then {
+            assert process.success
+            assert path(process.out.sentinel[0]).toFile().name == "tt1_sentinel.json"
+            def sentinel = new groovy.json.JsonSlurper().parse(
+                path(process.out.sentinel[0]).toFile()
+            )
+            assert sentinel.downstreamStartedAt == "2026-01-01 00:00:00 UTC (+0000)"
+            assert sentinel.downstreamCompletedAt != null
+            assert sentinel.downstreamCompletedAt ==~ /\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} UTC \(\+0000\)/
+        }
+    }
+
+    test("Should write downstream sentinel for ONT (uses expected-outputs-downstream-ont)") {
+        tag "expect_success"
+        when {
+            params {}
+            process {
+                '''
+                // ONT fixture lacks short-read-only files (e.g. extra.json); ONT key must be used
+                input[0] = ["done"]
+                input[1] = ["tt1", "tt1_sentinel.json", ["tt1"]]
+                input[2] = ["downstream-ont"]
+                input[3] = "GROUP"
+                input[4] = "2026-01-01 00:00:00 UTC (+0000)"
+                input[5] = "downstream"
+                input[6] = [
+                    output_dir: "${projectDir}/test-data/writeSentinel/downstream/output_ont",
+                    pyproject_path: "${projectDir}/test-data/writeSentinel/downstream/pyproject.toml",
+                    sentinel_utils_path: "${projectDir}/lib/SentinelUtils.groovy",
+                    sentinel_max_wait_mins: 1
+                ]
+                '''
+            }
+        }
+        then {
+            assert process.success
+            def sentinel = new groovy.json.JsonSlurper().parse(
+                path(process.out.sentinel[0]).toFile()
+            )
+            assert sentinel.downstreamStartedAt == "2026-01-01 00:00:00 UTC (+0000)"
+            assert sentinel.downstreamCompletedAt != null
+        }
+    }
+
+    test("Should write downstream sentinel when output directory is on S3") {
+        tag "expect_success"
+        when {
+            params {}
+            process {
+                '''
+                // Uses existing files in the nao-testing bucket with a fixture
+                // pyproject that has patterns matching those files (no {GROUP} expansion)
+                input[0] = ["done"]
+                input[1] = ["fixture_group", "fixture_group_sentinel.json", ["fixture_group"]]
+                input[2] = ["downstream"]
+                input[3] = "GROUP"
+                input[4] = "2026-01-01 00:00:00 UTC (+0000)"
+                input[5] = "downstream"
+                input[6] = [
+                    output_dir: "s3://nao-testing/tiny-test",
+                    pyproject_path: "${projectDir}/test-data/writeSentinel/downstream/pyproject_s3.toml",
+                    sentinel_utils_path: "${projectDir}/lib/SentinelUtils.groovy",
+                    sentinel_max_wait_mins: 1
+                ]
+                '''
+            }
+        }
+        then {
+            assert process.success
+            def sentinel = new groovy.json.JsonSlurper().parse(
+                path(process.out.sentinel[0]).toFile()
+            )
+            assert sentinel.downstreamStartedAt == "2026-01-01 00:00:00 UTC (+0000)"
+            assert sentinel.downstreamCompletedAt != null
+        }
+    }
+
+    test("Should fail when expected downstream outputs are missing") {
+        tag "expect_fail"
+        when {
+            params {}
+            process {
+                '''
+                // Point at a nonexistent path so the test is robust to future fixture additions
+                input[0] = ["done"]
+                input[1] = ["tt1", "tt1_sentinel.json", ["tt1"]]
+                input[2] = ["downstream"]
+                input[3] = "GROUP"
+                input[4] = "2026-01-01 00:00:00 UTC (+0000)"
+                input[5] = "downstream"
+                input[6] = [
+                    output_dir: "${projectDir}/test-data/writeSentinel/downstream/nonexistent_output_dir",
+                    pyproject_path: "${projectDir}/test-data/writeSentinel/downstream/pyproject.toml",
+                    sentinel_utils_path: "${projectDir}/lib/SentinelUtils.groovy",
+                    sentinel_max_wait_mins: 0
+                ]
+                '''
+            }
+        }
+        then {
+            assert process.failed
+            assert process.errorReport.contains("Timed out after 0 minutes waiting for")
+            assert process.errorReport.contains("published output file(s)")
+            // Assert that {GROUP} was expanded to "tt1" in the missing-file list
+            assert process.errorReport.contains("tt1_counts.tsv.gz")
+            assert process.errorReport.contains("tt1_extra.json")
+        }
+    }
+
+    test("Should fail when max_wait_mins is negative") {
+        tag "expect_fail"
+        when {
+            params {}
+            process {
+                '''
+                input[0] = ["done"]
+                input[1] = ["tt1", "tt1_sentinel.json", ["tt1"]]
+                input[2] = ["downstream"]
+                input[3] = "GROUP"
+                input[4] = "2026-01-01 00:00:00 UTC (+0000)"
+                input[5] = "downstream"
+                input[6] = [
+                    output_dir: "${projectDir}/test-data/writeSentinel/downstream/output_shortread",
+                    pyproject_path: "${projectDir}/test-data/writeSentinel/downstream/pyproject.toml",
+                    sentinel_utils_path: "${projectDir}/lib/SentinelUtils.groovy",
+                    sentinel_max_wait_mins: -1
+                ]
+                '''
+            }
+        }
+        then {
+            assert process.failed
+            assert process.errorReport.contains("max_wait_mins must be >= 0")
+        }
+    }
+}

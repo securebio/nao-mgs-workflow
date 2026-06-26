@@ -14,7 +14,7 @@ include { RUN_QC } from "../subworkflows/local/runQc"
 include { PROFILE} from "../subworkflows/local/profile"
 include { CHECK_VERSION_COMPATIBILITY } from "../subworkflows/local/checkVersionCompatibility"
 include { PREPARE_INPUT_LOGGING } from "../subworkflows/local/prepareInputLogging"
-include { WRITE_SENTINEL_RUN } from "../modules/local/writeSentinelRun"
+include { WRITE_SENTINEL } from "../modules/local/writeSentinel"
 
 /*****************
 | MAIN WORKFLOWS |
@@ -40,8 +40,11 @@ workflow RUN {
         // Validate published outputs and write sentinel
         expected_ch = input_log_ch.input_run.mix(input_log_ch.logging_run, qc_results_ch, other_results_ch)
         sentinel_samples = samplesheet_ch.samplesheet.map { sample, _reads -> sample }.collect()
-        sentinel_params = params + [output_dir: "${params.base_dir}/output", pyproject_path: "${projectDir}/pyproject.toml"]
-        sentinel_ch = WRITE_SENTINEL_RUN(expected_ch.collect(), sentinel_samples, samplesheet_ch.start_time_str, sentinel_params)
+        sentinel_params = params + [output_dir: "${params.base_dir}/output", pyproject_path: "${projectDir}/pyproject.toml", sentinel_utils_path: "${projectDir}/lib/SentinelUtils.groovy"]
+        // Whole-run sentinel: one util-tagged sentinel.json validating expected RUN outputs
+        run_keys = params.platform == "illumina" ? ["run", "run-shortread-extra"] : ["run"]
+        sentinel_spec = sentinel_samples.map { samples -> ["util", "sentinel.json", samples] }
+        sentinel_ch = WRITE_SENTINEL(expected_ch.collect(), sentinel_spec, run_keys, "SAMPLE", samplesheet_ch.start_time_str, "run", sentinel_params)
     emit:
         input_run = input_log_ch.input_run
         logging_run = input_log_ch.logging_run

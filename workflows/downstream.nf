@@ -16,7 +16,7 @@ include { COPY_FILE_BARE as COPY_PYPROJECT } from "../modules/local/copyFile"
 include { COPY_FILE_BARE as COPY_INPUT } from "../modules/local/copyFile"
 include { SORT_TSV as SORT_ONT_HITS } from "../modules/local/sortTsv"
 include { ADD_FIXED_COLUMN as PAD_ONT_COLUMNS } from "../modules/local/addFixedColumn"
-include { WRITE_SENTINEL_DOWNSTREAM } from "../modules/local/writeSentinelDownstream"
+include { WRITE_SENTINEL } from "../modules/local/writeSentinel"
 
 /*****************
 | MAIN WORKFLOWS |
@@ -85,11 +85,17 @@ workflow DOWNSTREAM {
         groups_only_ch = load_ch.groups
             .map { _label, _sample, group -> group }
             .unique()
-        sentinel_params = params + [output_dir: "${params.base_dir}/output", pyproject_path: "${projectDir}/pyproject.toml"]
-        WRITE_SENTINEL_DOWNSTREAM(
-            groups_only_ch,
+        sentinel_params = params + [output_dir: "${params.base_dir}/output", pyproject_path: "${projectDir}/pyproject.toml", sentinel_utils_path: "${projectDir}/lib/SentinelUtils.groovy"]
+        // Per-group sentinel: one {group}_sentinel.json per group validating expected DOWNSTREAM outputs
+        ds_keys = params.platform == "ont" ? ["downstream-ont"] : ["downstream"]
+        sentinel_spec = groups_only_ch.map { group -> [group, "${group}_sentinel.json", [group]] }
+        WRITE_SENTINEL(
             input_downstream_ch.mix(logging_downstream_ch, results_downstream_ch).collect(),
+            sentinel_spec,
+            ds_keys,
+            "GROUP",
             start_time_str,
+            "downstream",
             sentinel_params
         )
 
@@ -99,5 +105,5 @@ workflow DOWNSTREAM {
         intermediates_downstream = validate_ch.blast_results
         results_downstream = results_downstream_ch
         experimental_downstream = sim_dup_ch
-        sentinel_downstream = WRITE_SENTINEL_DOWNSTREAM.out.sentinel
+        sentinel_downstream = WRITE_SENTINEL.out.sentinel
 }

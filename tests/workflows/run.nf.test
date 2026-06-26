@@ -2,7 +2,7 @@ import static groovy.io.FileType.FILES
 
 // Get expected output files from pyproject.toml
 // Replaces {SAMPLE} and {GROUP} wildcards with the provided name
-// Note: this regex approach is also used in modules/local/writeSentinelRun/main.nf
+// Note: this regex approach is also used in lib/SentinelUtils.groovy (via modules/local/writeSentinel)
 def getExpectedOutputs = { pyprojectPath, workflowKey, sampleOrGroupName ->
     def pyprojectText = pyprojectPath.text
     def key = "expected-outputs-${workflowKey}"

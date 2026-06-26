@@ -1,5 +1,8 @@
-// Shared helpers for the WRITE_SENTINEL_RUN and WRITE_SENTINEL_DOWNSTREAM modules.
-// Files in lib/ are automatically loaded by Nextflow and callable from exec: blocks.
+// Shared regex/poll/timestamp helpers for the WRITE_SENTINEL module: validating
+// published outputs against the expected-outputs-* lists in pyproject.toml.
+// WRITE_SENTINEL loads this class explicitly from its file path rather than via
+// Nextflow's lib/ autoload, so it resolves regardless of which project is the
+// Nextflow entrypoint (autoload only covers the top-level projectDir/lib).
 
 class SentinelUtils {
 
