@@ -1,6 +1,7 @@
 # v3.2.2.0-dev
 
 - Require Nextflow `>=26.04.4` (from `25.10.4`), the first of a stacked series upgrading the pipeline to Nextflow 26. Set `aws.client.socketTimeout` to `3600000` (NF 26.04 rejects the previous `0`), bump the `nft-fastq`/`nft-bam` nf-test plugins for compatibility with nf-test `0.9.5`, pin nf-test to `0.9.5` in CI, and drop the now-moot `26.04.0`–`3` `.nextflowignore` deferral entries. Replace the `as List<String>` cast in `WRITE_SENTINEL_RUN` with a raw `as List`, which the NF 26.04 compiler requires (parameterized-type casts now fail at runtime).
+- Replace process/subworkflow `.out` property access (`PROCESS.out.name`) with named invocation results (`var = PROCESS(...); var.name`) across main.nf, INDEX/DOWNSTREAM workflows, and the extractViralReads/checkVersionCompatibility/validateViralAssignments subworkflows, preparing channels for static typing (typed channels don't support `.out` property access). Mechanical refactor; no behavioral change.
 - Exclude five viral genome records with rRNA contamination from the genome reference via `ref/hv_patterns_exclude.txt`.
 - Add `set -euo pipefail` to `BLASTN` module.
 - Add `pigz` to the `python` container so Python processes can use parallel (de)compression.

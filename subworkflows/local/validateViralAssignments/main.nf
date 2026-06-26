@@ -87,14 +87,14 @@ workflow VALIDATE_VIRAL_ASSIGNMENTS {
             (input_list as Set) - (output_list as Set)
         }
         platform = params_map.platform ?: "illumina"
-        CREATE_EMPTY_GROUP_OUTPUTS(
+        empty_outputs_ch = CREATE_EMPTY_GROUP_OUTPUTS(
             groups_without_output,
             file("${projectDir}/pyproject.toml"),
             file("${projectDir}/schemas"),
             platform,
             "validation_hits"
         )
-        all_hits_ch = output_hits_ch.mix(CREATE_EMPTY_GROUP_OUTPUTS.out.outputs.flatten().map { f ->
+        all_hits_ch = output_hits_ch.mix(empty_outputs_ch.outputs.flatten().map { f ->
             def group = f.name.replace("_validation_hits.tsv.gz", "")
             [group, f]
         })
