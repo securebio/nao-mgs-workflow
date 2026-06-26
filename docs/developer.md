@@ -49,6 +49,11 @@ These guidelines represent best practices to implement in new code, though some 
 - Performance conventions:
     - Design processes for streaming: avoid loading significant data into memory.
     - Use compressed intermediate files to save disk space.
+- Static typing (Nextflow 26.04+): we are incrementally adopting Nextflow's static typing, enabled via `nextflow.enable.types = true` in `configs/profiles.config`. Adoption is additive — untyped code keeps working — and proceeds subworkflow by subworkflow.
+    - Declare shared **record types** with the `record` keyword in a `.nf` module (e.g. `modules/local/types/main.nf`) and `include` them like processes/workflows. Record types are native Nextflow constructs, **not** Groovy classes in `lib/`.
+    - Prefer named **records** over positional tuples for new or converted channels (`record(id: String, reads: List<Path>)` rather than `tuple val(id), path(reads)`), and add type annotations to workflow `take:`/`emit:` and function signatures.
+    - Do **not** use `.out` property access on process/subworkflow handles (`PROCESS.out.name`); capture the invocation result and read the named output off it (`var = PROCESS(...); var.name`). Typed channels do not support `.out` access.
+    - Params remain config-file-driven Maps (not typed in-script `params {}` blocks): the pipeline injects params across many `configs/*.config` files and passes/extends `params` as a Map, which typed `params {}` blocks do not accommodate.
 
 ### Other languages (Python, Rust, R)
 - Add non-Nextflow scripts only when necessary; when possible, use existing bioinformatics tools and shell commands rather than creating custom scripts.
