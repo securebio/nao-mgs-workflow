@@ -328,3 +328,139 @@ class TestKrakenTopMovers:
             assert top.delta_pp < 0
         else:
             assert top.delta_pp > 0
+
+
+###############################
+# FOCUS 1: VIRAL ASSIGNMENTS  #
+###############################
+
+
+def _synthetic_tree() -> dm.TaxonomyTree:
+    """A small taxonomy mimicking the viral root layout.
+
+    1 (root, no rank)
+    +- 10239 Viruses (acellular root)
+       +- 100 realmA (realm)
+       |  +- 200 familyX (family)
+       |  |  +- 300 genusG (genus)
+       |  |     +- 401 speciesA (species)
+       |  |     +- 402 speciesB (species)
+       |  +- 210 familyY (family)
+       |     +- 410 speciesC (species)
+       +- 110 realmB (realm)
+          +- 500 speciesD (species)
+    +- 2 cellular (no rank) -> 600 bacSpecies (species)
+    """
+    parent = {
+        1: 1,
+        10239: 1,
+        100: 10239,
+        200: 100,
+        300: 200,
+        401: 300,
+        402: 300,
+        210: 100,
+        410: 210,
+        110: 10239,
+        500: 110,
+        2: 1,
+        600: 2,
+    }
+    rank = {
+        1: "no rank",
+        10239: "acellular root",
+        100: "realm",
+        200: "family",
+        300: "genus",
+        401: "species",
+        402: "species",
+        210: "family",
+        410: "species",
+        110: "realm",
+        500: "species",
+        2: "no rank",
+        600: "species",
+    }
+    return dm.TaxonomyTree(parent, rank)
+
+
+class TestTaxonomyTree:
+    def setup_method(self):
+        self.tax = _synthetic_tree()
+
+    def test_identical(self):
+        assert self.tax.divergence_bucket(401, 401) == "identical"
+
+    def test_same_genus_siblings(self):
+        # 401 and 402 share genus 300.
+        assert self.tax.divergence_bucket(401, 402) == "same-genus"
+        assert self.tax.edge_distance(401, 402) == 2
+
+    def test_same_family_different_genus(self):
+        # 401 (under genus 300/family 200) vs 410 (family 210) share realm 100.
+        assert self.tax.divergence_bucket(401, 410) == "same-realm"
+
+    def test_same_realm(self):
+        # 401 (realm 100) vs 500 (realm 110) -> only share Viruses root.
+        assert self.tax.divergence_bucket(401, 500) == dm.SHARED_HIGHER
+
+    def test_reassigned_up_to_viral_root(self):
+        # A specific species reassigned to Viruses (10239) shares the viral root.
+        assert self.tax.divergence_bucket(401, 10239) == dm.SHARED_HIGHER
+
+    def test_cross_root_virus_to_cellular(self):
+        # 401 (virus) vs 600 (bacterial species) meet only at root.
+        assert self.tax.divergence_bucket(401, 600) == dm.CROSS_ROOT
+
+    def test_edge_distance_via_lca(self):
+        # realmA and realmB sit under Viruses, so 401 and 500 meet at 10239:
+        # 401->300->200->100->10239 (4 up); 500->110->10239 (2 up); total 6.
+        assert self.tax.edge_distance(401, 500) == 6
+
+
+class TestJoinReadAssignments:
+    def _vh(self, rows):
+        return pd.DataFrame(rows, columns=["group", "seq_id", "aligner_taxid_lca"])
+
+    def test_lost_gained_same_reassigned(self):
+        main = self._vh([["G", "r1", 401], ["G", "r2", 401], ["G", "r3", 401]])
+        dev = self._vh([["G", "r1", 401], ["G", "r2", 402], ["G", "r4", 500]])
+        out = dm.join_read_assignments(main, dev)
+        status = dict(zip(out.seq_id, out.status, strict=True))
+        assert status["r1"] == "same"
+        assert status["r2"] == "reassigned"
+        assert status["r3"] == "lost"
+        assert status["r4"] == "gained"
+
+
+class TestSummariseAndBuckets:
+    def _joined(self):
+        main = pd.DataFrame(
+            [["G", "r1", 401], ["G", "r2", 401], ["G", "r3", 600]],
+            columns=["group", "seq_id", "aligner_taxid_lca"],
+        )
+        dev = pd.DataFrame(
+            [["G", "r1", 402], ["G", "r2", 401], ["G", "r4", 401]],
+            columns=["group", "seq_id", "aligner_taxid_lca"],
+        )
+        return dm.join_read_assignments(main, dev)
+
+    def test_vertebrate_scope_filters(self):
+        joined = self._joined()
+        # 401/402 vertebrate; 600 (bacterial) not.
+        summ = dm.summarize_read_status(joined, vert={401, 402})
+        vert = summ[summ.scope == "vertebrate"].iloc[0]
+        # r3 (600->lost) is excluded from vertebrate scope.
+        assert vert.n_lost == 0
+        all_ = summ[summ.scope == "all"].iloc[0]
+        assert all_.n_lost == 1
+
+    def test_bucket_summary_ordered(self):
+        joined = self._joined()
+        tax = _synthetic_tree()
+        detail = dm.reassignment_distances(joined, tax, vert={401, 402})
+        buckets = dm.bucket_summary(detail)
+        # r1: 401->402 is same-genus; that should be the only reassigned read.
+        all_buckets = buckets[buckets.scope == "all"]
+        assert list(all_buckets.bucket) == ["same-genus"]
+        assert all_buckets.iloc[0].n_reads == 1

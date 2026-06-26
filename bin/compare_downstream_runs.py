@@ -281,6 +281,68 @@ def load_qc_basic_stats(results_dir: Path, manifest: dm.SideManifest) -> pd.Data
     return pd.concat(frames, ignore_index=True)
 
 
+def fetch_index_file(index_root: str, subpath: str, work_dir: Path) -> Path:
+    """Stage a single file from an index `results/` tree, returning its path."""
+    src = f"{index_root.rstrip('/')}/output/results/{subpath}"
+    work_dir.mkdir(parents=True, exist_ok=True)
+    dst = work_dir / Path(subpath).name
+    if src.startswith("s3://"):
+        logger.info(f"Downloading {src}")
+        subprocess.run(["aws", "s3", "cp", src, str(dst), "--no-progress"], check=True)
+        return dst
+    return Path(src)
+
+
+def parse_taxonomy_nodes(path: Path) -> tuple[dict[int, int], dict[int, str]]:
+    """Parse taxonomy-nodes.dmp into (parent_map, rank_map).
+
+    nodes.dmp rows are '\\t|\\t'-separated: field 0 = taxid, 1 = parent taxid,
+    2 = rank.
+    """
+    parent: dict[int, int] = {}
+    rank: dict[int, str] = {}
+    with open_by_suffix(path) as fh:
+        for line in fh:
+            parts = line.split("\t|\t")
+            taxid = int(parts[0])
+            parent[taxid] = int(parts[1])
+            rank[taxid] = parts[2]
+    logger.info(f"Parsed taxonomy: {len(parent)} taxa from {path.name}")
+    return parent, rank
+
+
+def load_annotated_db(index_root: str, work_dir: Path) -> pd.DataFrame:
+    """Load total-virus-db-annotated.tsv.gz from an index root."""
+    path = fetch_index_file(index_root, "total-virus-db-annotated.tsv.gz", work_dir)
+    return read_tsv(path)
+
+
+def load_validation_hits(
+    results_dir: Path, manifest: dm.SideManifest, columns: list[str]
+) -> pd.DataFrame:
+    """Load and concatenate validation_hits across groups (selected columns).
+
+    Args:
+        results_dir: Local results_downstream dir.
+        manifest: Side manifest (provides the group list).
+        columns: Columns to read; missing optional columns are tolerated.
+
+    Returns:
+        Concatenated DataFrame, or empty if no files found.
+    """
+    wanted = set(columns)
+    frames: list[pd.DataFrame] = []
+    for group in manifest:
+        path = _group_file(results_dir, group, "validation_hits")
+        if path is None:
+            continue
+        df = read_tsv(path, usecols=lambda c: c in wanted)
+        frames.append(df)
+    if not frames:
+        return pd.DataFrame()
+    return pd.concat(frames, ignore_index=True)
+
+
 def load_kraken(results_dir: Path, manifest: dm.SideManifest) -> pd.DataFrame:
     """Load and concatenate kraken reports across all groups.
 
@@ -428,6 +490,33 @@ def main() -> None:
         write_tsv(movers, args.out / "kraken_top_movers.tsv")
     else:
         logger.warning("No kraken files found; skipping Focus 2.")
+
+    # Focus 1: viral assignments (requires the dev index for taxonomy + host
+    # annotation). If --index is absent we cannot compute these; surface that.
+    if args.index:
+        work_dir = args.out / "_index"
+        parent, rank = parse_taxonomy_nodes(
+            fetch_index_file(args.index, "taxonomy-nodes.dmp", work_dir)
+        )
+        tax = dm.TaxonomyTree(parent, rank)
+        annotated = load_annotated_db(args.index, work_dir)
+        vert = dm.vertebrate_taxids(annotated)
+        logger.info(f"{len(vert)} vertebrate-infecting taxids (status 1, dev index).")
+
+        vh_cols = ["group", "seq_id", "aligner_taxid_lca"]
+        vh_main = load_validation_hits(main_results, main_manifest, vh_cols)
+        vh_dev = load_validation_hits(dev_results, dev_manifest, vh_cols)
+        joined = dm.join_read_assignments(vh_main, vh_dev)
+        write_tsv(
+            dm.summarize_read_status(joined, vert), args.out / "viral_read_status.tsv"
+        )
+        reassign = dm.reassignment_distances(joined, tax, vert)
+        write_tsv(reassign, args.out / "viral_reassignment_detail.tsv")
+        write_tsv(
+            dm.bucket_summary(reassign), args.out / "viral_reassignment_buckets.tsv"
+        )
+    else:
+        logger.warning("No --index given; skipping Focus 1 (viral assignments).")
 
     logger.info(f"Done. Outputs in {args.out.resolve()}")
 

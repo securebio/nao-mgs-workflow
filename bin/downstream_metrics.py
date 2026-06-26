@@ -508,3 +508,315 @@ def kraken_top_movers(
             "delta_pp",
         ]
     ].reset_index(drop=True)
+
+
+#########################################
+# FOCUS 1: VIRAL ASSIGNMENTS (taxonomy) #
+#########################################
+
+# Standard ranks from most specific to least, used to bucket the taxonomic
+# distance between two assignments by the lowest rank at which they still agree.
+# `realm` is the highest viral rank in NCBI (viruses have no superkingdom); the
+# viral root `Viruses` (10239) sits above it with rank `acellular root`.
+ORDERED_RANKS = (
+    "species",
+    "genus",
+    "family",
+    "order",
+    "class",
+    "phylum",
+    "kingdom",
+    "realm",
+    "superkingdom",
+)
+
+ROOT_TAXID = 1
+
+# Buckets used when two assignments share an ancestor but not at any standard
+# rank: SHARED_HIGHER means they meet above the standard ranks (e.g. both under
+# `Viruses` but in different realms); CROSS_ROOT means their only common
+# ancestor is the tree root (e.g. a virus reassigned to a cellular organism).
+SHARED_HIGHER = "shared-higher-taxon"
+CROSS_ROOT = "cross-root"
+
+
+class TaxonomyTree:
+    """NCBI taxonomy tree for taxonomic-distance calculations.
+
+    Built from a parent map and rank map (parsed from taxonomy-nodes.dmp). All
+    methods are pure functions of those maps; lineages are cached per taxid.
+    """
+
+    def __init__(self, parent: dict[int, int], rank: dict[int, str]) -> None:
+        self.parent = parent
+        self.rank = rank
+        self._lineage_cache: dict[int, list[int]] = {}
+        self._rank_anc_cache: dict[int, dict[str, int]] = {}
+
+    def lineage(self, taxid: int) -> list[int]:
+        """Ancestor chain from `taxid` up to the root (inclusive)."""
+        if taxid in self._lineage_cache:
+            return self._lineage_cache[taxid]
+        chain: list[int] = []
+        seen: set[int] = set()
+        cur = taxid
+        while cur not in seen:
+            chain.append(cur)
+            seen.add(cur)
+            parent = self.parent.get(cur)
+            if parent is None or parent == cur:
+                break
+            cur = parent
+        self._lineage_cache[taxid] = chain
+        return chain
+
+    def rank_ancestors(self, taxid: int) -> dict[str, int]:
+        """Map standard rank -> nearest ancestor taxid of that rank (or self)."""
+        if taxid in self._rank_anc_cache:
+            return self._rank_anc_cache[taxid]
+        out: dict[str, int] = {}
+        for anc in self.lineage(taxid):
+            r = self.rank.get(anc)
+            if r in ORDERED_RANKS and r not in out:
+                out[r] = anc
+        self._rank_anc_cache[taxid] = out
+        return out
+
+    def lca(self, a: int, b: int) -> int | None:
+        """Lowest common ancestor of `a` and `b`, or None if no shared ancestor."""
+        ancestors_a = set(self.lineage(a))
+        for anc in self.lineage(b):
+            if anc in ancestors_a:
+                return anc
+        return None
+
+    def edge_distance(self, a: int, b: int) -> int | None:
+        """Number of parent-child steps between `a` and `b` via their LCA."""
+        lca = self.lca(a, b)
+        if lca is None:
+            return None
+        return self.lineage(a).index(lca) + self.lineage(b).index(lca)
+
+    def divergence_bucket(self, a: int, b: int) -> str:
+        """Lowest rank at which assignments `a` and `b` still agree.
+
+        Returns 'identical' when equal, or 'same-<rank>' for the lowest shared
+        standard rank. When they share an ancestor only above the standard ranks
+        (e.g. both under `Viruses` but different realms, or one is an ancestor of
+        the other at an unranked node) returns 'shared-higher-taxon'. When their
+        only common ancestor is the tree root (e.g. a virus reassigned to a
+        cellular organism) returns 'cross-root'.
+        """
+        if a == b:
+            return "identical"
+        ra = self.rank_ancestors(a)
+        rb = self.rank_ancestors(b)
+        for rank in ORDERED_RANKS:
+            if rank in ra and ra[rank] == rb.get(rank):
+                return f"same-{rank}"
+        lca = self.lca(a, b)
+        if lca is None or lca == ROOT_TAXID:
+            return CROSS_ROOT
+        return SHARED_HIGHER
+
+
+def vertebrate_taxids(annotated_db: pd.DataFrame, host: str = "vertebrate") -> set[int]:
+    """Taxids affirmatively marked as infecting `host` (status 1), with rollup.
+
+    Mirrors the index's own surveillance predicate: a taxon counts if its
+    infection_status_<host> is 1 (MATCH), or if its species-rollup taxon is.
+    Status 3 ('likely') is intentionally excluded; see the report notes.
+
+    Args:
+        annotated_db: total-virus-db-annotated, with taxid, taxid_species, and
+            infection_status_<host> columns.
+        host: Host group name (default 'vertebrate').
+
+    Returns:
+        Set of integer taxids considered host-infecting.
+    """
+    col = f"infection_status_{host}"
+    if col not in annotated_db.columns or "taxid" not in annotated_db.columns:
+        return set()
+    status = annotated_db[col].astype(str)
+    positive = set(annotated_db.loc[status == "1", "taxid"].astype(int))
+    if "taxid_species" in annotated_db.columns:
+        species = annotated_db["taxid_species"].astype("Int64")
+        rollup = annotated_db.loc[species.isin(positive), "taxid"].astype(int)
+        positive.update(rollup)
+    return positive
+
+
+def join_read_assignments(main_vh: pd.DataFrame, dev_vh: pd.DataFrame) -> pd.DataFrame:
+    """Join per-read pipeline assignments across sides on (group, seq_id).
+
+    Args:
+        main_vh: validation_hits for main (needs group, seq_id, aligner_taxid_lca).
+        dev_vh: validation_hits for dev (same columns).
+
+    Returns:
+        DataFrame: group, seq_id, taxid_main, taxid_dev, status, where status is
+        'lost' (main only), 'gained' (dev only), 'same' (shared, same taxid), or
+        'reassigned' (shared, different taxid).
+    """
+    cols = ["group", "seq_id", "aligner_taxid_lca"]
+    m = main_vh[cols].rename(columns={"aligner_taxid_lca": "taxid_main"})
+    d = dev_vh[cols].rename(columns={"aligner_taxid_lca": "taxid_dev"})
+    merged = m.merge(d, on=["group", "seq_id"], how="outer", indicator=True)
+    merged["taxid_main"] = merged["taxid_main"].astype("Int64")
+    merged["taxid_dev"] = merged["taxid_dev"].astype("Int64")
+    status = pd.Series("same", index=merged.index, dtype="object")
+    status[merged["_merge"] == "left_only"] = "lost"
+    status[merged["_merge"] == "right_only"] = "gained"
+    both = merged["_merge"] == "both"
+    reassigned = both & (merged["taxid_main"] != merged["taxid_dev"])
+    status[reassigned] = "reassigned"
+    merged["status"] = status
+    return merged[["group", "seq_id", "taxid_main", "taxid_dev", "status"]]
+
+
+def _add_vertebrate_flag(joined: pd.DataFrame, vert: set[int]) -> pd.DataFrame:
+    """Add is_vertebrate: assigned taxid (either side) is vertebrate-infecting."""
+    out = joined.copy()
+    main_vert = out["taxid_main"].isin(vert)
+    dev_vert = out["taxid_dev"].isin(vert)
+    out["is_vertebrate"] = main_vert | dev_vert
+    return out
+
+
+def summarize_read_status(joined: pd.DataFrame, vert: set[int]) -> pd.DataFrame:
+    """Per-group read-status counts, for all reads and the vertebrate subset.
+
+    Returns:
+        DataFrame: group, scope ('all'|'vertebrate'), n_main, n_dev, n_shared,
+        n_same, n_reassigned, n_lost, n_gained, pct_lost, pct_reassigned
+        (percentages relative to the main-side read count).
+    """
+    flagged = _add_vertebrate_flag(joined, vert)
+    records: list[dict[str, object]] = []
+    for scope in ("all", "vertebrate"):
+        subset = flagged if scope == "all" else flagged[flagged["is_vertebrate"]]
+        for group, g in subset.groupby("group"):
+            counts = g["status"].value_counts()
+            n_lost = int(counts.get("lost", 0))
+            n_gained = int(counts.get("gained", 0))
+            n_same = int(counts.get("same", 0))
+            n_reassigned = int(counts.get("reassigned", 0))
+            n_main = n_lost + n_same + n_reassigned
+            n_dev = n_gained + n_same + n_reassigned
+            n_shared = n_same + n_reassigned
+            records.append(
+                {
+                    "group": group,
+                    "scope": scope,
+                    "n_main": n_main,
+                    "n_dev": n_dev,
+                    "n_shared": n_shared,
+                    "n_same": n_same,
+                    "n_reassigned": n_reassigned,
+                    "n_lost": n_lost,
+                    "n_gained": n_gained,
+                    "pct_lost": 100.0 * n_lost / n_main if n_main else None,
+                    "pct_reassigned": (
+                        100.0 * n_reassigned / n_shared if n_shared else None
+                    ),
+                }
+            )
+    return pd.DataFrame.from_records(
+        records,
+        columns=[
+            "group",
+            "scope",
+            "n_main",
+            "n_dev",
+            "n_shared",
+            "n_same",
+            "n_reassigned",
+            "n_lost",
+            "n_gained",
+            "pct_lost",
+            "pct_reassigned",
+        ],
+    )
+
+
+def reassignment_distances(
+    joined: pd.DataFrame, tax: TaxonomyTree, vert: set[int]
+) -> pd.DataFrame:
+    """Taxonomic distance for each reassigned read, by divergence bucket + edges.
+
+    Computes the bucket and edge distance once per distinct (taxid_main,
+    taxid_dev) pair (cached in the tree) and joins back to reads.
+
+    Returns:
+        DataFrame of reassigned reads: group, scope, seq_id, taxid_main,
+        taxid_dev, bucket, edge_distance. Emitted for scope 'all' and
+        'vertebrate' (vertebrate rows are a subset, re-labelled).
+    """
+    flagged = _add_vertebrate_flag(joined, vert)
+    reassigned = flagged[flagged["status"] == "reassigned"].copy()
+    if reassigned.empty:
+        return pd.DataFrame(
+            columns=[
+                "group",
+                "scope",
+                "seq_id",
+                "taxid_main",
+                "taxid_dev",
+                "bucket",
+                "edge_distance",
+            ]
+        )
+    pairs = reassigned[["taxid_main", "taxid_dev"]].drop_duplicates()
+    bucket_map: dict[tuple[int, int], str] = {}
+    edge_map: dict[tuple[int, int], int | None] = {}
+    for a, b in zip(pairs["taxid_main"], pairs["taxid_dev"], strict=True):
+        key = (int(a), int(b))
+        bucket_map[key] = tax.divergence_bucket(*key)
+        edge_map[key] = tax.edge_distance(*key)
+    keys = list(zip(reassigned["taxid_main"], reassigned["taxid_dev"], strict=True))
+    reassigned["bucket"] = [bucket_map[(int(a), int(b))] for a, b in keys]
+    reassigned["edge_distance"] = [edge_map[(int(a), int(b))] for a, b in keys]
+
+    frames = []
+    for scope in ("all", "vertebrate"):
+        sub = reassigned if scope == "all" else reassigned[reassigned["is_vertebrate"]]
+        sub = sub.assign(scope=scope)
+        frames.append(sub)
+    out = pd.concat(frames, ignore_index=True)
+    return out[
+        [
+            "group",
+            "scope",
+            "seq_id",
+            "taxid_main",
+            "taxid_dev",
+            "bucket",
+            "edge_distance",
+        ]
+    ]
+
+
+def bucket_summary(reassignment_detail: pd.DataFrame) -> pd.DataFrame:
+    """Counts of reassigned reads per (scope, bucket), ordered by severity.
+
+    Returns:
+        DataFrame: scope, bucket, n_reads, ordered identical->cross-superkingdom.
+    """
+    order = [
+        "identical",
+        *(f"same-{r}" for r in ORDERED_RANKS),
+        SHARED_HIGHER,
+        CROSS_ROOT,
+    ]
+    if reassignment_detail.empty:
+        return pd.DataFrame(columns=["scope", "bucket", "n_reads"])
+    counts = (
+        reassignment_detail.groupby(["scope", "bucket"])
+        .size()
+        .reset_index(name="n_reads")
+    )
+    counts["_o"] = counts["bucket"].apply(
+        lambda b: order.index(b) if b in order else len(order)
+    )
+    return counts.sort_values(["scope", "_o"]).drop(columns="_o").reset_index(drop=True)
