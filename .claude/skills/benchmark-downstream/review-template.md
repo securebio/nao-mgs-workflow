@@ -121,12 +121,29 @@ thresholds used.
 
 ## Recommendations
 
-1. **What a human should look at before shipping** (high | medium | low concern)
-    - Concise argument referencing the findings above.
-2. ...
+Derive the list **deterministically** from the data so independent reviewers
+produce the same set. Emit exactly one bullet for each condition below that
+holds, in this order, and no others (omit a bullet whose condition is false):
 
-(Err toward inclusion: every large or anomalous difference should appear as
-something to review, even at low concern.)
+1. Each whole-clade collapse/appearance — one bullet per family/order that goes
+   to (or from) ~0 share across many groups (e.g. Picobirnaviridae). (high)
+2. The single highest reassignment-rate group, if it is a clear outlier above
+   the rest. (high)
+3. All remaining groups over the reassignment threshold, as ONE bullet. (medium)
+4. Groups over the lost threshold, as ONE bullet — only if any exist. (medium)
+5. Large `gained`-read groups (a group whose dev read count far exceeds main),
+   as ONE bullet — only if any exist. (high)
+6. Vertebrate-status flips between indexes, as ONE bullet. (medium)
+7. BLAST agreement-rate drops over threshold, as ONE bullet — only if any. (medium)
+8. Kraken Bray-Curtis flags over threshold, as ONE bullet — only if any. (medium)
+9. Any cross-root or shared-higher-taxon reassignments, as ONE bullet — only if
+   the count is > 0. (low)
+10. Empty outputs (e.g. bracken), as ONE bullet — only if any are empty. (low)
+11. A QC note, as ONE bullet — only if a QC/screen parameter changed but is not
+    visible in the aggregate QC metrics. (low)
+
+Each bullet: a one-line argument referencing the findings above, with a concern
+level (high | medium | low). No verdict — concern reflects magnitude/breadth only.
 
 ---
 
