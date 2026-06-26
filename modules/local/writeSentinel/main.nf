@@ -24,6 +24,10 @@ process WRITE_SENTINEL {
     output:
         path("*sentinel.json"), emit: sentinel
     exec:
+        // Parsed once per invocation (per group for the DOWNSTREAM fan-out). This is
+        // cheap head-node-only work, bounded by the sentinel `maxForks` cap, and dwarfed
+        // by the S3 output polling below; the explicit per-task load is what keeps the
+        // module independent of lib/ autoload, so re-parsing is an accepted trade-off.
         def sentinel_utils = new GroovyClassLoader().parseClass(
             file(params_map.sentinel_utils_path).toFile())
         def pyproject_text = file(params_map.pyproject_path).text
