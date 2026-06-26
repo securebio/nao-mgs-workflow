@@ -343,6 +343,19 @@ def load_validation_hits(
     return pd.concat(frames, ignore_index=True)
 
 
+def load_clade_counts(results_dir: Path, manifest: dm.SideManifest) -> pd.DataFrame:
+    """Load and concatenate clade_counts across groups (short-read only)."""
+    frames: list[pd.DataFrame] = []
+    for group in manifest:
+        path = _group_file(results_dir, group, "clade_counts")
+        if path is None:
+            continue
+        frames.append(read_tsv(path))
+    if not frames:
+        return pd.DataFrame()
+    return pd.concat(frames, ignore_index=True)
+
+
 def load_kraken(results_dir: Path, manifest: dm.SideManifest) -> pd.DataFrame:
     """Load and concatenate kraken reports across all groups.
 
@@ -427,6 +440,17 @@ def parse_arguments() -> argparse.Namespace:
         help="Directory of *.schema.json files (default: repo schemas/).",
     )
     parser.add_argument(
+        "--thresholds",
+        type=str,
+        default=None,
+        help=(
+            "JSON object overriding flag thresholds, e.g. "
+            '\'{"bray_curtis": 0.2, "viral_pct_lost": 3}\'. Keys: '
+            + ", ".join(dm.DEFAULT_THRESHOLDS)
+            + "."
+        ),
+    )
+    parser.add_argument(
         "--pyproject",
         type=Path,
         default=Path(__file__).resolve().parent.parent / "pyproject.toml",
@@ -452,6 +476,9 @@ def main() -> None:
 
     schema_columns = load_schema_columns(args.schema_dir)
 
+    # Quantitative tables that feed the consolidated flags (Focus 1-3).
+    outputs: dict[str, pd.DataFrame] = {}
+
     # Focus 4: schema-driven file/column inventory.
     inventory = dm.compare_file_inventory(main_manifest, dev_manifest)
     write_tsv(inventory, args.out / "file_inventory.tsv")
@@ -464,6 +491,7 @@ def main() -> None:
     if not qc_main.empty and not qc_dev.empty:
         qc_numeric = dm.compare_qc_numeric(qc_main, qc_dev)
         write_tsv(qc_numeric, args.out / "qc_numeric.tsv")
+        outputs["qc_numeric"] = qc_numeric
         flag_cols = [
             c
             for c in qc_main.columns
@@ -480,6 +508,7 @@ def main() -> None:
     if not kraken_main.empty and not kraken_dev.empty:
         bray = dm.kraken_bray_curtis(kraken_main, kraken_dev)
         write_tsv(bray, args.out / "kraken_bray_curtis.tsv")
+        outputs["kraken_bray_curtis"] = bray
         movers = pd.concat(
             [
                 dm.kraken_top_movers(kraken_main, kraken_dev, rank)
@@ -507,16 +536,55 @@ def main() -> None:
         vh_main = load_validation_hits(main_results, main_manifest, vh_cols)
         vh_dev = load_validation_hits(dev_results, dev_manifest, vh_cols)
         joined = dm.join_read_assignments(vh_main, vh_dev)
-        write_tsv(
-            dm.summarize_read_status(joined, vert), args.out / "viral_read_status.tsv"
-        )
+        read_status = dm.summarize_read_status(joined, vert)
+        write_tsv(read_status, args.out / "viral_read_status.tsv")
+        outputs["viral_read_status"] = read_status
         reassign = dm.reassignment_distances(joined, tax, vert)
         write_tsv(reassign, args.out / "viral_reassignment_detail.tsv")
         write_tsv(
             dm.bucket_summary(reassign), args.out / "viral_reassignment_buckets.tsv"
         )
+
+        # Clade-count family/order breakdown (short-read only).
+        clade_main = load_clade_counts(main_results, main_manifest)
+        clade_dev = load_clade_counts(dev_results, dev_manifest)
+        if not clade_main.empty and not clade_dev.empty:
+            clade = dm.clade_rank_shares(clade_main, clade_dev, annotated)
+            write_tsv(clade, args.out / "clade_rank_shares.tsv")
+            outputs["clade_rank_shares"] = clade
+        else:
+            logger.warning("No clade_counts found; skipping clade breakdown.")
+
+        # BLAST-validation agreement (secondary).
+        val_cols = ["group", "validation_distance_aligner"]
+        val_main = load_validation_hits(main_results, main_manifest, val_cols)
+        val_dev = load_validation_hits(dev_results, dev_manifest, val_cols)
+        validation = dm.validation_agreement(val_main).merge(
+            dm.validation_agreement(val_dev),
+            on="group",
+            how="outer",
+            suffixes=("_main", "_dev"),
+        )
+        write_tsv(validation, args.out / "viral_validation_agreement.tsv")
+        outputs["viral_validation_agreement"] = validation
+
+        # Vertebrate-status flips between the two index annotations.
+        if args.old_index:
+            old_annotated = load_annotated_db(args.old_index, args.out / "_old_index")
+            flips = dm.vertebrate_status_flips(old_annotated, annotated)
+            write_tsv(flips, args.out / "vertebrate_status_flips.tsv")
+        else:
+            logger.warning(
+                "No --old-index; skipping vertebrate-status-flip side-table."
+            )
     else:
         logger.warning("No --index given; skipping Focus 1 (viral assignments).")
+
+    # Consolidated flags across all focuses (fixed thresholds + cohort outliers).
+    thresholds = json.loads(args.thresholds) if args.thresholds else None
+    flags = dm.build_flags(outputs, thresholds=thresholds)
+    write_tsv(flags, args.out / "flags.tsv")
+    logger.info(f"{len(flags)} flags raised across all focuses.")
 
     logger.info(f"Done. Outputs in {args.out.resolve()}")
 

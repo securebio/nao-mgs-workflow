@@ -820,3 +820,407 @@ def bucket_summary(reassignment_detail: pd.DataFrame) -> pd.DataFrame:
         lambda b: order.index(b) if b in order else len(order)
     )
     return counts.sort_values(["scope", "_o"]).drop(columns="_o").reset_index(drop=True)
+
+
+def clade_rank_shares(
+    clade_main: pd.DataFrame,
+    clade_dev: pd.DataFrame,
+    annotated: pd.DataFrame,
+    rank_levels: tuple[str, ...] = ("family", "order"),
+    count_cols: tuple[str, ...] = ("reads_clade_total", "reads_clade_dedup"),
+) -> pd.DataFrame:
+    """Compare the high-level taxonomic breakdown of clade counts.
+
+    For each rank level (family, order), the clade-count row at a rank-level
+    taxon already holds that clade's total reads, so we filter to those rows and
+    compute each taxon's share of the rank-classified viral reads per group, on
+    both sides. Rank and name are looked up from the (dev) annotated DB so the
+    classification is consistent across sides.
+
+    Args:
+        clade_main: clade_counts for main (group, taxid, reads_clade_* columns).
+        clade_dev: clade_counts for dev.
+        annotated: total-virus-db-annotated providing taxid -> rank, name.
+        rank_levels: taxonomic ranks to roll up to.
+        count_cols: which clade-count columns to compute shares for.
+
+    Returns:
+        Long DataFrame: group, rank_level, count_type, taxid, name, reads_main,
+        reads_dev, share_main, share_dev, delta_pp (share change in pp).
+    """
+    rankmap = dict(zip(annotated["taxid"].astype(int), annotated["rank"], strict=True))
+    namemap = dict(zip(annotated["taxid"].astype(int), annotated["name"], strict=True))
+
+    def side_shares(df: pd.DataFrame, rank_level: str, count_col: str) -> pd.DataFrame:
+        d = df[["group", "taxid", count_col]].copy()
+        d["rk"] = d["taxid"].astype(int).map(rankmap)
+        sub = d[d["rk"] == rank_level].copy()
+        if sub.empty:
+            return sub.assign(share=pd.Series(dtype=float))[
+                ["group", "taxid", count_col, "share"]
+            ]
+        totals = sub.groupby("group")[count_col].transform("sum")
+        sub["share"] = sub[count_col].div(totals.where(totals != 0))
+        return sub[["group", "taxid", count_col, "share"]]
+
+    frames: list[pd.DataFrame] = []
+    for rank_level in rank_levels:
+        for count_col in count_cols:
+            a = side_shares(clade_main, rank_level, count_col).rename(
+                columns={count_col: "reads_main", "share": "share_main"}
+            )
+            b = side_shares(clade_dev, rank_level, count_col).rename(
+                columns={count_col: "reads_dev", "share": "share_dev"}
+            )
+            merged = a.merge(b, on=["group", "taxid"], how="outer")
+            for col in ("reads_main", "reads_dev", "share_main", "share_dev"):
+                merged[col] = merged[col].fillna(0.0)
+            merged["name"] = merged["taxid"].astype(int).map(namemap)
+            merged["rank_level"] = rank_level
+            merged["count_type"] = count_col
+            merged["delta_pp"] = (merged["share_dev"] - merged["share_main"]) * 100.0
+            frames.append(merged)
+    out = pd.concat(frames, ignore_index=True)
+    return (
+        out[
+            [
+                "group",
+                "rank_level",
+                "count_type",
+                "taxid",
+                "name",
+                "reads_main",
+                "reads_dev",
+                "share_main",
+                "share_dev",
+                "delta_pp",
+            ]
+        ]
+        .sort_values(["rank_level", "count_type", "group", "delta_pp"])
+        .reset_index(drop=True)
+    )
+
+
+def validation_agreement(vh: pd.DataFrame) -> pd.DataFrame:
+    """Per-group BLAST-validation agreement summary for one side (secondary).
+
+    A read is 'validated' when validation_distance_aligner is non-null; among
+    validated reads, agreement means a taxonomic distance of 0 between the
+    pipeline (aligner) assignment and the BLAST validation LCA.
+
+    Args:
+        vh: validation_hits with group and validation_distance_aligner columns.
+
+    Returns:
+        DataFrame: group, n_reads, n_validated, frac_validated, agreement_rate
+        (fraction of validated reads with distance 0), mean_distance.
+    """
+    records: list[dict[str, object]] = []
+    dist = pd.to_numeric(vh["validation_distance_aligner"], errors="coerce")
+    vh = vh.assign(_dist=dist)
+    for group, g in vh.groupby("group"):
+        n_reads = len(g)
+        validated = g["_dist"].notna()
+        n_validated = int(validated.sum())
+        agree = int((g.loc[validated, "_dist"] == 0).sum())
+        records.append(
+            {
+                "group": group,
+                "n_reads": n_reads,
+                "n_validated": n_validated,
+                "frac_validated": n_validated / n_reads if n_reads else None,
+                "agreement_rate": agree / n_validated if n_validated else None,
+                "mean_distance": (
+                    g.loc[validated, "_dist"].mean() if n_validated else None
+                ),
+            }
+        )
+    return pd.DataFrame.from_records(
+        records,
+        columns=[
+            "group",
+            "n_reads",
+            "n_validated",
+            "frac_validated",
+            "agreement_rate",
+            "mean_distance",
+        ],
+    )
+
+
+def vertebrate_status_flips(
+    old_annotated: pd.DataFrame,
+    new_annotated: pd.DataFrame,
+    host: str = "vertebrate",
+) -> pd.DataFrame:
+    """Taxa whose host-infecting status (==1) flipped between two index annotations.
+
+    Args:
+        old_annotated: annotated viral DB from the old (main) index.
+        new_annotated: annotated viral DB from the new (dev) index.
+        host: host group name.
+
+    Returns:
+        DataFrame: taxid, name, change ('gained_<host>' or 'lost_<host>').
+    """
+    old = vertebrate_taxids(old_annotated, host)
+    new = vertebrate_taxids(new_annotated, host)
+    namemap = dict(
+        zip(new_annotated["taxid"].astype(int), new_annotated["name"], strict=True)
+    )
+    namemap.update(
+        dict(
+            zip(
+                old_annotated["taxid"].astype(int),
+                old_annotated["name"],
+                strict=True,
+            )
+        )
+    )
+    records: list[dict[str, object]] = []
+    for taxid in sorted(new - old):
+        records.append(
+            {"taxid": taxid, "name": namemap.get(taxid), "change": f"gained_{host}"}
+        )
+    for taxid in sorted(old - new):
+        records.append(
+            {"taxid": taxid, "name": namemap.get(taxid), "change": f"lost_{host}"}
+        )
+    return pd.DataFrame.from_records(records, columns=["taxid", "name", "change"])
+
+
+#########################################
+# FLAGGING (fixed thresholds + cohort)  #
+#########################################
+
+# Default thresholds for flagging a difference as worth human review. All are
+# exposed as CLI flags; they are deliberate judgment calls, documented in the
+# skill. A flag is advisory -- the report always shows the underlying numbers.
+DEFAULT_THRESHOLDS: dict[str, float] = {
+    "read_survival_pct": 5.0,  # |%| change in cleaned read survival
+    "qc_pct_change": 10.0,  # |%| change in other qc metrics
+    "bray_curtis": 0.15,  # kraken whole-profile dissimilarity
+    "viral_pct_lost": 2.0,  # |%| of vertebrate-viral reads lost
+    "viral_pct_reassigned": 10.0,  # |%| of shared reads reassigned
+    "clade_share_pp": 3.0,  # |pp| change in a family/order share
+    "validation_agreement_drop": 0.10,  # drop in BLAST-agreement rate
+}
+
+# Robust z-score (MAD-based) cutoff for cohort-outlier flags.
+MAD_THRESHOLD = 3.5
+
+# A cohort outlier must also reach this fraction of the metric's fixed threshold,
+# so a tiny deviation in a near-constant cohort is not flagged as a regression.
+COHORT_MIN_FRACTION = 0.25
+
+
+def mad_outlier_mask(values: pd.Series, threshold: float = MAD_THRESHOLD) -> pd.Series:
+    """Boolean mask of robust (MAD-based) outliers in `values`.
+
+    Uses the modified z-score 0.6745*(x - median)/MAD. When the MAD is zero
+    (most values identical) no rows are flagged, since a robust spread cannot be
+    estimated. NaNs are never flagged.
+
+    Args:
+        values: Numeric series (a cohort of comparable measurements).
+        threshold: Modified-z cutoff above which a value is an outlier.
+
+    Returns:
+        Boolean Series aligned to `values`.
+    """
+    v = pd.to_numeric(values, errors="coerce")
+    med = v.median()
+    mad = (v - med).abs().median()
+    if not mad or pd.isna(mad):
+        return pd.Series(False, index=values.index)
+    robust_z = 0.6745 * (v - med) / mad
+    return robust_z.abs() > threshold
+
+
+def _flag_records(
+    df: pd.DataFrame,
+    value_col: str,
+    threshold: float,
+    focus: str,
+    metric: str,
+    key_cols: list[str],
+    cohort_cols: list[str] | None,
+    direction: str = "abs",
+) -> list[dict[str, object]]:
+    """Build flag records for rows whose value trips the fixed and/or cohort test.
+
+    Args:
+        df: Source comparison table.
+        value_col: Column holding the magnitude to test.
+        threshold: Fixed threshold for the magnitude.
+        focus: Report focus label (e.g. 'kraken').
+        metric: Human-readable metric name.
+        key_cols: Columns identifying the flagged row (e.g. group, rank).
+        cohort_cols: Columns defining cohorts for MAD outliers (None = no cohort
+            test; whole column is one cohort if []).
+        direction: 'abs' flags |value| > threshold (two-sided); 'pos' flags
+            value > threshold (one-sided, for already-signed magnitudes like a
+            dissimilarity or an agreement-rate drop).
+
+    Returns:
+        List of flag dicts (focus, key, metric, value, threshold, flag_type).
+    """
+    if df.empty or value_col not in df.columns:
+        return []
+    work = df.copy()
+    vals = pd.to_numeric(work[value_col], errors="coerce")
+    compare = vals.abs() if direction == "abs" else vals
+    fixed = (compare > threshold).fillna(False)
+    if cohort_cols is None:
+        cohort = pd.Series(False, index=work.index)
+    elif cohort_cols:
+        cohort = work.groupby(cohort_cols)[value_col].transform(
+            lambda s: mad_outlier_mask(s)
+        )
+        cohort = cohort.fillna(False).astype(bool)
+    else:
+        cohort = mad_outlier_mask(vals)
+    # Magnitude floor: a cohort outlier in a near-constant cohort can have a huge
+    # robust-z yet a trivial magnitude. Require it to also clear a fraction of the
+    # fixed threshold so we don't flag sub-noise differences.
+    cohort = cohort & (compare > threshold * COHORT_MIN_FRACTION)
+    records: list[dict[str, object]] = []
+    for idx in work.index[fixed | cohort]:
+        types = []
+        if fixed[idx]:
+            types.append("fixed")
+        if cohort[idx]:
+            types.append("cohort-outlier")
+        key = ", ".join(f"{c}={work.at[idx, c]}" for c in key_cols)
+        records.append(
+            {
+                "focus": focus,
+                "key": key,
+                "metric": metric,
+                "value": vals[idx],
+                "threshold": threshold,
+                "flag_type": "+".join(types),
+            }
+        )
+    return records
+
+
+def build_flags(
+    outputs: dict[str, pd.DataFrame],
+    thresholds: dict[str, float] | None = None,
+) -> pd.DataFrame:
+    """Assemble the consolidated flags table across focuses.
+
+    Applies fixed thresholds and MAD cohort-outlier tests to the quantitative
+    comparison tables. Cohorts are formed within platform / rank / metric so a
+    group that is out of line with its siblings is flagged even when under the
+    absolute threshold.
+
+    Args:
+        outputs: Mapping of table name -> comparison DataFrame, using the names
+            written by compare_downstream_runs.py.
+        thresholds: Override thresholds (falls back to DEFAULT_THRESHOLDS).
+
+    Returns:
+        DataFrame: focus, key, metric, value, threshold, flag_type.
+    """
+    t = {**DEFAULT_THRESHOLDS, **(thresholds or {})}
+    records: list[dict[str, object]] = []
+
+    qc = outputs.get("qc_numeric")
+    if qc is not None and not qc.empty:
+        survival = qc[(qc["metric"] == "n_reads_single") & (qc["stage"] == "cleaned")]
+        records += _flag_records(
+            survival,
+            "pct_change",
+            t["read_survival_pct"],
+            "qc",
+            "cleaned read survival (%)",
+            ["group", "sample"],
+            ["platform"],
+            "abs",
+        )
+        others = qc[
+            ~qc["metric"].isin(["n_reads_single", "n_read_pairs", "n_bases_approx"])
+        ]
+        records += _flag_records(
+            others,
+            "pct_change",
+            t["qc_pct_change"],
+            "qc",
+            "qc metric (%)",
+            ["group", "sample", "stage", "metric"],
+            ["platform", "metric"],
+            "abs",
+        )
+
+    bc = outputs.get("kraken_bray_curtis")
+    if bc is not None and not bc.empty:
+        records += _flag_records(
+            bc,
+            "bray_curtis",
+            t["bray_curtis"],
+            "kraken",
+            "Bray-Curtis dissimilarity",
+            ["group", "rank", "ribosomal"],
+            ["rank", "ribosomal"],
+            "pos",
+        )
+
+    status = outputs.get("viral_read_status")
+    if status is not None and not status.empty:
+        vert = status[status["scope"] == "vertebrate"]
+        records += _flag_records(
+            vert,
+            "pct_lost",
+            t["viral_pct_lost"],
+            "viral",
+            "vertebrate-viral reads lost (%)",
+            ["group"],
+            [],
+            "pos",
+        )
+        records += _flag_records(
+            vert,
+            "pct_reassigned",
+            t["viral_pct_reassigned"],
+            "viral",
+            "vertebrate-viral reads reassigned (%)",
+            ["group"],
+            [],
+            "pos",
+        )
+
+    clade = outputs.get("clade_rank_shares")
+    if clade is not None and not clade.empty:
+        total = clade[clade["count_type"] == "reads_clade_total"]
+        records += _flag_records(
+            total,
+            "delta_pp",
+            t["clade_share_pp"],
+            "viral",
+            "clade share change (pp)",
+            ["group", "rank_level", "name"],
+            ["rank_level"],
+            "abs",
+        )
+
+    val = outputs.get("viral_validation_agreement")
+    if val is not None and not val.empty and "agreement_rate_main" in val.columns:
+        v = val.copy()
+        v["agreement_drop"] = v["agreement_rate_main"] - v["agreement_rate_dev"]
+        records += _flag_records(
+            v,
+            "agreement_drop",
+            t["validation_agreement_drop"],
+            "viral",
+            "BLAST-agreement rate drop",
+            ["group"],
+            [],
+            "pos",
+        )
+
+    return pd.DataFrame.from_records(
+        records,
+        columns=["focus", "key", "metric", "value", "threshold", "flag_type"],
+    )

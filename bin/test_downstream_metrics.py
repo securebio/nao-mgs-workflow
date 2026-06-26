@@ -464,3 +464,145 @@ class TestSummariseAndBuckets:
         all_buckets = buckets[buckets.scope == "all"]
         assert list(all_buckets.bucket) == ["same-genus"]
         assert all_buckets.iloc[0].n_reads == 1
+
+
+class TestCladeRankShares:
+    ANN = pd.DataFrame(
+        [
+            {"taxid": 200, "name": "familyX", "rank": "family"},
+            {"taxid": 210, "name": "familyY", "rank": "family"},
+            {"taxid": 300, "name": "genusG", "rank": "genus"},
+        ]
+    )
+
+    def _clade(self, rows):
+        return pd.DataFrame(
+            rows, columns=["group", "taxid", "reads_clade_total", "reads_clade_dedup"]
+        )
+
+    def test_family_shares_and_delta(self):
+        main = self._clade([["G", 200, 75, 75], ["G", 210, 25, 25], ["G", 300, 99, 99]])
+        dev = self._clade([["G", 200, 50, 50], ["G", 210, 50, 50], ["G", 300, 99, 99]])
+        out = dm.clade_rank_shares(
+            main,
+            dev,
+            self.ANN,
+            rank_levels=("family",),
+            count_cols=("reads_clade_total",),
+        )
+        fx = out[out.taxid == 200].iloc[0]
+        # genus row (300) ignored; familyX share 0.75 -> 0.50.
+        assert abs(fx.share_main - 0.75) < 1e-9
+        assert abs(fx.share_dev - 0.50) < 1e-9
+        assert abs(fx.delta_pp - (-25.0)) < 1e-9
+
+    def test_family_dropped_in_dev(self):
+        main = self._clade([["G", 200, 50, 50], ["G", 210, 50, 50]])
+        dev = self._clade([["G", 200, 100, 100]])
+        out = dm.clade_rank_shares(
+            main,
+            dev,
+            self.ANN,
+            rank_levels=("family",),
+            count_cols=("reads_clade_total",),
+        )
+        fy = out[out.taxid == 210].iloc[0]
+        assert fy.share_dev == 0.0
+        assert fy.delta_pp == -50.0
+
+
+class TestValidationAgreement:
+    def test_counts_and_rates(self):
+        vh = pd.DataFrame(
+            {
+                "group": ["G", "G", "G", "G"],
+                "validation_distance_aligner": [0, 2, None, 0],
+            }
+        )
+        out = dm.validation_agreement(vh).iloc[0]
+        assert out.n_reads == 4
+        assert out.n_validated == 3
+        assert abs(out.frac_validated - 0.75) < 1e-9
+        # 2 of 3 validated reads agree (distance 0).
+        assert abs(out.agreement_rate - 2 / 3) < 1e-9
+
+
+class TestVertebrateStatusFlips:
+    def _ann(self, rows):
+        return pd.DataFrame(
+            rows,
+            columns=["taxid", "taxid_species", "name", "infection_status_vertebrate"],
+        )
+
+    def test_gained_and_lost(self):
+        old = self._ann([[1, 1, "a", "1"], [2, 2, "b", "0"], [3, 3, "c", "1"]])
+        new = self._ann([[1, 1, "a", "1"], [2, 2, "b", "1"], [3, 3, "c", "0"]])
+        out = dm.vertebrate_status_flips(old, new)
+        changes = dict(zip(out.taxid, out.change, strict=True))
+        assert changes[2] == "gained_vertebrate"
+        assert changes[3] == "lost_vertebrate"
+        assert 1 not in changes
+
+
+###############################
+# FLAGGING                    #
+###############################
+
+
+class TestMadOutlierMask:
+    def test_flags_clear_outlier(self):
+        s = pd.Series([1.0, 1.1, 0.9, 1.0, 10.0])
+        mask = dm.mad_outlier_mask(s)
+        assert mask.iloc[-1]
+        assert not mask.iloc[0]
+
+    def test_zero_mad_flags_nothing(self):
+        # All identical -> MAD 0 -> no robust spread -> no flags.
+        s = pd.Series([5.0, 5.0, 5.0, 5.0])
+        assert not dm.mad_outlier_mask(s).any()
+
+
+class TestBuildFlags:
+    def test_fixed_threshold_on_bray_curtis(self):
+        bc = pd.DataFrame(
+            {
+                "group": ["A", "B"],
+                "rank": ["S", "S"],
+                "ribosomal": [False, False],
+                "bray_curtis": [0.02, 0.40],
+            }
+        )
+        flags = dm.build_flags({"kraken_bray_curtis": bc})
+        assert len(flags) == 1
+        assert "B" in flags.iloc[0].key
+        assert "fixed" in flags.iloc[0].flag_type
+
+    def test_cohort_outlier_suppressed_below_magnitude_floor(self):
+        # mean_seq_len pct_change near zero everywhere; one slightly higher but
+        # still trivial -> must NOT flag despite being a statistical outlier.
+        qc = pd.DataFrame(
+            {
+                "group": [f"G{i}" for i in range(6)],
+                "sample": [f"S{i}" for i in range(6)],
+                "stage": ["cleaned"] * 6,
+                "platform": ["illumina"] * 6,
+                "metric": ["mean_seq_len"] * 6,
+                "pct_change": [0.0, 0.001, -0.001, 0.002, -0.002, 0.03],
+            }
+        )
+        flags = dm.build_flags({"qc_numeric": qc})
+        assert flags.empty
+
+    def test_cohort_outlier_flagged_when_magnitude_meaningful(self):
+        # One group's reassignment rate is a clear, sizable cohort outlier.
+        status = pd.DataFrame(
+            {
+                "group": [f"G{i}" for i in range(6)],
+                "scope": ["vertebrate"] * 6,
+                "pct_lost": [0.1, 0.2, 0.1, 0.15, 0.1, 0.12],
+                "pct_reassigned": [1.0, 1.1, 0.9, 1.0, 1.2, 9.0],
+            }
+        )
+        flags = dm.build_flags({"viral_read_status": status})
+        reassign_flags = flags[flags.metric.str.contains("reassigned")]
+        assert any("G5" in k for k in reassign_flags.key)
