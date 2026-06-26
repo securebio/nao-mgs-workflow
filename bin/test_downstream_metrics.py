@@ -247,3 +247,84 @@ class TestCompareQcFlags:
         )
         out = dm.compare_qc_flags(main, dev, ["per_tile_sequence_quality"])
         assert out.empty
+
+
+###############################
+# FOCUS 2: KRAKEN ABUNDANCES  #
+###############################
+
+
+def _kr(group, ribosomal, rank, taxid, name, n) -> dict:
+    return {
+        "group": group,
+        "ribosomal": ribosomal,
+        "rank": rank,
+        "taxid": taxid,
+        "name": name,
+        "n_reads_clade": n,
+    }
+
+
+class TestKrakenRelativeAbundance:
+    def test_filters_rank_and_aggregates_samples_to_fraction(self):
+        # Two species at rank S (plus a genus row that must be ignored).
+        df = pd.DataFrame(
+            [
+                _kr("G1", False, "S", 1, "sp1", 30),
+                _kr("G1", False, "S", 2, "sp2", 10),
+                _kr("G1", False, "G", 9, "genus", 999),
+            ]
+        )
+        out = dm.kraken_relative_abundance(df, "S")
+        assert set(out.taxid) == {1, 2}
+        rel = dict(zip(out.taxid, out.rel, strict=True))
+        assert rel[1] == 0.75 and rel[2] == 0.25
+
+    def test_zero_total_set_dropped(self):
+        df = pd.DataFrame([_kr("G1", False, "S", 1, "sp1", 0)])
+        out = dm.kraken_relative_abundance(df, "S")
+        assert out.empty
+
+
+class TestKrakenBrayCurtis:
+    def test_identical_profiles_give_zero(self):
+        df = pd.DataFrame(
+            [_kr("G1", False, "S", 1, "a", 50), _kr("G1", False, "S", 2, "b", 50)]
+        )
+        out = dm.kraken_bray_curtis(df, df, ranks=("S",))
+        assert out.iloc[0].bray_curtis == 0.0
+
+    def test_disjoint_profiles_give_one(self):
+        main = pd.DataFrame([_kr("G1", False, "S", 1, "a", 100)])
+        dev = pd.DataFrame([_kr("G1", False, "S", 2, "b", 100)])
+        out = dm.kraken_bray_curtis(main, dev, ranks=("S",))
+        assert out.iloc[0].bray_curtis == 1.0
+
+    def test_known_intermediate_value(self):
+        # main 80/20, dev 50/50 -> TVD = 0.5*(|.8-.5|+|.2-.5|) = 0.3
+        main = pd.DataFrame(
+            [_kr("G1", False, "S", 1, "a", 80), _kr("G1", False, "S", 2, "b", 20)]
+        )
+        dev = pd.DataFrame(
+            [_kr("G1", False, "S", 1, "a", 50), _kr("G1", False, "S", 2, "b", 50)]
+        )
+        out = dm.kraken_bray_curtis(main, dev, ranks=("S",))
+        assert abs(out.iloc[0].bray_curtis - 0.3) < 1e-9
+
+
+class TestKrakenTopMovers:
+    def test_orders_by_abs_change_and_signs_delta(self):
+        main = pd.DataFrame(
+            [_kr("G1", False, "S", 1, "a", 90), _kr("G1", False, "S", 2, "b", 10)]
+        )
+        dev = pd.DataFrame(
+            [_kr("G1", False, "S", 1, "a", 10), _kr("G1", False, "S", 2, "b", 90)]
+        )
+        out = dm.kraken_top_movers(main, dev, "S", n=1)
+        top = out.iloc[0]
+        # Both move 80pp; tie broken arbitrarily but delta sign must be correct.
+        assert abs(abs(top.delta_pp) - 80.0) < 1e-9
+        if top.taxid == 1:
+            assert top.delta_pp < 0
+        else:
+            assert top.delta_pp > 0

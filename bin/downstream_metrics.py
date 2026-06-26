@@ -381,3 +381,130 @@ def compare_qc_flags(
         .sort_values([*QC_KEYS, "check"])
         .reset_index(drop=True)[[*QC_KEYS, "check", "main_flag", "dev_flag"]]
     )
+
+
+#########################################
+# FOCUS 2: KRAKEN ABUNDANCES            #
+#########################################
+
+# Kraken ribosomal/non-ribosomal read sets are compared separately; abundance is
+# compared at these rank codes by default.
+KRAKEN_RANKS = ("G", "S")
+
+
+def kraken_relative_abundance(df: pd.DataFrame, rank: str) -> pd.DataFrame:
+    """Relative abundance of each taxon at `rank` per (group, ribosomal).
+
+    Reads are aggregated across samples within a group using clade read counts
+    (n_reads_clade), so sub-rank reads roll up into their rank-level ancestor's
+    clade total. Relative abundance is each taxon's share of the total clade
+    reads assigned at that rank within the (group, ribosomal) set.
+
+    Args:
+        df: Long kraken frame with columns group, ribosomal, rank, taxid, name,
+            n_reads_clade.
+        rank: Kraken rank code to filter to (e.g. 'S', 'G').
+
+    Returns:
+        DataFrame: group, ribosomal, taxid, name, n_reads_clade, rel. Sets whose
+        total is zero are dropped (no abundance is defined).
+    """
+    sub = df[df["rank"] == rank].copy()
+    agg = sub.groupby(["group", "ribosomal", "taxid"], as_index=False).agg(
+        n_reads_clade=("n_reads_clade", "sum"),
+        name=("name", "first"),
+    )
+    totals = agg.groupby(["group", "ribosomal"])["n_reads_clade"].transform("sum")
+    agg = agg[totals > 0].copy()
+    totals = totals[totals > 0]
+    agg["rel"] = agg["n_reads_clade"] / totals
+    return agg
+
+
+def _merge_abundance(main: pd.DataFrame, dev: pd.DataFrame, rank: str) -> pd.DataFrame:
+    """Outer-join main/dev relative abundance at `rank`, filling absent taxa 0."""
+    a = kraken_relative_abundance(main, rank)
+    b = kraken_relative_abundance(dev, rank)
+    merged = a.merge(
+        b,
+        on=["group", "ribosomal", "taxid"],
+        how="outer",
+        suffixes=("_main", "_dev"),
+    )
+    merged["rel_main"] = merged["rel_main"].fillna(0.0)
+    merged["rel_dev"] = merged["rel_dev"].fillna(0.0)
+    merged["name"] = merged["name_main"].fillna(merged["name_dev"])
+    merged["abs_diff"] = (merged["rel_main"] - merged["rel_dev"]).abs()
+    return merged
+
+
+def kraken_bray_curtis(
+    main: pd.DataFrame, dev: pd.DataFrame, ranks: tuple[str, ...] = KRAKEN_RANKS
+) -> pd.DataFrame:
+    """Bray-Curtis dissimilarity per (group, ribosomal, rank).
+
+    For abundance vectors that each sum to 1, Bray-Curtis equals the total
+    variation distance, 0.5 * sum|x_i - y_i| (0 = identical, 1 = disjoint).
+
+    Returns:
+        DataFrame: group, ribosomal, rank, bray_curtis, n_taxa_union.
+    """
+    records: list[dict[str, object]] = []
+    for rank in ranks:
+        merged = _merge_abundance(main, dev, rank)
+        grouped = merged.groupby(["group", "ribosomal"])
+        for (group, ribosomal), sub in grouped:
+            records.append(
+                {
+                    "group": group,
+                    "ribosomal": ribosomal,
+                    "rank": rank,
+                    "bray_curtis": 0.5 * sub["abs_diff"].sum(),
+                    "n_taxa_union": len(sub),
+                }
+            )
+    return (
+        pd.DataFrame.from_records(
+            records,
+            columns=["group", "ribosomal", "rank", "bray_curtis", "n_taxa_union"],
+        )
+        .sort_values(["group", "rank", "ribosomal"])
+        .reset_index(drop=True)
+    )
+
+
+def kraken_top_movers(
+    main: pd.DataFrame,
+    dev: pd.DataFrame,
+    rank: str,
+    n: int = 10,
+) -> pd.DataFrame:
+    """Top `n` taxa by absolute abundance change per (group, ribosomal) at `rank`.
+
+    Returns:
+        DataFrame: group, ribosomal, rank, taxid, name, pct_main, pct_dev,
+        delta_pp (percentage-point change, dev - main), ordered by |delta_pp|.
+    """
+    merged = _merge_abundance(main, dev, rank)
+    merged["pct_main"] = merged["rel_main"] * 100.0
+    merged["pct_dev"] = merged["rel_dev"] * 100.0
+    merged["delta_pp"] = merged["pct_dev"] - merged["pct_main"]
+    merged["rank"] = rank
+    ordered = merged.sort_values("abs_diff", ascending=False)
+    top = ordered.groupby(
+        ["group", "ribosomal"], as_index=False, group_keys=False
+    ).head(n)
+    return top.sort_values(
+        ["group", "ribosomal", "abs_diff"], ascending=[True, True, False]
+    )[
+        [
+            "group",
+            "ribosomal",
+            "rank",
+            "taxid",
+            "name",
+            "pct_main",
+            "pct_dev",
+            "delta_pp",
+        ]
+    ].reset_index(drop=True)

@@ -281,6 +281,30 @@ def load_qc_basic_stats(results_dir: Path, manifest: dm.SideManifest) -> pd.Data
     return pd.concat(frames, ignore_index=True)
 
 
+def load_kraken(results_dir: Path, manifest: dm.SideManifest) -> pd.DataFrame:
+    """Load and concatenate kraken reports across all groups.
+
+    Reads only the columns needed for abundance comparison to keep memory low.
+
+    Returns:
+        Concatenated DataFrame with columns group, ribosomal, rank, taxid, name,
+        n_reads_clade, or an empty DataFrame if no kraken files are found.
+    """
+    cols = ["group", "ribosomal", "rank", "taxid", "name", "n_reads_clade"]
+    frames: list[pd.DataFrame] = []
+    for group, gm in manifest.items():
+        if "kraken" not in gm.files:
+            continue
+        path = _group_file(results_dir, group, "kraken")
+        if path is None:
+            continue
+        df = read_tsv(path, usecols=cols)
+        frames.append(df)
+    if not frames:
+        return pd.DataFrame()
+    return pd.concat(frames, ignore_index=True)
+
+
 ###############
 # OUTPUT I/O  #
 ###############
@@ -387,6 +411,23 @@ def main() -> None:
         write_tsv(qc_flags, args.out / "qc_flag_changes.tsv")
     else:
         logger.warning("No qc_basic_stats files found; skipping Focus 3.")
+
+    # Focus 2: kraken abundances.
+    kraken_main = load_kraken(main_results, main_manifest)
+    kraken_dev = load_kraken(dev_results, dev_manifest)
+    if not kraken_main.empty and not kraken_dev.empty:
+        bray = dm.kraken_bray_curtis(kraken_main, kraken_dev)
+        write_tsv(bray, args.out / "kraken_bray_curtis.tsv")
+        movers = pd.concat(
+            [
+                dm.kraken_top_movers(kraken_main, kraken_dev, rank)
+                for rank in dm.KRAKEN_RANKS
+            ],
+            ignore_index=True,
+        )
+        write_tsv(movers, args.out / "kraken_top_movers.tsv")
+    else:
+        logger.warning("No kraken files found; skipping Focus 2.")
 
     logger.info(f"Done. Outputs in {args.out.resolve()}")
 
