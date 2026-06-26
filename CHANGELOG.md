@@ -1,5 +1,6 @@
 # v3.2.2.0-dev
 
+- Replace channel-operator `.splitCsv(header: true)` with the `flatMap { f -> f.splitCsv(header: true) }` Path-method form in the loadSampleSheet (x2) and loadDownstreamData (x1) subworkflows, preparing for static typing (the channel-operator `splitCsv` is non-statically-typed). Mechanical refactor; no behavioral change.
 - Scale `MARK_ALIGNMENT_DUPLICATES` and `VSEARCH_CLUSTER` memory by input size via per-label tier closures (~1.5× headroom) to address OOM issues on large samples.
 - Exclude five viral genome records with rRNA contamination from the genome reference via `ref/hv_patterns_exclude.txt`.
 - Add `set -euo pipefail` to `BLASTN` module.
