@@ -82,13 +82,21 @@ The script writes these TSVs to `--out`:
   flag_type). Read this first; it drives the §Flags section and Summary.
 - `file_inventory.tsv`, `column_conformance.tsv` — Focus 4 / §0.
 - `viral_read_status.tsv` — per group × scope (all|vertebrate) read-status
-  counts (§1.1).
+  counts, with pct_lost (/main), pct_gained (/dev), pct_reassigned (/shared) —
+  note the different denominators (§1.1).
+- `viral_read_status_dedup.tsv` — same, on alignment exemplars only (short-read),
+  to check whether PCR duplicates drive the lost/gained/reassigned counts (§1.1).
+- `viral_reassignment_concentration.tsv` — per group: distinct (taxid_main,
+  taxid_dev) pairs and the top pair's share, so a high reassignment % driven by
+  one systematic remap is visible (§1.1).
 - `viral_reassignment_buckets.tsv`, `viral_reassignment_detail.tsv` —
-  divergence-bucket counts and per-read detail (§1.2).
+  divergence-bucket counts (all buckets, incl. zero and unresolved-taxid) and
+  per-read detail (§1.2).
 - `clade_rank_shares.tsv` — family/order shares main vs dev (§1.3).
 - `viral_validation_agreement.tsv` — BLAST agreement (§1.4).
 - `vertebrate_status_flips.tsv` — taxa whose vertebrate status flipped (§1.5).
 - `kraken_bray_curtis.tsv`, `kraken_top_movers.tsv` — Focus 2 / §2.
+- `qc_survival.tsv` — raw->cleaned read-survival fraction per side + delta (§3).
 - `qc_numeric.tsv`, `qc_flag_changes.tsv` — Focus 3 / §3.
 
 ### Step 3 - Fill in the template

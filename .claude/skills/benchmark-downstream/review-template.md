@@ -17,10 +17,13 @@
 
 ## Summary
 
-- Concise bullet list of the most important findings (one short sentence each).
+- Bullet list of the most important findings: each ≤2 lines with at most one
+  representative number; leave the supporting detail to the numbered findings.
 - State the comparison scope: N groups (X Illumina + Y ONT), matched by name.
 - **Flags:** one line per flagged finding category with counts (mirrors §Flags).
 - Don't link out to file paths; the report must stand alone (embed the numbers).
+- Keep language neutral: describe differences, never assert causation or a
+  good/bad verdict. Name a likely driver only with an explicit "(hypothesis)".
 
 ---
 
@@ -35,18 +38,37 @@
 
 ### 1. Viral assignments
 
-Read-level comparison on `(group, seq_id)`; the canonical assignment is the
-pipeline call `aligner_taxid_lca`. The vertebrate-viral subset = reads whose
-assigned taxid is `infection_status_vertebrate == 1` in the **dev** index
-(species rollup; status 3 "likely" excluded — note as a documented choice).
+Read-level comparison joined on `(group, sample, seq_id)`; the canonical
+assignment is the pipeline call `aligner_taxid_lca`. The vertebrate-viral subset
+= reads whose assigned taxid is `infection_status_vertebrate == 1` in the **dev**
+index (species rollup; status 3 "likely" excluded — note as a documented choice).
+
+> **Status-3 caveat (state this):** the subset is status-1 ("affirmatively
+> infecting") only; status-3 ("likely-infecting") reads are excluded, so a
+> regression confined to status-3 taxa would not trip the vertebrate flags. Note
+> the status-3 read share if material.
+
+> **Caveat (state this):** counts are per-read (PCR duplicates included), and
+> taxids are compared as-is. If the dev index ships no `taxonomy-merged.dmp`,
+> taxids merged across index versions cannot be canonicalized, so some
+> "reassigned" reads may be taxid-renumbering artifacts. Use the dedup view
+> (`viral_read_status_dedup.tsv`, alignment exemplars) and the concentration
+> table (`viral_reassignment_concentration.tsv`) to qualify the headline %.
 
 #### 1.1. Lost / gained / reassigned reads (vertebrate-viral subset)
 
-| Group | Platform | main reads | shared | reassigned | lost | gained | % lost | % reassigned |
-|---|---|---|---|---|---|---|---|---|
-| ... | | | | | | | | |
+Note the **different denominators**: % lost = lost/main, % gained = gained/dev,
+% reassigned = reassigned/shared.
+
+| Group | Platform | main | dev | shared | reassigned | lost | gained | % lost | % gained | % reassigned |
+|---|---|---|---|---|---|---|---|---|---|---|
+| ... | | | | | | | | | | |
 
 - Findings: groups with notable loss/gain/reassignment; flag large ones.
+- For any flagged group, give its concentration (distinct taxid pairs and the
+  top pair's share of reassigned reads) so a high % driven by one systematic
+  taxid remap is not mistaken for broad instability; and note whether the dedup
+  (exemplar) view changes the picture.
 
 #### 1.2. Reassignment severity (how different taxonomically)
 
@@ -72,12 +94,19 @@ assigned taxid is `infection_status_vertebrate == 1` in the **dev** index
 - Per-family (and per-order) share of viral reads, main vs dev, flagging large
   share shifts (report both reads_clade_total and reads_clade_dedup).
 - Call out whole families that appear/disappear across many groups.
+- Shares are normalized within the rank (each family's share of family-classified
+  reads), so when one family drops to 0 the others' shares mechanically rise —
+  read share *increases* as partly renormalization, not necessarily real growth.
+  Rank/name are resolved from both index annotations; note that classification
+  uses the dev taxonomy, so a "disappearance" can be a re-ranking artifact.
 
 #### 1.4. BLAST validation agreement (secondary)
 
-- Per-group fraction of reads validated and the agreement rate (distance 0),
-  main vs dev. Note large agreement-rate shifts. (BLAST runs on cluster
-  representatives; treat as a secondary signal.)
+- Per-group fraction of reads validated and the agreement rate, main vs dev,
+  reported together (a rate change on a shifting validated subset is ambiguous).
+  "Agreement" = `validation_distance_aligner == 0`, i.e. the aligner call is an
+  ancestor of or equal to the BLAST call (not necessarily identical). BLAST runs
+  on cluster representatives and is propagated to reads; treat as secondary.
 
 #### 1.5. Vertebrate-status flips between indexes (side table)
 
@@ -87,7 +116,11 @@ assigned taxid is `infection_status_vertebrate == 1` in the **dev** index
 ### 2. Kraken abundances
 
 Per group, split by ribosomal read set (TRUE/FALSE); Bray-Curtis dissimilarity
-(= total variation distance) at genus and species rank, plus top movers.
+(0 = identical, 1 = disjoint; for relative-abundance vectors that each sum to 1
+it equals the total variation distance) at genus and species rank, plus top
+movers. Abundances are pooled across a group's samples (depth-weighted) and
+computed on subsampled reads, so this is a whole-community sanity check
+dominated by abundant (mostly non-viral) taxa, not a viral-signal detector.
 
 | Group | Ribosomal | Rank | Bray-Curtis | n taxa (union) |
 |---|---|---|---|---|
@@ -96,11 +129,12 @@ Per group, split by ribosomal read set (TRUE/FALSE); Bray-Curtis dissimilarity
 
 ### 3. Quality metrics
 
-Per group/sample at raw and cleaned stages: read survival, mean_seq_len,
-percent_gc, percent_duplicates, n_bases; plus FASTQC flag transitions.
+Per group/sample: the raw->cleaned read-survival fraction compared across runs
+(in percentage points — this reflects a QC/screen change, unlike a cross-run
+change in the absolute cleaned count); plus mean_seq_len, percent_gc,
+percent_duplicates, n_bases deltas and FASTQC flag transitions.
 
-- Findings: notable QC shifts (e.g. cleaned read survival), any FASTQC flag
-  changes.
+- Findings: notable survival or QC-metric shifts, any FASTQC flag changes.
 
 ### 4. Output file overview (schema-driven)
 
@@ -147,6 +181,10 @@ holds, in this order, and no others (omit a bullet whose condition is false):
 
 Each bullet: a one-line argument referencing the findings above, with a concern
 level (high | medium | low). No verdict — concern reflects magnitude/breadth only.
+Concern levels are FIXED per condition above; do not re-level. Use neutral
+wording: "confirm whether X reflects a real change or an artifact", never verdict
+words like "over-calling", "legitimate", or "directly caused by"; keep any
+driver link explicitly hypothetical ("temporally/structurally consistent with").
 
 ---
 

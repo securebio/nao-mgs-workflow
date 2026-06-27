@@ -818,8 +818,9 @@ def summarize_read_status(joined: pd.DataFrame, vert: set[int]) -> pd.DataFrame:
 
     Returns:
         DataFrame: group, scope ('all'|'vertebrate'), n_main, n_dev, n_shared,
-        n_same, n_reassigned, n_lost, n_gained, pct_lost, pct_reassigned
-        (percentages relative to the main-side read count).
+        n_same, n_reassigned, n_lost, n_gained, and three percentages with
+        DIFFERENT denominators: pct_lost = lost/n_main, pct_gained = gained/n_dev,
+        pct_reassigned = reassigned/n_shared.
     """
     flagged = _add_vertebrate_flag(joined, vert)
     records: list[dict[str, object]] = []
@@ -846,6 +847,7 @@ def summarize_read_status(joined: pd.DataFrame, vert: set[int]) -> pd.DataFrame:
                     "n_lost": n_lost,
                     "n_gained": n_gained,
                     "pct_lost": 100.0 * n_lost / n_main if n_main else None,
+                    "pct_gained": 100.0 * n_gained / n_dev if n_dev else None,
                     "pct_reassigned": (
                         100.0 * n_reassigned / n_shared if n_shared else None
                     ),
@@ -864,6 +866,7 @@ def summarize_read_status(joined: pd.DataFrame, vert: set[int]) -> pd.DataFrame:
             "n_lost",
             "n_gained",
             "pct_lost",
+            "pct_gained",
             "pct_reassigned",
         ],
     )
@@ -927,18 +930,21 @@ def reassignment_distances(
 
 
 def bucket_summary(reassignment_detail: pd.DataFrame) -> pd.DataFrame:
-    """Counts of reassigned reads per (scope, bucket), ordered by severity.
+    """Counts of reassigned reads per (scope, bucket), all buckets shown.
+
+    Every canonical bucket is emitted for each scope (0 when none) so a reader can
+    tell "0 reads" from "not checked" — e.g. a 0 in `unresolved-taxid` is the
+    reassuring result that no assignment used a taxid missing from the dev
+    taxonomy. unresolved-taxid sits at the FRONT, outside the same-species ->
+    cross-root biological severity gradient (placing it after cross-root would
+    wrongly read as the most severe category).
 
     Returns:
-        DataFrame: scope, bucket, n_reads, ordered identical->cross-superkingdom.
+        DataFrame: scope, bucket, n_reads.
     """
-    # unresolved-taxid is a taxonomy-versioning artifact of unknown biological
-    # severity, so it sits at the FRONT, outside the same-species -> cross-root
-    # severity gradient (placing it after cross-root would wrongly read as the
-    # most severe category).
-    order = [
+    # 'identical' is excluded: reassigned reads by definition are not identical.
+    display_buckets = [
         UNRESOLVED_TAXID,
-        "identical",
         *(f"same-{r}" for r in ORDERED_RANKS),
         SHARED_HIGHER,
         CROSS_ROOT,
@@ -946,14 +952,19 @@ def bucket_summary(reassignment_detail: pd.DataFrame) -> pd.DataFrame:
     if reassignment_detail.empty:
         return pd.DataFrame(columns=["scope", "bucket", "n_reads"])
     counts = (
-        reassignment_detail.groupby(["scope", "bucket"])
-        .size()
-        .reset_index(name="n_reads")
+        reassignment_detail.groupby(["scope", "bucket"]).size().to_dict()
     )
-    counts["_o"] = counts["bucket"].apply(
-        lambda b: order.index(b) if b in order else len(order)
-    )
-    return counts.sort_values(["scope", "_o"]).drop(columns="_o").reset_index(drop=True)
+    records: list[dict[str, object]] = []
+    for scope in sorted(reassignment_detail["scope"].unique()):
+        for bucket in display_buckets:
+            records.append(
+                {
+                    "scope": scope,
+                    "bucket": bucket,
+                    "n_reads": int(counts.get((scope, bucket), 0)),
+                }
+            )
+    return pd.DataFrame.from_records(records, columns=["scope", "bucket", "n_reads"])
 
 
 def reassignment_concentration(reassignment_detail: pd.DataFrame) -> pd.DataFrame:

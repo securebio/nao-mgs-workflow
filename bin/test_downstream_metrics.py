@@ -504,10 +504,14 @@ class TestSummariseAndBuckets:
         tax = _synthetic_tree()
         detail = dm.reassignment_distances(joined, tax, vert={401, 402})
         buckets = dm.bucket_summary(detail)
-        # r1: 401->402 is same-genus; that should be the only reassigned read.
         all_buckets = buckets[buckets.scope == "all"]
-        assert list(all_buckets.bucket) == ["same-genus"]
-        assert all_buckets.iloc[0].n_reads == 1
+        # All canonical buckets are emitted (0 when none) so zero rows are visible.
+        assert "unresolved-taxid" in set(all_buckets.bucket)
+        assert "cross-root" in set(all_buckets.bucket)
+        nonzero = all_buckets[all_buckets.n_reads > 0]
+        # r1: 401->402 is the only reassigned read, a same-genus move.
+        assert list(nonzero.bucket) == ["same-genus"]
+        assert nonzero.iloc[0].n_reads == 1
 
 
 class TestCladeRankShares:
