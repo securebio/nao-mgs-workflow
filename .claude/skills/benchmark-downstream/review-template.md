@@ -191,8 +191,10 @@ holds, in this order, and no others (omit a bullet whose condition is false):
 9. Any cross-root or shared-higher-taxon reassignments, as ONE bullet — only if
    the count is > 0. (low)
 10. Empty outputs (e.g. bracken), as ONE bullet — only if any are empty. (low)
-11. A QC note, as ONE bullet — only if a QC/screen parameter changed but is not
-    visible in the aggregate QC metrics. (low)
+11. A QC note, ALWAYS as exactly ONE bullet (low): state the QC result either
+    way — "QC stable: survival Δ within threshold, no FASTQC flag changes" when
+    nothing material changed, or the specific shift otherwise. (Always emit this
+    bullet so the recommendation count is deterministic across reviewers.)
 
 Each bullet: a one-line argument referencing the findings above, with a concern
 level (high | medium | low). No verdict — concern reflects magnitude/breadth only.
