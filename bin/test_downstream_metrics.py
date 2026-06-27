@@ -6,6 +6,7 @@ Test order mirrors the order of functions in downstream_metrics.py.
 
 import downstream_metrics as dm
 import pandas as pd
+import pytest
 
 
 def _entry(
@@ -452,40 +453,33 @@ class TestTaxonomyTree:
     def setup_method(self) -> None:
         self.tax = _synthetic_tree()
 
-    def test_identical(self) -> None:
-        assert self.tax.divergence_bucket(401, 401) == "identical"
+    @pytest.mark.parametrize(
+        ("a", "b", "expected"),
+        [
+            (401, 401, "identical"),
+            (401, 402, "same-genus"),  # siblings under genus 300
+            (401, 410, "same-realm"),  # different family, share realm 100
+            (401, 500, dm.SHARED_HIGHER),  # different realm, share Viruses root
+            (401, 10239, dm.SHARED_HIGHER),  # rolled up to Viruses
+            (401, 600, dm.CROSS_ROOT),  # virus vs bacterial species
+            (401, 999, dm.UNRESOLVED_TAXID),  # 999 absent from the taxonomy
+        ],
+    )
+    def test_divergence_bucket(self, a: int, b: int, expected: str) -> None:
+        assert self.tax.divergence_bucket(a, b) == expected
 
-    def test_same_genus_siblings(self) -> None:
-        # 401 and 402 share genus 300.
-        assert self.tax.divergence_bucket(401, 402) == "same-genus"
-        assert self.tax.edge_distance(401, 402) == 2
-
-    def test_same_family_different_genus(self) -> None:
-        # 401 (under genus 300/family 200) vs 410 (family 210) share realm 100.
-        assert self.tax.divergence_bucket(401, 410) == "same-realm"
-
-    def test_same_realm(self) -> None:
-        # 401 (realm 100) vs 500 (realm 110) -> only share Viruses root.
-        assert self.tax.divergence_bucket(401, 500) == dm.SHARED_HIGHER
-
-    def test_reassigned_up_to_viral_root(self) -> None:
-        # A specific species reassigned to Viruses (10239) shares the viral root.
-        assert self.tax.divergence_bucket(401, 10239) == dm.SHARED_HIGHER
-
-    def test_cross_root_virus_to_cellular(self) -> None:
-        # 401 (virus) vs 600 (bacterial species) meet only at root.
-        assert self.tax.divergence_bucket(401, 600) == dm.CROSS_ROOT
-
-    def test_unresolved_taxid_when_absent_from_tree(self) -> None:
-        # 999 is not in the taxonomy (e.g. merged/deleted across index versions):
-        # an unresolved-taxid bucket, NOT a severe cross-root reassignment.
-        assert self.tax.divergence_bucket(401, 999) == dm.UNRESOLVED_TAXID
-        assert self.tax.edge_distance(401, 999) is None
-
-    def test_edge_distance_via_lca(self) -> None:
-        # realmA and realmB sit under Viruses, so 401 and 500 meet at 10239:
-        # 401->300->200->100->10239 (4 up); 500->110->10239 (2 up); total 6.
-        assert self.tax.edge_distance(401, 500) == 6
+    @pytest.mark.parametrize(
+        ("a", "b", "expected"),
+        [
+            (401, 402, 2),  # siblings: up to genus 300 and back
+            (401, 999, None),  # unresolved taxid -> no distance
+            # realmA/realmB meet at Viruses: 401->300->200->100->10239 (4) +
+            # 500->110->10239 (2) = 6.
+            (401, 500, 6),
+        ],
+    )
+    def test_edge_distance(self, a: int, b: int, expected: int | None) -> None:
+        assert self.tax.edge_distance(a, b) == expected
 
 
 class TestJoinReadAssignments:
@@ -684,26 +678,28 @@ class TestVertebrateStatusFlips:
 
 
 class TestMadOutlierMask:
-    def test_flags_clear_outlier(self) -> None:
-        s = pd.Series([1.0, 1.1, 0.9, 1.0, 10.0])
-        mask = dm.mad_outlier_mask(s)
-        assert mask.iloc[-1]
-        assert not mask.iloc[0]
-
-    def test_zero_mad_flags_nothing(self) -> None:
-        # All identical -> MAD 0 -> no robust spread -> no flags.
-        s = pd.Series([5.0, 5.0, 5.0, 5.0])
-        assert not dm.mad_outlier_mask(s).any()
-
-    def test_one_sided_ignores_low_outlier(self) -> None:
-        # An unusually LOW value is a two-sided outlier but not an upper-tail one.
-        s = pd.Series([10.0, 10.1, 9.9, 10.0, 1.0])
-        assert dm.mad_outlier_mask(s, two_sided=True).iloc[-1]
-        assert not dm.mad_outlier_mask(s, two_sided=False).iloc[-1]
-
-    def test_one_sided_still_flags_high_outlier(self) -> None:
-        s = pd.Series([1.0, 1.1, 0.9, 1.0, 10.0])
-        assert dm.mad_outlier_mask(s, two_sided=False).iloc[-1]
+    @pytest.mark.parametrize(
+        ("values", "two_sided", "idx", "flagged"),
+        [
+            # clear high outlier (two-sided default): last flagged, first not.
+            ([1.0, 1.1, 0.9, 1.0, 10.0], True, -1, True),
+            ([1.0, 1.1, 0.9, 1.0, 10.0], True, 0, False),
+            # constant cohort -> no robust spread -> nothing flagged.
+            ([5.0, 5.0, 5.0, 5.0], True, -1, False),
+            # unusually LOW value: a two-sided outlier but not an upper-tail one.
+            ([10.0, 10.1, 9.9, 10.0, 1.0], True, -1, True),
+            ([10.0, 10.1, 9.9, 10.0, 1.0], False, -1, False),
+            # one-sided still flags a HIGH outlier.
+            ([1.0, 1.1, 0.9, 1.0, 10.0], False, -1, True),
+            # >half identical -> MAD 0; mean-abs-deviation fallback still catches it.
+            ([10.0, 10.0, 10.0, 10.0, 10.0, 500.0], True, -1, True),
+        ],
+    )
+    def test_mad_outlier_mask(
+        self, values: list[float], two_sided: bool, idx: int, flagged: bool
+    ) -> None:
+        mask = dm.mad_outlier_mask(pd.Series(values), two_sided=two_sided)
+        assert bool(mask.iloc[idx]) is flagged
 
 
 class TestBuildFlags:
@@ -786,17 +782,6 @@ class TestVertebrateTaxidsDtype:
         assert dm.vertebrate_taxids(ann) == {10}
 
 
-class TestMadFallback:
-    def test_majority_identical_cohort_still_flags_outlier(self) -> None:
-        # >half identical -> MAD 0; the mean-abs-deviation fallback must still
-        # catch a clear outlier instead of flagging nothing.
-        s = pd.Series([10.0, 10.0, 10.0, 10.0, 10.0, 500.0])
-        assert dm.mad_outlier_mask(s).iloc[-1]
-
-    def test_constant_cohort_flags_nothing(self) -> None:
-        assert not dm.mad_outlier_mask(pd.Series([5.0, 5.0, 5.0, 5.0])).any()
-
-
 class TestJoinReadAssignmentsFixes:
     def _vh(self, rows: list[list]) -> pd.DataFrame:
         return pd.DataFrame(
@@ -824,11 +809,19 @@ class TestJoinReadAssignmentsFixes:
     def test_duplicate_key_raises(self) -> None:
         main = self._vh([["G", "S", "r", 10], ["G", "S", "r", 20]])
         dev = self._vh([["G", "S", "r", 10]])
-        try:
+        with pytest.raises(ValueError, match="Duplicate"):
             dm.join_read_assignments(main, dev)
-            raise AssertionError("expected ValueError on duplicate key")
-        except ValueError:
-            pass
+
+    def test_na_taxid_on_shared_read_is_reassigned(self) -> None:
+        # A shared read with a present taxid on one side and NA on the other must
+        # be 'reassigned', never silently 'same' (NA != value is <NA> -> fillna).
+        main = self._vh([["G", "S", "r1", 10]])
+        dev = pd.DataFrame(
+            [["G", "S", "r1", None]],
+            columns=["group", "sample", "seq_id", "aligner_taxid_lca"],
+        )
+        out = dm.join_read_assignments(main, dev)
+        assert out.iloc[0].status == "reassigned"
 
 
 class TestReassignmentConcentration:
@@ -923,3 +916,99 @@ class TestQcSurvivalPlatformCoalesce:
         assert s2.platform == "illumina"
         assert pd.isna(s2.survival_main)
         assert abs(s2.survival_dev - 0.95) < 1e-9
+
+
+###############################
+# TEST-QUALITY REVIEW: GAPS   #
+###############################
+
+
+class TestBuildFlagsBranches:
+    def test_survival_branch_flags_large_pp_change(self) -> None:
+        survival = pd.DataFrame(
+            {
+                "group": ["G"],
+                "sample": ["S"],
+                "platform": ["illumina"],
+                "delta_pp": [-12.0],  # > read_survival_pp default 5
+            }
+        )
+        flags = dm.build_flags({"qc_survival": survival})
+        assert (flags.metric.str.contains("survival")).any()
+
+    def test_clade_branch_flags_large_share_shift(self) -> None:
+        clade = pd.DataFrame(
+            {
+                "group": ["G"],
+                "rank_level": ["family"],
+                "name": ["FamX"],
+                "count_type": ["reads_clade_total"],
+                "delta_pp": [-20.0],  # > clade_share_pp default 3
+            }
+        )
+        flags = dm.build_flags({"clade_rank_shares": clade})
+        assert (flags.metric.str.contains("clade")).any()
+
+    def test_agreement_drop_flagged_but_improvement_not(self) -> None:
+        # pos metric: a DROP over threshold flags; an equal-size improvement
+        # (negative drop) must NOT flag (guards the direction=="pos" path).
+        val = pd.DataFrame(
+            {
+                "group": ["Gdrop", "Gimprove"],
+                "agreement_rate_main": [0.9, 0.5],
+                "agreement_rate_dev": [0.7, 0.9],  # drop +0.2 ; drop -0.4
+            }
+        )
+        flags = dm.build_flags({"viral_validation_agreement": val})
+        keys = list(flags[flags.metric.str.contains("agreement")].key)
+        assert any("Gdrop" in k for k in keys)
+        assert not any("Gimprove" in k for k in keys)
+
+
+class TestExemplarSubset:
+    def test_keeps_only_exemplars(self) -> None:
+        vh = pd.DataFrame(
+            {
+                "seq_id": ["r1", "r2", "r3"],
+                "prim_align_dup_exemplar": ["r1", "r1", "r3"],
+            }
+        )
+        out = dm.exemplar_subset(vh)
+        assert list(out.seq_id) == ["r1", "r3"]
+
+    def test_passthrough_when_column_absent(self) -> None:
+        vh = pd.DataFrame({"seq_id": ["r1", "r2"]})
+        assert len(dm.exemplar_subset(vh)) == 2
+
+
+class TestKrakenTopMoversCutoff:
+    def test_tie_at_cutoff_broken_by_taxid(self) -> None:
+        # Two taxa tie on abs_diff at the n=1 boundary; lower taxid wins (stable).
+        main = pd.DataFrame(
+            [_kr("G", False, "S", 5, "hi", 90), _kr("G", False, "S", 9, "lo", 10)]
+        )
+        dev = pd.DataFrame(
+            [_kr("G", False, "S", 5, "hi", 10), _kr("G", False, "S", 9, "lo", 90)]
+        )
+        out = dm.kraken_top_movers(main, dev, "S", n=1)
+        assert out.iloc[0].taxid == 5  # both move 80pp; lower taxid kept
+
+
+class TestReassignmentDistancesBuckets:
+    def test_distinct_buckets_mapped(self) -> None:
+        # cross-root (virus->bacteria) and same-genus in one frame map correctly.
+        joined = pd.DataFrame(
+            {
+                "group": ["G", "G"],
+                "seq_id": ["r1", "r2"],
+                "taxid_main": pd.array([401, 401], dtype="Int64"),
+                "taxid_dev": pd.array([600, 402], dtype="Int64"),
+                "status": ["reassigned", "reassigned"],
+            }
+        )
+        detail = dm.reassignment_distances(
+            joined, _synthetic_tree(), vert={401, 402, 600}
+        )
+        all_scope = detail[detail.scope == "all"].set_index("seq_id")
+        assert all_scope.loc["r1", "bucket"] == dm.CROSS_ROOT
+        assert all_scope.loc["r2", "bucket"] == "same-genus"

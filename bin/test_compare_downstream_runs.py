@@ -20,7 +20,7 @@ def _write_tsv_gz(path: Path, header: list[str], rows: list[list]) -> None:
 
 
 ###########################
-# _strip_group_prefix     #
+# _split_filename         #
 ###########################
 
 
@@ -101,11 +101,8 @@ class TestDiscoverSide:
         d = tmp_path / "empty"
         d.mkdir()
         _write_tsv_gz(d / "stray_file.tsv.gz", ["x"], [[1]])
-        try:
+        with pytest.raises(ValueError, match="No recognized"):
             cdr.discover_side(d, self.KNOWN)
-            raise AssertionError("expected ValueError")
-        except ValueError:
-            pass
 
 
 ###########################
