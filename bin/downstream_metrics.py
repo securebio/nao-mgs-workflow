@@ -192,6 +192,42 @@ def _columns_consistent(manifest: SideManifest, file_type: str) -> bool:
     return len(seen) <= 1
 
 
+def _all_columns(manifest: SideManifest, file_type: str) -> list[list[str]]:
+    """Every distinct header observed for `file_type` across groups on this side."""
+    seen: list[list[str]] = []
+    for gm in manifest.values():
+        fe = gm.files.get(file_type)
+        if fe and fe.columns is not None and fe.columns not in seen:
+            seen.append(fe.columns)
+    return seen
+
+
+def _schema_cells_aggregated(
+    schema: list[str] | None, headers: list[list[str]]
+) -> tuple[str, str]:
+    """(missing, extra) vs schema aggregated over all group headers on a side.
+
+    A schema field is 'missing' if absent from ANY group's header (so a single
+    group dropping a required column is caught); a column is 'extra' if present in
+    ANY group's header but not in the schema. Empty-but-present headers surface as
+    '(empty file)'.
+    """
+    if not headers:
+        return "", ""
+    if any(h == [] for h in headers):
+        return "(empty file)", ""
+    if schema is None:
+        return "", ""
+    schema_set = set(schema)
+    missing = [c for c in schema if any(c not in h for h in headers)]
+    seen_extra: list[str] = []
+    for h in headers:
+        for c in h:
+            if c not in schema_set and c not in seen_extra:
+                seen_extra.append(c)
+    return _join(missing), _join(seen_extra)
+
+
 def compare_columns_to_schema(
     main: SideManifest,
     dev: SideManifest,
@@ -227,8 +263,10 @@ def compare_columns_to_schema(
         cols_main = _columns_for_type(main, ft)
         cols_dev = _columns_for_type(dev, ft)
         schema = schema_columns.get(ft)
-        miss_main, extra_main = _schema_cells(schema, cols_main)
-        miss_dev, extra_dev = _schema_cells(schema, cols_dev)
+        # Aggregate missing/extra across ALL groups' headers on each side, so a
+        # later group dropping/adding a column is caught (not just the first).
+        miss_main, extra_main = _schema_cells_aggregated(schema, _all_columns(main, ft))
+        miss_dev, extra_dev = _schema_cells_aggregated(schema, _all_columns(dev, ft))
         rec: dict[str, object] = {
             "file_type": ft,
             "has_schema": schema is not None,
@@ -1016,11 +1054,16 @@ def bucket_summary(reassignment_detail: pd.DataFrame) -> pd.DataFrame:
         SHARED_HIGHER,
         CROSS_ROOT,
     ]
+    # Emit both scopes even with zero reassignments, so "none observed" stays
+    # distinguishable from "not computed".
     if reassignment_detail.empty:
-        return pd.DataFrame(columns=["scope", "bucket", "n_reads"])
-    counts = reassignment_detail.groupby(["scope", "bucket"]).size().to_dict()
+        counts: dict[Any, int] = {}
+        scopes = ["all", "vertebrate"]
+    else:
+        counts = reassignment_detail.groupby(["scope", "bucket"]).size().to_dict()
+        scopes = sorted(reassignment_detail["scope"].unique())
     records: list[dict[str, object]] = []
-    for scope in sorted(reassignment_detail["scope"].unique()):
+    for scope in scopes:
         for bucket in display_buckets:
             records.append(
                 {
@@ -1276,6 +1319,7 @@ DEFAULT_THRESHOLDS: dict[str, float] = {
     "qc_pct_change": 10.0,  # |%| change in other qc metrics
     "bray_curtis": 0.15,  # kraken whole-profile dissimilarity
     "viral_pct_lost": 2.0,  # |%| of vertebrate-viral reads lost
+    "viral_pct_gained": 25.0,  # |%| of dev vertebrate-viral reads that are new
     "viral_pct_reassigned": 10.0,  # |%| of shared reads reassigned
     "clade_share_pp": 3.0,  # |pp| change in a family/order share
     "validation_agreement_drop": 0.10,  # drop in BLAST-agreement rate
@@ -1472,6 +1516,16 @@ def build_flags(
             t["viral_pct_lost"],
             "viral",
             "vertebrate-viral reads lost (%)",
+            ["group"],
+            [],
+            "pos",
+        )
+        records += _flag_records(
+            vert,
+            "pct_gained",
+            t["viral_pct_gained"],
+            "viral",
+            "vertebrate-viral reads gained (%)",
             ["group"],
             [],
             "pos",

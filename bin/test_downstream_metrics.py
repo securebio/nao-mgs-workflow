@@ -159,6 +159,19 @@ class TestCompareColumnsToSchema:
         row = df[df.file_type == "kraken"].iloc[0]
         assert not row.groups_consistent_main
 
+    def test_later_group_missing_column_is_aggregated(self) -> None:
+        # First group conforms, a LATER group drops a required column: the missing
+        # field must still be reported (aggregated across all group headers).
+        main = _manifest(
+            {
+                "G1": ("illumina", {"kraken": _entry(columns=["taxid", "name"])}),
+                "G2": ("illumina", {"kraken": _entry(columns=["taxid"])}),
+            }
+        )
+        df = dm.compare_columns_to_schema(main, main, {"kraken": ["taxid", "name"]})
+        row = df[df.file_type == "kraken"].iloc[0]
+        assert row.missing_vs_schema_main == "name"
+
 
 ###############################
 # FOCUS 3: QUALITY METRICS    #
@@ -511,6 +524,32 @@ class TestSummariseAndBuckets:
         assert vert.n_lost == 0
         all_ = summ[summ.scope == "all"].iloc[0]
         assert all_.n_lost == 1
+
+    def test_zero_vertebrate_group_still_gets_a_row(self) -> None:
+        # A group with no vertebrate reads must still get an explicit zero row
+        # (so "none observed" differs from "not computed").
+        joined = self._joined()
+        summ = dm.summarize_read_status(joined, vert=set())  # nothing vertebrate
+        vert = summ[summ.scope == "vertebrate"]
+        assert len(vert) == 1
+        assert vert.iloc[0].n_main == 0 and vert.iloc[0].n_dev == 0
+
+    def test_bucket_summary_empty_emits_canonical_zero_rows(self) -> None:
+        empty = pd.DataFrame(
+            columns=[
+                "group",
+                "scope",
+                "seq_id",
+                "taxid_main",
+                "taxid_dev",
+                "bucket",
+                "edge_distance",
+            ]
+        )
+        out = dm.bucket_summary(empty)
+        assert set(out.scope) == {"all", "vertebrate"}
+        assert "unresolved-taxid" in set(out.bucket)
+        assert (out.n_reads == 0).all()
 
     def test_bucket_summary_ordered(self) -> None:
         joined = self._joined()

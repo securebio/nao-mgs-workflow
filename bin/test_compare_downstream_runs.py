@@ -30,22 +30,22 @@ _USCORE_GROUP = "Demo_Site_19990101"
 _HYPHEN_GROUP = "XX-000000-Demo-NAS-P1"
 
 
-class TestStripGroupPrefix:
-    GROUPS = [_USCORE_GROUP, _HYPHEN_GROUP]
+class TestSplitFilename:
+    # File types (not group names) anchor the split; both contain underscores.
+    KNOWN = {"qc_basic_stats_raw", "validation_hits", "fastp", "read_counts"}
 
-    def test_underscore_group_matched_by_longest(self) -> None:
-        # Group names contain underscores; must not split naively.
-        got = cdr._strip_group_prefix(
-            f"{_USCORE_GROUP}_qc_basic_stats_raw.tsv.gz", self.GROUPS
+    def test_underscore_filetype_matched_by_longest(self) -> None:
+        got = cdr._split_filename(
+            f"{_USCORE_GROUP}_qc_basic_stats_raw.tsv.gz", self.KNOWN
         )
         assert got == (_USCORE_GROUP, "qc_basic_stats_raw")
 
     def test_json_suffix_stripped(self) -> None:
-        got = cdr._strip_group_prefix(f"{_HYPHEN_GROUP}_fastp.json", self.GROUPS)
+        got = cdr._split_filename(f"{_HYPHEN_GROUP}_fastp.json", self.KNOWN)
         assert got == (_HYPHEN_GROUP, "fastp")
 
-    def test_unknown_prefix_returns_none(self) -> None:
-        assert cdr._strip_group_prefix("stray_file.tsv.gz", self.GROUPS) is None
+    def test_unknown_file_type_returns_none(self) -> None:
+        assert cdr._split_filename("stray_file.tsv.gz", self.KNOWN) is None
 
 
 ###########################
@@ -54,6 +54,8 @@ class TestStripGroupPrefix:
 
 
 class TestDiscoverSide:
+    KNOWN = {"validation_hits", "kraken", "clade_counts", "qc_basic_stats_raw"}
+
     def _make_results(self, base: Path, with_clade: bool) -> Path:
         d = base
         d.mkdir(parents=True, exist_ok=True)
@@ -70,7 +72,7 @@ class TestDiscoverSide:
 
     def test_illumina_inferred_from_clade_counts(self, tmp_path: Path) -> None:
         results = self._make_results(tmp_path / "ill", with_clade=True)
-        manifest = cdr.discover_side(results)
+        manifest = cdr.discover_side(results, self.KNOWN)
         assert manifest["G1"].platform == "illumina"
         assert manifest["G1"].files["validation_hits"].n_rows == 2
         assert manifest["G1"].files["validation_hits"].columns == [
@@ -81,15 +83,26 @@ class TestDiscoverSide:
 
     def test_ont_inferred_when_no_clade_counts(self, tmp_path: Path) -> None:
         results = self._make_results(tmp_path / "ont", with_clade=False)
-        manifest = cdr.discover_side(results)
+        manifest = cdr.discover_side(results, self.KNOWN)
         assert manifest["G1"].platform == "ont"
 
-    def test_no_validation_hits_raises(self, tmp_path: Path) -> None:
+    def test_group_discovered_without_validation_hits(self, tmp_path: Path) -> None:
+        # A group missing its validation_hits is still discovered from other
+        # outputs (so the absence can be reported, not the whole group lost).
+        d = tmp_path / "partial"
+        d.mkdir()
+        _write_tsv_gz(d / "G1_kraken.tsv.gz", ["taxid", "group"], [[1, "G1"]])
+        _write_tsv_gz(d / "G1_clade_counts.tsv.gz", ["taxid", "group"], [[1, "G1"]])
+        manifest = cdr.discover_side(d, self.KNOWN)
+        assert "G1" in manifest
+        assert "validation_hits" not in manifest["G1"].files
+
+    def test_no_recognized_files_raises(self, tmp_path: Path) -> None:
         d = tmp_path / "empty"
         d.mkdir()
-        _write_tsv_gz(d / "G1_kraken.tsv.gz", ["taxid"], [[1]])
+        _write_tsv_gz(d / "stray_file.tsv.gz", ["x"], [[1]])
         try:
-            cdr.discover_side(d)
+            cdr.discover_side(d, self.KNOWN)
             raise AssertionError("expected ValueError")
         except ValueError:
             pass
@@ -168,7 +181,9 @@ def test_load_qc_basic_stats_adds_platform(tmp_path: Path) -> None:
         ["mean_seq_len", "stage", "sample", "group"],
         [[150, "raw", "G1", "G1"]],
     )
-    manifest = cdr.discover_side(d)
+    manifest = cdr.discover_side(
+        d, {"validation_hits", "clade_counts", "qc_basic_stats_raw"}
+    )
     qc = cdr.load_qc_basic_stats(d, manifest)
     assert "platform" in qc.columns
     assert qc.iloc[0]["platform"] == "illumina"

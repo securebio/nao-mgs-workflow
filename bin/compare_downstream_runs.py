@@ -116,24 +116,30 @@ def stage_results(root: str, local_dir: Path) -> Path:
 #############
 
 
-def _strip_group_prefix(filename: str, groups: list[str]) -> tuple[str, str] | None:
-    """Split `filename` into (group, file_type) using the known group list.
+def _split_filename(filename: str, known_types: set[str]) -> tuple[str, str] | None:
+    """Split `filename` into (group, file_type) using the known file-type set.
 
-    Group names may contain underscores, so we match against the known set
-    (longest first) rather than splitting naively. The file_type is the
-    remainder with its extension (.tsv.gz/.tsv/.json) removed.
+    Both group names and file types contain underscores, so we anchor on the
+    KNOWN file-type suffixes (schema names + expected outputs), matching the
+    longest first: a name ending in `_<type>.<ext>` yields (prefix, type). This
+    does not depend on any single anchor file, so a group is still discovered
+    even if (say) its validation_hits is missing.
 
     Returns:
-        (group, file_type), or None if no known group prefixes the filename.
+        (group, file_type), or None if no known file type suffixes the filename.
     """
-    for group in sorted(groups, key=len, reverse=True):
-        prefix = f"{group}_"
-        if filename.startswith(prefix):
-            rest = filename[len(prefix) :]
-            for ext in (".tsv.gz", ".tsv", ".json"):
-                if rest.endswith(ext):
-                    return group, rest[: -len(ext)]
-            return group, rest
+    for ext in (".tsv.gz", ".tsv", ".json"):
+        if filename.endswith(ext):
+            stem = filename[: -len(ext)]
+            break
+    else:
+        return None
+    for file_type in sorted(known_types, key=len, reverse=True):
+        suffix = f"_{file_type}"
+        if stem.endswith(suffix):
+            group = stem[: -len(suffix)]
+            if group:
+                return group, file_type
     return None
 
 
@@ -146,40 +152,35 @@ def _read_table_meta(path: Path) -> tuple[int, list[str]]:
     return n_rows, columns
 
 
-def discover_side(results_dir: Path) -> dm.SideManifest:
+def discover_side(results_dir: Path, known_types: set[str]) -> dm.SideManifest:
     """Build a manifest of per-group output files for one run.
 
-    Groups are enumerated from `*_validation_hits.tsv.gz` (one per group), then
-    every file is attributed to a group and file type. Platform is inferred per
-    group from file presence: a group is ONT only if it has none of the
-    short-read-only output types (SHORTREAD_ONLY_TYPES), so a short-read group
-    merely missing one of them is not mislabelled ONT. Row counts and columns are
-    read for TSVs; JSON files are recorded as present only.
+    Groups and file types are recovered by anchoring each filename on the KNOWN
+    file-type suffixes (`known_types`) rather than a single anchor file, so a
+    group whose validation_hits (or any one output) is missing is still
+    discovered — its absent files then show up in the inventory. Platform is
+    inferred per group from file presence: a group is ONT only if it has none of
+    the short-read-only output types (SHORTREAD_ONLY_TYPES), so a short-read
+    group merely missing one of them is not mislabelled ONT. Row counts and
+    columns are read for TSVs; JSON files are recorded as present only.
 
     Args:
         results_dir: Local `results_downstream/` directory.
+        known_types: Recognized file-type keys (schema names + expected outputs).
 
     Returns:
         Manifest mapping group name -> GroupManifest.
     """
     all_files = sorted(p.name for p in results_dir.iterdir() if p.is_file())
-    groups = sorted(
-        f[: -len("_validation_hits.tsv.gz")]
-        for f in all_files
-        if f.endswith("_validation_hits.tsv.gz")
-    )
-    if not groups:
-        raise ValueError(f"No *_validation_hits.tsv.gz files found in {results_dir}")
-
-    manifest: dm.SideManifest = {
-        g: dm.GroupManifest(platform="illumina") for g in groups
-    }
+    manifest: dm.SideManifest = {}
     for fname in all_files:
-        split = _strip_group_prefix(fname, groups)
+        split = _split_filename(fname, known_types)
         if split is None:
-            logger.warning(f"Skipping file with no known group prefix: {fname}")
+            logger.warning(f"Skipping file with no known file type: {fname}")
             continue
         group, file_type = split
+        if group not in manifest:
+            manifest[group] = dm.GroupManifest(platform="illumina")
         path = results_dir / fname
         if fname.endswith((".tsv.gz", ".tsv")):
             n_rows, columns = _read_table_meta(path)
@@ -187,6 +188,9 @@ def discover_side(results_dir: Path) -> dm.SideManifest:
         else:  # JSON or other non-tabular output: record presence only.
             entry = dm.FileEntry(present=True, n_rows=None, columns=None)
         manifest[group].files[file_type] = entry
+
+    if not manifest:
+        raise ValueError(f"No recognized per-group output files in {results_dir}")
 
     # Infer platform from file presence: a group is ONT only if it has NONE of
     # the short-read-only output types (so a short-read group missing just one of
@@ -464,7 +468,11 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument(
         "--old-index",
         required=False,
-        help="Main index root, used only for the vertebrate-status-flip table.",
+        help=(
+            "Main index root. Used for the vertebrate-status-flip table, main-side "
+            "clade names, and a rank fallback for taxids deleted from the dev "
+            "taxonomy. (Clade rank otherwise uses the full dev taxonomy.)"
+        ),
     )
     parser.add_argument(
         "--out",
@@ -510,28 +518,39 @@ def main() -> None:
     stage_dir = args.out / "_staged"
     logger.info(f"Comparing DOWNSTREAM output: main={args.main} dev={args.dev}")
 
+    # Recognized per-group file types = schema names + expected-output suffixes.
+    # Used to recover (group, file_type) from filenames without depending on a
+    # single anchor file.
+    schema_columns = load_schema_columns(args.schema_dir)
+    expected_types = expected_downstream_types(args.pyproject)
+    known_types = (
+        set(schema_columns)
+        | expected_types.get("illumina", set())
+        | expected_types.get("ont", set())
+    )
+
     main_results = stage_results(args.main, stage_dir / "main")
     dev_results = stage_results(args.dev, stage_dir / "dev")
-    main_manifest = discover_side(main_results)
-    dev_manifest = discover_side(dev_results)
+    main_manifest = discover_side(main_results, known_types)
+    dev_manifest = discover_side(dev_results, known_types)
     logger.info(
         f"Discovered {len(main_manifest)} main groups, {len(dev_manifest)} dev groups."
     )
     # Platform is inferred from file presence; a severely truncated short-read
     # group missing ALL short-read-only outputs is indistinguishable from ONT
-    # here. Log the ONT-inferred groups so a reviewer can sanity-check.
-    ont_groups = sorted(g for g, gm in dev_manifest.items() if gm.platform == "ont")
-    if ont_groups:
-        logger.info(f"Inferred ONT (no short-read-only outputs): {ont_groups}")
-
-    schema_columns = load_schema_columns(args.schema_dir)
+    # here. Log the ONT-inferred groups (both sides) so a reviewer can check.
+    for side, manifest in (("main", main_manifest), ("dev", dev_manifest)):
+        ont_groups = sorted(g for g, gm in manifest.items() if gm.platform == "ont")
+        if ont_groups:
+            logger.info(
+                f"Inferred ONT on {side} (no short-read-only outputs): {ont_groups}"
+            )
 
     # Quantitative tables that feed the consolidated flags (Focus 1-3).
     outputs: dict[str, pd.DataFrame] = {}
 
     # Focus 4: schema-driven file/column inventory. Pass the platform-expected
     # output types so a file missing from BOTH runs still surfaces as a row.
-    expected_types = expected_downstream_types(args.pyproject)
     inventory = dm.compare_file_inventory(main_manifest, dev_manifest, expected_types)
     write_tsv(inventory, args.out / "file_inventory.tsv")
     columns = dm.compare_columns_to_schema(main_manifest, dev_manifest, schema_columns)
@@ -645,9 +664,10 @@ def main() -> None:
             )
 
         # Clade-count family/order breakdown (short-read only). Rank is resolved
-        # from the full dev taxonomy (covers every taxid, so a main-only family
-        # is not dropped for lacking a dev annotation); names from the union of
-        # both indexes' annotations (taxid fallback otherwise).
+        # from the full dev taxonomy (covers every live taxid), with the old
+        # index's annotation as a fallback for taxids deleted/merged out of the
+        # dev taxonomy — so a main-only family is not dropped. Names come from the
+        # union of both indexes' annotations (taxid fallback otherwise).
         clade_main = load_clade_counts(main_results, main_manifest)
         clade_dev = load_clade_counts(dev_results, dev_manifest)
         if not clade_main.empty and not clade_dev.empty:
@@ -658,7 +678,16 @@ def main() -> None:
                     strict=True,
                 )
             )
-            clade = dm.clade_rank_shares(clade_main, clade_dev, rank, name_map)
+            rank_map = dict(rank)  # dev taxonomy (complete for live taxids)
+            if old_annotated is not None and "rank" in old_annotated.columns:
+                # Fallback only for taxids absent from the dev taxonomy.
+                for taxid, rk in zip(
+                    old_annotated["taxid"].astype(int),
+                    old_annotated["rank"],
+                    strict=True,
+                ):
+                    rank_map.setdefault(taxid, rk)
+            clade = dm.clade_rank_shares(clade_main, clade_dev, rank_map, name_map)
             write_tsv(clade, args.out / "clade_rank_shares.tsv")
             outputs["clade_rank_shares"] = clade
         else:

@@ -103,8 +103,10 @@ Note the **different denominators**: % lost = lost/main, % gained = gained/dev,
 - Shares are normalized within the rank (each family's share of family-classified
   reads), so when one family drops to 0 the others' shares mechanically rise —
   read share *increases* as partly renormalization, not necessarily real growth.
-  Rank/name are resolved from both index annotations; note that classification
-  uses the dev taxonomy, so a "disappearance" can be a re-ranking artifact.
+  Rank is resolved from the full dev taxonomy (with the old index as a fallback
+  for taxids deleted from it) and names from both indexes' annotations; note that
+  rank classification uses the dev taxonomy, so a "disappearance" can be a
+  re-ranking artifact.
 
 #### 1.4. BLAST validation agreement (secondary)
 
