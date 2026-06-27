@@ -178,6 +178,20 @@ def _columns_for_type(manifest: SideManifest, file_type: str) -> list[str] | Non
     return None
 
 
+def _columns_consistent(manifest: SideManifest, file_type: str) -> bool:
+    """Whether every group on this side that has `file_type` shares one header.
+
+    Guards against the first-group-only assumption: if groups disagree on columns
+    for the same file type, that itself is a finding.
+    """
+    seen = {
+        tuple(gm.files[file_type].columns)  # type: ignore[arg-type]
+        for gm in manifest.values()
+        if file_type in gm.files and gm.files[file_type].columns is not None
+    }
+    return len(seen) <= 1
+
+
 def compare_columns_to_schema(
     main: SideManifest,
     dev: SideManifest,
@@ -230,6 +244,10 @@ def compare_columns_to_schema(
                 and cols_main != cols_dev
                 and set(cols_main or []) == set(cols_dev or [])
             ),
+            # True when groups within a side disagree on this file's columns
+            # (the per-side header above is only representative when consistent).
+            "groups_consistent_main": _columns_consistent(main, ft),
+            "groups_consistent_dev": _columns_consistent(dev, ft),
         }
         records.append(rec)
     return pd.DataFrame.from_records(
@@ -243,6 +261,8 @@ def compare_columns_to_schema(
             "extra_vs_schema_dev",
             "cols_only_in_main",
             "cols_only_in_dev",
+            "groups_consistent_main",
+            "groups_consistent_dev",
             "order_changed",
         ],
     )
@@ -804,7 +824,30 @@ def join_read_assignments(
     reassigned = both & (merged["taxid_main"] != merged["taxid_dev"]).fillna(True)
     status[reassigned] = "reassigned"
     merged["status"] = status
-    return merged[["group", "seq_id", "taxid_main", "taxid_dev", "status"]]
+    # Keep sample in the output when it was part of the key, so repeated seq_id
+    # values stay individually traceable in the per-read detail.
+    out_cols = ["group", "seq_id", "taxid_main", "taxid_dev", "status"]
+    if "sample" in key:
+        out_cols.insert(1, "sample")
+    return merged[out_cols]
+
+
+def exemplar_subset(vh: pd.DataFrame) -> pd.DataFrame:
+    """Rows of `vh` that are their own alignment-duplicate exemplar (short-read).
+
+    A duplicate group's exemplar is the read annotated with itself in
+    prim_align_dup_exemplar. Filtering to these gives one read per alignment
+    duplicate group. Returns `vh` unchanged if the column is absent (e.g. ONT,
+    which has no duplicate marking).
+
+    NOTE: exemplar identity is chosen independently per run, so a duplicate group
+    present on both sides can pick different exemplars — making the dedup view's
+    lost/gained (and, via a shifting denominator, its reassignment rate) a rough
+    cross-check rather than a reliable duplicate-adjusted metric.
+    """
+    if "prim_align_dup_exemplar" not in vh.columns:
+        return vh
+    return vh[vh["seq_id"] == vh["prim_align_dup_exemplar"]].copy()
 
 
 def _add_vertebrate_flag(joined: pd.DataFrame, vert: set[int]) -> pd.DataFrame:
@@ -826,11 +869,18 @@ def summarize_read_status(joined: pd.DataFrame, vert: set[int]) -> pd.DataFrame:
         pct_reassigned = reassigned/n_shared.
     """
     flagged = _add_vertebrate_flag(joined, vert)
+    all_groups = sorted(flagged["group"].unique())
     records: list[dict[str, object]] = []
     for scope in ("all", "vertebrate"):
         subset = flagged if scope == "all" else flagged[flagged["is_vertebrate"]]
-        for group, g in subset.groupby("group"):
-            counts = g["status"].value_counts()
+        by_group = dict(list(subset.groupby("group")))
+        # Iterate ALL groups (not just those with rows in this scope) so a group
+        # with zero vertebrate reads still gets an explicit zero row.
+        for group in all_groups:
+            g = by_group.get(group)
+            counts = (
+                g["status"].value_counts() if g is not None else pd.Series(dtype=int)
+            )
             n_lost = int(counts.get("lost", 0))
             n_gained = int(counts.get("gained", 0))
             n_same = int(counts.get("same", 0))
@@ -932,17 +982,18 @@ def reassignment_distances(
         sub = sub.assign(scope=scope)
         frames.append(sub)
     out = pd.concat(frames, ignore_index=True)
-    return out[
-        [
-            "group",
-            "scope",
-            "seq_id",
-            "taxid_main",
-            "taxid_dev",
-            "bucket",
-            "edge_distance",
-        ]
+    cols = [
+        "group",
+        "scope",
+        "seq_id",
+        "taxid_main",
+        "taxid_dev",
+        "bucket",
+        "edge_distance",
     ]
+    if "sample" in out.columns:
+        cols.insert(2, "sample")
+    return out[cols]
 
 
 def bucket_summary(reassignment_detail: pd.DataFrame) -> pd.DataFrame:
@@ -1041,7 +1092,8 @@ def reassignment_concentration(reassignment_detail: pd.DataFrame) -> pd.DataFram
 def clade_rank_shares(
     clade_main: pd.DataFrame,
     clade_dev: pd.DataFrame,
-    annotated: pd.DataFrame,
+    rank_map: dict[int, str],
+    name_map: dict[int, str],
     rank_levels: tuple[str, ...] = ("family", "order"),
     count_cols: tuple[str, ...] = ("reads_clade_total", "reads_clade_dedup"),
 ) -> pd.DataFrame:
@@ -1050,13 +1102,17 @@ def clade_rank_shares(
     For each rank level (family, order), the clade-count row at a rank-level
     taxon already holds that clade's total reads, so we filter to those rows and
     compute each taxon's share of the rank-classified viral reads per group, on
-    both sides. Rank and name are looked up from the (dev) annotated DB so the
-    classification is consistent across sides.
+    both sides. Rank is looked up from the dev index's full NCBI taxonomy
+    (nodes.dmp), which covers every taxid — so a family present only on the main
+    side is NOT dropped for lacking a dev annotation, and a whole-clade
+    disappearance still shows as share_main > 0, share_dev = 0.
 
     Args:
         clade_main: clade_counts for main (group, taxid, reads_clade_* columns).
         clade_dev: clade_counts for dev.
-        annotated: total-virus-db-annotated providing taxid -> rank, name.
+        rank_map: taxid -> rank from the dev taxonomy (complete).
+        name_map: taxid -> name (from the union of both indexes' annotated DBs;
+            taxids absent from it fall back to their stringified taxid).
         rank_levels: taxonomic ranks to roll up to.
         count_cols: which clade-count columns to compute shares for.
 
@@ -1064,12 +1120,10 @@ def clade_rank_shares(
         Long DataFrame: group, rank_level, count_type, taxid, name, reads_main,
         reads_dev, share_main, share_dev, delta_pp (share change in pp).
     """
-    rankmap = dict(zip(annotated["taxid"].astype(int), annotated["rank"], strict=True))
-    namemap = dict(zip(annotated["taxid"].astype(int), annotated["name"], strict=True))
 
     def side_shares(df: pd.DataFrame, rank_level: str, count_col: str) -> pd.DataFrame:
         d = df[["group", "taxid", count_col]].copy()
-        d["rk"] = d["taxid"].astype(int).map(rankmap)
+        d["rk"] = d["taxid"].astype(int).map(rank_map)
         sub = d[d["rk"] == rank_level].copy()
         if sub.empty:
             return sub.assign(share=pd.Series(dtype=float))[
@@ -1091,7 +1145,12 @@ def clade_rank_shares(
             merged = a.merge(b, on=["group", "taxid"], how="outer")
             for col in ("reads_main", "reads_dev", "share_main", "share_dev"):
                 merged[col] = merged[col].fillna(0.0)
-            merged["name"] = merged["taxid"].astype(int).map(namemap)
+            merged["name"] = (
+                merged["taxid"]
+                .astype(int)
+                .map(name_map)
+                .fillna(merged["taxid"].astype(str))
+            )
             merged["rank_level"] = rank_level
             merged["count_type"] = count_col
             merged["delta_pp"] = (merged["share_dev"] - merged["share_main"]) * 100.0

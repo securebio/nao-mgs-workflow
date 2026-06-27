@@ -201,20 +201,34 @@ def _build_downstream_tree(root: Path, side: str) -> None:
     seq2_taxid = 10 if side == "main" else 20  # dev reassigns read 2: 10 -> 20
 
     for group in ("G_ILL", "G_ONT"):
-        _write_tsv_gz(
-            d / f"{group}_validation_hits.tsv.gz",
-            [
+        # Short-read validation_hits carry prim_align_dup_exemplar (each read is
+        # its own exemplar here); ONT has no duplicate marking, so omit it there.
+        if group == "G_ILL":
+            cols = [
                 "seq_id",
                 "sample",
                 "aligner_taxid_lca",
                 "group",
                 "validation_distance_aligner",
-            ],
-            [
+                "prim_align_dup_exemplar",
+            ]
+            rows = [
+                ["r1", group, 10, group, 0, "r1"],
+                ["r2", group, seq2_taxid, group, 1, "r2"],
+            ]
+        else:
+            cols = [
+                "seq_id",
+                "sample",
+                "aligner_taxid_lca",
+                "group",
+                "validation_distance_aligner",
+            ]
+            rows = [
                 ["r1", group, 10, group, 0],
                 ["r2", group, seq2_taxid, group, 1],
-            ],
-        )
+            ]
+        _write_tsv_gz(d / f"{group}_validation_hits.tsv.gz", cols, rows)
         _write_tsv_gz(
             d / f"{group}_kraken.tsv.gz",
             ["group", "ribosomal", "rank", "taxid", "name", "n_reads_clade"],
@@ -314,6 +328,7 @@ def test_main_end_to_end(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Non
     _build_downstream_tree(dev_root, "dev")
     _build_index(index_root)
 
+    # Reuse the same synthetic index as --old-index (exercises both-index paths).
     argv = [
         "compare_downstream_runs.py",
         "--main",
@@ -321,6 +336,8 @@ def test_main_end_to_end(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Non
         "--dev",
         str(dev_root),
         "--index",
+        str(index_root),
+        "--old-index",
         str(index_root),
         "--out",
         str(out),
@@ -330,18 +347,27 @@ def test_main_end_to_end(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Non
 
     import pandas as pd
 
-    # Core outputs exist.
+    # Core outputs exist, incl. the dedup view, concentration, and status flips.
     for name in (
         "flags.tsv",
         "file_inventory.tsv",
         "column_conformance.tsv",
         "qc_numeric.tsv",
+        "qc_survival.tsv",
         "kraken_bray_curtis.tsv",
         "viral_read_status.tsv",
+        "viral_read_status_dedup.tsv",
         "viral_reassignment_buckets.tsv",
+        "viral_reassignment_concentration.tsv",
         "clade_rank_shares.tsv",
+        "vertebrate_status_flips.tsv",
     ):
         assert (out / name).exists(), f"missing {name}"
+
+    # Dedup view is short-read only (G_ONT excluded).
+    dedup = pd.read_csv(out / "viral_read_status_dedup.tsv", sep="\t")
+    assert "G_ILL" in set(dedup.group)
+    assert "G_ONT" not in set(dedup.group)
 
     inv = pd.read_csv(out / "file_inventory.tsv", sep="\t")
     # Platform inference: G_ILL short-read, G_ONT ONT.

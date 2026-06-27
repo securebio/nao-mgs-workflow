@@ -517,6 +517,12 @@ def main() -> None:
     logger.info(
         f"Discovered {len(main_manifest)} main groups, {len(dev_manifest)} dev groups."
     )
+    # Platform is inferred from file presence; a severely truncated short-read
+    # group missing ALL short-read-only outputs is indistinguishable from ONT
+    # here. Log the ONT-inferred groups so a reviewer can sanity-check.
+    ont_groups = sorted(g for g, gm in dev_manifest.items() if gm.platform == "ont")
+    if ont_groups:
+        logger.info(f"Inferred ONT (no short-read-only outputs): {ont_groups}")
 
     schema_columns = load_schema_columns(args.schema_dir)
 
@@ -619,16 +625,16 @@ def main() -> None:
             args.out / "viral_reassignment_concentration.tsv",
         )
 
-        # Duplicate-aware view: re-run the read-status comparison on alignment
-        # exemplars only (short-read), so lost/gained/reassigned are not weighted
-        # by PCR-duplicate counts (whose fraction can itself differ across runs).
+        # Duplicate-aware cross-check: re-run the read-status comparison on
+        # alignment exemplars only (short-read). See exemplar_subset's docstring
+        # for why this is a rough cross-check, not a reliable metric.
         if (
             "prim_align_dup_exemplar" in vh_main.columns
             and "prim_align_dup_exemplar" in vh_dev.columns
         ):
-            ex_main = vh_main[vh_main["seq_id"] == vh_main["prim_align_dup_exemplar"]]
-            ex_dev = vh_dev[vh_dev["seq_id"] == vh_dev["prim_align_dup_exemplar"]]
-            joined_dedup = dm.join_read_assignments(ex_main, ex_dev, merge_map)
+            joined_dedup = dm.join_read_assignments(
+                dm.exemplar_subset(vh_main), dm.exemplar_subset(vh_dev), merge_map
+            )
             write_tsv(
                 dm.summarize_read_status(joined_dedup, vert),
                 args.out / "viral_read_status_dedup.tsv",
@@ -638,12 +644,21 @@ def main() -> None:
                 "No prim_align_dup_exemplar column; skipping dedup read-status view."
             )
 
-        # Clade-count family/order breakdown (short-read only). Rank/name resolved
-        # from both index versions so main-only families are not dropped.
+        # Clade-count family/order breakdown (short-read only). Rank is resolved
+        # from the full dev taxonomy (covers every taxid, so a main-only family
+        # is not dropped for lacking a dev annotation); names from the union of
+        # both indexes' annotations (taxid fallback otherwise).
         clade_main = load_clade_counts(main_results, main_manifest)
         clade_dev = load_clade_counts(dev_results, dev_manifest)
         if not clade_main.empty and not clade_dev.empty:
-            clade = dm.clade_rank_shares(clade_main, clade_dev, clade_annotated)
+            name_map = dict(
+                zip(
+                    clade_annotated["taxid"].astype(int),
+                    clade_annotated["name"],
+                    strict=True,
+                )
+            )
+            clade = dm.clade_rank_shares(clade_main, clade_dev, rank, name_map)
             write_tsv(clade, args.out / "clade_rank_shares.tsv")
             outputs["clade_rank_shares"] = clade
         else:

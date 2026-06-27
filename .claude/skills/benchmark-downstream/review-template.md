@@ -56,9 +56,10 @@ index (species rollup; status 3 "likely" excluded — note as a documented choic
 > same-species move (especially a child<->parent pair sharing a species, which
 > you can check) is a genuine LCA-specificity change, not a versioning artifact.
 > Use the dedup view and the concentration table (below) to qualify the headline
-> %. The dedup view's **reassigned** column is the reliable one; its lost/gained
-> columns also reflect per-side alignment-exemplar choice (chosen independently
-> per run) and so are not directly comparable across runs.
+> %. Treat the dedup view as a rough cross-check, not a reliable metric: exemplar
+> identity is chosen independently per run, so its lost/gained columns — and, via
+> a shifting shared-read denominator, even its reassignment rate — can move from
+> exemplar reshuffling rather than real change.
 
 #### 1.1. Lost / gained / reassigned reads (vertebrate-viral subset)
 

@@ -46,8 +46,10 @@ them at the output directory; do not write `REVIEW.md`.
 - `main` (required): reference DOWNSTREAM output root → `--main`.
 - `dev_index` (required for Focus 1): the dev run's index root
   (`s3://nao-mgs-index/<DATE>`), for taxonomy + vertebrate annotation → `--index`.
-- `main_index` (optional): the main run's index root, only for the
-  vertebrate-status-flip side-table → `--old-index`.
+- `main_index` (optional): the main run's index root → `--old-index`. Used for
+  the vertebrate-status-flip side-table and to add main-side names to the
+  clade-share table. (Clade rank classification uses the full dev taxonomy, so
+  main-only families are not dropped even without `--old-index`.)
 - `out_dir` (required): absolute path for tables and the report → `--out`.
 
 If a required input is missing, ask; do not guess. Without `--index`, Focus 1
@@ -137,7 +139,8 @@ contents are AWS-derived data.
 
 ## Glossary
 
-**Read-status categories** (Focus 1, per shared `(group, seq_id)`):
+**Read-status categories** (Focus 1, per shared read; joined on
+`(group, sample, seq_id)` when a `sample` column is present, else `(group, seq_id)`):
 - `same` — present both sides, same `aligner_taxid_lca`.
 - `reassigned` — present both sides, different `aligner_taxid_lca`.
 - `lost` — in main only (no longer a viral hit in dev).

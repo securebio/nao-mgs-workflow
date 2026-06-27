@@ -146,6 +146,19 @@ class TestCompareColumnsToSchema:
         assert not row.has_schema
         assert row.extra_vs_schema_main == ""
 
+    def test_groups_inconsistent_columns_within_side_flagged(self) -> None:
+        # Two groups on the main side disagree on kraken columns; the first-group
+        # header alone would hide it, so groups_consistent_main must be False.
+        main = _manifest(
+            {
+                "G1": ("illumina", {"kraken": _entry(columns=["taxid", "name"])}),
+                "G2": ("illumina", {"kraken": _entry(columns=["taxid"])}),
+            }
+        )
+        df = dm.compare_columns_to_schema(main, main, {"kraken": ["taxid", "name"]})
+        row = df[df.file_type == "kraken"].iloc[0]
+        assert not row.groups_consistent_main
+
 
 ###############################
 # FOCUS 3: QUALITY METRICS    #
@@ -515,13 +528,9 @@ class TestSummariseAndBuckets:
 
 
 class TestCladeRankShares:
-    ANN = pd.DataFrame(
-        [
-            {"taxid": 200, "name": "familyX", "rank": "family"},
-            {"taxid": 210, "name": "familyY", "rank": "family"},
-            {"taxid": 300, "name": "genusG", "rank": "genus"},
-        ]
-    )
+    # rank_map from the (complete) taxonomy; name_map from annotations.
+    RANK = {200: "family", 210: "family", 300: "genus"}
+    NAME = {200: "familyX", 210: "familyY", 300: "genusG"}
 
     def _clade(self, rows: list[list]) -> pd.DataFrame:
         return pd.DataFrame(
@@ -534,7 +543,8 @@ class TestCladeRankShares:
         out = dm.clade_rank_shares(
             main,
             dev,
-            self.ANN,
+            self.RANK,
+            self.NAME,
             rank_levels=("family",),
             count_cols=("reads_clade_total",),
         )
@@ -550,13 +560,31 @@ class TestCladeRankShares:
         out = dm.clade_rank_shares(
             main,
             dev,
-            self.ANN,
+            self.RANK,
+            self.NAME,
             rank_levels=("family",),
             count_cols=("reads_clade_total",),
         )
         fy = out[out.taxid == 210].iloc[0]
         assert fy.share_dev == 0.0
         assert fy.delta_pp == -50.0
+
+    def test_main_only_family_not_dropped(self) -> None:
+        # Family 999 appears only in main clade_counts and only in the (complete)
+        # rank_map — it must still show share_main>0, share_dev=0, not vanish.
+        main = self._clade([["G", 200, 50, 50], ["G", 999, 50, 50]])
+        dev = self._clade([["G", 200, 100, 100]])
+        out = dm.clade_rank_shares(
+            main,
+            dev,
+            {**self.RANK, 999: "family"},
+            self.NAME,  # 999 absent from name_map -> falls back to "999"
+            rank_levels=("family",),
+            count_cols=("reads_clade_total",),
+        )
+        f999 = out[out.taxid == 999].iloc[0]
+        assert f999.share_main == 0.5 and f999.share_dev == 0.0
+        assert f999["name"] == "999"
 
 
 class TestValidationAgreement:
