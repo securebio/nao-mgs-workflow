@@ -443,9 +443,7 @@ def qc_read_survival(main_qc: pd.DataFrame, dev_qc: pd.DataFrame) -> pd.DataFram
 
     a = survival(main_qc).rename(columns={"survival": "survival_main"})
     b = survival(dev_qc).rename(columns={"survival": "survival_dev"})
-    merged = a.merge(
-        b, on=["group", "sample"], how="outer", suffixes=("_main", "_dev")
-    )
+    merged = a.merge(b, on=["group", "sample"], how="outer", suffixes=("_main", "_dev"))
     # Coalesce platform from both sides so a dev-only (or main-only) sample still
     # carries a platform (else its survival row drops out of the cohort test).
     merged["platform"] = merged["platform_main"].fillna(merged["platform_dev"])
@@ -904,6 +902,7 @@ def reassignment_distances(
                 "edge_distance",
             ]
         )
+
     def _pair_key(a: Any, b: Any) -> tuple[int, int] | None:
         # A reassigned read with a missing taxid on either side (non-conformant
         # input — aligner_taxid_lca is schema-required) has no resolvable pair.
@@ -968,9 +967,7 @@ def bucket_summary(reassignment_detail: pd.DataFrame) -> pd.DataFrame:
     ]
     if reassignment_detail.empty:
         return pd.DataFrame(columns=["scope", "bucket", "n_reads"])
-    counts = (
-        reassignment_detail.groupby(["scope", "bucket"]).size().to_dict()
-    )
+    counts = reassignment_detail.groupby(["scope", "bucket"]).size().to_dict()
     records: list[dict[str, object]] = []
     for scope in sorted(reassignment_detail["scope"].unique()):
         for bucket in display_buckets:
