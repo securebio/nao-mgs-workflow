@@ -84,8 +84,11 @@ The script writes these TSVs to `--out`:
 - `viral_read_status.tsv` — per group × scope (all|vertebrate) read-status
   counts, with pct_lost (/main), pct_gained (/dev), pct_reassigned (/shared) —
   note the different denominators (§1.1).
-- `viral_read_status_dedup.tsv` — same, on alignment exemplars only (short-read),
-  to check whether PCR duplicates drive the lost/gained/reassigned counts (§1.1).
+- `viral_read_status_dedup.tsv` — same, on alignment exemplars only (Illumina;
+  ONT groups are excluded as they have no exemplars). Use its **reassigned**
+  column to check whether PCR duplicates drive the headline reassignment %; its
+  lost/gained columns also reflect per-side exemplar choice and are not directly
+  comparable across runs (§1.1).
 - `viral_reassignment_concentration.tsv` — per group: distinct (taxid_main,
   taxid_dev) pairs and the top pair's share, so a high reassignment % driven by
   one systematic remap is visible (§1.1).

@@ -49,11 +49,16 @@ index (species rollup; status 3 "likely" excluded — note as a documented choic
 > the status-3 read share if material.
 
 > **Caveat (state this):** counts are per-read (PCR duplicates included), and
-> taxids are compared as-is. If the dev index ships no `taxonomy-merged.dmp`,
-> taxids merged across index versions cannot be canonicalized, so some
-> "reassigned" reads may be taxid-renumbering artifacts. Use the dedup view
-> (`viral_read_status_dedup.tsv`, alignment exemplars) and the concentration
-> table (`viral_reassignment_concentration.tsv`) to qualify the headline %.
+> taxids are compared as-is. The index workflow does not currently publish
+> `taxonomy-merged.dmp`, so taxid canonicalization is presently always skipped;
+> in principle a merged/renumbered taxid could show as a spurious reassignment,
+> but do NOT invoke this as the driver for `same-species` reassignments — a
+> same-species move (especially a child<->parent pair sharing a species, which
+> you can check) is a genuine LCA-specificity change, not a versioning artifact.
+> Use the dedup view and the concentration table (below) to qualify the headline
+> %. The dedup view's **reassigned** column is the reliable one; its lost/gained
+> columns also reflect per-side alignment-exemplar choice (chosen independently
+> per run) and so are not directly comparable across runs.
 
 #### 1.1. Lost / gained / reassigned reads (vertebrate-viral subset)
 
@@ -150,6 +155,12 @@ percent_duplicates, n_bases deltas and FASTQC flag transitions.
 Consolidated flags for human review (fixed thresholds and/or cohort-outlier).
 Group by focus; give the key, value, threshold, and flag type. State the
 thresholds used.
+
+When a category mixes flag types, report the per-type counts (from the
+`flag_type` column of `flags.tsv`) and do NOT describe `cohort-outlier` flags
+with the fixed-threshold comparator — e.g. write "106 clade flags (41
+fixed+cohort-outlier >3pp, 65 cohort-outlier <3pp)", never "106 clade flags
+(>3pp)". A cohort-outlier can be below the fixed threshold by design.
 
 | Focus | Key | Metric | Value | Threshold | Flag type |
 |---|---|---|---|---|---|

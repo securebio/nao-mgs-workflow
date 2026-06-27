@@ -787,3 +787,53 @@ class TestQcReadSurvival:
         assert abs(out.survival_main - 0.9) < 1e-9
         assert abs(out.survival_dev - 0.8) < 1e-9
         assert abs(out.delta_pp - (-10.0)) < 1e-9
+
+
+class TestNaTaxidRobustness:
+    def _tree(self) -> dm.TaxonomyTree:
+        return _synthetic_tree()
+
+    def test_na_taxid_reassigned_does_not_crash(self) -> None:
+        # A reassigned read with a missing taxid (non-conformant input) must route
+        # to unresolved-taxid with no edge distance, not crash the pipeline.
+        joined = pd.DataFrame(
+            {
+                "group": ["G", "G"],
+                "seq_id": ["r1", "r2"],
+                "taxid_main": pd.array([401, pd.NA], dtype="Int64"),
+                "taxid_dev": pd.array([402, 500], dtype="Int64"),
+                "status": ["reassigned", "reassigned"],
+            }
+        )
+        detail = dm.reassignment_distances(joined, self._tree(), vert={401, 402, 500})
+        r2 = detail[(detail.scope == "all") & (detail.seq_id == "r2")].iloc[0]
+        assert r2.bucket == dm.UNRESOLVED_TAXID
+        assert pd.isna(r2.edge_distance)
+        # concentration must also survive the NA pair.
+        conc = dm.reassignment_concentration(detail)
+        assert not conc.empty
+        assert (conc.n_reassigned > 0).all()
+
+
+class TestQcSurvivalPlatformCoalesce:
+    def test_dev_only_sample_keeps_platform(self) -> None:
+        main = pd.DataFrame(
+            [
+                _qc_row("G", "S1", "raw", "illumina", n_reads_single=1000),
+                _qc_row("G", "S1", "cleaned", "illumina", n_reads_single=900),
+            ]
+        )
+        # S2 exists only on the dev side.
+        dev = pd.DataFrame(
+            [
+                _qc_row("G", "S1", "raw", "illumina", n_reads_single=1000),
+                _qc_row("G", "S1", "cleaned", "illumina", n_reads_single=900),
+                _qc_row("G", "S2", "raw", "illumina", n_reads_single=1000),
+                _qc_row("G", "S2", "cleaned", "illumina", n_reads_single=950),
+            ]
+        )
+        out = dm.qc_read_survival(main, dev)
+        s2 = out[out["sample"] == "S2"].iloc[0]
+        assert s2.platform == "illumina"
+        assert pd.isna(s2.survival_main)
+        assert abs(s2.survival_dev - 0.95) < 1e-9

@@ -19,7 +19,7 @@ Grouped by report focus:
 ###########
 
 from dataclasses import dataclass, field
-from typing import cast
+from typing import Any, cast
 
 import pandas as pd
 
@@ -443,7 +443,12 @@ def qc_read_survival(main_qc: pd.DataFrame, dev_qc: pd.DataFrame) -> pd.DataFram
 
     a = survival(main_qc).rename(columns={"survival": "survival_main"})
     b = survival(dev_qc).rename(columns={"survival": "survival_dev"})
-    merged = a.merge(b.drop(columns="platform"), on=["group", "sample"], how="outer")
+    merged = a.merge(
+        b, on=["group", "sample"], how="outer", suffixes=("_main", "_dev")
+    )
+    # Coalesce platform from both sides so a dev-only (or main-only) sample still
+    # carries a platform (else its survival row drops out of the cohort test).
+    merged["platform"] = merged["platform_main"].fillna(merged["platform_dev"])
     merged["delta_pp"] = (merged["survival_dev"] - merged["survival_main"]) * 100.0
     return (
         merged[
@@ -899,16 +904,28 @@ def reassignment_distances(
                 "edge_distance",
             ]
         )
+    def _pair_key(a: Any, b: Any) -> tuple[int, int] | None:
+        # A reassigned read with a missing taxid on either side (non-conformant
+        # input — aligner_taxid_lca is schema-required) has no resolvable pair.
+        if pd.isna(a) or pd.isna(b):
+            return None
+        return (int(a), int(b))
+
     pairs = reassigned[["taxid_main", "taxid_dev"]].drop_duplicates()
-    bucket_map: dict[tuple[int, int], str] = {}
-    edge_map: dict[tuple[int, int], int | None] = {}
+    bucket_map: dict[tuple[int, int] | None, str] = {None: UNRESOLVED_TAXID}
+    edge_map: dict[tuple[int, int] | None, int | None] = {None: None}
     for a, b in zip(pairs["taxid_main"], pairs["taxid_dev"], strict=True):
-        key = (int(a), int(b))
+        key = _pair_key(a, b)
+        if key is None:
+            continue
         bucket_map[key] = tax.divergence_bucket(*key)
         edge_map[key] = tax.edge_distance(*key)
-    keys = list(zip(reassigned["taxid_main"], reassigned["taxid_dev"], strict=True))
-    reassigned["bucket"] = [bucket_map[(int(a), int(b))] for a, b in keys]
-    reassigned["edge_distance"] = [edge_map[(int(a), int(b))] for a, b in keys]
+    keys = [
+        _pair_key(a, b)
+        for a, b in zip(reassigned["taxid_main"], reassigned["taxid_dev"], strict=True)
+    ]
+    reassigned["bucket"] = [bucket_map[k] for k in keys]
+    reassigned["edge_distance"] = [edge_map[k] for k in keys]
 
     frames = []
     for scope in ("all", "vertebrate"):
@@ -994,17 +1011,25 @@ def reassignment_concentration(reassignment_detail: pd.DataFrame) -> pd.DataFram
         return pd.DataFrame(columns=cols)
     records: list[dict[str, object]] = []
     for (group, scope), sub in reassignment_detail.groupby(["group", "scope"]):
-        pair_counts = sub.groupby(["taxid_main", "taxid_dev"]).size()
+        # dropna=False so reads with a missing taxid (non-conformant input) are
+        # still counted as their own pair rather than silently dropped.
+        pair_counts = sub.groupby(["taxid_main", "taxid_dev"], dropna=False).size()
         n = int(pair_counts.sum())
-        top_main, top_dev = cast(tuple[int, int], pair_counts.idxmax())
+        if pair_counts.empty:
+            continue
+        top_main, top_dev = cast(tuple[object, object], pair_counts.idxmax())
         top_reads = int(pair_counts.max())
+
+        def _fmt(t: Any) -> str:
+            return "NA" if pd.isna(t) else str(int(t))
+
         records.append(
             {
                 "group": group,
                 "scope": scope,
                 "n_reassigned": n,
                 "n_distinct_pairs": int(pair_counts.size),
-                "top_pair": f"{int(top_main)}->{int(top_dev)}",
+                "top_pair": f"{_fmt(top_main)}->{_fmt(top_dev)}",
                 "top_pair_reads": top_reads,
                 "top_pair_frac": top_reads / n if n else None,
             }
