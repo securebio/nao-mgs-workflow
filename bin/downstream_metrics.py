@@ -19,6 +19,7 @@ Grouped by report focus:
 ###########
 
 from dataclasses import dataclass, field
+from typing import cast
 
 import pandas as pd
 
@@ -406,6 +407,53 @@ def compare_qc_flags(
     )
 
 
+def qc_read_survival(main_qc: pd.DataFrame, dev_qc: pd.DataFrame) -> pd.DataFrame:
+    """Compare the raw->cleaned read-survival fraction per (group, sample).
+
+    Survival is computed WITHIN each run as cleaned/raw read count, then compared
+    across runs. This is the metric that reflects a QC/screen change (e.g. a
+    FASTP min-length change), unlike a cross-run change in the absolute cleaned
+    count (which is masked when both runs subsample to the same depth upstream).
+
+    Args:
+        main_qc: concatenated qc_basic_stats (raw + cleaned) for main.
+        dev_qc: same for dev.
+
+    Returns:
+        DataFrame: group, sample, platform, survival_main, survival_dev,
+        delta_pp (dev - main, in percentage points). survival_* are <NA> when a
+        stage is missing or raw count is 0.
+    """
+
+    def survival(df: pd.DataFrame) -> pd.DataFrame:
+        sub = df[["group", "sample", "stage", "platform", "n_reads_single"]].copy()
+        sub["n_reads_single"] = pd.to_numeric(sub["n_reads_single"], errors="coerce")
+        piv = sub.pivot_table(
+            index=["group", "sample", "platform"],
+            columns="stage",
+            values="n_reads_single",
+            aggfunc="first",
+        ).reset_index()
+        raw = piv["raw"] if "raw" in piv else pd.Series(pd.NA, index=piv.index)
+        cleaned = (
+            piv["cleaned"] if "cleaned" in piv else pd.Series(pd.NA, index=piv.index)
+        )
+        piv["survival"] = cleaned.where(raw > 0) / raw.where(raw > 0)
+        return piv[["group", "sample", "platform", "survival"]]
+
+    a = survival(main_qc).rename(columns={"survival": "survival_main"})
+    b = survival(dev_qc).rename(columns={"survival": "survival_dev"})
+    merged = a.merge(b.drop(columns="platform"), on=["group", "sample"], how="outer")
+    merged["delta_pp"] = (merged["survival_dev"] - merged["survival_main"]) * 100.0
+    return (
+        merged[
+            ["group", "sample", "platform", "survival_main", "survival_dev", "delta_pp"]
+        ]
+        .sort_values(["group", "sample"])
+        .reset_index(drop=True)
+    )
+
+
 #########################################
 # FOCUS 2: KRAKEN ABUNDANCES            #
 #########################################
@@ -520,7 +568,11 @@ def kraken_top_movers(
     merged["pct_dev"] = merged["rel_dev"] * 100.0
     merged["delta_pp"] = merged["pct_dev"] - merged["pct_main"]
     merged["rank"] = rank
-    ordered = merged.sort_values("abs_diff", ascending=False)
+    # taxid tiebreaker so the top-n cutoff is deterministic when taxa tie on
+    # abs_diff right at the boundary.
+    ordered = merged.sort_values(
+        ["abs_diff", "taxid"], ascending=[False, True], kind="stable"
+    )
     top = ordered.groupby(
         ["group", "ribosomal"], as_index=False, group_keys=False
     ).head(n)
@@ -677,8 +729,11 @@ def vertebrate_taxids(annotated_db: pd.DataFrame, host: str = "vertebrate") -> s
     col = f"infection_status_{host}"
     if col not in annotated_db.columns or "taxid" not in annotated_db.columns:
         return set()
-    status = annotated_db[col].astype(str)
-    positive = set(annotated_db.loc[status == "1", "taxid"].astype(int))
+    # Compare numerically, not as strings: if the column has any NA, pandas reads
+    # it as float, so str values become "1.0" and a == "1" test would silently
+    # match nothing (an empty vertebrate set with no error).
+    status = pd.to_numeric(annotated_db[col], errors="coerce")
+    positive = set(annotated_db.loc[status == 1, "taxid"].astype(int))
     if "taxid_species" in annotated_db.columns:
         species = annotated_db["taxid_species"].astype("Int64")
         rollup = annotated_db.loc[species.isin(positive), "taxid"].astype(int)
@@ -686,29 +741,64 @@ def vertebrate_taxids(annotated_db: pd.DataFrame, host: str = "vertebrate") -> s
     return positive
 
 
-def join_read_assignments(main_vh: pd.DataFrame, dev_vh: pd.DataFrame) -> pd.DataFrame:
-    """Join per-read pipeline assignments across sides on (group, seq_id).
+def join_read_assignments(
+    main_vh: pd.DataFrame,
+    dev_vh: pd.DataFrame,
+    merge_map: dict[int, int] | None = None,
+) -> pd.DataFrame:
+    """Join per-read pipeline assignments across sides.
+
+    Joins on (group, sample, seq_id) when a `sample` column is present on both
+    sides, else (group, seq_id); raises on duplicate keys.
 
     Args:
-        main_vh: validation_hits for main (needs group, seq_id, aligner_taxid_lca).
+        main_vh: validation_hits for main (needs group, seq_id, aligner_taxid_lca;
+            sample used for the key when present).
         dev_vh: validation_hits for dev (same columns).
+        merge_map: optional {old_taxid: canonical_taxid} from the dev index's
+            merged.dmp, applied to both sides so taxid renumbering across index
+            versions is not counted as a reassignment.
 
     Returns:
         DataFrame: group, seq_id, taxid_main, taxid_dev, status, where status is
         'lost' (main only), 'gained' (dev only), 'same' (shared, same taxid), or
         'reassigned' (shared, different taxid).
     """
-    cols = ["group", "seq_id", "aligner_taxid_lca"]
-    m = main_vh[cols].rename(columns={"aligner_taxid_lca": "taxid_main"})
-    d = dev_vh[cols].rename(columns={"aligner_taxid_lca": "taxid_dev"})
-    merged = m.merge(d, on=["group", "seq_id"], how="outer", indicator=True)
+    # Include sample in the join key when available: seq_id is the instrument
+    # query name, unique only within a sample, and a group can hold several
+    # samples — so (group, seq_id) alone risks a many-to-many cartesian merge.
+    if "sample" in main_vh.columns and "sample" in dev_vh.columns:
+        key = ["group", "sample", "seq_id"]
+    else:
+        key = ["group", "seq_id"]
+    m = main_vh[[*key, "aligner_taxid_lca"]].rename(
+        columns={"aligner_taxid_lca": "taxid_main"}
+    )
+    d = dev_vh[[*key, "aligner_taxid_lca"]].rename(
+        columns={"aligner_taxid_lca": "taxid_dev"}
+    )
+    for side, df in (("main", m), ("dev", d)):
+        if df.duplicated(key).any():
+            raise ValueError(
+                f"Duplicate {key} rows in {side} validation_hits; cannot join "
+                "reads unambiguously."
+            )
+    if merge_map:
+        # Canonicalize taxids through the dev index's merged.dmp so a read that
+        # only changed because its taxid was merged across index versions is not
+        # counted as a biological reassignment.
+        m["taxid_main"] = m["taxid_main"].map(lambda t: merge_map.get(t, t))
+        d["taxid_dev"] = d["taxid_dev"].map(lambda t: merge_map.get(t, t))
+    merged = m.merge(d, on=key, how="outer", indicator=True)
     merged["taxid_main"] = merged["taxid_main"].astype("Int64")
     merged["taxid_dev"] = merged["taxid_dev"].astype("Int64")
     status = pd.Series("same", index=merged.index, dtype="object")
     status[merged["_merge"] == "left_only"] = "lost"
     status[merged["_merge"] == "right_only"] = "gained"
     both = merged["_merge"] == "both"
-    reassigned = both & (merged["taxid_main"] != merged["taxid_dev"])
+    # NA != value is <NA> in pandas; .fillna(True) so a malformed missing taxid on
+    # a shared read is treated as reassigned, never silently "same".
+    reassigned = both & (merged["taxid_main"] != merged["taxid_dev"]).fillna(True)
     status[reassigned] = "reassigned"
     merged["status"] = status
     return merged[["group", "seq_id", "taxid_main", "taxid_dev", "status"]]
@@ -864,6 +954,55 @@ def bucket_summary(reassignment_detail: pd.DataFrame) -> pd.DataFrame:
         lambda b: order.index(b) if b in order else len(order)
     )
     return counts.sort_values(["scope", "_o"]).drop(columns="_o").reset_index(drop=True)
+
+
+def reassignment_concentration(reassignment_detail: pd.DataFrame) -> pd.DataFrame:
+    """How concentrated each group's reassignments are in a few taxid pairs.
+
+    A high read-level reassignment % can come from one systematic taxid remap
+    counted across many (possibly duplicate) reads. This reports, per
+    (group, scope): the reassigned read count, the number of distinct
+    (taxid_main, taxid_dev) pairs, the top pair, and the fraction of reassigned
+    reads it accounts for, so a reviewer can tell broad instability from a single
+    clade-wide LCA shift.
+
+    Returns:
+        DataFrame: group, scope, n_reassigned, n_distinct_pairs, top_pair,
+        top_pair_reads, top_pair_frac.
+    """
+    cols = [
+        "group",
+        "scope",
+        "n_reassigned",
+        "n_distinct_pairs",
+        "top_pair",
+        "top_pair_reads",
+        "top_pair_frac",
+    ]
+    if reassignment_detail.empty:
+        return pd.DataFrame(columns=cols)
+    records: list[dict[str, object]] = []
+    for (group, scope), sub in reassignment_detail.groupby(["group", "scope"]):
+        pair_counts = sub.groupby(["taxid_main", "taxid_dev"]).size()
+        n = int(pair_counts.sum())
+        top_main, top_dev = cast(tuple[int, int], pair_counts.idxmax())
+        top_reads = int(pair_counts.max())
+        records.append(
+            {
+                "group": group,
+                "scope": scope,
+                "n_reassigned": n,
+                "n_distinct_pairs": int(pair_counts.size),
+                "top_pair": f"{int(top_main)}->{int(top_dev)}",
+                "top_pair_reads": top_reads,
+                "top_pair_frac": top_reads / n if n else None,
+            }
+        )
+    return (
+        pd.DataFrame.from_records(records, columns=cols)
+        .sort_values(["scope", "group"])
+        .reset_index(drop=True)
+    )
 
 
 def clade_rank_shares(
@@ -1041,7 +1180,7 @@ def vertebrate_status_flips(
 # exposed as CLI flags; they are deliberate judgment calls, documented in the
 # skill. A flag is advisory -- the report always shows the underlying numbers.
 DEFAULT_THRESHOLDS: dict[str, float] = {
-    "read_survival_pct": 5.0,  # |%| change in cleaned read survival
+    "read_survival_pp": 5.0,  # |pp| change in raw->cleaned read-survival fraction
     "qc_pct_change": 10.0,  # |%| change in other qc metrics
     "bray_curtis": 0.15,  # kraken whole-profile dissimilarity
     "viral_pct_lost": 2.0,  # |%| of vertebrate-viral reads lost
@@ -1084,7 +1223,15 @@ def mad_outlier_mask(
     med = v.median()
     mad = (v - med).abs().median()
     if not mad or pd.isna(mad):
-        return pd.Series(False, index=values.index)
+        # MAD collapses to 0 when >=half the cohort shares the median value, which
+        # would hide a lone real outlier among otherwise-identical siblings. Fall
+        # back to the mean absolute deviation (scaled to be ~comparable to MAD)
+        # when there is still some spread; only give up if the cohort is constant.
+        mean_ad = (v - med).abs().mean()
+        if not mean_ad or pd.isna(mean_ad):
+            return pd.Series(False, index=values.index)
+        z = 0.7979 * (v - med) / mean_ad
+        return z.abs() > threshold if two_sided else z > threshold
     robust_z = 0.6745 * (v - med) / mad
     return robust_z.abs() > threshold if two_sided else robust_z > threshold
 
@@ -1182,19 +1329,21 @@ def build_flags(
     t = {**DEFAULT_THRESHOLDS, **(thresholds or {})}
     records: list[dict[str, object]] = []
 
-    qc = outputs.get("qc_numeric")
-    if qc is not None and not qc.empty:
-        survival = qc[(qc["metric"] == "n_reads_single") & (qc["stage"] == "cleaned")]
+    survival = outputs.get("qc_survival")
+    if survival is not None and not survival.empty:
         records += _flag_records(
             survival,
-            "pct_change",
-            t["read_survival_pct"],
+            "delta_pp",
+            t["read_survival_pp"],
             "qc",
-            "cleaned read survival (%)",
+            "raw->cleaned read survival change (pp)",
             ["group", "sample"],
             ["platform"],
             "abs",
         )
+
+    qc = outputs.get("qc_numeric")
+    if qc is not None and not qc.empty:
         others = qc[
             ~qc["metric"].isin(["n_reads_single", "n_read_pairs", "n_bases_approx"])
         ]
