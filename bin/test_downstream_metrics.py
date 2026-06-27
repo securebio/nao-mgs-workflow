@@ -674,3 +674,112 @@ class TestBuildFlags:
         flags = dm.build_flags({"viral_read_status": status})
         reassign_flags = flags[flags.metric.str.contains("reassigned")]
         assert any("G5" in k for k in reassign_flags.key)
+
+
+###############################
+# SCIENTIFIC-REVIEW FIXES     #
+###############################
+
+
+class TestVertebrateTaxidsDtype:
+    def test_float_dtype_status_still_found(self) -> None:
+        # An NA in the column makes pandas read it as float ("1.0"); a string
+        # compare would silently match nothing. Numeric compare must still work.
+        ann = pd.DataFrame(
+            {
+                "taxid": [10, 20, 30],
+                "taxid_species": [10, 20, 30],
+                "infection_status_vertebrate": [1, 0, None],  # NA -> float dtype
+            }
+        )
+        assert ann["infection_status_vertebrate"].dtype == float
+        assert dm.vertebrate_taxids(ann) == {10}
+
+
+class TestMadFallback:
+    def test_majority_identical_cohort_still_flags_outlier(self) -> None:
+        # >half identical -> MAD 0; the mean-abs-deviation fallback must still
+        # catch a clear outlier instead of flagging nothing.
+        s = pd.Series([10.0, 10.0, 10.0, 10.0, 10.0, 500.0])
+        assert dm.mad_outlier_mask(s).iloc[-1]
+
+    def test_constant_cohort_flags_nothing(self) -> None:
+        assert not dm.mad_outlier_mask(pd.Series([5.0, 5.0, 5.0, 5.0])).any()
+
+
+class TestJoinReadAssignmentsFixes:
+    def _vh(self, rows: list[list]) -> pd.DataFrame:
+        return pd.DataFrame(
+            rows, columns=["group", "sample", "seq_id", "aligner_taxid_lca"]
+        )
+
+    def test_merge_map_canonicalizes_so_not_reassigned(self) -> None:
+        # main taxid 100 was merged into 200 in dev; with the merge map the read
+        # is 'same', not 'reassigned'.
+        main = self._vh([["G", "S", "r1", 100]])
+        dev = self._vh([["G", "S", "r1", 200]])
+        out = dm.join_read_assignments(main, dev, merge_map={100: 200})
+        assert out.iloc[0].status == "same"
+        out_nomap = dm.join_read_assignments(main, dev)
+        assert out_nomap.iloc[0].status == "reassigned"
+
+    def test_sample_in_key_prevents_cross_sample_collision(self) -> None:
+        # Same seq_id in two samples of one group must not cartesian-join.
+        main = self._vh([["G", "S1", "r", 10], ["G", "S2", "r", 20]])
+        dev = self._vh([["G", "S1", "r", 10], ["G", "S2", "r", 20]])
+        out = dm.join_read_assignments(main, dev)
+        assert len(out) == 2
+        assert (out.status == "same").all()
+
+    def test_duplicate_key_raises(self) -> None:
+        main = self._vh([["G", "S", "r", 10], ["G", "S", "r", 20]])
+        dev = self._vh([["G", "S", "r", 10]])
+        try:
+            dm.join_read_assignments(main, dev)
+            raise AssertionError("expected ValueError on duplicate key")
+        except ValueError:
+            pass
+
+
+class TestReassignmentConcentration:
+    def test_top_pair_fraction(self) -> None:
+        detail = pd.DataFrame(
+            {
+                "group": ["G"] * 5,
+                "scope": ["all"] * 5,
+                "seq_id": list("abcde"),
+                "taxid_main": [1, 1, 1, 1, 2],
+                "taxid_dev": [9, 9, 9, 9, 8],
+                "bucket": ["same-genus"] * 5,
+                "edge_distance": [2] * 5,
+            }
+        )
+        out = dm.reassignment_concentration(detail).iloc[0]
+        assert out.n_reassigned == 5
+        assert out.n_distinct_pairs == 2
+        assert out.top_pair == "1->9"
+        assert abs(out.top_pair_frac - 0.8) < 1e-9
+
+
+class TestQcReadSurvival:
+    def test_survival_fraction_and_delta(self) -> None:
+        def rows(cleaned: int) -> pd.DataFrame:
+            return pd.DataFrame(
+                [
+                    _qc_row("G", "S", "raw", "illumina", n_reads_single=1000),
+                    _qc_row(
+                        "G",
+                        "S",
+                        "cleaned",
+                        "illumina",
+                        n_reads_single=cleaned,
+                    ),
+                ]
+            )
+
+        main = rows(900)  # 90% survival
+        dev = rows(800)  # 80% survival
+        out = dm.qc_read_survival(main, dev).iloc[0]
+        assert abs(out.survival_main - 0.9) < 1e-9
+        assert abs(out.survival_dev - 0.8) < 1e-9
+        assert abs(out.delta_pp - (-10.0)) < 1e-9

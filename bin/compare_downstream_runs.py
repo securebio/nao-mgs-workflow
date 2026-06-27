@@ -321,6 +321,35 @@ def parse_taxonomy_nodes(path: Path) -> tuple[dict[int, int], dict[int, str]]:
     return parent, rank
 
 
+def load_merged_taxids(index_root: str, work_dir: Path) -> dict[int, int]:
+    """Load the dev index's merged.dmp into an {old_taxid: new_taxid} map.
+
+    merged.dmp rows are '\\t|\\t'-separated: field 0 = old taxid, 1 = new taxid.
+    Returns an empty map (with a warning) if the file is absent, so older index
+    layouts without merged.dmp degrade gracefully.
+    """
+    try:
+        path: Path | None = fetch_index_file(
+            index_root, "taxonomy-merged.dmp", work_dir
+        )
+    except subprocess.CalledProcessError:
+        path = None
+    if path is None or not path.exists():
+        logger.warning(
+            "No taxonomy-merged.dmp in index; skipping taxid canonicalization "
+            "(reassignments may include taxid-renumbering artifacts)."
+        )
+        return {}
+    merged: dict[int, int] = {}
+    with open_by_suffix(path) as fh:
+        for line in fh:
+            parts = line.split("\t|\t")
+            if len(parts) >= 2:
+                merged[int(parts[0])] = int(parts[1].split("\t|")[0])
+    logger.info(f"Parsed {len(merged)} merged taxids from {path.name}")
+    return merged
+
+
 def load_annotated_db(index_root: str, work_dir: Path) -> pd.DataFrame:
     """Load total-virus-db-annotated.tsv.gz from an index root."""
     path = fetch_index_file(index_root, "total-virus-db-annotated.tsv.gz", work_dir)
@@ -509,6 +538,9 @@ def main() -> None:
         qc_numeric = dm.compare_qc_numeric(qc_main, qc_dev)
         write_tsv(qc_numeric, args.out / "qc_numeric.tsv")
         outputs["qc_numeric"] = qc_numeric
+        survival = dm.qc_read_survival(qc_main, qc_dev)
+        write_tsv(survival, args.out / "qc_survival.tsv")
+        outputs["qc_survival"] = survival
         flag_cols = [
             c
             for c in qc_main.columns
@@ -545,14 +577,35 @@ def main() -> None:
             fetch_index_file(args.index, "taxonomy-nodes.dmp", work_dir)
         )
         tax = dm.TaxonomyTree(parent, rank)
+        merge_map = load_merged_taxids(args.index, work_dir)
         annotated = load_annotated_db(args.index, work_dir)
         vert = dm.vertebrate_taxids(annotated)
         logger.info(f"{len(vert)} vertebrate-infecting taxids (status 1, dev index).")
 
-        vh_cols = ["group", "seq_id", "aligner_taxid_lca"]
+        # Load the main index annotation too (if given): used to resolve clade
+        # rank/name from BOTH index versions (so a main-only family isn't dropped)
+        # and for the vertebrate-status-flip side-table.
+        old_annotated = (
+            load_annotated_db(args.old_index, args.out / "_old_index")
+            if args.old_index
+            else None
+        )
+        clade_annotated = (
+            pd.concat([old_annotated, annotated], ignore_index=True)
+            if old_annotated is not None
+            else annotated
+        )
+
+        vh_cols = [
+            "group",
+            "sample",
+            "seq_id",
+            "aligner_taxid_lca",
+            "prim_align_dup_exemplar",
+        ]
         vh_main = load_validation_hits(main_results, main_manifest, vh_cols)
         vh_dev = load_validation_hits(dev_results, dev_manifest, vh_cols)
-        joined = dm.join_read_assignments(vh_main, vh_dev)
+        joined = dm.join_read_assignments(vh_main, vh_dev, merge_map)
         read_status = dm.summarize_read_status(joined, vert)
         write_tsv(read_status, args.out / "viral_read_status.tsv")
         outputs["viral_read_status"] = read_status
@@ -561,12 +614,36 @@ def main() -> None:
         write_tsv(
             dm.bucket_summary(reassign), args.out / "viral_reassignment_buckets.tsv"
         )
+        write_tsv(
+            dm.reassignment_concentration(reassign),
+            args.out / "viral_reassignment_concentration.tsv",
+        )
 
-        # Clade-count family/order breakdown (short-read only).
+        # Duplicate-aware view: re-run the read-status comparison on alignment
+        # exemplars only (short-read), so lost/gained/reassigned are not weighted
+        # by PCR-duplicate counts (whose fraction can itself differ across runs).
+        if (
+            "prim_align_dup_exemplar" in vh_main.columns
+            and "prim_align_dup_exemplar" in vh_dev.columns
+        ):
+            ex_main = vh_main[vh_main["seq_id"] == vh_main["prim_align_dup_exemplar"]]
+            ex_dev = vh_dev[vh_dev["seq_id"] == vh_dev["prim_align_dup_exemplar"]]
+            joined_dedup = dm.join_read_assignments(ex_main, ex_dev, merge_map)
+            write_tsv(
+                dm.summarize_read_status(joined_dedup, vert),
+                args.out / "viral_read_status_dedup.tsv",
+            )
+        else:
+            logger.warning(
+                "No prim_align_dup_exemplar column; skipping dedup read-status view."
+            )
+
+        # Clade-count family/order breakdown (short-read only). Rank/name resolved
+        # from both index versions so main-only families are not dropped.
         clade_main = load_clade_counts(main_results, main_manifest)
         clade_dev = load_clade_counts(dev_results, dev_manifest)
         if not clade_main.empty and not clade_dev.empty:
-            clade = dm.clade_rank_shares(clade_main, clade_dev, annotated)
+            clade = dm.clade_rank_shares(clade_main, clade_dev, clade_annotated)
             write_tsv(clade, args.out / "clade_rank_shares.tsv")
             outputs["clade_rank_shares"] = clade
         else:
@@ -586,8 +663,7 @@ def main() -> None:
         outputs["viral_validation_agreement"] = validation
 
         # Vertebrate-status flips between the two index annotations.
-        if args.old_index:
-            old_annotated = load_annotated_db(args.old_index, args.out / "_old_index")
+        if old_annotated is not None:
             flips = dm.vertebrate_status_flips(old_annotated, annotated)
             write_tsv(flips, args.out / "vertebrate_status_flips.tsv")
         else:
