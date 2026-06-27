@@ -990,8 +990,15 @@ def reassignment_distances(
     reassigned = flagged[flagged["status"] == "reassigned"].copy()
     if reassigned.empty:
         # Keep the sample-aware column set stable on the empty path too.
-        cols = ["group", "scope", "seq_id", "taxid_main", "taxid_dev", "bucket",
-                "edge_distance"]
+        cols = [
+            "group",
+            "scope",
+            "seq_id",
+            "taxid_main",
+            "taxid_dev",
+            "bucket",
+            "edge_distance",
+        ]
         if "sample" in joined.columns:
             cols.insert(2, "sample")
         return pd.DataFrame(columns=cols)
