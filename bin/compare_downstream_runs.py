@@ -630,6 +630,16 @@ def main() -> None:
         ]
         vh_main = load_validation_hits(main_results, main_manifest, vh_cols)
         vh_dev = load_validation_hits(dev_results, dev_manifest, vh_cols)
+        # Group discovery no longer requires validation_hits, so a side could lack
+        # it entirely; surface that rather than crashing the read-level join.
+        need = {"group", "seq_id", "aligner_taxid_lca"}
+        if not need.issubset(vh_main.columns) or not need.issubset(vh_dev.columns):
+            logger.warning(
+                "validation_hits missing on a side; skipping Focus 1 read-level "
+                "comparison (not computed)."
+            )
+            _finish(args, outputs)
+            return
         joined = dm.join_read_assignments(vh_main, vh_dev, merge_map)
         read_status = dm.summarize_read_status(joined, vert)
         write_tsv(read_status, args.out / "viral_read_status.tsv")
@@ -717,12 +727,15 @@ def main() -> None:
     else:
         logger.warning("No --index given; skipping Focus 1 (viral assignments).")
 
-    # Consolidated flags across all focuses (fixed thresholds + cohort outliers).
+    _finish(args, outputs)
+
+
+def _finish(args: argparse.Namespace, outputs: dict[str, pd.DataFrame]) -> None:
+    """Write the consolidated flags table and log completion."""
     thresholds = json.loads(args.thresholds) if args.thresholds else None
     flags = dm.build_flags(outputs, thresholds=thresholds)
     write_tsv(flags, args.out / "flags.tsv")
     logger.info(f"{len(flags)} flags raised across all focuses.")
-
     logger.info(f"Done. Outputs in {args.out.resolve()}")
 
 

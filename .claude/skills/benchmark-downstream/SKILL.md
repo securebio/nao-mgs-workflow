@@ -47,9 +47,11 @@ them at the output directory; do not write `REVIEW.md`.
 - `dev_index` (required for Focus 1): the dev run's index root
   (`s3://nao-mgs-index/<DATE>`), for taxonomy + vertebrate annotation → `--index`.
 - `main_index` (optional): the main run's index root → `--old-index`. Used for
-  the vertebrate-status-flip side-table and to add main-side names to the
-  clade-share table. (Clade rank classification uses the full dev taxonomy, so
-  main-only families are not dropped even without `--old-index`.)
+  the vertebrate-status-flip side-table, main-side names in the clade-share table,
+  and a rank fallback for taxids deleted from the dev taxonomy. Clade rank
+  otherwise uses the full dev taxonomy, so a main-only family with a *live* dev
+  taxon is not dropped; a main taxon *deleted/merged out of* the dev taxonomy
+  stays unresolved (and its clade row drops) unless `--old-index` is given.
 - `out_dir` (required): absolute path for tables and the report → `--out`.
 
 If a required input is missing, ask; do not guess. Without `--index`, Focus 1

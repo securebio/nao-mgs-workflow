@@ -551,6 +551,25 @@ class TestSummariseAndBuckets:
         assert "unresolved-taxid" in set(out.bucket)
         assert (out.n_reads == 0).all()
 
+    def test_bucket_summary_emits_vertebrate_when_only_all_present(self) -> None:
+        # Non-vertebrate reassignment only: vertebrate scope must still appear
+        # (all canonical buckets, zero) rather than vanishing.
+        detail = pd.DataFrame(
+            [["G", "all", "r1", 1, 2, "same-genus", 2]],
+            columns=[
+                "group",
+                "scope",
+                "seq_id",
+                "taxid_main",
+                "taxid_dev",
+                "bucket",
+                "edge_distance",
+            ],
+        )
+        out = dm.bucket_summary(detail)
+        assert set(out.scope) == {"all", "vertebrate"}
+        assert (out[out.scope == "vertebrate"].n_reads == 0).all()
+
     def test_bucket_summary_ordered(self) -> None:
         joined = self._joined()
         tax = _synthetic_tree()

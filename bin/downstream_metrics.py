@@ -242,6 +242,14 @@ def compare_columns_to_schema(
     to the other side. Schema-driven: file types without a matching schema are
     still reported (with empty schema columns) so unschema'd outputs surface.
 
+    Missing/extra columns are aggregated across ALL group headers per side, so a
+    later group's drop/add is caught. `cols_only_in_*` and `order_changed`,
+    however, compare a single representative header per side and are only
+    meaningful when `groups_consistent_*` is True; cross-side column ORDER is not
+    schema-checked because the schema legitimately permits platform-specific
+    ordering (e.g. ONT places paired-end columns last). Read `order_changed`
+    together with `groups_consistent_*`.
+
     Args:
         main: Side manifest for main.
         dev: Side manifest for dev.
@@ -981,17 +989,12 @@ def reassignment_distances(
     flagged = _add_vertebrate_flag(joined, vert)
     reassigned = flagged[flagged["status"] == "reassigned"].copy()
     if reassigned.empty:
-        return pd.DataFrame(
-            columns=[
-                "group",
-                "scope",
-                "seq_id",
-                "taxid_main",
-                "taxid_dev",
-                "bucket",
-                "edge_distance",
-            ]
-        )
+        # Keep the sample-aware column set stable on the empty path too.
+        cols = ["group", "scope", "seq_id", "taxid_main", "taxid_dev", "bucket",
+                "edge_distance"]
+        if "sample" in joined.columns:
+            cols.insert(2, "sample")
+        return pd.DataFrame(columns=cols)
 
     def _pair_key(a: Any, b: Any) -> tuple[int, int] | None:
         # A reassigned read with a missing taxid on either side (non-conformant
@@ -1056,16 +1059,15 @@ def bucket_summary(reassignment_detail: pd.DataFrame) -> pd.DataFrame:
         SHARED_HIGHER,
         CROSS_ROOT,
     ]
-    # Emit both scopes even with zero reassignments, so "none observed" stays
+    # Always emit BOTH scopes for every canonical bucket, so "none observed"
+    # (e.g. zero vertebrate reassignments even when 'all' has some) stays
     # distinguishable from "not computed".
     if reassignment_detail.empty:
         counts: dict[Any, int] = {}
-        scopes = ["all", "vertebrate"]
     else:
         counts = reassignment_detail.groupby(["scope", "bucket"]).size().to_dict()
-        scopes = sorted(reassignment_detail["scope"].unique())
     records: list[dict[str, object]] = []
-    for scope in scopes:
+    for scope in ("all", "vertebrate"):
         for bucket in display_buckets:
             records.append(
                 {

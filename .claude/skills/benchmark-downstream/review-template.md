@@ -182,8 +182,9 @@ holds, in this order, and no others (omit a bullet whose condition is false):
    the rest. (high)
 3. All remaining groups over the reassignment threshold, as ONE bullet. (medium)
 4. Groups over the lost threshold, as ONE bullet — only if any exist. (medium)
-5. Large `gained`-read groups (a group whose dev read count far exceeds main),
-   as ONE bullet — only if any exist. (high)
+5. Groups over the gained threshold (a high gained *fraction*: gained/n_dev, so
+   high turnover can trip it even without total-count growth), as ONE bullet —
+   only if any exist. (high)
 6. Vertebrate-status flips between indexes, as ONE bullet. (medium)
 7. BLAST agreement-rate drops over threshold, as ONE bullet — only if any. (medium)
 8. Kraken Bray-Curtis flags over threshold, as ONE bullet — only if any. (medium)

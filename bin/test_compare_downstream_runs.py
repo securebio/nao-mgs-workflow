@@ -410,3 +410,40 @@ def test_main_end_to_end(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Non
     assert not flags.empty
     reassign_flags = flags[flags.metric.str.contains("reassigned")]
     assert any("G_ILL" in k for k in reassign_flags.key)
+
+
+def test_main_skips_focus1_when_validation_hits_absent(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import sys
+
+    main_root = tmp_path / "main"
+    dev_root = tmp_path / "dev"
+    index_root = tmp_path / "index"
+    out = tmp_path / "out"
+    _build_downstream_tree(main_root, "main")
+    _build_downstream_tree(dev_root, "dev")
+    _build_index(index_root)
+    # Remove ALL validation_hits on the dev side: Focus 1 must skip cleanly, not
+    # crash, and still produce the other focuses + flags.
+    for vh in (dev_root / "results_downstream").glob("*_validation_hits.tsv.gz"):
+        vh.unlink()
+
+    argv = [
+        "compare_downstream_runs.py",
+        "--main",
+        str(main_root),
+        "--dev",
+        str(dev_root),
+        "--index",
+        str(index_root),
+        "--out",
+        str(out),
+    ]
+    monkeypatch.setattr(sys, "argv", argv)
+    cdr.main()  # must not raise
+
+    assert (out / "flags.tsv").exists()
+    assert (out / "file_inventory.tsv").exists()
+    # Focus 1 read-level output is skipped (not computed).
+    assert not (out / "viral_read_status.tsv").exists()
