@@ -179,17 +179,19 @@ def _columns_for_type(manifest: SideManifest, file_type: str) -> list[str] | Non
 
 
 def _columns_consistent(manifest: SideManifest, file_type: str) -> bool:
-    """Whether every group on this side that has `file_type` shares one header.
+    """Whether groups of the SAME platform share one header for `file_type`.
 
-    Guards against the first-group-only assumption: if groups disagree on columns
-    for the same file type, that itself is a finding.
+    Guards against the first-group-only assumption. Consistency is judged within
+    each platform, so a benign cross-platform ordering difference (e.g. ONT places
+    paired-end columns last) is not flagged — only genuine intra-platform
+    disagreement is.
     """
-    seen = {
-        tuple(gm.files[file_type].columns)  # type: ignore[arg-type]
-        for gm in manifest.values()
-        if file_type in gm.files and gm.files[file_type].columns is not None
-    }
-    return len(seen) <= 1
+    by_platform: dict[str, set[tuple[str, ...]]] = {}
+    for gm in manifest.values():
+        fe = gm.files.get(file_type)
+        if fe and fe.columns is not None:
+            by_platform.setdefault(gm.platform, set()).add(tuple(fe.columns))
+    return all(len(headers) <= 1 for headers in by_platform.values())
 
 
 def _all_columns(manifest: SideManifest, file_type: str) -> list[list[str]]:
