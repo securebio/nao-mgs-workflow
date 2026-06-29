@@ -11,9 +11,10 @@ a likely driver only as a hypothesis.
 > differs between these two runs (see SKILL.md "Attribution"); delete the others.
 
 `<Attribution statement for THIS comparison — one of: "These runs differ in
-<list ≥2 of code / reference index / QC parameters>, so a difference here cannot
-be attributed to a single cause." OR "These runs differ only in <the one
-dimension>, so differences are attributable to that change.">`
+<list ≥2 of code / reference index / QC parameters, or any dimension that cannot
+be confirmed unchanged>, so a difference here cannot be attributed to a single
+cause." OR "These runs differ only in <the one dimension> (the others confirmed
+unchanged), so a difference is attributable to that dimension more directly.">`
 
 > **How to fill this in (instructions for the report author; delete this block
 > and every `> **Author instructions**` block in the final REVIEW.md).** Replace
@@ -71,10 +72,13 @@ out:
 > **Author instructions.** Write one `###` subsection per metric dimension that
 > showed a *substantial* difference in THIS comparison — a consolidated flag, or
 > a difference large enough that a human should see it even if it didn't trip a
-> threshold. **Coverage is deterministic: every dimension that produced a flag
-> MUST get a subsection here** (don't drop one as "minor" — that is what makes two
-> independent reviewers surface the same set). Dimensions that were checked but
-> stayed within threshold go in "Checked, no action needed" below, not here. The
+> threshold. **Coverage is deterministic: a subsection is required for (a) every
+> dimension with a flag in `flags.tsv`, and (b) two enumerated non-flag triggers a
+> flag can miss — any cross-root or shared-higher-taxon reassignment, and any
+> clade reaching zero candidate-side share.** Don't drop one as "minor" — that
+> fixed set is what makes two independent reviewers surface the same findings.
+> Dimensions checked but within threshold and with neither trigger go in
+> "Checked, no action needed" below, not here. The
 > candidate dimensions are listed below so no class of finding is missed; **give a
 > dimension a subsection only if its data shows something**, and delete the rest.
 > Don't presume any of them happened — let the TSVs decide. **Title each
@@ -87,7 +91,7 @@ out:
 > high/medium/low verdict — that is the human's prioritization signal. Where a
 > difference is bidirectional or mixed (some groups up, some down), say so rather
 > than forcing a single direction. Put method and statistical caveats in the
-> matching Detailed-investigation section and the Methodology appendix, not here.
+> matching Detailed investigation section and the Methodology appendix, not here.
 > Do not assert causes; if a Likely-drivers investigation was done, point to it
 > rather than restating it.
 >
@@ -97,7 +101,7 @@ out:
 > hypothetical ("consistent with", "hypothesis only") and using no verdict words
 > ("over-calling", "legitimate", "wrong", "caused by").
 >
-> Candidate dimensions (each maps to a Detailed-investigation section; cross-
+> Candidate dimensions (each maps to a Detailed investigation section; cross-
 > reference it). For each, the kind of thing to report if present:
 >
 > - **Read-level viral assignment changes** — lost / gained / reassigned reads in
@@ -157,11 +161,13 @@ line. Delete the dimensions with nothing to report.>`
 
 > **Author instructions.** One short bullet per dimension that was checked and
 > showed no flagged difference, so the reader knows it was examined rather than
-> skipped — the counterpart to Main findings. ALWAYS include quality metrics and
-> schema/inventory here (unless they shifted, in which case they are a Main
-> finding instead). State the result plainly with the bounding number (e.g.
-> "survival within X pp, no FASTQC flag changes"). No recommendations here — these
-> need no action.
+> skipped — the counterpart to Main findings. Include quality metrics and
+> schema/inventory here whenever they were computed (unless they shifted, in which
+> case they are a Main finding instead); if an input was missing so a metric could
+> not be computed, say that here per the missing-data rule rather than asserting it
+> was stable. State the result plainly with the bounding number (e.g. "survival
+> within X pp, no FASTQC flag changes"). No recommendations here — these need no
+> action.
 
 - `<dimension: result, with the bounding number — e.g. quality metrics, schema/
   inventory, and any metric dimension checked but within threshold>`
@@ -189,8 +195,11 @@ or delete this section if none were investigated.>`
 ## Detailed investigation
 
 > **Author instructions.** This is the reference layer behind the Main findings:
-> the full per-group tables and the numbers each finding summarizes. Keep prose
-> minimal here — let the tables carry it. Each subsection opens with a one-line,
+> the per-group tables and the numbers each finding summarizes. Show the rows the
+> per-section table asks for (typically the largest/flagged rows) and state the
+> total count; park any oversized full table in Appendix C rather than inlining it
+> here. Keep prose minimal — let the tables carry it. Each subsection opens with a
+> one-line,
 > jargon-free statement of what it measures; deeper method notes and statistical
 > caveats live in the Methodology appendix. Report Illumina and ONT separately
 > where they differ, and note where ONT has no data (no clade counts, no
@@ -199,19 +208,14 @@ or delete this section if none were investigated.>`
 ### Completeness and schema
 
 What this checks: every expected output file is present for every group on both
-sides, with the same columns.
+sides, with the same columns. (Row-count *changes* are covered separately in
+Output-file overview.)
 
 - **Inventory:** `<N groups × M file types; list anything missing on either
   side, or state none missing>`.
 - **Groups skipped for a metric** (from `skipped_groups.tsv`): `<list any group
   excluded from the viral or kraken comparison because a required input was
   present on only one side, or state none were skipped>`.
-- **Largest row-count changes** (shared files):
-
-  | Group | File type | rows (main) | rows (dev) | change | % |
-  |---|---|---|---|---|---|
-  | ... | | | | | |
-
 - **Column conformance:** `<state whether every output matches its schema and
   matches across sides; note any added/removed columns; note empty outputs such
   as bracken>`.
@@ -219,7 +223,8 @@ sides, with the same columns.
 ### Viral assignments
 
 What this measures: a read-by-read comparison of the pipeline's viral taxon call
-(`aligner_taxid_lca`), matched between runs on `(group, sample, seq_id)`. The
+(`aligner_taxid_lca`), matched between runs on `(group, sample, seq_id)` when a
+`sample` column is present, else `(group, seq_id)`. The
 **vertebrate-viral subset** is reads whose assigned taxon is annotated as
 vertebrate-infecting in the candidate index (see the Methodology appendix for the exact
 definition and the excluded "likely-infecting" status, and for the per-read /
@@ -261,10 +266,11 @@ biological reassignment; do not rank it as most severe.>`
 `<Per-family and per-order view of viral reads, main vs dev, from
 clade_rank_shares.tsv: raw read counts (reads_main, reads_dev, delta_reads) plus
 each clade's share of the group's TOTAL viral reads (share_main, share_dev,
-delta_pp), for both reads_clade_total and reads_clade_dedup. Flag large count or
+delta_pp). Flags are computed on the `reads_clade_total` basis only; the
+`reads_clade_dedup` rows are context, not a flag source. Report large count or
 share shifts; name clades with taxids. Name any whole families that
 appear/disappear and give the number of groups affected. See the Methodology
-appendix on the fixed total-viral denominator and dev-taxonomy re-ranking before
+appendix on the fixed total-viral denominator and candidate-index re-ranking before
 reading a disappearance as a biological loss.>`
 
 #### BLAST-validation agreement (secondary)
@@ -311,11 +317,18 @@ flag transitions (or none).>`
 
 ### Output-file overview (schema-driven)
 
-`<Generic per-group presence and row-count changes across every output file
-type, derived from schemas + expected-outputs (no per-file logic). Largest
-row-count changes and any structural surprises. Cross-reference findings above
-where a row-count change tracks a finding (e.g. a change in validation-hit rows
-that moves with a read-level lost/gained finding).>`
+What this measures: per-group row-count changes across every output file type,
+derived from schemas + expected-outputs (no per-file logic). (Presence and column
+conformance are covered in Completeness and schema; this section owns the
+quantitative row-count deltas.)
+
+| Group | File type | rows (main) | rows (dev) | change | % |
+|---|---|---|---|---|---|
+| ... | | | | | |
+
+`<Largest row-count changes and any structural surprises. Cross-reference findings
+above where a row-count change tracks a finding (e.g. a change in validation-hit
+rows that moves with a read-level lost/gained finding).>`
 
 ---
 
@@ -327,7 +340,7 @@ that moves with a read-level lost/gained finding).>`
 > report should be read, and only for analyses that actually appear here (drop a
 > caveat whose analysis was skipped or had nothing to report); phrase each in one
 > or two plain sentences. These are referenced by name from the
-> Detailed-investigation sections so the body stays readable.
+> Detailed investigation sections so the body stays readable.
 
 - **Vertebrate-viral subset & excluded status.** The subset is taxa annotated
   "affirmatively infecting" (status 1) in the candidate index, rolled up to species;
@@ -347,7 +360,7 @@ that moves with a read-level lost/gained finding).>`
   one species) is a genuine LCA-specificity change, not a versioning artifact.
   The `unresolved-taxid` bucket counts the cases where a taxid is genuinely
   absent from the candidate-index taxonomy.
-- **Clade-share denominator & dev-taxonomy re-ranking.** Each clade's share uses
+- **Clade-share denominator & candidate-index re-ranking.** Each clade's share uses
   a fixed denominator — the group's total viral reads (the Viruses-root clade
   total) — so a family dropping to 0 does NOT mechanically inflate the others'
   shares. Read `delta_reads` (raw count change) alongside the share: the total
@@ -389,7 +402,7 @@ share change >3pp, BLAST agreement drop >0.1, Bray-Curtis >0.15>`.
 
 > **Author instructions.** Place oversized tables here (e.g. the full per-group
 > clade-share table, the full reassignment severity-bucket table) so the body
-> stays skimmable. Add one `###`-titled table per subject.
+> stays skimmable. Add one `####`-titled table per subject.
 
 #### C.1 `<table subject>`
 

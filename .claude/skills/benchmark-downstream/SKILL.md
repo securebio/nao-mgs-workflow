@@ -21,14 +21,19 @@ flags large changes for human review, naming a likely driver only as a
 hypothesis.
 
 **Attribution.** How far a difference can be attributed depends on what differs
-between the runs. First establish which of {pipeline code, reference index, QC
-parameters} actually differ (from the version/index pairs and params diff), and
-record it in the report's Run identity. Then print the single matching attribution
-statement in the report intro (the template marks the spot), deleting the others:
-- They differ in **more than one** dimension (the typical release diff) → a
-  difference cannot be pinned on any single cause.
-- They differ in **only one** dimension (e.g. same code, only the index rebuilt)
-  → a difference is attributable to that dimension more directly.
+between the runs. Establish which of {pipeline code, reference index, QC
+parameters} differ from the Run-identity inputs: the pipeline version and the
+index identity (date/path) are given; QC parameters are **not** emitted by the
+script, so unless the user states they are unchanged, treat that dimension as not
+confirmed. Record the conclusion in Run identity, then print the single matching
+attribution statement in the report intro (the template marks the spot), deleting
+the others:
+- **More than one** dimension differs, OR any dimension cannot be confirmed
+  unchanged (the typical release diff) → a difference cannot be pinned on any
+  single cause.
+- **Exactly one** dimension differs and the others are confirmed unchanged (e.g.
+  same code and same QC params, only the index rebuilt) → a difference is
+  attributable to that dimension more directly.
 
 Either way there is no ground truth, so still no good/bad verdict.
 
@@ -67,7 +72,8 @@ same rules.
 - **Each section has one job; don't repeat.** The Summary orients (2–3
   headlines), Main findings carries the full set, the detail sections hold the
   tables, the appendix holds method. Don't restate a finding across sections —
-  cross-reference by section name instead.
+  cross-reference by section name instead. The Summary's 2–3 headline lines are
+  the one intended exception: a deliberate at-a-glance orientation, not a repeat.
 - **Keep the recommendation with its finding.** The "to confirm" question lives on
   the finding it concerns, not in a separate distant section.
 - **Print only what is true for this comparison.** The report carries
@@ -128,6 +134,12 @@ Use an **absolute** path for `--out`. The script stages each run's
 `results_downstream/` tree and the candidate index's `taxonomy-nodes.dmp` +
 `total-virus-db-annotated.tsv.gz` under `<out>/_staged` and `<out>/_index`. It
 takes a couple of minutes (most of it staging + taxonomy parsing).
+
+The script does **not** stage `taxonomy-names.dmp`, but the report-writing
+"name every entity" rule needs it (the reassignment TSVs carry only taxids). Fetch
+it once from the candidate index alongside the staged dumps, e.g.
+`aws s3 cp s3://nao-mgs-index/<DATE>/output/results/taxonomy-names.dmp <out>/_index/`,
+and use it to resolve every taxid to a name.
 
 Flag thresholds are tunable via `--thresholds '{"bray_curtis": 0.2, ...}'`;
 defaults are documented in `bin/downstream_metrics.py` (`DEFAULT_THRESHOLDS`).
@@ -196,15 +208,18 @@ Key reminders:
 - **Platform split.** Report Illumina and ONT separately under each dimension;
   ONT has no clade counts or duplicate marking — note the omission rather than
   leaving a blank.
-- **Coverage is deterministic.** Every metric dimension with a flag (and any
-  other difference large enough that a human should see it — e.g. a clade that
-  appears or disappears, a cross-root reassignment) gets its own Main-findings
-  subsection; never drop one as "minor". Dimensions checked but within threshold
-  go under "Checked, no action needed". Annotate each finding with its breadth and
-  magnitude rather than a fixed concern level; let the human prioritize. What is
-  guaranteed identical across reviewers is the *set* of subsections and To-confirm
-  lines (it is fixed by `flags.tsv`); their wording and grouping are author
-  judgment, not a reproducible string.
+- **Coverage is deterministic.** A Main-findings subsection is required for (a)
+  every metric dimension with a flag in `flags.tsv`, and (b) two enumerated
+  non-flag triggers that a flag can miss: any cross-root or shared-higher-taxon
+  reassignment (the reassignment flag is per-group, so a few severe moves inside
+  an otherwise-unflagged group would slip past it), and any clade reaching zero
+  candidate-side share (a collapse can sit below the share-change threshold).
+  Never drop one as "minor"; a dimension checked but within threshold and with
+  neither trigger goes under "Checked, no action needed". The *set* of subsections
+  and To-confirm lines is fixed by `flags.tsv` plus those two triggers — that is
+  what is identical across reviewers; their wording and grouping are author
+  judgment, not a reproducible string. Annotate each finding with breadth and
+  magnitude rather than a fixed concern level; let the human prioritize.
 
 ### Step 4 - Optionally investigate likely drivers
 
