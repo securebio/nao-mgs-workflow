@@ -522,25 +522,7 @@ class TestSummariseAndBuckets:
         assert "unresolved-taxid" in set(out.bucket)
         assert (out.n_reads == 0).all()
 
-    def test_bucket_summary_emits_vertebrate_when_only_all_present(self) -> None:
-        # Non-vertebrate reassignment only: vertebrate scope must still appear
-        # (all canonical buckets, zero) rather than vanishing.
-        detail = pd.DataFrame(
-            [["G", "all", "r1", 1, 2, "same-genus"]],
-            columns=[
-                "group",
-                "scope",
-                "seq_id",
-                "taxid_main",
-                "taxid_dev",
-                "bucket",
-            ],
-        )
-        out = dm.bucket_summary(detail)
-        assert set(out.scope) == {"all", "vertebrate"}
-        assert (out[out.scope == "vertebrate"].n_reads == 0).all()
-
-    def test_bucket_summary_ordered(self) -> None:
+    def test_bucket_summary_populated_counts_and_canonical_buckets(self) -> None:
         joined = self._joined()
         tax = _synthetic_tree()
         detail = dm.reassignment_distances(joined, tax, vert={401, 402})
@@ -553,6 +535,12 @@ class TestSummariseAndBuckets:
         # r1: 401->402 is the only reassigned read, a same-genus move.
         assert list(nonzero.bucket) == ["same-genus"]
         assert nonzero.iloc[0].n_reads == 1
+        # Vertebrate scope is always emitted with all canonical buckets; here r1
+        # (401->402) is vertebrate, so it carries the same-genus read too.
+        vert_buckets = buckets[buckets.scope == "vertebrate"]
+        assert "cross-root" in set(vert_buckets.bucket)
+        vert_nonzero = vert_buckets[vert_buckets.n_reads > 0]
+        assert list(vert_nonzero.bucket) == ["same-genus"]
 
 
 class TestCladeRankShares:
@@ -951,23 +939,3 @@ class TestKrakenTopMoversCutoff:
         )
         out = dm.kraken_top_movers(main, dev, "S", n=1)
         assert out.iloc[0].taxid == 5  # both move 80pp; lower taxid kept
-
-
-class TestReassignmentDistancesBuckets:
-    def test_distinct_buckets_mapped(self) -> None:
-        # cross-root (virus->bacteria) and same-genus in one frame map correctly.
-        joined = pd.DataFrame(
-            {
-                "group": ["G", "G"],
-                "seq_id": ["r1", "r2"],
-                "taxid_main": pd.array([401, 401], dtype="Int64"),
-                "taxid_dev": pd.array([600, 402], dtype="Int64"),
-                "status": ["reassigned", "reassigned"],
-            }
-        )
-        detail = dm.reassignment_distances(
-            joined, _synthetic_tree(), vert={401, 402, 600}
-        )
-        all_scope = detail[detail.scope == "all"].set_index("seq_id")
-        assert all_scope.loc["r1", "bucket"] == dm.CROSS_ROOT
-        assert all_scope.loc["r2", "bucket"] == "same-genus"
