@@ -468,11 +468,7 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument(
         "--old-index",
         required=False,
-        help=(
-            "Main index root. Used for the vertebrate-status-flip table, main-side "
-            "clade names, and a rank fallback for taxids deleted from the dev "
-            "taxonomy. (Clade rank otherwise uses the full dev taxonomy.)"
-        ),
+        help="Main index root. Used for the vertebrate-status-flip side-table.",
     )
     parser.add_argument(
         "--out",
@@ -607,18 +603,12 @@ def main() -> None:
         vert = dm.vertebrate_taxids(annotated)
         logger.info(f"{len(vert)} vertebrate-infecting taxids (status 1, dev index).")
 
-        # Load the main index annotation too (if given): used to resolve clade
-        # rank/name from BOTH index versions (so a main-only family isn't dropped)
-        # and for the vertebrate-status-flip side-table.
+        # Load the main index annotation too (if given): used for the
+        # vertebrate-status-flip side-table.
         old_annotated = (
             load_annotated_db(args.old_index, args.out / "_old_index")
             if args.old_index
             else None
-        )
-        clade_annotated = (
-            pd.concat([old_annotated, annotated], ignore_index=True)
-            if old_annotated is not None
-            else annotated
         )
 
         vh_cols = [
@@ -652,31 +642,21 @@ def main() -> None:
             args.out / "viral_reassignment_concentration.tsv",
         )
 
-        # Clade-count family/order breakdown (short-read only). Rank is resolved
-        # from the full dev taxonomy (covers every live taxid), with the old
-        # index's annotation as a fallback for taxids deleted/merged out of the
-        # dev taxonomy — so a main-only family is not dropped. Names come from the
-        # union of both indexes' annotations (taxid fallback otherwise).
+        # Clade-count family/order breakdown (short-read only). Rank and name are
+        # resolved from the dev index (taxonomy nodes.dmp + annotation); a taxid
+        # deleted from the dev taxonomy simply drops from the clade table, and a
+        # name absent from the dev annotation falls back to its taxid.
         clade_main = load_clade_counts(main_results, main_manifest)
         clade_dev = load_clade_counts(dev_results, dev_manifest)
         if not clade_main.empty and not clade_dev.empty:
             name_map = dict(
                 zip(
-                    clade_annotated["taxid"].astype(int),
-                    clade_annotated["name"],
+                    annotated["taxid"].astype(int),
+                    annotated["name"],
                     strict=True,
                 )
             )
-            rank_map = dict(rank)  # dev taxonomy (complete for live taxids)
-            if old_annotated is not None and "rank" in old_annotated.columns:
-                # Fallback only for taxids absent from the dev taxonomy.
-                for taxid, rk in zip(
-                    old_annotated["taxid"].astype(int),
-                    old_annotated["rank"],
-                    strict=True,
-                ):
-                    rank_map.setdefault(taxid, rk)
-            clade = dm.clade_rank_shares(clade_main, clade_dev, rank_map, name_map)
+            clade = dm.clade_rank_shares(clade_main, clade_dev, rank, name_map)
             write_tsv(clade, args.out / "clade_rank_shares.tsv")
             outputs["clade_rank_shares"] = clade
         else:
