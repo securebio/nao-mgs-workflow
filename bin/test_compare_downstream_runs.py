@@ -285,6 +285,8 @@ def _build_downstream_tree(root: Path, side: str) -> None:
             "reads_clade_dedup",
         ],
         [
+            # Viruses root: total viral reads (the clade-share denominator).
+            ["G_ILL", 10239, 1, 0, 0, 100, 100],
             ["G_ILL", 5, 10239, 0, 0, 100, 100],  # family FamX
             ["G_ILL", 10, 5, 80, 80, 80, 80],  # species
         ],

@@ -615,6 +615,10 @@ ORDERED_RANKS = (
 
 ROOT_TAXID = 1
 
+# The viral root `Viruses` in NCBI taxonomy. Its clade-count row holds a group's
+# total viral reads, used as the denominator for clade family/order shares.
+VIRUSES_TAXID = 10239
+
 # Buckets used when two assignments share an ancestor but not at any standard
 # rank: SHARED_HIGHER means they meet above the standard ranks (e.g. both under
 # `Viruses` but in different realms); CROSS_ROOT means their only common
@@ -1055,25 +1059,41 @@ def clade_rank_shares(
 
     For each rank level (family, order), the clade-count row at a rank-level
     taxon already holds that clade's total reads, so we filter to those rows and
-    compute each taxon's share of the rank-classified viral reads per group, on
-    both sides. Rank is looked up from the dev index's full NCBI taxonomy
-    (nodes.dmp), which covers every taxid — so a family present only on the main
-    side is NOT dropped for lacking a dev annotation, and a whole-clade
-    disappearance still shows as share_main > 0, share_dev = 0.
+    compute each taxon's share PER GROUP, on both sides. The denominator is the
+    group's TOTAL viral reads — the count on its Viruses-root row (taxid 10239),
+    per side, per count column — NOT a within-rank sum over the family/order rows.
+    Within-rank normalization was removed because it mechanically inflated the
+    surviving families when another family vanished (its denominator shrank),
+    reporting a positive share change for a family whose raw count was unchanged
+    or falling. A total-viral denominator moves only when a clade's own reads or
+    the group's total viral reads move, so the sign of `delta_pp` is meaningful.
+
+    Rank is looked up from the dev index's full NCBI taxonomy (nodes.dmp); a taxid
+    deleted from the dev taxonomy drops from this table. Raw counts (`reads_main`,
+    `reads_dev`, `delta_reads`) are reported alongside the shares so a reviewer
+    can read the absolute change directly.
 
     Args:
         clade_main: clade_counts for main (group, taxid, reads_clade_* columns).
         clade_dev: clade_counts for dev.
         rank_map: taxid -> rank from the dev taxonomy (complete).
-        name_map: taxid -> name (from the union of both indexes' annotated DBs;
-            taxids absent from it fall back to their stringified taxid).
+        name_map: taxid -> name (from the dev index's annotated DB; taxids absent
+            from it fall back to their stringified taxid).
         rank_levels: taxonomic ranks to roll up to.
         count_cols: which clade-count columns to compute shares for.
 
     Returns:
         Long DataFrame: group, rank_level, count_type, taxid, name, reads_main,
-        reads_dev, share_main, share_dev, delta_pp (share change in pp).
+        reads_dev, delta_reads (dev - main), share_main, share_dev (each a share
+        of the group's total viral reads), delta_pp (share change in pp). If a
+        group has no Viruses-root (10239) row, its denominator is missing and the
+        shares (and delta_pp) are NaN for that group.
     """
+
+    def viral_totals(df: pd.DataFrame, count_col: str) -> dict[object, float]:
+        """Group -> total viral reads (the Viruses-root 10239 row), per count_col."""
+        root = df[df["taxid"].astype(int) == VIRUSES_TAXID]
+        return root.groupby("group")[count_col].sum().to_dict()
 
     def side_shares(df: pd.DataFrame, rank_level: str, count_col: str) -> pd.DataFrame:
         d = df[["group", "taxid", count_col]].copy()
@@ -1083,13 +1103,24 @@ def clade_rank_shares(
             return sub.assign(share=pd.Series(dtype=float))[
                 ["group", "taxid", count_col, "share"]
             ]
-        totals = sub.groupby("group")[count_col].transform("sum")
-        sub["share"] = sub[count_col].div(totals.where(totals != 0))
+        totals = viral_totals(df, count_col)
+        # Missing root -> NaN denominator -> NaN share (surfaced, not silently 0).
+        denom = sub["group"].map(totals)
+        sub["share"] = sub[count_col].div(denom.where(denom != 0))
         return sub[["group", "taxid", count_col, "share"]]
 
     frames: list[pd.DataFrame] = []
     for rank_level in rank_levels:
         for count_col in count_cols:
+            # Groups that have a (nonzero) Viruses-root on each side: a family
+            # absent from such a group has share 0, but in a group with NO root the
+            # share is genuinely undefined (NaN), so the two cases stay distinct.
+            main_root_groups = {
+                g for g, v in viral_totals(clade_main, count_col).items() if v
+            }
+            dev_root_groups = {
+                g for g, v in viral_totals(clade_dev, count_col).items() if v
+            }
             a = side_shares(clade_main, rank_level, count_col).rename(
                 columns={count_col: "reads_main", "share": "share_main"}
             )
@@ -1097,8 +1128,15 @@ def clade_rank_shares(
                 columns={count_col: "reads_dev", "share": "share_dev"}
             )
             merged = a.merge(b, on=["group", "taxid"], how="outer")
-            for col in ("reads_main", "reads_dev", "share_main", "share_dev"):
+            # Raw counts default to 0 for a side where the family is absent.
+            for col in ("reads_main", "reads_dev"):
                 merged[col] = merged[col].fillna(0.0)
+            # Fill an absent family's share with 0 only when its group HAS a root on
+            # that side; leave NaN (no-root) groups NaN so they stay surfaced.
+            main_has_root = merged["group"].isin(main_root_groups)
+            dev_has_root = merged["group"].isin(dev_root_groups)
+            merged.loc[merged["share_main"].isna() & main_has_root, "share_main"] = 0.0
+            merged.loc[merged["share_dev"].isna() & dev_has_root, "share_dev"] = 0.0
             merged["name"] = (
                 merged["taxid"]
                 .astype(int)
@@ -1107,6 +1145,7 @@ def clade_rank_shares(
             )
             merged["rank_level"] = rank_level
             merged["count_type"] = count_col
+            merged["delta_reads"] = merged["reads_dev"] - merged["reads_main"]
             merged["delta_pp"] = (merged["share_dev"] - merged["share_main"]) * 100.0
             frames.append(merged)
     out = pd.concat(frames, ignore_index=True)
@@ -1120,6 +1159,7 @@ def clade_rank_shares(
                 "name",
                 "reads_main",
                 "reads_dev",
+                "delta_reads",
                 "share_main",
                 "share_dev",
                 "delta_pp",

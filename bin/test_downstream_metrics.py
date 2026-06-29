@@ -556,18 +556,24 @@ class TestSummariseAndBuckets:
 
 
 class TestCladeRankShares:
-    # rank_map from the (complete) taxonomy; name_map from annotations.
-    RANK = {200: "family", 210: "family", 300: "genus"}
-    NAME = {200: "familyX", 210: "familyY", 300: "genusG"}
+    # rank_map from the (complete) taxonomy; name_map from annotations. 10239 is
+    # the Viruses root whose count is the total-viral denominator.
+    RANK = {dm.VIRUSES_TAXID: "acellular root", 200: "family", 210: "family"}
+    NAME = {200: "familyX", 210: "familyY"}
 
     def _clade(self, rows: list[list]) -> pd.DataFrame:
         return pd.DataFrame(
             rows, columns=["group", "taxid", "reads_clade_total", "reads_clade_dedup"]
         )
 
-    def test_family_shares_and_delta(self) -> None:
-        main = self._clade([["G", 200, 75, 75], ["G", 210, 25, 25], ["G", 300, 99, 99]])
-        dev = self._clade([["G", 200, 50, 50], ["G", 210, 50, 50], ["G", 300, 99, 99]])
+    def test_family_shares_over_total_viral(self) -> None:
+        # Total viral (Viruses root) = 200 reads on each side. familyX 80 -> 60.
+        main = self._clade(
+            [["G", dm.VIRUSES_TAXID, 200, 200], ["G", 200, 80, 80], ["G", 210, 40, 40]]
+        )
+        dev = self._clade(
+            [["G", dm.VIRUSES_TAXID, 200, 200], ["G", 200, 60, 60], ["G", 210, 40, 40]]
+        )
         out = dm.clade_rank_shares(
             main,
             dev,
@@ -577,14 +583,47 @@ class TestCladeRankShares:
             count_cols=("reads_clade_total",),
         )
         fx = out[out.taxid == 200].iloc[0]
-        # genus row (300) ignored; familyX share 0.75 -> 0.50.
-        assert abs(fx.share_main - 0.75) < 1e-9
-        assert abs(fx.share_dev - 0.50) < 1e-9
-        assert abs(fx.delta_pp - (-25.0)) < 1e-9
+        # Share is of TOTAL viral reads (200), not of the family-rank sum.
+        assert abs(fx.share_main - 0.40) < 1e-9
+        assert abs(fx.share_dev - 0.30) < 1e-9
+        assert abs(fx.delta_pp - (-10.0)) < 1e-9
+        assert fx.delta_reads == -20
+
+    def test_unchanged_family_not_inflated_when_other_collapses(self) -> None:
+        # The old within-rank bug: familyX's raw count is UNCHANGED, but familyY
+        # collapses. With a within-rank denominator familyX's share would jump up
+        # (a spurious positive delta). With the total-viral denominator it does
+        # not move, and delta_reads is exactly 0.
+        main = self._clade(
+            [
+                ["G", dm.VIRUSES_TAXID, 200, 200],
+                ["G", 200, 50, 50],
+                ["G", 210, 100, 100],
+            ]
+        )
+        dev = self._clade(
+            [["G", dm.VIRUSES_TAXID, 200, 200], ["G", 200, 50, 50], ["G", 210, 10, 10]]
+        )
+        out = dm.clade_rank_shares(
+            main,
+            dev,
+            self.RANK,
+            self.NAME,
+            rank_levels=("family",),
+            count_cols=("reads_clade_total",),
+        )
+        fx = out[out.taxid == 200].iloc[0]
+        assert fx.delta_reads == 0
+        assert abs(fx.delta_pp) < 1e-9  # NOT a positive gainer
+        fy = out[out.taxid == 210].iloc[0]
+        assert fy.delta_reads == -90
+        assert fy.delta_pp < 0  # the family that actually fell
 
     def test_family_dropped_in_dev(self) -> None:
-        main = self._clade([["G", 200, 50, 50], ["G", 210, 50, 50]])
-        dev = self._clade([["G", 200, 100, 100]])
+        main = self._clade(
+            [["G", dm.VIRUSES_TAXID, 100, 100], ["G", 200, 50, 50], ["G", 210, 50, 50]]
+        )
+        dev = self._clade([["G", dm.VIRUSES_TAXID, 100, 100], ["G", 200, 50, 50]])
         out = dm.clade_rank_shares(
             main,
             dev,
@@ -596,12 +635,28 @@ class TestCladeRankShares:
         fy = out[out.taxid == 210].iloc[0]
         assert fy.share_dev == 0.0
         assert fy.delta_pp == -50.0
+        assert fy.delta_reads == -50
 
-    def test_main_only_family_not_dropped(self) -> None:
-        # Family 999 appears only in main clade_counts and only in the (complete)
-        # rank_map — it must still show share_main>0, share_dev=0, not vanish.
-        main = self._clade([["G", 200, 50, 50], ["G", 999, 50, 50]])
-        dev = self._clade([["G", 200, 100, 100]])
+    def test_missing_viruses_root_gives_nan_share(self) -> None:
+        # No Viruses-root row -> denominator missing -> share NaN (surfaced, not 0).
+        main = self._clade([["G", 200, 50, 50]])
+        dev = self._clade([["G", 200, 50, 50]])
+        out = dm.clade_rank_shares(
+            main,
+            dev,
+            self.RANK,
+            self.NAME,
+            rank_levels=("family",),
+            count_cols=("reads_clade_total",),
+        )
+        fx = out[out.taxid == 200].iloc[0]
+        assert pd.isna(fx.share_main) and pd.isna(fx.share_dev)
+        # Raw counts are still reported.
+        assert fx.reads_main == 50 and fx.delta_reads == 0
+
+    def test_name_falls_back_to_taxid(self) -> None:
+        main = self._clade([["G", dm.VIRUSES_TAXID, 100, 100], ["G", 999, 50, 50]])
+        dev = self._clade([["G", dm.VIRUSES_TAXID, 100, 100], ["G", 999, 50, 50]])
         out = dm.clade_rank_shares(
             main,
             dev,
@@ -611,8 +666,8 @@ class TestCladeRankShares:
             count_cols=("reads_clade_total",),
         )
         f999 = out[out.taxid == 999].iloc[0]
-        assert f999.share_main == 0.5 and f999.share_dev == 0.0
         assert f999["name"] == "999"
+        assert abs(f999.share_main - 0.5) < 1e-9
 
 
 class TestValidationAgreement:
