@@ -270,6 +270,41 @@ def _group_file(results_dir: Path, group: str, file_type: str) -> Path | None:
     return matches[0] if matches else None
 
 
+def _both_sided_manifests(
+    main_manifest: dm.SideManifest,
+    dev_manifest: dm.SideManifest,
+    file_type: str,
+) -> tuple[dm.SideManifest, dm.SideManifest, list[dict[str, str]]]:
+    """Restrict both manifests to groups whose `file_type` is present on BOTH sides.
+
+    A per-group input absent on one side only would otherwise be misread by the
+    downstream outer join as a real difference (every main read "lost", or
+    Bray-Curtis 1.0). This filters such groups out of the metric and records them
+    so the caller can surface them (log + skipped_groups.tsv).
+
+    Returns:
+        (main_filtered, dev_filtered, skipped) where `skipped` is a list of
+        {metric, group, reason} records (metric == file_type) for groups present
+        on exactly one side.
+    """
+    main_groups = {g for g, gm in main_manifest.items() if file_type in gm.files}
+    dev_groups = {g for g, gm in dev_manifest.items() if file_type in gm.files}
+    common = main_groups & dev_groups
+    skipped: list[dict[str, str]] = []
+    for group in sorted(main_groups ^ dev_groups):
+        side = "main" if group in main_groups else "dev"
+        skipped.append(
+            {
+                "metric": file_type,
+                "group": group,
+                "reason": f"present on {side} only",
+            }
+        )
+    main_filtered = {g: gm for g, gm in main_manifest.items() if g in common}
+    dev_filtered = {g: gm for g, gm in dev_manifest.items() if g in common}
+    return main_filtered, dev_filtered, skipped
+
+
 def load_qc_basic_stats(results_dir: Path, manifest: dm.SideManifest) -> pd.DataFrame:
     """Load and concatenate qc_basic_stats (raw + cleaned) across all groups.
 
@@ -544,6 +579,10 @@ def main() -> None:
 
     # Quantitative tables that feed the consolidated flags (Focus 1-3).
     outputs: dict[str, pd.DataFrame] = {}
+    # Groups dropped from a metric because the required input is present on only
+    # one side (would otherwise fabricate a difference). Surfaced via log +
+    # skipped_groups.tsv.
+    skipped_groups: list[dict[str, str]] = []
 
     # Focus 4: schema-driven file/column inventory. Pass the platform-expected
     # output types so a file missing from BOTH runs still surfaces as a row.
@@ -572,9 +611,19 @@ def main() -> None:
     else:
         logger.warning("No qc_basic_stats files found; skipping Focus 3.")
 
-    # Focus 2: kraken abundances.
-    kraken_main = load_kraken(main_results, main_manifest)
-    kraken_dev = load_kraken(dev_results, dev_manifest)
+    # Focus 2: kraken abundances. Restrict to groups whose kraken file is present
+    # on both sides; a one-sided kraken file would otherwise yield Bray-Curtis 1.0.
+    kraken_main_mf, kraken_dev_mf, kraken_skipped = _both_sided_manifests(
+        main_manifest, dev_manifest, "kraken"
+    )
+    skipped_groups.extend(kraken_skipped)
+    if kraken_skipped:
+        logger.warning(
+            "kraken present on only one side for groups (skipped from Focus 2): "
+            f"{[r['group'] for r in kraken_skipped]}"
+        )
+    kraken_main = load_kraken(main_results, kraken_main_mf)
+    kraken_dev = load_kraken(dev_results, kraken_dev_mf)
     if not kraken_main.empty and not kraken_dev.empty:
         bray = dm.kraken_bray_curtis(kraken_main, kraken_dev)
         write_tsv(bray, args.out / "kraken_bray_curtis.tsv")
@@ -617,8 +666,21 @@ def main() -> None:
             "seq_id",
             "aligner_taxid_lca",
         ]
-        vh_main = load_validation_hits(main_results, main_manifest, vh_cols)
-        vh_dev = load_validation_hits(dev_results, dev_manifest, vh_cols)
+        # Read-level join: restrict to groups whose validation_hits is present on
+        # both sides. A one-sided file would misread every main read for that group
+        # as "lost" (and vice versa). Independent metrics below (clade shares,
+        # validation agreement, vertebrate-status flips) keep the full manifests.
+        vh_main_mf, vh_dev_mf, vh_skipped = _both_sided_manifests(
+            main_manifest, dev_manifest, "validation_hits"
+        )
+        skipped_groups.extend(vh_skipped)
+        if vh_skipped:
+            logger.warning(
+                "validation_hits present on only one side for groups (skipped from "
+                f"Focus 1 read-level comparison): {[r['group'] for r in vh_skipped]}"
+            )
+        vh_main = load_validation_hits(main_results, vh_main_mf, vh_cols)
+        vh_dev = load_validation_hits(dev_results, vh_dev_mf, vh_cols)
         # Group discovery no longer requires validation_hits, so a side could lack
         # it entirely; surface that rather than crashing the read-level join.
         need = {"group", "seq_id", "aligner_taxid_lca"}
@@ -627,7 +689,7 @@ def main() -> None:
                 "validation_hits missing on a side; skipping Focus 1 read-level "
                 "comparison (not computed)."
             )
-            _finish(args, outputs)
+            _finish(args, outputs, skipped_groups)
             return
         joined = dm.join_read_assignments(vh_main, vh_dev, merge_map)
         read_status = dm.summarize_read_status(joined, vert)
@@ -690,14 +752,24 @@ def main() -> None:
     else:
         logger.warning("No --index given; skipping Focus 1 (viral assignments).")
 
-    _finish(args, outputs)
+    _finish(args, outputs, skipped_groups)
 
 
-def _finish(args: argparse.Namespace, outputs: dict[str, pd.DataFrame]) -> None:
-    """Write the consolidated flags table and log completion."""
+def _finish(
+    args: argparse.Namespace,
+    outputs: dict[str, pd.DataFrame],
+    skipped_groups: list[dict[str, str]],
+) -> None:
+    """Write the consolidated flags + skipped-groups tables and log completion."""
     thresholds = json.loads(args.thresholds) if args.thresholds else None
     flags = dm.build_flags(outputs, thresholds=thresholds)
     write_tsv(flags, args.out / "flags.tsv")
+    # Groups dropped from a metric due to one-sided input absence. Always written
+    # (header-only when none) so the report can state "no groups skipped".
+    skipped = pd.DataFrame(
+        skipped_groups, columns=["metric", "group", "reason"]
+    ).sort_values(["metric", "group"])
+    write_tsv(skipped, args.out / "skipped_groups.tsv")
     logger.info(f"{len(flags)} flags raised across all focuses.")
     logger.info(f"Done. Outputs in {args.out.resolve()}")
 

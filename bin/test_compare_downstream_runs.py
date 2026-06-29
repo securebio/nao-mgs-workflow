@@ -440,3 +440,76 @@ def test_main_skips_focus1_when_validation_hits_absent(
     assert (out / "file_inventory.tsv").exists()
     # Focus 1 read-level output is skipped (not computed).
     assert not (out / "viral_read_status.tsv").exists()
+
+
+def test_main_per_group_one_sided_input_is_skipped_not_fabricated(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """C1: a per-group input missing on one side is skipped, not misread.
+
+    Removing G_ONT's validation_hits and G_ILL's kraken on the dev side must:
+    drop those groups from the affected metric (recorded in skipped_groups.tsv),
+    NOT fabricate a lost/Bray-Curtis flag for them, and still compute the other
+    group's metric plus the independent viral outputs (clade, status flips).
+    """
+    import sys
+
+    main_root = tmp_path / "main"
+    dev_root = tmp_path / "dev"
+    index_root = tmp_path / "index"
+    out = tmp_path / "out"
+    _build_downstream_tree(main_root, "main")
+    _build_downstream_tree(dev_root, "dev")
+    _build_index(index_root)
+    # One-sided per-group absences (dev side only).
+    (dev_root / "results_downstream" / "G_ONT_validation_hits.tsv.gz").unlink()
+    (dev_root / "results_downstream" / "G_ILL_kraken.tsv.gz").unlink()
+
+    argv = [
+        "compare_downstream_runs.py",
+        "--main",
+        str(main_root),
+        "--dev",
+        str(dev_root),
+        "--index",
+        str(index_root),
+        "--old-index",
+        str(index_root),
+        "--out",
+        str(out),
+    ]
+    monkeypatch.setattr(sys, "argv", argv)
+    cdr.main()
+
+    import pandas as pd
+
+    skipped = pd.read_csv(out / "skipped_groups.tsv", sep="\t")
+    skipped_pairs = set(zip(skipped.metric, skipped.group, strict=True))
+    assert ("validation_hits", "G_ONT") in skipped_pairs
+    assert ("kraken", "G_ILL") in skipped_pairs
+
+    # Read-level join: G_ILL computed (both sides), G_ONT absent (skipped, not
+    # fabricated as fully lost).
+    status = pd.read_csv(out / "viral_read_status.tsv", sep="\t")
+    assert "G_ILL" in set(status.group)
+    assert "G_ONT" not in set(status.group)
+
+    # Bray-Curtis: G_ONT computed (both sides), G_ILL absent (skipped, not a
+    # fabricated 1.0).
+    bray = pd.read_csv(out / "kraken_bray_curtis.tsv", sep="\t")
+    assert "G_ONT" in set(bray.group)
+    assert "G_ILL" not in set(bray.group)
+
+    # No fabricated flag mentions a skipped group's dropped metric.
+    flags = pd.read_csv(out / "flags.tsv", sep="\t")
+    if not flags.empty:
+        bray_flag_keys = flags[flags.metric.str.contains("bray")].key.astype(str)
+        assert not any("G_ILL" in k for k in bray_flag_keys)
+
+    # Independent viral outputs still produced for the group that has its inputs.
+    assert (out / "clade_rank_shares.tsv").exists()
+    clade = pd.read_csv(out / "clade_rank_shares.tsv", sep="\t")
+    assert "G_ILL" in set(clade.group)
+    assert (out / "vertebrate_status_flips.tsv").exists()
+    # Pair-count table (C2) is still emitted for the computed read-level group.
+    assert (out / "viral_reassignment_pairs.tsv").exists()
