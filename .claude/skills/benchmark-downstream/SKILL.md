@@ -1,23 +1,36 @@
 ---
 name: benchmark-downstream
-description: Compare the DOWNSTREAM output of two pipeline runs (dev vs main) before a release and flag large differences for human review. Use to vet a release candidate's viral assignments, kraken abundances, and QC metrics against the current main output.
+description: Compare the DOWNSTREAM output of two pipeline runs — each a (pipeline version, reference index) pair, typically a release candidate vs current production — and flag large differences for human review. Use to vet a candidate's viral assignments, kraken abundances, and QC metrics against a reference run before adopting it.
 ---
 
-# Compare DOWNSTREAM output before a release
+# Compare DOWNSTREAM output of two runs
 
-Before promoting `dev` to `main`, this skill diffs the DOWNSTREAM output of the
-two runs across both platforms and flags large differences for a human to
-adjudicate. `bin/compare_downstream_runs.py` does the deterministic data
-extraction (munging + I/O); the per-metric calculations live in
-`bin/downstream_metrics.py` so they can be reviewed and tested separately. You
-fill in `review-template.md` from the script's TSV outputs.
+This skill diffs the DOWNSTREAM output of two pipeline runs across both platforms
+and flags large differences for a human to adjudicate. Each run is a **(pipeline
+version, reference index) pair**; the common case is a release diff (`dev` + its
+index vs `main` + its index, which the CLI labels `--dev` / `--main`), but it
+works for any two version/index pairs — e.g. the same code with only the index
+rebuilt. `bin/compare_downstream_runs.py` does the deterministic data extraction
+(munging + I/O); the per-metric calculations live in `bin/downstream_metrics.py`
+so they can be reviewed and tested separately. You fill in `review-template.md`
+from the script's TSV outputs.
 
-**This is a holistic release diff, not a causal analysis.** main and dev
-usually differ in code AND reference index AND QC parameters at once, so a
-difference cannot be pinned on any single cause. There is no ground truth, so
-no difference is "good" or "bad" on its face — the report's job is to surface
-and flag large changes for human review, naming a likely driver only as a
+**This is a difference-flagging diff, not a causal analysis.** There is no ground
+truth, so no difference is "good" or "bad" on its face — the report surfaces and
+flags large changes for human review, naming a likely driver only as a
 hypothesis.
+
+**Attribution.** How far a difference can be attributed depends on what differs
+between the runs. First establish which of {pipeline code, reference index, QC
+parameters} actually differ (from the version/index pairs and params diff), and
+record it in the report's Run identity. Then print the single matching attribution
+statement in the report intro (the template marks the spot), deleting the others:
+- They differ in **more than one** dimension (the typical release diff) → a
+  difference cannot be pinned on any single cause.
+- They differ in **only one** dimension (e.g. same code, only the index rebuilt)
+  → a difference is attributable to that dimension more directly.
+
+Either way there is no ground truth, so still no good/bad verdict.
 
 **`review-template.md` is the source of truth for report structure** — open it
 and fill it in literally. `REVIEW.md` must stand alone: embed the needed tables
@@ -27,6 +40,26 @@ and numbers rather than pointing at output files.
 names / taxids / abundances into a PR.** They originate from AWS data; keep
 them local and (optionally) in the agent scratch bucket. The PR contains only
 the skill, scripts, tests, and docs.
+
+## Report-writing principles
+
+These apply to **every section** of `REVIEW.md`, not just one:
+
+- **Name every taxon.** Each time a taxid appears, give its name and rank too, in
+  the form `<taxon name> (<rank>, taxid <id>)`; for a reassignment pair, name
+  both: `<taxon> (<id>) → <taxon> (<id>)`. Never refer to "a species", "one
+  taxon", or "a clade" without naming it — an unnamed taxon is not actionable.
+- **Plain language for a non-expert.** Write so a reader who has never used this
+  skill can follow it. Prefer saying fewer things clearly over many dense hedges.
+- **Don't describe findings in terms of the tool's own mechanics.** State what
+  happened biologically/observationally, not what the tooling did to detect it.
+  Avoid self-referential jargon — don't write "tripping the clade-share
+  threshold", "in the shared-higher-taxon bucket", "Focus 1", or "§1.1". Instead
+  say e.g. "its share of viral reads dropped by N points" or "no longer
+  classified within any specific viral family", and refer to a section by its
+  name. State a threshold as a plain fact only when the reader needs it.
+- **Results first.** Lead with what changed (the result), then the supporting
+  numbers; keep method and caveats in the detail sections and the appendix.
 
 ## When to use
 
@@ -41,19 +74,22 @@ them at the output directory; do not write `REVIEW.md`.
 
 ## Inputs
 
-- `dev` (required): candidate DOWNSTREAM output root (the parent of
-  `results_downstream/`), `s3://` URI or local path → `--dev`.
-- `main` (required): reference DOWNSTREAM output root → `--main`.
-- `dev_index` (required for Focus 1): the dev run's index root
-  (`s3://nao-mgs-index/<DATE>`), for taxonomy + vertebrate annotation → `--index`.
-- `main_index` (optional): the main run's index root → `--old-index`. Used for
-  the vertebrate-status-flip side-table (taxa whose vertebrate annotation changed
-  between the two indexes). Clade rank and names come from the dev index; a taxon
-  deleted from the dev taxonomy drops from the clade-share table.
+- `candidate` (required): the candidate run's DOWNSTREAM output root (the parent
+  of `results_downstream/`), `s3://` URI or local path → `--dev`.
+- `reference` (required): the reference run's DOWNSTREAM output root → `--main`.
+- `candidate_index` (required for the viral-assignment analysis): the candidate
+  run's index root (`s3://nao-mgs-index/<DATE>`), for taxonomy + vertebrate
+  annotation → `--index`.
+- `reference_index` (optional): the reference run's index root → `--old-index`.
+  Used for the vertebrate-status-flip side-table (taxa whose vertebrate annotation
+  changed between the two indexes). Clade rank and names come from the candidate
+  index; a taxon deleted from the candidate-index taxonomy drops from the
+  clade-share table.
 - `out_dir` (required): absolute path for tables and the report → `--out`.
 
-If a required input is missing, ask; do not guess. Without `--index`, Focus 1
-(viral assignments) is skipped and the report must say so — never fabricate it.
+If a required input is missing, ask; do not guess. Without `--index`, the
+viral-assignment analysis is skipped and the report must say so — never fabricate
+it.
 
 ## Procedure
 
@@ -81,10 +117,13 @@ defaults are documented in `bin/downstream_metrics.py` (`DEFAULT_THRESHOLDS`).
 The script writes these TSVs to `--out`:
 
 - `flags.tsv` — consolidated flags (focus, key, metric, value, threshold,
-  flag_type). Read this first; it drives the §Flags section and Summary.
-- `file_inventory.tsv`, `column_conformance.tsv` — Focus 4 / §0.
+  flag_type). Read this first; it drives the Flags appendix, the Summary, and
+  which Main-findings subsections must appear.
+- `file_inventory.tsv`, `column_conformance.tsv` — Completeness and schema /
+  Output-file overview.
 - `skipped_groups.tsv` — any group excluded from a metric because a required
-  input was present on only one side (empty if none); surface it in §0.
+  input was present on only one side (empty if none); surface it in Completeness
+  and schema.
 - `viral_read_status.tsv` — per group × scope (all|vertebrate) read-status
   counts, with pct_lost (/main), pct_gained (/dev), pct_reassigned (/shared) —
   note the different denominators (Lost / gained / reassigned section).
@@ -103,37 +142,46 @@ The script writes these TSVs to `--out`:
   points; and the clade-share flag is computed on the `reads_clade_total` basis
   only (not `reads_clade_dedup`), so flag counts reconcile against the
   `reads_clade_total` rows.
-- `viral_validation_agreement.tsv` — BLAST agreement (§1.4).
-- `vertebrate_status_flips.tsv` — taxa whose vertebrate status flipped (§1.5).
-- `kraken_bray_curtis.tsv`, `kraken_top_movers.tsv` — Focus 2 / §2.
-- `qc_survival.tsv` — raw->cleaned read-survival fraction per side + delta (§3).
-- `qc_numeric.tsv`, `qc_flag_changes.tsv` — Focus 3 / §3.
+- `viral_validation_agreement.tsv` — BLAST-validation agreement.
+- `vertebrate_status_flips.tsv` — taxa whose vertebrate status flipped.
+- `kraken_bray_curtis.tsv`, `kraken_top_movers.tsv` — Kraken abundances.
+- `qc_survival.tsv` — raw->cleaned read-survival fraction per side + delta
+  (Quality metrics).
+- `qc_numeric.tsv`, `qc_flag_changes.tsv` — Quality metrics.
 
 ### Step 3 - Fill in the template
 
 Copy `review-template.md` to `<out>/REVIEW.md` and fill it in, following the
 template's per-section instructions literally. Embed the actual tables/numbers
 from the TSVs (large tables: show the top rows the template asks for and state
-the total count). State the thresholds used in §Flags. The template's examples,
-illustrative shapes, and candidate-dimension lists are format guides, not
-expected results — report only what this comparison's TSVs show, and don't carry
-an example's taxa, directions, or counts into the report (the template's "How to
-fill this in" block states this rule in full).
+the total count). State the thresholds used in the Flags appendix. The template's
+examples, illustrative shapes, and candidate-dimension lists are format guides,
+not expected results — report only what this comparison's TSVs show, and don't
+carry an example's taxa, directions, or counts into the report (the template's
+"How to fill this in" block states this rule in full). Follow the
+report-writing principles above throughout.
+
+The report leads with a short Summary (scope + the 2–3 broadest differences),
+then **Main findings** — one subsection per metric dimension that produced a flag,
+each ending in a `**To confirm:**` line — then **Checked, no action needed** for
+the dimensions that stayed within threshold. There is no separate recommendations
+section; the per-finding `To confirm:` lines are the recommendations.
 
 Key reminders:
 
 - **Missing-data rule.** If an input needed for a metric is absent, say so in
   that section and move on — never fabricate or mis-compute. (E.g. no `--index`
-  → §1 is "not computed"; empty bracken → note it, don't invent abundances.)
-- **Platform split.** Report Illumina and ONT separately under each focus; ONT
-  has no clade counts or duplicate marking — note the omission rather than
+  → the viral-assignment analysis is "not computed"; empty bracken → note it,
+  don't invent abundances.)
+- **Platform split.** Report Illumina and ONT separately under each dimension;
+  ONT has no clade counts or duplicate marking — note the omission rather than
   leaving a blank.
-- **Err toward inclusion** in the Recommendations section: every metric
-  dimension with a consolidated flag (and any other difference large enough that
-  a human should see it — e.g. a clade that appears or disappears, a cross-root
-  reassignment) should surface as something to review. Annotate it with its
-  breadth and magnitude rather than stamping a fixed concern level; let the human
-  prioritize.
+- **Coverage is deterministic.** Every metric dimension with a flag (and any
+  other difference large enough that a human should see it — e.g. a clade that
+  appears or disappears, a cross-root reassignment) gets its own Main-findings
+  subsection; never drop one as "minor". Dimensions checked but within threshold
+  go under "Checked, no action needed". Annotate each finding with its breadth and
+  magnitude rather than a fixed concern level; let the human prioritize.
 
 ### Step 4 - Optionally investigate likely drivers
 
@@ -190,7 +238,7 @@ contents are AWS-derived data.
 
 ## Glossary
 
-**Read-status categories** (Focus 1, per shared read; joined on
+**Read-status categories** (viral-assignment analysis, per shared read; joined on
 `(group, sample, seq_id)` when a `sample` column is present, else `(group, seq_id)`):
 - `same` — present both sides, same `aligner_taxid_lca`.
 - `reassigned` — present both sides, different `aligner_taxid_lca`.
@@ -210,7 +258,7 @@ contents are AWS-derived data.
   biological severity, **not** part of the same-species→cross-root gradient;
   assess it separately rather than treating it as more severe than cross-root.
 
-**Bray-Curtis** (Focus 2) — total variation distance between two relative-
+**Bray-Curtis** (kraken analysis) — total variation distance between two relative-
 abundance vectors at a rank; 0 = identical profiles, 1 = disjoint.
 
 **Flag type** — flags are `fixed`: a metric value exceeds a documented absolute
