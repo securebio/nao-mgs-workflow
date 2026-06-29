@@ -99,12 +99,19 @@ count; omit categories with zero flags. Do not carry over example counts.>`
 > Categories, in emission order (each is one bullet unless noted; include only if
 > the data has it):
 >
-> 1. Clade-share collapses or appearances — one bullet per family/order with a
->    clade-share-change flag that reaches `share_dev == 0` (collapse) or
->    `share_main == 0` (appearance); state in how many of that platform's groups.
+> 1. Clade-share collapses or appearances — ONE consolidated bullet for this
+>    category (not one per clade): name the family/order clades that reach
+>    `share_dev == 0` (collapse) or `share_main == 0` (appearance), and for each
+>    state in how many groups it occurs. Count a family and its order that move on
+>    the same reads as a single event (the clade-share flag total counts family
+>    and order rows separately, so it overstates the number of distinct events).
+>    Separately, distinguish "groups flagged (share change past threshold)" from
+>    "groups where the clade hit zero dev share" — they are different numbers.
 > 2. Viral reads reassigned to a different taxon (groups over the reassignment
 >    threshold) — one bullet; give the count, the rate range, and the
->    highest-rate group.
+>    highest-rate group. Split the group count by platform (in the form
+>    "<n> Illumina + <m> ONT"); the flag key does not carry platform, so do not
+>    assume every flagged group is Illumina.
 > 3. Cross-root or shared-higher-taxon reassignments (viral reads no longer placed
 >    within a specific viral clade) — only if the count is > 0; report the bucket
 >    counts.
@@ -161,10 +168,19 @@ count; omit categories with zero flags. Do not carry over example counts.>`
 >   specific viral clade), with named example pairs. Report `unresolved-taxid`
 >   separately — it is a versioning artifact, not a severity level.
 > - **Clade-share shifts (family / order, Illumina)** — clades whose share of
->   total viral reads moved materially, including any family/order that appears or
->   disappears across groups; give taxids, the number of groups, and the largest
->   per-group share moves in percentage points. State the alternatives (a real
->   change vs. a reference/classification/re-ranking effect) as alternatives.
+>   total viral reads moved materially, including any family/order that drops to
+>   zero dev share or newly appears; give taxids and the largest per-group share
+>   moves in percentage points. State two distinct counts without conflating them:
+>   how many groups *flagged* (share change past the threshold), and separately in
+>   how many groups the clade reached zero dev share (a collapse can occur below
+>   the flag threshold, and a flagged move need not be a collapse). Before calling
+>   a share drop a collapse, check the raw read counts (`reads_main`/`reads_dev`,
+>   i.e. `delta_reads`): a clade's share can fall purely because the group's total
+>   viral reads grew, so confirm the clade's own reads actually dropped. State the
+>   alternatives (a real change vs. a reference/classification effect) as
+>   alternatives — but note a clade present in the table with `reads_dev == 0` is
+>   still in the dev taxonomy, so a re-ranking/deletion artifact does not explain
+>   it (that applies only to a clade missing from the table entirely).
 > - **BLAST-validation agreement** — groups whose agreement rate moved past
 >   threshold, with both the validated fraction and the agreement rate (a rate
 >   change on a shifting validated subset is ambiguous — note which groups have a
@@ -371,9 +387,16 @@ that moves with a read-level lost/gained finding).>`
   shares. Read `delta_reads` (raw count change) alongside the share: the total
   viral-read count can itself differ between sides (reads reassigned to/from
   higher ranks), so a share move can be driven by the total rather than the
-  family, which `delta_reads` disambiguates. Rank is resolved from the full dev
-  taxonomy; a taxon deleted from it drops from the table, and a "disappearance"
-  can be a re-ranking artifact rather than a biological loss.
+  family, which `delta_reads` disambiguates. A clade-share flag fires on the
+  share change alone, so a clade with identical read counts on both sides
+  (`delta_reads == 0`) can still be flagged purely as a denominator effect — read
+  `delta_reads` before treating a flagged share move as a real change in that
+  clade. Rank is resolved from the full dev taxonomy, so a clade that appears in
+  the table at all is present in the dev taxonomy: a row with `reads_dev == 0` is
+  a genuine read-level drop, NOT a re-ranking/deletion artifact. The re-ranking
+  or taxon-deletion explanation applies only to a clade that is absent from the
+  table entirely; before invoking it, confirm the taxid is actually missing from
+  the dev `taxonomy-nodes.dmp` rather than present with zero reads.
 - **BLAST agreement on a shifting subset.** Agreement rate and validated fraction
   are reported together because a rate change on a different validated subset is
   ambiguous.

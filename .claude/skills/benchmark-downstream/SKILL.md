@@ -152,7 +152,12 @@ under `<out>/_index` / `<out>/_old_index`):
   genomes changed. Count alignments per reference accession on each side (in the
   `*_validation_hits.tsv.gz` files): an accession with many hits on one side and
   zero on the other points to a reference added to / removed from the aligner DB,
-  not a code change.
+  not a code change. Before attributing a collapse to taxonomy re-ranking or
+  taxon deletion instead, verify it: look the clade's taxid up in the dev
+  `taxonomy-nodes.dmp`. A clade that still appears in `clade_rank_shares.tsv` is
+  by construction present in the dev taxonomy, so re-ranking/deletion is already
+  excluded for it — do not assert that explanation without confirming the taxid
+  is genuinely absent.
 - **A reassignment pair dominates** → look up both taxids in the dev
   `taxonomy-nodes.dmp`. If one is the direct parent of the other (same species),
   it is an LCA-specificity move — the mildest reassignment, not a renumbering.
