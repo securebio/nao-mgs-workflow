@@ -47,11 +47,9 @@ them at the output directory; do not write `REVIEW.md`.
 - `dev_index` (required for Focus 1): the dev run's index root
   (`s3://nao-mgs-index/<DATE>`), for taxonomy + vertebrate annotation → `--index`.
 - `main_index` (optional): the main run's index root → `--old-index`. Used for
-  the vertebrate-status-flip side-table, main-side names in the clade-share table,
-  and a rank fallback for taxids deleted from the dev taxonomy. Clade rank
-  otherwise uses the full dev taxonomy, so a main-only family with a *live* dev
-  taxon is not dropped; a main taxon *deleted/merged out of* the dev taxonomy
-  stays unresolved (and its clade row drops) unless `--old-index` is given.
+  the vertebrate-status-flip side-table (taxa whose vertebrate annotation changed
+  between the two indexes). Clade rank and names come from the dev index; a taxon
+  deleted from the dev taxonomy drops from the clade-share table.
 - `out_dir` (required): absolute path for tables and the report → `--out`.
 
 If a required input is missing, ask; do not guess. Without `--index`, Focus 1
@@ -87,19 +85,15 @@ The script writes these TSVs to `--out`:
 - `file_inventory.tsv`, `column_conformance.tsv` — Focus 4 / §0.
 - `viral_read_status.tsv` — per group × scope (all|vertebrate) read-status
   counts, with pct_lost (/main), pct_gained (/dev), pct_reassigned (/shared) —
-  note the different denominators (§1.1).
-- `viral_read_status_dedup.tsv` — same, on alignment exemplars only (Illumina;
-  ONT groups are excluded as they have no exemplars). Use its **reassigned**
-  column to check whether PCR duplicates drive the headline reassignment %; its
-  lost/gained columns also reflect per-side exemplar choice and are not directly
-  comparable across runs (§1.1).
+  note the different denominators (Lost / gained / reassigned section).
 - `viral_reassignment_concentration.tsv` — per group: distinct (taxid_main,
   taxid_dev) pairs and the top pair's share, so a high reassignment % driven by
-  one systematic remap is visible (§1.1).
-- `viral_reassignment_buckets.tsv`, `viral_reassignment_detail.tsv` —
-  divergence-bucket counts (all buckets, incl. zero and unresolved-taxid) and
-  per-read detail (§1.2).
-- `clade_rank_shares.tsv` — family/order shares main vs dev (§1.3).
+  one systematic remap is visible.
+- `viral_reassignment_buckets.tsv` — divergence-bucket counts (all buckets,
+  incl. zero and unresolved-taxid) for the Reassignment-severity section.
+- `clade_rank_shares.tsv` — per family/order: raw read counts (reads_main,
+  reads_dev, delta_reads) plus each clade's share of the group's total viral
+  reads (share_main, share_dev, delta_pp), main vs dev (Clade-share section).
 - `viral_validation_agreement.tsv` — BLAST agreement (§1.4).
 - `vertebrate_status_flips.tsv` — taxa whose vertebrate status flipped (§1.5).
 - `kraken_bray_curtis.tsv`, `kraken_top_movers.tsv` — Focus 2 / §2.
@@ -126,13 +120,46 @@ Key reminders:
   cross-root reassignment cluster) should appear as something for a human to
   review, even at low concern.
 
-### Step 4 - Review and iterate
+### Step 4 - Optionally investigate likely drivers
+
+The script flags differences but does not explain them. For the headline
+findings, a short by-hand investigation often pins down the likely mechanism
+cheaply, and is worth doing when a human will act on the report. This stays
+**hypothesis-only** (there is no ground truth) and goes in the report's optional
+"Likely drivers" section, kept separate from the deterministic findings.
+
+Cheap, high-yield query patterns (run against the staged data under
+`<out>/_staged` and the index dumps under `<out>/_index` / `<out>/_old_index`):
+
+- **A clade collapsed, or reads were gained/lost** → check whether reference
+  genomes changed. Count alignments per reference accession on each side (in the
+  `*_validation_hits.tsv.gz` files): an accession with many hits on one side and
+  zero on the other points to a reference added to / removed from the aligner DB,
+  not a code change.
+- **A reassignment pair dominates** → look up both taxids in the dev
+  `taxonomy-nodes.dmp`. If one is the direct parent of the other (same species),
+  it is an LCA-specificity move — the mildest reassignment, not a renumbering.
+- **Gained reads entered the vertebrate subset** → join the gained reads' taxids
+  against `vertebrate_status_flips.tsv` to see what fraction is explained by an
+  annotation flip rather than a new detection.
+- **BLAST agreement dropped** → tabulate `(aligner_taxid_lca,
+  validation_staxid_lca)` pairs for the affected group; a single recurring offset
+  (e.g. the aligner call one edge below a restructured parent taxon) localizes
+  the drop to a taxonomy change.
+
+Record, per finding: the suspected mechanism in one sentence, then the concrete
+evidence (named taxa with taxids, accessions, counts) and the one-line query
+that produced it. Frame every conclusion as a hypothesis. Skip this step if no
+finding warrants it.
+
+### Step 5 - Review and iterate
 
 Re-read `REVIEW.md` for clarity and accuracy against the TSVs (a sub-agent is
 useful here). Correct any number that doesn't trace back to an output, any
-causal claim that slipped in, and any flag that lacks its underlying numbers.
+causal claim that slipped into the deterministic findings, and any flag that
+lacks its underlying numbers.
 
-### Step 5 - Hand off
+### Step 6 - Hand off
 
 Print the `REVIEW.md` path to the user. Optionally copy the report and tables to
 `s3://sb-det-agent-scratch-general/...` for durability. Do **not** open a PR or
@@ -164,6 +191,6 @@ contents are AWS-derived data.
 **Bray-Curtis** (Focus 2) — total variation distance between two relative-
 abundance vectors at a rank; 0 = identical profiles, 1 = disjoint.
 
-**Flag types** — `fixed` (exceeds an absolute threshold), `cohort-outlier`
-(a robust-MAD outlier versus sibling groups, with a magnitude floor so trivial
-differences in near-constant cohorts are not flagged), or `fixed+cohort-outlier`.
+**Flag type** — flags are `fixed`: a metric value exceeds a documented absolute
+threshold. Defaults are in `DEFAULT_THRESHOLDS` in `bin/downstream_metrics.py`
+and are tunable via `--thresholds`.
