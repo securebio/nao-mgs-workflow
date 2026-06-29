@@ -83,6 +83,8 @@ The script writes these TSVs to `--out`:
 - `flags.tsv` — consolidated flags (focus, key, metric, value, threshold,
   flag_type). Read this first; it drives the §Flags section and Summary.
 - `file_inventory.tsv`, `column_conformance.tsv` — Focus 4 / §0.
+- `skipped_groups.tsv` — any group excluded from a metric because a required
+  input was present on only one side (empty if none); surface it in §0.
 - `viral_read_status.tsv` — per group × scope (all|vertebrate) read-status
   counts, with pct_lost (/main), pct_gained (/dev), pct_reassigned (/shared) —
   note the different denominators (Lost / gained / reassigned section).
@@ -91,9 +93,16 @@ The script writes these TSVs to `--out`:
   one systematic remap is visible.
 - `viral_reassignment_buckets.tsv` — divergence-bucket counts (all buckets,
   incl. zero and unresolved-taxid) for the Reassignment-severity section.
+- `viral_reassignment_pairs.tsv` — per (group, scope, taxid_main, taxid_dev,
+  bucket) read counts, so cross-root / shared-higher-taxon example pairs can be
+  named even when they are not a group's top pair.
 - `clade_rank_shares.tsv` — per family/order: raw read counts (reads_main,
   reads_dev, delta_reads) plus each clade's share of the group's total viral
   reads (share_main, share_dev, delta_pp), main vs dev (Clade-share section).
+  Note: `share_*` are fractions (0–1) but `delta_pp` is already in percentage
+  points; and the clade-share flag is computed on the `reads_clade_total` basis
+  only (not `reads_clade_dedup`), so flag counts reconcile against the
+  `reads_clade_total` rows.
 - `viral_validation_agreement.tsv` — BLAST agreement (§1.4).
 - `vertebrate_status_flips.tsv` — taxa whose vertebrate status flipped (§1.5).
 - `kraken_bray_curtis.tsv`, `kraken_top_movers.tsv` — Focus 2 / §2.

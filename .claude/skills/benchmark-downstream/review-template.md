@@ -28,7 +28,7 @@ verdicts.** Where a likely driver is obvious, it is named only as a hypothesis.
 |---|---|---|
 | DOWNSTREAM output | `s3://path/to/dev/...` | `s3://path/to/main/...` |
 | Index | `s3://nao-mgs-index/<DATE>` | `s3://nao-mgs-index/<DATE>` |
-| Code version | `<ver>` | `<ver>` |
+| Code version | `<ver, if known>` | `<ver, if known>` |
 
 - **Comparison scope:** `<N>` groups (`<X>` Illumina + `<Y>` ONT), matched by
   name. `<note any group or file type missing on one side; if none, say so>`.
@@ -42,9 +42,10 @@ verdicts.** Where a likely driver is obvious, it is named only as a hypothesis.
 > bullets) that a reader unfamiliar with this skill can follow. State the
 > comparison scope, then the handful of differences that actually matter, each
 > with at most one representative number and a plain-English description of what
-> changed. Explicitly describe the read-gain finding in the affected groups (see
-> the dedicated finding below) and say what is and is not known about it. End
-> with one sentence on what was stable (QC, schema). Do not link to file paths;
+> changed. If (and only if) any group is over the gained-reads threshold, describe
+> that read-gain finding and the affected groups explicitly, saying what is and
+> is not known about it; if no group crosses the threshold, omit it. End with one
+> sentence on what was stable (QC, schema). Do not link to file paths;
 > the report stands alone. Keep language neutral — describe differences, never
 > assert a cause or a good/bad verdict.
 
@@ -79,9 +80,13 @@ share-change flags; 3 BLAST-agreement drops; 5 kraken-community flags.">`
 > trailing clause pointing to it, but keep the recommendation itself neutral.
 
 1. **(high)** Each whole-clade collapse/appearance — one bullet per family or
-   order that goes to (or from) ~0% share across many groups.
-2. **(high)** The single highest reassignment-rate group, if it is a clear
-   outlier above the rest.
+   order that has a clade-share-change flag and reaches `share_dev == 0` (or
+   `share_main == 0` for an appearance) in **at least half** of that platform's
+   groups. (Fixed predicate; no subjective "many".)
+2. **(high)** The single highest reassignment-rate group over the threshold,
+   called out on its own bullet **only when its rate is ≥ 1.5× the next-highest
+   over-threshold group**; otherwise omit this bullet and let it fall into the
+   bullet below.
 3. **(medium)** All remaining groups over the reassignment threshold, as ONE
    bullet.
 4. **(medium)** Groups over the lost threshold, as ONE bullet — only if any
@@ -215,6 +220,9 @@ sides, with the same columns.
 
 - **Inventory:** `<N groups × M file types; list anything missing on either
   side, or state none missing>`.
+- **Groups skipped for a metric** (from `skipped_groups.tsv`): `<list any group
+  excluded from the viral or kraken comparison because a required input was
+  present on only one side, or state none were skipped>`.
 - **Largest row-count changes** (shared files):
 
   | Group | File type | rows (main) | rows (dev) | change | % |
@@ -260,8 +268,9 @@ instability. Name the recurring pairs with taxon names.>`
 | unresolved-taxid *(versioning artifact — not a severity level)* | | |
 
 `<Call out any cross-root or shared-higher-taxon reads (a viral read no longer
-placed within a specific viral clade) with named example pairs. Report
-unresolved-taxid separately — it is a taxonomy-versioning artifact, not a
+placed within a specific viral clade) with named example pairs — take the pairs
+from viral_reassignment_pairs.tsv (per group/scope/taxid-pair/bucket counts).
+Report unresolved-taxid separately — it is a taxonomy-versioning artifact, not a
 biological reassignment; do not rank it as most severe.>`
 
 #### Clade-share breakdown (Illumina only)
