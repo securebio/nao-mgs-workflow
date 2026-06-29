@@ -43,23 +43,43 @@ the skill, scripts, tests, and docs.
 
 ## Report-writing principles
 
-These apply to **every section** of `REVIEW.md`, not just one:
+These apply to **every section** of `REVIEW.md`, not just one. They are also the
+general standard for editing this template and skill: prose here should obey the
+same rules.
 
-- **Name every taxon.** Each time a taxid appears, give its name and rank too, in
-  the form `<taxon name> (<rank>, taxid <id>)`; for a reassignment pair, name
-  both: `<taxon> (<id>) → <taxon> (<id>)`. Never refer to "a species", "one
-  taxon", or "a clade" without naming it — an unnamed taxon is not actionable.
-- **Plain language for a non-expert.** Write so a reader who has never used this
-  skill can follow it. Prefer saying fewer things clearly over many dense hedges.
-- **Don't describe findings in terms of the tool's own mechanics.** State what
-  happened biologically/observationally, not what the tooling did to detect it.
-  Avoid self-referential jargon — don't write "tripping the clade-share
-  threshold", "in the shared-higher-taxon bucket", "Focus 1", or "§1.1". Instead
-  say e.g. "its share of viral reads dropped by N points" or "no longer
-  classified within any specific viral family", and refer to a section by its
-  name. State a threshold as a plain fact only when the reader needs it.
-- **Results first.** Lead with what changed (the result), then the supporting
-  numbers; keep method and caveats in the detail sections and the appendix.
+- **Name every entity.** Give taxa as `<name> (<rank>, taxid <id>)` and name both
+  sides of a reassignment pair: `<taxon> (<id>) → <taxon> (<id>)`. The same goes
+  for any other entity — never refer to "a group", "a sample", "a reference
+  genome/accession", "a species", or "a clade" without naming it; an unnamed
+  entity is not actionable. Avoid vague quantifiers ("many groups", "several
+  taxa") — give the count and name the notable ones.
+- **Plain language; no tool-internal jargon.** In the Summary, the findings, and
+  the To-confirm lines, describe what happened observationally, not how the
+  tooling detected it. Don't write "tripping the clade-share threshold", "in the
+  shared-higher-taxon bucket", "Focus 1", or "§1.1"; say e.g. "its share of viral
+  reads dropped by N points" or "no longer classified within any specific viral
+  family", and refer to a section by its name. State a threshold as a plain fact
+  only when the reader needs it. Defined technical terms (e.g. Bray-Curtis, the
+  vertebrate-viral subset) are fine in the detail and appendix sections where they
+  are introduced.
+- **Results first.** Lead with what changed, then the supporting numbers; keep
+  method and caveats in the detail sections and the appendix.
+- **Each section has one job; don't repeat.** The Summary orients (2–3
+  headlines), Main findings carries the full set, the detail sections hold the
+  tables, the appendix holds method. Don't restate a finding across sections —
+  cross-reference by section name instead.
+- **Keep the recommendation with its finding.** The "to confirm" question lives on
+  the finding it concerns, not in a separate distant section.
+- **Print only what is true for this comparison.** The report carries
+  case-specific, data-backed content. Generic "how this works" explanation, and
+  the rules for choosing between alternative statements, live here in the skill —
+  not copied into every report. Where the template offers conditional text (e.g.
+  the attribution statement), print the one that applies and delete the rest.
+- **Trim headings and hedges.** No unnecessary parentheticals or qualifiers in a
+  heading; prefer fewer words. (A scope qualifier that tells the reader what is or
+  isn't covered, like "(Illumina only)", is fine.)
+- **Enumerate with lists.** When listing two or more items, use a markdown list,
+  not inline "(1) … (2) …" prose.
 
 ## When to use
 

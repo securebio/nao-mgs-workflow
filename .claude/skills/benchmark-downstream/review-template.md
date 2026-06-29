@@ -262,10 +262,10 @@ biological reassignment; do not rank it as most severe.>`
 clade_rank_shares.tsv: raw read counts (reads_main, reads_dev, delta_reads) plus
 each clade's share of the group's TOTAL viral reads (share_main, share_dev,
 delta_pp), for both reads_clade_total and reads_clade_dedup. Flag large count or
-share shifts; name clades with taxids. Call out whole families that
-appear/disappear across many groups. See the Methodology appendix on the
-fixed total-viral denominator and dev-taxonomy re-ranking before reading a
-disappearance as a biological loss.>`
+share shifts; name clades with taxids. Name any whole families that
+appear/disappear and give the number of groups affected. See the Methodology
+appendix on the fixed total-viral denominator and dev-taxonomy re-ranking before
+reading a disappearance as a biological loss.>`
 
 #### BLAST-validation agreement (secondary)
 
@@ -323,8 +323,10 @@ that moves with a read-level lost/gained finding).>`
 
 ### Appendix A — Methodology and caveats
 
-> **Author instructions.** Keep the caveats that change how a number should be
-> read; phrase each in one or two plain sentences. These are referenced from the
+> **Author instructions.** Keep only the caveats that change how a number in THIS
+> report should be read, and only for analyses that actually appear here (drop a
+> caveat whose analysis was skipped or had nothing to report); phrase each in one
+> or two plain sentences. These are referenced by name from the
 > Detailed-investigation sections so the body stays readable.
 
 - **Vertebrate-viral subset & excluded status.** The subset is taxa annotated
