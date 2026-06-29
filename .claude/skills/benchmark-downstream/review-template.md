@@ -12,15 +12,19 @@ verdicts.** Where a likely driver is obvious, it is named only as a hypothesis.
 > **How to fill this in (instructions for the report author; delete this block
 > in the final REVIEW.md).** Replace every `<placeholder>`. Every number must
 > trace to a TSV produced by `bin/compare_downstream_runs.py` — never fabricate
-> or estimate. **Missing-data rule:** if an input needed for a metric is absent
+> or estimate. **Report what this comparison's data actually shows** — the
+> examples and illustrative shapes throughout this template are format guides,
+> not expected results; do not carry their specific taxa, groups, directions, or
+> magnitudes into your report, and do not assume a finding exists until the TSVs
+> show it. **Missing-data rule:** if an input needed for a metric is absent
 > (e.g. no `--index` → viral analysis skipped; empty bracken), say so plainly in
 > that spot and move on; do not invent values. **Naming rule:** every time a
-> taxid appears, give its name and rank too, e.g. "Picobirnaviridae (family,
-> taxid 585893)" or "Rotavirus A (taxid 10941)"; for a reassignment pair, name
-> both, e.g. "Human rotavirus A (10941) → Rotavirus A (28875)". Keep the writing
-> plain and explicit — prefer saying fewer things clearly over many dense
-> hedges. Spell out shorthand: write "the viral-assignment analysis" not
-> "Focus 1", and refer to a detail section by its name, not "§1.1".
+> taxid appears, give its name and rank too, in the form
+> `<taxon name> (<rank>, taxid <id>)`; for a reassignment pair, name both, in the
+> form `<taxon> (<id>) → <taxon> (<id>)`. Keep the writing plain and explicit —
+> prefer saying fewer things clearly over many dense hedges. Spell out shorthand:
+> write "the viral-assignment analysis" not "Focus 1", and refer to a detail
+> section by its name, not "§1.1".
 
 ## Run identity
 
@@ -40,148 +44,144 @@ verdicts.** Where a likely driver is obvious, it is named only as a hypothesis.
 
 > **Author instructions.** Write 4–8 short prose sentences (not telegraphic
 > bullets) that a reader unfamiliar with this skill can follow. State the
-> comparison scope, then the handful of differences that actually matter, each
-> with at most one representative number and a plain-English description of what
-> changed. If (and only if) any group is over the gained-reads threshold, describe
-> that read-gain finding and the affected groups explicitly, saying what is and
-> is not known about it; if no group crosses the threshold, omit it. End with one
-> sentence on what was stable (QC, schema). Do not link to file paths;
-> the report stands alone. Keep language neutral — describe differences, never
-> assert a cause or a good/bad verdict.
+> comparison scope first, then walk through the differences this comparison
+> actually surfaced — driven by the flags in `flags.tsv` and the notable
+> differences in the per-metric tables, ordered by how much they would matter to
+> a human (breadth across groups/platforms × magnitude past threshold). Give each
+> at most one representative number and a plain-English description of what
+> changed. Cover every metric dimension that produced a flag (don't drop one
+> because it seems minor), and state plainly which dimensions were stable or
+> unflagged so the reader knows they were checked, not skipped. Do not link to
+> file paths; the report stands alone. Keep language neutral — describe
+> differences, never assert a cause or a good/bad verdict.
 
-`<Prose summary. Example shape: "We compared N groups .... The largest
-differences are: (1) the family <Name> (taxid <X>) disappears from the dev
-viral results across all Illumina groups; (2) <M> groups have a substantial
-fraction of viral reads reassigned to a neighbouring taxon, dominated by one or
-two recurring species-level pairs; (3) the <region> groups gain far more
-vertebrate-viral reads than they lose, almost entirely on newly added reference
-genomes. Whole-community kraken profiles and all QC metrics are stable.">`
+`<Prose summary of THIS comparison's findings. Illustrative shape only — your
+content, taxa, directions, and counts will differ: "We compared N groups (X
+Illumina + Y ONT). The differences that stand out are: (1) <dimension and what
+changed, with one number>; (2) <…>; (3) <…>. <Dimensions that were checked and
+showed no flagged difference, e.g. QC and schema, named explicitly>.">`
 
 **Counts of flagged differences (full table in the Flags appendix):**
-`<one short clause per flag category with its count, e.g. "13 groups over the
-reassignment threshold; 3 groups over the read-gain threshold; N clade
-share-change flags; 3 BLAST-agreement drops; 5 kraken-community flags.">`
+`<one short clause per flag category that has any flags in THIS run, with its
+count; omit categories with zero flags. Do not carry over example counts.>`
 
 ---
 
 ## Recommendations
 
-> **Author instructions — this list is deterministic.** Emit exactly one bullet
-> for each condition below that holds, **in this order**, and no others (omit a
-> bullet whose condition is false; the QC bullet, #11, is always emitted). The
-> determinism is intentional: two independent reviewers reading the same data
-> must produce the same recommendation set. Each bullet is one plain sentence
-> phrased as a question to confirm ("Confirm whether X reflects a real change or
-> an artifact"), names its taxa, and carries a **fixed** concern level — do not
-> re-level. Concern reflects magnitude and breadth only, never a verdict. Never
-> use verdict words ("over-calling", "legitimate", "wrong", "caused by"); keep
-> any driver link explicitly hypothetical ("consistent with", "hypothesis
-> only"). If a Likely-drivers investigation (below) was done, you may add a
-> trailing clause pointing to it, but keep the recommendation itself neutral.
+> **Author instructions — coverage is deterministic; concern is not pre-assigned.**
+> Walk the category list below **in order**, and emit a recommendation for every
+> category that has at least one flag or qualifying difference in THIS comparison
+> (skip a category with none; the QC category is always emitted). Emitting one
+> recommendation per flagged category — and no extras — is what makes two
+> independent reviewers of the same data produce the same recommendation *set*;
+> that coverage rule is the only thing fixed here.
+>
+> **Do not stamp a fixed high/medium/low verdict on a category.** Severity is not
+> a property of the category — a 3-group reassignment cluster and a 14-group one
+> are not equally concerning. Instead, annotate each recommendation with its
+> objective **breadth and magnitude** (how many groups and platforms, and how far
+> past threshold — in the form "<k> of <N> <platform> groups, up to <X> past
+> threshold"); that is the prioritization signal, and the human applies judgment
+> to it. If you choose
+> to add a one-word relative-priority hint, derive it only from breadth ×
+> magnitude and say so — never from an assumption that a given metric is
+> inherently more serious.
+>
+> Phrase each recommendation as one plain sentence asking a human to confirm
+> something ("Confirm whether X reflects a real change or an artifact"), name the
+> taxa/groups involved, and keep any driver link explicitly hypothetical
+> ("consistent with", "hypothesis only"). Never use verdict words ("over-calling",
+> "legitimate", "wrong", "caused by"). If a Likely-drivers investigation (below)
+> was done, you may add a trailing clause pointing to it, but keep the
+> recommendation itself neutral.
+>
+> Categories, in emission order (each is one bullet unless noted; include only if
+> the data has it):
+>
+> 1. Clade-share collapses or appearances — one bullet per family/order with a
+>    clade-share-change flag that reaches `share_dev == 0` (collapse) or
+>    `share_main == 0` (appearance); state in how many of that platform's groups.
+> 2. Viral reads reassigned to a different taxon (groups over the reassignment
+>    threshold) — one bullet; give the count, the rate range, and the
+>    highest-rate group.
+> 3. Cross-root or shared-higher-taxon reassignments (viral reads no longer placed
+>    within a specific viral clade) — only if the count is > 0; report the bucket
+>    counts.
+> 4. Viral reads lost (groups over the lost threshold) — only if any.
+> 5. Viral reads gained (groups over the gained threshold) — only if any. The
+>    threshold is on gained reads *as a fraction of the dev total*, so high
+>    turnover can trip it even without net growth — note this.
+> 6. Vertebrate-infecting annotation flips between the two indexes — only if any.
+> 7. BLAST-agreement-rate drops over threshold — only if any.
+> 8. Kraken whole-community (Bray-Curtis) shifts over threshold — only if any.
+> 9. Schema / inventory anomalies (files missing on one side, column changes,
+>    empty outputs such as bracken, groups skipped for a metric) — only if any.
+> 10. Quality metrics — ALWAYS one bullet; state the result either way (e.g.
+>     survival and FASTQC checks within threshold, or the specific shift). Always
+>     emitted so the minimum recommendation count is fixed.
 
-1. **(high)** Each whole-clade collapse/appearance — one bullet per family or
-   order that has a clade-share-change flag and reaches `share_dev == 0` (or
-   `share_main == 0` for an appearance) in **at least half** of that platform's
-   groups. (Fixed predicate; no subjective "many".)
-2. **(high)** The single highest reassignment-rate group over the threshold,
-   called out on its own bullet **only when its rate is ≥ 1.5× the next-highest
-   over-threshold group**; otherwise omit this bullet and let it fall into the
-   bullet below.
-3. **(medium)** All remaining groups over the reassignment threshold, as ONE
-   bullet.
-4. **(medium)** Groups over the lost threshold, as ONE bullet — only if any
-   exist.
-5. **(high)** Groups over the gained threshold, as ONE bullet — only if any
-   exist. (The threshold is on gained reads *as a fraction of the dev total*, so
-   high turnover can trip it even without net growth — note this.)
-6. **(medium)** Vertebrate-status flips between indexes, as ONE bullet.
-7. **(medium)** BLAST agreement-rate drops over threshold, as ONE bullet — only
-   if any.
-8. **(medium)** Kraken Bray-Curtis flags over threshold, as ONE bullet — only if
-   any.
-9. **(low)** Any cross-root or shared-higher-taxon reassignments (viral reads no
-   longer placed within a specific viral clade), as ONE bullet — only if the
-   count is > 0.
-10. **(low)** Empty outputs (e.g. bracken), as ONE bullet — only if any are
-    empty.
-11. **(low)** A QC note, ALWAYS as exactly ONE bullet: state the QC result
-    either way — "QC stable: survival change within threshold, no FASTQC flag
-    changes" or the specific shift. (Always emitted, so the recommendation count
-    is deterministic across reviewers.)
-
-`<Render the applicable bullets here.>`
+`<Render the applicable bullets here, in the order above.>`
 
 ---
 
 ## Main findings
 
-> **Author instructions.** One `###` subsection per *substantial* finding —
-> include only findings actually present in this comparison; delete the
-> subsections that don't apply, and add one if a real finding doesn't fit the
-> list below. Lead each with a one-sentence statement of *what changed* (the
-> result), then 2–4 plain sentences of supporting numbers. Put method and
-> statistical caveats in the matching Detailed-investigation section and the
-> Methodology appendix, not here. Name every taxon. Do not assert causes; if a
-> Likely-drivers investigation was done, point to it rather than restating it.
+> **Author instructions.** Write one `###` subsection per metric dimension that
+> showed a *substantial* difference in THIS comparison — a consolidated flag, or
+> a difference large enough that a human should see it even if it didn't trip a
+> threshold. The candidate dimensions are listed below so no class of finding is
+> missed; **include a dimension only if its data shows something**, and delete the
+> rest. Don't presume any of them happened — let the TSVs decide. **Title each
+> subsection after what the data actually shows**, not after the dimension's
+> name: a neutral, factual headline (e.g. for the clade dimension, "Family <Name>
+> drops to zero share in N Illumina groups" if that is what occurred — not the
+> generic label). Lead each with a one-sentence statement of *what changed*, then
+> 2–4 plain sentences of supporting numbers. Where a difference is bidirectional
+> or mixed (some groups up, some down), say so rather than forcing a single
+> direction. Put method and statistical caveats in the matching
+> Detailed-investigation section and the Methodology appendix, not here. Name
+> every taxon. Do not assert causes; if a Likely-drivers investigation was done,
+> point to it rather than restating it.
+>
+> Candidate dimensions (each maps to a Detailed-investigation section; cross-
+> reference it). For each, the kind of thing to report if present:
+>
+> - **Read-level viral assignment changes** — lost / gained / reassigned reads in
+>   the vertebrate-viral subset: which groups cross a threshold, the rate range,
+>   the highest group, and (for reassignment) whether the moves concentrate in a
+>   few recurring taxid pairs (name them, give the top-pair share) or are broad.
+>   Note the denominators (% lost ÷ main, % gained ÷ dev, % reassigned ÷ shared)
+>   and, for gains, that the metric is a fraction of the dev total so turnover can
+>   trip it without net growth. State what is and is NOT known: the reads differ
+>   on the matched key; whether real or an index/annotation effect is not
+>   established here.
+> - **Reassignment taxonomic severity** — how far reassigned reads moved: any
+>   cross-root or shared-higher-taxon moves (viral reads no longer within a
+>   specific viral clade), with named example pairs. Report `unresolved-taxid`
+>   separately — it is a versioning artifact, not a severity level.
+> - **Clade-share shifts (family / order, Illumina)** — clades whose share of
+>   total viral reads moved materially, including any family/order that appears or
+>   disappears across groups; give taxids, the number of groups, and the largest
+>   per-group share moves in percentage points. State the alternatives (a real
+>   change vs. a reference/classification/re-ranking effect) as alternatives.
+> - **BLAST-validation agreement** — groups whose agreement rate moved past
+>   threshold, with both the validated fraction and the agreement rate (a rate
+>   change on a shifting validated subset is ambiguous — note which groups have a
+>   stable validated fraction).
+> - **Vertebrate-infecting annotation flips** — taxa that gained or lost the
+>   annotation between the indexes, with named examples; note it as a possible
+>   driver of subset-membership changes (hypothesis only).
+> - **Kraken whole-community shifts** — group/rank/read-set combinations past the
+>   Bray-Curtis threshold, the range, and the top-moving taxa (viral vs.
+>   environmental).
+> - **Quality metrics** — report this dimension's result either way (a specific
+>   shift, or that survival/GC/duplication/FASTQC checks are within threshold), so
+>   the reader knows QC was checked.
 
-### A whole viral clade disappears
-
-`<Name the family/order that goes to ~0% share in dev across many groups, with
-taxids and ranks, the number of groups affected, and the largest per-group share
-drops in percentage points (share of all viral reads). State the alternatives
-plainly — a real loss vs. a reference/classification effect — as alternatives,
-not a conclusion. Cross-reference the "Clade-share breakdown" detail section.>`
-
-### Many groups have viral reads reassigned to a neighbouring taxon
-
-`<How many groups exceed the reassignment threshold and the range. Name the
-single highest group and its rate. State that the reassignments concentrate in
-one or two recurring taxid pairs — name them with taxon names, e.g. "Human
-rotavirus A (10941) → Rotavirus A (28875)" — and give the top-pair share so the
-reader sees this is a systematic remap, not broad instability. Note the
-taxonomic depth in one phrase (e.g. "nearly all same-species moves"). Cross-
-reference the "Lost / gained / reassigned" and "Reassignment severity" sections.>`
-
-### One or more groups gain viral reads heavily
-
-`<Name the groups (e.g. the Iowa / IA_* groups) that gain far more vertebrate-
-viral reads than they lose. For each, give dev vs main counts, the number
-gained, and gained as a fraction of the dev total. Say explicitly what is and is
-NOT known: the reads are present in dev and absent in main on the matched key;
-whether this is a real detection change or an index/annotation effect is not
-established here. If the gain co-occurs with downstream row-count growth
-(validation hits, duplicate stats), note it as consistent. Cross-reference the
-"Lost / gained / reassigned" and "Vertebrate-status flips" sections.>`
-
-### BLAST-validation agreement drops for some groups
-
-`<How many groups drop agreement past the threshold and by how much, named, with
-both the validated fraction and the agreement rate for each (a rate change on a
-shifting validated subset is ambiguous — say which groups have a stable
-validated fraction and which don't). Cross-reference the "BLAST-validation
-agreement" section.>`
-
-### Vertebrate-infecting status flips between the two indexes
-
-`<How many taxa gained vs lost the vertebrate-infecting annotation between the
-main and dev indexes, with a couple of named examples. State the hypothesis
-plainly: a read can enter or leave the vertebrate-viral subset purely because
-its taxon's annotation flipped — hypothesis only. Cross-reference the
-"Vertebrate-status flips" section.>`
-
-### Whole-community (kraken) profiles shift in some groups
-
-`<How many group/rank/read-set combinations exceed the Bray-Curtis threshold,
-the range, and at which rank/read-set. Name the top-moving taxa and note whether
-they are viral or environmental/non-viral. Cross-reference the "Kraken
-abundances" section.>`
-
-### Quality metrics are stable (or: QC changed as follows)
-
-`<State the QC result plainly either way: e.g. "read survival, GC, duplication,
-and FASTQC checks are essentially unchanged (max survival change <0.05 pp, 0
-FASTQC flag transitions)", OR describe the specific shift. Cross-reference the
-"Quality metrics" section.>`
+`<One ### subsection per dimension that THIS comparison shows a substantial
+difference in, titled after the observed result. Delete the dimensions with
+nothing to report; for QC, state the result either way.>`
 
 ---
 
@@ -331,8 +331,8 @@ flag transitions (or none).>`
 `<Generic per-group presence and row-count changes across every output file
 type, derived from schemas + expected-outputs (no per-file logic). Largest
 row-count changes and any structural surprises. Cross-reference findings above
-where a row-count change tracks a finding (e.g. more validation hits where reads
-were gained).>`
+where a row-count change tracks a finding (e.g. a change in validation-hit rows
+that moves with a read-level lost/gained finding).>`
 
 ---
 
@@ -399,8 +399,8 @@ share change >3pp, BLAST agreement drop >0.1, Bray-Curtis >0.15>`.
 ### Appendix C — Large reference tables
 
 > **Author instructions.** Place oversized tables here (e.g. the full per-group
-> clade-collapse table, the full severity-bucket table) so the body stays
-> skimmable. Add one `###`-titled table per subject.
+> clade-share table, the full reassignment severity-bucket table) so the body
+> stays skimmable. Add one `###`-titled table per subject.
 
 #### C.1 `<table subject>`
 

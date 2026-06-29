@@ -114,7 +114,11 @@ The script writes these TSVs to `--out`:
 Copy `review-template.md` to `<out>/REVIEW.md` and fill it in, following the
 template's per-section instructions literally. Embed the actual tables/numbers
 from the TSVs (large tables: show the top rows the template asks for and state
-the total count). State the thresholds used in §Flags.
+the total count). State the thresholds used in §Flags. The template's examples,
+illustrative shapes, and candidate-dimension lists are format guides, not
+expected results — report only what this comparison's TSVs show, and don't carry
+an example's taxa, directions, or counts into the report (the template's "How to
+fill this in" block states this rule in full).
 
 Key reminders:
 
@@ -124,21 +128,25 @@ Key reminders:
 - **Platform split.** Report Illumina and ONT separately under each focus; ONT
   has no clade counts or duplicate marking — note the omission rather than
   leaving a blank.
-- **Err toward inclusion** in §Recommendations: every large or anomalous
-  difference (any consolidated flag, any whole-family share collapse, any
-  cross-root reassignment cluster) should appear as something for a human to
-  review, even at low concern.
+- **Err toward inclusion** in the Recommendations section: every metric
+  dimension with a consolidated flag (and any other difference large enough that
+  a human should see it — e.g. a clade that appears or disappears, a cross-root
+  reassignment) should surface as something to review. Annotate it with its
+  breadth and magnitude rather than stamping a fixed concern level; let the human
+  prioritize.
 
 ### Step 4 - Optionally investigate likely drivers
 
-The script flags differences but does not explain them. For the headline
-findings, a short by-hand investigation often pins down the likely mechanism
-cheaply, and is worth doing when a human will act on the report. This stays
-**hypothesis-only** (there is no ground truth) and goes in the report's optional
-"Likely drivers" section, kept separate from the deterministic findings.
+The script flags differences but does not explain them. For whichever findings
+this comparison surfaces, a short by-hand investigation often pins down the
+likely mechanism cheaply, and is worth doing when a human will act on the report.
+This stays **hypothesis-only** (there is no ground truth) and goes in the
+report's optional "Likely drivers" section, kept separate from the deterministic
+findings.
 
-Cheap, high-yield query patterns (run against the staged data under
-`<out>/_staged` and the index dumps under `<out>/_index` / `<out>/_old_index`):
+Cheap, high-yield query patterns, each conditional on observing the difference it
+addresses (run against the staged data under `<out>/_staged` and the index dumps
+under `<out>/_index` / `<out>/_old_index`):
 
 - **A clade collapsed, or reads were gained/lost** → check whether reference
   genomes changed. Count alignments per reference accession on each side (in the
