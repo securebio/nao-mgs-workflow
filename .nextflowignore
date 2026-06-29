@@ -22,10 +22,3 @@
 # install this version. Permanent ignore; remove only if bioconda backfills it.
 25.10.5
 25.10.6
-
-# Defer 26.04.x until the pipeline bumps its minimum Nextflow version; revisit on expiry.
-26.04.0 exp:2026-07-31
-26.04.1 exp:2026-07-31
-26.04.2 exp:2026-07-31
-26.04.3 exp:2026-07-31
-26.04.4 exp:2026-07-31
