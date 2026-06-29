@@ -808,6 +808,47 @@ class TestReassignmentConcentration:
         assert abs(out.top_pair_frac - 0.8) < 1e-9
 
 
+class TestReassignmentPairCounts:
+    def test_non_top_severe_pair_still_present(self) -> None:
+        # A severe cross-root pair (2->8) that is NOT the group's top pair (1->9,
+        # 4 reads) must still appear as its own row, so the report can name it.
+        detail = pd.DataFrame(
+            {
+                "group": ["G"] * 5,
+                "scope": ["all"] * 5,
+                "seq_id": list("abcde"),
+                "taxid_main": [1, 1, 1, 1, 2],
+                "taxid_dev": [9, 9, 9, 9, 8],
+                "bucket": ["same-genus"] * 4 + [dm.CROSS_ROOT],
+            }
+        )
+        out = dm.reassignment_pair_counts(detail)
+        cross = out[out.bucket == dm.CROSS_ROOT]
+        assert len(cross) == 1
+        row = cross.iloc[0]
+        assert row.group == "G"
+        assert row.taxid_main == 2
+        assert row.taxid_dev == 8
+        assert row.n_reads == 1
+        # The top pair is still present too (every pair is kept).
+        assert {(1, 9), (2, 8)} <= set(zip(out.taxid_main, out.taxid_dev, strict=True))
+
+    def test_empty_detail_emits_header_only(self) -> None:
+        empty = pd.DataFrame(
+            columns=["group", "scope", "seq_id", "taxid_main", "taxid_dev", "bucket"]
+        )
+        out = dm.reassignment_pair_counts(empty)
+        assert out.empty
+        assert list(out.columns) == [
+            "group",
+            "scope",
+            "taxid_main",
+            "taxid_dev",
+            "bucket",
+            "n_reads",
+        ]
+
+
 class TestQcReadSurvival:
     def test_survival_fraction_and_delta(self) -> None:
         def rows(cleaned: int) -> pd.DataFrame:

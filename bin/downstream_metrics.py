@@ -1047,6 +1047,38 @@ def reassignment_concentration(reassignment_detail: pd.DataFrame) -> pd.DataFram
     )
 
 
+def reassignment_pair_counts(reassignment_detail: pd.DataFrame) -> pd.DataFrame:
+    """Per-(group, scope, taxid pair) reassigned-read counts with bucket.
+
+    A compact aggregate of the reassignment detail: one row per distinct
+    (group, scope, taxid_main, taxid_dev) with its bucket and read count. Unlike
+    `reassignment_concentration` (top pair per group only), this keeps EVERY pair,
+    so the report can name example pairs for any bucket — e.g. a severe
+    cross-root or shared-higher-taxon pair that is not a group's single top pair.
+
+    Returns:
+        DataFrame: group, scope, taxid_main, taxid_dev, bucket, n_reads, sorted by
+        group, scope, bucket, n_reads (desc). Empty (header-only) when there are no
+        reassigned reads.
+    """
+    cols = ["group", "scope", "taxid_main", "taxid_dev", "bucket", "n_reads"]
+    if reassignment_detail.empty:
+        return pd.DataFrame(columns=cols)
+    counts = (
+        # dropna=False so a pair with a missing taxid (non-conformant input) is
+        # still counted rather than silently dropped.
+        reassignment_detail.groupby(
+            ["group", "scope", "taxid_main", "taxid_dev", "bucket"], dropna=False
+        )
+        .size()
+        .reset_index(name="n_reads")
+    )
+    return counts.sort_values(
+        ["group", "scope", "bucket", "n_reads"],
+        ascending=[True, True, True, False],
+    ).reset_index(drop=True)[cols]
+
+
 def clade_rank_shares(
     clade_main: pd.DataFrame,
     clade_dev: pd.DataFrame,

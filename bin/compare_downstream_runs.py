@@ -641,6 +641,10 @@ def main() -> None:
             dm.reassignment_concentration(reassign),
             args.out / "viral_reassignment_concentration.tsv",
         )
+        write_tsv(
+            dm.reassignment_pair_counts(reassign),
+            args.out / "viral_reassignment_pairs.tsv",
+        )
 
         # Clade-count family/order breakdown (short-read only). Rank and name are
         # resolved from the dev index (taxonomy nodes.dmp + annotation); a taxid
