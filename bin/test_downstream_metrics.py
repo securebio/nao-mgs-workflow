@@ -107,8 +107,7 @@ class TestCompareColumnsToSchema:
         row = df.iloc[0]
         assert row.missing_vs_schema_main == ""
         assert row.extra_vs_schema_main == ""
-        assert row.cols_only_in_main == ""
-        assert not row.order_changed
+        assert row.groups_consistent_main
 
     def test_empty_file_reports_empty_marker_not_full_schema(self) -> None:
         man = _manifest({"G1": ("illumina", {"bracken": _entry(n_rows=0, columns=[])})})
@@ -126,17 +125,9 @@ class TestCompareColumnsToSchema:
         )
         df = dm.compare_columns_to_schema(main, dev, {"kraken": ["taxid"]})
         row = df.iloc[0]
-        assert row.cols_only_in_dev == "new_col"
-        assert row.cols_only_in_main == ""
+        # A column added on dev but absent from the schema surfaces as extra.
         assert row.extra_vs_schema_dev == "new_col"
-
-    def test_reorder_only_sets_order_changed(self) -> None:
-        main = _manifest({"G1": ("illumina", {"kraken": _entry(columns=["a", "b"])})})
-        dev = _manifest({"G1": ("illumina", {"kraken": _entry(columns=["b", "a"])})})
-        df = dm.compare_columns_to_schema(main, dev, {"kraken": ["a", "b"]})
-        row = df.iloc[0]
-        assert row.order_changed
-        assert row.cols_only_in_main == "" and row.cols_only_in_dev == ""
+        assert row.extra_vs_schema_main == ""
 
     def test_file_type_without_schema_still_reported(self) -> None:
         man = _manifest({"G1": ("illumina", {"mystery": _entry(columns=["x"])})})

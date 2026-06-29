@@ -164,20 +164,6 @@ def compare_file_inventory(
     return df
 
 
-def _columns_for_type(manifest: SideManifest, file_type: str) -> list[str] | None:
-    """Return the column list seen for `file_type` in `manifest`.
-
-    Columns are expected to be identical across all groups of a given platform,
-    so the first group that has them is representative. Returns None if no group
-    on this side carries columns for this file type (e.g. JSON or all absent).
-    """
-    for gm in manifest.values():
-        fe = gm.files.get(file_type)
-        if fe and fe.columns is not None:
-            return fe.columns
-    return None
-
-
 def _columns_consistent(manifest: SideManifest, file_type: str) -> bool:
     """Whether groups of the SAME platform share one header for `file_type`.
 
@@ -235,20 +221,18 @@ def compare_columns_to_schema(
     dev: SideManifest,
     schema_columns: dict[str, list[str]],
 ) -> pd.DataFrame:
-    """Check each file type's columns against its schema and across sides.
+    """Check each file type's columns against its schema for both sides.
 
     For every tabular file type present on either side, compares the observed
-    column set/order to the schema's declared fields (when a schema exists) and
-    to the other side. Schema-driven: file types without a matching schema are
-    still reported (with empty schema columns) so unschema'd outputs surface.
+    columns to the schema's declared fields (when a schema exists). Schema-driven:
+    file types without a matching schema are still reported (with empty schema
+    columns) so unschema'd outputs surface.
 
     Missing/extra columns are aggregated across ALL group headers per side, so a
-    later group's drop/add is caught. `cols_only_in_*` and `order_changed`,
-    however, compare a single representative header per side and are only
-    meaningful when `groups_consistent_*` is True; cross-side column ORDER is not
+    later group's drop/add is caught. `groups_consistent_*` reports whether groups
+    within a side agree on this file's columns. Cross-side column ORDER is not
     schema-checked because the schema legitimately permits platform-specific
-    ordering (e.g. ONT places paired-end columns last). Read `order_changed`
-    together with `groups_consistent_*`.
+    ordering (e.g. ONT places paired-end columns last).
 
     Args:
         main: Side manifest for main.
@@ -258,9 +242,9 @@ def compare_columns_to_schema(
     Returns:
         DataFrame with one row per file_type, columns: file_type,
         has_schema, missing_vs_schema_main, extra_vs_schema_main,
-        missing_vs_schema_dev, extra_vs_schema_dev, cols_only_in_main,
-        cols_only_in_dev, order_changed. List-valued cells are
-        comma-joined strings ('' when empty).
+        missing_vs_schema_dev, extra_vs_schema_dev, groups_consistent_main,
+        groups_consistent_dev. List-valued cells are comma-joined strings
+        ('' when empty).
     """
     file_types: set[str] = set()
     for manifest in (main, dev):
@@ -270,8 +254,6 @@ def compare_columns_to_schema(
             )
     records: list[dict[str, object]] = []
     for ft in sorted(file_types):
-        cols_main = _columns_for_type(main, ft)
-        cols_dev = _columns_for_type(dev, ft)
         schema = schema_columns.get(ft)
         # Aggregate missing/extra across ALL groups' headers on each side, so a
         # later group dropping/adding a column is caught (not just the first).
@@ -284,16 +266,7 @@ def compare_columns_to_schema(
             "extra_vs_schema_main": extra_main,
             "missing_vs_schema_dev": miss_dev,
             "extra_vs_schema_dev": extra_dev,
-            "cols_only_in_main": _join(_only_in(cols_main, cols_dev)),
-            "cols_only_in_dev": _join(_only_in(cols_dev, cols_main)),
-            "order_changed": (
-                bool(cols_main)
-                and bool(cols_dev)
-                and cols_main != cols_dev
-                and set(cols_main or []) == set(cols_dev or [])
-            ),
-            # True when groups within a side disagree on this file's columns
-            # (the per-side header above is only representative when consistent).
+            # True when groups within a side agree on this file's columns.
             "groups_consistent_main": _columns_consistent(main, ft),
             "groups_consistent_dev": _columns_consistent(dev, ft),
         }
@@ -307,53 +280,10 @@ def compare_columns_to_schema(
             "extra_vs_schema_main",
             "missing_vs_schema_dev",
             "extra_vs_schema_dev",
-            "cols_only_in_main",
-            "cols_only_in_dev",
             "groups_consistent_main",
             "groups_consistent_dev",
-            "order_changed",
         ],
     )
-
-
-def _schema_cells(
-    schema: list[str] | None, observed: list[str] | None
-) -> tuple[str, str]:
-    """Format (missing, extra) schema-comparison cells for one side.
-
-    Empty-but-present files (header absent) would otherwise report every schema
-    field as 'missing'; surface them as '(empty file)' instead so the signal is
-    'this output is empty', not a wall of column names.
-    """
-    if observed is None:
-        return "", ""
-    if observed == []:
-        return "(empty file)", ""
-    return _join(_missing(schema, observed)), _join(_extra(schema, observed))
-
-
-def _missing(schema: list[str] | None, observed: list[str] | None) -> list[str]:
-    """Schema fields absent from the observed columns (order preserved)."""
-    if schema is None or observed is None:
-        return []
-    seen = set(observed)
-    return [c for c in schema if c not in seen]
-
-
-def _extra(schema: list[str] | None, observed: list[str] | None) -> list[str]:
-    """Observed columns not declared in the schema (order preserved)."""
-    if schema is None or observed is None:
-        return []
-    declared = set(schema)
-    return [c for c in observed if c not in declared]
-
-
-def _only_in(a: list[str] | None, b: list[str] | None) -> list[str]:
-    """Columns in `a` but not `b` (order preserved); empty if either is None."""
-    if a is None or b is None:
-        return []
-    other = set(b)
-    return [c for c in a if c not in other]
 
 
 def _join(items: list[str]) -> str:

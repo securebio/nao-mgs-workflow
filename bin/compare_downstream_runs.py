@@ -645,7 +645,6 @@ def main() -> None:
         write_tsv(read_status, args.out / "viral_read_status.tsv")
         outputs["viral_read_status"] = read_status
         reassign = dm.reassignment_distances(joined, tax, vert)
-        write_tsv(reassign, args.out / "viral_reassignment_detail.tsv")
         write_tsv(
             dm.bucket_summary(reassign), args.out / "viral_reassignment_buckets.tsv"
         )
