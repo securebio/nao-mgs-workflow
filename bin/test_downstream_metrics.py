@@ -956,22 +956,6 @@ class TestBuildFlagsBranches:
         assert not any("Gimprove" in k for k in keys)
 
 
-class TestExemplarSubset:
-    def test_keeps_only_exemplars(self) -> None:
-        vh = pd.DataFrame(
-            {
-                "seq_id": ["r1", "r2", "r3"],
-                "prim_align_dup_exemplar": ["r1", "r1", "r3"],
-            }
-        )
-        out = dm.exemplar_subset(vh)
-        assert list(out.seq_id) == ["r1", "r3"]
-
-    def test_passthrough_when_column_absent(self) -> None:
-        vh = pd.DataFrame({"seq_id": ["r1", "r2"]})
-        assert len(dm.exemplar_subset(vh)) == 2
-
-
 class TestKrakenTopMoversCutoff:
     def test_tie_at_cutoff_broken_by_taxid(self) -> None:
         # Two taxa tie on abs_diff at the n=1 boundary; lower taxid wins (stable).

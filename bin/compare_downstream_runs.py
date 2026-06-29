@@ -626,7 +626,6 @@ def main() -> None:
             "sample",
             "seq_id",
             "aligner_taxid_lca",
-            "prim_align_dup_exemplar",
         ]
         vh_main = load_validation_hits(main_results, main_manifest, vh_cols)
         vh_dev = load_validation_hits(dev_results, dev_manifest, vh_cols)
@@ -652,25 +651,6 @@ def main() -> None:
             dm.reassignment_concentration(reassign),
             args.out / "viral_reassignment_concentration.tsv",
         )
-
-        # Duplicate-aware cross-check: re-run the read-status comparison on
-        # alignment exemplars only (short-read). See exemplar_subset's docstring
-        # for why this is a rough cross-check, not a reliable metric.
-        if (
-            "prim_align_dup_exemplar" in vh_main.columns
-            and "prim_align_dup_exemplar" in vh_dev.columns
-        ):
-            joined_dedup = dm.join_read_assignments(
-                dm.exemplar_subset(vh_main), dm.exemplar_subset(vh_dev), merge_map
-            )
-            write_tsv(
-                dm.summarize_read_status(joined_dedup, vert),
-                args.out / "viral_read_status_dedup.tsv",
-            )
-        else:
-            logger.warning(
-                "No prim_align_dup_exemplar column; skipping dedup read-status view."
-            )
 
         # Clade-count family/order breakdown (short-read only). Rank is resolved
         # from the full dev taxonomy (covers every live taxid), with the old

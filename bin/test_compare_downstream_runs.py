@@ -359,7 +359,7 @@ def test_main_end_to_end(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Non
 
     import pandas as pd
 
-    # Core outputs exist, incl. the dedup view, concentration, and status flips.
+    # Core outputs exist, incl. concentration and status flips.
     for name in (
         "flags.tsv",
         "file_inventory.tsv",
@@ -368,18 +368,12 @@ def test_main_end_to_end(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Non
         "qc_survival.tsv",
         "kraken_bray_curtis.tsv",
         "viral_read_status.tsv",
-        "viral_read_status_dedup.tsv",
         "viral_reassignment_buckets.tsv",
         "viral_reassignment_concentration.tsv",
         "clade_rank_shares.tsv",
         "vertebrate_status_flips.tsv",
     ):
         assert (out / name).exists(), f"missing {name}"
-
-    # Dedup view is short-read only (G_ONT excluded).
-    dedup = pd.read_csv(out / "viral_read_status_dedup.tsv", sep="\t")
-    assert "G_ILL" in set(dedup.group)
-    assert "G_ONT" not in set(dedup.group)
 
     inv = pd.read_csv(out / "file_inventory.tsv", sep="\t")
     # Platform inference: G_ILL short-read, G_ONT ONT.

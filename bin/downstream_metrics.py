@@ -810,24 +810,6 @@ def join_read_assignments(
     return merged[out_cols]
 
 
-def exemplar_subset(vh: pd.DataFrame) -> pd.DataFrame:
-    """Rows of `vh` that are their own alignment-duplicate exemplar (short-read).
-
-    A duplicate group's exemplar is the read annotated with itself in
-    prim_align_dup_exemplar. Filtering to these gives one read per alignment
-    duplicate group. Returns `vh` unchanged if the column is absent (e.g. ONT,
-    which has no duplicate marking).
-
-    NOTE: exemplar identity is chosen independently per run, so a duplicate group
-    present on both sides can pick different exemplars — making the dedup view's
-    lost/gained (and, via a shifting denominator, its reassignment rate) a rough
-    cross-check rather than a reliable duplicate-adjusted metric.
-    """
-    if "prim_align_dup_exemplar" not in vh.columns:
-        return vh
-    return vh[vh["seq_id"] == vh["prim_align_dup_exemplar"]].copy()
-
-
 def _add_vertebrate_flag(joined: pd.DataFrame, vert: set[int]) -> pd.DataFrame:
     """Add is_vertebrate: assigned taxid (either side) is vertebrate-infecting."""
     out = joined.copy()
