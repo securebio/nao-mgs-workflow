@@ -459,19 +459,6 @@ class TestTaxonomyTree:
     def test_divergence_bucket(self, a: int, b: int, expected: str) -> None:
         assert self.tax.divergence_bucket(a, b) == expected
 
-    @pytest.mark.parametrize(
-        ("a", "b", "expected"),
-        [
-            (401, 402, 2),  # siblings: up to genus 300 and back
-            (401, 999, None),  # unresolved taxid -> no distance
-            # realmA/realmB meet at Viruses: 401->300->200->100->10239 (4) +
-            # 500->110->10239 (2) = 6.
-            (401, 500, 6),
-        ],
-    )
-    def test_edge_distance(self, a: int, b: int, expected: int | None) -> None:
-        assert self.tax.edge_distance(a, b) == expected
-
 
 class TestJoinReadAssignments:
     def _vh(self, rows: list[list]) -> pd.DataFrame:
@@ -528,7 +515,6 @@ class TestSummariseAndBuckets:
                 "taxid_main",
                 "taxid_dev",
                 "bucket",
-                "edge_distance",
             ]
         )
         out = dm.bucket_summary(empty)
@@ -540,7 +526,7 @@ class TestSummariseAndBuckets:
         # Non-vertebrate reassignment only: vertebrate scope must still appear
         # (all canonical buckets, zero) rather than vanishing.
         detail = pd.DataFrame(
-            [["G", "all", "r1", 1, 2, "same-genus", 2]],
+            [["G", "all", "r1", 1, 2, "same-genus"]],
             columns=[
                 "group",
                 "scope",
@@ -548,7 +534,6 @@ class TestSummariseAndBuckets:
                 "taxid_main",
                 "taxid_dev",
                 "bucket",
-                "edge_distance",
             ],
         )
         out = dm.bucket_summary(detail)
@@ -825,7 +810,6 @@ class TestReassignmentConcentration:
                 "taxid_main": [1, 1, 1, 1, 2],
                 "taxid_dev": [9, 9, 9, 9, 8],
                 "bucket": ["same-genus"] * 5,
-                "edge_distance": [2] * 5,
             }
         )
         out = dm.reassignment_concentration(detail).iloc[0]
@@ -865,7 +849,7 @@ class TestNaTaxidRobustness:
 
     def test_na_taxid_reassigned_does_not_crash(self) -> None:
         # A reassigned read with a missing taxid (non-conformant input) must route
-        # to unresolved-taxid with no edge distance, not crash the pipeline.
+        # to unresolved-taxid, not crash the pipeline.
         joined = pd.DataFrame(
             {
                 "group": ["G", "G"],
@@ -878,7 +862,6 @@ class TestNaTaxidRobustness:
         detail = dm.reassignment_distances(joined, self._tree(), vert={401, 402, 500})
         r2 = detail[(detail.scope == "all") & (detail.seq_id == "r2")].iloc[0]
         assert r2.bucket == dm.UNRESOLVED_TAXID
-        assert pd.isna(r2.edge_distance)
         # concentration must also survive the NA pair.
         conc = dm.reassignment_concentration(detail)
         assert not conc.empty

@@ -678,13 +678,6 @@ class TaxonomyTree:
                 return anc
         return None
 
-    def edge_distance(self, a: int, b: int) -> int | None:
-        """Number of parent-child steps between `a` and `b` via their LCA."""
-        lca = self.lca(a, b)
-        if lca is None:
-            return None
-        return self.lineage(a).index(lca) + self.lineage(b).index(lca)
-
     def divergence_bucket(self, a: int, b: int) -> str:
         """Lowest rank at which assignments `a` and `b` still agree.
 
@@ -888,15 +881,15 @@ def summarize_read_status(joined: pd.DataFrame, vert: set[int]) -> pd.DataFrame:
 def reassignment_distances(
     joined: pd.DataFrame, tax: TaxonomyTree, vert: set[int]
 ) -> pd.DataFrame:
-    """Taxonomic distance for each reassigned read, by divergence bucket + edges.
+    """Divergence bucket for each reassigned read.
 
-    Computes the bucket and edge distance once per distinct (taxid_main,
-    taxid_dev) pair (cached in the tree) and joins back to reads.
+    Computes the bucket once per distinct (taxid_main, taxid_dev) pair (cached in
+    the tree) and joins back to reads.
 
     Returns:
         DataFrame of reassigned reads: group, scope, seq_id, taxid_main,
-        taxid_dev, bucket, edge_distance. Emitted for scope 'all' and
-        'vertebrate' (vertebrate rows are a subset, re-labelled).
+        taxid_dev, bucket. Emitted for scope 'all' and 'vertebrate' (vertebrate
+        rows are a subset, re-labelled).
     """
     flagged = _add_vertebrate_flag(joined, vert)
     reassigned = flagged[flagged["status"] == "reassigned"].copy()
@@ -909,7 +902,6 @@ def reassignment_distances(
             "taxid_main",
             "taxid_dev",
             "bucket",
-            "edge_distance",
         ]
         if "sample" in joined.columns:
             cols.insert(2, "sample")
@@ -924,19 +916,16 @@ def reassignment_distances(
 
     pairs = reassigned[["taxid_main", "taxid_dev"]].drop_duplicates()
     bucket_map: dict[tuple[int, int] | None, str] = {None: UNRESOLVED_TAXID}
-    edge_map: dict[tuple[int, int] | None, int | None] = {None: None}
     for a, b in zip(pairs["taxid_main"], pairs["taxid_dev"], strict=True):
         key = _pair_key(a, b)
         if key is None:
             continue
         bucket_map[key] = tax.divergence_bucket(*key)
-        edge_map[key] = tax.edge_distance(*key)
     keys = [
         _pair_key(a, b)
         for a, b in zip(reassigned["taxid_main"], reassigned["taxid_dev"], strict=True)
     ]
     reassigned["bucket"] = [bucket_map[k] for k in keys]
-    reassigned["edge_distance"] = [edge_map[k] for k in keys]
 
     frames = []
     for scope in ("all", "vertebrate"):
@@ -951,7 +940,6 @@ def reassignment_distances(
         "taxid_main",
         "taxid_dev",
         "bucket",
-        "edge_distance",
     ]
     if "sample" in out.columns:
         cols.insert(2, "sample")
