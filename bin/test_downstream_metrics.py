@@ -653,31 +653,6 @@ class TestVertebrateStatusFlips:
 ###############################
 
 
-class TestMadOutlierMask:
-    @pytest.mark.parametrize(
-        ("values", "two_sided", "idx", "flagged"),
-        [
-            # clear high outlier (two-sided default): last flagged, first not.
-            ([1.0, 1.1, 0.9, 1.0, 10.0], True, -1, True),
-            ([1.0, 1.1, 0.9, 1.0, 10.0], True, 0, False),
-            # constant cohort -> no robust spread -> nothing flagged.
-            ([5.0, 5.0, 5.0, 5.0], True, -1, False),
-            # unusually LOW value: a two-sided outlier but not an upper-tail one.
-            ([10.0, 10.1, 9.9, 10.0, 1.0], True, -1, True),
-            ([10.0, 10.1, 9.9, 10.0, 1.0], False, -1, False),
-            # one-sided still flags a HIGH outlier.
-            ([1.0, 1.1, 0.9, 1.0, 10.0], False, -1, True),
-            # >half identical -> MAD 0; mean-abs-deviation fallback still catches it.
-            ([10.0, 10.0, 10.0, 10.0, 10.0, 500.0], True, -1, True),
-        ],
-    )
-    def test_mad_outlier_mask(
-        self, values: list[float], two_sided: bool, idx: int, flagged: bool
-    ) -> None:
-        mask = dm.mad_outlier_mask(pd.Series(values), two_sided=two_sided)
-        assert bool(mask.iloc[idx]) is flagged
-
-
 class TestBuildFlags:
     def test_fixed_threshold_on_bray_curtis(self) -> None:
         bc = pd.DataFrame(
@@ -691,40 +666,11 @@ class TestBuildFlags:
         flags = dm.build_flags({"kraken_bray_curtis": bc})
         assert len(flags) == 1
         assert "B" in flags.iloc[0].key
-        assert "fixed" in flags.iloc[0].flag_type
+        assert flags.iloc[0].flag_type == "fixed"
 
-    def test_cohort_outlier_suppressed_below_magnitude_floor(self) -> None:
-        # mean_seq_len pct_change near zero everywhere; one slightly higher but
-        # still trivial -> must NOT flag despite being a statistical outlier.
-        qc = pd.DataFrame(
-            {
-                "group": [f"G{i}" for i in range(6)],
-                "sample": [f"S{i}" for i in range(6)],
-                "stage": ["cleaned"] * 6,
-                "platform": ["illumina"] * 6,
-                "metric": ["mean_seq_len"] * 6,
-                "pct_change": [0.0, 0.001, -0.001, 0.002, -0.002, 0.03],
-            }
-        )
-        flags = dm.build_flags({"qc_numeric": qc})
-        assert flags.empty
-
-    def test_low_bray_curtis_not_flagged_as_cohort_outlier(self) -> None:
-        # pos metric: an unusually LOW Bray-Curtis (above the magnitude floor but
-        # below the fixed threshold) must not be flagged as a cohort regression.
-        bc = pd.DataFrame(
-            {
-                "group": [f"G{i}" for i in range(5)],
-                "rank": ["S"] * 5,
-                "ribosomal": [False] * 5,
-                "bray_curtis": [0.10, 0.11, 0.09, 0.10, 0.04],
-            }
-        )
-        flags = dm.build_flags({"kraken_bray_curtis": bc})
-        assert flags.empty
-
-    def test_cohort_outlier_flagged_when_magnitude_meaningful(self) -> None:
-        # One group's reassignment rate is a clear, sizable cohort outlier.
+    def test_below_threshold_not_flagged(self) -> None:
+        # No cohort test: a group merely out of line with its siblings but under
+        # the fixed threshold must NOT be flagged.
         status = pd.DataFrame(
             {
                 "group": [f"G{i}" for i in range(6)],
@@ -734,8 +680,8 @@ class TestBuildFlags:
             }
         )
         flags = dm.build_flags({"viral_read_status": status})
-        reassign_flags = flags[flags.metric.str.contains("reassigned")]
-        assert any("G5" in k for k in reassign_flags.key)
+        # 9.0 is below the viral_pct_reassigned default of 10; nothing flagged.
+        assert flags.empty
 
 
 ###############################

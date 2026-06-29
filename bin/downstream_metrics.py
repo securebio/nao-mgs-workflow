@@ -443,7 +443,7 @@ def qc_read_survival(main_qc: pd.DataFrame, dev_qc: pd.DataFrame) -> pd.DataFram
     b = survival(dev_qc).rename(columns={"survival": "survival_dev"})
     merged = a.merge(b, on=["group", "sample"], how="outer", suffixes=("_main", "_dev"))
     # Coalesce platform from both sides so a dev-only (or main-only) sample still
-    # carries a platform (else its survival row drops out of the cohort test).
+    # carries a platform rather than dropping its survival row.
     merged["platform"] = merged["platform_main"].fillna(merged["platform_dev"])
     merged["delta_pp"] = (merged["survival_dev"] - merged["survival_main"]) * 100.0
     return (
@@ -1219,7 +1219,7 @@ def vertebrate_status_flips(
 
 
 #########################################
-# FLAGGING (fixed thresholds + cohort)  #
+# FLAGGING (fixed thresholds)           #
 #########################################
 
 # Default thresholds for flagging a difference as worth human review. All are
@@ -1236,52 +1236,6 @@ DEFAULT_THRESHOLDS: dict[str, float] = {
     "validation_agreement_drop": 0.10,  # drop in BLAST-agreement rate
 }
 
-# Robust z-score (MAD-based) cutoff for cohort-outlier flags.
-MAD_THRESHOLD = 3.5
-
-# A cohort outlier must also reach this fraction of the metric's fixed threshold,
-# so a tiny deviation in a near-constant cohort is not flagged as a regression.
-COHORT_MIN_FRACTION = 0.25
-
-
-def mad_outlier_mask(
-    values: pd.Series, threshold: float = MAD_THRESHOLD, two_sided: bool = True
-) -> pd.Series:
-    """Boolean mask of robust (MAD-based) outliers in `values`.
-
-    Uses the modified z-score 0.6745*(x - median)/MAD. When the MAD is zero
-    (most values identical) no rows are flagged, since a robust spread cannot be
-    estimated. NaNs are never flagged.
-
-    Args:
-        values: Numeric series (a cohort of comparable measurements).
-        threshold: Modified-z cutoff above which a value is an outlier.
-        two_sided: If True, flag both high and low outliers (|z| > threshold) —
-            appropriate for signed deltas where either direction is notable. If
-            False, flag only upper-tail outliers (z > threshold) — appropriate
-            for positive-only "worse = larger" metrics (a dissimilarity, a loss
-            %, an agreement-rate drop), so an unusually *low* value is not
-            flagged as a regression.
-
-    Returns:
-        Boolean Series aligned to `values`.
-    """
-    v = pd.to_numeric(values, errors="coerce")
-    med = v.median()
-    mad = (v - med).abs().median()
-    if not mad or pd.isna(mad):
-        # MAD collapses to 0 when >=half the cohort shares the median value, which
-        # would hide a lone real outlier among otherwise-identical siblings. Fall
-        # back to the mean absolute deviation (scaled to be ~comparable to MAD)
-        # when there is still some spread; only give up if the cohort is constant.
-        mean_ad = (v - med).abs().mean()
-        if not mean_ad or pd.isna(mean_ad):
-            return pd.Series(False, index=values.index)
-        z = 0.7979 * (v - med) / mean_ad
-        return z.abs() > threshold if two_sided else z > threshold
-    robust_z = 0.6745 * (v - med) / mad
-    return robust_z.abs() > threshold if two_sided else robust_z > threshold
-
 
 def _flag_records(
     df: pd.DataFrame,
@@ -1290,10 +1244,9 @@ def _flag_records(
     focus: str,
     metric: str,
     key_cols: list[str],
-    cohort_cols: list[str] | None,
     direction: str = "abs",
 ) -> list[dict[str, object]]:
-    """Build flag records for rows whose value trips the fixed and/or cohort test.
+    """Build flag records for rows whose value trips the fixed threshold.
 
     Args:
         df: Source comparison table.
@@ -1302,14 +1255,13 @@ def _flag_records(
         focus: Report focus label (e.g. 'kraken').
         metric: Human-readable metric name.
         key_cols: Columns identifying the flagged row (e.g. group, rank).
-        cohort_cols: Columns defining cohorts for MAD outliers (None = no cohort
-            test; whole column is one cohort if []).
         direction: 'abs' flags |value| > threshold (two-sided); 'pos' flags
             value > threshold (one-sided, for already-signed magnitudes like a
             dissimilarity or an agreement-rate drop).
 
     Returns:
         List of flag dicts (focus, key, metric, value, threshold, flag_type).
+        flag_type is always 'fixed'.
     """
     if df.empty or value_col not in df.columns:
         return []
@@ -1317,29 +1269,8 @@ def _flag_records(
     vals = pd.to_numeric(work[value_col], errors="coerce")
     compare = vals.abs() if direction == "abs" else vals
     fixed = (compare > threshold).fillna(False)
-    # Positive-only metrics get an upper-tail MAD test, so an unusually LOW value
-    # (e.g. a low Bray-Curtis or loss %) is not flagged as a cohort regression.
-    two_sided = direction == "abs"
-    if cohort_cols is None:
-        cohort = pd.Series(False, index=work.index)
-    elif cohort_cols:
-        cohort = work.groupby(cohort_cols)[value_col].transform(
-            lambda s: mad_outlier_mask(s, two_sided=two_sided)
-        )
-        cohort = cohort.fillna(False).astype(bool)
-    else:
-        cohort = mad_outlier_mask(vals, two_sided=two_sided)
-    # Magnitude floor: a cohort outlier in a near-constant cohort can have a huge
-    # robust-z yet a trivial magnitude. Require it to also clear a fraction of the
-    # fixed threshold so we don't flag sub-noise differences.
-    cohort = cohort & (compare > threshold * COHORT_MIN_FRACTION)
     records: list[dict[str, object]] = []
-    for idx in work.index[fixed | cohort]:
-        types = []
-        if fixed[idx]:
-            types.append("fixed")
-        if cohort[idx]:
-            types.append("cohort-outlier")
+    for idx in work.index[fixed]:
         key = ", ".join(f"{c}={work.at[idx, c]}" for c in key_cols)
         records.append(
             {
@@ -1348,7 +1279,7 @@ def _flag_records(
                 "metric": metric,
                 "value": vals[idx],
                 "threshold": threshold,
-                "flag_type": "+".join(types),
+                "flag_type": "fixed",
             }
         )
     return records
@@ -1360,10 +1291,8 @@ def build_flags(
 ) -> pd.DataFrame:
     """Assemble the consolidated flags table across focuses.
 
-    Applies fixed thresholds and MAD cohort-outlier tests to the quantitative
-    comparison tables. Cohorts are formed within platform / rank / metric so a
-    group that is out of line with its siblings is flagged even when under the
-    absolute threshold.
+    Applies fixed thresholds to the quantitative comparison tables. A flag is
+    advisory -- the report always shows the underlying numbers.
 
     Args:
         outputs: Mapping of table name -> comparison DataFrame, using the names
@@ -1385,7 +1314,6 @@ def build_flags(
             "qc",
             "raw->cleaned read survival change (pp)",
             ["group", "sample"],
-            ["platform"],
             "abs",
         )
 
@@ -1401,7 +1329,6 @@ def build_flags(
             "qc",
             "qc metric (%)",
             ["group", "sample", "stage", "metric"],
-            ["platform", "metric"],
             "abs",
         )
 
@@ -1414,7 +1341,6 @@ def build_flags(
             "kraken",
             "Bray-Curtis dissimilarity",
             ["group", "rank", "ribosomal"],
-            ["rank", "ribosomal"],
             "pos",
         )
 
@@ -1428,7 +1354,6 @@ def build_flags(
             "viral",
             "vertebrate-viral reads lost (%)",
             ["group"],
-            [],
             "pos",
         )
         records += _flag_records(
@@ -1438,7 +1363,6 @@ def build_flags(
             "viral",
             "vertebrate-viral reads gained (%)",
             ["group"],
-            [],
             "pos",
         )
         records += _flag_records(
@@ -1448,7 +1372,6 @@ def build_flags(
             "viral",
             "vertebrate-viral reads reassigned (%)",
             ["group"],
-            [],
             "pos",
         )
 
@@ -1462,7 +1385,6 @@ def build_flags(
             "viral",
             "clade share change (pp)",
             ["group", "rank_level", "name"],
-            ["rank_level"],
             "abs",
         )
 
@@ -1477,7 +1399,6 @@ def build_flags(
             "viral",
             "BLAST-agreement rate drop",
             ["group"],
-            [],
             "pos",
         )
 
