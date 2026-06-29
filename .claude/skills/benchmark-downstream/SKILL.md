@@ -7,10 +7,11 @@ description: Compare the DOWNSTREAM output of two pipeline runs — each a (pipe
 
 This skill diffs the DOWNSTREAM output of two pipeline runs across both platforms
 and flags large differences for a human to adjudicate. Each run is a **(pipeline
-version, reference index) pair**; the common case is a release diff (`dev` + its
-index vs `main` + its index, which the CLI labels `--dev` / `--main`), but it
-works for any two version/index pairs — e.g. the same code with only the index
-rebuilt. `bin/compare_downstream_runs.py` does the deterministic data extraction
+version, reference index) pair**; the common case is a release diff (the candidate
++ its index vs the reference + its index, which the CLI labels `--candidate` /
+`--reference`), but it works for any two version/index pairs — e.g. the same code
+with only the index rebuilt. `bin/compare_downstream_runs.py` does the
+deterministic data extraction
 (munging + I/O); the per-metric calculations live in `bin/downstream_metrics.py`
 so they can be reviewed and tested separately. You fill in `review-template.md`
 from the script's TSV outputs.
@@ -89,8 +90,8 @@ same rules.
 
 ## When to use
 
-- A release candidate exists on `dev` and you want to vet its DOWNSTREAM output
-  against `main` before merging.
+- A release candidate exists and you want to vet its DOWNSTREAM output against the
+  current reference run before merging.
 - The user has two DOWNSTREAM output trees (or `s3://` URIs) to compare.
 - The user references "downstream comparison", "release diff", "regression
   check", or similar.
@@ -101,21 +102,21 @@ them at the output directory; do not write `REVIEW.md`.
 ## Inputs
 
 - `candidate` (required): the candidate run's DOWNSTREAM output root (the parent
-  of `results_downstream/`), `s3://` URI or local path → `--dev`.
-- `reference` (required): the reference run's DOWNSTREAM output root → `--main`.
+  of `results_downstream/`), `s3://` URI or local path → `--candidate`.
+- `reference` (required): the reference run's DOWNSTREAM output root → `--reference`.
 - `candidate_index` (required for the viral-assignment analysis): the candidate
   run's index root (`s3://nao-mgs-index/<DATE>`), for taxonomy + vertebrate
-  annotation → `--index`.
-- `reference_index` (optional): the reference run's index root → `--old-index`.
+  annotation → `--candidate-index`.
+- `reference_index` (optional): the reference run's index root → `--reference-index`.
   Used for the vertebrate-status-flip side-table (taxa whose vertebrate annotation
   changed between the two indexes). Clade rank and names come from the candidate
   index; a taxon deleted from the candidate-index taxonomy drops from the
   clade-share table.
 - `out_dir` (required): absolute path for tables and the report → `--out`.
 
-If a required input is missing, ask; do not guess. Without `--index`, the
-viral-assignment analysis is skipped and the report must say so — never fabricate
-it.
+If a required input is missing, ask; do not guess. Without `--candidate-index`,
+the viral-assignment analysis is skipped and the report must say so — never
+fabricate it.
 
 ## Procedure
 
@@ -123,10 +124,10 @@ it.
 
 ```bash
 python bin/compare_downstream_runs.py \
-  --main  <main-downstream-output-root> \
-  --dev   <dev-downstream-output-root> \
-  --index <dev-index-root> \
-  --old-index <main-index-root> \
+  --reference <reference-downstream-output-root> \
+  --candidate <candidate-downstream-output-root> \
+  --candidate-index <candidate-index-root> \
+  --reference-index <reference-index-root> \
   --out   <output-dir>
 ```
 
@@ -157,19 +158,20 @@ The script writes these TSVs to `--out`:
   input was present on only one side (empty if none); surface it in Completeness
   and schema.
 - `viral_read_status.tsv` — per group × scope (all|vertebrate) read-status
-  counts, with pct_lost (/main), pct_gained (/dev), pct_reassigned (/shared) —
-  note the different denominators (Lost / gained / reassigned section).
-- `viral_reassignment_concentration.tsv` — per group: distinct (taxid_main,
-  taxid_dev) pairs and the top pair's share, so a high reassignment % driven by
-  one systematic remap is visible.
+  counts, with pct_lost (/reference), pct_gained (/candidate), pct_reassigned
+  (/shared) — note the different denominators (Lost / gained / reassigned section).
+- `viral_reassignment_concentration.tsv` — per group: distinct (taxid_reference,
+  taxid_candidate) pairs and the top pair's share, so a high reassignment % driven
+  by one systematic remap is visible.
 - `viral_reassignment_buckets.tsv` — divergence-bucket counts (all buckets,
   incl. zero and unresolved-taxid) for the Reassignment-severity section.
-- `viral_reassignment_pairs.tsv` — per (group, scope, taxid_main, taxid_dev,
-  bucket) read counts, so cross-root / shared-higher-taxon example pairs can be
-  named even when they are not a group's top pair.
-- `clade_rank_shares.tsv` — per family/order: raw read counts (reads_main,
-  reads_dev, delta_reads) plus each clade's share of the group's total viral
-  reads (share_main, share_dev, delta_pp), main vs dev (Clade-share section).
+- `viral_reassignment_pairs.tsv` — per (group, scope, taxid_reference,
+  taxid_candidate, bucket) read counts, so cross-root / shared-higher-taxon
+  example pairs can be named even when they are not a group's top pair.
+- `clade_rank_shares.tsv` — per family/order: raw read counts (reads_reference,
+  reads_candidate, delta_reads) plus each clade's share of the group's total viral
+  reads (share_reference, share_candidate, delta_pp), reference vs candidate
+  (Clade-share section).
   Note: `share_*` are fractions (0–1) but `delta_pp` is already in percentage
   points; and the clade-share flag is computed on the `reads_clade_total` basis
   only (not `reads_clade_dedup`), so flag counts reconcile against the
@@ -202,9 +204,9 @@ section; the per-finding `To confirm:` lines are the recommendations.
 Key reminders:
 
 - **Missing-data rule.** If an input needed for a metric is absent, say so in
-  that section and move on — never fabricate or mis-compute. (E.g. no `--index`
-  → the viral-assignment analysis is "not computed"; empty bracken → note it,
-  don't invent abundances.)
+  that section and move on — never fabricate or mis-compute. (E.g. no
+  `--candidate-index` → the viral-assignment analysis is "not computed"; empty
+  bracken → note it, don't invent abundances.)
 - **Platform split.** Report Illumina and ONT separately under each dimension;
   ONT has no clade counts or duplicate marking — note the omission rather than
   leaving a blank.
@@ -232,7 +234,7 @@ findings.
 
 Cheap, high-yield query patterns, each conditional on observing the difference it
 addresses (run against the staged data under `<out>/_staged` and the index dumps
-under `<out>/_index` / `<out>/_old_index`):
+under `<out>/_index` / `<out>/_reference_index`):
 
 - **A clade collapsed, or reads were gained/lost** → check whether reference
   genomes changed. Count alignments per reference accession on each side (in the
@@ -280,8 +282,8 @@ contents are AWS-derived data.
 `(group, sample, seq_id)` when a `sample` column is present, else `(group, seq_id)`):
 - `same` — present both sides, same `aligner_taxid_lca`.
 - `reassigned` — present both sides, different `aligner_taxid_lca`.
-- `lost` — in main only (no longer a viral hit in dev).
-- `gained` — in dev only.
+- `lost` — in the reference only (no longer a viral hit in the candidate).
+- `gained` — in the candidate only.
 
 **Divergence buckets** (reassignment severity, against the candidate-index taxonomy):
 - `identical` — equal taxids (not counted as reassigned).

@@ -1,27 +1,29 @@
 #!/usr/bin/env python3
 DESC = """
-Compare the DOWNSTREAM output of two pipeline runs (typically `main` vs `dev`)
-before promoting dev to a release, and flag large differences for human review.
+Compare the DOWNSTREAM output of two pipeline runs (a candidate vs a reference),
+typically before promoting a release candidate, and flag large differences for
+human review.
 
-Because main and dev usually differ in code AND reference index AND QC params at
-once, this is a *holistic* release diff: it surfaces and flags differences but
-makes no causal attribution and renders no good/bad verdict (there is no ground
-truth). Differences are flagged for a human to adjudicate.
+Because candidate and reference usually differ in code AND reference index AND QC
+params at once, this is a *holistic* release diff: it surfaces and flags
+differences but makes no causal attribution and renders no good/bad verdict
+(there is no ground truth). Differences are flagged for a human to adjudicate.
 
 This script does the munging and orchestration: it stages each run's
 `results_downstream/` tree, discovers per-group output files, loads the NCBI
-taxonomy and annotated viral DB from the (dev) index, and writes comparison
+taxonomy and annotated viral DB from the candidate index, and writes comparison
 tables. All numeric calculations live in `downstream_metrics.py` so they can be
 reviewed and tested apart from this I/O code.
 
-Accepts s3:// URIs or local directories for --main / --dev (each the DOWNSTREAM
-output root, i.e. the parent of `results_downstream/`) and for --index.
+Accepts s3:// URIs or local directories for --reference / --candidate (each the
+DOWNSTREAM output root, i.e. the parent of `results_downstream/`) and for
+--candidate-index.
 
 Usage:
     python bin/compare_downstream_runs.py \\
-        --main s3://.../main/downstream/output \\
-        --dev  s3://.../dev/downstream/output \\
-        --index s3://nao-mgs-index/20260615 \\
+        --reference s3://.../reference/downstream/output \\
+        --candidate s3://.../candidate/downstream/output \\
+        --candidate-index s3://nao-mgs-index/20260615 \\
         --out ./downstream-bench/
 """
 
@@ -271,28 +273,32 @@ def _group_file(results_dir: Path, group: str, file_type: str) -> Path | None:
 
 
 def _both_sided_manifests(
-    main_manifest: dm.SideManifest,
-    dev_manifest: dm.SideManifest,
+    reference_manifest: dm.SideManifest,
+    candidate_manifest: dm.SideManifest,
     file_type: str,
 ) -> tuple[dm.SideManifest, dm.SideManifest, list[dict[str, str]]]:
     """Restrict both manifests to groups whose `file_type` is present on BOTH sides.
 
     A per-group input absent on one side only would otherwise be misread by the
-    downstream outer join as a real difference (every main read "lost", or
+    downstream outer join as a real difference (every reference read "lost", or
     Bray-Curtis 1.0). This filters such groups out of the metric and records them
     so the caller can surface them (log + skipped_groups.tsv).
 
     Returns:
-        (main_filtered, dev_filtered, skipped) where `skipped` is a list of
-        {metric, group, reason} records (metric == file_type) for groups present
-        on exactly one side.
+        (reference_filtered, candidate_filtered, skipped) where `skipped` is a list
+        of {metric, group, reason} records (metric == file_type) for groups
+        present on exactly one side.
     """
-    main_groups = {g for g, gm in main_manifest.items() if file_type in gm.files}
-    dev_groups = {g for g, gm in dev_manifest.items() if file_type in gm.files}
-    common = main_groups & dev_groups
+    reference_groups = {
+        g for g, gm in reference_manifest.items() if file_type in gm.files
+    }
+    candidate_groups = {
+        g for g, gm in candidate_manifest.items() if file_type in gm.files
+    }
+    common = reference_groups & candidate_groups
     skipped: list[dict[str, str]] = []
-    for group in sorted(main_groups ^ dev_groups):
-        side = "main" if group in main_groups else "dev"
+    for group in sorted(reference_groups ^ candidate_groups):
+        side = "reference" if group in reference_groups else "candidate"
         skipped.append(
             {
                 "metric": file_type,
@@ -300,9 +306,9 @@ def _both_sided_manifests(
                 "reason": f"present on {side} only",
             }
         )
-    main_filtered = {g: gm for g, gm in main_manifest.items() if g in common}
-    dev_filtered = {g: gm for g, gm in dev_manifest.items() if g in common}
-    return main_filtered, dev_filtered, skipped
+    reference_filtered = {g: gm for g, gm in reference_manifest.items() if g in common}
+    candidate_filtered = {g: gm for g, gm in candidate_manifest.items() if g in common}
+    return reference_filtered, candidate_filtered, skipped
 
 
 def load_qc_basic_stats(results_dir: Path, manifest: dm.SideManifest) -> pd.DataFrame:
@@ -361,7 +367,7 @@ def parse_taxonomy_nodes(path: Path) -> tuple[dict[int, int], dict[int, str]]:
 
 
 def load_merged_taxids(index_root: str, work_dir: Path) -> dict[int, int]:
-    """Load the dev index's merged.dmp into an {old_taxid: new_taxid} map.
+    """Load the candidate index's merged.dmp into an {old_taxid: new_taxid} map.
 
     merged.dmp rows are '\\t|\\t'-separated: field 0 = old taxid, 1 = new taxid.
     Returns an empty map (with a warning) if the file is absent, so older index
@@ -486,24 +492,24 @@ def parse_arguments() -> argparse.Namespace:
         description=DESC, formatter_class=argparse.RawDescriptionHelpFormatter
     )
     parser.add_argument(
-        "--main",
+        "--reference",
         required=True,
-        help="Reference (main) DOWNSTREAM output root: parent of results_downstream/.",
+        help="Reference DOWNSTREAM output root: parent of results_downstream/.",
     )
     parser.add_argument(
-        "--dev",
+        "--candidate",
         required=True,
-        help="Candidate (dev) DOWNSTREAM output root: parent of results_downstream/.",
+        help="Candidate DOWNSTREAM output root: parent of results_downstream/.",
     )
     parser.add_argument(
-        "--index",
+        "--candidate-index",
         required=False,
-        help="Dev index root (s3://... or local), for taxonomy + viral annotation.",
+        help="Candidate index root (s3://... or local), for taxonomy + annotation.",
     )
     parser.add_argument(
-        "--old-index",
+        "--reference-index",
         required=False,
-        help="Main index root. Used for the vertebrate-status-flip side-table.",
+        help="Reference index root. Used for the vertebrate-status-flip side-table.",
     )
     parser.add_argument(
         "--out",
@@ -542,12 +548,15 @@ def main() -> None:
     args = parse_arguments()
     args.out.mkdir(parents=True, exist_ok=True)
     # Clear this script's own output tables from any prior run so a skipped focus
-    # (e.g. no --index) cannot leave stale tables behind. REVIEW.md (the human's
+    # (e.g. no --candidate-index) cannot leave stale tables behind. REVIEW.md (the human's
     # artifact) is *.md and is left untouched.
     for stale in args.out.glob("*.tsv"):
         stale.unlink()
     stage_dir = args.out / "_staged"
-    logger.info(f"Comparing DOWNSTREAM output: main={args.main} dev={args.dev}")
+    logger.info(
+        f"Comparing DOWNSTREAM output: "
+        f"reference={args.reference} candidate={args.candidate}"
+    )
 
     # Recognized per-group file types = schema names + expected-output suffixes.
     # Used to recover (group, file_type) from filenames without depending on a
@@ -560,17 +569,21 @@ def main() -> None:
         | expected_types.get("ont", set())
     )
 
-    main_results = stage_results(args.main, stage_dir / "main")
-    dev_results = stage_results(args.dev, stage_dir / "dev")
-    main_manifest = discover_side(main_results, known_types)
-    dev_manifest = discover_side(dev_results, known_types)
+    reference_results = stage_results(args.reference, stage_dir / "reference")
+    candidate_results = stage_results(args.candidate, stage_dir / "candidate")
+    reference_manifest = discover_side(reference_results, known_types)
+    candidate_manifest = discover_side(candidate_results, known_types)
     logger.info(
-        f"Discovered {len(main_manifest)} main groups, {len(dev_manifest)} dev groups."
+        f"Discovered {len(reference_manifest)} reference groups, "
+        f"{len(candidate_manifest)} candidate groups."
     )
     # Platform is inferred from file presence; a severely truncated short-read
     # group missing ALL short-read-only outputs is indistinguishable from ONT
     # here. Log the ONT-inferred groups (both sides) so a reviewer can check.
-    for side, manifest in (("main", main_manifest), ("dev", dev_manifest)):
+    for side, manifest in (
+        ("reference", reference_manifest),
+        ("candidate", candidate_manifest),
+    ):
         ont_groups = sorted(g for g, gm in manifest.items() if gm.platform == "ont")
         if ont_groups:
             logger.info(
@@ -586,35 +599,39 @@ def main() -> None:
 
     # Focus 4: schema-driven file/column inventory. Pass the platform-expected
     # output types so a file missing from BOTH runs still surfaces as a row.
-    inventory = dm.compare_file_inventory(main_manifest, dev_manifest, expected_types)
+    inventory = dm.compare_file_inventory(
+        reference_manifest, candidate_manifest, expected_types
+    )
     write_tsv(inventory, args.out / "file_inventory.tsv")
-    columns = dm.compare_columns_to_schema(main_manifest, dev_manifest, schema_columns)
+    columns = dm.compare_columns_to_schema(
+        reference_manifest, candidate_manifest, schema_columns
+    )
     write_tsv(columns, args.out / "column_conformance.tsv")
 
     # Focus 3: quality metrics (qc_basic_stats).
-    qc_main = load_qc_basic_stats(main_results, main_manifest)
-    qc_dev = load_qc_basic_stats(dev_results, dev_manifest)
-    if not qc_main.empty and not qc_dev.empty:
-        qc_numeric = dm.compare_qc_numeric(qc_main, qc_dev)
+    qc_reference = load_qc_basic_stats(reference_results, reference_manifest)
+    qc_candidate = load_qc_basic_stats(candidate_results, candidate_manifest)
+    if not qc_reference.empty and not qc_candidate.empty:
+        qc_numeric = dm.compare_qc_numeric(qc_reference, qc_candidate)
         write_tsv(qc_numeric, args.out / "qc_numeric.tsv")
         outputs["qc_numeric"] = qc_numeric
-        survival = dm.qc_read_survival(qc_main, qc_dev)
+        survival = dm.qc_read_survival(qc_reference, qc_candidate)
         write_tsv(survival, args.out / "qc_survival.tsv")
         outputs["qc_survival"] = survival
         flag_cols = [
             c
-            for c in qc_main.columns
+            for c in qc_reference.columns
             if c not in (*dm.QC_NUMERIC_METRICS, *dm.QC_KEYS, "platform")
         ]
-        qc_flags = dm.compare_qc_flags(qc_main, qc_dev, flag_cols)
+        qc_flags = dm.compare_qc_flags(qc_reference, qc_candidate, flag_cols)
         write_tsv(qc_flags, args.out / "qc_flag_changes.tsv")
     else:
         logger.warning("No qc_basic_stats files found; skipping Focus 3.")
 
     # Focus 2: kraken abundances. Restrict to groups whose kraken file is present
     # on both sides; a one-sided kraken file would otherwise yield Bray-Curtis 1.0.
-    kraken_main_mf, kraken_dev_mf, kraken_skipped = _both_sided_manifests(
-        main_manifest, dev_manifest, "kraken"
+    kraken_reference_mf, kraken_candidate_mf, kraken_skipped = _both_sided_manifests(
+        reference_manifest, candidate_manifest, "kraken"
     )
     skipped_groups.extend(kraken_skipped)
     if kraken_skipped:
@@ -622,15 +639,15 @@ def main() -> None:
             "kraken present on only one side for groups (skipped from Focus 2): "
             f"{[r['group'] for r in kraken_skipped]}"
         )
-    kraken_main = load_kraken(main_results, kraken_main_mf)
-    kraken_dev = load_kraken(dev_results, kraken_dev_mf)
-    if not kraken_main.empty and not kraken_dev.empty:
-        bray = dm.kraken_bray_curtis(kraken_main, kraken_dev)
+    kraken_reference = load_kraken(reference_results, kraken_reference_mf)
+    kraken_candidate = load_kraken(candidate_results, kraken_candidate_mf)
+    if not kraken_reference.empty and not kraken_candidate.empty:
+        bray = dm.kraken_bray_curtis(kraken_reference, kraken_candidate)
         write_tsv(bray, args.out / "kraken_bray_curtis.tsv")
         outputs["kraken_bray_curtis"] = bray
         movers = pd.concat(
             [
-                dm.kraken_top_movers(kraken_main, kraken_dev, rank)
+                dm.kraken_top_movers(kraken_reference, kraken_candidate, rank)
                 for rank in dm.KRAKEN_RANKS
             ],
             ignore_index=True,
@@ -639,24 +656,27 @@ def main() -> None:
     else:
         logger.warning("No kraken files found; skipping Focus 2.")
 
-    # Focus 1: viral assignments (requires the dev index for taxonomy + host
-    # annotation). If --index is absent we cannot compute these; surface that.
-    if args.index:
+    # Focus 1: viral assignments (requires the candidate index for taxonomy + host
+    # annotation). If --candidate-index is absent we cannot compute these; surface
+    # that.
+    if args.candidate_index:
         work_dir = args.out / "_index"
         parent, rank = parse_taxonomy_nodes(
-            fetch_index_file(args.index, "taxonomy-nodes.dmp", work_dir)
+            fetch_index_file(args.candidate_index, "taxonomy-nodes.dmp", work_dir)
         )
         tax = dm.TaxonomyTree(parent, rank)
-        merge_map = load_merged_taxids(args.index, work_dir)
-        annotated = load_annotated_db(args.index, work_dir)
+        merge_map = load_merged_taxids(args.candidate_index, work_dir)
+        annotated = load_annotated_db(args.candidate_index, work_dir)
         vert = dm.vertebrate_taxids(annotated)
-        logger.info(f"{len(vert)} vertebrate-infecting taxids (status 1, dev index).")
+        logger.info(
+            f"{len(vert)} vertebrate-infecting taxids (status 1, candidate index)."
+        )
 
-        # Load the main index annotation too (if given): used for the
+        # Load the reference index annotation too (if given): used for the
         # vertebrate-status-flip side-table.
         old_annotated = (
-            load_annotated_db(args.old_index, args.out / "_old_index")
-            if args.old_index
+            load_annotated_db(args.reference_index, args.out / "_reference_index")
+            if args.reference_index
             else None
         )
 
@@ -667,11 +687,12 @@ def main() -> None:
             "aligner_taxid_lca",
         ]
         # Read-level join: restrict to groups whose validation_hits is present on
-        # both sides. A one-sided file would misread every main read for that group
-        # as "lost" (and vice versa). Independent metrics below (clade shares,
-        # validation agreement, vertebrate-status flips) keep the full manifests.
-        vh_main_mf, vh_dev_mf, vh_skipped = _both_sided_manifests(
-            main_manifest, dev_manifest, "validation_hits"
+        # both sides. A one-sided file would misread every reference read for that
+        # group as "lost" (and vice versa). Independent metrics below (clade
+        # shares, validation agreement, vertebrate-status flips) keep the full
+        # manifests.
+        vh_reference_mf, vh_candidate_mf, vh_skipped = _both_sided_manifests(
+            reference_manifest, candidate_manifest, "validation_hits"
         )
         skipped_groups.extend(vh_skipped)
         if vh_skipped:
@@ -679,19 +700,21 @@ def main() -> None:
                 "validation_hits present on only one side for groups (skipped from "
                 f"Focus 1 read-level comparison): {[r['group'] for r in vh_skipped]}"
             )
-        vh_main = load_validation_hits(main_results, vh_main_mf, vh_cols)
-        vh_dev = load_validation_hits(dev_results, vh_dev_mf, vh_cols)
+        vh_reference = load_validation_hits(reference_results, vh_reference_mf, vh_cols)
+        vh_candidate = load_validation_hits(candidate_results, vh_candidate_mf, vh_cols)
         # Group discovery no longer requires validation_hits, so a side could lack
         # it entirely; surface that rather than crashing the read-level join.
         need = {"group", "seq_id", "aligner_taxid_lca"}
-        if not need.issubset(vh_main.columns) or not need.issubset(vh_dev.columns):
+        if not need.issubset(vh_reference.columns) or not need.issubset(
+            vh_candidate.columns
+        ):
             logger.warning(
                 "validation_hits missing on a side; skipping Focus 1 read-level "
                 "comparison (not computed)."
             )
             _finish(args, outputs, skipped_groups)
             return
-        joined = dm.join_read_assignments(vh_main, vh_dev, merge_map)
+        joined = dm.join_read_assignments(vh_reference, vh_candidate, merge_map)
         read_status = dm.summarize_read_status(joined, vert)
         write_tsv(read_status, args.out / "viral_read_status.tsv")
         outputs["viral_read_status"] = read_status
@@ -709,12 +732,13 @@ def main() -> None:
         )
 
         # Clade-count family/order breakdown (short-read only). Rank and name are
-        # resolved from the dev index (taxonomy nodes.dmp + annotation); a taxid
-        # deleted from the dev taxonomy simply drops from the clade table, and a
-        # name absent from the dev annotation falls back to its taxid.
-        clade_main = load_clade_counts(main_results, main_manifest)
-        clade_dev = load_clade_counts(dev_results, dev_manifest)
-        if not clade_main.empty and not clade_dev.empty:
+        # resolved from the candidate index (taxonomy nodes.dmp + annotation); a
+        # taxid deleted from the candidate-index taxonomy simply drops from the
+        # clade table, and a name absent from the candidate annotation falls back
+        # to its taxid.
+        clade_reference = load_clade_counts(reference_results, reference_manifest)
+        clade_candidate = load_clade_counts(candidate_results, candidate_manifest)
+        if not clade_reference.empty and not clade_candidate.empty:
             name_map = dict(
                 zip(
                     annotated["taxid"].astype(int),
@@ -722,7 +746,9 @@ def main() -> None:
                     strict=True,
                 )
             )
-            clade = dm.clade_rank_shares(clade_main, clade_dev, rank, name_map)
+            clade = dm.clade_rank_shares(
+                clade_reference, clade_candidate, rank, name_map
+            )
             write_tsv(clade, args.out / "clade_rank_shares.tsv")
             outputs["clade_rank_shares"] = clade
         else:
@@ -730,13 +756,17 @@ def main() -> None:
 
         # BLAST-validation agreement (secondary).
         val_cols = ["group", "validation_distance_aligner"]
-        val_main = load_validation_hits(main_results, main_manifest, val_cols)
-        val_dev = load_validation_hits(dev_results, dev_manifest, val_cols)
-        validation = dm.validation_agreement(val_main).merge(
-            dm.validation_agreement(val_dev),
+        val_reference = load_validation_hits(
+            reference_results, reference_manifest, val_cols
+        )
+        val_candidate = load_validation_hits(
+            candidate_results, candidate_manifest, val_cols
+        )
+        validation = dm.validation_agreement(val_reference).merge(
+            dm.validation_agreement(val_candidate),
             on="group",
             how="outer",
-            suffixes=("_main", "_dev"),
+            suffixes=("_reference", "_candidate"),
         )
         write_tsv(validation, args.out / "viral_validation_agreement.tsv")
         outputs["viral_validation_agreement"] = validation
@@ -747,10 +777,12 @@ def main() -> None:
             write_tsv(flips, args.out / "vertebrate_status_flips.tsv")
         else:
             logger.warning(
-                "No --old-index; skipping vertebrate-status-flip side-table."
+                "No --reference-index; skipping vertebrate-status-flip side-table."
             )
     else:
-        logger.warning("No --index given; skipping Focus 1 (viral assignments).")
+        logger.warning(
+            "No --candidate-index given; skipping Focus 1 (viral assignments)."
+        )
 
     _finish(args, outputs, skipped_groups)
 

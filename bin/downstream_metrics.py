@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 DESC = """
-Pure calculation functions for the DOWNSTREAM dev-vs-main release comparison
+Pure calculation functions for the DOWNSTREAM candidate-vs-reference comparison
 (see compare_downstream_runs.py for the I/O and orchestration that feed these).
 
 This module is deliberately free of network/filesystem/argparse code so the
@@ -30,7 +30,7 @@ import pandas as pd
 
 @dataclass
 class FileEntry:
-    """One discovered per-group output file on one side (main or dev).
+    """One discovered per-group output file on one side (reference or candidate).
 
     Attributes:
         present: Whether the file exists for this group on this side.
@@ -68,8 +68,8 @@ SideManifest = dict[str, GroupManifest]
 
 
 def compare_file_inventory(
-    main: SideManifest,
-    dev: SideManifest,
+    reference: SideManifest,
+    candidate: SideManifest,
     expected_types: dict[str, set[str]] | None = None,
 ) -> pd.DataFrame:
     """Compare presence and row counts of every per-group output file.
@@ -78,30 +78,32 @@ def compare_file_inventory(
     manifest, so new outputs are picked up without code changes. When
     `expected_types` is given, each group's platform-expected types are also
     included, so an output absent from BOTH sides still shows up as a row with
-    in_main = in_dev = False (rather than being silently invisible).
+    in_reference = in_candidate = False (rather than being silently invisible).
 
     Args:
-        main: Side manifest for the reference (main) run.
-        dev: Side manifest for the candidate (dev) run.
+        reference: Side manifest for the reference run.
+        candidate: Side manifest for the candidate run.
         expected_types: Optional {platform: {file_type, ...}} of expected
             per-group outputs, used to surface types missing on both sides.
 
     Returns:
         Long-format DataFrame with one row per (group, file_type), columns:
-        group, platform, file_type, in_main, in_dev, n_rows_main, n_rows_dev,
-        row_delta, row_pct_change. n_rows_* are <NA> for JSON/unreadable files;
-        row_delta/row_pct_change are <NA> unless both sides have a row count.
+        group, platform, file_type, in_reference, in_candidate, n_rows_reference,
+        n_rows_candidate, row_delta, row_pct_change. n_rows_* are <NA> for
+        JSON/unreadable files; row_delta/row_pct_change are <NA> unless both
+        sides have a row count.
     """
     expected_types = expected_types or {}
-    groups = sorted(set(main) | set(dev))
+    groups = sorted(set(reference) | set(candidate))
     records: list[dict[str, object]] = []
     for group in groups:
-        gm_main = main.get(group)
-        gm_dev = dev.get(group)
+        gm_reference = reference.get(group)
+        gm_candidate = candidate.get(group)
         # Use BOTH sides' platforms: if they disagree (e.g. a group is Illumina
-        # on main but degraded to ONT on dev), flag the mismatch and union the
-        # expected types from both so no platform's expected outputs are dropped.
-        platforms = [gm.platform for gm in (gm_main, gm_dev) if gm]
+        # on reference but degraded to ONT on candidate), flag the mismatch and
+        # union the expected types from both so no platform's expected outputs
+        # are dropped.
+        platforms = [gm.platform for gm in (gm_reference, gm_candidate) if gm]
         unique = sorted(set(platforms))
         if len(unique) == 1:
             platform = unique[0]
@@ -113,21 +115,21 @@ def compare_file_inventory(
         for p in unique:
             expected_union |= expected_types.get(p, set())
         file_types = sorted(
-            (set(gm_main.files) if gm_main else set())
-            | (set(gm_dev.files) if gm_dev else set())
+            (set(gm_reference.files) if gm_reference else set())
+            | (set(gm_candidate.files) if gm_candidate else set())
             | expected_union
         )
         for ft in file_types:
-            fe_main = gm_main.files.get(ft) if gm_main else None
-            fe_dev = gm_dev.files.get(ft) if gm_dev else None
-            in_main = bool(fe_main and fe_main.present)
-            in_dev = bool(fe_dev and fe_dev.present)
-            rows_main = fe_main.n_rows if fe_main else None
-            rows_dev = fe_dev.n_rows if fe_dev else None
-            if rows_main is not None and rows_dev is not None:
-                d = rows_dev - rows_main
+            fe_reference = gm_reference.files.get(ft) if gm_reference else None
+            fe_candidate = gm_candidate.files.get(ft) if gm_candidate else None
+            in_reference = bool(fe_reference and fe_reference.present)
+            in_candidate = bool(fe_candidate and fe_candidate.present)
+            rows_reference = fe_reference.n_rows if fe_reference else None
+            rows_candidate = fe_candidate.n_rows if fe_candidate else None
+            if rows_reference is not None and rows_candidate is not None:
+                d = rows_candidate - rows_reference
                 delta = d
-                pct = 100.0 * d / rows_main if rows_main else None
+                pct = 100.0 * d / rows_reference if rows_reference else None
             else:
                 delta = None
                 pct = None
@@ -136,10 +138,10 @@ def compare_file_inventory(
                     "group": group,
                     "platform": platform,
                     "file_type": ft,
-                    "in_main": in_main,
-                    "in_dev": in_dev,
-                    "n_rows_main": rows_main,
-                    "n_rows_dev": rows_dev,
+                    "in_reference": in_reference,
+                    "in_candidate": in_candidate,
+                    "n_rows_reference": rows_reference,
+                    "n_rows_candidate": rows_candidate,
                     "row_delta": delta,
                     "row_pct_change": pct,
                 }
@@ -150,16 +152,16 @@ def compare_file_inventory(
             "group",
             "platform",
             "file_type",
-            "in_main",
-            "in_dev",
-            "n_rows_main",
-            "n_rows_dev",
+            "in_reference",
+            "in_candidate",
+            "n_rows_reference",
+            "n_rows_candidate",
             "row_delta",
             "row_pct_change",
         ],
     )
     # Nullable integer dtypes so missing row counts render as <NA>, not NaN/float.
-    for col in ("n_rows_main", "n_rows_dev", "row_delta"):
+    for col in ("n_rows_reference", "n_rows_candidate", "row_delta"):
         df[col] = df[col].astype("Int64")
     return df
 
@@ -217,8 +219,8 @@ def _schema_cells_aggregated(
 
 
 def compare_columns_to_schema(
-    main: SideManifest,
-    dev: SideManifest,
+    reference: SideManifest,
+    candidate: SideManifest,
     schema_columns: dict[str, list[str]],
 ) -> pd.DataFrame:
     """Check each file type's columns against its schema for both sides.
@@ -235,19 +237,19 @@ def compare_columns_to_schema(
     ordering (e.g. ONT places paired-end columns last).
 
     Args:
-        main: Side manifest for main.
-        dev: Side manifest for dev.
+        reference: Side manifest for the reference run.
+        candidate: Side manifest for the candidate run.
         schema_columns: Maps file-type key -> ordered schema field names.
 
     Returns:
         DataFrame with one row per file_type, columns: file_type,
-        has_schema, missing_vs_schema_main, extra_vs_schema_main,
-        missing_vs_schema_dev, extra_vs_schema_dev, groups_consistent_main,
-        groups_consistent_dev. List-valued cells are comma-joined strings
-        ('' when empty).
+        has_schema, missing_vs_schema_reference, extra_vs_schema_reference,
+        missing_vs_schema_candidate, extra_vs_schema_candidate,
+        groups_consistent_reference, groups_consistent_candidate. List-valued
+        cells are comma-joined strings ('' when empty).
     """
     file_types: set[str] = set()
-    for manifest in (main, dev):
+    for manifest in (reference, candidate):
         for gm in manifest.values():
             file_types.update(
                 ft for ft, fe in gm.files.items() if fe.columns is not None
@@ -257,18 +259,22 @@ def compare_columns_to_schema(
         schema = schema_columns.get(ft)
         # Aggregate missing/extra across ALL groups' headers on each side, so a
         # later group dropping/adding a column is caught (not just the first).
-        miss_main, extra_main = _schema_cells_aggregated(schema, _all_columns(main, ft))
-        miss_dev, extra_dev = _schema_cells_aggregated(schema, _all_columns(dev, ft))
+        miss_reference, extra_reference = _schema_cells_aggregated(
+            schema, _all_columns(reference, ft)
+        )
+        miss_candidate, extra_candidate = _schema_cells_aggregated(
+            schema, _all_columns(candidate, ft)
+        )
         rec: dict[str, object] = {
             "file_type": ft,
             "has_schema": schema is not None,
-            "missing_vs_schema_main": miss_main,
-            "extra_vs_schema_main": extra_main,
-            "missing_vs_schema_dev": miss_dev,
-            "extra_vs_schema_dev": extra_dev,
+            "missing_vs_schema_reference": miss_reference,
+            "extra_vs_schema_reference": extra_reference,
+            "missing_vs_schema_candidate": miss_candidate,
+            "extra_vs_schema_candidate": extra_candidate,
             # True when groups within a side agree on this file's columns.
-            "groups_consistent_main": _columns_consistent(main, ft),
-            "groups_consistent_dev": _columns_consistent(dev, ft),
+            "groups_consistent_reference": _columns_consistent(reference, ft),
+            "groups_consistent_candidate": _columns_consistent(candidate, ft),
         }
         records.append(rec)
     return pd.DataFrame.from_records(
@@ -276,12 +282,12 @@ def compare_columns_to_schema(
         columns=[
             "file_type",
             "has_schema",
-            "missing_vs_schema_main",
-            "extra_vs_schema_main",
-            "missing_vs_schema_dev",
-            "extra_vs_schema_dev",
-            "groups_consistent_main",
-            "groups_consistent_dev",
+            "missing_vs_schema_reference",
+            "extra_vs_schema_reference",
+            "missing_vs_schema_candidate",
+            "extra_vs_schema_candidate",
+            "groups_consistent_reference",
+            "groups_consistent_candidate",
         ],
     )
 
@@ -321,36 +327,41 @@ def _melt_qc(df: pd.DataFrame, metrics: tuple[str, ...]) -> pd.DataFrame:
 
 
 def compare_qc_numeric(
-    main: pd.DataFrame,
-    dev: pd.DataFrame,
+    reference: pd.DataFrame,
+    candidate: pd.DataFrame,
     metrics: tuple[str, ...] = QC_NUMERIC_METRICS,
 ) -> pd.DataFrame:
     """Compare numeric qc_basic_stats metrics per (group, sample, stage).
 
     Args:
-        main: Concatenated qc_basic_stats (raw + cleaned) for the main run, with
-            a `platform` column added.
-        dev: Same for the dev run.
+        reference: Concatenated qc_basic_stats (raw + cleaned) for the reference
+            run, with a `platform` column added.
+        candidate: Same for the candidate run.
         metrics: Numeric metric column names to compare.
 
     Returns:
-        Long DataFrame: group, sample, platform, stage, metric, main, dev,
-        delta, pct_change. NA-valued metrics (e.g. n_read_pairs for ONT) yield
-        <NA> deltas rather than spurious numbers.
+        Long DataFrame: group, sample, platform, stage, metric, reference,
+        candidate, delta, pct_change. NA-valued metrics (e.g. n_read_pairs for
+        ONT) yield <NA> deltas rather than spurious numbers.
     """
-    long_main = _melt_qc(main, metrics)
-    long_dev = _melt_qc(dev, metrics)
-    merged = long_main.merge(
-        long_dev,
+    long_reference = _melt_qc(reference, metrics)
+    long_candidate = _melt_qc(candidate, metrics)
+    merged = long_reference.merge(
+        long_candidate,
         on=[*QC_KEYS, "metric"],
         how="outer",
-        suffixes=("_main", "_dev"),
+        suffixes=("_reference", "_candidate"),
     )
-    merged["platform"] = merged["platform_main"].fillna(merged["platform_dev"])
-    main_val = pd.to_numeric(merged["value_main"], errors="coerce")
-    dev_val = pd.to_numeric(merged["value_dev"], errors="coerce")
-    delta = dev_val - main_val
-    pct = delta.where(main_val != 0).div(main_val.where(main_val != 0)) * 100.0
+    merged["platform"] = merged["platform_reference"].fillna(
+        merged["platform_candidate"]
+    )
+    reference_val = pd.to_numeric(merged["value_reference"], errors="coerce")
+    candidate_val = pd.to_numeric(merged["value_candidate"], errors="coerce")
+    delta = candidate_val - reference_val
+    pct = (
+        delta.where(reference_val != 0).div(reference_val.where(reference_val != 0))
+        * 100.0
+    )
     out = pd.DataFrame(
         {
             "group": merged["group"],
@@ -358,8 +369,8 @@ def compare_qc_numeric(
             "platform": merged["platform"],
             "stage": merged["stage"],
             "metric": merged["metric"],
-            "main": main_val,
-            "dev": dev_val,
+            "reference": reference_val,
+            "candidate": candidate_val,
             "delta": delta,
             "pct_change": pct,
         }
@@ -370,42 +381,52 @@ def compare_qc_numeric(
 
 
 def compare_qc_flags(
-    main: pd.DataFrame, dev: pd.DataFrame, flag_cols: list[str]
+    reference: pd.DataFrame, candidate: pd.DataFrame, flag_cols: list[str]
 ) -> pd.DataFrame:
     """Compare FASTQC pass/warn/fail flags per (group, sample, stage, check).
 
     Args:
-        main: Concatenated qc_basic_stats for main.
-        dev: Same for dev.
+        reference: Concatenated qc_basic_stats for the reference run.
+        candidate: Same for the candidate run.
         flag_cols: FASTQC flag column names (pass/warn/fail strings).
 
     Returns:
         Long DataFrame of only the flags that CHANGED: group, sample, stage,
-        check, main_flag, dev_flag.
+        check, reference_flag, candidate_flag.
     """
-    present = [c for c in flag_cols if c in main.columns and c in dev.columns]
-    long_main = main.melt(
-        id_vars=QC_KEYS, value_vars=present, var_name="check", value_name="main_flag"
+    present = [
+        c for c in flag_cols if c in reference.columns and c in candidate.columns
+    ]
+    long_reference = reference.melt(
+        id_vars=QC_KEYS,
+        value_vars=present,
+        var_name="check",
+        value_name="reference_flag",
     )
-    long_dev = dev.melt(
-        id_vars=QC_KEYS, value_vars=present, var_name="check", value_name="dev_flag"
+    long_candidate = candidate.melt(
+        id_vars=QC_KEYS,
+        value_vars=present,
+        var_name="check",
+        value_name="candidate_flag",
     )
-    merged = long_main.merge(long_dev, on=[*QC_KEYS, "check"], how="outer")
+    merged = long_reference.merge(long_candidate, on=[*QC_KEYS, "check"], how="outer")
     # Normalize missing flags to a sentinel: astype(str) leaves NaN as a float
     # NaN (NaN != NaN is True), which would spuriously flag NA-vs-NA as changed.
-    main_flag = merged["main_flag"].fillna("NA").astype(str)
-    dev_flag = merged["dev_flag"].fillna("NA").astype(str)
-    merged["main_flag"] = main_flag
-    merged["dev_flag"] = dev_flag
-    changed = main_flag != dev_flag
+    reference_flag = merged["reference_flag"].fillna("NA").astype(str)
+    candidate_flag = merged["candidate_flag"].fillna("NA").astype(str)
+    merged["reference_flag"] = reference_flag
+    merged["candidate_flag"] = candidate_flag
+    changed = reference_flag != candidate_flag
     return (
         merged[changed]
         .sort_values([*QC_KEYS, "check"])
-        .reset_index(drop=True)[[*QC_KEYS, "check", "main_flag", "dev_flag"]]
+        .reset_index(drop=True)[[*QC_KEYS, "check", "reference_flag", "candidate_flag"]]
     )
 
 
-def qc_read_survival(main_qc: pd.DataFrame, dev_qc: pd.DataFrame) -> pd.DataFrame:
+def qc_read_survival(
+    reference_qc: pd.DataFrame, candidate_qc: pd.DataFrame
+) -> pd.DataFrame:
     """Compare the raw->cleaned read-survival fraction per (group, sample).
 
     Survival is computed WITHIN each run as cleaned/raw read count, then compared
@@ -414,13 +435,14 @@ def qc_read_survival(main_qc: pd.DataFrame, dev_qc: pd.DataFrame) -> pd.DataFram
     count (which is masked when both runs subsample to the same depth upstream).
 
     Args:
-        main_qc: concatenated qc_basic_stats (raw + cleaned) for main.
-        dev_qc: same for dev.
+        reference_qc: concatenated qc_basic_stats (raw + cleaned) for the
+            reference run.
+        candidate_qc: same for the candidate run.
 
     Returns:
-        DataFrame: group, sample, platform, survival_main, survival_dev,
-        delta_pp (dev - main, in percentage points). survival_* are <NA> when a
-        stage is missing or raw count is 0.
+        DataFrame: group, sample, platform, survival_reference,
+        survival_candidate, delta_pp (candidate - reference, in percentage
+        points). survival_* are <NA> when a stage is missing or raw count is 0.
     """
 
     def survival(df: pd.DataFrame) -> pd.DataFrame:
@@ -439,16 +461,29 @@ def qc_read_survival(main_qc: pd.DataFrame, dev_qc: pd.DataFrame) -> pd.DataFram
         piv["survival"] = cleaned.where(raw > 0) / raw.where(raw > 0)
         return piv[["group", "sample", "platform", "survival"]]
 
-    a = survival(main_qc).rename(columns={"survival": "survival_main"})
-    b = survival(dev_qc).rename(columns={"survival": "survival_dev"})
-    merged = a.merge(b, on=["group", "sample"], how="outer", suffixes=("_main", "_dev"))
-    # Coalesce platform from both sides so a dev-only (or main-only) sample still
-    # carries a platform rather than dropping its survival row.
-    merged["platform"] = merged["platform_main"].fillna(merged["platform_dev"])
-    merged["delta_pp"] = (merged["survival_dev"] - merged["survival_main"]) * 100.0
+    a = survival(reference_qc).rename(columns={"survival": "survival_reference"})
+    b = survival(candidate_qc).rename(columns={"survival": "survival_candidate"})
+    merged = a.merge(
+        b, on=["group", "sample"], how="outer", suffixes=("_reference", "_candidate")
+    )
+    # Coalesce platform from both sides so a candidate-only (or reference-only)
+    # sample still carries a platform rather than dropping its survival row.
+    merged["platform"] = merged["platform_reference"].fillna(
+        merged["platform_candidate"]
+    )
+    merged["delta_pp"] = (
+        merged["survival_candidate"] - merged["survival_reference"]
+    ) * 100.0
     return (
         merged[
-            ["group", "sample", "platform", "survival_main", "survival_dev", "delta_pp"]
+            [
+                "group",
+                "sample",
+                "platform",
+                "survival_reference",
+                "survival_candidate",
+                "delta_pp",
+            ]
         ]
         .sort_values(["group", "sample"])
         .reset_index(drop=True)
@@ -493,25 +528,29 @@ def kraken_relative_abundance(df: pd.DataFrame, rank: str) -> pd.DataFrame:
     return agg
 
 
-def _merge_abundance(main: pd.DataFrame, dev: pd.DataFrame, rank: str) -> pd.DataFrame:
-    """Outer-join main/dev relative abundance at `rank`, filling absent taxa 0."""
-    a = kraken_relative_abundance(main, rank)
-    b = kraken_relative_abundance(dev, rank)
+def _merge_abundance(
+    reference: pd.DataFrame, candidate: pd.DataFrame, rank: str
+) -> pd.DataFrame:
+    """Outer-join reference/candidate relative abundance at `rank`, fill absent 0."""
+    a = kraken_relative_abundance(reference, rank)
+    b = kraken_relative_abundance(candidate, rank)
     merged = a.merge(
         b,
         on=["group", "ribosomal", "taxid"],
         how="outer",
-        suffixes=("_main", "_dev"),
+        suffixes=("_reference", "_candidate"),
     )
-    merged["rel_main"] = merged["rel_main"].fillna(0.0)
-    merged["rel_dev"] = merged["rel_dev"].fillna(0.0)
-    merged["name"] = merged["name_main"].fillna(merged["name_dev"])
-    merged["abs_diff"] = (merged["rel_main"] - merged["rel_dev"]).abs()
+    merged["rel_reference"] = merged["rel_reference"].fillna(0.0)
+    merged["rel_candidate"] = merged["rel_candidate"].fillna(0.0)
+    merged["name"] = merged["name_reference"].fillna(merged["name_candidate"])
+    merged["abs_diff"] = (merged["rel_reference"] - merged["rel_candidate"]).abs()
     return merged
 
 
 def kraken_bray_curtis(
-    main: pd.DataFrame, dev: pd.DataFrame, ranks: tuple[str, ...] = KRAKEN_RANKS
+    reference: pd.DataFrame,
+    candidate: pd.DataFrame,
+    ranks: tuple[str, ...] = KRAKEN_RANKS,
 ) -> pd.DataFrame:
     """Bray-Curtis dissimilarity per (group, ribosomal, rank).
 
@@ -523,7 +562,7 @@ def kraken_bray_curtis(
     """
     records: list[dict[str, object]] = []
     for rank in ranks:
-        merged = _merge_abundance(main, dev, rank)
+        merged = _merge_abundance(reference, candidate, rank)
         grouped = merged.groupby(["group", "ribosomal"])
         for (group, ribosomal), sub in grouped:
             # Bray-Curtis = sum|x_i - y_i| / (sum x + sum y). When both sides sum
@@ -531,7 +570,7 @@ def kraken_bray_curtis(
             # set has reads on only one side the other side sums to 0, and this
             # general form correctly yields 1.0 (disjoint) rather than 0.5. Both
             # sides empty -> undefined (NaN).
-            denom = sub["rel_main"].sum() + sub["rel_dev"].sum()
+            denom = sub["rel_reference"].sum() + sub["rel_candidate"].sum()
             bc = sub["abs_diff"].sum() / denom if denom > 0 else float("nan")
             records.append(
                 {
@@ -553,21 +592,22 @@ def kraken_bray_curtis(
 
 
 def kraken_top_movers(
-    main: pd.DataFrame,
-    dev: pd.DataFrame,
+    reference: pd.DataFrame,
+    candidate: pd.DataFrame,
     rank: str,
     n: int = 10,
 ) -> pd.DataFrame:
     """Top `n` taxa by absolute abundance change per (group, ribosomal) at `rank`.
 
     Returns:
-        DataFrame: group, ribosomal, rank, taxid, name, pct_main, pct_dev,
-        delta_pp (percentage-point change, dev - main), ordered by |delta_pp|.
+        DataFrame: group, ribosomal, rank, taxid, name, pct_reference,
+        pct_candidate, delta_pp (percentage-point change, candidate - reference),
+        ordered by |delta_pp|.
     """
-    merged = _merge_abundance(main, dev, rank)
-    merged["pct_main"] = merged["rel_main"] * 100.0
-    merged["pct_dev"] = merged["rel_dev"] * 100.0
-    merged["delta_pp"] = merged["pct_dev"] - merged["pct_main"]
+    merged = _merge_abundance(reference, candidate, rank)
+    merged["pct_reference"] = merged["rel_reference"] * 100.0
+    merged["pct_candidate"] = merged["rel_candidate"] * 100.0
+    merged["delta_pp"] = merged["pct_candidate"] - merged["pct_reference"]
     merged["rank"] = rank
     # taxid tiebreaker so the top-n cutoff is deterministic when taxa tie on
     # abs_diff right at the boundary.
@@ -586,8 +626,8 @@ def kraken_top_movers(
             "rank",
             "taxid",
             "name",
-            "pct_main",
-            "pct_dev",
+            "pct_reference",
+            "pct_candidate",
             "delta_pp",
         ]
     ].reset_index(drop=True)
@@ -625,8 +665,9 @@ VIRUSES_TAXID = 10239
 # ancestor is the tree root (e.g. a virus reassigned to a cellular organism).
 SHARED_HIGHER = "shared-higher-taxon"
 CROSS_ROOT = "cross-root"
-# A taxid that is not present in the (dev) taxonomy at all — e.g. a main-side
-# assignment whose taxid was merged or deleted by the time of the dev taxonomy.
+# A taxid that is not present in the candidate-index taxonomy at all — e.g. a
+# reference-side assignment whose taxid was merged or deleted by the time of the
+# candidate-index taxonomy.
 # This is a taxonomy-versioning artifact, NOT a severe biological reassignment,
 # so it gets its own bucket rather than being lumped into cross-root.
 UNRESOLVED_TAXID = "unresolved-taxid"
@@ -740,8 +781,8 @@ def vertebrate_taxids(annotated_db: pd.DataFrame, host: str = "vertebrate") -> s
 
 
 def join_read_assignments(
-    main_vh: pd.DataFrame,
-    dev_vh: pd.DataFrame,
+    reference_vh: pd.DataFrame,
+    candidate_vh: pd.DataFrame,
     merge_map: dict[int, int] | None = None,
 ) -> pd.DataFrame:
     """Join per-read pipeline assignments across sides.
@@ -750,58 +791,60 @@ def join_read_assignments(
     sides, else (group, seq_id); raises on duplicate keys.
 
     Args:
-        main_vh: validation_hits for main (needs group, seq_id, aligner_taxid_lca;
-            sample used for the key when present).
-        dev_vh: validation_hits for dev (same columns).
-        merge_map: optional {old_taxid: canonical_taxid} from the dev index's
-            merged.dmp, applied to both sides so taxid renumbering across index
-            versions is not counted as a reassignment.
+        reference_vh: validation_hits for the reference run (needs group, seq_id,
+            aligner_taxid_lca; sample used for the key when present).
+        candidate_vh: validation_hits for the candidate run (same columns).
+        merge_map: optional {old_taxid: canonical_taxid} from the candidate
+            index's merged.dmp, applied to both sides so taxid renumbering across
+            index versions is not counted as a reassignment.
 
     Returns:
-        DataFrame: group, seq_id, taxid_main, taxid_dev, status, where status is
-        'lost' (main only), 'gained' (dev only), 'same' (shared, same taxid), or
-        'reassigned' (shared, different taxid).
+        DataFrame: group, seq_id, taxid_reference, taxid_candidate, status, where
+        status is 'lost' (reference only), 'gained' (candidate only), 'same'
+        (shared, same taxid), or 'reassigned' (shared, different taxid).
     """
     # Include sample in the join key when available: seq_id is the instrument
     # query name, unique only within a sample, and a group can hold several
     # samples — so (group, seq_id) alone risks a many-to-many cartesian merge.
-    if "sample" in main_vh.columns and "sample" in dev_vh.columns:
+    if "sample" in reference_vh.columns and "sample" in candidate_vh.columns:
         key = ["group", "sample", "seq_id"]
     else:
         key = ["group", "seq_id"]
-    m = main_vh[[*key, "aligner_taxid_lca"]].rename(
-        columns={"aligner_taxid_lca": "taxid_main"}
+    m = reference_vh[[*key, "aligner_taxid_lca"]].rename(
+        columns={"aligner_taxid_lca": "taxid_reference"}
     )
-    d = dev_vh[[*key, "aligner_taxid_lca"]].rename(
-        columns={"aligner_taxid_lca": "taxid_dev"}
+    d = candidate_vh[[*key, "aligner_taxid_lca"]].rename(
+        columns={"aligner_taxid_lca": "taxid_candidate"}
     )
-    for side, df in (("main", m), ("dev", d)):
+    for side, df in (("reference", m), ("candidate", d)):
         if df.duplicated(key).any():
             raise ValueError(
                 f"Duplicate {key} rows in {side} validation_hits; cannot join "
                 "reads unambiguously."
             )
     if merge_map:
-        # Canonicalize taxids through the dev index's merged.dmp so a read that
-        # only changed because its taxid was merged across index versions is not
-        # counted as a biological reassignment.
-        m["taxid_main"] = m["taxid_main"].map(lambda t: merge_map.get(t, t))
-        d["taxid_dev"] = d["taxid_dev"].map(lambda t: merge_map.get(t, t))
+        # Canonicalize taxids through the candidate index's merged.dmp so a read
+        # that only changed because its taxid was merged across index versions is
+        # not counted as a biological reassignment.
+        m["taxid_reference"] = m["taxid_reference"].map(lambda t: merge_map.get(t, t))
+        d["taxid_candidate"] = d["taxid_candidate"].map(lambda t: merge_map.get(t, t))
     merged = m.merge(d, on=key, how="outer", indicator=True)
-    merged["taxid_main"] = merged["taxid_main"].astype("Int64")
-    merged["taxid_dev"] = merged["taxid_dev"].astype("Int64")
+    merged["taxid_reference"] = merged["taxid_reference"].astype("Int64")
+    merged["taxid_candidate"] = merged["taxid_candidate"].astype("Int64")
     status = pd.Series("same", index=merged.index, dtype="object")
     status[merged["_merge"] == "left_only"] = "lost"
     status[merged["_merge"] == "right_only"] = "gained"
     both = merged["_merge"] == "both"
     # NA != value is <NA> in pandas; .fillna(True) so a malformed missing taxid on
     # a shared read is treated as reassigned, never silently "same".
-    reassigned = both & (merged["taxid_main"] != merged["taxid_dev"]).fillna(True)
+    reassigned = both & (merged["taxid_reference"] != merged["taxid_candidate"]).fillna(
+        True
+    )
     status[reassigned] = "reassigned"
     merged["status"] = status
     # Keep sample in the output when it was part of the key, so repeated seq_id
     # values stay individually traceable in the per-read detail.
-    out_cols = ["group", "seq_id", "taxid_main", "taxid_dev", "status"]
+    out_cols = ["group", "seq_id", "taxid_reference", "taxid_candidate", "status"]
     if "sample" in key:
         out_cols.insert(1, "sample")
     return merged[out_cols]
@@ -810,9 +853,9 @@ def join_read_assignments(
 def _add_vertebrate_flag(joined: pd.DataFrame, vert: set[int]) -> pd.DataFrame:
     """Add is_vertebrate: assigned taxid (either side) is vertebrate-infecting."""
     out = joined.copy()
-    main_vert = out["taxid_main"].isin(vert)
-    dev_vert = out["taxid_dev"].isin(vert)
-    out["is_vertebrate"] = main_vert | dev_vert
+    reference_vert = out["taxid_reference"].isin(vert)
+    candidate_vert = out["taxid_candidate"].isin(vert)
+    out["is_vertebrate"] = reference_vert | candidate_vert
     return out
 
 
@@ -820,10 +863,10 @@ def summarize_read_status(joined: pd.DataFrame, vert: set[int]) -> pd.DataFrame:
     """Per-group read-status counts, for all reads and the vertebrate subset.
 
     Returns:
-        DataFrame: group, scope ('all'|'vertebrate'), n_main, n_dev, n_shared,
-        n_same, n_reassigned, n_lost, n_gained, and three percentages with
-        DIFFERENT denominators: pct_lost = lost/n_main, pct_gained = gained/n_dev,
-        pct_reassigned = reassigned/n_shared.
+        DataFrame: group, scope ('all'|'vertebrate'), n_reference, n_candidate,
+        n_shared, n_same, n_reassigned, n_lost, n_gained, and three percentages
+        with DIFFERENT denominators: pct_lost = lost/n_reference,
+        pct_gained = gained/n_candidate, pct_reassigned = reassigned/n_shared.
     """
     flagged = _add_vertebrate_flag(joined, vert)
     all_groups = sorted(flagged["group"].unique())
@@ -842,22 +885,24 @@ def summarize_read_status(joined: pd.DataFrame, vert: set[int]) -> pd.DataFrame:
             n_gained = int(counts.get("gained", 0))
             n_same = int(counts.get("same", 0))
             n_reassigned = int(counts.get("reassigned", 0))
-            n_main = n_lost + n_same + n_reassigned
-            n_dev = n_gained + n_same + n_reassigned
+            n_reference = n_lost + n_same + n_reassigned
+            n_candidate = n_gained + n_same + n_reassigned
             n_shared = n_same + n_reassigned
             records.append(
                 {
                     "group": group,
                     "scope": scope,
-                    "n_main": n_main,
-                    "n_dev": n_dev,
+                    "n_reference": n_reference,
+                    "n_candidate": n_candidate,
                     "n_shared": n_shared,
                     "n_same": n_same,
                     "n_reassigned": n_reassigned,
                     "n_lost": n_lost,
                     "n_gained": n_gained,
-                    "pct_lost": 100.0 * n_lost / n_main if n_main else None,
-                    "pct_gained": 100.0 * n_gained / n_dev if n_dev else None,
+                    "pct_lost": 100.0 * n_lost / n_reference if n_reference else None,
+                    "pct_gained": (
+                        100.0 * n_gained / n_candidate if n_candidate else None
+                    ),
                     "pct_reassigned": (
                         100.0 * n_reassigned / n_shared if n_shared else None
                     ),
@@ -868,8 +913,8 @@ def summarize_read_status(joined: pd.DataFrame, vert: set[int]) -> pd.DataFrame:
         columns=[
             "group",
             "scope",
-            "n_main",
-            "n_dev",
+            "n_reference",
+            "n_candidate",
             "n_shared",
             "n_same",
             "n_reassigned",
@@ -887,13 +932,13 @@ def reassignment_distances(
 ) -> pd.DataFrame:
     """Divergence bucket for each reassigned read.
 
-    Computes the bucket once per distinct (taxid_main, taxid_dev) pair (cached in
-    the tree) and joins back to reads.
+    Computes the bucket once per distinct (taxid_reference, taxid_candidate) pair
+    (cached in the tree) and joins back to reads.
 
     Returns:
-        DataFrame of reassigned reads: group, scope, seq_id, taxid_main,
-        taxid_dev, bucket. Emitted for scope 'all' and 'vertebrate' (vertebrate
-        rows are a subset, re-labelled).
+        DataFrame of reassigned reads: group, scope, seq_id, taxid_reference,
+        taxid_candidate, bucket. Emitted for scope 'all' and 'vertebrate'
+        (vertebrate rows are a subset, re-labelled).
     """
     flagged = _add_vertebrate_flag(joined, vert)
     reassigned = flagged[flagged["status"] == "reassigned"].copy()
@@ -903,8 +948,8 @@ def reassignment_distances(
             "group",
             "scope",
             "seq_id",
-            "taxid_main",
-            "taxid_dev",
+            "taxid_reference",
+            "taxid_candidate",
             "bucket",
         ]
         if "sample" in joined.columns:
@@ -918,16 +963,18 @@ def reassignment_distances(
             return None
         return (int(a), int(b))
 
-    pairs = reassigned[["taxid_main", "taxid_dev"]].drop_duplicates()
+    pairs = reassigned[["taxid_reference", "taxid_candidate"]].drop_duplicates()
     bucket_map: dict[tuple[int, int] | None, str] = {None: UNRESOLVED_TAXID}
-    for a, b in zip(pairs["taxid_main"], pairs["taxid_dev"], strict=True):
+    for a, b in zip(pairs["taxid_reference"], pairs["taxid_candidate"], strict=True):
         key = _pair_key(a, b)
         if key is None:
             continue
         bucket_map[key] = tax.divergence_bucket(*key)
     keys = [
         _pair_key(a, b)
-        for a, b in zip(reassigned["taxid_main"], reassigned["taxid_dev"], strict=True)
+        for a, b in zip(
+            reassigned["taxid_reference"], reassigned["taxid_candidate"], strict=True
+        )
     ]
     reassigned["bucket"] = [bucket_map[k] for k in keys]
 
@@ -941,8 +988,8 @@ def reassignment_distances(
         "group",
         "scope",
         "seq_id",
-        "taxid_main",
-        "taxid_dev",
+        "taxid_reference",
+        "taxid_candidate",
         "bucket",
     ]
     if "sample" in out.columns:
@@ -955,8 +1002,9 @@ def bucket_summary(reassignment_detail: pd.DataFrame) -> pd.DataFrame:
 
     Every canonical bucket is emitted for each scope (0 when none) so a reader can
     tell "0 reads" from "not checked" — e.g. a 0 in `unresolved-taxid` is the
-    reassuring result that no assignment used a taxid missing from the dev
-    taxonomy. unresolved-taxid sits at the FRONT, outside the same-species ->
+    reassuring result that no assignment used a taxid missing from the
+    candidate-index taxonomy. unresolved-taxid sits at the FRONT, outside the
+    same-species ->
     cross-root biological severity gradient (placing it after cross-root would
     wrongly read as the most severe category).
 
@@ -996,7 +1044,8 @@ def reassignment_concentration(reassignment_detail: pd.DataFrame) -> pd.DataFram
     A high read-level reassignment % can come from one systematic taxid remap
     counted across many (possibly duplicate) reads. This reports, per
     (group, scope): the reassigned read count, the number of distinct
-    (taxid_main, taxid_dev) pairs, the top pair, and the fraction of reassigned
+    (taxid_reference, taxid_candidate) pairs, the top pair, and the fraction of
+    reassigned
     reads it accounts for, so a reviewer can tell broad instability from a single
     clade-wide LCA shift.
 
@@ -1019,11 +1068,13 @@ def reassignment_concentration(reassignment_detail: pd.DataFrame) -> pd.DataFram
     for (group, scope), sub in reassignment_detail.groupby(["group", "scope"]):
         # dropna=False so reads with a missing taxid (non-conformant input) are
         # still counted as their own pair rather than silently dropped.
-        pair_counts = sub.groupby(["taxid_main", "taxid_dev"], dropna=False).size()
+        pair_counts = sub.groupby(
+            ["taxid_reference", "taxid_candidate"], dropna=False
+        ).size()
         n = int(pair_counts.sum())
         if pair_counts.empty:
             continue
-        top_main, top_dev = cast(tuple[object, object], pair_counts.idxmax())
+        top_reference, top_candidate = cast(tuple[object, object], pair_counts.idxmax())
         top_reads = int(pair_counts.max())
 
         def _fmt(t: Any) -> str:
@@ -1035,7 +1086,7 @@ def reassignment_concentration(reassignment_detail: pd.DataFrame) -> pd.DataFram
                 "scope": scope,
                 "n_reassigned": n,
                 "n_distinct_pairs": int(pair_counts.size),
-                "top_pair": f"{_fmt(top_main)}->{_fmt(top_dev)}",
+                "top_pair": f"{_fmt(top_reference)}->{_fmt(top_candidate)}",
                 "top_pair_reads": top_reads,
                 "top_pair_frac": top_reads / n if n else None,
             }
@@ -1051,24 +1102,33 @@ def reassignment_pair_counts(reassignment_detail: pd.DataFrame) -> pd.DataFrame:
     """Per-(group, scope, taxid pair) reassigned-read counts with bucket.
 
     A compact aggregate of the reassignment detail: one row per distinct
-    (group, scope, taxid_main, taxid_dev) with its bucket and read count. Unlike
-    `reassignment_concentration` (top pair per group only), this keeps EVERY pair,
-    so the report can name example pairs for any bucket — e.g. a severe
-    cross-root or shared-higher-taxon pair that is not a group's single top pair.
+    (group, scope, taxid_reference, taxid_candidate) with its bucket and read
+    count. Unlike `reassignment_concentration` (top pair per group only), this
+    keeps EVERY pair, so the report can name example pairs for any bucket — e.g. a
+    severe cross-root or shared-higher-taxon pair that is not a group's single top
+    pair.
 
     Returns:
-        DataFrame: group, scope, taxid_main, taxid_dev, bucket, n_reads, sorted by
-        group, scope, bucket, n_reads (desc). Empty (header-only) when there are no
-        reassigned reads.
+        DataFrame: group, scope, taxid_reference, taxid_candidate, bucket,
+        n_reads, sorted by group, scope, bucket, n_reads (desc). Empty
+        (header-only) when there are no reassigned reads.
     """
-    cols = ["group", "scope", "taxid_main", "taxid_dev", "bucket", "n_reads"]
+    cols = [
+        "group",
+        "scope",
+        "taxid_reference",
+        "taxid_candidate",
+        "bucket",
+        "n_reads",
+    ]
     if reassignment_detail.empty:
         return pd.DataFrame(columns=cols)
     counts = (
         # dropna=False so a pair with a missing taxid (non-conformant input) is
         # still counted rather than silently dropped.
         reassignment_detail.groupby(
-            ["group", "scope", "taxid_main", "taxid_dev", "bucket"], dropna=False
+            ["group", "scope", "taxid_reference", "taxid_candidate", "bucket"],
+            dropna=False,
         )
         .size()
         .reset_index(name="n_reads")
@@ -1080,8 +1140,8 @@ def reassignment_pair_counts(reassignment_detail: pd.DataFrame) -> pd.DataFrame:
 
 
 def clade_rank_shares(
-    clade_main: pd.DataFrame,
-    clade_dev: pd.DataFrame,
+    clade_reference: pd.DataFrame,
+    clade_candidate: pd.DataFrame,
     rank_map: dict[int, str],
     name_map: dict[int, str],
     rank_levels: tuple[str, ...] = ("family", "order"),
@@ -1100,26 +1160,28 @@ def clade_rank_shares(
     or falling. A total-viral denominator moves only when a clade's own reads or
     the group's total viral reads move, so the sign of `delta_pp` is meaningful.
 
-    Rank is looked up from the dev index's full NCBI taxonomy (nodes.dmp); a taxid
-    deleted from the dev taxonomy drops from this table. Raw counts (`reads_main`,
-    `reads_dev`, `delta_reads`) are reported alongside the shares so a reviewer
-    can read the absolute change directly.
+    Rank is looked up from the candidate index's full NCBI taxonomy (nodes.dmp); a
+    taxid deleted from the candidate-index taxonomy drops from this table. Raw
+    counts (`reads_reference`, `reads_candidate`, `delta_reads`) are reported
+    alongside the shares so a reviewer can read the absolute change directly.
 
     Args:
-        clade_main: clade_counts for main (group, taxid, reads_clade_* columns).
-        clade_dev: clade_counts for dev.
-        rank_map: taxid -> rank from the dev taxonomy (complete).
-        name_map: taxid -> name (from the dev index's annotated DB; taxids absent
-            from it fall back to their stringified taxid).
+        clade_reference: clade_counts for the reference run (group, taxid,
+            reads_clade_* columns).
+        clade_candidate: clade_counts for the candidate run.
+        rank_map: taxid -> rank from the candidate-index taxonomy (complete).
+        name_map: taxid -> name (from the candidate index's annotated DB; taxids
+            absent from it fall back to their stringified taxid).
         rank_levels: taxonomic ranks to roll up to.
         count_cols: which clade-count columns to compute shares for.
 
     Returns:
-        Long DataFrame: group, rank_level, count_type, taxid, name, reads_main,
-        reads_dev, delta_reads (dev - main), share_main, share_dev (each a share
-        of the group's total viral reads), delta_pp (share change in pp). If a
-        group has no Viruses-root (10239) row, its denominator is missing and the
-        shares (and delta_pp) are NaN for that group.
+        Long DataFrame: group, rank_level, count_type, taxid, name,
+        reads_reference, reads_candidate, delta_reads (candidate - reference),
+        share_reference, share_candidate (each a share of the group's total viral
+        reads), delta_pp (share change in pp). If a group has no Viruses-root
+        (10239) row, its denominator is missing and the shares (and delta_pp) are
+        NaN for that group.
     """
 
     def viral_totals(df: pd.DataFrame, count_col: str) -> dict[object, float]:
@@ -1147,28 +1209,32 @@ def clade_rank_shares(
             # Groups that have a (nonzero) Viruses-root on each side: a family
             # absent from such a group has share 0, but in a group with NO root the
             # share is genuinely undefined (NaN), so the two cases stay distinct.
-            main_root_groups = {
-                g for g, v in viral_totals(clade_main, count_col).items() if v
+            reference_root_groups = {
+                g for g, v in viral_totals(clade_reference, count_col).items() if v
             }
-            dev_root_groups = {
-                g for g, v in viral_totals(clade_dev, count_col).items() if v
+            candidate_root_groups = {
+                g for g, v in viral_totals(clade_candidate, count_col).items() if v
             }
-            a = side_shares(clade_main, rank_level, count_col).rename(
-                columns={count_col: "reads_main", "share": "share_main"}
+            a = side_shares(clade_reference, rank_level, count_col).rename(
+                columns={count_col: "reads_reference", "share": "share_reference"}
             )
-            b = side_shares(clade_dev, rank_level, count_col).rename(
-                columns={count_col: "reads_dev", "share": "share_dev"}
+            b = side_shares(clade_candidate, rank_level, count_col).rename(
+                columns={count_col: "reads_candidate", "share": "share_candidate"}
             )
             merged = a.merge(b, on=["group", "taxid"], how="outer")
             # Raw counts default to 0 for a side where the family is absent.
-            for col in ("reads_main", "reads_dev"):
+            for col in ("reads_reference", "reads_candidate"):
                 merged[col] = merged[col].fillna(0.0)
             # Fill an absent family's share with 0 only when its group HAS a root on
             # that side; leave NaN (no-root) groups NaN so they stay surfaced.
-            main_has_root = merged["group"].isin(main_root_groups)
-            dev_has_root = merged["group"].isin(dev_root_groups)
-            merged.loc[merged["share_main"].isna() & main_has_root, "share_main"] = 0.0
-            merged.loc[merged["share_dev"].isna() & dev_has_root, "share_dev"] = 0.0
+            reference_has_root = merged["group"].isin(reference_root_groups)
+            candidate_has_root = merged["group"].isin(candidate_root_groups)
+            merged.loc[
+                merged["share_reference"].isna() & reference_has_root, "share_reference"
+            ] = 0.0
+            merged.loc[
+                merged["share_candidate"].isna() & candidate_has_root, "share_candidate"
+            ] = 0.0
             merged["name"] = (
                 merged["taxid"]
                 .astype(int)
@@ -1177,8 +1243,12 @@ def clade_rank_shares(
             )
             merged["rank_level"] = rank_level
             merged["count_type"] = count_col
-            merged["delta_reads"] = merged["reads_dev"] - merged["reads_main"]
-            merged["delta_pp"] = (merged["share_dev"] - merged["share_main"]) * 100.0
+            merged["delta_reads"] = (
+                merged["reads_candidate"] - merged["reads_reference"]
+            )
+            merged["delta_pp"] = (
+                merged["share_candidate"] - merged["share_reference"]
+            ) * 100.0
             frames.append(merged)
     out = pd.concat(frames, ignore_index=True)
     return (
@@ -1189,11 +1259,11 @@ def clade_rank_shares(
                 "count_type",
                 "taxid",
                 "name",
-                "reads_main",
-                "reads_dev",
+                "reads_reference",
+                "reads_candidate",
                 "delta_reads",
-                "share_main",
-                "share_dev",
+                "share_reference",
+                "share_candidate",
                 "delta_pp",
             ]
         ]
@@ -1257,8 +1327,8 @@ def vertebrate_status_flips(
     """Taxa whose host-infecting status (==1) flipped between two index annotations.
 
     Args:
-        old_annotated: annotated viral DB from the old (main) index.
-        new_annotated: annotated viral DB from the new (dev) index.
+        old_annotated: annotated viral DB from the reference index.
+        new_annotated: annotated viral DB from the candidate index.
         host: host group name.
 
     Returns:
@@ -1302,7 +1372,7 @@ DEFAULT_THRESHOLDS: dict[str, float] = {
     "qc_pct_change": 10.0,  # |%| change in other qc metrics
     "bray_curtis": 0.15,  # kraken whole-profile dissimilarity
     "viral_pct_lost": 2.0,  # |%| of vertebrate-viral reads lost
-    "viral_pct_gained": 25.0,  # |%| of dev vertebrate-viral reads that are new
+    "viral_pct_gained": 25.0,  # |%| of candidate vertebrate-viral reads that are new
     "viral_pct_reassigned": 10.0,  # |%| of shared reads reassigned
     "clade_share_pp": 3.0,  # |pp| change in a family/order share
     "validation_agreement_drop": 0.10,  # drop in BLAST-agreement rate
@@ -1461,9 +1531,11 @@ def build_flags(
         )
 
     val = outputs.get("viral_validation_agreement")
-    if val is not None and not val.empty and "agreement_rate_main" in val.columns:
+    if val is not None and not val.empty and "agreement_rate_reference" in val.columns:
         v = val.copy()
-        v["agreement_drop"] = v["agreement_rate_main"] - v["agreement_rate_dev"]
+        v["agreement_drop"] = (
+            v["agreement_rate_reference"] - v["agreement_rate_candidate"]
+        )
         records += _flag_records(
             v,
             "agreement_drop",

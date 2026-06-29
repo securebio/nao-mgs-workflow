@@ -32,63 +32,69 @@ def _manifest(spec: dict[str, tuple[str, dict[str, dm.FileEntry]]]) -> dm.SideMa
 
 class TestCompareFileInventory:
     def test_row_delta_and_pct(self) -> None:
-        main = _manifest(
+        reference = _manifest(
             {"G1": ("illumina", {"validation_hits": _entry(n_rows=100, columns=["a"])})}
         )
-        dev = _manifest(
+        candidate = _manifest(
             {"G1": ("illumina", {"validation_hits": _entry(n_rows=150, columns=["a"])})}
         )
-        df = dm.compare_file_inventory(main, dev)
+        df = dm.compare_file_inventory(reference, candidate)
         row = df.iloc[0]
         assert row.row_delta == 50
         assert row.row_pct_change == 50.0
-        assert row.in_main and row.in_dev
+        assert row.in_reference and row.in_candidate
 
     def test_presence_mismatch_one_side(self) -> None:
-        main = _manifest({"G1": ("ont", {"kraken": _entry(n_rows=10, columns=["t"])})})
-        dev = _manifest(
+        reference = _manifest(
+            {"G1": ("ont", {"kraken": _entry(n_rows=10, columns=["t"])})}
+        )
+        candidate = _manifest(
             {
                 "G1": ("ont", {"kraken": _entry(n_rows=10, columns=["t"])}),
                 "G2": ("ont", {"kraken": _entry(n_rows=5, columns=["t"])}),
             }
         )
-        df = dm.compare_file_inventory(main, dev)
+        df = dm.compare_file_inventory(reference, candidate)
         g2 = df[df.group == "G2"].iloc[0]
-        assert not g2.in_main
-        assert g2.in_dev
+        assert not g2.in_reference
+        assert g2.in_candidate
         # No row count on the absent side -> delta is null, not a spurious number.
         assert pd.isna(g2.row_delta)
 
-    def test_zero_rows_main_gives_null_pct_not_divide_by_zero(self) -> None:
-        main = _manifest(
+    def test_zero_rows_reference_gives_null_pct_not_divide_by_zero(self) -> None:
+        reference = _manifest(
             {"G1": ("illumina", {"bracken": _entry(n_rows=0, columns=[])})}
         )
-        dev = _manifest({"G1": ("illumina", {"bracken": _entry(n_rows=3, columns=[])})})
-        df = dm.compare_file_inventory(main, dev)
+        candidate = _manifest(
+            {"G1": ("illumina", {"bracken": _entry(n_rows=3, columns=[])})}
+        )
+        df = dm.compare_file_inventory(reference, candidate)
         row = df.iloc[0]
         assert row.row_delta == 3
         assert pd.isna(row.row_pct_change)
 
     def test_json_file_has_null_rows(self) -> None:
-        main = _manifest({"G1": ("illumina", {"fastp": _entry(n_rows=None)})})
-        dev = _manifest({"G1": ("illumina", {"fastp": _entry(n_rows=None)})})
-        df = dm.compare_file_inventory(main, dev)
+        reference = _manifest({"G1": ("illumina", {"fastp": _entry(n_rows=None)})})
+        candidate = _manifest({"G1": ("illumina", {"fastp": _entry(n_rows=None)})})
+        df = dm.compare_file_inventory(reference, candidate)
         row = df.iloc[0]
-        assert row.in_main and row.in_dev
-        assert pd.isna(row.n_rows_main) and pd.isna(row.row_delta)
+        assert row.in_reference and row.in_candidate
+        assert pd.isna(row.n_rows_reference) and pd.isna(row.row_delta)
 
     def test_platform_mismatch_unions_expected_types(self) -> None:
-        # Illumina on main, ONT on dev (degraded): report the mismatch and still
+        # Illumina on reference, ONT on candidate (degraded): report the mismatch and still
         # surface Illumina-only expected types missing on both sides.
-        main = _manifest(
+        reference = _manifest(
             {"G": ("illumina", {"clade_counts": _entry(n_rows=1, columns=["t"])})}
         )
-        dev = _manifest({"G": ("ont", {"kraken": _entry(n_rows=1, columns=["t"])})})
+        candidate = _manifest(
+            {"G": ("ont", {"kraken": _entry(n_rows=1, columns=["t"])})}
+        )
         expected = {
             "illumina": {"clade_counts", "kraken", "bracken"},
             "ont": {"kraken"},
         }
-        df = dm.compare_file_inventory(main, dev, expected)
+        df = dm.compare_file_inventory(reference, candidate, expected)
         assert "mismatch" in df.iloc[0].platform
         # bracken is illumina-expected and absent on both sides -> still a row.
         assert (df.file_type == "bracken").any()
@@ -105,9 +111,9 @@ class TestCompareColumnsToSchema:
         man = _manifest({"G1": ("illumina", {"validation_hits": _entry(columns=cols)})})
         df = dm.compare_columns_to_schema(man, man, {"validation_hits": cols})
         row = df.iloc[0]
-        assert row.missing_vs_schema_main == ""
-        assert row.extra_vs_schema_main == ""
-        assert row.groups_consistent_main
+        assert row.missing_vs_schema_reference == ""
+        assert row.extra_vs_schema_reference == ""
+        assert row.groups_consistent_reference
 
     def test_empty_file_reports_empty_marker_not_full_schema(self) -> None:
         man = _manifest({"G1": ("illumina", {"bracken": _entry(n_rows=0, columns=[])})})
@@ -115,19 +121,21 @@ class TestCompareColumnsToSchema:
             man, man, {"bracken": ["taxid", "name", "fraction_total_reads"]}
         )
         row = df.iloc[0]
-        assert row.missing_vs_schema_main == "(empty file)"
-        assert row.missing_vs_schema_dev == "(empty file)"
+        assert row.missing_vs_schema_reference == "(empty file)"
+        assert row.missing_vs_schema_candidate == "(empty file)"
 
-    def test_column_added_in_dev_is_flagged(self) -> None:
-        main = _manifest({"G1": ("illumina", {"kraken": _entry(columns=["taxid"])})})
-        dev = _manifest(
+    def test_column_added_in_candidate_is_flagged(self) -> None:
+        reference = _manifest(
+            {"G1": ("illumina", {"kraken": _entry(columns=["taxid"])})}
+        )
+        candidate = _manifest(
             {"G1": ("illumina", {"kraken": _entry(columns=["taxid", "new_col"])})}
         )
-        df = dm.compare_columns_to_schema(main, dev, {"kraken": ["taxid"]})
+        df = dm.compare_columns_to_schema(reference, candidate, {"kraken": ["taxid"]})
         row = df.iloc[0]
-        # A column added on dev but absent from the schema surfaces as extra.
-        assert row.extra_vs_schema_dev == "new_col"
-        assert row.extra_vs_schema_main == ""
+        # A column added on candidate but absent from the schema surfaces as extra.
+        assert row.extra_vs_schema_candidate == "new_col"
+        assert row.extra_vs_schema_reference == ""
 
     def test_file_type_without_schema_still_reported(self) -> None:
         man = _manifest({"G1": ("illumina", {"mystery": _entry(columns=["x"])})})
@@ -136,33 +144,37 @@ class TestCompareColumnsToSchema:
         # Without a schema we can't judge missing/extra; has_schema=False is the
         # signal that an output lacks a schema entirely.
         assert not row.has_schema
-        assert row.extra_vs_schema_main == ""
+        assert row.extra_vs_schema_reference == ""
 
     def test_groups_inconsistent_columns_within_side_flagged(self) -> None:
-        # Two groups on the main side disagree on kraken columns; the first-group
-        # header alone would hide it, so groups_consistent_main must be False.
-        main = _manifest(
+        # Two groups on the reference side disagree on kraken columns; the first-group
+        # header alone would hide it, so groups_consistent_reference must be False.
+        reference = _manifest(
             {
                 "G1": ("illumina", {"kraken": _entry(columns=["taxid", "name"])}),
                 "G2": ("illumina", {"kraken": _entry(columns=["taxid"])}),
             }
         )
-        df = dm.compare_columns_to_schema(main, main, {"kraken": ["taxid", "name"]})
+        df = dm.compare_columns_to_schema(
+            reference, reference, {"kraken": ["taxid", "name"]}
+        )
         row = df[df.file_type == "kraken"].iloc[0]
-        assert not row.groups_consistent_main
+        assert not row.groups_consistent_reference
 
     def test_later_group_missing_column_is_aggregated(self) -> None:
         # First group conforms, a LATER group drops a required column: the missing
         # field must still be reported (aggregated across all group headers).
-        main = _manifest(
+        reference = _manifest(
             {
                 "G1": ("illumina", {"kraken": _entry(columns=["taxid", "name"])}),
                 "G2": ("illumina", {"kraken": _entry(columns=["taxid"])}),
             }
         )
-        df = dm.compare_columns_to_schema(main, main, {"kraken": ["taxid", "name"]})
+        df = dm.compare_columns_to_schema(
+            reference, reference, {"kraken": ["taxid", "name"]}
+        )
         row = df[df.file_type == "kraken"].iloc[0]
-        assert row.missing_vs_schema_main == "name"
+        assert row.missing_vs_schema_reference == "name"
 
 
 ###############################
@@ -183,7 +195,7 @@ def _qc_row(group: str, sample: str, stage: str, platform: str, **vals: object) 
 
 class TestCompareQcNumeric:
     def test_delta_and_pct_per_key(self) -> None:
-        main = pd.DataFrame(
+        reference = pd.DataFrame(
             [
                 _qc_row(
                     "G1",
@@ -195,7 +207,7 @@ class TestCompareQcNumeric:
                 )
             ]
         )
-        dev = pd.DataFrame(
+        candidate = pd.DataFrame(
             [
                 _qc_row(
                     "G1",
@@ -207,7 +219,9 @@ class TestCompareQcNumeric:
                 )
             ]
         )
-        out = dm.compare_qc_numeric(main, dev, metrics=("n_reads_single", "percent_gc"))
+        out = dm.compare_qc_numeric(
+            reference, candidate, metrics=("n_reads_single", "percent_gc")
+        )
         reads = out[out.metric == "n_reads_single"].iloc[0]
         assert reads.delta == -100
         assert reads["pct_change"] == -10.0
@@ -216,22 +230,26 @@ class TestCompareQcNumeric:
 
     def test_na_metric_yields_na_delta(self) -> None:
         # ONT: n_read_pairs is NA on both sides.
-        main = pd.DataFrame(
+        reference = pd.DataFrame(
             [_qc_row("G1", "S1", "raw", "ont", n_read_pairs=None, n_reads_single=500)]
         )
-        dev = pd.DataFrame(
+        candidate = pd.DataFrame(
             [_qc_row("G1", "S1", "raw", "ont", n_read_pairs=None, n_reads_single=480)]
         )
-        out = dm.compare_qc_numeric(main, dev)
+        out = dm.compare_qc_numeric(reference, candidate)
         pairs = out[out.metric == "n_read_pairs"].iloc[0]
         assert pd.isna(pairs.delta)
         single = out[out.metric == "n_reads_single"].iloc[0]
         assert single.delta == -20
 
-    def test_zero_main_gives_na_pct(self) -> None:
-        main = pd.DataFrame([_qc_row("G1", "S1", "raw", "illumina", n_reads_single=0)])
-        dev = pd.DataFrame([_qc_row("G1", "S1", "raw", "illumina", n_reads_single=5)])
-        out = dm.compare_qc_numeric(main, dev, metrics=("n_reads_single",))
+    def test_zero_reference_gives_na_pct(self) -> None:
+        reference = pd.DataFrame(
+            [_qc_row("G1", "S1", "raw", "illumina", n_reads_single=0)]
+        )
+        candidate = pd.DataFrame(
+            [_qc_row("G1", "S1", "raw", "illumina", n_reads_single=5)]
+        )
+        out = dm.compare_qc_numeric(reference, candidate, metrics=("n_reads_single",))
         assert pd.isna(out.iloc[0]["pct_change"])
         assert out.iloc[0].delta == 5
 
@@ -240,7 +258,7 @@ class TestCompareQcFlags:
     FLAGS = ["per_base_sequence_quality", "per_tile_sequence_quality"]
 
     def test_only_changed_flags_returned(self) -> None:
-        main = pd.DataFrame(
+        reference = pd.DataFrame(
             [
                 {
                     "group": "G1",
@@ -251,7 +269,7 @@ class TestCompareQcFlags:
                 }
             ]
         )
-        dev = pd.DataFrame(
+        candidate = pd.DataFrame(
             [
                 {
                     "group": "G1",
@@ -262,13 +280,16 @@ class TestCompareQcFlags:
                 }
             ]
         )
-        out = dm.compare_qc_flags(main, dev, self.FLAGS)
+        out = dm.compare_qc_flags(reference, candidate, self.FLAGS)
         assert list(out.check) == ["per_base_sequence_quality"]
-        assert out.iloc[0].main_flag == "pass" and out.iloc[0].dev_flag == "fail"
+        assert (
+            out.iloc[0].reference_flag == "pass"
+            and out.iloc[0].candidate_flag == "fail"
+        )
 
     def test_na_vs_na_not_flagged(self) -> None:
         # Both sides NA must NOT register as a change (the float-NaN bug).
-        main = pd.DataFrame(
+        reference = pd.DataFrame(
             [
                 {
                     "group": "G1",
@@ -278,7 +299,7 @@ class TestCompareQcFlags:
                 }
             ]
         )
-        dev = pd.DataFrame(
+        candidate = pd.DataFrame(
             [
                 {
                     "group": "G1",
@@ -288,7 +309,7 @@ class TestCompareQcFlags:
                 }
             ]
         )
-        out = dm.compare_qc_flags(main, dev, ["per_tile_sequence_quality"])
+        out = dm.compare_qc_flags(reference, candidate, ["per_tile_sequence_quality"])
         assert out.empty
 
 
@@ -338,30 +359,30 @@ class TestKrakenBrayCurtis:
         assert out.iloc[0].bray_curtis == 0.0
 
     def test_disjoint_profiles_give_one(self) -> None:
-        main = pd.DataFrame([_kr("G1", False, "S", 1, "a", 100)])
-        dev = pd.DataFrame([_kr("G1", False, "S", 2, "b", 100)])
-        out = dm.kraken_bray_curtis(main, dev, ranks=("S",))
+        reference = pd.DataFrame([_kr("G1", False, "S", 1, "a", 100)])
+        candidate = pd.DataFrame([_kr("G1", False, "S", 2, "b", 100)])
+        out = dm.kraken_bray_curtis(reference, candidate, ranks=("S",))
         assert out.iloc[0].bray_curtis == 1.0
 
     def test_known_intermediate_value(self) -> None:
-        # main 80/20, dev 50/50 -> TVD = 0.5*(|.8-.5|+|.2-.5|) = 0.3
-        main = pd.DataFrame(
+        # reference 80/20, candidate 50/50 -> TVD = 0.5*(|.8-.5|+|.2-.5|) = 0.3
+        reference = pd.DataFrame(
             [_kr("G1", False, "S", 1, "a", 80), _kr("G1", False, "S", 2, "b", 20)]
         )
-        dev = pd.DataFrame(
+        candidate = pd.DataFrame(
             [_kr("G1", False, "S", 1, "a", 50), _kr("G1", False, "S", 2, "b", 50)]
         )
-        out = dm.kraken_bray_curtis(main, dev, ranks=("S",))
+        out = dm.kraken_bray_curtis(reference, candidate, ranks=("S",))
         assert abs(out.iloc[0].bray_curtis - 0.3) < 1e-9
 
     def test_one_sided_set_gives_one_not_half(self) -> None:
         # A (group, ribosomal) set present on only one side: Bray-Curtis must be
         # 1.0 (disjoint), not 0.5 from a naive 0.5*L1 on an all-zero other side.
-        main = pd.DataFrame([_kr("G1", False, "S", 1, "a", 100)])
-        dev = pd.DataFrame(
+        reference = pd.DataFrame([_kr("G1", False, "S", 1, "a", 100)])
+        candidate = pd.DataFrame(
             [_kr("G1", False, "S", 1, "a", 100), _kr("G1", True, "S", 2, "b", 50)]
         )
-        out = dm.kraken_bray_curtis(main, dev, ranks=("S",))
+        out = dm.kraken_bray_curtis(reference, candidate, ranks=("S",))
         rib = out[out.ribosomal].iloc[0]
         assert rib.bray_curtis == 1.0
         nonrib = out[~out.ribosomal].iloc[0]
@@ -370,13 +391,13 @@ class TestKrakenBrayCurtis:
 
 class TestKrakenTopMovers:
     def test_orders_by_abs_change_and_signs_delta(self) -> None:
-        main = pd.DataFrame(
+        reference = pd.DataFrame(
             [_kr("G1", False, "S", 1, "a", 90), _kr("G1", False, "S", 2, "b", 10)]
         )
-        dev = pd.DataFrame(
+        candidate = pd.DataFrame(
             [_kr("G1", False, "S", 1, "a", 10), _kr("G1", False, "S", 2, "b", 90)]
         )
-        out = dm.kraken_top_movers(main, dev, "S", n=1)
+        out = dm.kraken_top_movers(reference, candidate, "S", n=1)
         top = out.iloc[0]
         # Both move 80pp; tie broken arbitrarily but delta sign must be correct.
         assert abs(abs(top.delta_pp) - 80.0) < 1e-9
@@ -465,9 +486,9 @@ class TestJoinReadAssignments:
         return pd.DataFrame(rows, columns=["group", "seq_id", "aligner_taxid_lca"])
 
     def test_lost_gained_same_reassigned(self) -> None:
-        main = self._vh([["G", "r1", 401], ["G", "r2", 401], ["G", "r3", 401]])
-        dev = self._vh([["G", "r1", 401], ["G", "r2", 402], ["G", "r4", 500]])
-        out = dm.join_read_assignments(main, dev)
+        reference = self._vh([["G", "r1", 401], ["G", "r2", 401], ["G", "r3", 401]])
+        candidate = self._vh([["G", "r1", 401], ["G", "r2", 402], ["G", "r4", 500]])
+        out = dm.join_read_assignments(reference, candidate)
         status = dict(zip(out.seq_id, out.status, strict=True))
         assert status["r1"] == "same"
         assert status["r2"] == "reassigned"
@@ -477,15 +498,15 @@ class TestJoinReadAssignments:
 
 class TestSummariseAndBuckets:
     def _joined(self) -> pd.DataFrame:
-        main = pd.DataFrame(
+        reference = pd.DataFrame(
             [["G", "r1", 401], ["G", "r2", 401], ["G", "r3", 600]],
             columns=["group", "seq_id", "aligner_taxid_lca"],
         )
-        dev = pd.DataFrame(
+        candidate = pd.DataFrame(
             [["G", "r1", 402], ["G", "r2", 401], ["G", "r4", 401]],
             columns=["group", "seq_id", "aligner_taxid_lca"],
         )
-        return dm.join_read_assignments(main, dev)
+        return dm.join_read_assignments(reference, candidate)
 
     def test_vertebrate_scope_filters(self) -> None:
         joined = self._joined()
@@ -504,7 +525,7 @@ class TestSummariseAndBuckets:
         summ = dm.summarize_read_status(joined, vert=set())  # nothing vertebrate
         vert = summ[summ.scope == "vertebrate"]
         assert len(vert) == 1
-        assert vert.iloc[0].n_main == 0 and vert.iloc[0].n_dev == 0
+        assert vert.iloc[0].n_reference == 0 and vert.iloc[0].n_candidate == 0
 
     def test_bucket_summary_empty_emits_canonical_zero_rows(self) -> None:
         empty = pd.DataFrame(
@@ -512,8 +533,8 @@ class TestSummariseAndBuckets:
                 "group",
                 "scope",
                 "seq_id",
-                "taxid_main",
-                "taxid_dev",
+                "taxid_reference",
+                "taxid_candidate",
                 "bucket",
             ]
         )
@@ -556,15 +577,15 @@ class TestCladeRankShares:
 
     def test_family_shares_over_total_viral(self) -> None:
         # Total viral (Viruses root) = 200 reads on each side. familyX 80 -> 60.
-        main = self._clade(
+        reference = self._clade(
             [["G", dm.VIRUSES_TAXID, 200, 200], ["G", 200, 80, 80], ["G", 210, 40, 40]]
         )
-        dev = self._clade(
+        candidate = self._clade(
             [["G", dm.VIRUSES_TAXID, 200, 200], ["G", 200, 60, 60], ["G", 210, 40, 40]]
         )
         out = dm.clade_rank_shares(
-            main,
-            dev,
+            reference,
+            candidate,
             self.RANK,
             self.NAME,
             rank_levels=("family",),
@@ -572,8 +593,8 @@ class TestCladeRankShares:
         )
         fx = out[out.taxid == 200].iloc[0]
         # Share is of TOTAL viral reads (200), not of the family-rank sum.
-        assert abs(fx.share_main - 0.40) < 1e-9
-        assert abs(fx.share_dev - 0.30) < 1e-9
+        assert abs(fx.share_reference - 0.40) < 1e-9
+        assert abs(fx.share_candidate - 0.30) < 1e-9
         assert abs(fx.delta_pp - (-10.0)) < 1e-9
         assert fx.delta_reads == -20
 
@@ -582,19 +603,19 @@ class TestCladeRankShares:
         # collapses. With a within-rank denominator familyX's share would jump up
         # (a spurious positive delta). With the total-viral denominator it does
         # not move, and delta_reads is exactly 0.
-        main = self._clade(
+        reference = self._clade(
             [
                 ["G", dm.VIRUSES_TAXID, 200, 200],
                 ["G", 200, 50, 50],
                 ["G", 210, 100, 100],
             ]
         )
-        dev = self._clade(
+        candidate = self._clade(
             [["G", dm.VIRUSES_TAXID, 200, 200], ["G", 200, 50, 50], ["G", 210, 10, 10]]
         )
         out = dm.clade_rank_shares(
-            main,
-            dev,
+            reference,
+            candidate,
             self.RANK,
             self.NAME,
             rank_levels=("family",),
@@ -607,47 +628,47 @@ class TestCladeRankShares:
         assert fy.delta_reads == -90
         assert fy.delta_pp < 0  # the family that actually fell
 
-    def test_family_dropped_in_dev(self) -> None:
-        main = self._clade(
+    def test_family_dropped_in_candidate(self) -> None:
+        reference = self._clade(
             [["G", dm.VIRUSES_TAXID, 100, 100], ["G", 200, 50, 50], ["G", 210, 50, 50]]
         )
-        dev = self._clade([["G", dm.VIRUSES_TAXID, 100, 100], ["G", 200, 50, 50]])
+        candidate = self._clade([["G", dm.VIRUSES_TAXID, 100, 100], ["G", 200, 50, 50]])
         out = dm.clade_rank_shares(
-            main,
-            dev,
+            reference,
+            candidate,
             self.RANK,
             self.NAME,
             rank_levels=("family",),
             count_cols=("reads_clade_total",),
         )
         fy = out[out.taxid == 210].iloc[0]
-        assert fy.share_dev == 0.0
+        assert fy.share_candidate == 0.0
         assert fy.delta_pp == -50.0
         assert fy.delta_reads == -50
 
     def test_missing_viruses_root_gives_nan_share(self) -> None:
         # No Viruses-root row -> denominator missing -> share NaN (surfaced, not 0).
-        main = self._clade([["G", 200, 50, 50]])
-        dev = self._clade([["G", 200, 50, 50]])
+        reference = self._clade([["G", 200, 50, 50]])
+        candidate = self._clade([["G", 200, 50, 50]])
         out = dm.clade_rank_shares(
-            main,
-            dev,
+            reference,
+            candidate,
             self.RANK,
             self.NAME,
             rank_levels=("family",),
             count_cols=("reads_clade_total",),
         )
         fx = out[out.taxid == 200].iloc[0]
-        assert pd.isna(fx.share_main) and pd.isna(fx.share_dev)
+        assert pd.isna(fx.share_reference) and pd.isna(fx.share_candidate)
         # Raw counts are still reported.
-        assert fx.reads_main == 50 and fx.delta_reads == 0
+        assert fx.reads_reference == 50 and fx.delta_reads == 0
 
     def test_name_falls_back_to_taxid(self) -> None:
-        main = self._clade([["G", dm.VIRUSES_TAXID, 100, 100], ["G", 999, 50, 50]])
-        dev = self._clade([["G", dm.VIRUSES_TAXID, 100, 100], ["G", 999, 50, 50]])
+        reference = self._clade([["G", dm.VIRUSES_TAXID, 100, 100], ["G", 999, 50, 50]])
+        candidate = self._clade([["G", dm.VIRUSES_TAXID, 100, 100], ["G", 999, 50, 50]])
         out = dm.clade_rank_shares(
-            main,
-            dev,
+            reference,
+            candidate,
             {**self.RANK, 999: "family"},
             self.NAME,  # 999 absent from name_map -> falls back to "999"
             rank_levels=("family",),
@@ -655,7 +676,7 @@ class TestCladeRankShares:
         )
         f999 = out[out.taxid == 999].iloc[0]
         assert f999["name"] == "999"
-        assert abs(f999.share_main - 0.5) < 1e-9
+        assert abs(f999.share_reference - 0.5) < 1e-9
 
 
 class TestValidationAgreement:
@@ -754,38 +775,38 @@ class TestJoinReadAssignmentsFixes:
         )
 
     def test_merge_map_canonicalizes_so_not_reassigned(self) -> None:
-        # main taxid 100 was merged into 200 in dev; with the merge map the read
+        # reference taxid 100 was merged into 200 in candidate; with the merge map the read
         # is 'same', not 'reassigned'.
-        main = self._vh([["G", "S", "r1", 100]])
-        dev = self._vh([["G", "S", "r1", 200]])
-        out = dm.join_read_assignments(main, dev, merge_map={100: 200})
+        reference = self._vh([["G", "S", "r1", 100]])
+        candidate = self._vh([["G", "S", "r1", 200]])
+        out = dm.join_read_assignments(reference, candidate, merge_map={100: 200})
         assert out.iloc[0].status == "same"
-        out_nomap = dm.join_read_assignments(main, dev)
+        out_nomap = dm.join_read_assignments(reference, candidate)
         assert out_nomap.iloc[0].status == "reassigned"
 
     def test_sample_in_key_prevents_cross_sample_collision(self) -> None:
         # Same seq_id in two samples of one group must not cartesian-join.
-        main = self._vh([["G", "S1", "r", 10], ["G", "S2", "r", 20]])
-        dev = self._vh([["G", "S1", "r", 10], ["G", "S2", "r", 20]])
-        out = dm.join_read_assignments(main, dev)
+        reference = self._vh([["G", "S1", "r", 10], ["G", "S2", "r", 20]])
+        candidate = self._vh([["G", "S1", "r", 10], ["G", "S2", "r", 20]])
+        out = dm.join_read_assignments(reference, candidate)
         assert len(out) == 2
         assert (out.status == "same").all()
 
     def test_duplicate_key_raises(self) -> None:
-        main = self._vh([["G", "S", "r", 10], ["G", "S", "r", 20]])
-        dev = self._vh([["G", "S", "r", 10]])
+        reference = self._vh([["G", "S", "r", 10], ["G", "S", "r", 20]])
+        candidate = self._vh([["G", "S", "r", 10]])
         with pytest.raises(ValueError, match="Duplicate"):
-            dm.join_read_assignments(main, dev)
+            dm.join_read_assignments(reference, candidate)
 
     def test_na_taxid_on_shared_read_is_reassigned(self) -> None:
         # A shared read with a present taxid on one side and NA on the other must
         # be 'reassigned', never silently 'same' (NA != value is <NA> -> fillna).
-        main = self._vh([["G", "S", "r1", 10]])
-        dev = pd.DataFrame(
+        reference = self._vh([["G", "S", "r1", 10]])
+        candidate = pd.DataFrame(
             [["G", "S", "r1", None]],
             columns=["group", "sample", "seq_id", "aligner_taxid_lca"],
         )
-        out = dm.join_read_assignments(main, dev)
+        out = dm.join_read_assignments(reference, candidate)
         assert out.iloc[0].status == "reassigned"
 
 
@@ -796,8 +817,8 @@ class TestReassignmentConcentration:
                 "group": ["G"] * 5,
                 "scope": ["all"] * 5,
                 "seq_id": list("abcde"),
-                "taxid_main": [1, 1, 1, 1, 2],
-                "taxid_dev": [9, 9, 9, 9, 8],
+                "taxid_reference": [1, 1, 1, 1, 2],
+                "taxid_candidate": [9, 9, 9, 9, 8],
                 "bucket": ["same-genus"] * 5,
             }
         )
@@ -817,8 +838,8 @@ class TestReassignmentPairCounts:
                 "group": ["G"] * 5,
                 "scope": ["all"] * 5,
                 "seq_id": list("abcde"),
-                "taxid_main": [1, 1, 1, 1, 2],
-                "taxid_dev": [9, 9, 9, 9, 8],
+                "taxid_reference": [1, 1, 1, 1, 2],
+                "taxid_candidate": [9, 9, 9, 9, 8],
                 "bucket": ["same-genus"] * 4 + [dm.CROSS_ROOT],
             }
         )
@@ -827,23 +848,32 @@ class TestReassignmentPairCounts:
         assert len(cross) == 1
         row = cross.iloc[0]
         assert row.group == "G"
-        assert row.taxid_main == 2
-        assert row.taxid_dev == 8
+        assert row.taxid_reference == 2
+        assert row.taxid_candidate == 8
         assert row.n_reads == 1
         # The top pair is still present too (every pair is kept).
-        assert {(1, 9), (2, 8)} <= set(zip(out.taxid_main, out.taxid_dev, strict=True))
+        assert {(1, 9), (2, 8)} <= set(
+            zip(out.taxid_reference, out.taxid_candidate, strict=True)
+        )
 
     def test_empty_detail_emits_header_only(self) -> None:
         empty = pd.DataFrame(
-            columns=["group", "scope", "seq_id", "taxid_main", "taxid_dev", "bucket"]
+            columns=[
+                "group",
+                "scope",
+                "seq_id",
+                "taxid_reference",
+                "taxid_candidate",
+                "bucket",
+            ]
         )
         out = dm.reassignment_pair_counts(empty)
         assert out.empty
         assert list(out.columns) == [
             "group",
             "scope",
-            "taxid_main",
-            "taxid_dev",
+            "taxid_reference",
+            "taxid_candidate",
             "bucket",
             "n_reads",
         ]
@@ -865,11 +895,11 @@ class TestQcReadSurvival:
                 ]
             )
 
-        main = rows(900)  # 90% survival
-        dev = rows(800)  # 80% survival
-        out = dm.qc_read_survival(main, dev).iloc[0]
-        assert abs(out.survival_main - 0.9) < 1e-9
-        assert abs(out.survival_dev - 0.8) < 1e-9
+        reference = rows(900)  # 90% survival
+        candidate = rows(800)  # 80% survival
+        out = dm.qc_read_survival(reference, candidate).iloc[0]
+        assert abs(out.survival_reference - 0.9) < 1e-9
+        assert abs(out.survival_candidate - 0.8) < 1e-9
         assert abs(out.delta_pp - (-10.0)) < 1e-9
 
 
@@ -884,8 +914,8 @@ class TestNaTaxidRobustness:
             {
                 "group": ["G", "G"],
                 "seq_id": ["r1", "r2"],
-                "taxid_main": pd.array([401, pd.NA], dtype="Int64"),
-                "taxid_dev": pd.array([402, 500], dtype="Int64"),
+                "taxid_reference": pd.array([401, pd.NA], dtype="Int64"),
+                "taxid_candidate": pd.array([402, 500], dtype="Int64"),
                 "status": ["reassigned", "reassigned"],
             }
         )
@@ -899,15 +929,15 @@ class TestNaTaxidRobustness:
 
 
 class TestQcSurvivalPlatformCoalesce:
-    def test_dev_only_sample_keeps_platform(self) -> None:
-        main = pd.DataFrame(
+    def test_candidate_only_sample_keeps_platform(self) -> None:
+        reference = pd.DataFrame(
             [
                 _qc_row("G", "S1", "raw", "illumina", n_reads_single=1000),
                 _qc_row("G", "S1", "cleaned", "illumina", n_reads_single=900),
             ]
         )
-        # S2 exists only on the dev side.
-        dev = pd.DataFrame(
+        # S2 exists only on the candidate side.
+        candidate = pd.DataFrame(
             [
                 _qc_row("G", "S1", "raw", "illumina", n_reads_single=1000),
                 _qc_row("G", "S1", "cleaned", "illumina", n_reads_single=900),
@@ -915,11 +945,11 @@ class TestQcSurvivalPlatformCoalesce:
                 _qc_row("G", "S2", "cleaned", "illumina", n_reads_single=950),
             ]
         )
-        out = dm.qc_read_survival(main, dev)
+        out = dm.qc_read_survival(reference, candidate)
         s2 = out[out["sample"] == "S2"].iloc[0]
         assert s2.platform == "illumina"
-        assert pd.isna(s2.survival_main)
-        assert abs(s2.survival_dev - 0.95) < 1e-9
+        assert pd.isna(s2.survival_reference)
+        assert abs(s2.survival_candidate - 0.95) < 1e-9
 
 
 ###############################
@@ -959,8 +989,8 @@ class TestBuildFlagsBranches:
         val = pd.DataFrame(
             {
                 "group": ["Gdrop", "Gimprove"],
-                "agreement_rate_main": [0.9, 0.5],
-                "agreement_rate_dev": [0.7, 0.9],  # drop +0.2 ; drop -0.4
+                "agreement_rate_reference": [0.9, 0.5],
+                "agreement_rate_candidate": [0.7, 0.9],  # drop +0.2 ; drop -0.4
             }
         )
         flags = dm.build_flags({"viral_validation_agreement": val})
@@ -972,11 +1002,11 @@ class TestBuildFlagsBranches:
 class TestKrakenTopMoversCutoff:
     def test_tie_at_cutoff_broken_by_taxid(self) -> None:
         # Two taxa tie on abs_diff at the n=1 boundary; lower taxid wins (stable).
-        main = pd.DataFrame(
+        reference = pd.DataFrame(
             [_kr("G", False, "S", 5, "hi", 90), _kr("G", False, "S", 9, "lo", 10)]
         )
-        dev = pd.DataFrame(
+        candidate = pd.DataFrame(
             [_kr("G", False, "S", 5, "hi", 10), _kr("G", False, "S", 9, "lo", 90)]
         )
-        out = dm.kraken_top_movers(main, dev, "S", n=1)
+        out = dm.kraken_top_movers(reference, candidate, "S", n=1)
         assert out.iloc[0].taxid == 5  # both move 80pp; lower taxid kept

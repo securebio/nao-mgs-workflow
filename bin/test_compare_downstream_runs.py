@@ -195,7 +195,7 @@ def test_read_tsv_handles_leading_quote(tmp_path: Path) -> None:
 
 
 ###########################
-# end-to-end main()       #
+# end-to-end reference()       #
 ###########################
 
 
@@ -205,12 +205,14 @@ def _build_downstream_tree(root: Path, side: str) -> None:
     One short-read group (G_ILL) and one ONT group (G_ONT), with wholly invented
     taxids/names. bracken and fastp are omitted so the run exercises the
     'expected output missing on both sides' path; duplicate_stats is written
-    header-only to exercise the zero-row path. `side` ('main' or 'dev') tweaks
-    one read's assignment to create a reassignment in dev.
+    header-only to exercise the zero-row path. `side` ('reference' or 'candidate') tweaks
+    one read's assignment to create a reassignment in candidate.
     """
     d = root / "results_downstream"
     d.mkdir(parents=True, exist_ok=True)
-    seq2_taxid = 10 if side == "main" else 20  # dev reassigns read 2: 10 -> 20
+    seq2_taxid = (
+        10 if side == "reference" else 20
+    )  # candidate reassigns read 2: 10 -> 20
 
     for group in ("G_ILL", "G_ONT"):
         # Short-read validation_hits carry prim_align_dup_exemplar (each read is
@@ -245,8 +247,8 @@ def _build_downstream_tree(root: Path, side: str) -> None:
             d / f"{group}_kraken.tsv.gz",
             ["group", "ribosomal", "rank", "taxid", "name", "n_reads_clade"],
             [
-                [group, "FALSE", "S", 10, "sp10", 80 if side == "main" else 60],
-                [group, "FALSE", "S", 20, "sp20", 20 if side == "main" else 40],
+                [group, "FALSE", "S", 10, "sp10", 80 if side == "reference" else 60],
+                [group, "FALSE", "S", 20, "sp20", 20 if side == "reference" else 40],
                 [group, "TRUE", "S", 10, "sp10", 50],
             ],
         )
@@ -334,24 +336,24 @@ def _build_index(root: Path) -> None:
 def test_main_end_to_end(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     import sys
 
-    main_root = tmp_path / "main"
-    dev_root = tmp_path / "dev"
+    reference_root = tmp_path / "reference"
+    candidate_root = tmp_path / "candidate"
     index_root = tmp_path / "index"
     out = tmp_path / "out"
-    _build_downstream_tree(main_root, "main")
-    _build_downstream_tree(dev_root, "dev")
+    _build_downstream_tree(reference_root, "reference")
+    _build_downstream_tree(candidate_root, "candidate")
     _build_index(index_root)
 
-    # Reuse the same synthetic index as --old-index (exercises both-index paths).
+    # Reuse the same synthetic index as --reference-index (exercises both-index paths).
     argv = [
         "compare_downstream_runs.py",
-        "--main",
-        str(main_root),
-        "--dev",
-        str(dev_root),
-        "--index",
+        "--reference",
+        str(reference_root),
+        "--candidate",
+        str(candidate_root),
+        "--candidate-index",
         str(index_root),
-        "--old-index",
+        "--reference-index",
         str(index_root),
         "--out",
         str(out),
@@ -384,14 +386,14 @@ def test_main_end_to_end(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Non
     # C2: bracken is expected for Illumina but absent on BOTH sides -> still a row.
     brk = inv[(inv.group == "G_ILL") & (inv.file_type == "bracken")]
     assert len(brk) == 1
-    assert not bool(brk.iloc[0].in_main) and not bool(brk.iloc[0].in_dev)
+    assert not bool(brk.iloc[0].in_reference) and not bool(brk.iloc[0].in_candidate)
 
     # Header-only file is handled end-to-end: present with zero data rows.
     dup = inv[(inv.group == "G_ILL") & (inv.file_type == "duplicate_stats")]
     assert len(dup) == 1
-    assert bool(dup.iloc[0].in_main) and dup.iloc[0].n_rows_main == 0
+    assert bool(dup.iloc[0].in_reference) and dup.iloc[0].n_rows_reference == 0
 
-    # The dev reassignment (read r2: 10 -> 20, same family) is captured.
+    # The candidate reassignment (read r2: 10 -> 20, same family) is captured.
     status = pd.read_csv(out / "viral_read_status.tsv", sep="\t")
     gil = status[(status.group == "G_ILL") & (status.scope == "vertebrate")].iloc[0]
     assert gil.n_reassigned == 1
@@ -410,25 +412,25 @@ def test_main_skips_focus1_when_validation_hits_absent(
 ) -> None:
     import sys
 
-    main_root = tmp_path / "main"
-    dev_root = tmp_path / "dev"
+    reference_root = tmp_path / "reference"
+    candidate_root = tmp_path / "candidate"
     index_root = tmp_path / "index"
     out = tmp_path / "out"
-    _build_downstream_tree(main_root, "main")
-    _build_downstream_tree(dev_root, "dev")
+    _build_downstream_tree(reference_root, "reference")
+    _build_downstream_tree(candidate_root, "candidate")
     _build_index(index_root)
-    # Remove ALL validation_hits on the dev side: Focus 1 must skip cleanly, not
+    # Remove ALL validation_hits on the candidate side: Focus 1 must skip cleanly, not
     # crash, and still produce the other focuses + flags.
-    for vh in (dev_root / "results_downstream").glob("*_validation_hits.tsv.gz"):
+    for vh in (candidate_root / "results_downstream").glob("*_validation_hits.tsv.gz"):
         vh.unlink()
 
     argv = [
         "compare_downstream_runs.py",
-        "--main",
-        str(main_root),
-        "--dev",
-        str(dev_root),
-        "--index",
+        "--reference",
+        str(reference_root),
+        "--candidate",
+        str(candidate_root),
+        "--candidate-index",
         str(index_root),
         "--out",
         str(out),
@@ -447,33 +449,33 @@ def test_main_per_group_one_sided_input_is_skipped_not_fabricated(
 ) -> None:
     """C1: a per-group input missing on one side is skipped, not misread.
 
-    Removing G_ONT's validation_hits and G_ILL's kraken on the dev side must:
+    Removing G_ONT's validation_hits and G_ILL's kraken on the candidate side must:
     drop those groups from the affected metric (recorded in skipped_groups.tsv),
     NOT fabricate a lost/Bray-Curtis flag for them, and still compute the other
     group's metric plus the independent viral outputs (clade, status flips).
     """
     import sys
 
-    main_root = tmp_path / "main"
-    dev_root = tmp_path / "dev"
+    reference_root = tmp_path / "reference"
+    candidate_root = tmp_path / "candidate"
     index_root = tmp_path / "index"
     out = tmp_path / "out"
-    _build_downstream_tree(main_root, "main")
-    _build_downstream_tree(dev_root, "dev")
+    _build_downstream_tree(reference_root, "reference")
+    _build_downstream_tree(candidate_root, "candidate")
     _build_index(index_root)
-    # One-sided per-group absences (dev side only).
-    (dev_root / "results_downstream" / "G_ONT_validation_hits.tsv.gz").unlink()
-    (dev_root / "results_downstream" / "G_ILL_kraken.tsv.gz").unlink()
+    # One-sided per-group absences (candidate side only).
+    (candidate_root / "results_downstream" / "G_ONT_validation_hits.tsv.gz").unlink()
+    (candidate_root / "results_downstream" / "G_ILL_kraken.tsv.gz").unlink()
 
     argv = [
         "compare_downstream_runs.py",
-        "--main",
-        str(main_root),
-        "--dev",
-        str(dev_root),
-        "--index",
+        "--reference",
+        str(reference_root),
+        "--candidate",
+        str(candidate_root),
+        "--candidate-index",
         str(index_root),
-        "--old-index",
+        "--reference-index",
         str(index_root),
         "--out",
         str(out),

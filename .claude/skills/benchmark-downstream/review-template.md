@@ -24,14 +24,14 @@ unchanged), so a difference is attributable to that dimension more directly.">`
 > throughout this template are format guides, not expected results; do not carry
 > their specific taxa, groups, directions, or magnitudes into your report, and do
 > not assume a finding exists until the TSVs show it. **Missing-data rule:** if an
-> input needed for a metric is absent (e.g. no `--index` → viral analysis skipped;
+> input needed for a metric is absent (e.g. no `--candidate-index` → viral analysis skipped;
 > empty bracken), say so plainly in that spot and move on; do not invent values.
 > **Follow the report-writing principles in SKILL.md** (name every taxon; plain
 > language; no tool-internal jargon) throughout — they apply to every section.
 
 ## Run identity
 
-| | Candidate (`--dev`) | Reference (`--main`) |
+| | Candidate (`--candidate`) | Reference (`--reference`) |
 |---|---|---|
 | DOWNSTREAM output | `s3://path/to/candidate/...` | `s3://path/to/reference/...` |
 | Index | `s3://nao-mgs-index/<DATE>` | `s3://nao-mgs-index/<DATE>` |
@@ -110,9 +110,10 @@ out:
 >   few recurring taxid pairs (name them, give the top-pair share) or are broad.
 >   Split group counts by platform (in the form "<n> Illumina + <m> ONT"); the
 >   flag key does not carry platform, so do not assume every flagged group is
->   Illumina. Note the denominators (% lost ÷ main, % gained ÷ dev, % reassigned ÷
->   shared) and, for gains, that the metric is a fraction of the dev total so
->   turnover can trip it without net growth. State what is and is NOT known: the
+>   Illumina. Note the denominators (% lost ÷ reference, % gained ÷ candidate,
+>   % reassigned ÷ shared) and, for gains, that the metric is a fraction of the
+>   candidate total so turnover can trip it without net growth. State what is and
+>   is NOT known: the
 >   reads differ on the matched key; whether real or an index/annotation effect is
 >   not established here.
 > - **Reassignment taxonomic severity** — how far reassigned reads moved: any
@@ -121,17 +122,18 @@ out:
 >   separately — it is a versioning artifact, not a severity level.
 > - **Clade-share shifts (family / order, Illumina)** — clades whose share of
 >   total viral reads moved materially, including any family/order that drops to
->   zero dev share or newly appears; give taxids and the largest per-group share
->   moves in percentage points. State two distinct counts without conflating them:
->   how many groups *flagged* (share change past the threshold), and separately in
->   how many groups the clade reached zero dev share (a collapse can occur below
->   the flag threshold, and a flagged move need not be a collapse). Before calling
->   a share drop a collapse, check the raw read counts (`reads_main`/`reads_dev`,
->   i.e. `delta_reads`): a clade's share can fall purely because the group's total
->   viral reads grew, so confirm the clade's own reads actually dropped. State the
->   alternatives (a real change vs. a reference/classification effect) as
->   alternatives — but note a clade present in the table with `reads_dev == 0` is
->   still in the candidate-index taxonomy, so a re-ranking/deletion artifact does not explain
+>   zero candidate share or newly appears; give taxids and the largest per-group
+>   share moves in percentage points. State two distinct counts without conflating
+>   them: how many groups *flagged* (share change past the threshold), and
+>   separately in how many groups the clade reached zero candidate share (a
+>   collapse can occur below the flag threshold, and a flagged move need not be a
+>   collapse). Before calling a share drop a collapse, check the raw read counts
+>   (`reads_reference`/`reads_candidate`, i.e. `delta_reads`): a clade's share can
+>   fall purely because the group's total viral reads grew, so confirm the clade's
+>   own reads actually dropped. State the alternatives (a real change vs. a
+>   reference/classification effect) as alternatives — but note a clade present in
+>   the table with `reads_candidate == 0` is still in the candidate-index taxonomy,
+>   so a re-ranking/deletion artifact does not explain
 >   it (that applies only to a clade missing from the table entirely).
 > - **BLAST-validation agreement** — groups whose agreement rate moved past
 >   threshold, with both the validated fraction and the agreement rate (a rate
@@ -232,10 +234,10 @@ taxid-comparison caveats that apply to this whole section).
 
 #### Lost / gained / reassigned reads (vertebrate-viral subset)
 
-Different denominators: % lost = lost ÷ main, % gained = gained ÷ dev,
+Different denominators: % lost = lost ÷ reference, % gained = gained ÷ candidate,
 % reassigned = reassigned ÷ shared.
 
-| Group | Platform | main | dev | shared | reassigned | lost | gained | % lost | % gained | % reassigned |
+| Group | Platform | reference | candidate | shared | reassigned | lost | gained | % lost | % gained | % reassigned |
 |---|---|---|---|---|---|---|---|---|---|---|
 | ... | | | | | | | | | | |
 
@@ -263,10 +265,11 @@ biological reassignment; do not rank it as most severe.>`
 
 #### Clade-share breakdown (Illumina only)
 
-`<Per-family and per-order view of viral reads, main vs dev, from
-clade_rank_shares.tsv: raw read counts (reads_main, reads_dev, delta_reads) plus
-each clade's share of the group's TOTAL viral reads (share_main, share_dev,
-delta_pp). Flags are computed on the `reads_clade_total` basis only; the
+`<Per-family and per-order view of viral reads, reference vs candidate, from
+clade_rank_shares.tsv: raw read counts (reads_reference, reads_candidate,
+delta_reads) plus each clade's share of the group's TOTAL viral reads
+(share_reference, share_candidate, delta_pp). Flags are computed on the
+`reads_clade_total` basis only; the
 `reads_clade_dedup` rows are context, not a flag source. Report large count or
 share shifts; name clades with taxids. Name any whole families that
 appear/disappear and give the number of groups affected. See the Methodology
@@ -275,12 +278,12 @@ reading a disappearance as a biological loss.>`
 
 #### BLAST-validation agreement (secondary)
 
-`<Per-group validated fraction and agreement rate, main vs dev, reported
-together. "Agreement" = the aligner call is an ancestor of or equal to the BLAST
-call (validation distance 0), not necessarily identical. Secondary signal: BLAST
-runs on cluster representatives and is propagated to reads.>`
+`<Per-group validated fraction and agreement rate, reference vs candidate,
+reported together. "Agreement" = the aligner call is an ancestor of or equal to
+the BLAST call (validation distance 0), not necessarily identical. Secondary
+signal: BLAST runs on cluster representatives and is propagated to reads.>`
 
-| Group | frac validated (main) | agree (main) | frac validated (dev) | agree (dev) | Δ agree |
+| Group | frac validated (reference) | agree (reference) | frac validated (candidate) | agree (candidate) | Δ agree |
 |---|---|---|---|---|---|
 | ... | | | | | |
 
@@ -322,7 +325,7 @@ derived from schemas + expected-outputs (no per-file logic). (Presence and colum
 conformance are covered in Completeness and schema; this section owns the
 quantitative row-count deltas.)
 
-| Group | File type | rows (main) | rows (dev) | change | % |
+| Group | File type | rows (reference) | rows (candidate) | change | % |
 |---|---|---|---|---|---|
 | ... | | | | | |
 
@@ -371,8 +374,9 @@ rows that moves with a read-level lost/gained finding).>`
   (`delta_reads == 0`) can still be flagged purely as a denominator effect — read
   `delta_reads` before treating a flagged share move as a real change in that
   clade. Rank is resolved from the full candidate-index taxonomy, so a clade that appears in
-  the table at all is present in the candidate-index taxonomy: a row with `reads_dev == 0` is
-  a genuine read-level drop, NOT a re-ranking/deletion artifact. The re-ranking
+  the table at all is present in the candidate-index taxonomy: a row with
+  `reads_candidate == 0` is a genuine read-level drop, NOT a re-ranking/deletion
+  artifact. The re-ranking
   or taxon-deletion explanation applies only to a clade that is absent from the
   table entirely; before invoking it, confirm the taxid is actually missing from
   the candidate index's `taxonomy-nodes.dmp` rather than present with zero reads.
