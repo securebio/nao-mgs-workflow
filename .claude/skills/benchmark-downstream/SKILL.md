@@ -125,7 +125,7 @@ python bin/compare_downstream_runs.py \
 ```
 
 Use an **absolute** path for `--out`. The script stages each run's
-`results_downstream/` tree and the dev index's `taxonomy-nodes.dmp` +
+`results_downstream/` tree and the candidate index's `taxonomy-nodes.dmp` +
 `total-virus-db-annotated.tsv.gz` under `<out>/_staged` and `<out>/_index`. It
 takes a couple of minutes (most of it staging + taxonomy parsing).
 
@@ -201,7 +201,10 @@ Key reminders:
   appears or disappears, a cross-root reassignment) gets its own Main-findings
   subsection; never drop one as "minor". Dimensions checked but within threshold
   go under "Checked, no action needed". Annotate each finding with its breadth and
-  magnitude rather than a fixed concern level; let the human prioritize.
+  magnitude rather than a fixed concern level; let the human prioritize. What is
+  guaranteed identical across reviewers is the *set* of subsections and To-confirm
+  lines (it is fixed by `flags.tsv`); their wording and grouping are author
+  judgment, not a reproducible string.
 
 ### Step 4 - Optionally investigate likely drivers
 
@@ -221,12 +224,12 @@ under `<out>/_index` / `<out>/_old_index`):
   `*_validation_hits.tsv.gz` files): an accession with many hits on one side and
   zero on the other points to a reference added to / removed from the aligner DB,
   not a code change. Before attributing a collapse to taxonomy re-ranking or
-  taxon deletion instead, verify it: look the clade's taxid up in the dev
+  taxon deletion instead, verify it: look the clade's taxid up in the candidate index's
   `taxonomy-nodes.dmp`. A clade that still appears in `clade_rank_shares.tsv` is
-  by construction present in the dev taxonomy, so re-ranking/deletion is already
+  by construction present in the candidate-index taxonomy, so re-ranking/deletion is already
   excluded for it — do not assert that explanation without confirming the taxid
   is genuinely absent.
-- **A reassignment pair dominates** → look up both taxids in the dev
+- **A reassignment pair dominates** → look up both taxids in the candidate index's
   `taxonomy-nodes.dmp`. If one is the direct parent of the other (same species),
   it is an LCA-specificity move — the mildest reassignment, not a renumbering.
 - **Gained reads entered the vertebrate subset** → join the gained reads' taxids
@@ -265,7 +268,7 @@ contents are AWS-derived data.
 - `lost` — in main only (no longer a viral hit in dev).
 - `gained` — in dev only.
 
-**Divergence buckets** (reassignment severity, against the dev taxonomy):
+**Divergence buckets** (reassignment severity, against the candidate-index taxonomy):
 - `identical` — equal taxids (not counted as reassigned).
 - `same-<rank>` — lowest standard rank (species…superkingdom) at which the two
   assignments still share an ancestor.
@@ -273,7 +276,7 @@ contents are AWS-derived data.
   both under `Viruses` but different realms, or one reassigned up to `Viruses`).
 - `cross-root` — share only the tree root (e.g. a viral read reassigned to a
   cellular organism). The most severe *biological* reassignment.
-- `unresolved-taxid` — one of the taxids is absent from the dev taxonomy
+- `unresolved-taxid` — one of the taxids is absent from the candidate-index taxonomy
   (merged/deleted across index versions). A versioning artifact of unknown
   biological severity, **not** part of the same-species→cross-root gradient;
   assess it separately rather than treating it as more severe than cross-root.

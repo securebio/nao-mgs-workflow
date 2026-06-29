@@ -127,7 +127,7 @@ out:
 >   viral reads grew, so confirm the clade's own reads actually dropped. State the
 >   alternatives (a real change vs. a reference/classification effect) as
 >   alternatives — but note a clade present in the table with `reads_dev == 0` is
->   still in the dev taxonomy, so a re-ranking/deletion artifact does not explain
+>   still in the candidate-index taxonomy, so a re-ranking/deletion artifact does not explain
 >   it (that applies only to a clade missing from the table entirely).
 > - **BLAST-validation agreement** — groups whose agreement rate moved past
 >   threshold, with both the validated fraction and the agreement rate (a rate
@@ -221,7 +221,7 @@ sides, with the same columns.
 What this measures: a read-by-read comparison of the pipeline's viral taxon call
 (`aligner_taxid_lca`), matched between runs on `(group, sample, seq_id)`. The
 **vertebrate-viral subset** is reads whose assigned taxon is annotated as
-vertebrate-infecting in the dev index (see the Methodology appendix for the exact
+vertebrate-infecting in the candidate index (see the Methodology appendix for the exact
 definition and the excluded "likely-infecting" status, and for the per-read /
 taxid-comparison caveats that apply to this whole section).
 
@@ -281,7 +281,7 @@ runs on cluster representatives and is propagated to reads.>`
 #### Vertebrate-status flips between indexes
 
 `<Count of taxa that gained vs lost the vertebrate-infecting annotation between
-the main and dev indexes, with named examples. A possible driver of subset-
+the reference and candidate indexes, with named examples. A possible driver of subset-
 membership changes above — hypothesis only.>`
 
 ### Kraken abundances
@@ -330,13 +330,13 @@ that moves with a read-level lost/gained finding).>`
 > Detailed-investigation sections so the body stays readable.
 
 - **Vertebrate-viral subset & excluded status.** The subset is taxa annotated
-  "affirmatively infecting" (status 1) in the dev index, rolled up to species;
+  "affirmatively infecting" (status 1) in the candidate index, rolled up to species;
   "likely-infecting" (status 3) reads are excluded by design, so a regression
   confined to status-3 taxa would not trip the vertebrate flags. State the
   status-3 read share if it can be computed; if not, say so (missing-data rule).
   **Union rule for reassigned reads:** a shared read whose taxid differs between
   the two runs is in the subset if **either** side's taxid is vertebrate-infecting
-  in the dev index, so a read moving into or out of a vertebrate taxon is retained
+  in the candidate index, so a read moving into or out of a vertebrate taxon is retained
   for the comparison rather than silently dropped.
 - **Per-read counts & taxid comparison.** Lost/gained/reassigned counts are
   per-read (PCR duplicates included) and taxids are compared as-is. The index
@@ -346,7 +346,7 @@ that moves with a read-level lost/gained finding).>`
   same-species reassignments** — a same-species move (a child↔parent pair within
   one species) is a genuine LCA-specificity change, not a versioning artifact.
   The `unresolved-taxid` bucket counts the cases where a taxid is genuinely
-  absent from the dev taxonomy.
+  absent from the candidate-index taxonomy.
 - **Clade-share denominator & dev-taxonomy re-ranking.** Each clade's share uses
   a fixed denominator — the group's total viral reads (the Viruses-root clade
   total) — so a family dropping to 0 does NOT mechanically inflate the others'
@@ -357,12 +357,12 @@ that moves with a read-level lost/gained finding).>`
   share change alone, so a clade with identical read counts on both sides
   (`delta_reads == 0`) can still be flagged purely as a denominator effect — read
   `delta_reads` before treating a flagged share move as a real change in that
-  clade. Rank is resolved from the full dev taxonomy, so a clade that appears in
-  the table at all is present in the dev taxonomy: a row with `reads_dev == 0` is
+  clade. Rank is resolved from the full candidate-index taxonomy, so a clade that appears in
+  the table at all is present in the candidate-index taxonomy: a row with `reads_dev == 0` is
   a genuine read-level drop, NOT a re-ranking/deletion artifact. The re-ranking
   or taxon-deletion explanation applies only to a clade that is absent from the
   table entirely; before invoking it, confirm the taxid is actually missing from
-  the dev `taxonomy-nodes.dmp` rather than present with zero reads.
+  the candidate index's `taxonomy-nodes.dmp` rather than present with zero reads.
 - **BLAST agreement on a shifting subset.** Agreement rate and validated fraction
   are reported together because a rate change on a different validated subset is
   ambiguous.
