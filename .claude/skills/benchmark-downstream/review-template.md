@@ -352,6 +352,10 @@ were gained).>`
   "likely-infecting" (status 3) reads are excluded by design, so a regression
   confined to status-3 taxa would not trip the vertebrate flags. State the
   status-3 read share if it can be computed; if not, say so (missing-data rule).
+  **Union rule for reassigned reads:** a shared read whose taxid differs between
+  the two runs is in the subset if **either** side's taxid is vertebrate-infecting
+  in the dev index, so a read moving into or out of a vertebrate taxon is retained
+  for the comparison rather than silently dropped.
 - **Per-read counts & taxid comparison.** Lost/gained/reassigned counts are
   per-read (PCR duplicates included) and taxids are compared as-is. The index
   workflow does not currently publish `taxonomy-merged.dmp`, so taxid
