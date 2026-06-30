@@ -66,7 +66,7 @@ nextflow_workflow {
             def kraken_report_tab = path(workflow.out.kraken[0][1]).csv(sep: "\t", decompress: true)
             assert kraken_report_tab.columnCount == 10
             assert kraken_report_tab.columnNames == kraken_headers_exp
-            // Bracken output should have expected fields
+            // Domain abundance output should have expected fields
             def bracken_tab = path(workflow.out.bracken[0][1]).csv(sep: "\t", decompress: true)
             assert bracken_tab.columnCount == 9
             assert bracken_tab.columnNames == bracken_headers_exp
@@ -96,7 +96,7 @@ nextflow_workflow {
             def kraken_report_tab = path(workflow.out.kraken[0][1]).csv(sep: "\t", decompress: true)
             assert kraken_report_tab.columnCount == 10
             assert kraken_report_tab.columnNames == kraken_headers_exp
-            // Bracken output should have expected fields
+            // Domain abundance output should have expected fields
             def bracken_tab = path(workflow.out.bracken[0][1]).csv(sep: "\t", decompress: true)
             assert bracken_tab.columnCount == 9
             assert bracken_tab.columnNames == bracken_headers_exp

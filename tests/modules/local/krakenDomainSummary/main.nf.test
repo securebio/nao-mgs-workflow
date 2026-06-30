@@ -1,0 +1,35 @@
+nextflow_process {
+
+    name "Test process KRAKEN_DOMAIN_SUMMARY"
+    script "modules/local/krakenDomainSummary/main.nf"
+    process "KRAKEN_DOMAIN_SUMMARY"
+    config "tests/configs/run.config"
+    tag "module"
+    tag "kraken_domain_summary"
+
+    test("Should emit a well-formed domain summary from a Kraken report") {
+        tag "expect_success"
+        when {
+            params {}
+            process {
+                // Toy report uses post-2024 taxonomy rank codes (R1/R2, no "D")
+                // and has reads above the domains both at "cellular organisms"
+                // (taxid 131567) and at the root, so it exercises the full
+                // taxid-keyed two-level proration in-container. The numeric
+                // correctness of that proration is covered by the pytest suite;
+                // here we just confirm the script runs and emits a valid table.
+                '''
+                input[0] = Channel.of("test")
+                    | combine(Channel.of("${projectDir}/test-data/toy-data/kraken-domain-summary/kraken.report"))
+                '''
+            }
+        }
+        then {
+            assert process.success
+            def rows = path(process.out.output[0][1]).linesGzip
+            assert rows[0] == "name\ttaxid\trank\tkraken2_assigned_reads\tadded_reads\tnew_est_reads\tfraction_total_reads\tsample"
+            assert rows.size() == 5  // header plus the four domains
+        }
+    }
+
+}

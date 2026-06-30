@@ -26,7 +26,7 @@ C --> N[DISCOVER_RUN_OUTPUT]
 N --> O[CONCAT_RUN_OUTPUTS_BY_GROUP]
 O --> S(Read count TSVs)
 O --> KR(Kraken TSVs)
-O --> BR(Bracken TSVs)
+O --> BR(Domain abundance TSVs)
 O --> QC(QC stats TSVs)
 O --> FJ(FASTP JSON)
 O --> E[MARK_VIRAL_DUPLICATES]
@@ -80,7 +80,7 @@ C --> N[DISCOVER_RUN_OUTPUT]
 N --> O[CONCAT_RUN_OUTPUTS_BY_GROUP]
 O --> S(Read count TSVs)
 O --> KR(Kraken TSVs)
-O --> BR(Bracken TSVs)
+O --> BR(Domain abundance TSVs)
 O --> QC(QC stats TSVs)
 O --> F[VALIDATE_VIRAL_ASSIGNMENTS]
 G(Viral taxonomy DB) --> F
@@ -115,12 +115,12 @@ This is a reusable subworkflow that discovers all per-sample TSV and JSON files 
 
 ### Concatenate all per-sample RUN outputs by group (`CONCAT_RUN_OUTPUTS_BY_GROUP`)
 
-This subworkflow wraps multiple calls to `CONCAT_BY_GROUP` (see below) to concatenate all per-sample RUN output types (viral hits, read counts, Kraken reports, Bracken abundance estimates, and QC statistics) into per-group TSVs, and calls `CONCAT_JSON_BY_GROUP` to merge per-sample FASTP JSON files into per-group JSON outputs. It emits three output channels: `hits` (used by downstream duplicate marking, validation, and clade counting), `fastp_json` (per-group combined FASTP QC data, short-read only), and `other` (all remaining TSV outputs, which flow directly to the published results).
+This subworkflow wraps multiple calls to `CONCAT_BY_GROUP` (see below) to concatenate all per-sample RUN output types (viral hits, read counts, Kraken reports, domain abundance estimates, and QC statistics) into per-group TSVs, and calls `CONCAT_JSON_BY_GROUP` to merge per-sample FASTP JSON files into per-group JSON outputs. It emits three output channels: `hits` (used by downstream duplicate marking, validation, and clade counting), `fastp_json` (per-group combined FASTP QC data, short-read only), and `other` (all remaining TSV outputs, which flow directly to the published results).
 
 
 ### Concatenate per-sample outputs into per-group TSVs (`CONCAT_BY_GROUP`)
 
-This is a general-purpose subworkflow that takes per-sample file tuples (with group annotations), filters for files matching a specified suffix, groups them by sample group, concatenates the files within each group, adds a group column, and renames the output to a clean filename. It is called by `CONCAT_RUN_OUTPUTS_BY_GROUP` for each RUN output type (viral hits, read counts, Kraken reports, Bracken abundance estimates, and QC statistics).
+This is a general-purpose subworkflow that takes per-sample file tuples (with group annotations), filters for files matching a specified suffix, groups them by sample group, concatenates the files within each group, adds a group column, and renames the output to a clean filename. It is called by `CONCAT_RUN_OUTPUTS_BY_GROUP` for each RUN output type (viral hits, read counts, Kraken reports, domain abundance estimates, and QC statistics).
 
 ```mermaid
 ---

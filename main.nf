@@ -90,7 +90,9 @@ output {
         tags nextflow_file_class: "publish", "nextflow.io/temporary": "false"
     }
     experimental_run {
-        path "experimental"
+        // `>>` is Nextflow's dynamic publish-path operator: it publishes this
+        // single file to the given target name, renaming on publish (no copy).
+        path { sample, file -> file >> "experimental/${sample}_kraken_domains.tsv.gz" }
         tags nextflow_file_class: "publish", "nextflow.io/temporary": "false"
     }
     sentinel_run {

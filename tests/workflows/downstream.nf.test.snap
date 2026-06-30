@@ -1,7 +1,7 @@
 {
     "downstream_output_shortread": {
         "content": [
-            "tt1_bracken.tsv.gz:md5,dcfdd1e797ae4d1dbc4e6c32cc669f99",
+            "tt1_bracken.tsv.gz:md5,d5b6eb0c0631a9d08af6d4b5a5b26bf5",
             "tt1_clade_counts.tsv.gz:md5,c08ec913ad5dab545a701ed4ac851fc9",
             "tt1_duplicate_stats.tsv.gz:md5,dea20f8f6c3f9753f8b225fc0f8c7e52",
             "tt1_fastp.json:md5,ba9f3a01139a64cf7b10e2085a127aed",
@@ -23,11 +23,11 @@
             "nf-test": "0.9.3",
             "nextflow": "25.10.4"
         },
-        "timestamp": "2026-02-18T14:14:07.608349848"
+        "timestamp": "2026-06-24T21:00:28.32974079"
     },
     "downstream_output_ont": {
         "content": [
-            "tt1_bracken.tsv.gz:md5,dcfdd1e797ae4d1dbc4e6c32cc669f99",
+            "tt1_bracken.tsv.gz:md5,d5b6eb0c0631a9d08af6d4b5a5b26bf5",
             "tt1_kraken.tsv.gz:md5,01ee4db5759045acf987a921ae711903",
             "tt1_qc_adapter_stats_cleaned.tsv.gz:md5,70d8f2e6594f9133273459ec89c025a5",
             "tt1_qc_adapter_stats_raw.tsv.gz:md5,70d8f2e6594f9133273459ec89c025a5",
@@ -46,6 +46,6 @@
             "nf-test": "0.9.3",
             "nextflow": "25.10.4"
         },
-        "timestamp": "2026-02-19T18:31:35.845525"
+        "timestamp": "2026-06-24T21:01:47.300248816"
     }
 }

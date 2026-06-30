@@ -65,8 +65,11 @@ Main heading represents the folder name, and subheadings represent a description
 - `virus_hits_final.tsv.gz`: TSV output from EXTRACT_VIRAL_READS, giving information about each read pair assigned to a host-infecting virus, using the LCA taxid assignment as the source of truth. Contains both LCA-based taxonomic assignments (columns with `aligner_` prefix) that utilize multiple alignments per read, and read sequence information plus primary alignment details (columns with `prim_align_` prefix) for the DOWNSTREAM workflow. See [virus_hits_final.md](./virus_hits_final.md) for documentation of column names.
 
 #### Taxonomic identification
-- `{sample}_bracken.tsv.gz`: Bracken output reports in TSV format for a given sample, labeled by ribosomal status, for subset samples produced by SUBSET_TRIM.
+- `{sample}_bracken.tsv.gz`: Domain-level abundance estimates derived from Kraken2 reports for a given sample, labeled by ribosomal status, for subset samples produced by SUBSET_TRIM. Reads classified above the domain rows are redistributed down the taxonomy in proportion to domain clade counts, respecting the tree (reads at "cellular organisms" go only to the cellular domains, never to Viruses). The file name is retained for compatibility with existing downstream consumers; the same data is also published under a name reflecting its Kraken2 source in `experimental/` (see below).
 - `{sample}_kraken.tsv.gz`: Kraken output reports in TSV format for a given sample, labeled by ribosomal status, for subset samples produced by SUBSET_TRIM.
+
+### `experimental/`
+- `{sample}_kraken_domains.tsv.gz`: Identical content to `results/{sample}_bracken.tsv.gz` (the Kraken2-derived domain-abundance table), published under a name that reflects its actual provenance. This is the migration target for consumers currently reading the legacy `bracken` filename; once consumers have migrated, a future release will promote this file into `results/` and remove the `bracken`-named copy. Subject to the experimental-output stability caveats above.
 
 ## Downstream workflow
 

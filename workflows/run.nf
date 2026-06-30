@@ -50,6 +50,8 @@ workflow RUN {
         reads_trimmed_viral = viral_ch.kmer_trimmed
         qc_results_run = qc_results_ch
         other_results_run = other_results_ch
-        experimental_run = channel.empty()
+        // Migration target for the legacy "bracken" filename, under a
+        // Kraken2-reflecting name (see experimental_run in main.nf).
+        experimental_run = profile_ch.bracken
         sentinel_run = sentinel_ch.sentinel
 }
