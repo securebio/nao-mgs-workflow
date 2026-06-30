@@ -1090,11 +1090,17 @@ def mark_agreement_drivers(by_taxon: pd.DataFrame) -> pd.DataFrame:
 
 _DECOMPOSITION_COLS = [
     "group",
+    "n_validated_reference",
+    "n_validated_candidate",
     "n_validated_both",
+    "n_validated_reference_only",
+    "n_validated_candidate_only",
     "n_agreement_lost",
     "n_agreement_gained",
-    "n_lost_aligner_unchanged",
-    "n_lost_aligner_changed",
+    "n_lost_target_only",
+    "n_lost_aligner_only",
+    "n_lost_both_changed",
+    "n_lost_neither_changed",
     "dominant_target_shift_taxid_reference",
     "dominant_target_shift_taxid_candidate",
     "dominant_target_shift_name_reference",
@@ -1108,16 +1114,21 @@ def validation_agreement_decomposition(
     vh_candidate: pd.DataFrame,
     name_map: dict[int, str] | None = None,
 ) -> pd.DataFrame:
-    """Split each group's BLAST-agreement change into aligner-moved vs target-moved.
+    """Decompose each group's BLAST-agreement change to support a which-side-moved check.
 
-    Among reads validated on BOTH sides, an agreement loss (agree on reference,
-    disagree on candidate) can come from the aligner call changing (a reassignment)
-    or from the BLAST validation target moving under an *unchanged* aligner call
-    (e.g. a taxonomy rename that reparents the aligner's taxon below the new BLAST
-    target). These are different causes; this is the deterministic "which side
-    moved" check. For the unchanged-aligner losses it also names the dominant
-    validation-target shift (reference target -> candidate target). Emits a row per
-    group with any agreement change.
+    The group agreement rate is over reads validated on a given side, so its change
+    has two parts: reads validated on BOTH sides whose agreement flipped, and reads
+    validated on only one side (which move the per-side denominator). This emits a
+    row per group with any validated reads so a flagged group always resolves.
+
+    For the both-validated losses (agree on reference, disagree on candidate) it
+    splits by which taxid moved: `n_lost_target_only` (aligner call unchanged, BLAST
+    validation target moved -- e.g. a taxonomy rename), `n_lost_aligner_only` (a
+    reassignment), `n_lost_both_changed` (ambiguous -- both moved), and
+    `n_lost_neither_changed` (neither taxid moved). The dominant validation-target
+    shift is named over the target-only losses. The one-sided validated counts are
+    the residual the both-sided split cannot attribute, so a confident cause needs
+    that residual to be small relative to the loss being explained.
     """
     need = {
         "group",
@@ -1152,38 +1163,45 @@ def validation_agreement_decomposition(
     }
     a = vh_reference[keep].rename(columns={k: f"{v}_ref" for k, v in ren.items()})
     b = vh_candidate[keep].rename(columns={k: f"{v}_cand" for k, v in ren.items()})
-    m = a.merge(b, on=key, how="inner")
-    dist_ref = pd.to_numeric(m["dist_ref"], errors="coerce")
-    dist_cand = pd.to_numeric(m["dist_cand"], errors="coerce")
-    m = m[dist_ref.notna() & dist_cand.notna()].copy()
+    # Outer join so reads validated on only one side are retained as the residual,
+    # not silently dropped (the inner join would hide that part of the rate change).
+    m = a.merge(b, on=key, how="outer")
     if m.empty:
         return pd.DataFrame(columns=_DECOMPOSITION_COLS)
-    m["agree_ref"] = pd.to_numeric(m["dist_ref"], errors="coerce") == 0
-    m["agree_cand"] = pd.to_numeric(m["dist_cand"], errors="coerce") == 0
+    dist_ref = pd.to_numeric(m["dist_ref"], errors="coerce")
+    dist_cand = pd.to_numeric(m["dist_cand"], errors="coerce")
+    m["val_ref"] = dist_ref.notna()
+    m["val_cand"] = dist_cand.notna()
+    both = m["val_ref"] & m["val_cand"]
+    m["agree_ref"] = both & (dist_ref == 0)
+    m["agree_cand"] = both & (dist_cand == 0)
     aligner_ref = pd.to_numeric(m["aligner_ref"], errors="coerce")
     aligner_cand = pd.to_numeric(m["aligner_cand"], errors="coerce")
-    m["aligner_unchanged"] = (aligner_ref == aligner_cand) & aligner_ref.notna()
+    target_ref = pd.to_numeric(m["target_ref"], errors="coerce")
+    target_cand = pd.to_numeric(m["target_cand"], errors="coerce")
+    m["aligner_changed"] = both & (aligner_ref != aligner_cand)
+    m["target_changed"] = both & (target_ref != target_cand)
     m["lost"] = m["agree_ref"] & ~m["agree_cand"]
-    m["gained"] = ~m["agree_ref"] & m["agree_cand"]
+    m["gained"] = ~m["agree_ref"] & m["agree_cand"] & both
 
     records: list[dict[str, object]] = []
     for group, g in m.groupby("group"):
-        n_lost = int(g["lost"].sum())
-        n_gained = int(g["gained"].sum())
-        if n_lost == 0 and n_gained == 0:
+        n_val_ref = int(g["val_ref"].sum())
+        n_val_cand = int(g["val_cand"].sum())
+        if n_val_ref == 0 and n_val_cand == 0:
             continue
-        lost_unchanged = g[g["lost"] & g["aligner_unchanged"]]
-        n_lost_unchanged = int(len(lost_unchanged))
-        # Dominant validation-target shift among the unchanged-aligner losses: the
-        # reads where only the BLAST target moved.
-        shift = lost_unchanged[
-            pd.to_numeric(lost_unchanged["target_ref"], errors="coerce")
-            != pd.to_numeric(lost_unchanged["target_cand"], errors="coerce")
-        ]
+        g_both = g[g["val_ref"] & g["val_cand"]]
+        lost = g_both[g_both["lost"]]
+        target_only = lost[~lost["aligner_changed"] & lost["target_changed"]]
+        aligner_only = lost[lost["aligner_changed"] & ~lost["target_changed"]]
+        both_changed = lost[lost["aligner_changed"] & lost["target_changed"]]
+        neither = lost[~lost["aligner_changed"] & ~lost["target_changed"]]
+        # Dominant validation-target shift among the target-only losses: the clean
+        # "rename" signal (aligner unchanged, only the BLAST target moved).
         dom_ref = dom_cand = None
         dom_reads = 0
-        if not shift.empty:
-            pair_counts = shift.groupby(["target_ref", "target_cand"]).size()
+        if not target_only.empty:
+            pair_counts = target_only.groupby(["target_ref", "target_cand"]).size()
             top_pair = cast(Any, pair_counts.idxmax())
             dom_ref = int(top_pair[0])
             dom_cand = int(top_pair[1])
@@ -1191,11 +1209,21 @@ def validation_agreement_decomposition(
         records.append(
             {
                 "group": group,
-                "n_validated_both": int(len(g)),
-                "n_agreement_lost": n_lost,
-                "n_agreement_gained": n_gained,
-                "n_lost_aligner_unchanged": n_lost_unchanged,
-                "n_lost_aligner_changed": n_lost - n_lost_unchanged,
+                "n_validated_reference": n_val_ref,
+                "n_validated_candidate": n_val_cand,
+                "n_validated_both": int(len(g_both)),
+                "n_validated_reference_only": int(
+                    (g["val_ref"] & ~g["val_cand"]).sum()
+                ),
+                "n_validated_candidate_only": int(
+                    (~g["val_ref"] & g["val_cand"]).sum()
+                ),
+                "n_agreement_lost": int(len(lost)),
+                "n_agreement_gained": int(g_both["gained"].sum()),
+                "n_lost_target_only": int(len(target_only)),
+                "n_lost_aligner_only": int(len(aligner_only)),
+                "n_lost_both_changed": int(len(both_changed)),
+                "n_lost_neither_changed": int(len(neither)),
                 "dominant_target_shift_taxid_reference": dom_ref,
                 "dominant_target_shift_taxid_candidate": dom_cand,
                 "dominant_target_shift_name_reference": (

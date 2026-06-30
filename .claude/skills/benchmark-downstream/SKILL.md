@@ -102,12 +102,15 @@ Then read the detail tables a finding's `detail_source` points to:
   `viral_validation_agreement_by_taxon.tsv`: group and per-taxon BLAST agreement;
   use `mean_distance_disagree` for disagreement distance and `is_agreement_driver`
   to name the taxon behind a group's agreement change.
-- `viral_validation_decomposition.tsv`: per group, splits agreement losses into
-  `n_lost_aligner_changed` (the aligner call moved — a reassignment) vs
-  `n_lost_aligner_unchanged` (the BLAST validation target moved under an unchanged
-  aligner call — e.g. a taxonomy rename), and names the dominant validation-target
-  shift. This is the deterministic which-side-moved check for a BLAST-agreement
-  finding.
+- `viral_validation_decomposition.tsv`: per group, decomposes a BLAST-agreement
+  change. For reads validated on both sides it splits agreement losses by which
+  taxid moved — `n_lost_target_only` (aligner call unchanged, validation/BLAST
+  target moved, e.g. a taxonomy rename), `n_lost_aligner_only` (a reassignment),
+  `n_lost_both_changed` (ambiguous — both moved), `n_lost_neither_changed` — and
+  names the dominant validation-target shift over the target-only losses.
+  `n_validated_reference_only`/`n_validated_candidate_only` are the one-sided
+  validated reads that also move the per-side rate but the both-sided split cannot
+  attribute (the residual).
 - `vertebrate_status_flips.tsv`: true annotation changes
   (`gained_vertebrate`/`lost_vertebrate`) versus taxa present on only one side
   (`added_vertebrate`/`removed_vertebrate`).
@@ -217,12 +220,15 @@ Use these checks:
   `added_vertebrate` taxon is consistent with a new genome, but taxids are compared
   as-is, so confirm it is genuinely new before calling that strongly supported.
 - **BLAST agreement changes:** read `viral_validation_decomposition.tsv` for the
-  group. `n_lost_aligner_unchanged` reads lost agreement with an unchanged aligner
-  call — their `dominant_target_shift` is the BLAST/validation target moving (e.g.
-  a taxonomy rename), **not** a reassignment; `n_lost_aligner_changed` reads are
-  the reassignment-driven losses. Attribute the cause to whichever dominates; do
-  not call a reassignment the cause of agreement loss on unchanged aligner calls.
-  Use the per-taxon table's `is_agreement_driver` to name the taxon.
+  group. `n_lost_target_only` losses are the BLAST/validation target moving (e.g. a
+  taxonomy rename) under an unchanged aligner call — **not** a reassignment;
+  `n_lost_aligner_only` losses are reassignment-driven; `n_lost_both_changed` are
+  ambiguous (both taxids moved) and `n_lost_neither_changed` are unexplained by a
+  taxid move. Name a single cause only when one category clearly dominates **and**
+  the one-sided residual (`n_validated_reference_only` + `n_validated_candidate_only`)
+  is small relative to the losses; otherwise report the split and call it mixed or
+  partly unexplained. Use the per-taxon table's `is_agreement_driver` to name the
+  taxon and `dominant_target_shift_*` for the rename pair.
 - **Kraken shifts:** a database-update explanation is speculative unless
   per-taxon reference membership was checked.
 

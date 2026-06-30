@@ -222,11 +222,12 @@ def _build_downstream_tree(root: Path, side: str) -> None:
                 "aligner_taxid_lca",
                 "group",
                 "validation_distance_aligner",
+                "validation_staxid_lca",
                 "prim_align_dup_exemplar",
             ]
             rows = [
-                ["r1", group, 10, group, 0, "r1"],
-                ["r2", group, seq2_taxid, group, 1, "r2"],
+                ["r1", group, 10, group, 0, 10, "r1"],
+                ["r2", group, seq2_taxid, group, 1, seq2_taxid, "r2"],
             ]
         else:
             cols = [
@@ -235,10 +236,11 @@ def _build_downstream_tree(root: Path, side: str) -> None:
                 "aligner_taxid_lca",
                 "group",
                 "validation_distance_aligner",
+                "validation_staxid_lca",
             ]
             rows = [
-                ["r1", group, 10, group, 0],
-                ["r2", group, seq2_taxid, group, 1],
+                ["r1", group, 10, group, 0, 10],
+                ["r2", group, seq2_taxid, group, 1, seq2_taxid],
             ]
         _write_tsv_gz(d / f"{group}_validation_hits.tsv.gz", cols, rows)
         _write_tsv_gz(
@@ -408,6 +410,16 @@ def test_main_end_to_end(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Non
     assert gil.n_reassigned == 1
     buckets = pd.read_csv(out / "viral_reassignment_buckets.tsv", sep="\t")
     assert (buckets.bucket == "same-family").any()
+
+    # The BLAST decomposition table is produced with its full schema and a G_ILL
+    # row (here no shared read flips agreement, so the loss split is all zeros).
+    decomp = pd.read_csv(out / "viral_validation_decomposition.tsv", sep="\t")
+    assert {
+        "n_lost_target_only",
+        "n_lost_aligner_only",
+        "n_validated_reference_only",
+    } <= set(decomp.columns)
+    assert (decomp.group == "G_ILL").any()
 
     # Flag contents: 50% reassignment (> 10% threshold) is flagged for G_ILL.
     flags = pd.read_csv(out / "flags.tsv", sep="\t")

@@ -1182,32 +1182,38 @@ class TestValidationAgreementDecomposition:
             ],
         )
 
-    def test_splits_aligner_moved_from_target_moved(self) -> None:
-        # r1: aligner unchanged, target moved 28875->3432193 (rename) -> lost,
-        #     aligner_unchanged. r2: aligner moved 10941->28875 -> lost, changed.
-        #     r3: agrees on both sides -> not a loss.
+    def test_four_way_loss_split(self) -> None:
+        # r1 target-only (rename 28875->3432193); r2 aligner-only (10941->28875);
+        # r3 both taxids moved (ambiguous); r4 neither taxid moved (distance flip);
+        # r5 agrees on both sides (not a loss).
         reference = self._vh(
             [
                 ["G", "s", "r1", 28875, 0, 28875],
                 ["G", "s", "r2", 10941, 0, 10941],
-                ["G", "s", "r3", 500, 0, 500],
+                ["G", "s", "r3", 600, 0, 700],
+                ["G", "s", "r4", 800, 0, 800],
+                ["G", "s", "r5", 500, 0, 500],
             ]
         )
         candidate = self._vh(
             [
                 ["G", "s", "r1", 28875, 1, 3432193],
                 ["G", "s", "r2", 28875, 1, 10941],
-                ["G", "s", "r3", 500, 0, 500],
+                ["G", "s", "r3", 601, 1, 701],
+                ["G", "s", "r4", 800, 1, 800],
+                ["G", "s", "r5", 500, 0, 500],
             ]
         )
         out = dm.validation_agreement_decomposition(
             reference, candidate, name_map={3432193: "Rotavirus alphagastroenteritidis"}
         ).iloc[0]
-        assert out.n_validated_both == 3
-        assert out.n_agreement_lost == 2
-        assert out.n_lost_aligner_unchanged == 1
-        assert out.n_lost_aligner_changed == 1
-        # The unchanged-aligner loss is the validation-target rename.
+        assert out.n_validated_both == 5
+        assert out.n_agreement_lost == 4
+        assert out.n_lost_target_only == 1
+        assert out.n_lost_aligner_only == 1
+        assert out.n_lost_both_changed == 1
+        assert out.n_lost_neither_changed == 1
+        # The dominant target-only shift is the rename pair.
         assert out.dominant_target_shift_taxid_reference == 28875
         assert out.dominant_target_shift_taxid_candidate == 3432193
         assert (
@@ -1216,18 +1222,31 @@ class TestValidationAgreementDecomposition:
         )
         assert out.dominant_target_shift_reads == 1
 
-    def test_reads_validated_on_one_side_excluded(self) -> None:
-        # r1 validated only on the candidate side -> not part of the both-validated
-        # denominator, so no agreement change is attributed to it.
-        reference = self._vh([["G", "s", "r1", 10, None, 10]])
-        candidate = self._vh([["G", "s", "r1", 10, 0, 10]])
-        out = dm.validation_agreement_decomposition(reference, candidate)
-        assert out.empty
+    def test_one_sided_validated_reads_are_residual_not_dropped(self) -> None:
+        # The group's per-side rate can change purely from reads validated on one
+        # side. The group must still get a row, with those reads counted as the
+        # residual rather than silently excluded.
+        reference = self._vh(
+            [
+                ["G", "s", "r1", 10, 0, 10],  # validated reference-only
+                ["G", "s", "r2", 20, 0, 20],  # validated both, stays agreeing
+            ]
+        )
+        candidate = self._vh(
+            [
+                ["G", "s", "r1", 10, None, 10],  # not validated on candidate
+                ["G", "s", "r2", 20, 0, 20],
+            ]
+        )
+        out = dm.validation_agreement_decomposition(reference, candidate).iloc[0]
+        assert out.n_agreement_lost == 0  # no shared read flipped
+        assert out.n_validated_reference_only == 1  # the residual is surfaced
+        assert out.n_validated_both == 1
 
     def test_missing_columns_returns_header_only(self) -> None:
         out = dm.validation_agreement_decomposition(pd.DataFrame(), pd.DataFrame())
         assert out.empty
-        assert "n_lost_aligner_unchanged" in out.columns
+        assert "n_lost_target_only" in out.columns
 
 
 class TestBoundingNumbers:
