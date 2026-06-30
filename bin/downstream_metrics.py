@@ -1319,6 +1319,63 @@ def validation_agreement(vh: pd.DataFrame) -> pd.DataFrame:
     )
 
 
+def validation_agreement_by_taxon(vh: pd.DataFrame) -> pd.DataFrame:
+    """Per-(group, aligner taxon) BLAST-validation agreement for one side.
+
+    Breaks the per-group `validation_agreement` down by the pipeline's assigned
+    taxon (`aligner_taxid_lca`), so a group-level agreement-rate change can be
+    localized to the taxa driving it ("which taxa are most affected, and how far
+    off are the new disagreements"). A read is 'validated' when
+    validation_distance_aligner is non-null; agreement means a taxonomic distance
+    of 0 to the BLAST validation LCA, and a larger mean distance is a worse
+    disagreement.
+
+    This groups by taxon WITHIN each side independently (BLAST validation is a
+    per-side measurement), mirroring `validation_agreement`; the caller merges the
+    two sides on (group, taxid) to get the per-taxon delta.
+
+    Args:
+        vh: validation_hits with group, aligner_taxid_lca, and
+            validation_distance_aligner columns.
+
+    Returns:
+        DataFrame: group, taxid (the aligner_taxid_lca), n_reads, n_validated,
+        agreement_rate (fraction of validated reads with distance 0),
+        mean_distance (over validated reads). Empty (header-only) when no rows.
+    """
+    cols = [
+        "group",
+        "taxid",
+        "n_reads",
+        "n_validated",
+        "agreement_rate",
+        "mean_distance",
+    ]
+    if vh.empty or "aligner_taxid_lca" not in vh.columns:
+        return pd.DataFrame(columns=cols)
+    dist = pd.to_numeric(vh["validation_distance_aligner"], errors="coerce")
+    vh = vh.assign(_dist=dist)
+    records: list[dict[str, object]] = []
+    for (group, taxid), g in vh.groupby(["group", "aligner_taxid_lca"]):
+        n_reads = len(g)
+        validated = g["_dist"].notna()
+        n_validated = int(validated.sum())
+        agree = int((g.loc[validated, "_dist"] == 0).sum())
+        records.append(
+            {
+                "group": group,
+                "taxid": int(cast(Any, taxid)),
+                "n_reads": n_reads,
+                "n_validated": n_validated,
+                "agreement_rate": agree / n_validated if n_validated else None,
+                "mean_distance": (
+                    g.loc[validated, "_dist"].mean() if n_validated else None
+                ),
+            }
+        )
+    return pd.DataFrame.from_records(records, columns=cols)
+
+
 def vertebrate_status_flips(
     old_annotated: pd.DataFrame,
     new_annotated: pd.DataFrame,

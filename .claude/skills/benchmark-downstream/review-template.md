@@ -1,20 +1,9 @@
 # DOWNSTREAM comparison report
 
 This report compares the DOWNSTREAM output of two pipeline runs — a candidate run
-against a reference run, each a **(pipeline version, reference index) pair** — to
+against a reference run, each a **(pipeline version, index) pair** — to
 help a human decide whether the candidate is safe to adopt. With no ground truth
-to compare against, a difference is neither good nor bad on its face. **This
-report flags differences as questions for a human, never as verdicts**, and names
-a likely driver only as a hypothesis.
-
-> **Author instructions.** Print the one attribution statement that matches what
-> differs between these two runs (see SKILL.md "Attribution"); delete the others.
-
-`<Attribution statement for THIS comparison — one of: "These runs differ in
-<list ≥2 of code / reference index / QC parameters, or any dimension that cannot
-be confirmed unchanged>, so a difference here cannot be attributed to a single
-cause." OR "These runs differ only in <the one dimension> (the others confirmed
-unchanged), so a difference is attributable to that dimension more directly.">`
+to compare against, a difference is neither good nor bad on its face.
 
 > **How to fill this in (instructions for the report author; delete this block
 > and every `> **Author instructions**` block in the final REVIEW.md).** Replace
@@ -31,18 +20,33 @@ unchanged), so a difference is attributable to that dimension more directly.">`
 
 ## Run identity
 
+> **Author instructions.** Take the DOWNSTREAM roots, index roots, and pipeline
+> versions from `run_identity.tsv`. Use the **specific** pipeline version (e.g.
+> `3.2.2.0-dev`), not a branch label; if a version reads `unknown`, supply
+> `--candidate-version` / `--reference-version` and re-run (SKILL.md Step 1)
+> rather than writing "dev branch".
+
 | | Candidate (`--candidate`) | Reference (`--reference`) |
 |---|---|---|
 | DOWNSTREAM output | `s3://path/to/candidate/...` | `s3://path/to/reference/...` |
 | Index | `s3://nao-mgs-index/<DATE>` | `s3://nao-mgs-index/<DATE>` |
-| Pipeline version | `<ver, if known>` | `<ver, if known>` |
+| Pipeline version | `<exact version from run_identity.tsv>` | `<exact version>` |
 
-- **What differs between the runs:** `<list which of {pipeline code, reference
-  index, QC parameters} actually differ — this sets how far any difference can be
-  attributed (see the intro). If only one differs, say so.>`
+- **What differs between the runs:** `<list which of {pipeline code, index, QC
+  parameters} actually differ — this sets how far any difference can be
+  attributed (see the attribution statement below). If only one differs, say so.>`
 - **Comparison scope:** `<N>` groups (`<X>` Illumina + `<Y>` ONT), matched by
   name. `<note any group or file type missing on one side; if none, say so>`.
 - **Report generated:** `<YYYY-MM-DD HH:MM>`
+
+> **Author instructions.** Print the one attribution statement that matches what
+> differs between these two runs (see SKILL.md "Attribution"); delete the other.
+
+`<Attribution statement for THIS comparison — one of: "These runs differ in
+<list ≥2 of code / index / QC parameters, or any dimension that cannot be
+confirmed unchanged>, so a difference here cannot be attributed to a single
+cause." OR "These runs differ only in <the one dimension> (the others confirmed
+unchanged), so a difference is attributable to that dimension more directly.">`
 
 ---
 
@@ -92,14 +96,30 @@ out:
 > difference is bidirectional or mixed (some groups up, some down), say so rather
 > than forcing a single direction. Put method and statistical caveats in the
 > matching Detailed investigation section and the Methodology appendix, not here.
-> Do not assert causes; if a Likely-drivers investigation was done, point to it
-> rather than restating it.
 >
-> **End each subsection with a `**To confirm:**` line** — one or two plain
-> sentences asking the human to confirm whether the change reflects a real change
-> or an artifact, naming the taxa/groups, keeping any driver link explicitly
-> hypothetical ("consistent with", "hypothesis only") and using no verdict words
-> ("over-calling", "legitimate", "wrong", "caused by").
+> **Fold the mechanism in (no separate section).** When a Step-4 cross-check
+> points to a suspected cause, add a short `**Likely mechanism:**` clause **within
+> the finding** — there is no separate "Likely drivers" section. Tag it with one
+> of three evidence-anchored confidence levels — **Strongly supported** /
+> **Consistent** / **Speculative** (criteria in SKILL.md Step 4) — and cite the
+> evidence that earns the level; if nothing supports a mechanism, omit the clause
+> entirely. The level rates the evidence for the cause, not the finding's
+> severity, and even "Strongly supported" is an inference, not a verdict (no
+> ground truth). Attach the clause to the causal claim only — do not label a
+> deterministic number (straight from a TSV) as a mechanism. In particular, when a
+> clade/taxon drops out of the viral counts, check `vertebrate_status_flips.tsv`
+> first: a `lost_vertebrate` re-annotation removes it from the index's
+> vertebrate-infecting set and is the most likely benign cause — say so rather
+> than guessing at a genome removal.
+>
+> **End each subsection with a brief reviewer-facing line.** Usually a
+> `**To confirm:**` line — one or two plain sentences asking the human to confirm
+> whether the change reflects a real change or an artifact, naming the
+> taxa/groups. But **do not manufacture an action when nothing specific is
+> actionable**: a self-explanatory finding (e.g. a new detection from a genome
+> added to the index) can close with a one-line `**Note:**` flagging it for
+> awareness instead. Either way use no verdict words ("over-calling",
+> "legitimate", "wrong", "caused by").
 >
 > Candidate dimensions (each maps to a Detailed investigation section; cross-
 > reference it). For each, the kind of thing to report if present:
@@ -127,18 +147,31 @@ out:
 >   them: how many groups *flagged* (share change past the threshold), and
 >   separately in how many groups the clade reached zero candidate share (a
 >   collapse can occur below the flag threshold, and a flagged move need not be a
->   collapse). Before calling a share drop a collapse, check the raw read counts
+>   collapse). The flag fires at BOTH family and order rank, so a family and its
+>   parent order are two flags for one underlying clade — break the count down by
+>   rank (family rows vs order rows) rather than reporting a single conflated
+>   total. The same family can also flag in OPPOSITE directions across groups (a
+>   drop in some, a rise in others, often a denominator effect) — say so rather
+>   than implying one direction. Before calling a share drop a collapse, check the raw read counts
 >   (`reads_reference`/`reads_candidate`, i.e. `delta_reads`): a clade's share can
 >   fall purely because the group's total viral reads grew, so confirm the clade's
->   own reads actually dropped. State the alternatives (a real change vs. a
->   reference/classification effect) as alternatives — but note a clade present in
->   the table with `reads_candidate == 0` is still in the candidate-index taxonomy,
->   so a re-ranking/deletion artifact does not explain
->   it (that applies only to a clade missing from the table entirely).
+>   own reads actually dropped. For any clade that drops to zero candidate share,
+>   cross-check `vertebrate_status_flips.tsv` first: if its taxa appear as
+>   `lost_vertebrate`, the family was re-annotated out of the index's
+>   vertebrate-infecting set (the most likely benign cause) — fold that in as the
+>   hypothesis. State the alternatives (a real change vs. a re-annotation or
+>   reference-genome effect) as alternatives — but note a clade present in the
+>   table with `reads_candidate == 0` is still in the candidate-index taxonomy, so
+>   a re-ranking/deletion artifact does not explain it (that applies only to a
+>   clade missing from the table entirely).
 > - **BLAST-validation agreement** — groups whose agreement rate moved past
 >   threshold, with both the validated fraction and the agreement rate (a rate
 >   change on a shifting validated subset is ambiguous — note which groups have a
->   stable validated fraction).
+>   stable validated fraction). For a flagged group, break the change down by
+>   taxon from `viral_validation_agreement_by_taxon.tsv`: name the taxa with the
+>   most validated reads driving the move, their per-side agreement rate and
+>   `delta_agreement`, and use `mean_distance` to say how far off the new
+>   disagreements are (a one-edge offset is mild; a large distance is not).
 > - **Vertebrate-infecting annotation flips** — taxa that gained or lost the
 >   annotation between the indexes, with named examples; note it as a possible
 >   driver of subset-membership changes (hypothesis only).
@@ -173,24 +206,6 @@ line. Delete the dimensions with nothing to report.>`
 
 - `<dimension: result, with the bounding number — e.g. quality metrics, schema/
   inventory, and any metric dimension checked but within threshold>`
-
----
-
-## Likely drivers
-
-> **Author instructions.** This section is OPTIONAL and is NOT produced by the
-> script — it records any lightweight, by-hand investigation into the *probable
-> mechanism* behind a Main finding (see "Optionally investigate likely drivers"
-> in SKILL.md for cheap query patterns). Include it only when such investigation
-> was actually done; otherwise delete the whole section. Everything here is an
-> evidence-backed **hypothesis**, never a verdict — there is no ground truth.
-> One short subsection per finding investigated: state the suspected mechanism in
-> one sentence, then the concrete evidence (named taxa with taxids, accessions,
-> read counts, and the one-line query that produced them) so a reviewer can
-> re-run it. Keep this clearly separate from the deterministic findings above.
-
-`<One "### <finding> — <one-line mechanism>" subsection per investigated finding,
-or delete this section if none were investigated.>`
 
 ---
 
@@ -235,7 +250,9 @@ taxid-comparison caveats that apply to this whole section).
 #### Lost / gained / reassigned reads (vertebrate-viral subset)
 
 Different denominators: % lost = lost ÷ reference, % gained = gained ÷ candidate,
-% reassigned = reassigned ÷ shared.
+% reassigned = reassigned ÷ shared. (This table is the `scope == vertebrate` rows
+of `viral_read_status.tsv`; the `scope == all` rows are the all-viral counterpart,
+not shown here.)
 
 | Group | Platform | reference | candidate | shared | reassigned | lost | gained | % lost | % gained | % reassigned |
 |---|---|---|---|---|---|---|---|---|---|---|
@@ -287,11 +304,24 @@ signal: BLAST runs on cluster representatives and is propagated to reads.>`
 |---|---|---|---|---|---|
 | ... | | | | | |
 
+`<For each flagged group, break the change down by taxon from
+viral_validation_agreement_by_taxon.tsv: the aligner taxa (named, with taxid) that
+carry the most validated reads, their per-side agreement_rate and delta_agreement,
+and mean_distance (how far off the new disagreements are). This answers which taxa
+are most affected and how bad the disagreements are. Park the full per-taxon table
+in Appendix C if long.>`
+
+| Group | Taxon (taxid) | n validated (ref → cand) | agree (ref → cand) | Δ agree | mean dist (ref → cand) |
+|---|---|---|---|---|---|
+| ... | | | | | |
+
 #### Vertebrate-status flips between indexes
 
 `<Count of taxa that gained vs lost the vertebrate-infecting annotation between
-the reference and candidate indexes, with named examples. A possible driver of subset-
-membership changes above — hypothesis only.>`
+the reference and candidate indexes. The table can hold hundreds of rows; do NOT
+enumerate them — name only the flips that drive a finding above (e.g. the taxa
+behind a clade collapse or a read gain), and give the totals for the rest. A
+possible driver of subset-membership changes above — hypothesis only.>`
 
 ### Kraken abundances
 
@@ -391,7 +421,11 @@ rows that moves with a read-level lost/gained finding).>`
 
 > **Author instructions.** Reproduce the flag table from `flags.tsv` and state
 > the thresholds used. Flags are fixed-threshold only (a value exceeding a
-> documented absolute threshold). Give counts per category.
+> documented absolute threshold). Give counts per category. For the clade-share
+> category, break the total down by rank (family rows vs order rows): the flag
+> fires at both family and order rank, so the raw count double-counts each
+> underlying clade once per rank — report both so the number is not mistaken for
+> distinct clades.
 
 Thresholds used: `<list them, e.g. lost >2%, gained >25%, reassigned >10%, clade
 share change >3pp, BLAST agreement drop >0.1, Bray-Curtis >0.15>`.

@@ -113,6 +113,78 @@ def stage_results(root: str, local_dir: Path) -> Path:
     return Path(src)
 
 
+def _fetch_optional(src: str, dst: Path) -> Path | None:
+    """Stage a single file (s3:// or local), or return None if it is absent.
+
+    Unlike `fetch_index_file`, a missing source is not an error: it returns None
+    so callers can probe several candidate locations and degrade gracefully.
+    """
+    if src.startswith("s3://"):
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        result = subprocess.run(
+            ["aws", "s3", "cp", src, str(dst), "--no-progress"],
+            capture_output=True,
+        )
+        return dst if result.returncode == 0 else None
+    path = Path(src)
+    return path if path.exists() else None
+
+
+def _version_from_pyproject(path: Path) -> str | None:
+    """Read the pipeline version from a pyproject.toml, or None if not found."""
+    try:
+        data = tomllib.loads(path.read_text())
+    except (OSError, tomllib.TOMLDecodeError):
+        return None
+    project = data.get("project")
+    if isinstance(project, dict) and project.get("version"):
+        return str(project["version"])
+    if data.get("version"):
+        return str(data["version"])
+    return None
+
+
+def read_pipeline_version(
+    root: str, work_dir: Path, override: str | None = None
+) -> str | None:
+    """Resolve a run's pipeline version: explicit override, else probe `root`.
+
+    The DOWNSTREAM output root may carry the version in a `logging*/pyproject.toml`
+    (newer layout) or `logging*/pipeline-version.txt` (older layout). DOWNSTREAM-
+    only outputs whose logging directory holds no version file return None; in
+    that case the caller is expected to supply `override` (read from the matching
+    RUN output's `logging/pyproject.toml`, where the version lives). Network/parse
+    errors degrade to None rather than aborting the comparison.
+
+    Args:
+        root: DOWNSTREAM output root (s3:// URI or local path).
+        work_dir: Scratch directory for staging the probed file.
+        override: Explicit version string to use verbatim if given.
+
+    Returns:
+        Version string, or None if neither an override nor a probe found one.
+    """
+    if override:
+        return override
+    base = root.rstrip("/")
+    for sub in ("logging_downstream/pyproject.toml", "logging/pyproject.toml"):
+        staged = _fetch_optional(f"{base}/{sub}", work_dir / Path(sub).name)
+        if staged is not None:
+            version = _version_from_pyproject(staged)
+            if version:
+                return version
+    for sub in (
+        "logging_downstream/pipeline-version.txt",
+        "logging/pipeline-version.txt",
+    ):
+        staged = _fetch_optional(f"{base}/{sub}", work_dir / Path(sub).name)
+        if staged is not None:
+            text = staged.read_text().strip()
+            if text:
+                return text
+    return None
+
+
 #############
 # DISCOVERY #
 #############
@@ -512,6 +584,22 @@ def parse_arguments() -> argparse.Namespace:
         help="Reference index root. Used for the vertebrate-status-flip side-table.",
     )
     parser.add_argument(
+        "--candidate-version",
+        required=False,
+        default=None,
+        help=(
+            "Candidate pipeline version, used verbatim in run_identity.tsv. "
+            "Overrides auto-detection; supply this when the DOWNSTREAM root has no "
+            "logging pyproject.toml (read it from the RUN output's pyproject.toml)."
+        ),
+    )
+    parser.add_argument(
+        "--reference-version",
+        required=False,
+        default=None,
+        help="Reference pipeline version, used verbatim in run_identity.tsv.",
+    )
+    parser.add_argument(
         "--out",
         type=Path,
         required=True,
@@ -589,6 +677,34 @@ def main() -> None:
             logger.info(
                 f"Inferred ONT on {side} (no short-read-only outputs): {ont_groups}"
             )
+
+    # Run identity: each run's DOWNSTREAM root, index root, and pipeline version.
+    # The version auto-detects from the run's logging dir, falling back to the
+    # explicit --*-version override (DOWNSTREAM-only outputs carry no version).
+    meta_dir = args.out / "_meta"
+    run_identity = pd.DataFrame(
+        [
+            {
+                "side": "reference",
+                "downstream_root": args.reference,
+                "index_root": args.reference_index or "",
+                "pipeline_version": read_pipeline_version(
+                    args.reference, meta_dir / "reference", args.reference_version
+                )
+                or "unknown",
+            },
+            {
+                "side": "candidate",
+                "downstream_root": args.candidate,
+                "index_root": args.candidate_index or "",
+                "pipeline_version": read_pipeline_version(
+                    args.candidate, meta_dir / "candidate", args.candidate_version
+                )
+                or "unknown",
+            },
+        ]
+    )
+    write_tsv(run_identity, args.out / "run_identity.tsv")
 
     # Quantitative tables that feed the consolidated flags (Focus 1-3).
     outputs: dict[str, pd.DataFrame] = {}
@@ -770,6 +886,31 @@ def main() -> None:
         )
         write_tsv(validation, args.out / "viral_validation_agreement.tsv")
         outputs["viral_validation_agreement"] = validation
+
+        # Per-taxon agreement breakdown: localizes a group-level agreement-rate
+        # change to the aligner taxa driving it (most-affected taxa + how far the
+        # new disagreements are off). Needs aligner_taxid_lca alongside distance.
+        val_taxon_cols = ["group", "aligner_taxid_lca", "validation_distance_aligner"]
+        val_reference_t = load_validation_hits(
+            reference_results, reference_manifest, val_taxon_cols
+        )
+        val_candidate_t = load_validation_hits(
+            candidate_results, candidate_manifest, val_taxon_cols
+        )
+        agreement_by_taxon = dm.validation_agreement_by_taxon(val_reference_t).merge(
+            dm.validation_agreement_by_taxon(val_candidate_t),
+            on=["group", "taxid"],
+            how="outer",
+            suffixes=("_reference", "_candidate"),
+        )
+        agreement_by_taxon["delta_agreement"] = (
+            agreement_by_taxon["agreement_rate_candidate"]
+            - agreement_by_taxon["agreement_rate_reference"]
+        )
+        write_tsv(
+            agreement_by_taxon,
+            args.out / "viral_validation_agreement_by_taxon.tsv",
+        )
 
         # Vertebrate-status flips between the two index annotations.
         if old_annotated is not None:

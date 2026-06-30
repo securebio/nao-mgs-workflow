@@ -695,6 +695,37 @@ class TestValidationAgreement:
         assert abs(out.agreement_rate - 2 / 3) < 1e-9
 
 
+class TestValidationAgreementByTaxon:
+    def test_per_taxon_rates_and_distance(self) -> None:
+        vh = pd.DataFrame(
+            {
+                "group": ["G", "G", "G", "G", "G"],
+                "aligner_taxid_lca": [10, 10, 10, 20, 20],
+                "validation_distance_aligner": [0, 2, None, 0, 0],
+            }
+        )
+        out = dm.validation_agreement_by_taxon(vh).set_index("taxid")
+        # taxon 10: 3 reads, 2 validated, 1 agrees (distance 0), mean distance 1.
+        assert out.loc[10].n_reads == 3
+        assert out.loc[10].n_validated == 2
+        assert abs(out.loc[10].agreement_rate - 0.5) < 1e-9
+        assert abs(out.loc[10].mean_distance - 1.0) < 1e-9
+        # taxon 20: both validated and agree.
+        assert abs(out.loc[20].agreement_rate - 1.0) < 1e-9
+
+    def test_empty_input_returns_header_only(self) -> None:
+        out = dm.validation_agreement_by_taxon(pd.DataFrame())
+        assert out.empty
+        assert list(out.columns) == [
+            "group",
+            "taxid",
+            "n_reads",
+            "n_validated",
+            "agreement_rate",
+            "mean_distance",
+        ]
+
+
 class TestVertebrateStatusFlips:
     def _ann(self, rows: list[list]) -> pd.DataFrame:
         return pd.DataFrame(

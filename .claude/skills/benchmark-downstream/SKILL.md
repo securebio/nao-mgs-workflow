@@ -1,13 +1,13 @@
 ---
 name: benchmark-downstream
-description: Compare the DOWNSTREAM output of two pipeline runs — each a (pipeline version, reference index) pair, typically a release candidate vs current production — and flag large differences for human review. Use to vet a candidate's viral assignments, kraken abundances, and QC metrics against a reference run before adopting it.
+description: Compare the DOWNSTREAM output of two pipeline runs — each a (pipeline version, index) pair, typically a release candidate vs current production — and flag large differences for human review. Use to vet a candidate's viral assignments, kraken abundances, and QC metrics against a reference run before adopting it.
 ---
 
 # Compare DOWNSTREAM output of two runs
 
 This skill diffs the DOWNSTREAM output of two pipeline runs across both platforms
 and flags large differences for a human to adjudicate. Each run is a **(pipeline
-version, reference index) pair**; the common case is a release diff (the candidate
+version, index) pair**; the common case is a release diff (the candidate
 + its index vs the reference + its index, which the CLI labels `--candidate` /
 `--reference`), but it works for any two version/index pairs — e.g. the same code
 with only the index rebuilt. `bin/compare_downstream_runs.py` does the
@@ -22,13 +22,13 @@ flags large changes for human review, naming a likely driver only as a
 hypothesis.
 
 **Attribution.** How far a difference can be attributed depends on what differs
-between the runs. Establish which of {pipeline code, reference index, QC
+between the runs. Establish which of {pipeline code, index, QC
 parameters} differ from the Run-identity inputs: the pipeline version and the
 index identity (date/path) are given; QC parameters are **not** emitted by the
 script, so unless the user states they are unchanged, treat that dimension as not
 confirmed. Record the conclusion in Run identity, then print the single matching
-attribution statement in the report intro (the template marks the spot), deleting
-the others:
+attribution statement just below the Run-identity table (the template marks the
+spot), deleting the others:
 - **More than one** dimension differs, OR any dimension cannot be confirmed
   unchanged (the typical release diff) → a difference cannot be pinned on any
   single cause.
@@ -113,6 +113,10 @@ them at the output directory; do not write `REVIEW.md`.
   index; a taxon deleted from the candidate-index taxonomy drops from the
   clade-share table.
 - `out_dir` (required): absolute path for tables and the report → `--out`.
+- `candidate_version` / `reference_version` (optional): the pipeline version
+  string for each run → `--candidate-version` / `--reference-version`. The script
+  auto-detects the version from the run's `logging*/pyproject.toml`; supply these
+  only when auto-detection comes back `unknown` (see Step 1).
 
 If a required input is missing, ask; do not guess. Without `--candidate-index`,
 the viral-assignment analysis is skipped and the report must say so — never
@@ -136,6 +140,15 @@ Use an **absolute** path for `--out`. The script stages each run's
 `total-virus-db-annotated.tsv.gz` under `<out>/_staged` and `<out>/_index`. It
 takes a couple of minutes (most of it staging + taxonomy parsing).
 
+**Pipeline versions.** The script writes `run_identity.tsv` with each run's exact
+pipeline version, auto-detected from the run's `logging*/pyproject.toml`. The
+DOWNSTREAM output root does **not** always carry that file (a DOWNSTREAM-only run
+publishes only sentinels under `logging_downstream/`); when the version comes back
+`unknown`, read it from the matching **RUN** output's `logging/pyproject.toml`
+(its `[project] version`) and pass `--candidate-version` / `--reference-version`
+so the report names the specific version (e.g. `3.2.2.0-dev`) rather than a branch
+label. Re-run the script after supplying them so `run_identity.tsv` is correct.
+
 The script does **not** stage `taxonomy-names.dmp`, but the report-writing
 "name every entity" rule needs it (the reassignment TSVs carry only taxids). Fetch
 it once from the candidate index alongside the staged dumps, e.g.
@@ -149,6 +162,9 @@ defaults are documented in `bin/downstream_metrics.py` (`DEFAULT_THRESHOLDS`).
 
 The script writes these TSVs to `--out`:
 
+- `run_identity.tsv` — per side (reference/candidate): downstream_root, index_root,
+  pipeline_version (auto-detected or from `--*-version`). Drives the Run-identity
+  table; an `unknown` version is the cue to supply the override (Step 1).
 - `flags.tsv` — consolidated flags (focus, key, metric, value, threshold,
   flag_type). Read this first; it drives the Flags appendix, the Summary, and
   which Main-findings subsections must appear.
@@ -176,7 +192,11 @@ The script writes these TSVs to `--out`:
   points; and the clade-share flag is computed on the `reads_clade_total` basis
   only (not `reads_clade_dedup`), so flag counts reconcile against the
   `reads_clade_total` rows.
-- `viral_validation_agreement.tsv` — BLAST-validation agreement.
+- `viral_validation_agreement.tsv` — BLAST-validation agreement, per group.
+- `viral_validation_agreement_by_taxon.tsv` — the same agreement broken down per
+  (group, aligner taxon): per-side validated counts, agreement rate, mean
+  validation distance, and `delta_agreement`. Use it to say which taxa drove a
+  flagged group's agreement change and how far off the disagreements are.
 - `vertebrate_status_flips.tsv` — taxa whose vertebrate status flipped.
 - `kraken_bray_curtis.tsv`, `kraken_top_movers.tsv` — Kraken abundances.
 - `qc_survival.tsv` — raw->cleaned read-survival fraction per side + delta
@@ -196,10 +216,20 @@ carry an example's taxa, directions, or counts into the report (the template's
 report-writing principles above throughout.
 
 The report leads with a short Summary (scope + the 2–3 broadest differences),
-then **Main findings** — one subsection per metric dimension that produced a flag,
-each ending in a `**To confirm:**` line — then **Checked, no action needed** for
-the dimensions that stayed within threshold. There is no separate recommendations
-section; the per-finding `To confirm:` lines are the recommendations.
+then **Main findings** — one subsection per metric dimension that produced a flag —
+then **Checked, no action needed** for the dimensions that stayed within
+threshold. There is no separate recommendations section and no separate
+"likely drivers" section: each finding ends with a brief reviewer-facing line
+(the recommendation), and any suspected cause from a Step-4 cross-check is stated
+inline within the finding it concerns as a calibrated `**Likely mechanism:**`
+clause (see Step 4).
+
+That closing line is usually a `**To confirm:**` question, but **do not
+manufacture an action when there is nothing specific to confirm.** A finding that
+is self-explanatory once stated (e.g. a new detection enabled by a genome added
+to the index) can close with a one-line `**Note:**` that flags it for awareness
+instead. Keep the line free of verdict words ("over-calling", "legitimate",
+"wrong", "caused by").
 
 Key reminders:
 
@@ -223,51 +253,83 @@ Key reminders:
   judgment, not a reproducible string. Annotate each finding with breadth and
   magnitude rather than a fixed concern level; let the human prioritize.
 
-### Step 4 - Optionally investigate likely drivers
+### Step 4 - Run the standard mechanism cross-checks (fold into the findings)
 
-The script flags differences but does not explain them. For whichever findings
-this comparison surfaces, a short by-hand investigation often pins down the
-likely mechanism cheaply, and is worth doing when a human will act on the report.
-This stays **hypothesis-only** (there is no ground truth) and goes in the
-report's optional "Likely drivers" section, kept separate from the deterministic
-findings.
+The script flags differences but does not explain them. For each finding, run the
+matching cheap cross-check below **before** writing it up, and fold the result
+into that finding as a one-clause `**Likely mechanism:**` statement (see the
+closing paragraph for how to phrase it) — there is **no** separate "likely
+drivers" section. These checks are cheap, high yield, and keep a
+plausible-but-wrong guess (e.g. "genomes removed from the aligner DB" when the
+real cause is a re-annotation) from reaching the reader.
+Run them against the staged data under `<out>/_staged` and the index dumps under
+`<out>/_index` / `<out>/_reference_index`. Each is conditional on observing the
+difference it addresses; skip a check whose difference did not occur.
 
-Cheap, high-yield query patterns, each conditional on observing the difference it
-addresses (run against the staged data under `<out>/_staged` and the index dumps
-under `<out>/_index` / `<out>/_reference_index`):
-
-- **A clade collapsed, or reads were gained/lost** → check whether reference
-  genomes changed. Count alignments per reference accession on each side (in the
-  `*_validation_hits.tsv.gz` files): an accession with many hits on one side and
-  zero on the other points to a reference added to / removed from the aligner DB,
-  not a code change. Before attributing a collapse to taxonomy re-ranking or
-  taxon deletion instead, verify it: look the clade's taxid up in the candidate index's
-  `taxonomy-nodes.dmp`. A clade that still appears in `clade_rank_shares.tsv` is
-  by construction present in the candidate-index taxonomy, so re-ranking/deletion is already
-  excluded for it — do not assert that explanation without confirming the taxid
-  is genuinely absent.
+- **A clade/taxon dropped out of the viral counts, or vertebrate-viral reads were
+  lost** → **check `vertebrate_status_flips.tsv` first.** The DOWNSTREAM viral
+  output is scoped to the index's vertebrate-infecting set, so a taxon
+  re-annotated *non*-vertebrate (its members appear with `change == lost_vertebrate`)
+  drops out of the counts entirely — this is the most common benign cause of a
+  clade vanishing, and is far more likely than a genome removal. Only after ruling
+  the flip out should you look at whether reference genomes changed: count
+  alignments per reference accession on each side (`prim_align_genome_id_all` in
+  the `*_validation_hits.tsv.gz` files); an accession with many hits on one side
+  and zero on the other points to a reference added to / removed from the aligner
+  DB. A clade that still appears in `clade_rank_shares.tsv` is by construction
+  present in the candidate-index taxonomy, so do not attribute its drop to
+  taxonomy re-ranking/deletion without confirming the taxid is genuinely absent
+  from `taxonomy-nodes.dmp`.
 - **A reassignment pair dominates** → look up both taxids in the candidate index's
   `taxonomy-nodes.dmp`. If one is the direct parent of the other (same species),
   it is an LCA-specificity move — the mildest reassignment, not a renumbering.
-- **Gained reads entered the vertebrate subset** → join the gained reads' taxids
-  against `vertebrate_status_flips.tsv` to see what fraction is explained by an
-  annotation flip rather than a new detection.
-- **BLAST agreement dropped** → tabulate `(aligner_taxid_lca,
-  validation_staxid_lca)` pairs for the affected group; a single recurring offset
-  (e.g. the aligner call one edge below a restructured parent taxon) localizes
-  the drop to a taxonomy change.
+- **Vertebrate-viral reads were gained** → join the gained reads' taxids against
+  `vertebrate_status_flips.tsv` (and the candidate annotated DB) to see what
+  fraction is a `gained_vertebrate` annotation flip or a genome newly added to the
+  index, versus an existing taxon called more often.
+- **BLAST agreement moved in a group** → read that group's rows from
+  `viral_validation_agreement_by_taxon.tsv` (the deterministic per-taxon
+  breakdown): report the taxa with the largest validated-read counts and their
+  per-side agreement rate and `delta_agreement`, and use `mean_distance` to say
+  how far off the new disagreements are. This localizes the move to specific taxa
+  without a by-hand query.
 
-Record, per finding: the suspected mechanism in one sentence, then the concrete
-evidence (named taxa with taxids, accessions, counts) and the one-line query
-that produced it. Frame every conclusion as a hypothesis. Skip this step if no
-finding warrants it.
+For each finding investigated, fold in a short `**Likely mechanism:**` clause —
+the suspected cause plus the concrete evidence (named taxa with taxids, counts) —
+and tag it with one of **three confidence levels**, chosen by what the cross-check
+actually showed (not by how worried you are):
+
+- **Strongly supported** — a deterministic cross-check directly accounts for the
+  difference: the cause mechanistically entails the observed change and the link
+  is named and checkable (e.g. a clade collapse where every member taxon flips
+  `lost_vertebrate` and the output is vertebrate-scoped, so the family must drop
+  out).
+- **Consistent** — the cross-check is compatible with the difference and explains
+  much of it, but does not account for all of it or does not exclude an
+  alternative (e.g. a re-annotation that explains most lost reads but not a
+  residual few).
+- **Speculative** — no targeted cross-check confirmed it; only a plausible
+  association or domain reasoning (e.g. new environmental taxa "consistent with a
+  Kraken DB update", with no per-taxon check run).
+
+Two rules: **(a)** cite the evidence that earns the level — "Strongly supported"
+without a named, checkable link is not allowed; **(b)** if nothing supports a
+mechanism, **omit the clause** — do not default to "Speculative" to fill the slot.
+The level rates only how well the evidence supports the CAUSE; it is **not** a
+severity/concern verdict on the finding (a strongly-supported mechanism can be
+benign and a speculative one worrying — independent axes), and even "Strongly
+supported" stays an inference, not a verdict, because there is no ground truth.
+Attach the clause to the causal claim only — a deterministic number straight from
+a TSV belongs in the finding's body, not under a mechanism tag. Skip a check whose
+finding did not occur.
 
 ### Step 5 - Review and iterate
 
 Re-read `REVIEW.md` for clarity and accuracy against the TSVs (a sub-agent is
 useful here). Correct any number that doesn't trace back to an output, any
-causal claim that slipped into the deterministic findings, and any flag that
-lacks its underlying numbers.
+`Likely mechanism:` clause that overstates its confidence or isn't backed by a
+cross-check, any deterministic observation mislabeled as a mechanism, and any flag
+that lacks its underlying numbers.
 
 ### Step 6 - Hand off
 

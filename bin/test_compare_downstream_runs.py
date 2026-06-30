@@ -194,6 +194,32 @@ def test_read_tsv_handles_leading_quote(tmp_path: Path) -> None:
     assert df.iloc[0]["a"] == '"x'
 
 
+class TestReadPipelineVersion:
+    def test_override_wins_without_probing(self, tmp_path: Path) -> None:
+        # No files written: an override must be returned verbatim regardless.
+        assert (
+            cdr.read_pipeline_version(str(tmp_path), tmp_path / "_m", override="9.9.9")
+            == "9.9.9"
+        )
+
+    def test_reads_project_version_from_logging_pyproject(self, tmp_path: Path) -> None:
+        (tmp_path / "logging").mkdir()
+        (tmp_path / "logging" / "pyproject.toml").write_text(
+            '[project]\nversion = "3.2.1.5"\n'
+        )
+        assert cdr.read_pipeline_version(str(tmp_path), tmp_path / "_m") == "3.2.1.5"
+
+    def test_old_format_version_text_fallback(self, tmp_path: Path) -> None:
+        (tmp_path / "logging_downstream").mkdir()
+        (tmp_path / "logging_downstream" / "pipeline-version.txt").write_text(
+            "2.8.1.2\n"
+        )
+        assert cdr.read_pipeline_version(str(tmp_path), tmp_path / "_m") == "2.8.1.2"
+
+    def test_returns_none_when_no_version_present(self, tmp_path: Path) -> None:
+        assert cdr.read_pipeline_version(str(tmp_path), tmp_path / "_m") is None
+
+
 ###########################
 # end-to-end reference()       #
 ###########################
@@ -343,6 +369,12 @@ def test_main_end_to_end(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Non
     _build_downstream_tree(reference_root, "reference")
     _build_downstream_tree(candidate_root, "candidate")
     _build_index(index_root)
+    # logging/pyproject.toml in each run root drives pipeline-version auto-detection.
+    for root, version in ((reference_root, "1.2.3.4"), (candidate_root, "1.2.3.5-dev")):
+        (root / "logging").mkdir(parents=True, exist_ok=True)
+        (root / "logging" / "pyproject.toml").write_text(
+            f'[project]\nversion = "{version}"\n'
+        )
 
     # Reuse the same synthetic index as --reference-index (exercises both-index paths).
     argv = [
@@ -376,8 +408,16 @@ def test_main_end_to_end(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Non
         "viral_reassignment_concentration.tsv",
         "clade_rank_shares.tsv",
         "vertebrate_status_flips.tsv",
+        "run_identity.tsv",
+        "viral_validation_agreement_by_taxon.tsv",
     ):
         assert (out / name).exists(), f"missing {name}"
+
+    # Run identity carries the auto-detected pipeline versions from logging/.
+    ident = pd.read_csv(out / "run_identity.tsv", sep="\t")
+    versions = dict(zip(ident.side, ident.pipeline_version, strict=True))
+    assert versions["reference"] == "1.2.3.4"
+    assert versions["candidate"] == "1.2.3.5-dev"
 
     inv = pd.read_csv(out / "file_inventory.tsv", sep="\t")
     # Platform inference: G_ILL short-read, G_ONT ONT.
