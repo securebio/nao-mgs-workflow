@@ -1,35 +1,9 @@
 #!/usr/bin/env python3
 DESC = """
-Compare the DOWNSTREAM output of two pipeline runs (a candidate vs a reference),
-typically before promoting a release candidate, and flag large differences for
-human review.
-
-Because candidate and reference usually differ in code AND reference index AND QC
-params at once, this is a *holistic* release diff: it surfaces and flags
-differences but makes no causal attribution and renders no good/bad verdict
-(there is no ground truth). Differences are flagged for a human to adjudicate.
-
-This script does the munging and orchestration: it stages each run's
-`results_downstream/` tree, discovers per-group output files, loads the NCBI
-taxonomy and annotated viral DB from the candidate index, and writes comparison
-tables. All numeric calculations live in `downstream_metrics.py` so they can be
-reviewed and tested apart from this I/O code.
-
-Accepts s3:// URIs or local directories for --reference / --candidate (each the
-DOWNSTREAM output root, i.e. the parent of `results_downstream/`) and for
---candidate-index.
-
-Usage:
-    python bin/compare_downstream_runs.py \\
-        --reference s3://.../reference/downstream/output \\
-        --candidate s3://.../candidate/downstream/output \\
-        --candidate-index s3://nao-mgs-index/20260615 \\
-        --out ./downstream-bench/
+Compare candidate and reference DOWNSTREAM outputs and flag large differences
+for human review. Inputs may be local paths or s3:// roots. Calculations live in
+downstream_metrics.py; this script handles staging, discovery, and table I/O.
 """
-
-###########
-# IMPORTS #
-###########
 
 import argparse
 import csv
@@ -44,10 +18,6 @@ from typing import IO, Any, cast
 
 import downstream_metrics as dm
 import pandas as pd
-
-###########
-# LOGGING #
-###########
 
 
 class UTCFormatter(logging.Formatter):
@@ -75,11 +45,6 @@ logger.addHandler(handler)
 SHORTREAD_ONLY_TYPES = ("clade_counts", "duplicate_stats", "fastp")
 
 
-###########
-# STAGING #
-###########
-
-
 def open_by_suffix(path: Path) -> IO[str]:
     """Open a text file, transparently decompressing .gz."""
     if path.suffix == ".gz":
@@ -88,16 +53,7 @@ def open_by_suffix(path: Path) -> IO[str]:
 
 
 def stage_results(root: str, local_dir: Path) -> Path:
-    """Stage a run's `results_downstream/` tree locally and return its path.
-
-    Args:
-        root: DOWNSTREAM output root (s3:// URI or local path), the parent of
-            `results_downstream/`.
-        local_dir: Local directory to sync into.
-
-    Returns:
-        Path to the local `results_downstream/` directory.
-    """
+    """Stage `results_downstream/` locally and return its path."""
     src = f"{root.rstrip('/')}/results_downstream"
     local_dir.mkdir(parents=True, exist_ok=True)
     if src.startswith("s3://"):
@@ -114,11 +70,7 @@ def stage_results(root: str, local_dir: Path) -> Path:
 
 
 def _fetch_optional(src: str, dst: Path) -> Path | None:
-    """Stage a single file (s3:// or local), or return None if it is absent.
-
-    Unlike `fetch_index_file`, a missing source is not an error: it returns None
-    so callers can probe several candidate locations and degrade gracefully.
-    """
+    """Stage one file, returning None when it is absent."""
     if src.startswith("s3://"):
         dst.parent.mkdir(parents=True, exist_ok=True)
         result = subprocess.run(
@@ -147,23 +99,7 @@ def _version_from_pyproject(path: Path) -> str | None:
 def read_pipeline_version(
     root: str, work_dir: Path, override: str | None = None
 ) -> str | None:
-    """Resolve a run's pipeline version: explicit override, else probe `root`.
-
-    The DOWNSTREAM output root may carry the version in a `logging*/pyproject.toml`
-    (newer layout) or `logging*/pipeline-version.txt` (older layout). DOWNSTREAM-
-    only outputs whose logging directory holds no version file return None; in
-    that case the caller is expected to supply `override` (read from the matching
-    RUN output's `logging/pyproject.toml`, where the version lives). Network/parse
-    errors degrade to None rather than aborting the comparison.
-
-    Args:
-        root: DOWNSTREAM output root (s3:// URI or local path).
-        work_dir: Scratch directory for staging the probed file.
-        override: Explicit version string to use verbatim if given.
-
-    Returns:
-        Version string, or None if neither an override nor a probe found one.
-    """
+    """Return an override or probe current/legacy logging version files."""
     if override:
         return override
     base = root.rstrip("/")
@@ -185,23 +121,8 @@ def read_pipeline_version(
     return None
 
 
-#############
-# DISCOVERY #
-#############
-
-
 def _split_filename(filename: str, known_types: set[str]) -> tuple[str, str] | None:
-    """Split `filename` into (group, file_type) using the known file-type set.
-
-    Both group names and file types contain underscores, so we anchor on the
-    KNOWN file-type suffixes (schema names + expected outputs), matching the
-    longest first: a name ending in `_<type>.<ext>` yields (prefix, type). This
-    does not depend on any single anchor file, so a group is still discovered
-    even if (say) its validation_hits is missing.
-
-    Returns:
-        (group, file_type), or None if no known file type suffixes the filename.
-    """
+    """Split on the longest recognized `_<file_type>` suffix."""
     for ext in (".tsv.gz", ".tsv", ".json"):
         if filename.endswith(ext):
             stem = filename[: -len(ext)]
@@ -218,7 +139,7 @@ def _split_filename(filename: str, known_types: set[str]) -> tuple[str, str] | N
 
 
 def _read_table_meta(path: Path) -> tuple[int, list[str]]:
-    """Return (data_row_count, column_names) for a (optionally gzipped) TSV."""
+    """Return data-row count and columns for a (possibly gzipped) TSV."""
     with open_by_suffix(path) as fh:
         header = fh.readline().rstrip("\n")
         columns = header.split("\t") if header else []
@@ -227,24 +148,7 @@ def _read_table_meta(path: Path) -> tuple[int, list[str]]:
 
 
 def discover_side(results_dir: Path, known_types: set[str]) -> dm.SideManifest:
-    """Build a manifest of per-group output files for one run.
-
-    Groups and file types are recovered by anchoring each filename on the KNOWN
-    file-type suffixes (`known_types`) rather than a single anchor file, so a
-    group whose validation_hits (or any one output) is missing is still
-    discovered — its absent files then show up in the inventory. Platform is
-    inferred per group from file presence: a group is ONT only if it has none of
-    the short-read-only output types (SHORTREAD_ONLY_TYPES), so a short-read
-    group merely missing one of them is not mislabelled ONT. Row counts and
-    columns are read for TSVs; JSON files are recorded as present only.
-
-    Args:
-        results_dir: Local `results_downstream/` directory.
-        known_types: Recognized file-type keys (schema names + expected outputs).
-
-    Returns:
-        Manifest mapping group name -> GroupManifest.
-    """
+    """Discover group files and infer platform from short-read-only outputs."""
     all_files = sorted(p.name for p in results_dir.iterdir() if p.is_file())
     manifest: dm.SideManifest = {}
     for fname in all_files:
@@ -258,9 +162,9 @@ def discover_side(results_dir: Path, known_types: set[str]) -> dm.SideManifest:
         path = results_dir / fname
         if fname.endswith((".tsv.gz", ".tsv")):
             n_rows, columns = _read_table_meta(path)
-            entry = dm.FileEntry(present=True, n_rows=n_rows, columns=columns)
+            entry = dm.FileEntry(n_rows=n_rows, columns=columns)
         else:  # JSON or other non-tabular output: record presence only.
-            entry = dm.FileEntry(present=True, n_rows=None, columns=None)
+            entry = dm.FileEntry()
         manifest[group].files[file_type] = entry
 
     if not manifest:
@@ -276,13 +180,7 @@ def discover_side(results_dir: Path, known_types: set[str]) -> dm.SideManifest:
 
 
 def load_schema_columns(schema_dir: Path) -> dict[str, list[str]]:
-    """Map file-type key -> ordered schema field names from schemas/*.schema.json.
-
-    The file-type key is the schema filename without the `.schema.json` suffix,
-    which matches the per-group output suffix (e.g. `validation_hits`,
-    `qc_basic_stats_raw`). This keeps Focus 4 schema-driven: adding or changing
-    an output's schema is picked up automatically.
-    """
+    """Map schema filename stems to ordered field names."""
     out: dict[str, list[str]] = {}
     for schema_path in sorted(schema_dir.glob("*.schema.json")):
         file_type = schema_path.name[: -len(".schema.json")]
@@ -293,13 +191,7 @@ def load_schema_columns(schema_dir: Path) -> dict[str, list[str]]:
 
 
 def expected_downstream_types(pyproject_path: Path) -> dict[str, set[str]]:
-    """Expected per-group file types per platform, from pyproject expected-outputs.
-
-    Returns:
-        {'illumina': {...}, 'ont': {...}} of file-type keys (results_downstream
-        entries only), derived from `expected-outputs-downstream` and
-        `expected-outputs-downstream-ont`.
-    """
+    """Load expected per-group result types for Illumina and ONT."""
     data = tomllib.loads(pyproject_path.read_text())
     tool = data.get("tool", {}).get("mgs-workflow", data)
 
@@ -322,17 +214,8 @@ def expected_downstream_types(pyproject_path: Path) -> dict[str, set[str]]:
     }
 
 
-###########
-# LOADERS #
-###########
-
-
 def read_tsv(path: Path, **kwargs: Any) -> pd.DataFrame:
-    """Read a (optionally gzipped) TSV with CSV quoting disabled.
-
-    Quoting is disabled to match the pipeline's own TSV readers, where fields
-    can legitimately begin with a quote character (e.g. read sequences).
-    """
+    """Read a TSV with quoting disabled, matching pipeline readers."""
     return cast(
         pd.DataFrame, pd.read_csv(path, sep="\t", quoting=csv.QUOTE_NONE, **kwargs)
     )
@@ -349,18 +232,7 @@ def _both_sided_manifests(
     candidate_manifest: dm.SideManifest,
     file_type: str,
 ) -> tuple[dm.SideManifest, dm.SideManifest, list[dict[str, str]]]:
-    """Restrict both manifests to groups whose `file_type` is present on BOTH sides.
-
-    A per-group input absent on one side only would otherwise be misread by the
-    downstream outer join as a real difference (every reference read "lost", or
-    Bray-Curtis 1.0). This filters such groups out of the metric and records them
-    so the caller can surface them (log + skipped_groups.tsv).
-
-    Returns:
-        (reference_filtered, candidate_filtered, skipped) where `skipped` is a list
-        of {metric, group, reason} records (metric == file_type) for groups
-        present on exactly one side.
-    """
+    """Keep groups with `file_type` on both sides and record one-sided groups."""
     reference_groups = {
         g for g, gm in reference_manifest.items() if file_type in gm.files
     }
@@ -384,14 +256,7 @@ def _both_sided_manifests(
 
 
 def load_qc_basic_stats(results_dir: Path, manifest: dm.SideManifest) -> pd.DataFrame:
-    """Load and concatenate qc_basic_stats (raw + cleaned) across all groups.
-
-    Adds a `platform` column (from the manifest) to each row. NA strings (e.g.
-    n_read_pairs for ONT) are read as missing values.
-
-    Returns:
-        Concatenated DataFrame, or an empty DataFrame if no QC files are found.
-    """
+    """Load raw/cleaned QC tables and add the manifest platform."""
     frames: list[pd.DataFrame] = []
     for group, gm in manifest.items():
         for file_type in ("qc_basic_stats_raw", "qc_basic_stats_cleaned"):
@@ -421,11 +286,7 @@ def fetch_index_file(index_root: str, subpath: str, work_dir: Path) -> Path:
 
 
 def parse_taxonomy_nodes(path: Path) -> tuple[dict[int, int], dict[int, str]]:
-    """Parse taxonomy-nodes.dmp into (parent_map, rank_map).
-
-    nodes.dmp rows are '\\t|\\t'-separated: field 0 = taxid, 1 = parent taxid,
-    2 = rank.
-    """
+    """Parse taxonomy-nodes.dmp into parent and rank maps."""
     parent: dict[int, int] = {}
     rank: dict[int, str] = {}
     with open_by_suffix(path) as fh:
@@ -438,35 +299,6 @@ def parse_taxonomy_nodes(path: Path) -> tuple[dict[int, int], dict[int, str]]:
     return parent, rank
 
 
-def load_merged_taxids(index_root: str, work_dir: Path) -> dict[int, int]:
-    """Load the candidate index's merged.dmp into an {old_taxid: new_taxid} map.
-
-    merged.dmp rows are '\\t|\\t'-separated: field 0 = old taxid, 1 = new taxid.
-    Returns an empty map (with a warning) if the file is absent, so older index
-    layouts without merged.dmp degrade gracefully.
-    """
-    try:
-        path: Path | None = fetch_index_file(
-            index_root, "taxonomy-merged.dmp", work_dir
-        )
-    except subprocess.CalledProcessError:
-        path = None
-    if path is None or not path.exists():
-        logger.warning(
-            "No taxonomy-merged.dmp in index; skipping taxid canonicalization "
-            "(reassignments may include taxid-renumbering artifacts)."
-        )
-        return {}
-    merged: dict[int, int] = {}
-    with open_by_suffix(path) as fh:
-        for line in fh:
-            parts = line.split("\t|\t")
-            if len(parts) >= 2:
-                merged[int(parts[0])] = int(parts[1].split("\t|")[0])
-    logger.info(f"Parsed {len(merged)} merged taxids from {path.name}")
-    return merged
-
-
 def load_annotated_db(index_root: str, work_dir: Path) -> pd.DataFrame:
     """Load total-virus-db-annotated.tsv.gz from an index root."""
     path = fetch_index_file(index_root, "total-virus-db-annotated.tsv.gz", work_dir)
@@ -476,16 +308,7 @@ def load_annotated_db(index_root: str, work_dir: Path) -> pd.DataFrame:
 def load_validation_hits(
     results_dir: Path, manifest: dm.SideManifest, columns: list[str]
 ) -> pd.DataFrame:
-    """Load and concatenate validation_hits across groups (selected columns).
-
-    Args:
-        results_dir: Local results_downstream dir.
-        manifest: Side manifest (provides the group list).
-        columns: Columns to read; missing optional columns are tolerated.
-
-    Returns:
-        Concatenated DataFrame, or empty if no files found.
-    """
+    """Load selected validation-hit columns across manifest groups."""
     wanted = set(columns)
     frames: list[pd.DataFrame] = []
     for group in manifest:
@@ -513,14 +336,7 @@ def load_clade_counts(results_dir: Path, manifest: dm.SideManifest) -> pd.DataFr
 
 
 def load_kraken(results_dir: Path, manifest: dm.SideManifest) -> pd.DataFrame:
-    """Load and concatenate kraken reports across all groups.
-
-    Reads only the columns needed for abundance comparison to keep memory low.
-
-    Returns:
-        Concatenated DataFrame with columns group, ribosomal, rank, taxid, name,
-        n_reads_clade, or an empty DataFrame if no kraken files are found.
-    """
+    """Load abundance columns from Kraken reports across groups."""
     cols = ["group", "ribosomal", "rank", "taxid", "name", "n_reads_clade"]
     frames: list[pd.DataFrame] = []
     for group, gm in manifest.items():
@@ -536,26 +352,10 @@ def load_kraken(results_dir: Path, manifest: dm.SideManifest) -> pd.DataFrame:
     return pd.concat(frames, ignore_index=True)
 
 
-###############
-# OUTPUT I/O  #
-###############
-
-
 def write_tsv(df: pd.DataFrame, path: Path) -> None:
     """Write a DataFrame as TSV (no index)."""
     df.to_csv(path, sep="\t", index=False)
     logger.info(f"Wrote {path} ({len(df)} rows)")
-
-
-def write_json(path: Path, obj: object) -> None:
-    """Write `obj` as pretty, key-sorted JSON."""
-    path.write_text(json.dumps(obj, indent=2, sort_keys=True) + "\n")
-    logger.info(f"Wrote {path}")
-
-
-######################
-# CLI / ORCHESTRATION #
-######################
 
 
 def parse_arguments() -> argparse.Namespace:
@@ -782,7 +582,6 @@ def main() -> None:
             fetch_index_file(args.candidate_index, "taxonomy-nodes.dmp", work_dir)
         )
         tax = dm.TaxonomyTree(parent, rank)
-        merge_map = load_merged_taxids(args.candidate_index, work_dir)
         annotated = load_annotated_db(args.candidate_index, work_dir)
         vert = dm.vertebrate_taxids(annotated)
         logger.info(
@@ -802,6 +601,7 @@ def main() -> None:
             "sample",
             "seq_id",
             "aligner_taxid_lca",
+            "validation_distance_aligner",
         ]
         # Read-level join: restrict to groups whose validation_hits is present on
         # both sides. A one-sided file would misread every reference read for that
@@ -819,29 +619,17 @@ def main() -> None:
             )
         vh_reference = load_validation_hits(reference_results, vh_reference_mf, vh_cols)
         vh_candidate = load_validation_hits(candidate_results, vh_candidate_mf, vh_cols)
-        # Group discovery no longer requires validation_hits, so a side could lack
-        # it entirely. The read-level join needs it on both sides; clade shares and
-        # vertebrate-status flips do NOT, so only the read-level block is gated here
-        # — not the whole focus. (BLAST agreement also needs validation_hits and is
-        # guarded by its own check below.)
         need = {"group", "seq_id", "aligner_taxid_lca"}
         if need.issubset(vh_reference.columns) and need.issubset(vh_candidate.columns):
-            joined = dm.join_read_assignments(vh_reference, vh_candidate, merge_map)
+            joined = dm.join_read_assignments(vh_reference, vh_candidate)
             read_status = dm.summarize_read_status(joined, vert)
             write_tsv(read_status, args.out / "viral_read_status.tsv")
             outputs["viral_read_status"] = read_status
-            reassign = dm.reassignment_distances(joined, tax, vert)
+            reassign = dm.reassignment_pair_counts(joined, tax, vert)
             write_tsv(
                 dm.bucket_summary(reassign), args.out / "viral_reassignment_buckets.tsv"
             )
-            write_tsv(
-                dm.reassignment_concentration(reassign),
-                args.out / "viral_reassignment_concentration.tsv",
-            )
-            write_tsv(
-                dm.reassignment_pair_counts(reassign),
-                args.out / "viral_reassignment_pairs.tsv",
-            )
+            write_tsv(reassign, args.out / "viral_reassignment_pairs.tsv")
         else:
             logger.warning(
                 "validation_hits missing on a side; skipping the read-level "
@@ -873,22 +661,12 @@ def main() -> None:
         else:
             logger.warning("No clade_counts found; skipping clade breakdown.")
 
-        # BLAST-validation agreement (secondary). Independent of the read-level
-        # join, but still needs validation_hits (with the distance column) present
-        # on both sides — guard so a side lacking it skips agreement, not the focus.
-        val_taxon_cols = ["group", "aligner_taxid_lca", "validation_distance_aligner"]
-        val_reference_t = load_validation_hits(
-            reference_results, reference_manifest, val_taxon_cols
-        )
-        val_candidate_t = load_validation_hits(
-            candidate_results, candidate_manifest, val_taxon_cols
-        )
         agree_need = {"group", "validation_distance_aligner"}
-        if agree_need.issubset(val_reference_t.columns) and agree_need.issubset(
-            val_candidate_t.columns
+        if agree_need.issubset(vh_reference.columns) and agree_need.issubset(
+            vh_candidate.columns
         ):
-            validation = dm.validation_agreement(val_reference_t).merge(
-                dm.validation_agreement(val_candidate_t),
+            validation = dm.validation_agreement(vh_reference).merge(
+                dm.validation_agreement(vh_candidate),
                 on="group",
                 how="outer",
                 suffixes=("_reference", "_candidate"),
@@ -896,13 +674,8 @@ def main() -> None:
             write_tsv(validation, args.out / "viral_validation_agreement.tsv")
             outputs["viral_validation_agreement"] = validation
 
-            # Per-taxon agreement breakdown: localizes a group-level agreement-rate
-            # change to the aligner taxa driving it (most-affected taxa + how far
-            # the new disagreements are off, via mean_distance_disagree).
-            agreement_by_taxon = dm.validation_agreement_by_taxon(
-                val_reference_t
-            ).merge(
-                dm.validation_agreement_by_taxon(val_candidate_t),
+            agreement_by_taxon = dm.validation_agreement_by_taxon(vh_reference).merge(
+                dm.validation_agreement_by_taxon(vh_candidate),
                 on=["group", "taxid"],
                 how="outer",
                 suffixes=("_reference", "_candidate"),
@@ -934,15 +707,6 @@ def main() -> None:
             "No --candidate-index given; skipping Focus 1 (viral assignments)."
         )
 
-    _finish(args, outputs, skipped_groups)
-
-
-def _finish(
-    args: argparse.Namespace,
-    outputs: dict[str, pd.DataFrame],
-    skipped_groups: list[dict[str, str]],
-) -> None:
-    """Write the consolidated flags + skipped-groups tables and log completion."""
     thresholds = json.loads(args.thresholds) if args.thresholds else None
     flags = dm.build_flags(outputs, thresholds=thresholds)
     write_tsv(flags, args.out / "flags.tsv")

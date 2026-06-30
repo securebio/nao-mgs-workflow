@@ -1,70 +1,29 @@
 #!/usr/bin/env python3
-DESC = """
-Pure calculation functions for the DOWNSTREAM candidate-vs-reference comparison
-(see compare_downstream_runs.py for the I/O and orchestration that feed these).
-
-This module is deliberately free of network/filesystem/argparse code so the
-*calculations* that drive the release-regression report can be reviewed and
-unit-tested in isolation from the munging. Every function takes already-parsed
-in-memory inputs (DataFrames, dicts, manifests) and returns DataFrames or plain
-data structures.
-
-Grouped by report focus:
-  - Focus 4: schema-driven file/column inventory comparison.
-  - (later focuses appended as the report is built up.)
-"""
-
-###########
-# IMPORTS #
-###########
+"""Pure calculations for compare_downstream_runs.py."""
 
 from dataclasses import dataclass, field
 from typing import Any, cast
 
 import pandas as pd
 
-#####################
-# SHARED DATA MODEL #
-#####################
-
 
 @dataclass
 class FileEntry:
-    """One discovered per-group output file on one side (reference or candidate).
+    """One discovered per-group output file."""
 
-    Attributes:
-        present: Whether the file exists for this group on this side.
-        n_rows: Data row count (excluding header) for TSVs; None for JSON or
-            when the file is absent / could not be read.
-        columns: Ordered column names for TSVs; None for JSON or when absent.
-    """
-
-    present: bool = False
     n_rows: int | None = None
     columns: list[str] | None = None
 
 
 @dataclass
 class GroupManifest:
-    """All discovered output files for one group on one side.
-
-    Attributes:
-        platform: 'illumina' or 'ont', inferred from file presence upstream.
-        files: Maps file-type key (e.g. 'validation_hits', 'qc_basic_stats_raw')
-            to its FileEntry.
-    """
+    """Discovered files and inferred platform for one group."""
 
     platform: str
     files: dict[str, FileEntry] = field(default_factory=dict)
 
 
-# A side manifest maps group name -> GroupManifest.
 SideManifest = dict[str, GroupManifest]
-
-
-##################################################
-# FOCUS 4: SCHEMA-DRIVEN FILE/COLUMN COMPARISON  #
-##################################################
 
 
 def compare_file_inventory(
@@ -72,27 +31,7 @@ def compare_file_inventory(
     candidate: SideManifest,
     expected_types: dict[str, set[str]] | None = None,
 ) -> pd.DataFrame:
-    """Compare presence and row counts of every per-group output file.
-
-    Generic over file types: it walks whatever file-type keys appear in either
-    manifest, so new outputs are picked up without code changes. When
-    `expected_types` is given, each group's platform-expected types are also
-    included, so an output absent from BOTH sides still shows up as a row with
-    in_reference = in_candidate = False (rather than being silently invisible).
-
-    Args:
-        reference: Side manifest for the reference run.
-        candidate: Side manifest for the candidate run.
-        expected_types: Optional {platform: {file_type, ...}} of expected
-            per-group outputs, used to surface types missing on both sides.
-
-    Returns:
-        Long-format DataFrame with one row per (group, file_type), columns:
-        group, platform, file_type, in_reference, in_candidate, n_rows_reference,
-        n_rows_candidate, row_delta, row_pct_change. n_rows_* are <NA> for
-        JSON/unreadable files; row_delta/row_pct_change are <NA> unless both
-        sides have a row count.
-    """
+    """Compare file presence and row counts, including expected missing files."""
     expected_types = expected_types or {}
     groups = sorted(set(reference) | set(candidate))
     records: list[dict[str, object]] = []
@@ -122,28 +61,27 @@ def compare_file_inventory(
         for ft in file_types:
             fe_reference = gm_reference.files.get(ft) if gm_reference else None
             fe_candidate = gm_candidate.files.get(ft) if gm_candidate else None
-            in_reference = bool(fe_reference and fe_reference.present)
-            in_candidate = bool(fe_candidate and fe_candidate.present)
             rows_reference = fe_reference.n_rows if fe_reference else None
             rows_candidate = fe_candidate.n_rows if fe_candidate else None
             if rows_reference is not None and rows_candidate is not None:
-                d = rows_candidate - rows_reference
-                delta = d
-                pct = 100.0 * d / rows_reference if rows_reference else None
+                row_delta = rows_candidate - rows_reference
+                row_pct_change = (
+                    100.0 * row_delta / rows_reference if rows_reference else None
+                )
             else:
-                delta = None
-                pct = None
+                row_delta = None
+                row_pct_change = None
             records.append(
                 {
                     "group": group,
                     "platform": platform,
                     "file_type": ft,
-                    "in_reference": in_reference,
-                    "in_candidate": in_candidate,
+                    "in_reference": fe_reference is not None,
+                    "in_candidate": fe_candidate is not None,
                     "n_rows_reference": rows_reference,
                     "n_rows_candidate": rows_candidate,
-                    "row_delta": delta,
-                    "row_pct_change": pct,
+                    "row_delta": row_delta,
+                    "row_pct_change": row_pct_change,
                 }
             )
     df = pd.DataFrame.from_records(
@@ -160,20 +98,13 @@ def compare_file_inventory(
             "row_pct_change",
         ],
     )
-    # Nullable integer dtypes so missing row counts render as <NA>, not NaN/float.
     for col in ("n_rows_reference", "n_rows_candidate", "row_delta"):
         df[col] = df[col].astype("Int64")
     return df
 
 
 def _columns_consistent(manifest: SideManifest, file_type: str) -> bool:
-    """Whether groups of the SAME platform share one header for `file_type`.
-
-    Guards against the first-group-only assumption. Consistency is judged within
-    each platform, so a benign cross-platform ordering difference (e.g. ONT places
-    paired-end columns last) is not flagged — only genuine intra-platform
-    disagreement is.
-    """
+    """Whether groups of the same platform share one header for `file_type`."""
     by_platform: dict[str, set[tuple[str, ...]]] = {}
     for gm in manifest.values():
         fe = gm.files.get(file_type)
@@ -195,13 +126,7 @@ def _all_columns(manifest: SideManifest, file_type: str) -> list[list[str]]:
 def _schema_cells_aggregated(
     schema: list[str] | None, headers: list[list[str]]
 ) -> tuple[str, str]:
-    """(missing, extra) vs schema aggregated over all group headers on a side.
-
-    A schema field is 'missing' if absent from ANY group's header (so a single
-    group dropping a required column is caught); a column is 'extra' if present in
-    ANY group's header but not in the schema. Empty-but-present headers surface as
-    '(empty file)'.
-    """
+    """Aggregate missing/extra schema fields over every observed header."""
     if not headers:
         return "", ""
     if any(h == [] for h in headers):
@@ -223,31 +148,7 @@ def compare_columns_to_schema(
     candidate: SideManifest,
     schema_columns: dict[str, list[str]],
 ) -> pd.DataFrame:
-    """Check each file type's columns against its schema for both sides.
-
-    For every tabular file type present on either side, compares the observed
-    columns to the schema's declared fields (when a schema exists). Schema-driven:
-    file types without a matching schema are still reported (with empty schema
-    columns) so unschema'd outputs surface.
-
-    Missing/extra columns are aggregated across ALL group headers per side, so a
-    later group's drop/add is caught. `groups_consistent_*` reports whether groups
-    within a side agree on this file's columns. Cross-side column ORDER is not
-    schema-checked because the schema legitimately permits platform-specific
-    ordering (e.g. ONT places paired-end columns last).
-
-    Args:
-        reference: Side manifest for the reference run.
-        candidate: Side manifest for the candidate run.
-        schema_columns: Maps file-type key -> ordered schema field names.
-
-    Returns:
-        DataFrame with one row per file_type, columns: file_type,
-        has_schema, missing_vs_schema_reference, extra_vs_schema_reference,
-        missing_vs_schema_candidate, extra_vs_schema_candidate,
-        groups_consistent_reference, groups_consistent_candidate. List-valued
-        cells are comma-joined strings ('' when empty).
-    """
+    """Compare observed headers with schemas and within-platform consistency."""
     file_types: set[str] = set()
     for manifest in (reference, candidate):
         for gm in manifest.values():
@@ -297,10 +198,6 @@ def _join(items: list[str]) -> str:
     return ", ".join(items)
 
 
-########################################
-# FOCUS 3: QUALITY METRICS (qc_basic)  #
-########################################
-
 # Numeric QC metrics compared per (group, sample, stage). n_read_pairs is NA for
 # single-end (ONT) data; n_reads_single is populated for both platforms.
 QC_NUMERIC_METRICS = (
@@ -331,19 +228,7 @@ def compare_qc_numeric(
     candidate: pd.DataFrame,
     metrics: tuple[str, ...] = QC_NUMERIC_METRICS,
 ) -> pd.DataFrame:
-    """Compare numeric qc_basic_stats metrics per (group, sample, stage).
-
-    Args:
-        reference: Concatenated qc_basic_stats (raw + cleaned) for the reference
-            run, with a `platform` column added.
-        candidate: Same for the candidate run.
-        metrics: Numeric metric column names to compare.
-
-    Returns:
-        Long DataFrame: group, sample, platform, stage, metric, reference,
-        candidate, delta, pct_change. NA-valued metrics (e.g. n_read_pairs for
-        ONT) yield <NA> deltas rather than spurious numbers.
-    """
+    """Compare numeric QC metrics per (group, sample, stage)."""
     long_reference = _melt_qc(reference, metrics)
     long_candidate = _melt_qc(candidate, metrics)
     merged = long_reference.merge(
@@ -383,17 +268,7 @@ def compare_qc_numeric(
 def compare_qc_flags(
     reference: pd.DataFrame, candidate: pd.DataFrame, flag_cols: list[str]
 ) -> pd.DataFrame:
-    """Compare FASTQC pass/warn/fail flags per (group, sample, stage, check).
-
-    Args:
-        reference: Concatenated qc_basic_stats for the reference run.
-        candidate: Same for the candidate run.
-        flag_cols: FASTQC flag column names (pass/warn/fail strings).
-
-    Returns:
-        Long DataFrame of only the flags that CHANGED: group, sample, stage,
-        check, reference_flag, candidate_flag.
-    """
+    """Return changed FASTQC flags per (group, sample, stage, check)."""
     present = [
         c for c in flag_cols if c in reference.columns and c in candidate.columns
     ]
@@ -427,23 +302,7 @@ def compare_qc_flags(
 def qc_read_survival(
     reference_qc: pd.DataFrame, candidate_qc: pd.DataFrame
 ) -> pd.DataFrame:
-    """Compare the raw->cleaned read-survival fraction per (group, sample).
-
-    Survival is computed WITHIN each run as cleaned/raw read count, then compared
-    across runs. This is the metric that reflects a QC/screen change (e.g. a
-    FASTP min-length change), unlike a cross-run change in the absolute cleaned
-    count (which is masked when both runs subsample to the same depth upstream).
-
-    Args:
-        reference_qc: concatenated qc_basic_stats (raw + cleaned) for the
-            reference run.
-        candidate_qc: same for the candidate run.
-
-    Returns:
-        DataFrame: group, sample, platform, survival_reference,
-        survival_candidate, delta_pp (candidate - reference, in percentage
-        points). survival_* are <NA> when a stage is missing or raw count is 0.
-    """
+    """Compare each run's cleaned/raw read fraction in percentage points."""
 
     def survival(df: pd.DataFrame) -> pd.DataFrame:
         sub = df[["group", "sample", "stage", "platform", "n_reads_single"]].copy()
@@ -490,32 +349,13 @@ def qc_read_survival(
     )
 
 
-#########################################
-# FOCUS 2: KRAKEN ABUNDANCES            #
-#########################################
-
 # Kraken ribosomal/non-ribosomal read sets are compared separately; abundance is
 # compared at these rank codes by default.
 KRAKEN_RANKS = ("G", "S")
 
 
 def kraken_relative_abundance(df: pd.DataFrame, rank: str) -> pd.DataFrame:
-    """Relative abundance of each taxon at `rank` per (group, ribosomal).
-
-    Reads are aggregated across samples within a group using clade read counts
-    (n_reads_clade), so sub-rank reads roll up into their rank-level ancestor's
-    clade total. Relative abundance is each taxon's share of the total clade
-    reads assigned at that rank within the (group, ribosomal) set.
-
-    Args:
-        df: Long kraken frame with columns group, ribosomal, rank, taxid, name,
-            n_reads_clade.
-        rank: Kraken rank code to filter to (e.g. 'S', 'G').
-
-    Returns:
-        DataFrame: group, ribosomal, taxid, name, n_reads_clade, rel. Sets whose
-        total is zero are dropped (no abundance is defined).
-    """
+    """Compute rank-level abundance per (group, ribosomal); drop zero-total sets."""
     sub = df[df["rank"] == rank].copy()
     agg = sub.groupby(["group", "ribosomal", "taxid"], as_index=False).agg(
         n_reads_clade=("n_reads_clade", "sum"),
@@ -552,14 +392,7 @@ def kraken_bray_curtis(
     candidate: pd.DataFrame,
     ranks: tuple[str, ...] = KRAKEN_RANKS,
 ) -> pd.DataFrame:
-    """Bray-Curtis dissimilarity per (group, ribosomal, rank).
-
-    For abundance vectors that each sum to 1, Bray-Curtis equals the total
-    variation distance, 0.5 * sum|x_i - y_i| (0 = identical, 1 = disjoint).
-
-    Returns:
-        DataFrame: group, ribosomal, rank, bray_curtis, n_taxa_union.
-    """
+    """Compute Bray-Curtis dissimilarity per (group, ribosomal, rank)."""
     records: list[dict[str, object]] = []
     for rank in ranks:
         merged = _merge_abundance(reference, candidate, rank)
@@ -597,13 +430,7 @@ def kraken_top_movers(
     rank: str,
     n: int = 10,
 ) -> pd.DataFrame:
-    """Top `n` taxa by absolute abundance change per (group, ribosomal) at `rank`.
-
-    Returns:
-        DataFrame: group, ribosomal, rank, taxid, name, pct_reference,
-        pct_candidate, delta_pp (percentage-point change, candidate - reference),
-        ordered by |delta_pp|.
-    """
+    """Return the top `n` absolute abundance changes per group/read set."""
     merged = _merge_abundance(reference, candidate, rank)
     merged["pct_reference"] = merged["rel_reference"] * 100.0
     merged["pct_candidate"] = merged["rel_candidate"] * 100.0
@@ -632,10 +459,6 @@ def kraken_top_movers(
         ]
     ].reset_index(drop=True)
 
-
-#########################################
-# FOCUS 1: VIRAL ASSIGNMENTS (taxonomy) #
-#########################################
 
 # Standard ranks from most specific to least, used to bucket the taxonomic
 # distance between two assignments by the lowest rank at which they still agree.
@@ -674,11 +497,7 @@ UNRESOLVED_TAXID = "unresolved-taxid"
 
 
 class TaxonomyTree:
-    """NCBI taxonomy tree for taxonomic-distance calculations.
-
-    Built from a parent map and rank map (parsed from taxonomy-nodes.dmp). All
-    methods are pure functions of those maps; lineages are cached per taxid.
-    """
+    """NCBI taxonomy tree with cached lineages and rank ancestors."""
 
     def __init__(self, parent: dict[int, int], rank: dict[int, str]) -> None:
         self.parent = parent
@@ -724,17 +543,7 @@ class TaxonomyTree:
         return None
 
     def divergence_bucket(self, a: int, b: int) -> str:
-        """Lowest rank at which assignments `a` and `b` still agree.
-
-        Returns 'identical' when equal, or 'same-<rank>' for the lowest shared
-        standard rank. When they share an ancestor only above the standard ranks
-        (e.g. both under `Viruses` but different realms, or one is an ancestor of
-        the other at an unranked node) returns 'shared-higher-taxon'. When their
-        only common ancestor is the tree root (e.g. a virus reassigned to a
-        cellular organism) returns 'cross-root'. When either taxid is absent from
-        the taxonomy entirely (merged/deleted across index versions) returns
-        'unresolved-taxid' — a versioning artifact, distinct from cross-root.
-        """
+        """Return identical, same-rank, shared-higher, cross-root, or unresolved."""
         if a == b:
             return "identical"
         if a not in self.parent or b not in self.parent:
@@ -751,20 +560,7 @@ class TaxonomyTree:
 
 
 def vertebrate_taxids(annotated_db: pd.DataFrame, host: str = "vertebrate") -> set[int]:
-    """Taxids affirmatively marked as infecting `host` (status 1), with rollup.
-
-    Mirrors the index's own surveillance predicate: a taxon counts if its
-    infection_status_<host> is 1 (MATCH), or if its species-rollup taxon is.
-    Status 3 ('likely') is intentionally excluded; see the report notes.
-
-    Args:
-        annotated_db: total-virus-db-annotated, with taxid, taxid_species, and
-            infection_status_<host> columns.
-        host: Host group name (default 'vertebrate').
-
-    Returns:
-        Set of integer taxids considered host-infecting.
-    """
+    """Return status-1 host taxids plus rows rolling up to positive species."""
     col = f"infection_status_{host}"
     if col not in annotated_db.columns or "taxid" not in annotated_db.columns:
         return set()
@@ -783,26 +579,8 @@ def vertebrate_taxids(annotated_db: pd.DataFrame, host: str = "vertebrate") -> s
 def join_read_assignments(
     reference_vh: pd.DataFrame,
     candidate_vh: pd.DataFrame,
-    merge_map: dict[int, int] | None = None,
 ) -> pd.DataFrame:
-    """Join per-read pipeline assignments across sides.
-
-    Joins on (group, sample, seq_id) when a `sample` column is present on both
-    sides, else (group, seq_id); raises on duplicate keys.
-
-    Args:
-        reference_vh: validation_hits for the reference run (needs group, seq_id,
-            aligner_taxid_lca; sample used for the key when present).
-        candidate_vh: validation_hits for the candidate run (same columns).
-        merge_map: optional {old_taxid: canonical_taxid} from the candidate
-            index's merged.dmp, applied to both sides so taxid renumbering across
-            index versions is not counted as a reassignment.
-
-    Returns:
-        DataFrame: group, seq_id, taxid_reference, taxid_candidate, status, where
-        status is 'lost' (reference only), 'gained' (candidate only), 'same'
-        (shared, same taxid), or 'reassigned' (shared, different taxid).
-    """
+    """Join read assignments and classify them as same/reassigned/lost/gained."""
     # Include sample in the join key when available: seq_id is the instrument
     # query name, unique only within a sample, and a group can hold several
     # samples — so (group, seq_id) alone risks a many-to-many cartesian merge.
@@ -822,12 +600,6 @@ def join_read_assignments(
                 f"Duplicate {key} rows in {side} validation_hits; cannot join "
                 "reads unambiguously."
             )
-    if merge_map:
-        # Canonicalize taxids through the candidate index's merged.dmp so a read
-        # that only changed because its taxid was merged across index versions is
-        # not counted as a biological reassignment.
-        m["taxid_reference"] = m["taxid_reference"].map(lambda t: merge_map.get(t, t))
-        d["taxid_candidate"] = d["taxid_candidate"].map(lambda t: merge_map.get(t, t))
     merged = m.merge(d, on=key, how="outer", indicator=True)
     merged["taxid_reference"] = merged["taxid_reference"].astype("Int64")
     merged["taxid_candidate"] = merged["taxid_candidate"].astype("Int64")
@@ -860,14 +632,7 @@ def _add_vertebrate_flag(joined: pd.DataFrame, vert: set[int]) -> pd.DataFrame:
 
 
 def summarize_read_status(joined: pd.DataFrame, vert: set[int]) -> pd.DataFrame:
-    """Per-group read-status counts, for all reads and the vertebrate subset.
-
-    Returns:
-        DataFrame: group, scope ('all'|'vertebrate'), n_reference, n_candidate,
-        n_shared, n_same, n_reassigned, n_lost, n_gained, and three percentages
-        with DIFFERENT denominators: pct_lost = lost/n_reference,
-        pct_gained = gained/n_candidate, pct_reassigned = reassigned/n_shared.
-    """
+    """Summarize statuses for all/vertebrate scopes using metric-specific denominators."""
     flagged = _add_vertebrate_flag(joined, vert)
     all_groups = sorted(flagged["group"].unique())
     records: list[dict[str, object]] = []
@@ -927,90 +692,8 @@ def summarize_read_status(joined: pd.DataFrame, vert: set[int]) -> pd.DataFrame:
     )
 
 
-def reassignment_distances(
-    joined: pd.DataFrame, tax: TaxonomyTree, vert: set[int]
-) -> pd.DataFrame:
-    """Divergence bucket for each reassigned read.
-
-    Computes the bucket once per distinct (taxid_reference, taxid_candidate) pair
-    (cached in the tree) and joins back to reads.
-
-    Returns:
-        DataFrame of reassigned reads: group, scope, seq_id, taxid_reference,
-        taxid_candidate, bucket. Emitted for scope 'all' and 'vertebrate'
-        (vertebrate rows are a subset, re-labelled).
-    """
-    flagged = _add_vertebrate_flag(joined, vert)
-    reassigned = flagged[flagged["status"] == "reassigned"].copy()
-    if reassigned.empty:
-        # Keep the sample-aware column set stable on the empty path too.
-        cols = [
-            "group",
-            "scope",
-            "seq_id",
-            "taxid_reference",
-            "taxid_candidate",
-            "bucket",
-        ]
-        if "sample" in joined.columns:
-            cols.insert(2, "sample")
-        return pd.DataFrame(columns=cols)
-
-    def _pair_key(a: Any, b: Any) -> tuple[int, int] | None:
-        # A reassigned read with a missing taxid on either side (non-conformant
-        # input — aligner_taxid_lca is schema-required) has no resolvable pair.
-        if pd.isna(a) or pd.isna(b):
-            return None
-        return (int(a), int(b))
-
-    pairs = reassigned[["taxid_reference", "taxid_candidate"]].drop_duplicates()
-    bucket_map: dict[tuple[int, int] | None, str] = {None: UNRESOLVED_TAXID}
-    for a, b in zip(pairs["taxid_reference"], pairs["taxid_candidate"], strict=True):
-        key = _pair_key(a, b)
-        if key is None:
-            continue
-        bucket_map[key] = tax.divergence_bucket(*key)
-    keys = [
-        _pair_key(a, b)
-        for a, b in zip(
-            reassigned["taxid_reference"], reassigned["taxid_candidate"], strict=True
-        )
-    ]
-    reassigned["bucket"] = [bucket_map[k] for k in keys]
-
-    frames = []
-    for scope in ("all", "vertebrate"):
-        sub = reassigned if scope == "all" else reassigned[reassigned["is_vertebrate"]]
-        sub = sub.assign(scope=scope)
-        frames.append(sub)
-    out = pd.concat(frames, ignore_index=True)
-    cols = [
-        "group",
-        "scope",
-        "seq_id",
-        "taxid_reference",
-        "taxid_candidate",
-        "bucket",
-    ]
-    if "sample" in out.columns:
-        cols.insert(2, "sample")
-    return out[cols]
-
-
-def bucket_summary(reassignment_detail: pd.DataFrame) -> pd.DataFrame:
-    """Counts of reassigned reads per (scope, bucket), all buckets shown.
-
-    Every canonical bucket is emitted for each scope (0 when none) so a reader can
-    tell "0 reads" from "not checked" — e.g. a 0 in `unresolved-taxid` is the
-    reassuring result that no assignment used a taxid missing from the
-    candidate-index taxonomy. unresolved-taxid sits at the FRONT, outside the
-    same-species ->
-    cross-root biological severity gradient (placing it after cross-root would
-    wrongly read as the most severe category).
-
-    Returns:
-        DataFrame: scope, bucket, n_reads.
-    """
+def bucket_summary(reassignment_pairs: pd.DataFrame) -> pd.DataFrame:
+    """Count reads per scope/bucket, emitting zero rows for every bucket."""
     # 'identical' is excluded: reassigned reads by definition are not identical.
     display_buckets = [
         UNRESOLVED_TAXID,
@@ -1021,10 +704,12 @@ def bucket_summary(reassignment_detail: pd.DataFrame) -> pd.DataFrame:
     # Always emit BOTH scopes for every canonical bucket, so "none observed"
     # (e.g. zero vertebrate reassignments even when 'all' has some) stays
     # distinguishable from "not computed".
-    if reassignment_detail.empty:
+    if reassignment_pairs.empty:
         counts: dict[Any, int] = {}
     else:
-        counts = reassignment_detail.groupby(["scope", "bucket"]).size().to_dict()
+        counts = (
+            reassignment_pairs.groupby(["scope", "bucket"])["n_reads"].sum().to_dict()
+        )
     records: list[dict[str, object]] = []
     for scope in ("all", "vertebrate"):
         for bucket in display_buckets:
@@ -1038,81 +723,10 @@ def bucket_summary(reassignment_detail: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame.from_records(records, columns=["scope", "bucket", "n_reads"])
 
 
-def reassignment_concentration(reassignment_detail: pd.DataFrame) -> pd.DataFrame:
-    """How concentrated each group's reassignments are in a few taxid pairs.
-
-    A high read-level reassignment % can come from one systematic taxid remap
-    counted across many (possibly duplicate) reads. This reports, per
-    (group, scope): the reassigned read count, the number of distinct
-    (taxid_reference, taxid_candidate) pairs, the top pair, and the fraction of
-    reassigned
-    reads it accounts for, so a reviewer can tell broad instability from a single
-    clade-wide LCA shift.
-
-    Returns:
-        DataFrame: group, scope, n_reassigned, n_distinct_pairs, top_pair,
-        top_pair_reads, top_pair_frac.
-    """
-    cols = [
-        "group",
-        "scope",
-        "n_reassigned",
-        "n_distinct_pairs",
-        "top_pair",
-        "top_pair_reads",
-        "top_pair_frac",
-    ]
-    if reassignment_detail.empty:
-        return pd.DataFrame(columns=cols)
-    records: list[dict[str, object]] = []
-    for (group, scope), sub in reassignment_detail.groupby(["group", "scope"]):
-        # dropna=False so reads with a missing taxid (non-conformant input) are
-        # still counted as their own pair rather than silently dropped.
-        pair_counts = sub.groupby(
-            ["taxid_reference", "taxid_candidate"], dropna=False
-        ).size()
-        n = int(pair_counts.sum())
-        if pair_counts.empty:
-            continue
-        top_reference, top_candidate = cast(tuple[object, object], pair_counts.idxmax())
-        top_reads = int(pair_counts.max())
-
-        def _fmt(t: Any) -> str:
-            return "NA" if pd.isna(t) else str(int(t))
-
-        records.append(
-            {
-                "group": group,
-                "scope": scope,
-                "n_reassigned": n,
-                "n_distinct_pairs": int(pair_counts.size),
-                "top_pair": f"{_fmt(top_reference)}->{_fmt(top_candidate)}",
-                "top_pair_reads": top_reads,
-                "top_pair_frac": top_reads / n if n else None,
-            }
-        )
-    return (
-        pd.DataFrame.from_records(records, columns=cols)
-        .sort_values(["scope", "group"])
-        .reset_index(drop=True)
-    )
-
-
-def reassignment_pair_counts(reassignment_detail: pd.DataFrame) -> pd.DataFrame:
-    """Per-(group, scope, taxid pair) reassigned-read counts with bucket.
-
-    A compact aggregate of the reassignment detail: one row per distinct
-    (group, scope, taxid_reference, taxid_candidate) with its bucket and read
-    count. Unlike `reassignment_concentration` (top pair per group only), this
-    keeps EVERY pair, so the report can name example pairs for any bucket — e.g. a
-    severe cross-root or shared-higher-taxon pair that is not a group's single top
-    pair.
-
-    Returns:
-        DataFrame: group, scope, taxid_reference, taxid_candidate, bucket,
-        n_reads, sorted by group, scope, bucket, n_reads (desc). Empty
-        (header-only) when there are no reassigned reads.
-    """
+def reassignment_pair_counts(
+    joined: pd.DataFrame, tax: TaxonomyTree, vert: set[int]
+) -> pd.DataFrame:
+    """Aggregate reassigned reads by group/scope/taxid pair with count and fraction."""
     cols = [
         "group",
         "scope",
@@ -1120,22 +734,46 @@ def reassignment_pair_counts(reassignment_detail: pd.DataFrame) -> pd.DataFrame:
         "taxid_candidate",
         "bucket",
         "n_reads",
+        "pair_frac",
     ]
-    if reassignment_detail.empty:
+    if joined.empty:
         return pd.DataFrame(columns=cols)
-    counts = (
-        # dropna=False so a pair with a missing taxid (non-conformant input) is
-        # still counted rather than silently dropped.
-        reassignment_detail.groupby(
-            ["group", "scope", "taxid_reference", "taxid_candidate", "bucket"],
-            dropna=False,
+    reassigned = _add_vertebrate_flag(joined, vert)
+    reassigned = reassigned[reassigned["status"] == "reassigned"]
+    if reassigned.empty:
+        return pd.DataFrame(columns=cols)
+
+    frames: list[pd.DataFrame] = []
+    for scope in ("all", "vertebrate"):
+        sub = reassigned if scope == "all" else reassigned[reassigned["is_vertebrate"]]
+        counts = (
+            sub.groupby(["group", "taxid_reference", "taxid_candidate"], dropna=False)
+            .size()
+            .reset_index(name="n_reads")
         )
-        .size()
-        .reset_index(name="n_reads")
-    )
-    return counts.sort_values(
-        ["group", "scope", "bucket", "n_reads"],
-        ascending=[True, True, True, False],
+        if not counts.empty:
+            counts["scope"] = scope
+            frames.append(counts)
+    if not frames:
+        return pd.DataFrame(columns=cols)
+
+    out = pd.concat(frames, ignore_index=True)
+
+    def bucket(a: Any, b: Any) -> str:
+        if pd.isna(a) or pd.isna(b):
+            return UNRESOLVED_TAXID
+        return tax.divergence_bucket(int(a), int(b))
+
+    out["bucket"] = [
+        bucket(a, b)
+        for a, b in zip(out["taxid_reference"], out["taxid_candidate"], strict=True)
+    ]
+    totals = out.groupby(["group", "scope"])["n_reads"].transform("sum")
+    out["pair_frac"] = out["n_reads"] / totals
+    return out.sort_values(
+        ["group", "scope", "n_reads", "taxid_reference", "taxid_candidate"],
+        ascending=[True, True, False, True, True],
+        na_position="last",
     ).reset_index(drop=True)[cols]
 
 
@@ -1147,45 +785,14 @@ def clade_rank_shares(
     rank_levels: tuple[str, ...] = ("family", "order"),
     count_cols: tuple[str, ...] = ("reads_clade_total", "reads_clade_dedup"),
 ) -> pd.DataFrame:
-    """Compare the high-level taxonomic breakdown of clade counts.
+    """Compare family/order raw counts and shares of each side's Viruses-root total.
 
-    For each rank level (family, order), the clade-count row at a rank-level
-    taxon already holds that clade's total reads, so we filter to those rows and
-    compute each taxon's share PER GROUP, on both sides. The denominator is the
-    group's TOTAL viral reads — the count on its Viruses-root row (taxid 10239),
-    per side, per count column — NOT a within-rank sum over the family/order rows.
-    Within-rank normalization was removed because it mechanically inflated the
-    surviving families when another family vanished (its denominator shrank),
-    reporting a positive share change for a family whose raw count was unchanged
-    or falling. A total-viral denominator moves only when a clade's own reads or
-    the group's total viral reads move, so the sign of `delta_pp` is meaningful.
-
-    Rank is looked up from the candidate index's full NCBI taxonomy (nodes.dmp); a
-    taxid deleted from the candidate-index taxonomy drops from this table. Raw
-    counts (`reads_reference`, `reads_candidate`, `delta_reads`) are reported
-    alongside the shares so a reviewer can read the absolute change directly.
-
-    Args:
-        clade_reference: clade_counts for the reference run (group, taxid,
-            reads_clade_* columns).
-        clade_candidate: clade_counts for the candidate run.
-        rank_map: taxid -> rank from the candidate-index taxonomy (complete).
-        name_map: taxid -> name (from the candidate index's annotated DB; taxids
-            absent from it fall back to their stringified taxid).
-        rank_levels: taxonomic ranks to roll up to.
-        count_cols: which clade-count columns to compute shares for.
-
-    Returns:
-        Long DataFrame: group, rank_level, count_type, taxid, name,
-        reads_reference, reads_candidate, delta_reads (candidate - reference),
-        share_reference, share_candidate (each a share of the group's total viral
-        reads), delta_pp (share change in pp). If a group has no Viruses-root
-        (10239) row, its denominator is missing and the shares (and delta_pp) are
-        NaN for that group.
+    A missing family is zero only when that side has a nonzero Viruses-root row;
+    without a root, its share remains undefined.
     """
 
     def viral_totals(df: pd.DataFrame, count_col: str) -> dict[object, float]:
-        """Group -> total viral reads (the Viruses-root 10239 row), per count_col."""
+        """Group -> total viral reads (the Viruses-root 10239 row)."""
         root = df[df["taxid"].astype(int) == VIRUSES_TAXID]
         return root.groupby("group")[count_col].sum().to_dict()
 
@@ -1206,9 +813,6 @@ def clade_rank_shares(
     frames: list[pd.DataFrame] = []
     for rank_level in rank_levels:
         for count_col in count_cols:
-            # Groups that have a (nonzero) Viruses-root on each side: a family
-            # absent from such a group has share 0, but in a group with NO root the
-            # share is genuinely undefined (NaN), so the two cases stay distinct.
             reference_root_groups = {
                 g for g, v in viral_totals(clade_reference, count_col).items() if v
             }
@@ -1222,18 +826,17 @@ def clade_rank_shares(
                 columns={count_col: "reads_candidate", "share": "share_candidate"}
             )
             merged = a.merge(b, on=["group", "taxid"], how="outer")
-            # Raw counts default to 0 for a side where the family is absent.
             for col in ("reads_reference", "reads_candidate"):
                 merged[col] = merged[col].fillna(0.0)
-            # Fill an absent family's share with 0 only when its group HAS a root on
-            # that side; leave NaN (no-root) groups NaN so they stay surfaced.
             reference_has_root = merged["group"].isin(reference_root_groups)
             candidate_has_root = merged["group"].isin(candidate_root_groups)
             merged.loc[
-                merged["share_reference"].isna() & reference_has_root, "share_reference"
+                merged["share_reference"].isna() & reference_has_root,
+                "share_reference",
             ] = 0.0
             merged.loc[
-                merged["share_candidate"].isna() & candidate_has_root, "share_candidate"
+                merged["share_candidate"].isna() & candidate_has_root,
+                "share_candidate",
             ] = 0.0
             merged["name"] = (
                 merged["taxid"]
@@ -1273,19 +876,7 @@ def clade_rank_shares(
 
 
 def validation_agreement(vh: pd.DataFrame) -> pd.DataFrame:
-    """Per-group BLAST-validation agreement summary for one side (secondary).
-
-    A read is 'validated' when validation_distance_aligner is non-null; among
-    validated reads, agreement means a taxonomic distance of 0 between the
-    pipeline (aligner) assignment and the BLAST validation LCA.
-
-    Args:
-        vh: validation_hits with group and validation_distance_aligner columns.
-
-    Returns:
-        DataFrame: group, n_reads, n_validated, frac_validated, agreement_rate
-        (fraction of validated reads with distance 0), mean_distance.
-    """
+    """Summarize validated fraction and distance-zero agreement by group."""
     records: list[dict[str, object]] = []
     dist = pd.to_numeric(vh["validation_distance_aligner"], errors="coerce")
     vh = vh.assign(_dist=dist)
@@ -1301,9 +892,6 @@ def validation_agreement(vh: pd.DataFrame) -> pd.DataFrame:
                 "n_validated": n_validated,
                 "frac_validated": n_validated / n_reads if n_reads else None,
                 "agreement_rate": agree / n_validated if n_validated else None,
-                "mean_distance": (
-                    g.loc[validated, "_dist"].mean() if n_validated else None
-                ),
             }
         )
     return pd.DataFrame.from_records(
@@ -1314,46 +902,18 @@ def validation_agreement(vh: pd.DataFrame) -> pd.DataFrame:
             "n_validated",
             "frac_validated",
             "agreement_rate",
-            "mean_distance",
         ],
     )
 
 
 def validation_agreement_by_taxon(vh: pd.DataFrame) -> pd.DataFrame:
-    """Per-(group, aligner taxon) BLAST-validation agreement for one side.
-
-    Breaks the per-group `validation_agreement` down by the pipeline's assigned
-    taxon (`aligner_taxid_lca`), so a group-level agreement-rate change can be
-    localized to the taxa driving it ("which taxa are most affected, and how far
-    off are the new disagreements"). A read is 'validated' when
-    validation_distance_aligner is non-null; agreement means a taxonomic distance
-    of 0 to the BLAST validation LCA, and a larger mean distance is a worse
-    disagreement.
-
-    This groups by taxon WITHIN each side independently (BLAST validation is a
-    per-side measurement), mirroring `validation_agreement`; the caller merges the
-    two sides on (group, taxid) to get the per-taxon delta.
-
-    Args:
-        vh: validation_hits with group, aligner_taxid_lca, and
-            validation_distance_aligner columns.
-
-    Returns:
-        DataFrame: group, taxid (the aligner_taxid_lca), n_reads, n_validated,
-        agreement_rate (fraction of validated reads with distance 0),
-        mean_distance (over ALL validated reads, agreements included), and
-        mean_distance_disagree (over only the disagreeing reads, distance > 0).
-        Use `mean_distance_disagree` for "how far off are the disagreements" —
-        `mean_distance` is diluted toward 0 when agreement is high. Empty
-        (header-only) when no rows.
-    """
+    """Summarize agreement and disagreement-only distance by group/aligner taxon."""
     cols = [
         "group",
         "taxid",
         "n_reads",
         "n_validated",
         "agreement_rate",
-        "mean_distance",
         "mean_distance_disagree",
     ]
     if vh.empty or "aligner_taxid_lca" not in vh.columns:
@@ -1375,7 +935,6 @@ def validation_agreement_by_taxon(vh: pd.DataFrame) -> pd.DataFrame:
                 "n_reads": n_reads,
                 "n_validated": n_validated,
                 "agreement_rate": agree / n_validated if n_validated else None,
-                "mean_distance": validated_dist.mean() if n_validated else None,
                 "mean_distance_disagree": (
                     disagree_dist.mean() if not disagree_dist.empty else None
                 ),
@@ -1389,33 +948,7 @@ def vertebrate_status_flips(
     new_annotated: pd.DataFrame,
     host: str = "vertebrate",
 ) -> pd.DataFrame:
-    """Taxa whose host-infecting membership changed between two index annotations.
-
-    Separates a TRUE status flip (a taxon present in BOTH annotated DBs whose
-    `infection_status_<host>` changed) from a presence change (a taxon added to or
-    removed from the annotated DB entirely). Conflating them is wrong: only a true
-    flip is evidence of a re-annotation, whereas an added/removed taxon reflects a
-    genome being added to or dropped from the index. The `change` vocabulary:
-    - `gained_<host>` / `lost_<host>` — present in both DBs, status crossed 1 (a
-      genuine re-annotation).
-    - `added_<host>` — present only in the candidate (new) DB and host-infecting
-      there (a newly added taxon, not a flip).
-    - `removed_<host>` — present only in the reference (old) DB where it was
-      host-infecting (dropped from the candidate DB).
-
-    Caveat: taxids are compared as-is (no `taxonomy-merged.dmp` canonicalization),
-    so a merged/renumbered taxid can appear as one `added_<host>` paired with a
-    `removed_<host>` rather than a single taxon. Treat an added/removed entry as a
-    presence change to confirm, not proof of a genome being added or dropped.
-
-    Args:
-        old_annotated: annotated viral DB from the reference index.
-        new_annotated: annotated viral DB from the candidate index.
-        host: host group name.
-
-    Returns:
-        DataFrame: taxid, name, change (one of the four values above).
-    """
+    """Classify host membership changes as gained/lost status or added/removed taxa."""
     old_pos = vertebrate_taxids(old_annotated, host)
     new_pos = vertebrate_taxids(new_annotated, host)
     # Full taxid universe of each annotated DB, to tell a status flip (taxon in
@@ -1448,10 +981,6 @@ def vertebrate_status_flips(
     return pd.DataFrame.from_records(records, columns=["taxid", "name", "change"])
 
 
-#########################################
-# FLAGGING (fixed thresholds)           #
-#########################################
-
 # Default thresholds for flagging a difference as worth human review. All are
 # exposed as CLI flags; they are deliberate judgment calls, documented in the
 # skill. A flag is advisory -- the report always shows the underlying numbers.
@@ -1476,23 +1005,7 @@ def _flag_records(
     key_cols: list[str],
     direction: str = "abs",
 ) -> list[dict[str, object]]:
-    """Build flag records for rows whose value trips the fixed threshold.
-
-    Args:
-        df: Source comparison table.
-        value_col: Column holding the magnitude to test.
-        threshold: Fixed threshold for the magnitude.
-        focus: Report focus label (e.g. 'kraken').
-        metric: Human-readable metric name.
-        key_cols: Columns identifying the flagged row (e.g. group, rank).
-        direction: 'abs' flags |value| > threshold (two-sided); 'pos' flags
-            value > threshold (one-sided, for already-signed magnitudes like a
-            dissimilarity or an agreement-rate drop).
-
-    Returns:
-        List of flag dicts (focus, key, metric, value, threshold, flag_type).
-        flag_type is always 'fixed'.
-    """
+    """Build fixed-threshold flag records; `direction` is `abs` or `pos`."""
     if df.empty or value_col not in df.columns:
         return []
     work = df.copy()
@@ -1519,19 +1032,7 @@ def build_flags(
     outputs: dict[str, pd.DataFrame],
     thresholds: dict[str, float] | None = None,
 ) -> pd.DataFrame:
-    """Assemble the consolidated flags table across focuses.
-
-    Applies fixed thresholds to the quantitative comparison tables. A flag is
-    advisory -- the report always shows the underlying numbers.
-
-    Args:
-        outputs: Mapping of table name -> comparison DataFrame, using the names
-            written by compare_downstream_runs.py.
-        thresholds: Override thresholds (falls back to DEFAULT_THRESHOLDS).
-
-    Returns:
-        DataFrame: focus, key, metric, value, threshold, flag_type.
-    """
+    """Assemble the consolidated fixed-threshold flags table."""
     t = {**DEFAULT_THRESHOLDS, **(thresholds or {})}
     records: list[dict[str, object]] = []
 

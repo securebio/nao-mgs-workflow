@@ -10,11 +10,10 @@ import pytest
 
 
 def _entry(
-    present: bool = True,
     n_rows: int | None = None,
     columns: list[str] | None = None,
 ) -> dm.FileEntry:
-    return dm.FileEntry(present=present, n_rows=n_rows, columns=columns)
+    return dm.FileEntry(n_rows=n_rows, columns=columns)
 
 
 def _manifest(spec: dict[str, tuple[str, dict[str, dm.FileEntry]]]) -> dm.SideManifest:
@@ -25,71 +24,79 @@ def _manifest(spec: dict[str, tuple[str, dict[str, dm.FileEntry]]]) -> dm.SideMa
     }
 
 
-#################################
-# FOCUS 4: compare_file_inventory #
-#################################
-
-
 class TestCompareFileInventory:
-    def test_row_delta_and_pct(self) -> None:
+    def test_present_and_expected_missing_files(self) -> None:
         reference = _manifest(
-            {"G1": ("illumina", {"validation_hits": _entry(n_rows=100, columns=["a"])})}
-        )
-        candidate = _manifest(
-            {"G1": ("illumina", {"validation_hits": _entry(n_rows=150, columns=["a"])})}
-        )
-        df = dm.compare_file_inventory(reference, candidate)
-        row = df.iloc[0]
-        assert row.row_delta == 50
-        assert row.row_pct_change == 50.0
-        assert row.in_reference and row.in_candidate
-
-    def test_presence_mismatch_one_side(self) -> None:
-        reference = _manifest(
-            {"G1": ("ont", {"kraken": _entry(n_rows=10, columns=["t"])})}
+            {
+                "G1": (
+                    "illumina",
+                    {"validation_hits": _entry(n_rows=100, columns=["a"])},
+                )
+            }
         )
         candidate = _manifest(
             {
-                "G1": ("ont", {"kraken": _entry(n_rows=10, columns=["t"])}),
-                "G2": ("ont", {"kraken": _entry(n_rows=5, columns=["t"])}),
+                "G1": (
+                    "illumina",
+                    {"validation_hits": _entry(n_rows=150, columns=["a"])},
+                )
+            }
+        )
+        df = dm.compare_file_inventory(
+            reference,
+            candidate,
+            {"illumina": {"validation_hits", "bracken"}},
+        ).set_index("file_type")
+        assert df.loc["validation_hits"].in_reference
+        assert df.loc["validation_hits"].in_candidate
+        assert not df.loc["bracken"].in_reference
+        assert not df.loc["bracken"].in_candidate
+        assert df.loc["validation_hits"].row_delta == 50
+        assert df.loc["validation_hits"].row_pct_change == 50.0
+
+    @pytest.mark.parametrize(
+        ("reference_rows", "candidate_rows", "expected_delta"),
+        [(0, 3, 3), (None, 3, None)],
+    )
+    def test_row_pct_is_null_without_nonzero_reference(
+        self,
+        reference_rows: int | None,
+        candidate_rows: int,
+        expected_delta: int | None,
+    ) -> None:
+        reference = _manifest(
+            {"G1": ("illumina", {"bracken": _entry(n_rows=reference_rows)})}
+        )
+        candidate = _manifest(
+            {"G1": ("illumina", {"bracken": _entry(n_rows=candidate_rows)})}
+        )
+        row = dm.compare_file_inventory(reference, candidate).iloc[0]
+        if expected_delta is None:
+            assert pd.isna(row.row_delta)
+        else:
+            assert row.row_delta == expected_delta
+        assert pd.isna(row.row_pct_change)
+
+    def test_presence_mismatch_one_side(self) -> None:
+        reference = _manifest({"G1": ("ont", {"kraken": _entry(columns=["t"])})})
+        candidate = _manifest(
+            {
+                "G1": ("ont", {"kraken": _entry(columns=["t"])}),
+                "G2": ("ont", {"kraken": _entry(columns=["t"])}),
             }
         )
         df = dm.compare_file_inventory(reference, candidate)
         g2 = df[df.group == "G2"].iloc[0]
         assert not g2.in_reference
         assert g2.in_candidate
-        # No row count on the absent side -> delta is null, not a spurious number.
-        assert pd.isna(g2.row_delta)
-
-    def test_zero_rows_reference_gives_null_pct_not_divide_by_zero(self) -> None:
-        reference = _manifest(
-            {"G1": ("illumina", {"bracken": _entry(n_rows=0, columns=[])})}
-        )
-        candidate = _manifest(
-            {"G1": ("illumina", {"bracken": _entry(n_rows=3, columns=[])})}
-        )
-        df = dm.compare_file_inventory(reference, candidate)
-        row = df.iloc[0]
-        assert row.row_delta == 3
-        assert pd.isna(row.row_pct_change)
-
-    def test_json_file_has_null_rows(self) -> None:
-        reference = _manifest({"G1": ("illumina", {"fastp": _entry(n_rows=None)})})
-        candidate = _manifest({"G1": ("illumina", {"fastp": _entry(n_rows=None)})})
-        df = dm.compare_file_inventory(reference, candidate)
-        row = df.iloc[0]
-        assert row.in_reference and row.in_candidate
-        assert pd.isna(row.n_rows_reference) and pd.isna(row.row_delta)
 
     def test_platform_mismatch_unions_expected_types(self) -> None:
         # Illumina on reference, ONT on candidate (degraded): report the mismatch and still
         # surface Illumina-only expected types missing on both sides.
         reference = _manifest(
-            {"G": ("illumina", {"clade_counts": _entry(n_rows=1, columns=["t"])})}
+            {"G": ("illumina", {"clade_counts": _entry(columns=["t"])})}
         )
-        candidate = _manifest(
-            {"G": ("ont", {"kraken": _entry(n_rows=1, columns=["t"])})}
-        )
+        candidate = _manifest({"G": ("ont", {"kraken": _entry(columns=["t"])})})
         expected = {
             "illumina": {"clade_counts", "kraken", "bracken"},
             "ont": {"kraken"},
@@ -98,11 +105,6 @@ class TestCompareFileInventory:
         assert "mismatch" in df.iloc[0].platform
         # bracken is illumina-expected and absent on both sides -> still a row.
         assert (df.file_type == "bracken").any()
-
-
-#####################################
-# FOCUS 4: compare_columns_to_schema #
-#####################################
 
 
 class TestCompareColumnsToSchema:
@@ -116,7 +118,7 @@ class TestCompareColumnsToSchema:
         assert row.groups_consistent_reference
 
     def test_empty_file_reports_empty_marker_not_full_schema(self) -> None:
-        man = _manifest({"G1": ("illumina", {"bracken": _entry(n_rows=0, columns=[])})})
+        man = _manifest({"G1": ("illumina", {"bracken": _entry(columns=[])})})
         df = dm.compare_columns_to_schema(
             man, man, {"bracken": ["taxid", "name", "fraction_total_reads"]}
         )
@@ -146,9 +148,7 @@ class TestCompareColumnsToSchema:
         assert not row.has_schema
         assert row.extra_vs_schema_reference == ""
 
-    def test_groups_inconsistent_columns_within_side_flagged(self) -> None:
-        # Two groups on the reference side disagree on kraken columns; the first-group
-        # header alone would hide it, so groups_consistent_reference must be False.
+    def test_inconsistent_groups_are_aggregated(self) -> None:
         reference = _manifest(
             {
                 "G1": ("illumina", {"kraken": _entry(columns=["taxid", "name"])}),
@@ -160,26 +160,7 @@ class TestCompareColumnsToSchema:
         )
         row = df[df.file_type == "kraken"].iloc[0]
         assert not row.groups_consistent_reference
-
-    def test_later_group_missing_column_is_aggregated(self) -> None:
-        # First group conforms, a LATER group drops a required column: the missing
-        # field must still be reported (aggregated across all group headers).
-        reference = _manifest(
-            {
-                "G1": ("illumina", {"kraken": _entry(columns=["taxid", "name"])}),
-                "G2": ("illumina", {"kraken": _entry(columns=["taxid"])}),
-            }
-        )
-        df = dm.compare_columns_to_schema(
-            reference, reference, {"kraken": ["taxid", "name"]}
-        )
-        row = df[df.file_type == "kraken"].iloc[0]
         assert row.missing_vs_schema_reference == "name"
-
-
-###############################
-# FOCUS 3: QUALITY METRICS    #
-###############################
 
 
 def _qc_row(group: str, sample: str, stage: str, platform: str, **vals: object) -> dict:
@@ -313,11 +294,6 @@ class TestCompareQcFlags:
         assert out.empty
 
 
-###############################
-# FOCUS 2: KRAKEN ABUNDANCES  #
-###############################
-
-
 def _kr(group: str, ribosomal: bool, rank: str, taxid: int, name: str, n: int) -> dict:
     return {
         "group": group,
@@ -374,6 +350,7 @@ class TestKrakenBrayCurtis:
         )
         out = dm.kraken_bray_curtis(reference, candidate, ranks=("S",))
         assert abs(out.iloc[0].bray_curtis - 0.3) < 1e-9
+        assert out.iloc[0].n_taxa_union == 2
 
     def test_one_sided_set_gives_one_not_half(self) -> None:
         # A (group, ribosomal) set present on only one side: Bray-Curtis must be
@@ -405,11 +382,6 @@ class TestKrakenTopMovers:
             assert top.delta_pp < 0
         else:
             assert top.delta_pp > 0
-
-
-###############################
-# FOCUS 1: VIRAL ASSIGNMENTS  #
-###############################
 
 
 def _synthetic_tree() -> dm.TaxonomyTree:
@@ -546,8 +518,8 @@ class TestSummariseAndBuckets:
     def test_bucket_summary_populated_counts_and_canonical_buckets(self) -> None:
         joined = self._joined()
         tax = _synthetic_tree()
-        detail = dm.reassignment_distances(joined, tax, vert={401, 402})
-        buckets = dm.bucket_summary(detail)
+        pairs = dm.reassignment_pair_counts(joined, tax, vert={401, 402})
+        buckets = dm.bucket_summary(pairs)
         all_buckets = buckets[buckets.scope == "all"]
         # All canonical buckets are emitted (0 when none) so zero rows are visible.
         assert "unresolved-taxid" in set(all_buckets.bucket)
@@ -571,17 +543,27 @@ class TestCladeRankShares:
     NAME = {200: "familyX", 210: "familyY"}
 
     def _clade(self, rows: list[list]) -> pd.DataFrame:
+        rows = [row if len(row) == 4 else [*row, row[2]] for row in rows]
         return pd.DataFrame(
             rows, columns=["group", "taxid", "reads_clade_total", "reads_clade_dedup"]
         )
 
     def test_family_shares_over_total_viral(self) -> None:
-        # Total viral (Viruses root) = 200 reads on each side. familyX 80 -> 60.
+        # Total shares change, while deduplicated shares show that the underlying
+        # family breadth is stable.
         reference = self._clade(
-            [["G", dm.VIRUSES_TAXID, 200, 200], ["G", 200, 80, 80], ["G", 210, 40, 40]]
+            [
+                ["G", dm.VIRUSES_TAXID, 200, 100],
+                ["G", 200, 80, 20],
+                ["G", 210, 40, 40],
+            ]
         )
         candidate = self._clade(
-            [["G", dm.VIRUSES_TAXID, 200, 200], ["G", 200, 60, 60], ["G", 210, 40, 40]]
+            [
+                ["G", dm.VIRUSES_TAXID, 200, 100],
+                ["G", 200, 60, 20],
+                ["G", 210, 40, 40],
+            ]
         )
         out = dm.clade_rank_shares(
             reference,
@@ -589,14 +571,10 @@ class TestCladeRankShares:
             self.RANK,
             self.NAME,
             rank_levels=("family",),
-            count_cols=("reads_clade_total",),
         )
-        fx = out[out.taxid == 200].iloc[0]
-        # Share is of TOTAL viral reads (200), not of the family-rank sum.
-        assert abs(fx.share_reference - 0.40) < 1e-9
-        assert abs(fx.share_candidate - 0.30) < 1e-9
-        assert abs(fx.delta_pp - (-10.0)) < 1e-9
-        assert fx.delta_reads == -20
+        fx = out[out.taxid == 200].set_index("count_type")
+        assert fx.loc["reads_clade_total"].delta_pp == pytest.approx(-10.0)
+        assert fx.loc["reads_clade_dedup"].delta_pp == pytest.approx(0.0)
 
     def test_unchanged_family_not_inflated_when_other_collapses(self) -> None:
         # The old within-rank bug: familyX's raw count is UNCHANGED, but familyY
@@ -605,13 +583,13 @@ class TestCladeRankShares:
         # not move, and delta_reads is exactly 0.
         reference = self._clade(
             [
-                ["G", dm.VIRUSES_TAXID, 200, 200],
-                ["G", 200, 50, 50],
-                ["G", 210, 100, 100],
+                ["G", dm.VIRUSES_TAXID, 200],
+                ["G", 200, 50],
+                ["G", 210, 100],
             ]
         )
         candidate = self._clade(
-            [["G", dm.VIRUSES_TAXID, 200, 200], ["G", 200, 50, 50], ["G", 210, 10, 10]]
+            [["G", dm.VIRUSES_TAXID, 200], ["G", 200, 50], ["G", 210, 10]]
         )
         out = dm.clade_rank_shares(
             reference,
@@ -619,7 +597,6 @@ class TestCladeRankShares:
             self.RANK,
             self.NAME,
             rank_levels=("family",),
-            count_cols=("reads_clade_total",),
         )
         fx = out[out.taxid == 200].iloc[0]
         assert fx.delta_reads == 0
@@ -630,16 +607,15 @@ class TestCladeRankShares:
 
     def test_family_dropped_in_candidate(self) -> None:
         reference = self._clade(
-            [["G", dm.VIRUSES_TAXID, 100, 100], ["G", 200, 50, 50], ["G", 210, 50, 50]]
+            [["G", dm.VIRUSES_TAXID, 100], ["G", 200, 50], ["G", 210, 50]]
         )
-        candidate = self._clade([["G", dm.VIRUSES_TAXID, 100, 100], ["G", 200, 50, 50]])
+        candidate = self._clade([["G", dm.VIRUSES_TAXID, 100], ["G", 200, 50]])
         out = dm.clade_rank_shares(
             reference,
             candidate,
             self.RANK,
             self.NAME,
             rank_levels=("family",),
-            count_cols=("reads_clade_total",),
         )
         fy = out[out.taxid == 210].iloc[0]
         assert fy.share_candidate == 0.0
@@ -648,15 +624,14 @@ class TestCladeRankShares:
 
     def test_missing_viruses_root_gives_nan_share(self) -> None:
         # No Viruses-root row -> denominator missing -> share NaN (surfaced, not 0).
-        reference = self._clade([["G", 200, 50, 50]])
-        candidate = self._clade([["G", 200, 50, 50]])
+        reference = self._clade([["G", 200, 50]])
+        candidate = self._clade([["G", 200, 50]])
         out = dm.clade_rank_shares(
             reference,
             candidate,
             self.RANK,
             self.NAME,
             rank_levels=("family",),
-            count_cols=("reads_clade_total",),
         )
         fx = out[out.taxid == 200].iloc[0]
         assert pd.isna(fx.share_reference) and pd.isna(fx.share_candidate)
@@ -664,15 +639,14 @@ class TestCladeRankShares:
         assert fx.reads_reference == 50 and fx.delta_reads == 0
 
     def test_name_falls_back_to_taxid(self) -> None:
-        reference = self._clade([["G", dm.VIRUSES_TAXID, 100, 100], ["G", 999, 50, 50]])
-        candidate = self._clade([["G", dm.VIRUSES_TAXID, 100, 100], ["G", 999, 50, 50]])
+        reference = self._clade([["G", dm.VIRUSES_TAXID, 100], ["G", 999, 50]])
+        candidate = self._clade([["G", dm.VIRUSES_TAXID, 100], ["G", 999, 50]])
         out = dm.clade_rank_shares(
             reference,
             candidate,
             {**self.RANK, 999: "family"},
             self.NAME,  # 999 absent from name_map -> falls back to "999"
             rank_levels=("family",),
-            count_cols=("reads_clade_total",),
         )
         f999 = out[out.taxid == 999].iloc[0]
         assert f999["name"] == "999"
@@ -710,15 +684,14 @@ class TestValidationAgreementByTaxon:
         assert out.loc[10].n_reads == 3
         assert out.loc[10].n_validated == 2
         assert abs(out.loc[10].agreement_rate - 0.5) < 1e-9
-        assert abs(out.loc[10].mean_distance - 1.0) < 1e-9
         assert abs(out.loc[10].mean_distance_disagree - 2.0) < 1e-9
         # taxon 20: both validated and agree, so no disagreement distance.
         assert abs(out.loc[20].agreement_rate - 1.0) < 1e-9
         assert pd.isna(out.loc[20].mean_distance_disagree)
 
     def test_disagreement_distance_not_diluted_by_agreements(self) -> None:
-        # 9 agreements + 1 distance-10 disagreement: mean_distance is diluted to
-        # 1.0, but mean_distance_disagree must report the real severity (10).
+        # 9 agreements + 1 distance-10 disagreement: report the disagreement
+        # distance itself, not a mean diluted by the agreements.
         vh = pd.DataFrame(
             {
                 "group": ["G"] * 10,
@@ -728,7 +701,6 @@ class TestValidationAgreementByTaxon:
         )
         row = dm.validation_agreement_by_taxon(vh).iloc[0]
         assert abs(row.agreement_rate - 0.9) < 1e-9
-        assert abs(row.mean_distance - 1.0) < 1e-9
         assert abs(row.mean_distance_disagree - 10.0) < 1e-9
 
     def test_empty_input_returns_header_only(self) -> None:
@@ -740,7 +712,6 @@ class TestValidationAgreementByTaxon:
             "n_reads",
             "n_validated",
             "agreement_rate",
-            "mean_distance",
             "mean_distance_disagree",
         ]
 
@@ -774,11 +745,6 @@ class TestVertebrateStatusFlips:
         # A genuine flip (present both, status crossed) stays distinct.
         assert "gained_vertebrate" not in changes.values()
         assert "lost_vertebrate" not in changes.values()
-
-
-###############################
-# FLAGGING                    #
-###############################
 
 
 class TestBuildFlags:
@@ -832,11 +798,6 @@ class TestBuildFlags:
         assert flags.iloc[0].value == "pass->fail"
 
 
-###############################
-# SCIENTIFIC-REVIEW FIXES     #
-###############################
-
-
 class TestVertebrateTaxidsDtype:
     def test_float_dtype_status_still_found(self) -> None:
         # An NA in the column makes pandas read it as float ("1.0"); a string
@@ -857,16 +818,6 @@ class TestJoinReadAssignmentsFixes:
         return pd.DataFrame(
             rows, columns=["group", "sample", "seq_id", "aligner_taxid_lca"]
         )
-
-    def test_merge_map_canonicalizes_so_not_reassigned(self) -> None:
-        # reference taxid 100 was merged into 200 in candidate; with the merge map the read
-        # is 'same', not 'reassigned'.
-        reference = self._vh([["G", "S", "r1", 100]])
-        candidate = self._vh([["G", "S", "r1", 200]])
-        out = dm.join_read_assignments(reference, candidate, merge_map={100: 200})
-        assert out.iloc[0].status == "same"
-        out_nomap = dm.join_read_assignments(reference, candidate)
-        assert out_nomap.iloc[0].status == "reassigned"
 
     def test_sample_in_key_prevents_cross_sample_collision(self) -> None:
         # Same seq_id in two samples of one group must not cartesian-join.
@@ -894,64 +845,37 @@ class TestJoinReadAssignmentsFixes:
         assert out.iloc[0].status == "reassigned"
 
 
-class TestReassignmentConcentration:
-    def test_top_pair_fraction(self) -> None:
-        detail = pd.DataFrame(
-            {
-                "group": ["G"] * 5,
-                "scope": ["all"] * 5,
-                "seq_id": list("abcde"),
-                "taxid_reference": [1, 1, 1, 1, 2],
-                "taxid_candidate": [9, 9, 9, 9, 8],
-                "bucket": ["same-genus"] * 5,
-            }
-        )
-        out = dm.reassignment_concentration(detail).iloc[0]
-        assert out.n_reassigned == 5
-        assert out.n_distinct_pairs == 2
-        assert out.top_pair == "1->9"
-        assert abs(out.top_pair_frac - 0.8) < 1e-9
-
-
 class TestReassignmentPairCounts:
     def test_non_top_severe_pair_still_present(self) -> None:
-        # A severe cross-root pair (2->8) that is NOT the group's top pair (1->9,
-        # 4 reads) must still appear as its own row, so the report can name it.
-        detail = pd.DataFrame(
+        joined = pd.DataFrame(
             {
                 "group": ["G"] * 5,
-                "scope": ["all"] * 5,
                 "seq_id": list("abcde"),
-                "taxid_reference": [1, 1, 1, 1, 2],
-                "taxid_candidate": [9, 9, 9, 9, 8],
-                "bucket": ["same-genus"] * 4 + [dm.CROSS_ROOT],
+                "taxid_reference": [401, 401, 401, 401, 401],
+                "taxid_candidate": [402, 402, 402, 402, 600],
+                "status": ["reassigned"] * 5,
             }
         )
-        out = dm.reassignment_pair_counts(detail)
+        out = dm.reassignment_pair_counts(joined, _synthetic_tree(), vert={401, 402})
         cross = out[out.bucket == dm.CROSS_ROOT]
-        assert len(cross) == 1
+        assert len(cross) == 2  # all + vertebrate scopes
         row = cross.iloc[0]
         assert row.group == "G"
-        assert row.taxid_reference == 2
-        assert row.taxid_candidate == 8
+        assert row.taxid_reference == 401
+        assert row.taxid_candidate == 600
         assert row.n_reads == 1
+        assert row.pair_frac == 0.2
         # The top pair is still present too (every pair is kept).
-        assert {(1, 9), (2, 8)} <= set(
+        assert {(401, 402), (401, 600)} <= set(
             zip(out.taxid_reference, out.taxid_candidate, strict=True)
         )
+        assert set(out[out.taxid_candidate == 402].pair_frac) == {0.8}
 
     def test_empty_detail_emits_header_only(self) -> None:
         empty = pd.DataFrame(
-            columns=[
-                "group",
-                "scope",
-                "seq_id",
-                "taxid_reference",
-                "taxid_candidate",
-                "bucket",
-            ]
+            columns=["group", "seq_id", "taxid_reference", "taxid_candidate", "status"]
         )
-        out = dm.reassignment_pair_counts(empty)
+        out = dm.reassignment_pair_counts(empty, _synthetic_tree(), vert=set())
         assert out.empty
         assert list(out.columns) == [
             "group",
@@ -960,6 +884,7 @@ class TestReassignmentPairCounts:
             "taxid_candidate",
             "bucket",
             "n_reads",
+            "pair_frac",
         ]
 
 
@@ -1003,13 +928,10 @@ class TestNaTaxidRobustness:
                 "status": ["reassigned", "reassigned"],
             }
         )
-        detail = dm.reassignment_distances(joined, self._tree(), vert={401, 402, 500})
-        r2 = detail[(detail.scope == "all") & (detail.seq_id == "r2")].iloc[0]
+        pairs = dm.reassignment_pair_counts(joined, self._tree(), vert={401, 402, 500})
+        r2 = pairs[(pairs.scope == "all") & pairs.taxid_reference.isna()].iloc[0]
         assert r2.bucket == dm.UNRESOLVED_TAXID
-        # concentration must also survive the NA pair.
-        conc = dm.reassignment_concentration(detail)
-        assert not conc.empty
-        assert (conc.n_reassigned > 0).all()
+        assert r2.n_reads == 1
 
 
 class TestQcSurvivalPlatformCoalesce:
@@ -1036,13 +958,8 @@ class TestQcSurvivalPlatformCoalesce:
         assert abs(s2.survival_candidate - 0.95) < 1e-9
 
 
-###############################
-# TEST-QUALITY REVIEW: GAPS   #
-###############################
-
-
 class TestBuildFlagsBranches:
-    def test_survival_branch_flags_large_pp_change(self) -> None:
+    def test_numeric_branches(self) -> None:
         survival = pd.DataFrame(
             {
                 "group": ["G"],
@@ -1051,25 +968,15 @@ class TestBuildFlagsBranches:
                 "delta_pp": [-12.0],  # > read_survival_pp default 5
             }
         )
-        flags = dm.build_flags({"qc_survival": survival})
-        assert (flags.metric.str.contains("survival")).any()
-
-    def test_clade_branch_flags_large_share_shift(self) -> None:
         clade = pd.DataFrame(
             {
-                "group": ["G"],
-                "rank_level": ["family"],
-                "name": ["FamX"],
-                "count_type": ["reads_clade_total"],
-                "delta_pp": [-20.0],  # > clade_share_pp default 3
+                "group": ["G", "G"],
+                "rank_level": ["family", "family"],
+                "count_type": ["reads_clade_total", "reads_clade_dedup"],
+                "name": ["FamX", "FamX"],
+                "delta_pp": [-20.0, -30.0],
             }
         )
-        flags = dm.build_flags({"clade_rank_shares": clade})
-        assert (flags.metric.str.contains("clade")).any()
-
-    def test_agreement_drop_flagged_but_improvement_not(self) -> None:
-        # pos metric: a DROP over threshold flags; an equal-size improvement
-        # (negative drop) must NOT flag (guards the direction=="pos" path).
         val = pd.DataFrame(
             {
                 "group": ["Gdrop", "Gimprove"],
@@ -1077,7 +984,15 @@ class TestBuildFlagsBranches:
                 "agreement_rate_candidate": [0.7, 0.9],  # drop +0.2 ; drop -0.4
             }
         )
-        flags = dm.build_flags({"viral_validation_agreement": val})
+        flags = dm.build_flags(
+            {
+                "qc_survival": survival,
+                "clade_rank_shares": clade,
+                "viral_validation_agreement": val,
+            }
+        )
+        assert (flags.metric.str.contains("survival")).any()
+        assert sum(flags.metric.str.contains("clade")) == 1
         keys = list(flags[flags.metric.str.contains("agreement")].key)
         assert any("Gdrop" in k for k in keys)
         assert not any("Gimprove" in k for k in keys)

@@ -19,38 +19,26 @@ def _write_tsv_gz(path: Path, header: list[str], rows: list[list]) -> None:
         fh.write("\n".join(lines) + "\n")
 
 
-###########################
-# _split_filename         #
-###########################
-
-
 # Wholly invented group identifiers (no real site/date data) that still exercise
 # the underscore- and hyphen-containing group-name parsing.
 _USCORE_GROUP = "Demo_Site_19990101"
 _HYPHEN_GROUP = "XX-000000-Demo-NAS-P1"
 
 
-class TestSplitFilename:
-    # File types (not group names) anchor the split; both contain underscores.
-    KNOWN = {"qc_basic_stats_raw", "validation_hits", "fastp", "read_counts"}
-
-    def test_underscore_filetype_matched_by_longest(self) -> None:
-        got = cdr._split_filename(
-            f"{_USCORE_GROUP}_qc_basic_stats_raw.tsv.gz", self.KNOWN
-        )
-        assert got == (_USCORE_GROUP, "qc_basic_stats_raw")
-
-    def test_json_suffix_stripped(self) -> None:
-        got = cdr._split_filename(f"{_HYPHEN_GROUP}_fastp.json", self.KNOWN)
-        assert got == (_HYPHEN_GROUP, "fastp")
-
-    def test_unknown_file_type_returns_none(self) -> None:
-        assert cdr._split_filename("stray_file.tsv.gz", self.KNOWN) is None
-
-
-###########################
-# discover_side           #
-###########################
+@pytest.mark.parametrize(
+    ("filename", "expected"),
+    [
+        (
+            f"{_USCORE_GROUP}_qc_basic_stats_raw.tsv.gz",
+            (_USCORE_GROUP, "qc_basic_stats_raw"),
+        ),
+        (f"{_HYPHEN_GROUP}_fastp.json", (_HYPHEN_GROUP, "fastp")),
+        ("stray_file.tsv.gz", None),
+    ],
+)
+def test_split_filename(filename: str, expected: tuple[str, str] | None) -> None:
+    known = {"qc_basic_stats_raw", "validation_hits", "fastp", "read_counts"}
+    assert cdr._split_filename(filename, known) == expected
 
 
 class TestDiscoverSide:
@@ -70,21 +58,20 @@ class TestDiscoverSide:
             _write_tsv_gz(d / f"{g}_clade_counts.tsv.gz", ["taxid", "group"], [[1, g]])
         return d
 
-    def test_illumina_inferred_from_clade_counts(self, tmp_path: Path) -> None:
-        results = self._make_results(tmp_path / "ill", with_clade=True)
+    @pytest.mark.parametrize(
+        ("with_clade", "platform"), [(True, "illumina"), (False, "ont")]
+    )
+    def test_platform_inference(
+        self, tmp_path: Path, with_clade: bool, platform: str
+    ) -> None:
+        results = self._make_results(tmp_path / platform, with_clade=with_clade)
         manifest = cdr.discover_side(results, self.KNOWN)
-        assert manifest["G1"].platform == "illumina"
-        assert manifest["G1"].files["validation_hits"].n_rows == 2
+        assert manifest["G1"].platform == platform
         assert manifest["G1"].files["validation_hits"].columns == [
             "seq_id",
             "group",
             "aligner_taxid_lca",
         ]
-
-    def test_ont_inferred_when_no_clade_counts(self, tmp_path: Path) -> None:
-        results = self._make_results(tmp_path / "ont", with_clade=False)
-        manifest = cdr.discover_side(results, self.KNOWN)
-        assert manifest["G1"].platform == "ont"
 
     def test_group_discovered_without_validation_hits(self, tmp_path: Path) -> None:
         # A group missing its validation_hits is still discovered from other
@@ -105,11 +92,6 @@ class TestDiscoverSide:
             cdr.discover_side(d, self.KNOWN)
 
 
-###########################
-# parse_taxonomy_nodes    #
-###########################
-
-
 def test_parse_taxonomy_nodes(tmp_path: Path) -> None:
     dmp = tmp_path / "nodes.dmp"
     # Real nodes.dmp rows carry further '\t|\t'-separated fields after rank
@@ -124,11 +106,6 @@ def test_parse_taxonomy_nodes(tmp_path: Path) -> None:
     assert parent[100] == 10239
     assert rank[10239] == "acellular root"
     assert parent[1] == 1
-
-
-###########################
-# schema / expected types #
-###########################
 
 
 def test_load_schema_columns(tmp_path: Path) -> None:
@@ -157,11 +134,6 @@ def test_expected_downstream_types(tmp_path: Path) -> None:
     assert types["ont"] == {"kraken"}
     # logging_downstream entries are not per-group result types.
     assert "pyproject" not in types["illumina"]
-
-
-###########################
-# loaders                 #
-###########################
 
 
 def test_load_qc_basic_stats_adds_platform(tmp_path: Path) -> None:
@@ -202,27 +174,27 @@ class TestReadPipelineVersion:
             == "9.9.9"
         )
 
-    def test_reads_project_version_from_logging_pyproject(self, tmp_path: Path) -> None:
-        (tmp_path / "logging").mkdir()
-        (tmp_path / "logging" / "pyproject.toml").write_text(
-            '[project]\nversion = "3.2.1.5"\n'
-        )
-        assert cdr.read_pipeline_version(str(tmp_path), tmp_path / "_m") == "3.2.1.5"
-
-    def test_old_format_version_text_fallback(self, tmp_path: Path) -> None:
-        (tmp_path / "logging_downstream").mkdir()
-        (tmp_path / "logging_downstream" / "pipeline-version.txt").write_text(
-            "2.8.1.2\n"
-        )
-        assert cdr.read_pipeline_version(str(tmp_path), tmp_path / "_m") == "2.8.1.2"
+    @pytest.mark.parametrize(
+        ("relative_path", "contents", "expected"),
+        [
+            (
+                "logging/pyproject.toml",
+                '[project]\nversion = "3.2.1.5"\n',
+                "3.2.1.5",
+            ),
+            ("logging_downstream/pipeline-version.txt", "2.8.1.2\n", "2.8.1.2"),
+        ],
+    )
+    def test_reads_version_file(
+        self, tmp_path: Path, relative_path: str, contents: str, expected: str
+    ) -> None:
+        path = tmp_path / relative_path
+        path.parent.mkdir()
+        path.write_text(contents)
+        assert cdr.read_pipeline_version(str(tmp_path), tmp_path / "_m") == expected
 
     def test_returns_none_when_no_version_present(self, tmp_path: Path) -> None:
         assert cdr.read_pipeline_version(str(tmp_path), tmp_path / "_m") is None
-
-
-###########################
-# end-to-end reference()       #
-###########################
 
 
 def _build_downstream_tree(root: Path, side: str) -> None:
@@ -319,18 +291,6 @@ def _build_downstream_tree(root: Path, side: str) -> None:
             ["G_ILL", 10, 5, 80, 80, 80, 80],  # species
         ],
     )
-    # A header-only (zero data row) file, to exercise the empty-table path
-    # end-to-end. duplicate_stats is also a short-read-only marker.
-    _write_tsv_gz(
-        root / "results_downstream" / "G_ILL_duplicate_stats.tsv.gz",
-        [
-            "prim_align_genome_id_all",
-            "prim_align_dup_exemplar",
-            "prim_align_dup_count",
-            "prim_align_dup_pairwise_match_frac",
-        ],
-        [],
-    )
 
 
 def _build_index(root: Path) -> None:
@@ -344,8 +304,6 @@ def _build_index(root: Path) -> None:
         "10\t|\t5\t|\tspecies\t|\tXX\t|\n"
         "20\t|\t5\t|\tspecies\t|\tXX\t|\n"
     )
-    import gzip as _gz
-
     ann = res / "total-virus-db-annotated.tsv.gz"
     header = ["taxid", "name", "rank", "taxid_species", "infection_status_vertebrate"]
     rows = [
@@ -353,15 +311,13 @@ def _build_index(root: Path) -> None:
         [10, "sp10", "species", 10, 1],
         [20, "sp20", "species", 20, 1],
     ]
-    with _gz.open(ann, "wt") as fh:
+    with gzip.open(ann, "wt") as fh:
         fh.write("\t".join(header) + "\n")
         for r in rows:
             fh.write("\t".join(str(v) for v in r) + "\n")
 
 
-def test_main_end_to_end(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    import sys
-
+def _build_comparison(tmp_path: Path) -> tuple[Path, Path, Path, Path]:
     reference_root = tmp_path / "reference"
     candidate_root = tmp_path / "candidate"
     index_root = tmp_path / "index"
@@ -369,14 +325,23 @@ def test_main_end_to_end(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Non
     _build_downstream_tree(reference_root, "reference")
     _build_downstream_tree(candidate_root, "candidate")
     _build_index(index_root)
-    # logging/pyproject.toml in each run root drives pipeline-version auto-detection.
     for root, version in ((reference_root, "1.2.3.4"), (candidate_root, "1.2.3.5-dev")):
         (root / "logging").mkdir(parents=True, exist_ok=True)
         (root / "logging" / "pyproject.toml").write_text(
             f'[project]\nversion = "{version}"\n'
         )
+    return reference_root, candidate_root, index_root, out
 
-    # Reuse the same synthetic index as --reference-index (exercises both-index paths).
+
+def _run_comparison(
+    monkeypatch: pytest.MonkeyPatch,
+    reference_root: Path,
+    candidate_root: Path,
+    index_root: Path,
+    out: Path,
+) -> None:
+    import sys
+
     argv = [
         "compare_downstream_runs.py",
         "--reference",
@@ -393,9 +358,14 @@ def test_main_end_to_end(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Non
     monkeypatch.setattr(sys, "argv", argv)
     cdr.main()
 
+
+def test_main_end_to_end(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    reference_root, candidate_root, index_root, out = _build_comparison(tmp_path)
+    _run_comparison(monkeypatch, reference_root, candidate_root, index_root, out)
+
     import pandas as pd
 
-    # Core outputs exist, incl. concentration and status flips.
+    # Core outputs exist, including pair counts and status flips.
     for name in (
         "flags.tsv",
         "file_inventory.tsv",
@@ -405,7 +375,7 @@ def test_main_end_to_end(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Non
         "kraken_bray_curtis.tsv",
         "viral_read_status.tsv",
         "viral_reassignment_buckets.tsv",
-        "viral_reassignment_concentration.tsv",
+        "viral_reassignment_pairs.tsv",
         "clade_rank_shares.tsv",
         "vertebrate_status_flips.tsv",
         "run_identity.tsv",
@@ -427,11 +397,10 @@ def test_main_end_to_end(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Non
     brk = inv[(inv.group == "G_ILL") & (inv.file_type == "bracken")]
     assert len(brk) == 1
     assert not bool(brk.iloc[0].in_reference) and not bool(brk.iloc[0].in_candidate)
-
-    # Header-only file is handled end-to-end: present with zero data rows.
-    dup = inv[(inv.group == "G_ILL") & (inv.file_type == "duplicate_stats")]
-    assert len(dup) == 1
-    assert bool(dup.iloc[0].in_reference) and dup.iloc[0].n_rows_reference == 0
+    hits = inv[(inv.group == "G_ILL") & (inv.file_type == "validation_hits")].iloc[0]
+    assert hits.n_rows_reference == 2
+    assert hits.n_rows_candidate == 2
+    assert hits.row_delta == 0
 
     # The candidate reassignment (read r2: 10 -> 20, same family) is captured.
     status = pd.read_csv(out / "viral_read_status.tsv", sep="\t")
@@ -450,35 +419,12 @@ def test_main_end_to_end(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Non
 def test_main_skips_focus1_when_validation_hits_absent(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    import sys
-
-    reference_root = tmp_path / "reference"
-    candidate_root = tmp_path / "candidate"
-    index_root = tmp_path / "index"
-    out = tmp_path / "out"
-    _build_downstream_tree(reference_root, "reference")
-    _build_downstream_tree(candidate_root, "candidate")
-    _build_index(index_root)
+    reference_root, candidate_root, index_root, out = _build_comparison(tmp_path)
     # Remove ALL validation_hits on the candidate side: Focus 1 must skip cleanly, not
     # crash, and still produce the other focuses + flags.
     for vh in (candidate_root / "results_downstream").glob("*_validation_hits.tsv.gz"):
         vh.unlink()
-
-    argv = [
-        "compare_downstream_runs.py",
-        "--reference",
-        str(reference_root),
-        "--candidate",
-        str(candidate_root),
-        "--candidate-index",
-        str(index_root),
-        "--reference-index",
-        str(index_root),
-        "--out",
-        str(out),
-    ]
-    monkeypatch.setattr(sys, "argv", argv)
-    cdr.main()  # must not raise
+    _run_comparison(monkeypatch, reference_root, candidate_root, index_root, out)
 
     assert (out / "flags.tsv").exists()
     assert (out / "file_inventory.tsv").exists()
@@ -501,34 +447,11 @@ def test_main_per_group_one_sided_input_is_skipped_not_fabricated(
     NOT fabricate a lost/Bray-Curtis flag for them, and still compute the other
     group's metric plus the independent viral outputs (clade, status flips).
     """
-    import sys
-
-    reference_root = tmp_path / "reference"
-    candidate_root = tmp_path / "candidate"
-    index_root = tmp_path / "index"
-    out = tmp_path / "out"
-    _build_downstream_tree(reference_root, "reference")
-    _build_downstream_tree(candidate_root, "candidate")
-    _build_index(index_root)
+    reference_root, candidate_root, index_root, out = _build_comparison(tmp_path)
     # One-sided per-group absences (candidate side only).
     (candidate_root / "results_downstream" / "G_ONT_validation_hits.tsv.gz").unlink()
     (candidate_root / "results_downstream" / "G_ILL_kraken.tsv.gz").unlink()
-
-    argv = [
-        "compare_downstream_runs.py",
-        "--reference",
-        str(reference_root),
-        "--candidate",
-        str(candidate_root),
-        "--candidate-index",
-        str(index_root),
-        "--reference-index",
-        str(index_root),
-        "--out",
-        str(out),
-    ]
-    monkeypatch.setattr(sys, "argv", argv)
-    cdr.main()
+    _run_comparison(monkeypatch, reference_root, candidate_root, index_root, out)
 
     import pandas as pd
 
