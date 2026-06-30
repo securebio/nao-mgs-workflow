@@ -698,9 +698,7 @@ def main() -> None:
             decomposition = dm.validation_agreement_decomposition(
                 vh_reference, vh_candidate, name_map
             )
-            write_tsv(
-                decomposition, args.out / "viral_validation_decomposition.tsv"
-            )
+            write_tsv(decomposition, args.out / "viral_validation_decomposition.tsv")
         else:
             logger.warning(
                 "validation_hits missing on a side; skipping BLAST-validation "
