@@ -41,6 +41,9 @@ to compare against, a difference is neither good nor bad on its face.
 
 > **Author instructions.** Print the one attribution statement that matches what
 > differs between these two runs (see SKILL.md "Attribution"); delete the other.
+> A dimension you cannot verify is **"not confirmed unchanged"**, never "differs":
+> QC parameters are not emitted by the comparison, so unless the user states
+> otherwise, list QC as unconfirmed — do not claim it differs.
 
 `<Attribution statement for THIS comparison — one of: "These runs differ in
 <list ≥2 of code / index / QC parameters, or any dimension that cannot be
@@ -231,8 +234,11 @@ What this checks: every expected output file is present for every group on both
 sides, with the same columns. (Row-count *changes* are covered separately in
 Output-file overview.)
 
-- **Inventory:** `<N groups × M file types; list anything missing on either
-  side, or state none missing>`.
+- **Inventory:** `<total file-type rows in file_inventory.tsv and how they
+  decompose — do NOT state a uniform "N groups × M types" grid, since platforms
+  have different expected sets (ONT lacks clade_counts / duplicate_stats / fastp);
+  give it per-platform (e.g. "X Illumina groups × A types + Y ONT × B types").
+  List anything missing on either side, or state none missing.>`.
 - **Groups skipped for a metric** (from `skipped_groups.tsv`): `<list any group
   excluded from the viral or kraken comparison because a required input was
   present on only one side, or state none were skipped>`.
@@ -399,14 +405,18 @@ rows that moves with a read-level lost/gained finding).>`
   The `unresolved-taxid` bucket counts the cases where a taxid is genuinely
   absent from the candidate-index taxonomy.
 - **Clade-share denominator & candidate-index re-ranking.** Each clade's share uses
-  a fixed denominator — the group's total viral reads (the Viruses-root clade
-  total) — so a family dropping to 0 does NOT mechanically inflate the others'
-  shares. Read `delta_reads` (raw count change) alongside the share: the total
-  viral-read count can itself differ between sides (reads reassigned to/from
-  higher ranks), so a share move can be driven by the total rather than the
-  family, which `delta_reads` disambiguates. A clade-share flag fires on the
-  share change alone, so a clade with identical read counts on both sides
-  (`delta_reads == 0`) can still be flagged purely as a denominator effect — read
+  a fixed denominator — the group's total viral reads per side (the Viruses-root
+  clade total). This avoids the *within-rank* inflation artifact (dividing by a
+  sum over only the family rows, where one family vanishing would inflate the
+  rest), but it does NOT eliminate denominator effects: the per-side total viral
+  reads itself differs between runs whenever reads are added or removed (a clade
+  re-annotated out, a new taxon gained), so a family with unchanged raw counts can
+  still gain or lose share purely from the shrinking/growing total. Always read
+  `delta_reads` (raw count change) alongside the share: a share move can be driven
+  by the total rather than the family, which `delta_reads` disambiguates. A
+  clade-share flag fires on the share change alone, so a clade with identical read
+  counts on both sides (`delta_reads == 0`) can still be flagged purely as a
+  denominator effect — read
   `delta_reads` before treating a flagged share move as a real change in that
   clade. Rank is resolved from the full candidate-index taxonomy, so a clade that appears in
   the table at all is present in the candidate-index taxonomy: a row with

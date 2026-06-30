@@ -247,9 +247,12 @@ Key reminders:
   every metric dimension with a flag in `flags.tsv`, and (b) two enumerated
   non-flag triggers that a flag can miss: any cross-root or shared-higher-taxon
   reassignment (the reassignment flag is per-group, so a few severe moves inside
-  an otherwise-unflagged group would slip past it), and any clade reaching zero
-  candidate-side share (a collapse can sit below the share-change threshold).
-  Never drop one as "minor"; a dimension checked but within threshold and with
+  an otherwise-unflagged group would slip past it), and any clade (family OR order)
+  reaching zero candidate-side share (a collapse can sit below the share-change
+  threshold). For that second trigger, enumerate **every** such clade from
+  `clade_rank_shares.tsv`, however small the reference count — not just the large
+  ones; a one-line list of the minor ones is enough, but they must not be silently
+  dropped. Never drop a trigger as "minor"; a dimension checked but within threshold and with
   neither trigger goes under "Checked, no action needed". The *set* of subsections
   (each closing with a `**To confirm:**` or `**Note:**` line) is fixed by
   `flags.tsv` plus those two triggers — that is what is identical across reviewers;
@@ -270,24 +273,57 @@ Run them against the staged data under `<out>/_staged` and the index dumps under
 `<out>/_index` / `<out>/_reference_index`. Each is conditional on observing the
 difference it addresses; skip a check whose difference did not occur.
 
-- **A clade/taxon dropped out of the viral counts, or vertebrate-viral reads were
-  lost** → **check `vertebrate_status_flips.tsv` first.** The DOWNSTREAM viral
-  output is scoped to the index's vertebrate-infecting set, so a taxon
-  re-annotated *non*-vertebrate (its members appear with `change == lost_vertebrate`
-  — a TRUE status flip, present in both index annotations) drops out of the counts
-  entirely. This is the most common benign cause of a clade vanishing and is far
-  more likely than a genome removal; it supports a **Strongly supported** mechanism
-  when the clade's members all carry that flip. (A `removed_vertebrate` value
-  instead means the taxon was dropped from the candidate annotated DB altogether —
-  a different mechanism.) Only after ruling the flip out should you look at whether
-  reference genomes changed: count
-  alignments per reference accession on each side (`prim_align_genome_id_all` in
-  the `*_validation_hits.tsv.gz` files); an accession with many hits on one side
-  and zero on the other points to a reference added to / removed from the aligner
-  DB. A clade that still appears in `clade_rank_shares.tsv` is by construction
-  present in the candidate-index taxonomy, so do not attribute its drop to
-  taxonomy re-ranking/deletion without confirming the taxid is genuinely absent
-  from `taxonomy-nodes.dmp`.
+**Two traps to avoid when assigning a mechanism — both are about not asserting a
+cause the data doesn't actually pin down:**
+
+- **Don't carry a cause across metrics without re-checking it in the second
+  metric.** Each metric has its own subset, denominator, and matching rule (e.g.
+  the read-level lost/gained/reassigned counts use the vertebrate-viral subset
+  defined by *candidate-index* annotation; the clade-share view uses a different
+  denominator; the all-scope counts include everything). A taxon or clade that
+  drives one metric may be *excluded by construction* from another, so a cause
+  established for finding A can be irrelevant to finding B even when they look
+  related. Before writing "X explains flag B", confirm X's reads actually fall
+  inside B's subset/denominator — recompute the contribution, don't infer it from
+  a sibling finding.
+- **When a signal is a relationship between two quantities, find out which side
+  moved.** A metric defined as a relation (e.g. BLAST agreement = the aligner call
+  vs. the BLAST/validation call; or any "A relative to B" rate) can shift because
+  either side changed. Localizing *where* the shift sits (which taxon, which
+  group) does not tell you *which side* moved. Determine that — e.g. join the
+  affected reads across runs and check whether the aligner call actually changed —
+  before naming a cause; a shift concentrated on *unchanged* aligner calls points
+  to the other side (the validation reference) moving, not a reassignment.
+
+- **A clade dropped out of the clade-share view** → **check
+  `vertebrate_status_flips.tsv` first.** The DOWNSTREAM viral output is scoped to
+  the index's vertebrate-infecting set, so a clade whose members were re-annotated
+  *non*-vertebrate (they appear with `change == lost_vertebrate` — a TRUE status
+  flip, present in both index annotations) drops out of the clade-share counts
+  entirely. This is the most common benign cause of a clade vanishing and far more
+  likely than a genome removal; it supports a **Strongly supported** mechanism for
+  the *clade-share* finding when the clade's members all carry that flip. (A
+  `removed_vertebrate` value instead means the taxon was dropped from the candidate
+  annotated DB altogether — a different mechanism.) Only after ruling the flip out
+  should you look at whether reference genomes changed: count alignments per
+  reference accession on each side (`prim_align_genome_id_all` in the
+  `*_validation_hits.tsv.gz` files); an accession with many hits on one side and
+  zero on the other points to a reference added to / removed from the aligner DB. A
+  clade that still appears in `clade_rank_shares.tsv` is by construction present in
+  the candidate-index taxonomy, so do not attribute its drop to taxonomy
+  re-ranking/deletion without confirming the taxid is genuinely absent from
+  `taxonomy-nodes.dmp`.
+- **Vertebrate-viral reads were lost (the lost-flag)** → this is a DIFFERENT
+  metric from the clade-share collapse above; do not assume the same cause (first
+  trap). The lost count is over the vertebrate-viral subset (candidate-index
+  status 1, union rule), so a clade re-annotated *non*-vertebrate is **excluded
+  from this metric** — its disappearance shows up in the all-scope and clade-share
+  views but contributes **zero** to the vertebrate-scope lost count. Confirm by
+  comparing the all-scope vs vertebrate-scope `n_lost` for the group in
+  `viral_read_status.tsv`: the vertebrate-loss flag is the *residual* after the
+  non-vertebrate (incl. re-annotated) losses are removed. Explain it from the taxa
+  of the vertebrate-subset lost reads themselves (look them up in the staged
+  reference `validation_hits` for that group), not from the re-annotated clade.
 - **A reassignment pair dominates** → look up both taxids in the candidate index's
   `taxonomy-nodes.dmp`. If one is the direct parent of the other (same species),
   it is an LCA-specificity move — the mildest reassignment, not a renumbering.
@@ -310,7 +346,14 @@ difference it addresses; skip a check whose difference did not occur.
   the new disagreements are — a value near 1 is a one-edge offset; a large value
   is a gross mis-call. Do **not** use `mean_distance` for this: it is over all
   validated reads and dilutes toward 0 when agreement is high. This localizes the
-  move to specific taxa without a by-hand query.
+  move to a taxon — but agreement is a two-sided signal (aligner call vs BLAST
+  call), so localization is **not** the cause (second trap). Before linking the
+  drop to a reassignment finding, check **which side moved**: join the affected
+  group's reads across runs and compare `aligner_taxid_lca`. If the bulk of the
+  agreement loss sits on reads whose aligner call is *unchanged*, the BLAST/
+  validation reference moved (e.g. it now resolves to a new or split species near
+  the aligner's taxon), and a reassignment is **not** the cause — cap that link at
+  **Consistent** (or drop it) rather than **Strongly supported**.
 
 For each finding investigated, fold in a short `**Likely mechanism:**` clause —
 the suspected cause plus the concrete evidence (named taxa with taxids, counts) —
@@ -347,7 +390,16 @@ Re-read `REVIEW.md` for clarity and accuracy against the TSVs (a sub-agent is
 useful here). Correct any number that doesn't trace back to an output, any
 `Likely mechanism:` clause that overstates its confidence or isn't backed by a
 cross-check, any deterministic observation mislabeled as a mechanism, and any flag
-that lacks its underlying numbers.
+that lacks its underlying numbers. Specifically guard the two traps above:
+- **Re-derive every count, total, and taxid you cite directly from the TSV** —
+  group counts, read totals, per-pair counts, taxids — rather than transcribing
+  from a sibling finding or from memory; an off-by-one group count or a wrong
+  taxid is a common slip.
+- **Check each cross-metric attribution**: where a finding for metric A is named
+  as the cause of a flag in metric B, recompute the cause's contribution *within
+  metric B's own subset/denominator* (e.g. confirm the reads are in the
+  vertebrate-viral subset before blaming a vertebrate-loss flag on them), and
+  confirm a relation-based signal's cause by checking which side actually moved.
 
 ### Step 6 - Hand off
 
