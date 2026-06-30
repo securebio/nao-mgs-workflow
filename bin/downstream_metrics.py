@@ -1137,11 +1137,12 @@ def validation_agreement_decomposition(
         "validation_distance_aligner",
         "validation_staxid_lca",
     }
-    if (
-        vh_reference.empty
-        or vh_candidate.empty
-        or not need.issubset(vh_reference.columns)
-        or not need.issubset(vh_candidate.columns)
+    # Check columns, not emptiness: the pipeline emits header-only validation_hits
+    # for groups with no reads, so a schema-bearing 0-row frame on one side must
+    # still flow through the outer join (the other side's reads become the
+    # one-sided residual) rather than collapsing the whole table to a header.
+    if not need.issubset(vh_reference.columns) or not need.issubset(
+        vh_candidate.columns
     ):
         return pd.DataFrame(columns=_DECOMPOSITION_COLS)
     names = name_map or {}
@@ -1833,7 +1834,7 @@ def build_findings(
                     f"viral_validation_agreement_by_taxon.tsv?group={group}"
                     " (is_agreement_driver==True);"
                     f" viral_validation_decomposition.tsv?group={group}"
-                    " (aligner-moved vs target-moved)"
+                    " (loss split by which taxid moved + one-sided residual)"
                 ),
             )
 

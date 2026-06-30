@@ -1243,7 +1243,22 @@ class TestValidationAgreementDecomposition:
         assert out.n_validated_reference_only == 1  # the residual is surfaced
         assert out.n_validated_both == 1
 
+    def test_schema_bearing_empty_side_still_yields_residual(self) -> None:
+        # The pipeline emits header-only validation_hits for groups with no reads.
+        # A 0-row-but-columned reference frame must NOT collapse the table: the
+        # candidate's validated reads must still surface as the candidate-only
+        # residual (the row-per-group contract).
+        empty_ref = self._vh([]).iloc[0:0]
+        candidate = self._vh([["G", "s", "r1", 10, 0, 10]])
+        out = dm.validation_agreement_decomposition(empty_ref, candidate)
+        assert len(out) == 1
+        row = out.iloc[0]
+        assert row.n_validated_candidate_only == 1
+        assert row.n_validated_both == 0
+        assert row.n_agreement_lost == 0
+
     def test_missing_columns_returns_header_only(self) -> None:
+        # A frame with no columns at all (not just no rows) cannot be compared.
         out = dm.validation_agreement_decomposition(pd.DataFrame(), pd.DataFrame())
         assert out.empty
         assert "n_lost_target_only" in out.columns

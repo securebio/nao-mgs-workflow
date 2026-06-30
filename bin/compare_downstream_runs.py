@@ -692,9 +692,10 @@ def main() -> None:
                 agreement_by_taxon,
                 args.out / "viral_validation_agreement_by_taxon.tsv",
             )
-            # Which-side-moved decomposition: separate agreement losses caused by
-            # the aligner call changing (reassignment) from those caused by the
-            # validation target moving under an unchanged aligner call (rename).
+            # Which-side-moved decomposition: split each group's agreement losses
+            # by which taxid moved -- target-only (rename), aligner-only
+            # (reassignment), both (ambiguous), or neither -- plus the one-sided
+            # validated residual, so a BLAST-agreement cause is not guessed.
             decomposition = dm.validation_agreement_decomposition(
                 vh_reference, vh_candidate, name_map
             )
