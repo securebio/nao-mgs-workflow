@@ -1199,19 +1199,22 @@ class TestBoundingNumbers:
         assert s.max_abs_value == pytest.approx(0.18)
         assert s.n_flagged == 1  # only 0.18 exceeds the 0.15 default
 
-    def test_blast_improvement_not_counted_as_flagged(self) -> None:
-        # The agreement metric is one-directional (a drop): a large improvement
-        # (negative drop) must not count toward n_flagged.
+    def test_blast_improvement_not_counted_or_reported_as_drop(self) -> None:
+        # The agreement metric is one-directional (a drop). Group B improves by
+        # MORE than group A drops, so an abs-based bound would wrongly report B's
+        # improvement as the largest "drop". The bound must describe the drop side.
         val = pd.DataFrame(
             {
                 "group": ["A", "B"],
-                "agreement_rate_reference": [0.9, 0.4],
-                "agreement_rate_candidate": [0.4, 0.9],  # A drops 0.5; B improves 0.5
+                "agreement_rate_reference": [0.9, 0.30],
+                "agreement_rate_candidate": [0.4, 0.95],  # A drops 0.5; B improves 0.65
             }
         )
         out = dm.bounding_numbers({"viral_validation_agreement": val})
         row = out[out.metric == "BLAST-agreement rate drop"].iloc[0]
         assert row.n_flagged == 1  # only group A's drop
+        assert row.max_abs_value == pytest.approx(0.5)  # A's drop, not B's 0.65 gain
+        assert "A" in row.max_abs_group and "B" not in row.max_abs_group
 
     def test_not_computed_dimensions_emit_null_rows(self) -> None:
         # With no viral/clade/kraken sources, every dimension still gets a row so
