@@ -1917,6 +1917,27 @@ def build_findings(
             )
 
     if inventory is not None and not inventory.empty:
+        # Platform mismatch: a group inferred as a different platform on each side
+        # (e.g. Illumina degraded to ONT) is an anomaly even when the same file
+        # types happen to be present on both sides, so it would not surface as a
+        # presence difference below. Emit one finding per affected group (platform
+        # repeats across that group's file rows).
+        if "platform" in inventory.columns:
+            mismatched = sorted(
+                {
+                    str(inventory.at[i, "group"])
+                    for i in inventory.index
+                    if "mismatch" in str(inventory.at[i, "platform"])
+                }
+            )
+            for group in mismatched:
+                add(
+                    finding_type="output_anomaly",
+                    trigger="platform_mismatch",
+                    group=group,
+                    metric="platform differs between runs",
+                    detail_source=f"file_inventory.tsv?group={group}",
+                )
         for idx in inventory.index:
             in_ref = bool(inventory.at[idx, "in_reference"])
             in_cand = bool(inventory.at[idx, "in_candidate"])
@@ -1943,6 +1964,26 @@ def build_findings(
                     metric=f"{ft} expected but absent on both sides",
                     detail_source=f"file_inventory.tsv?group={group}&file_type={ft}",
                 )
+            elif {"n_rows_reference", "n_rows_candidate"}.issubset(inventory.columns):
+                # Present on both sides, but a file that collapses to zero rows on
+                # one side (or is newly populated) stays schema-conformant and so
+                # would not flag elsewhere; an unexpectedly empty output is worth a
+                # finding. (General non-zero row-count deltas are interpreted in
+                # the Checked section from file_inventory, not flagged here.)
+                nr = inventory.at[idx, "n_rows_reference"]
+                nc = inventory.at[idx, "n_rows_candidate"]
+                if pd.notna(nr) and pd.notna(nc) and ((nr == 0) != (nc == 0)):
+                    empty_side = "candidate" if nc == 0 else "reference"
+                    add(
+                        finding_type="output_anomaly",
+                        trigger="row_count_collapse",
+                        group=group,
+                        metric=f"{ft} has zero rows on {empty_side} only "
+                        f"({int(cast(Any, nr))} vs {int(cast(Any, nc))})",
+                        detail_source=(
+                            f"file_inventory.tsv?group={group}&file_type={ft}"
+                        ),
+                    )
 
     if columns is not None and not columns.empty:
         for idx in columns.index:

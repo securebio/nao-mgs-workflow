@@ -79,7 +79,11 @@ supported | Consistent | Speculative>.**
 
 > One short bullet per `bounding_numbers.tsv` row whose dimension stayed within
 > threshold (cite its `max_abs_value` and `max_abs_group`) so the reader can
-> distinguish "checked" from "not mentioned." If a metric could not be computed,
-> state that instead of calling it stable. Do not add recommendations.
+> distinguish "checked" from "not mentioned." If a metric could not be computed
+> (empty `max_abs_value`), state "not computed" instead of calling it stable. Add
+> one bullet summarising output completeness/schema, and one noting the largest
+> material row-count changes from `file_inventory.tsv` (zero-row collapses are
+> already Main findings; here bound the rest, e.g. "validation_hits up to +78%").
+> Do not add recommendations.
 
 - `<Dimension: result and bounding number.>`
