@@ -435,6 +435,7 @@ def kraken_top_movers(
     merged["pct_reference"] = merged["rel_reference"] * 100.0
     merged["pct_candidate"] = merged["rel_candidate"] * 100.0
     merged["delta_pp"] = merged["pct_candidate"] - merged["pct_reference"]
+    merged["abs_delta_pp"] = merged["delta_pp"].abs()
     merged["rank"] = rank
     # taxid tiebreaker so the top-n cutoff is deterministic when taxa tie on
     # abs_diff right at the boundary.
@@ -444,9 +445,14 @@ def kraken_top_movers(
     top = ordered.groupby(
         ["group", "ribosomal"], as_index=False, group_keys=False
     ).head(n)
-    return top.sort_values(
+    out = top.sort_values(
         ["group", "ribosomal", "abs_diff"], ascending=[True, True, False]
-    )[
+    ).reset_index(drop=True)
+    # mover_rank: 1 = largest |Δpp| within (group, ribosomal) for this rank, so
+    # the dominant mover is `mover_rank == 1` rather than a manual sort the reader
+    # has to redo (and can get wrong by reading a smaller change first).
+    out["mover_rank"] = out.groupby(["group", "ribosomal"]).cumcount() + 1
+    return out[
         [
             "group",
             "ribosomal",
@@ -456,8 +462,10 @@ def kraken_top_movers(
             "pct_reference",
             "pct_candidate",
             "delta_pp",
+            "abs_delta_pp",
+            "mover_rank",
         ]
-    ].reset_index(drop=True)
+    ]
 
 
 # Standard ranks from most specific to least, used to bucket the taxonomic
@@ -631,8 +639,37 @@ def _add_vertebrate_flag(joined: pd.DataFrame, vert: set[int]) -> pd.DataFrame:
     return out
 
 
-def summarize_read_status(joined: pd.DataFrame, vert: set[int]) -> pd.DataFrame:
-    """Summarize statuses for all/vertebrate scopes using metric-specific denominators."""
+def _dominant_taxon(
+    sub: pd.DataFrame, taxid_col: str, name_map: dict[int, str] | None
+) -> tuple[object, object, object, object]:
+    """Most frequent taxon in `sub`: (taxid, name, reads, frac of `sub`).
+
+    Returns Nones when `sub` is empty so a group with no lost/gained reads still
+    emits an explicit empty driver rather than dropping the row.
+    """
+    if sub.empty:
+        return (None, None, None, None)
+    counts = sub[taxid_col].dropna().astype(int).value_counts()
+    if counts.empty:
+        return (None, None, None, None)
+    taxid = int(counts.index[0])
+    reads = int(counts.iloc[0])
+    name = (name_map or {}).get(taxid, str(taxid))
+    return (taxid, name, reads, reads / len(sub))
+
+
+def summarize_read_status(
+    joined: pd.DataFrame,
+    vert: set[int],
+    name_map: dict[int, str] | None = None,
+) -> pd.DataFrame:
+    """Summarize statuses for all/vertebrate scopes using metric-specific denominators.
+
+    Also records the single dominant lost/gained taxon per group/scope so a
+    concentrated turnover (e.g. one newly added species driving a gain) is a
+    one-row lookup rather than a manual per-read join. `name_map` resolves the
+    driver taxid to a name; absent it, the taxid string is used.
+    """
     flagged = _add_vertebrate_flag(joined, vert)
     all_groups = sorted(flagged["group"].unique())
     records: list[dict[str, object]] = []
@@ -653,6 +690,15 @@ def summarize_read_status(joined: pd.DataFrame, vert: set[int]) -> pd.DataFrame:
             n_reference = n_lost + n_same + n_reassigned
             n_candidate = n_gained + n_same + n_reassigned
             n_shared = n_same + n_reassigned
+            empty = flagged.iloc[:0]
+            gained_rows = g[g["status"] == "gained"] if g is not None else empty
+            lost_rows = g[g["status"] == "lost"] if g is not None else empty
+            dg_taxid, dg_name, dg_reads, dg_frac = _dominant_taxon(
+                gained_rows, "taxid_candidate", name_map
+            )
+            dl_taxid, dl_name, dl_reads, dl_frac = _dominant_taxon(
+                lost_rows, "taxid_reference", name_map
+            )
             records.append(
                 {
                     "group": group,
@@ -671,6 +717,14 @@ def summarize_read_status(joined: pd.DataFrame, vert: set[int]) -> pd.DataFrame:
                     "pct_reassigned": (
                         100.0 * n_reassigned / n_shared if n_shared else None
                     ),
+                    "dominant_gained_taxid": dg_taxid,
+                    "dominant_gained_name": dg_name,
+                    "dominant_gained_reads": dg_reads,
+                    "dominant_gained_frac": dg_frac,
+                    "dominant_lost_taxid": dl_taxid,
+                    "dominant_lost_name": dl_name,
+                    "dominant_lost_reads": dl_reads,
+                    "dominant_lost_frac": dl_frac,
                 }
             )
     return pd.DataFrame.from_records(
@@ -688,6 +742,14 @@ def summarize_read_status(joined: pd.DataFrame, vert: set[int]) -> pd.DataFrame:
             "pct_lost",
             "pct_gained",
             "pct_reassigned",
+            "dominant_gained_taxid",
+            "dominant_gained_name",
+            "dominant_gained_reads",
+            "dominant_gained_frac",
+            "dominant_lost_taxid",
+            "dominant_lost_name",
+            "dominant_lost_reads",
+            "dominant_lost_frac",
         ],
     )
 
@@ -735,6 +797,8 @@ def reassignment_pair_counts(
         "bucket",
         "n_reads",
         "pair_frac",
+        "is_severe",
+        "is_dominant",
     ]
     if joined.empty:
         return pd.DataFrame(columns=cols)
@@ -770,11 +834,19 @@ def reassignment_pair_counts(
     ]
     totals = out.groupby(["group", "scope"])["n_reads"].transform("sum")
     out["pair_frac"] = out["n_reads"] / totals
-    return out.sort_values(
+    # is_severe flags the buckets the coverage rule requires a finding for even
+    # below the per-group reassignment threshold (a read leaving the viral tree
+    # or meeting another assignment only above the standard ranks).
+    out["is_severe"] = out["bucket"].isin([CROSS_ROOT, SHARED_HIGHER])
+    out = out.sort_values(
         ["group", "scope", "n_reads", "taxid_reference", "taxid_candidate"],
         ascending=[True, True, False, True, True],
         na_position="last",
-    ).reset_index(drop=True)[cols]
+    ).reset_index(drop=True)
+    # is_dominant marks the largest pair per (group, scope) (rows are n_reads-desc
+    # within each), so the headline remap is a one-row lookup.
+    out["is_dominant"] = out.groupby(["group", "scope"]).cumcount() == 0
+    return out[cols]
 
 
 def clade_rank_shares(
@@ -852,6 +924,14 @@ def clade_rank_shares(
             merged["delta_pp"] = (
                 merged["share_candidate"] - merged["share_reference"]
             ) * 100.0
+            # reaches_zero: present on the reference side but gone in the
+            # candidate. The coverage rule requires a finding for every clade
+            # reaching zero candidate share, even below the share threshold, so
+            # flagging it here keeps small-count drops (a few reads) from being
+            # silently skipped.
+            merged["reaches_zero"] = (merged["reads_reference"] > 0) & (
+                merged["reads_candidate"] == 0
+            )
             frames.append(merged)
     out = pd.concat(frames, ignore_index=True)
     return (
@@ -868,6 +948,7 @@ def clade_rank_shares(
                 "share_reference",
                 "share_candidate",
                 "delta_pp",
+                "reaches_zero",
             ]
         ]
         .sort_values(["rank_level", "count_type", "group", "delta_pp"])
@@ -941,6 +1022,40 @@ def validation_agreement_by_taxon(vh: pd.DataFrame) -> pd.DataFrame:
             }
         )
     return pd.DataFrame.from_records(records, columns=cols)
+
+
+def mark_agreement_drivers(by_taxon: pd.DataFrame) -> pd.DataFrame:
+    """Flag the taxon that drives each group's BLAST-agreement change.
+
+    Adds `abs_delta_agreement`, `agreement_impact` (|Δagreement| weighted by the
+    smaller of the two validated counts, so a one-read flip cannot outrank a real
+    move on hundreds of reads), and `is_agreement_driver` (the top-impact taxon
+    per group). This routes the reader to the taxon behind an agreement-rate flag
+    instead of leaving them to scan the per-taxon table.
+    """
+    out = by_taxon.copy()
+    needed = {"delta_agreement", "n_validated_reference", "n_validated_candidate"}
+    if out.empty or not needed.issubset(out.columns):
+        for col in ("abs_delta_agreement", "agreement_impact"):
+            out[col] = pd.Series(dtype=float)
+        out["is_agreement_driver"] = pd.Series(dtype=bool)
+        return out
+    out["abs_delta_agreement"] = pd.to_numeric(
+        out["delta_agreement"], errors="coerce"
+    ).abs()
+    n_ref = pd.to_numeric(out["n_validated_reference"], errors="coerce")
+    n_cand = pd.to_numeric(out["n_validated_candidate"], errors="coerce")
+    out["agreement_impact"] = out["abs_delta_agreement"] * pd.concat(
+        [n_ref, n_cand], axis=1
+    ).min(axis=1)
+    driver = pd.Series(False, index=out.index)
+    impact = out["agreement_impact"]
+    for _group, idx in out.groupby("group").groups.items():
+        sub = impact.loc[idx].dropna()
+        if not sub.empty and sub.max() > 0:
+            driver.loc[cast(Any, sub.idxmax())] = True
+    out["is_agreement_driver"] = driver
+    return out
 
 
 def vertebrate_status_flips(
@@ -1168,3 +1283,401 @@ def build_flags(
         records,
         columns=["focus", "key", "metric", "value", "threshold", "flag_type"],
     )
+
+
+def bounding_numbers(
+    outputs: dict[str, pd.DataFrame],
+    thresholds: dict[str, float] | None = None,
+) -> pd.DataFrame:
+    """Largest deviation per checked metric, for the 'Checked, no action needed' bullets.
+
+    Each stable dimension gets a bounding number (max |deviation| and where it
+    occurred) so the reader can distinguish "checked and within X" from "not
+    mentioned", computed here rather than by scanning the full table by eye (which
+    is where a maximum is easy to misread).
+    """
+    t = {**DEFAULT_THRESHOLDS, **(thresholds or {})}
+    records: list[dict[str, object]] = []
+
+    def add(
+        metric: str,
+        subset: str,
+        df: pd.DataFrame | None,
+        value_col: str,
+        key_cols: list[str],
+        threshold: float,
+    ) -> None:
+        if df is None or df.empty or value_col not in df.columns:
+            records.append(
+                {
+                    "metric": metric,
+                    "subset": subset,
+                    "max_abs_value": None,
+                    "max_abs_group": "",
+                    "threshold": threshold,
+                    "n_flagged": 0,
+                }
+            )
+            return
+        vals = pd.to_numeric(df[value_col], errors="coerce").abs()
+        if not vals.notna().any():
+            records.append(
+                {
+                    "metric": metric,
+                    "subset": subset,
+                    "max_abs_value": None,
+                    "max_abs_group": "",
+                    "threshold": threshold,
+                    "n_flagged": 0,
+                }
+            )
+            return
+        i = vals.idxmax()
+        where = ", ".join(f"{c}={df.at[i, c]}" for c in key_cols if c in df.columns)
+        records.append(
+            {
+                "metric": metric,
+                "subset": subset,
+                "max_abs_value": float(vals.loc[i]),
+                "max_abs_group": where,
+                "threshold": threshold,
+                "n_flagged": int((vals > threshold).sum()),
+            }
+        )
+
+    add(
+        "QC read survival (pp)",
+        "raw->cleaned",
+        outputs.get("qc_survival"),
+        "delta_pp",
+        ["group", "sample"],
+        t["read_survival_pp"],
+    )
+
+    qc = outputs.get("qc_numeric")
+    if qc is not None and not qc.empty:
+        others = qc[
+            ~qc["metric"].isin(["n_reads_single", "n_read_pairs", "n_bases_approx"])
+        ]
+        add(
+            "QC numeric metric (% change)",
+            "length/GC/duplication",
+            others,
+            "pct_change",
+            ["group", "sample", "stage", "metric"],
+            t["qc_pct_change"],
+        )
+
+    bc = outputs.get("kraken_bray_curtis")
+    if bc is not None and not bc.empty:
+        # One bounding row per (rank, ribosomal) subset so the reader sees that
+        # genus and the ribosomal subsets stayed below threshold even when a
+        # species subset triggered.
+        for (rank, ribosomal), sub in bc.groupby(["rank", "ribosomal"]):
+            add(
+                "Kraken Bray-Curtis",
+                f"rank={rank}, ribosomal={ribosomal}",
+                sub.reset_index(drop=True),
+                "bray_curtis",
+                ["group"],
+                t["bray_curtis"],
+            )
+
+    return pd.DataFrame.from_records(
+        records,
+        columns=[
+            "metric",
+            "subset",
+            "max_abs_value",
+            "max_abs_group",
+            "threshold",
+            "n_flagged",
+        ],
+    )
+
+
+# Maps a viral_read_status percent column to its finding_type, threshold key,
+# reader-facing label, and movement direction. Drives both the threshold check
+# and the manifest row so the two cannot drift.
+_VIRAL_STATUS_FINDINGS = (
+    (
+        "pct_lost",
+        "viral_reads_lost",
+        "viral_pct_lost",
+        "vertebrate-viral reads lost (%)",
+        "down",
+        "lost",
+    ),
+    (
+        "pct_gained",
+        "viral_reads_gained",
+        "viral_pct_gained",
+        "vertebrate-viral reads gained (%)",
+        "up",
+        "gained",
+    ),
+    (
+        "pct_reassigned",
+        "viral_reads_reassigned",
+        "viral_pct_reassigned",
+        "vertebrate-viral reads reassigned (%)",
+        "na",
+        None,
+    ),
+)
+
+
+def build_findings(
+    outputs: dict[str, pd.DataFrame],
+    inventory: pd.DataFrame | None = None,
+    columns: pd.DataFrame | None = None,
+    skipped: pd.DataFrame | None = None,
+    thresholds: dict[str, float] | None = None,
+    name_map: dict[int, str] | None = None,
+) -> pd.DataFrame:
+    """Enumerate every required Main-finding as one routed, named manifest row.
+
+    Supersets flags.tsv: alongside the threshold flags it carries the non-threshold
+    coverage triggers (clades reaching zero candidate share, severe reassignments,
+    output/schema anomalies, skipped groups) so the report's finding coverage is
+    "walk this table" rather than "remember to scan four others". Each row names
+    its entity from a source row (never a remembered taxid) and points to the TSV
+    rows holding its drivers via `detail_source`.
+    """
+    t = {**DEFAULT_THRESHOLDS, **(thresholds or {})}
+    names = name_map or {}
+    rec: list[dict[str, object]] = []
+
+    def add(**kw: object) -> None:
+        row: dict[str, object] = {
+            "finding_type": "",
+            "trigger": "",
+            "group": "",
+            "scope": "",
+            "rank": "",
+            "entity_taxid": None,
+            "entity_name": "",
+            "metric": "",
+            "value": None,
+            "threshold": None,
+            "direction": "",
+            "detail_source": "",
+        }
+        row.update(kw)
+        rec.append(row)
+
+    status = outputs.get("viral_read_status")
+    if status is not None and not status.empty:
+        vert = status[status["scope"] == "vertebrate"]
+        for col, ftype, thr_key, label, direction, driver in _VIRAL_STATUS_FINDINGS:
+            thr = t[thr_key]
+            vals = pd.to_numeric(vert[col], errors="coerce")
+            for idx in vert.index[(vals > thr).fillna(False)]:
+                group = vert.at[idx, "group"]
+                taxid = name = None
+                if driver is not None:
+                    taxid = vert.at[idx, f"dominant_{driver}_taxid"]
+                    name = vert.at[idx, f"dominant_{driver}_name"]
+                add(
+                    finding_type=ftype,
+                    trigger="threshold",
+                    group=group,
+                    scope="vertebrate",
+                    entity_taxid=taxid if pd.notna(taxid) else None,
+                    entity_name=name if isinstance(name, str) else "",
+                    metric=label,
+                    value=float(vals[idx]),
+                    threshold=thr,
+                    direction=direction,
+                    detail_source=(
+                        f"viral_read_status.tsv?group={group}&scope=vertebrate"
+                        if driver
+                        else f"viral_reassignment_pairs.tsv?group={group}&scope=vertebrate"
+                    ),
+                )
+
+    clade = outputs.get("clade_rank_shares")
+    if clade is not None and not clade.empty:
+        total = clade[clade["count_type"] == "reads_clade_total"]
+        thr = t["clade_share_pp"]
+        for idx in total.index:
+            delta = pd.to_numeric(total.at[idx, "delta_pp"], errors="coerce")
+            zero = bool(total.at[idx, "reaches_zero"])
+            crossed = pd.notna(delta) and abs(delta) > thr
+            if not (zero or crossed):
+                continue
+            group = total.at[idx, "group"]
+            taxid = int(cast(Any, total.at[idx, "taxid"]))
+            add(
+                finding_type="clade_reaches_zero" if zero else "clade_share_shift",
+                trigger="threshold" if crossed else "reaches_zero",
+                group=group,
+                rank=total.at[idx, "rank_level"],
+                entity_taxid=taxid,
+                entity_name=str(total.at[idx, "name"]),
+                metric="clade share change (pp)",
+                value=float(delta) if pd.notna(delta) else None,
+                threshold=thr,
+                direction="zero" if zero else ("up" if delta > 0 else "down"),
+                detail_source=(
+                    f"clade_rank_shares.tsv?group={group}"
+                    f"&taxid={taxid}&count_type=reads_clade_total"
+                ),
+            )
+
+    bc = outputs.get("kraken_bray_curtis")
+    if bc is not None and not bc.empty:
+        thr = t["bray_curtis"]
+        vals = pd.to_numeric(bc["bray_curtis"], errors="coerce")
+        for idx in bc.index[(vals > thr).fillna(False)]:
+            group = bc.at[idx, "group"]
+            rank = bc.at[idx, "rank"]
+            ribosomal = bc.at[idx, "ribosomal"]
+            add(
+                finding_type="kraken_community_shift",
+                trigger="threshold",
+                group=group,
+                scope=f"ribosomal={ribosomal}",
+                rank=rank,
+                metric="Bray-Curtis dissimilarity",
+                value=float(vals[idx]),
+                threshold=thr,
+                direction="na",
+                detail_source=(
+                    f"kraken_top_movers.tsv?group={group}&rank={rank}"
+                    f"&ribosomal={ribosomal} (mover_rank==1)"
+                ),
+            )
+
+    val = outputs.get("viral_validation_agreement")
+    if val is not None and not val.empty and "agreement_rate_reference" in val.columns:
+        thr = t["validation_agreement_drop"]
+        drop = pd.to_numeric(
+            val["agreement_rate_reference"], errors="coerce"
+        ) - pd.to_numeric(val["agreement_rate_candidate"], errors="coerce")
+        for idx in val.index[(drop > thr).fillna(False)]:
+            group = val.at[idx, "group"]
+            add(
+                finding_type="blast_agreement_drop",
+                trigger="threshold",
+                group=group,
+                metric="BLAST-agreement rate drop",
+                value=float(drop[idx]),
+                threshold=thr,
+                direction="down",
+                detail_source=(
+                    f"viral_validation_agreement_by_taxon.tsv?group={group}"
+                    " (is_agreement_driver==True)"
+                ),
+            )
+
+    pairs = outputs.get("viral_reassignment_pairs")
+    if pairs is not None and not pairs.empty and "is_severe" in pairs.columns:
+        sev = pairs[pairs["is_severe"].fillna(False) & (pairs["scope"] == "all")]
+        for idx in sev.index:
+            group = sev.at[idx, "group"]
+            tx_ref = sev.at[idx, "taxid_reference"]
+            tx_cand = sev.at[idx, "taxid_candidate"]
+            cand_int = int(cast(Any, tx_cand)) if pd.notna(tx_cand) else None
+            add(
+                finding_type="severe_reassignment",
+                trigger=str(sev.at[idx, "bucket"]),
+                group=group,
+                scope="all",
+                entity_taxid=cand_int,
+                entity_name=names.get(cand_int, "") if cand_int is not None else "",
+                metric=(
+                    f"{sev.at[idx, 'bucket']}: "
+                    f"{_fmt_taxid(tx_ref)}->{_fmt_taxid(tx_cand)}"
+                ),
+                value=float(cast(Any, sev.at[idx, "n_reads"])),
+                threshold=None,
+                direction="na",
+                detail_source=f"viral_reassignment_pairs.tsv?group={group}&scope=all",
+            )
+
+    if inventory is not None and not inventory.empty:
+        miss = inventory[inventory["in_reference"] != inventory["in_candidate"]]
+        for idx in miss.index:
+            side = "reference" if miss.at[idx, "in_reference"] else "candidate"
+            group = miss.at[idx, "group"]
+            ft = miss.at[idx, "file_type"]
+            add(
+                finding_type="output_anomaly",
+                trigger="missing_file",
+                group=group,
+                metric=f"{ft} present on {side} only",
+                detail_source=f"file_inventory.tsv?group={group}&file_type={ft}",
+            )
+
+    if columns is not None and not columns.empty:
+        for idx in columns.index:
+            problems = [
+                str(columns.at[idx, c])
+                for c in (
+                    "missing_vs_schema_reference",
+                    "extra_vs_schema_reference",
+                    "missing_vs_schema_candidate",
+                    "extra_vs_schema_candidate",
+                )
+                if str(columns.at[idx, c]) not in ("", "(empty file)")
+            ]
+            inconsistent = not (
+                bool(columns.at[idx, "groups_consistent_reference"])
+                and bool(columns.at[idx, "groups_consistent_candidate"])
+            )
+            if not problems and not inconsistent:
+                continue
+            ft = columns.at[idx, "file_type"]
+            detail = "; ".join(problems) or "columns inconsistent across groups"
+            add(
+                finding_type="schema_anomaly",
+                trigger="column_mismatch",
+                metric=f"{ft}: {detail}",
+                detail_source=f"column_conformance.tsv?file_type={ft}",
+            )
+
+    if skipped is not None and not skipped.empty:
+        for idx in skipped.index:
+            add(
+                finding_type="skipped_group",
+                trigger="one_sided_input",
+                group=skipped.at[idx, "group"],
+                metric=f"{skipped.at[idx, 'metric']}: {skipped.at[idx, 'reason']}",
+                detail_source="skipped_groups.tsv",
+            )
+
+    df = pd.DataFrame.from_records(
+        rec,
+        columns=[
+            "finding_type",
+            "trigger",
+            "group",
+            "scope",
+            "rank",
+            "entity_taxid",
+            "entity_name",
+            "metric",
+            "value",
+            "threshold",
+            "direction",
+            "detail_source",
+        ],
+    )
+    # rank_in_type: 1 = largest |value| within each finding_type, so the report can
+    # lead each subsection with its biggest instance. Rows without a numeric value
+    # (output/schema/skipped triggers) sort last but keep a stable order.
+    if df.empty:
+        df["rank_in_type"] = pd.Series(dtype="Int64")
+        return df
+    magnitude = pd.to_numeric(df["value"], errors="coerce").abs().fillna(-1.0)
+    df = df.assign(_m=magnitude).sort_values(
+        ["finding_type", "_m"], ascending=[True, False], kind="stable"
+    )
+    df["rank_in_type"] = df.groupby("finding_type").cumcount() + 1
+    return df.drop(columns="_m").reset_index(drop=True)
+
+
+def _fmt_taxid(value: Any) -> str:
+    """Render a possibly-NA taxid as a bare integer string for a pair label."""
+    return str(int(value)) if pd.notna(value) else "NA"

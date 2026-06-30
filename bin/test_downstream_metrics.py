@@ -383,6 +383,31 @@ class TestKrakenTopMovers:
         else:
             assert top.delta_pp > 0
 
+    def test_mover_rank_marks_largest_including_zero_to_present(self) -> None:
+        # A taxon appearing 0->present (a large positive Δ) must rank above a small
+        # negative mover, so mover_rank==1 surfaces the true dominant change rather
+        # than whatever a reader spots first.
+        reference = pd.DataFrame(
+            [
+                _kr("G1", False, "S", 1, "small_drop", 55),
+                _kr("G1", False, "S", 2, "x", 45),
+            ]
+        )
+        candidate = pd.DataFrame(
+            [
+                _kr("G1", False, "S", 1, "small_drop", 50),
+                _kr("G1", False, "S", 2, "x", 45),
+                _kr("G1", False, "S", 3, "newcomer", 60),
+            ]
+        )
+        out = dm.kraken_top_movers(reference, candidate, "S", n=10)
+        rank1 = out[out.mover_rank == 1].iloc[0]
+        assert rank1["name"] == "newcomer"
+        assert rank1.pct_reference == 0.0 and rank1.pct_candidate > 0
+        # abs_delta_pp matches |delta_pp| and ranks descend.
+        assert rank1.abs_delta_pp == pytest.approx(abs(rank1.delta_pp))
+        assert list(out.mover_rank) == sorted(out.mover_rank)
+
 
 def _synthetic_tree() -> dm.TaxonomyTree:
     """A small taxonomy mimicking the viral root layout.
@@ -489,6 +514,43 @@ class TestSummariseAndBuckets:
         assert vert.n_lost == 0
         all_ = summ[summ.scope == "all"].iloc[0]
         assert all_.n_lost == 1
+
+    def test_dominant_gained_and_lost_taxon(self) -> None:
+        # Two reads gained on 402 and one on 401; one read lost on 401. The
+        # dominant gained taxon is 402 (2 of 3 gained), the dominant lost is 401.
+        reference = pd.DataFrame(
+            [["G", "r1", 401], ["G", "r2", 401]],
+            columns=["group", "seq_id", "aligner_taxid_lca"],
+        )
+        candidate = pd.DataFrame(
+            [["G", "r1", 401], ["G", "g1", 402], ["G", "g2", 402], ["G", "g3", 401]],
+            columns=["group", "seq_id", "aligner_taxid_lca"],
+        )
+        joined = dm.join_read_assignments(reference, candidate)
+        summ = dm.summarize_read_status(
+            joined, vert={401, 402}, name_map={402: "speciesB", 401: "speciesA"}
+        )
+        row = summ[summ.scope == "vertebrate"].iloc[0]
+        assert row.dominant_gained_taxid == 402
+        assert row.dominant_gained_name == "speciesB"
+        assert row.dominant_gained_reads == 2
+        assert row.dominant_gained_frac == pytest.approx(2 / 3)
+        assert row.dominant_lost_taxid == 401
+        assert row.dominant_lost_name == "speciesA"
+
+    def test_no_gained_leaves_dominant_empty(self) -> None:
+        # A group with no gained reads must leave the gained-driver fields empty
+        # (None), not raise or fabricate a taxon.
+        reference = pd.DataFrame(
+            [["G", "r1", 401]], columns=["group", "seq_id", "aligner_taxid_lca"]
+        )
+        candidate = pd.DataFrame(
+            [["G", "r1", 401]], columns=["group", "seq_id", "aligner_taxid_lca"]
+        )
+        joined = dm.join_read_assignments(reference, candidate)
+        row = dm.summarize_read_status(joined, vert={401}).iloc[0]
+        assert pd.isna(row.dominant_gained_taxid)
+        assert pd.isna(row.dominant_lost_taxid)
 
     def test_zero_vertebrate_group_still_gets_a_row(self) -> None:
         # A group with no vertebrate reads must still get an explicit zero row
@@ -621,6 +683,10 @@ class TestCladeRankShares:
         assert fy.share_candidate == 0.0
         assert fy.delta_pp == -50.0
         assert fy.delta_reads == -50
+        # A family present on the reference but gone in the candidate reaches zero;
+        # one still present does not.
+        assert bool(fy.reaches_zero)
+        assert not bool(out[out.taxid == 200].iloc[0].reaches_zero)
 
     def test_missing_viruses_root_gives_nan_share(self) -> None:
         # No Viruses-root row -> denominator missing -> share NaN (surfaced, not 0).
@@ -885,7 +951,30 @@ class TestReassignmentPairCounts:
             "bucket",
             "n_reads",
             "pair_frac",
+            "is_severe",
+            "is_dominant",
         ]
+
+    def test_is_severe_and_is_dominant(self) -> None:
+        # Two reads to a same-genus sibling (the dominant pair) and one cross-root
+        # read (severe but not dominant).
+        joined = pd.DataFrame(
+            {
+                "group": ["G"] * 3,
+                "seq_id": list("abc"),
+                "taxid_reference": [401, 401, 401],
+                "taxid_candidate": [402, 402, 600],
+                "status": ["reassigned"] * 3,
+            }
+        )
+        out = dm.reassignment_pair_counts(joined, _synthetic_tree(), vert={401, 402})
+        all_scope = out[out.scope == "all"].set_index("taxid_candidate")
+        # The cross-root pair is severe; the same-genus pair is not.
+        assert bool(all_scope.loc[600].is_severe)
+        assert not bool(all_scope.loc[402].is_severe)
+        # The larger pair (2 reads) is the single dominant pair for the group/scope.
+        assert bool(all_scope.loc[402].is_dominant)
+        assert not bool(all_scope.loc[600].is_dominant)
 
 
 class TestQcReadSurvival:
@@ -1009,3 +1098,149 @@ class TestKrakenTopMoversCutoff:
         )
         out = dm.kraken_top_movers(reference, candidate, "S", n=1)
         assert out.iloc[0].taxid == 5  # both move 80pp; lower taxid kept
+
+
+class TestMarkAgreementDrivers:
+    def _by_taxon(self) -> pd.DataFrame:
+        # taxon 28875: big move on many reads; taxon 99: a 1-read full flip.
+        return pd.DataFrame(
+            {
+                "group": ["G", "G"],
+                "taxid": [28875, 99],
+                "n_validated_reference": [355, 1],
+                "n_validated_candidate": [487, 1],
+                "agreement_rate_reference": [0.73, 1.0],
+                "agreement_rate_candidate": [0.06, 0.0],
+                "delta_agreement": [-0.67, -1.0],
+            }
+        )
+
+    def test_driver_is_high_impact_not_one_read_flip(self) -> None:
+        out = dm.mark_agreement_drivers(self._by_taxon()).set_index("taxid")
+        # The 1-read flip has the larger |delta_agreement| but the small move on
+        # hundreds of reads is the driver once weighted by validated count.
+        assert bool(out.loc[28875].is_agreement_driver)
+        assert not bool(out.loc[99].is_agreement_driver)
+        assert out.loc[28875].agreement_impact > out.loc[99].agreement_impact
+
+    def test_empty_input_gets_driver_columns(self) -> None:
+        out = dm.mark_agreement_drivers(pd.DataFrame())
+        for col in ("abs_delta_agreement", "agreement_impact", "is_agreement_driver"):
+            assert col in out.columns
+
+
+class TestBoundingNumbers:
+    def test_survival_max_and_no_flag(self) -> None:
+        survival = pd.DataFrame(
+            {
+                "group": ["A", "B"],
+                "sample": ["A", "B"],
+                "platform": ["illumina", "illumina"],
+                "delta_pp": [0.02, -0.044],
+            }
+        )
+        out = dm.bounding_numbers({"qc_survival": survival})
+        row = out[out.metric == "QC read survival (pp)"].iloc[0]
+        # The bounding number is the largest |deviation|, reported with where it is.
+        assert row.max_abs_value == pytest.approx(0.044)
+        assert "B" in row.max_abs_group
+        assert row.n_flagged == 0  # default threshold is 5.0 pp
+
+    def test_kraken_split_by_rank_and_ribosomal(self) -> None:
+        bc = pd.DataFrame(
+            {
+                "group": ["A", "B", "C"],
+                "rank": ["S", "S", "G"],
+                "ribosomal": [False, False, False],
+                "bray_curtis": [0.18, 0.05, 0.10],
+            }
+        )
+        out = dm.bounding_numbers({"kraken_bray_curtis": bc})
+        s = out[out.subset == "rank=S, ribosomal=False"].iloc[0]
+        assert s.max_abs_value == pytest.approx(0.18)
+        assert s.n_flagged == 1  # only 0.18 exceeds the 0.15 default
+
+
+class TestBuildFindings:
+    def _status(self) -> pd.DataFrame:
+        return pd.DataFrame(
+            {
+                "group": ["G"],
+                "scope": ["vertebrate"],
+                "pct_lost": [0.0],
+                "pct_gained": [50.0],
+                "pct_reassigned": [0.0],
+                "dominant_gained_taxid": [3430604],
+                "dominant_gained_name": ["Mahrahovirus faecivivens"],
+                "dominant_lost_taxid": [None],
+                "dominant_lost_name": [""],
+            }
+        )
+
+    def test_gained_threshold_finding_carries_named_driver(self) -> None:
+        out = dm.build_findings({"viral_read_status": self._status()})
+        gained = out[out.finding_type == "viral_reads_gained"].iloc[0]
+        assert gained.trigger == "threshold"
+        assert gained.entity_taxid == 3430604
+        assert gained.entity_name == "Mahrahovirus faecivivens"
+        assert "viral_read_status.tsv?group=G" in gained.detail_source
+
+    def test_clade_reaches_zero_below_threshold_is_enumerated(self) -> None:
+        # A clade with a tiny (sub-threshold) drop that nonetheless reaches zero
+        # candidate reads must still produce a finding row.
+        clade = pd.DataFrame(
+            {
+                "group": ["G"],
+                "rank_level": ["family"],
+                "count_type": ["reads_clade_total"],
+                "taxid": [2169574],
+                "name": ["Smacoviridae"],
+                "delta_pp": [-0.1],
+                "reaches_zero": [True],
+            }
+        )
+        out = dm.build_findings({"clade_rank_shares": clade})
+        row = out[out.finding_type == "clade_reaches_zero"].iloc[0]
+        assert row.trigger == "reaches_zero"
+        assert row.entity_name == "Smacoviridae"
+        assert row.entity_taxid == 2169574
+
+    def test_severe_reassignment_named_from_map(self) -> None:
+        pairs = pd.DataFrame(
+            {
+                "group": ["G"],
+                "scope": ["all"],
+                "taxid_reference": [2805939],
+                "taxid_candidate": [3428315],
+                "bucket": [dm.SHARED_HIGHER],
+                "n_reads": [8],
+                "pair_frac": [1.0],
+                "is_severe": [True],
+                "is_dominant": [True],
+            }
+        )
+        out = dm.build_findings(
+            {"viral_reassignment_pairs": pairs},
+            name_map={3428315: "Dolmedivirus noldo"},
+        )
+        row = out[out.finding_type == "severe_reassignment"].iloc[0]
+        assert row.entity_name == "Dolmedivirus noldo"
+        assert "2805939->3428315" in row.metric
+
+    def test_rank_in_type_orders_by_magnitude(self) -> None:
+        clade = pd.DataFrame(
+            {
+                "group": ["G1", "G2"],
+                "rank_level": ["family", "family"],
+                "count_type": ["reads_clade_total", "reads_clade_total"],
+                "taxid": [200, 210],
+                "name": ["famX", "famY"],
+                "delta_pp": [-4.0, -9.0],
+                "reaches_zero": [False, False],
+            }
+        )
+        out = dm.build_findings({"clade_rank_shares": clade})
+        shift = out[out.finding_type == "clade_share_shift"].set_index("rank_in_type")
+        # The larger |Δpp| (famY, -9) is rank 1.
+        assert shift.loc[1].entity_name == "famY"
+        assert shift.loc[2].entity_name == "famX"

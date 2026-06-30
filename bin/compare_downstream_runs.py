@@ -508,6 +508,9 @@ def main() -> None:
 
     # Quantitative tables that feed the consolidated flags (Focus 1-3).
     outputs: dict[str, pd.DataFrame] = {}
+    # taxid -> name, populated when a candidate index is given; used to name
+    # manifest entities. Empty otherwise (findings then carry taxids only).
+    name_map: dict[int, str] = {}
     # Groups dropped from a metric because the required input is present on only
     # one side (would otherwise fabricate a difference). Surfaced via log +
     # skipped_groups.tsv.
@@ -584,6 +587,11 @@ def main() -> None:
         tax = dm.TaxonomyTree(parent, rank)
         annotated = load_annotated_db(args.candidate_index, work_dir)
         vert = dm.vertebrate_taxids(annotated)
+        # taxid -> name from the candidate annotation, used to name reassignment
+        # and read-status drivers without re-fetching taxonomy-names.dmp.
+        name_map = dict(
+            zip(annotated["taxid"].astype(int), annotated["name"], strict=True)
+        )
         logger.info(
             f"{len(vert)} vertebrate-infecting taxids (status 1, candidate index)."
         )
@@ -622,10 +630,11 @@ def main() -> None:
         need = {"group", "seq_id", "aligner_taxid_lca"}
         if need.issubset(vh_reference.columns) and need.issubset(vh_candidate.columns):
             joined = dm.join_read_assignments(vh_reference, vh_candidate)
-            read_status = dm.summarize_read_status(joined, vert)
+            read_status = dm.summarize_read_status(joined, vert, name_map)
             write_tsv(read_status, args.out / "viral_read_status.tsv")
             outputs["viral_read_status"] = read_status
             reassign = dm.reassignment_pair_counts(joined, tax, vert)
+            outputs["viral_reassignment_pairs"] = reassign
             write_tsv(
                 dm.bucket_summary(reassign), args.out / "viral_reassignment_buckets.tsv"
             )
@@ -646,13 +655,6 @@ def main() -> None:
         clade_reference = load_clade_counts(reference_results, reference_manifest)
         clade_candidate = load_clade_counts(candidate_results, candidate_manifest)
         if not clade_reference.empty and not clade_candidate.empty:
-            name_map = dict(
-                zip(
-                    annotated["taxid"].astype(int),
-                    annotated["name"],
-                    strict=True,
-                )
-            )
             clade = dm.clade_rank_shares(
                 clade_reference, clade_candidate, rank, name_map
             )
@@ -684,6 +686,7 @@ def main() -> None:
                 agreement_by_taxon["agreement_rate_candidate"]
                 - agreement_by_taxon["agreement_rate_reference"]
             )
+            agreement_by_taxon = dm.mark_agreement_drivers(agreement_by_taxon)
             write_tsv(
                 agreement_by_taxon,
                 args.out / "viral_validation_agreement_by_taxon.tsv",
@@ -716,7 +719,26 @@ def main() -> None:
         skipped_groups, columns=["metric", "group", "reason"]
     ).sort_values(["metric", "group"])
     write_tsv(skipped, args.out / "skipped_groups.tsv")
-    logger.info(f"{len(flags)} flags raised across all focuses.")
+
+    # findings.tsv: the report's required-coverage manifest (threshold flags plus
+    # the non-threshold triggers). bounding_numbers.tsv: a max-deviation per
+    # checked metric for the "Checked, no action needed" section.
+    findings = dm.build_findings(
+        outputs,
+        inventory=inventory,
+        columns=columns,
+        skipped=skipped,
+        thresholds=thresholds,
+        name_map=name_map,
+    )
+    write_tsv(findings, args.out / "findings.tsv")
+    write_tsv(
+        dm.bounding_numbers(outputs, thresholds=thresholds),
+        args.out / "bounding_numbers.tsv",
+    )
+    logger.info(
+        f"{len(flags)} flags raised; {len(findings)} required findings enumerated."
+    )
     logger.info(f"Done. Outputs in {args.out.resolve()}")
 
 

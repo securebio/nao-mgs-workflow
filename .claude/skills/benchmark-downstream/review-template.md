@@ -51,9 +51,11 @@ out:
 
 ## Main findings
 
-> Write one `###` subsection for every required finding from `SKILL.md`. Title it
-> after the observed result, not the metric name. Lead with what changed, then
-> give the named groups/taxa, breadth, magnitude, and the minimum caveat needed to
+> Write one `###` subsection per distinct `finding_type` in `findings.tsv` (see
+> `SKILL.md` for coverage). Title it after the observed result, not the metric
+> name. Lead with what changed (the `rank_in_type == 1` instance first), then give
+> the named groups/taxa from the manifest and the driver columns its
+> `detail_source` points to, breadth, magnitude, and the minimum caveat needed to
 > interpret it. Do not paste full tables.
 >
 > Add `**Likely mechanism:** ... **<confidence>.**` only after the matching
@@ -75,9 +77,9 @@ supported | Consistent | Speculative>.**
 
 ## Checked, no action needed
 
-> One short bullet per dimension that was computed and stayed within threshold.
-> Include a bounding number so the reader can distinguish "checked" from "not
-> mentioned." If a metric could not be computed, state that instead of calling it
-> stable. Do not add recommendations.
+> One short bullet per `bounding_numbers.tsv` row whose dimension stayed within
+> threshold (cite its `max_abs_value` and `max_abs_group`) so the reader can
+> distinguish "checked" from "not mentioned." If a metric could not be computed,
+> state that instead of calling it stable. Do not add recommendations.
 
 - `<Dimension: result and bounding number.>`

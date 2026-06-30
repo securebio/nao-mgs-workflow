@@ -58,29 +58,56 @@ Default flag thresholds are in `DEFAULT_THRESHOLDS`; override them with
 
 ## Read The Outputs
 
-Read `flags.tsv` first. It drives the Summary and required Main findings.
+Read `findings.tsv` first: it is the required-coverage manifest. Each row is one
+required Main finding, already enumerated for you — threshold flags plus the
+non-threshold triggers (clades reaching zero candidate share, severe
+reassignments, output/schema anomalies, skipped groups). Walk it rather than
+re-scanning the other tables to decide what to cover. Its columns:
+
+- `finding_type`: the dimension; write one Main-finding subsection per distinct
+  value present.
+- `trigger`: `threshold` or the rule that surfaced it (`reaches_zero`,
+  `shared-higher-taxon`, `cross-root`, `missing_file`, `column_mismatch`,
+  `one_sided_input`).
+- `group`, `scope`, `rank`, `entity_taxid`, `entity_name`: the named subject,
+  copied from a source row — use these names/ids directly.
+- `value`, `threshold`, `direction`, `rank_in_type`: the magnitude, the threshold
+  it crossed, which way it moved, and its size rank within the finding_type (lead
+  each subsection with `rank_in_type == 1`).
+- `detail_source`: the TSV (and filter) holding that finding's drivers and caveats.
+
+`bounding_numbers.tsv` drives the **Checked** section: one row per checked metric
+with its largest deviation (`max_abs_value`), where it occurred (`max_abs_group`),
+the `threshold`, and `n_flagged`. `flags.tsv` is retained as a flat threshold list.
+
+Then read the detail tables a finding's `detail_source` points to:
 
 - `run_identity.tsv`: roots, indexes, and pipeline versions.
 - `file_inventory.tsv`, `column_conformance.tsv`, `skipped_groups.tsv`: output
   completeness, row-count changes, and schema checks.
 - `viral_read_status.tsv`: lost, gained, and reassigned read counts for all viral
   reads and the vertebrate subset. Percent lost uses the reference count;
-  percent gained the candidate count; percent reassigned the shared count.
+  percent gained the candidate count; percent reassigned the shared count. The
+  `dominant_gained_*` / `dominant_lost_*` columns name the single taxon driving a
+  group's gain/loss and its read count — cite these for a concentrated turnover.
 - `viral_reassignment_buckets.tsv`: reassignment counts by taxonomic divergence.
 - `viral_reassignment_pairs.tsv`: every group/scope/taxid pair with divergence
-  bucket, read count, and fraction of that group's reassignments. Use this for
-  both dominant remaps and rare severe pairs.
+  bucket, read count, and fraction. `is_dominant` marks each group's headline
+  remap; `is_severe` marks cross-root / shared-higher-taxon pairs.
 - `clade_rank_shares.tsv`: family/order raw counts and shares of total viral reads,
   for total and deduplicated counts. Total-count rows drive flags; deduplicated
-  rows show whether a shift persists after duplicate removal.
+  rows show whether a shift persists after duplicate removal; `reaches_zero` marks
+  a clade gone from the candidate.
 - `viral_validation_agreement.tsv` and
   `viral_validation_agreement_by_taxon.tsv`: group and per-taxon BLAST agreement;
-  use `mean_distance_disagree` to describe disagreement distance.
+  use `mean_distance_disagree` for disagreement distance and `is_agreement_driver`
+  to name the taxon behind a group's agreement change.
 - `vertebrate_status_flips.tsv`: true annotation changes
   (`gained_vertebrate`/`lost_vertebrate`) versus taxa present on only one side
   (`added_vertebrate`/`removed_vertebrate`).
 - `kraken_bray_curtis.tsv`, `kraken_top_movers.tsv`: whole-community abundance
-  shifts, profile breadth, and the taxa driving them.
+  shifts and the taxa driving them; the dominant mover per group/rank/read-set is
+  `mover_rank == 1` (ranked by `abs_delta_pp`, so a 0→present jump is not missed).
 - `qc_survival.tsv`, `qc_numeric.tsv`, `qc_flag_changes.tsv`: QC changes.
 
 The TSVs are the drill-down artifact. Do not reproduce their full tables in
@@ -127,38 +154,36 @@ as **not confirmed unchanged** unless the user confirms otherwise.
 
 ### Finding Coverage
 
-Create a Main-finding subsection for:
-
-1. Every metric dimension represented in `flags.tsv`.
-2. Any `cross-root` or `shared-higher-taxon` reassignment, even if the group's
-   overall reassignment percentage is below threshold.
-3. Every family or order that reaches zero candidate share, even below the
-   clade-share threshold. Minor cases may share one concise subsection.
-4. Any missing or extra output, platform mismatch, schema/header inconsistency,
-   skipped group, or unexpected empty output. Inspect row-count changes across
-   all file types and report unexplained changes that could alter interpretation.
-
-Everything computed without one of those triggers belongs under Checked, no
+Write one Main-finding subsection per distinct `finding_type` in `findings.tsv`,
+grouping that type's rows into it (lead with `rank_in_type == 1`). Every required
+finding is already a row there — including the sub-threshold triggers
+(`reaches_zero`, `shared-higher-taxon`/`cross-root`, output/schema anomalies,
+skipped groups) — so do not re-derive the coverage list by hand. Minor instances
+of one type (e.g. several small clades reaching zero) may share one concise
+subsection. Any `finding_type` absent from the manifest belongs under Checked, no
 action needed. Each finding ends with a specific `**To confirm:**` question, or a
 short `**Note:**` when there is no concrete action.
 
-For each finding include only the decision-relevant fields:
+For each finding include only the decision-relevant fields, reading them from the
+row's `detail_source`:
 
 - **Lost/gained/reassigned reads:** affected groups by platform, rate range,
-  highest group, and dominant named pairs when concentrated. Remember that a high
-  gained fraction can occur without net growth.
-- **Reassignment severity:** named cross-root/shared-higher pairs and counts;
-  report `unresolved-taxid` separately because it is a versioning artifact, not a
-  biological severity level.
+  highest group. When concentrated, name the driver from `dominant_gained_*` /
+  `dominant_lost_*` (read status) or the `is_dominant` pair (reassignment pairs).
+  Remember that a high gained fraction can occur without net growth.
+- **Reassignment severity:** the `is_severe` pairs (cross-root/shared-higher),
+  named with counts; report `unresolved-taxid` separately because it is a
+  versioning artifact, not a biological severity level.
 - **Clade shares:** family/order, raw read change, share change, number of flagged
   groups, and number reaching zero. Use deduplicated shares to check whether a
   total-count shift is duplicate-driven. Family and parent-order flags can
   describe one underlying event; do not imply they are distinct.
-- **BLAST agreement:** agreement and validated fractions together, then the taxa
-  driving the change and `mean_distance_disagree`.
-- **Kraken:** flagged group/rank/read-set rows and named top movers.
-- **QC/schema:** only anomalous dimensions go in Main findings; otherwise give a
-  bounding number under Checked.
+- **BLAST agreement:** agreement and validated fractions together, then the
+  `is_agreement_driver` taxon and `mean_distance_disagree`.
+- **Kraken:** flagged group/rank/read-set rows and the `mover_rank == 1` movers
+  (by `abs_delta_pp`), named.
+- **QC/schema:** only anomalous dimensions go in Main findings; otherwise give the
+  `bounding_numbers.tsv` figure under Checked.
 
 ## Check Mechanisms
 
@@ -206,10 +231,12 @@ evidence, not the severity of the finding.
 
 Before handoff:
 
-- Re-derive every cited count, taxid, and group total from its source TSV.
-- Confirm each flagged dimension and non-flag trigger appears exactly once.
-- Confirm stable bullets have a bounding number and skipped analyses say "not
-  computed."
+- Re-derive every cited count, taxid, and group total from its source TSV (the
+  driver columns and `bounding_numbers.tsv` give most of them directly).
+- Confirm every `finding_type` in `findings.tsv` appears as exactly one Main
+  subsection, and each manifest row is covered by its subsection.
+- Confirm stable bullets cite a `bounding_numbers.tsv` figure and skipped analyses
+  say "not computed."
 - Remove all template instructions and placeholders.
 - Re-read every cross-metric attribution and relationship metric for the two
   mechanism traps above.
