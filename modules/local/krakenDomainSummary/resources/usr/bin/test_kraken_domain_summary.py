@@ -1,23 +1,23 @@
-import gzip
 from pathlib import Path
 
 import kraken_domain_summary
 import pytest
 
+SAMPLE = "s1"
 HEADER = (
     "name\ttaxid\trank\tkraken2_assigned_reads\t"
-    "added_reads\tnew_est_reads\tfraction_total_reads"
+    "added_reads\tnew_est_reads\tfraction_total_reads\tsample"
 )
 
 
 def write_report(path: Path, rows: list[str]) -> None:
-    """Write report rows to a gzipped Kraken2 report (the only input form)."""
-    with gzip.open(path, "wt") as report_file:
+    """Write report rows to a Kraken2 report (plain or gzipped by suffix)."""
+    with kraken_domain_summary.open_by_suffix(path, "w") as report_file:
         report_file.write("\n".join(rows) + "\n")
 
 
 def read_output(path: Path) -> list[str]:
-    with gzip.open(path, "rt") as output_file:
+    with kraken_domain_summary.open_by_suffix(path) as output_file:
         return output_file.read().splitlines()
 
 
@@ -41,16 +41,17 @@ def read_output(path: Path) -> list[str]:
             ],
             [
                 HEADER,
-                "Bacteria\t2\tD\t400\t80\t480\t0.33803",
-                "Archaea\t2157\tD\t400\t80\t480\t0.33803",
-                "Eukaryota\t2759\tD\t200\t40\t240\t0.16901",
-                "Viruses\t10239\tD\t200\t20\t220\t0.15493",
+                f"Bacteria\t2\tD\t400\t80\t480\t0.33803\t{SAMPLE}",
+                f"Archaea\t2157\tD\t400\t80\t480\t0.33803\t{SAMPLE}",
+                f"Eukaryota\t2759\tD\t200\t40\t240\t0.16901\t{SAMPLE}",
+                f"Viruses\t10239\tD\t200\t20\t220\t0.15493\t{SAMPLE}",
             ],
             id="with-cellular-organisms-node",
         ),
         # Without a "cellular organisms" node (post-2024 rank codes, no "D"): the
         # whole above-domain residual is root-level and split across all four
-        # domains by floor-proportional allocation, leaving one read unallocated.
+        # domains by largest-remainder allocation, so the residual is fully
+        # allocated (Bacteria absorbs the lone floor-remainder read: 278 -> 279).
         # Domains are still identified by taxid despite the non-"D" rank codes.
         pytest.param(
             [
@@ -62,10 +63,10 @@ def read_output(path: Path) -> list[str]:
             ],
             [
                 HEADER,
-                "Bacteria\t2\tR2\t650\t278\t928\t0.92800",
-                "Archaea\t2157\tR2\t5\t2\t7\t0.00700",
-                "Eukaryota\t2759\tR2\t40\t17\t57\t0.05700",
-                "Viruses\t10239\tR2\t5\t2\t7\t0.00700",
+                f"Bacteria\t2\tR2\t650\t279\t929\t0.92900\t{SAMPLE}",
+                f"Archaea\t2157\tR2\t5\t2\t7\t0.00700\t{SAMPLE}",
+                f"Eukaryota\t2759\tR2\t40\t17\t57\t0.05700\t{SAMPLE}",
+                f"Viruses\t10239\tR2\t5\t2\t7\t0.00700\t{SAMPLE}",
             ],
             id="without-cellular-organisms-node",
         ),
@@ -74,11 +75,11 @@ def read_output(path: Path) -> list[str]:
 def test_create_domain_summary(
     tmp_path: Path, report_rows: list[str], expected: list[str]
 ) -> None:
-    report = tmp_path / "kraken.report.gz"
+    report = tmp_path / "kraken.report"
     output = tmp_path / "domain.tsv.gz"
     write_report(report, report_rows)
 
-    kraken_domain_summary.create_domain_summary(report, output)
+    kraken_domain_summary.create_domain_summary(report, output, SAMPLE)
 
     assert read_output(output) == expected
 
@@ -95,10 +96,10 @@ def test_create_domain_summary(
 def test_create_domain_summary_writes_empty_output_when_unusable(
     tmp_path: Path, report_rows: list[str]
 ) -> None:
-    report = tmp_path / "kraken.report.gz"
+    report = tmp_path / "kraken.report"
     output = tmp_path / "domain.tsv.gz"
     write_report(report, report_rows)
 
-    kraken_domain_summary.create_domain_summary(report, output)
+    kraken_domain_summary.create_domain_summary(report, output, SAMPLE)
 
     assert read_output(output) == []

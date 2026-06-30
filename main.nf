@@ -90,8 +90,8 @@ output {
         tags nextflow_file_class: "publish", "nextflow.io/temporary": "false"
     }
     experimental_run {
-        // Publish the domain-abundance table under a name that reflects its
-        // Kraken2 source, renamed in place with `>>` (no copy process).
+        // `>>` is Nextflow's dynamic publish-path operator: it publishes this
+        // single file to the given target name, renaming on publish (no copy).
         path { sample, file -> file >> "experimental/${sample}_kraken_domains.tsv.gz" }
         tags nextflow_file_class: "publish", "nextflow.io/temporary": "false"
     }

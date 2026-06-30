@@ -10,7 +10,7 @@ process KRAKEN_DOMAIN_SUMMARY {
         tuple val(sample), path("input_${report}"), emit: input
     script:
         """
-        kraken_domain_summary.py ${report} ${sample}.bracken.gz
+        kraken_domain_summary.py ${report} ${sample}.bracken.gz ${sample}
         # Link input for testing
         ln -s ${report} input_${report}
         """

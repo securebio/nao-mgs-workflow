@@ -7,7 +7,7 @@ nextflow_process {
     tag "module"
     tag "kraken_domain_summary"
 
-    test("Should emit a well-formed domain summary from a gzipped Kraken report") {
+    test("Should emit a well-formed domain summary from a Kraken report") {
         tag "expect_success"
         when {
             params {}
@@ -20,14 +20,14 @@ nextflow_process {
                 // here we just confirm the script runs and emits a valid table.
                 '''
                 input[0] = Channel.of("test")
-                    | combine(Channel.of("${projectDir}/test-data/toy-data/kraken-domain-summary/kraken.report.gz"))
+                    | combine(Channel.of("${projectDir}/test-data/toy-data/kraken-domain-summary/kraken.report"))
                 '''
             }
         }
         then {
             assert process.success
             def rows = path(process.out.output[0][1]).linesGzip
-            assert rows[0] == "name\ttaxid\trank\tkraken2_assigned_reads\tadded_reads\tnew_est_reads\tfraction_total_reads"
+            assert rows[0] == "name\ttaxid\trank\tkraken2_assigned_reads\tadded_reads\tnew_est_reads\tfraction_total_reads\tsample"
             assert rows.size() == 5  // header plus the four domains
         }
     }

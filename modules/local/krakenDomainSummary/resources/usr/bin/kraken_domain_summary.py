@@ -26,7 +26,7 @@ import gzip
 import logging
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import NamedTuple
+from typing import IO, NamedTuple
 
 ###########
 # LOGGING #
@@ -74,6 +74,7 @@ OUTPUT_FIELDS = [
     "added_reads",
     "new_est_reads",
     "fraction_total_reads",
+    "sample",
 ]
 
 
@@ -90,18 +91,35 @@ class KrakenRow(NamedTuple):
 #############
 
 
-def read_report(report_path: str | Path) -> dict[int, KrakenRow]:
+def open_by_suffix(filename: str | Path, mode: str = "r") -> IO[str]:
     """
-    Read the rows we summarize from a gzipped Kraken2 report.
+    Open a file for reading or writing, transparently handling gzip.
 
     Args:
-        report_path: Path to a gzipped Kraken2 report.
+        filename: Path to the file; treated as gzipped iff it ends in ".gz".
+        mode: Base file mode, "r" or "w".
+
+    Returns:
+        A text-mode file handle appropriate for the file's compression.
+    """
+    filename_str = str(filename)
+    if filename_str.endswith(".gz"):
+        return gzip.open(filename_str, mode + "t")  # type: ignore[return-value]
+    return open(filename_str, mode)
+
+
+def read_report(report_path: str | Path) -> dict[int, KrakenRow]:
+    """
+    Read the rows we summarize from a Kraken2 report (plain or gzipped).
+
+    Args:
+        report_path: Path to a Kraken2 report, plain or gzipped.
 
     Returns:
         {taxid: KrakenRow} for the root, "cellular organisms", and domain taxids.
     """
     rows: dict[int, KrakenRow] = {}
-    with gzip.open(report_path, "rt") as report_file:
+    with open_by_suffix(report_path) as report_file:
         for line in report_file:
             fields = line.rstrip("\n").split("\t")
             if len(fields) < KRAKEN_FIELD_COUNT:
@@ -112,7 +130,7 @@ def read_report(report_path: str | Path) -> dict[int, KrakenRow]:
     return rows
 
 
-def summarize_domains(rows: dict[int, KrakenRow]) -> list[list[str]]:
+def summarize_domains(rows: dict[int, KrakenRow], sample: str) -> list[list[str]]:
     """
     Build the domain abundance table from parsed Kraken2 report rows.
 
@@ -120,6 +138,7 @@ def summarize_domains(rows: dict[int, KrakenRow]) -> list[list[str]]:
 
     Args:
         rows: {taxid: KrakenRow} from read_report.
+        sample: Sample identifier, written into the trailing "sample" column.
 
     Returns:
         Output rows (stringified, in OUTPUT_FIELDS order), or an empty list when
@@ -137,11 +156,24 @@ def summarize_domains(rows: dict[int, KrakenRow]) -> list[list[str]]:
     added = dict.fromkeys(domains, 0)
 
     def prorate(taxids: list[int], residual: int) -> None:
-        """Split `residual` across `taxids` by clade count, banking into `added`."""
+        """
+        Split `residual` across `taxids` by clade count, banking into `added`.
+
+        Uses largest-remainder apportionment so the whole residual is allocated;
+        plain floor division would drop up to len(taxids) - 1 reads, which can
+        matter for low-count domains like Viruses.
+        """
         total = sum(clade[taxid] for taxid in taxids)
+        if not total or residual <= 0:
+            return
+        shares = {taxid: residual * clade[taxid] for taxid in taxids}
+        alloc = {taxid: share // total for taxid, share in shares.items()}
+        # Hand the reads lost to flooring to the largest fractional remainders.
+        ranked = sorted(taxids, key=lambda taxid: shares[taxid] % total, reverse=True)
+        for taxid in ranked[: residual - sum(alloc.values())]:
+            alloc[taxid] += 1
         for taxid in taxids:
-            if total:
-                added[taxid] += residual * clade[taxid] // total
+            added[taxid] += alloc[taxid]
 
     # Level 1: reads inside "cellular organisms" go to the cellular domains only,
     # falling back to the cellular-domain total when that node is absent.
@@ -167,21 +199,26 @@ def summarize_domains(rows: dict[int, KrakenRow]) -> list[list[str]]:
                 str(added[taxid]),
                 str(new_est),
                 f"{new_est / total_reads:.5f}",
+                sample,
             ]
         )
     return summary
 
 
-def create_domain_summary(report_path: str | Path, output_path: str | Path) -> None:
+def create_domain_summary(
+    report_path: str | Path, output_path: str | Path, sample: str
+) -> None:
     """
-    Write a gzipped domain abundance table from a gzipped Kraken2 report.
+    Write a domain abundance table from a Kraken2 report (plain or gzipped).
 
     Args:
-        report_path: Path to a gzipped Kraken2 report.
-        output_path: Path to the gzipped output TSV (empty when nothing to report).
+        report_path: Path to a Kraken2 report, plain or gzipped.
+        output_path: Path to the output TSV, gzipped iff it ends in ".gz"
+            (empty when nothing to report).
+        sample: Sample identifier, written into the trailing "sample" column.
     """
-    summary = summarize_domains(read_report(report_path))
-    with gzip.open(output_path, "wt") as output_file:
+    summary = summarize_domains(read_report(report_path), sample)
+    with open_by_suffix(output_path, "w") as output_file:
         if not summary:
             return
         output_file.write("\t".join(OUTPUT_FIELDS) + "\n")
@@ -202,8 +239,9 @@ def parse_arguments() -> argparse.Namespace:
         Parsed command-line arguments.
     """
     parser = argparse.ArgumentParser(description=DESC)
-    parser.add_argument("report", help="Gzipped Kraken2 report.")
-    parser.add_argument("output", help="Gzipped output TSV path.")
+    parser.add_argument("report", help="Kraken2 report (plain or .gz).")
+    parser.add_argument("output", help="Output TSV path (gzipped if .gz).")
+    parser.add_argument("sample", help="Sample identifier for the 'sample' column.")
     return parser.parse_args()
 
 
@@ -211,7 +249,7 @@ def main() -> None:
     """Run the command-line entry point."""
     args = parse_arguments()
     logger.info("Reading Kraken2 report: %s", args.report)
-    create_domain_summary(args.report, args.output)
+    create_domain_summary(args.report, args.output, args.sample)
     logger.info("Wrote domain summary: %s", args.output)
 
 
