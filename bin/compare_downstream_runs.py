@@ -741,6 +741,7 @@ def main() -> None:
         ]
         qc_flags = dm.compare_qc_flags(qc_reference, qc_candidate, flag_cols)
         write_tsv(qc_flags, args.out / "qc_flag_changes.tsv")
+        outputs["qc_flag_changes"] = qc_flags
     else:
         logger.warning("No qc_basic_stats files found; skipping Focus 3.")
 
@@ -819,33 +820,33 @@ def main() -> None:
         vh_reference = load_validation_hits(reference_results, vh_reference_mf, vh_cols)
         vh_candidate = load_validation_hits(candidate_results, vh_candidate_mf, vh_cols)
         # Group discovery no longer requires validation_hits, so a side could lack
-        # it entirely; surface that rather than crashing the read-level join.
+        # it entirely. The read-level join needs it on both sides; the independent
+        # analyses below (clade shares, BLAST agreement, vertebrate-status flips) do
+        # NOT, so only the read-level block is gated — not the whole focus.
         need = {"group", "seq_id", "aligner_taxid_lca"}
-        if not need.issubset(vh_reference.columns) or not need.issubset(
-            vh_candidate.columns
-        ):
-            logger.warning(
-                "validation_hits missing on a side; skipping Focus 1 read-level "
-                "comparison (not computed)."
+        if need.issubset(vh_reference.columns) and need.issubset(vh_candidate.columns):
+            joined = dm.join_read_assignments(vh_reference, vh_candidate, merge_map)
+            read_status = dm.summarize_read_status(joined, vert)
+            write_tsv(read_status, args.out / "viral_read_status.tsv")
+            outputs["viral_read_status"] = read_status
+            reassign = dm.reassignment_distances(joined, tax, vert)
+            write_tsv(
+                dm.bucket_summary(reassign), args.out / "viral_reassignment_buckets.tsv"
             )
-            _finish(args, outputs, skipped_groups)
-            return
-        joined = dm.join_read_assignments(vh_reference, vh_candidate, merge_map)
-        read_status = dm.summarize_read_status(joined, vert)
-        write_tsv(read_status, args.out / "viral_read_status.tsv")
-        outputs["viral_read_status"] = read_status
-        reassign = dm.reassignment_distances(joined, tax, vert)
-        write_tsv(
-            dm.bucket_summary(reassign), args.out / "viral_reassignment_buckets.tsv"
-        )
-        write_tsv(
-            dm.reassignment_concentration(reassign),
-            args.out / "viral_reassignment_concentration.tsv",
-        )
-        write_tsv(
-            dm.reassignment_pair_counts(reassign),
-            args.out / "viral_reassignment_pairs.tsv",
-        )
+            write_tsv(
+                dm.reassignment_concentration(reassign),
+                args.out / "viral_reassignment_concentration.tsv",
+            )
+            write_tsv(
+                dm.reassignment_pair_counts(reassign),
+                args.out / "viral_reassignment_pairs.tsv",
+            )
+        else:
+            logger.warning(
+                "validation_hits missing on a side; skipping the read-level "
+                "comparison (not computed). Clade shares, BLAST agreement, and "
+                "vertebrate-status flips below are independent and still run."
+            )
 
         # Clade-count family/order breakdown (short-read only). Rank and name are
         # resolved from the candidate index (taxonomy nodes.dmp + annotation); a
@@ -870,26 +871,9 @@ def main() -> None:
         else:
             logger.warning("No clade_counts found; skipping clade breakdown.")
 
-        # BLAST-validation agreement (secondary).
-        val_cols = ["group", "validation_distance_aligner"]
-        val_reference = load_validation_hits(
-            reference_results, reference_manifest, val_cols
-        )
-        val_candidate = load_validation_hits(
-            candidate_results, candidate_manifest, val_cols
-        )
-        validation = dm.validation_agreement(val_reference).merge(
-            dm.validation_agreement(val_candidate),
-            on="group",
-            how="outer",
-            suffixes=("_reference", "_candidate"),
-        )
-        write_tsv(validation, args.out / "viral_validation_agreement.tsv")
-        outputs["viral_validation_agreement"] = validation
-
-        # Per-taxon agreement breakdown: localizes a group-level agreement-rate
-        # change to the aligner taxa driving it (most-affected taxa + how far the
-        # new disagreements are off). Needs aligner_taxid_lca alongside distance.
+        # BLAST-validation agreement (secondary). Independent of the read-level
+        # join, but still needs validation_hits (with the distance column) present
+        # on both sides — guard so a side lacking it skips agreement, not the focus.
         val_taxon_cols = ["group", "aligner_taxid_lca", "validation_distance_aligner"]
         val_reference_t = load_validation_hits(
             reference_results, reference_manifest, val_taxon_cols
@@ -897,20 +881,43 @@ def main() -> None:
         val_candidate_t = load_validation_hits(
             candidate_results, candidate_manifest, val_taxon_cols
         )
-        agreement_by_taxon = dm.validation_agreement_by_taxon(val_reference_t).merge(
-            dm.validation_agreement_by_taxon(val_candidate_t),
-            on=["group", "taxid"],
-            how="outer",
-            suffixes=("_reference", "_candidate"),
-        )
-        agreement_by_taxon["delta_agreement"] = (
-            agreement_by_taxon["agreement_rate_candidate"]
-            - agreement_by_taxon["agreement_rate_reference"]
-        )
-        write_tsv(
-            agreement_by_taxon,
-            args.out / "viral_validation_agreement_by_taxon.tsv",
-        )
+        agree_need = {"group", "validation_distance_aligner"}
+        if agree_need.issubset(val_reference_t.columns) and agree_need.issubset(
+            val_candidate_t.columns
+        ):
+            validation = dm.validation_agreement(val_reference_t).merge(
+                dm.validation_agreement(val_candidate_t),
+                on="group",
+                how="outer",
+                suffixes=("_reference", "_candidate"),
+            )
+            write_tsv(validation, args.out / "viral_validation_agreement.tsv")
+            outputs["viral_validation_agreement"] = validation
+
+            # Per-taxon agreement breakdown: localizes a group-level agreement-rate
+            # change to the aligner taxa driving it (most-affected taxa + how far
+            # the new disagreements are off, via mean_distance_disagree).
+            agreement_by_taxon = dm.validation_agreement_by_taxon(
+                val_reference_t
+            ).merge(
+                dm.validation_agreement_by_taxon(val_candidate_t),
+                on=["group", "taxid"],
+                how="outer",
+                suffixes=("_reference", "_candidate"),
+            )
+            agreement_by_taxon["delta_agreement"] = (
+                agreement_by_taxon["agreement_rate_candidate"]
+                - agreement_by_taxon["agreement_rate_reference"]
+            )
+            write_tsv(
+                agreement_by_taxon,
+                args.out / "viral_validation_agreement_by_taxon.tsv",
+            )
+        else:
+            logger.warning(
+                "validation_hits missing on a side; skipping BLAST-validation "
+                "agreement (not computed)."
+            )
 
         # Vertebrate-status flips between the two index annotations.
         if old_annotated is not None:

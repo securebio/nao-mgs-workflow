@@ -188,7 +188,7 @@ out:
 
 `<One ### subsection per dimension that THIS comparison shows a substantial
 difference in, titled after the observed result, each ending in a **To confirm:**
-line. Delete the dimensions with nothing to report.>`
+or **Note:** line. Delete the dimensions with nothing to report.>`
 
 ---
 

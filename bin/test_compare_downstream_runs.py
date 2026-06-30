@@ -472,6 +472,8 @@ def test_main_skips_focus1_when_validation_hits_absent(
         str(candidate_root),
         "--candidate-index",
         str(index_root),
+        "--reference-index",
+        str(index_root),
         "--out",
         str(out),
     ]
@@ -482,6 +484,11 @@ def test_main_skips_focus1_when_validation_hits_absent(
     assert (out / "file_inventory.tsv").exists()
     # Focus 1 read-level output is skipped (not computed).
     assert not (out / "viral_read_status.tsv").exists()
+    # BLAST agreement needs validation_hits too, so it is skipped as well.
+    assert not (out / "viral_validation_agreement.tsv").exists()
+    # But the analyses that do NOT need read-level matching still run.
+    assert (out / "clade_rank_shares.tsv").exists()
+    assert (out / "vertebrate_status_flips.tsv").exists()
 
 
 def test_main_per_group_one_sided_input_is_skipped_not_fabricated(

@@ -197,7 +197,10 @@ The script writes these TSVs to `--out`:
   (group, aligner taxon): per-side validated counts, agreement rate, mean
   validation distance, and `delta_agreement`. Use it to say which taxa drove a
   flagged group's agreement change and how far off the disagreements are.
-- `vertebrate_status_flips.tsv` — taxa whose vertebrate status flipped.
+- `vertebrate_status_flips.tsv` — taxa whose vertebrate membership changed, with
+  `change` distinguishing a true re-annotation flip (`gained_vertebrate` /
+  `lost_vertebrate`, taxon present in both index annotations) from a presence
+  change (`added_vertebrate` / `removed_vertebrate`, taxon in only one).
 - `kraken_bray_curtis.tsv`, `kraken_top_movers.tsv` — Kraken abundances.
 - `qc_survival.tsv` — raw->cleaned read-survival fraction per side + delta
   (Quality metrics).
@@ -248,9 +251,10 @@ Key reminders:
   candidate-side share (a collapse can sit below the share-change threshold).
   Never drop one as "minor"; a dimension checked but within threshold and with
   neither trigger goes under "Checked, no action needed". The *set* of subsections
-  and To-confirm lines is fixed by `flags.tsv` plus those two triggers — that is
-  what is identical across reviewers; their wording and grouping are author
-  judgment, not a reproducible string. Annotate each finding with breadth and
+  (each closing with a `**To confirm:**` or `**Note:**` line) is fixed by
+  `flags.tsv` plus those two triggers — that is what is identical across reviewers;
+  their wording and grouping are author judgment, not a reproducible string.
+  Annotate each finding with breadth and
   magnitude rather than a fixed concern level; let the human prioritize.
 
 ### Step 4 - Run the standard mechanism cross-checks (fold into the findings)
@@ -269,10 +273,14 @@ difference it addresses; skip a check whose difference did not occur.
 - **A clade/taxon dropped out of the viral counts, or vertebrate-viral reads were
   lost** → **check `vertebrate_status_flips.tsv` first.** The DOWNSTREAM viral
   output is scoped to the index's vertebrate-infecting set, so a taxon
-  re-annotated *non*-vertebrate (its members appear with `change == lost_vertebrate`)
-  drops out of the counts entirely — this is the most common benign cause of a
-  clade vanishing, and is far more likely than a genome removal. Only after ruling
-  the flip out should you look at whether reference genomes changed: count
+  re-annotated *non*-vertebrate (its members appear with `change == lost_vertebrate`
+  — a TRUE status flip, present in both index annotations) drops out of the counts
+  entirely. This is the most common benign cause of a clade vanishing and is far
+  more likely than a genome removal; it supports a **Strongly supported** mechanism
+  when the clade's members all carry that flip. (A `removed_vertebrate` value
+  instead means the taxon was dropped from the candidate annotated DB altogether —
+  a different mechanism.) Only after ruling the flip out should you look at whether
+  reference genomes changed: count
   alignments per reference accession on each side (`prim_align_genome_id_all` in
   the `*_validation_hits.tsv.gz` files); an accession with many hits on one side
   and zero on the other points to a reference added to / removed from the aligner
@@ -284,9 +292,11 @@ difference it addresses; skip a check whose difference did not occur.
   `taxonomy-nodes.dmp`. If one is the direct parent of the other (same species),
   it is an LCA-specificity move — the mildest reassignment, not a renumbering.
 - **Vertebrate-viral reads were gained** → join the gained reads' taxids against
-  `vertebrate_status_flips.tsv` (and the candidate annotated DB) to see what
-  fraction is a `gained_vertebrate` annotation flip or a genome newly added to the
-  index, versus an existing taxon called more often.
+  `vertebrate_status_flips.tsv` to see what fraction is a `gained_vertebrate` true
+  re-annotation flip versus an `added_vertebrate` taxon newly added to the index
+  (the latter is a genome added + annotated vertebrate-infecting, enabling a
+  detection that could not occur before), versus an existing taxon called more
+  often (no flip row at all).
 - **BLAST agreement moved in a group** → read that group's rows from
   `viral_validation_agreement_by_taxon.tsv` (the deterministic per-taxon
   breakdown): report the taxa with the largest validated-read counts and their

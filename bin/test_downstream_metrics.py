@@ -705,13 +705,31 @@ class TestValidationAgreementByTaxon:
             }
         )
         out = dm.validation_agreement_by_taxon(vh).set_index("taxid")
-        # taxon 10: 3 reads, 2 validated, 1 agrees (distance 0), mean distance 1.
+        # taxon 10: 3 reads, 2 validated, 1 agrees (distance 0), mean distance 1
+        # over all validated, but the disagreement-only mean is 2.
         assert out.loc[10].n_reads == 3
         assert out.loc[10].n_validated == 2
         assert abs(out.loc[10].agreement_rate - 0.5) < 1e-9
         assert abs(out.loc[10].mean_distance - 1.0) < 1e-9
-        # taxon 20: both validated and agree.
+        assert abs(out.loc[10].mean_distance_disagree - 2.0) < 1e-9
+        # taxon 20: both validated and agree, so no disagreement distance.
         assert abs(out.loc[20].agreement_rate - 1.0) < 1e-9
+        assert pd.isna(out.loc[20].mean_distance_disagree)
+
+    def test_disagreement_distance_not_diluted_by_agreements(self) -> None:
+        # 9 agreements + 1 distance-10 disagreement: mean_distance is diluted to
+        # 1.0, but mean_distance_disagree must report the real severity (10).
+        vh = pd.DataFrame(
+            {
+                "group": ["G"] * 10,
+                "aligner_taxid_lca": [10] * 10,
+                "validation_distance_aligner": [0] * 9 + [10],
+            }
+        )
+        row = dm.validation_agreement_by_taxon(vh).iloc[0]
+        assert abs(row.agreement_rate - 0.9) < 1e-9
+        assert abs(row.mean_distance - 1.0) < 1e-9
+        assert abs(row.mean_distance_disagree - 10.0) < 1e-9
 
     def test_empty_input_returns_header_only(self) -> None:
         out = dm.validation_agreement_by_taxon(pd.DataFrame())
@@ -723,6 +741,7 @@ class TestValidationAgreementByTaxon:
             "n_validated",
             "agreement_rate",
             "mean_distance",
+            "mean_distance_disagree",
         ]
 
 
@@ -741,6 +760,20 @@ class TestVertebrateStatusFlips:
         assert changes[2] == "gained_vertebrate"
         assert changes[3] == "lost_vertebrate"
         assert 1 not in changes
+
+    def test_added_and_removed_taxa_not_called_flips(self) -> None:
+        # Taxon 4 is host-infecting but exists only in the candidate (new) DB; it
+        # is an ADDED taxon, not a gain flip. Taxon 5 is host-infecting only in the
+        # reference (old) DB; it was REMOVED, not a loss flip.
+        old = self._ann([[1, 1, "a", "1"], [5, 5, "e", "1"]])
+        new = self._ann([[1, 1, "a", "1"], [4, 4, "d", "1"]])
+        out = dm.vertebrate_status_flips(old, new)
+        changes = dict(zip(out.taxid, out.change, strict=True))
+        assert changes[4] == "added_vertebrate"
+        assert changes[5] == "removed_vertebrate"
+        # A genuine flip (present both, status crossed) stays distinct.
+        assert "gained_vertebrate" not in changes.values()
+        assert "lost_vertebrate" not in changes.values()
 
 
 ###############################
@@ -777,6 +810,26 @@ class TestBuildFlags:
         flags = dm.build_flags({"viral_read_status": status})
         # 9.0 is below the viral_pct_reassigned default of 10; nothing flagged.
         assert flags.empty
+
+    def test_fastqc_flag_worsening_flagged_improvement_not(self) -> None:
+        # Only worsening FASTQC transitions (pass<warn<fail) are flagged; an
+        # improvement changes the table but must not be flagged.
+        qc_flags = pd.DataFrame(
+            {
+                "group": ["A", "B", "C"],
+                "sample": ["A", "B", "C"],
+                "stage": ["cleaned", "cleaned", "cleaned"],
+                "check": ["per_base_sequence_quality"] * 3,
+                "reference_flag": ["pass", "warn", "fail"],
+                "candidate_flag": ["fail", "pass", "fail"],
+            }
+        )
+        flags = dm.build_flags({"qc_flag_changes": qc_flags})
+        # A: pass->fail flagged; B: warn->pass improvement not flagged; C: fail->fail
+        # is not in a real change table but here is a no-op rank move, not flagged.
+        assert len(flags) == 1
+        assert "group=A" in flags.iloc[0].key
+        assert flags.iloc[0].value == "pass->fail"
 
 
 ###############################

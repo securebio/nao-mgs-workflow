@@ -1341,7 +1341,11 @@ def validation_agreement_by_taxon(vh: pd.DataFrame) -> pd.DataFrame:
     Returns:
         DataFrame: group, taxid (the aligner_taxid_lca), n_reads, n_validated,
         agreement_rate (fraction of validated reads with distance 0),
-        mean_distance (over validated reads). Empty (header-only) when no rows.
+        mean_distance (over ALL validated reads, agreements included), and
+        mean_distance_disagree (over only the disagreeing reads, distance > 0).
+        Use `mean_distance_disagree` for "how far off are the disagreements" —
+        `mean_distance` is diluted toward 0 when agreement is high. Empty
+        (header-only) when no rows.
     """
     cols = [
         "group",
@@ -1350,6 +1354,7 @@ def validation_agreement_by_taxon(vh: pd.DataFrame) -> pd.DataFrame:
         "n_validated",
         "agreement_rate",
         "mean_distance",
+        "mean_distance_disagree",
     ]
     if vh.empty or "aligner_taxid_lca" not in vh.columns:
         return pd.DataFrame(columns=cols)
@@ -1360,7 +1365,9 @@ def validation_agreement_by_taxon(vh: pd.DataFrame) -> pd.DataFrame:
         n_reads = len(g)
         validated = g["_dist"].notna()
         n_validated = int(validated.sum())
-        agree = int((g.loc[validated, "_dist"] == 0).sum())
+        validated_dist = g.loc[validated, "_dist"]
+        agree = int((validated_dist == 0).sum())
+        disagree_dist = validated_dist[validated_dist > 0]
         records.append(
             {
                 "group": group,
@@ -1368,8 +1375,9 @@ def validation_agreement_by_taxon(vh: pd.DataFrame) -> pd.DataFrame:
                 "n_reads": n_reads,
                 "n_validated": n_validated,
                 "agreement_rate": agree / n_validated if n_validated else None,
-                "mean_distance": (
-                    g.loc[validated, "_dist"].mean() if n_validated else None
+                "mean_distance": validated_dist.mean() if n_validated else None,
+                "mean_distance_disagree": (
+                    disagree_dist.mean() if not disagree_dist.empty else None
                 ),
             }
         )
@@ -1381,7 +1389,19 @@ def vertebrate_status_flips(
     new_annotated: pd.DataFrame,
     host: str = "vertebrate",
 ) -> pd.DataFrame:
-    """Taxa whose host-infecting status (==1) flipped between two index annotations.
+    """Taxa whose host-infecting membership changed between two index annotations.
+
+    Separates a TRUE status flip (a taxon present in BOTH annotated DBs whose
+    `infection_status_<host>` changed) from a presence change (a taxon added to or
+    removed from the annotated DB entirely). Conflating them is wrong: only a true
+    flip is evidence of a re-annotation, whereas an added/removed taxon reflects a
+    genome being added to or dropped from the index. The `change` vocabulary:
+    - `gained_<host>` / `lost_<host>` — present in both DBs, status crossed 1 (a
+      genuine re-annotation).
+    - `added_<host>` — present only in the candidate (new) DB and host-infecting
+      there (a newly added taxon, not a flip).
+    - `removed_<host>` — present only in the reference (old) DB where it was
+      host-infecting (dropped from the candidate DB).
 
     Args:
         old_annotated: annotated viral DB from the reference index.
@@ -1389,10 +1409,14 @@ def vertebrate_status_flips(
         host: host group name.
 
     Returns:
-        DataFrame: taxid, name, change ('gained_<host>' or 'lost_<host>').
+        DataFrame: taxid, name, change (one of the four values above).
     """
-    old = vertebrate_taxids(old_annotated, host)
-    new = vertebrate_taxids(new_annotated, host)
+    old_pos = vertebrate_taxids(old_annotated, host)
+    new_pos = vertebrate_taxids(new_annotated, host)
+    # Full taxid universe of each annotated DB, to tell a status flip (taxon in
+    # both) from an added/removed taxon (taxon in only one).
+    old_taxids = set(old_annotated["taxid"].astype(int))
+    new_taxids = set(new_annotated["taxid"].astype(int))
     namemap = dict(
         zip(new_annotated["taxid"].astype(int), new_annotated["name"], strict=True)
     )
@@ -1406,14 +1430,16 @@ def vertebrate_status_flips(
         )
     )
     records: list[dict[str, object]] = []
-    for taxid in sorted(new - old):
-        records.append(
-            {"taxid": taxid, "name": namemap.get(taxid), "change": f"gained_{host}"}
-        )
-    for taxid in sorted(old - new):
-        records.append(
-            {"taxid": taxid, "name": namemap.get(taxid), "change": f"lost_{host}"}
-        )
+    for taxid in sorted(new_pos - old_pos):
+        # Host-infecting in candidate but not reference: a true gain only if the
+        # taxon also existed in the reference DB (else it is newly added).
+        change = f"gained_{host}" if taxid in old_taxids else f"added_{host}"
+        records.append({"taxid": taxid, "name": namemap.get(taxid), "change": change})
+    for taxid in sorted(old_pos - new_pos):
+        # Host-infecting in reference but not candidate: a true loss only if the
+        # taxon still exists in the candidate DB (else it was removed entirely).
+        change = f"lost_{host}" if taxid in new_taxids else f"removed_{host}"
+        records.append({"taxid": taxid, "name": namemap.get(taxid), "change": change})
     return pd.DataFrame.from_records(records, columns=["taxid", "name", "change"])
 
 
@@ -1530,6 +1556,35 @@ def build_flags(
             ["group", "sample", "stage", "metric"],
             "abs",
         )
+
+    # FASTQC flag transitions: flag only WORSENING moves (pass < warn < fail), so a
+    # pass->fail cannot slip past the deterministic Main-findings coverage rule. An
+    # improvement (e.g. warn->pass) changes the flag table but is not flagged.
+    qc_flags = outputs.get("qc_flag_changes")
+    if qc_flags is not None and not qc_flags.empty:
+        rank = {"pass": 0, "warn": 1, "fail": 2}
+        for idx in qc_flags.index:
+            ref_rank = rank.get(str(qc_flags.at[idx, "reference_flag"]).lower())
+            cand_rank = rank.get(str(qc_flags.at[idx, "candidate_flag"]).lower())
+            if ref_rank is None or cand_rank is None or cand_rank <= ref_rank:
+                continue
+            key = ", ".join(
+                f"{c}={qc_flags.at[idx, c]}"
+                for c in ("group", "sample", "stage", "check")
+            )
+            records.append(
+                {
+                    "focus": "qc",
+                    "key": key,
+                    "metric": "FASTQC flag worsened (pass<warn<fail)",
+                    "value": (
+                        f"{qc_flags.at[idx, 'reference_flag']}->"
+                        f"{qc_flags.at[idx, 'candidate_flag']}"
+                    ),
+                    "threshold": "any worsening",
+                    "flag_type": "fixed",
+                }
+            )
 
     bc = outputs.get("kraken_bray_curtis")
     if bc is not None and not bc.empty:
