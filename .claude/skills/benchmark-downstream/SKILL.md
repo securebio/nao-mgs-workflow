@@ -240,6 +240,7 @@ instead. Keep the line free of verdict words ("over-calling", "legitimate",
 
 Key reminders:
 
+- **Never write an id from memory.** Every taxid (and accession) must be copied from the same TSV row as the name it labels — recalling an id for a familiar taxon name (e.g. a well-known viral family) is the easiest way to emit a confident, wrong, real-but-unrelated id.
 - **Missing-data rule.** If an input needed for a metric is absent, say so in
   that section and move on — never fabricate or mis-compute. (E.g. no
   `--candidate-index` → the viral-assignment analysis is "not computed"; empty
