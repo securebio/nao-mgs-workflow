@@ -170,8 +170,11 @@ out:
 >   stable validated fraction). For a flagged group, break the change down by
 >   taxon from `viral_validation_agreement_by_taxon.tsv`: name the taxa with the
 >   most validated reads driving the move, their per-side agreement rate and
->   `delta_agreement`, and use `mean_distance` to say how far off the new
->   disagreements are (a one-edge offset is mild; a large distance is not).
+>   `delta_agreement`, and use `mean_distance_disagree` (the mean distance over the
+>   *disagreeing* reads only) to say how far off the new disagreements are (a
+>   one-edge offset is mild; a large distance is not). Do not use `mean_distance`
+>   for this — it is over all validated reads and dilutes toward 0 when agreement
+>   is high.
 > - **Vertebrate-infecting annotation flips** — taxa that gained or lost the
 >   annotation between the indexes, with named examples; note it as a possible
 >   driver of subset-membership changes (hypothesis only).
@@ -307,11 +310,13 @@ signal: BLAST runs on cluster representatives and is propagated to reads.>`
 `<For each flagged group, break the change down by taxon from
 viral_validation_agreement_by_taxon.tsv: the aligner taxa (named, with taxid) that
 carry the most validated reads, their per-side agreement_rate and delta_agreement,
-and mean_distance (how far off the new disagreements are). This answers which taxa
-are most affected and how bad the disagreements are. Park the full per-taxon table
-in Appendix C if long.>`
+and mean_distance_disagree (the mean distance over the disagreeing reads only — how
+far off the new disagreements are; NOT mean_distance, which is over all validated
+reads and dilutes toward 0 when agreement is high). This answers which taxa are
+most affected and how bad the disagreements are. Park the full per-taxon table in
+Appendix C if long.>`
 
-| Group | Taxon (taxid) | n validated (ref → cand) | agree (ref → cand) | Δ agree | mean dist (ref → cand) |
+| Group | Taxon (taxid) | n validated (ref → cand) | agree (ref → cand) | Δ agree | mean disagree dist (ref → cand) |
 |---|---|---|---|---|---|
 | ... | | | | | |
 

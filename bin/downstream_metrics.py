@@ -1403,6 +1403,11 @@ def vertebrate_status_flips(
     - `removed_<host>` — present only in the reference (old) DB where it was
       host-infecting (dropped from the candidate DB).
 
+    Caveat: taxids are compared as-is (no `taxonomy-merged.dmp` canonicalization),
+    so a merged/renumbered taxid can appear as one `added_<host>` paired with a
+    `removed_<host>` rather than a single taxon. Treat an added/removed entry as a
+    presence change to confirm, not proof of a genome being added or dropped.
+
     Args:
         old_annotated: annotated viral DB from the reference index.
         new_annotated: annotated viral DB from the candidate index.

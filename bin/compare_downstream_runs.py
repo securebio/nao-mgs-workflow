@@ -820,9 +820,10 @@ def main() -> None:
         vh_reference = load_validation_hits(reference_results, vh_reference_mf, vh_cols)
         vh_candidate = load_validation_hits(candidate_results, vh_candidate_mf, vh_cols)
         # Group discovery no longer requires validation_hits, so a side could lack
-        # it entirely. The read-level join needs it on both sides; the independent
-        # analyses below (clade shares, BLAST agreement, vertebrate-status flips) do
-        # NOT, so only the read-level block is gated — not the whole focus.
+        # it entirely. The read-level join needs it on both sides; clade shares and
+        # vertebrate-status flips do NOT, so only the read-level block is gated here
+        # — not the whole focus. (BLAST agreement also needs validation_hits and is
+        # guarded by its own check below.)
         need = {"group", "seq_id", "aligner_taxid_lca"}
         if need.issubset(vh_reference.columns) and need.issubset(vh_candidate.columns):
             joined = dm.join_read_assignments(vh_reference, vh_candidate, merge_map)
@@ -844,8 +845,9 @@ def main() -> None:
         else:
             logger.warning(
                 "validation_hits missing on a side; skipping the read-level "
-                "comparison (not computed). Clade shares, BLAST agreement, and "
-                "vertebrate-status flips below are independent and still run."
+                "comparison (not computed). Clade shares and vertebrate-status "
+                "flips below are independent and still run; BLAST agreement is "
+                "evaluated separately and skipped if validation_hits is absent."
             )
 
         # Clade-count family/order breakdown (short-read only). Rank and name are

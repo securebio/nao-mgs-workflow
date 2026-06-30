@@ -293,16 +293,24 @@ difference it addresses; skip a check whose difference did not occur.
   it is an LCA-specificity move — the mildest reassignment, not a renumbering.
 - **Vertebrate-viral reads were gained** → join the gained reads' taxids against
   `vertebrate_status_flips.tsv` to see what fraction is a `gained_vertebrate` true
-  re-annotation flip versus an `added_vertebrate` taxon newly added to the index
-  (the latter is a genome added + annotated vertebrate-infecting, enabling a
-  detection that could not occur before), versus an existing taxon called more
-  often (no flip row at all).
+  re-annotation flip versus an `added_vertebrate` taxon present only in the
+  candidate annotation, versus an existing taxon called more often (no flip row at
+  all). Treat `added_vertebrate` as *consistent with* a genome newly added +
+  annotated vertebrate-infecting — but not proof: taxid canonicalization is not
+  applied (no `taxonomy-merged.dmp`), so a merged/renumbered taxid can surface as
+  one `added_vertebrate` paired with a `removed_vertebrate` rather than a genuine
+  addition. So this mechanism is at most **Consistent** unless you confirm the
+  taxon is genuinely new (e.g. against the index build), not **Strongly
+  supported**.
 - **BLAST agreement moved in a group** → read that group's rows from
   `viral_validation_agreement_by_taxon.tsv` (the deterministic per-taxon
   breakdown): report the taxa with the largest validated-read counts and their
-  per-side agreement rate and `delta_agreement`, and use `mean_distance` to say
-  how far off the new disagreements are. This localizes the move to specific taxa
-  without a by-hand query.
+  per-side agreement rate and `delta_agreement`, and use `mean_distance_disagree`
+  (mean taxonomic distance over only the *disagreeing* reads) to say how far off
+  the new disagreements are — a value near 1 is a one-edge offset; a large value
+  is a gross mis-call. Do **not** use `mean_distance` for this: it is over all
+  validated reads and dilutes toward 0 when agreement is high. This localizes the
+  move to specific taxa without a by-hand query.
 
 For each finding investigated, fold in a short `**Likely mechanism:**` clause —
 the suspected cause plus the concrete evidence (named taxa with taxids, counts) —
