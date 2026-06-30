@@ -928,9 +928,14 @@ def clade_rank_shares(
             # candidate. The coverage rule requires a finding for every clade
             # reaching zero candidate share, even below the share threshold, so
             # flagging it here keeps small-count drops (a few reads) from being
-            # silently skipped.
-            merged["reaches_zero"] = (merged["reads_reference"] > 0) & (
-                merged["reads_candidate"] == 0
+            # silently skipped. Require a real candidate denominator
+            # (`candidate_has_root`): without a candidate Viruses-root row the
+            # zero candidate count is "no candidate clade data for this group",
+            # not a genuine drop, and would be a false positive.
+            merged["reaches_zero"] = (
+                (merged["reads_reference"] > 0)
+                & (merged["reads_candidate"] == 0)
+                & candidate_has_root
             )
             frames.append(merged)
     out = pd.concat(frames, ignore_index=True)
@@ -1024,34 +1029,59 @@ def validation_agreement_by_taxon(vh: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame.from_records(records, columns=cols)
 
 
+_AGREEMENT_DRIVER_COLS = (
+    "n_validated_reference",
+    "n_validated_candidate",
+    "agreement_rate_reference",
+    "agreement_rate_candidate",
+)
+
+
 def mark_agreement_drivers(by_taxon: pd.DataFrame) -> pd.DataFrame:
     """Flag the taxon that drives each group's BLAST-agreement change.
 
-    Adds `abs_delta_agreement`, `agreement_impact` (|Δagreement| weighted by the
-    smaller of the two validated counts, so a one-read flip cannot outrank a real
-    move on hundreds of reads), and `is_agreement_driver` (the top-impact taxon
-    per group). This routes the reader to the taxon behind an agreement-rate flag
-    instead of leaving them to scan the per-taxon table.
+    A group's agreement rate is `sum(agreeing reads) / sum(validated reads)`, so
+    its change decomposes per taxon as
+    `agree_reference/N_reference - agree_candidate/N_candidate` (with N the
+    group's validated total on each side). Summing that over taxa gives the exact
+    group-level drop. `agreement_drop_contribution` is each taxon's signed term;
+    `is_agreement_driver` is the taxon contributing most to the drop. This handles
+    a taxon present on only one side (its missing side contributes zero) and a
+    composition shift with unchanged per-taxon rates, neither of which a
+    within-taxon rate-delta ranking would catch. `abs_delta_agreement` is kept for
+    reference.
     """
     out = by_taxon.copy()
-    needed = {"delta_agreement", "n_validated_reference", "n_validated_candidate"}
-    if out.empty or not needed.issubset(out.columns):
-        for col in ("abs_delta_agreement", "agreement_impact"):
+    if out.empty or not set(_AGREEMENT_DRIVER_COLS).issubset(out.columns):
+        for col in ("abs_delta_agreement", "agreement_drop_contribution"):
             out[col] = pd.Series(dtype=float)
         out["is_agreement_driver"] = pd.Series(dtype=bool)
         return out
-    out["abs_delta_agreement"] = pd.to_numeric(
-        out["delta_agreement"], errors="coerce"
-    ).abs()
-    n_ref = pd.to_numeric(out["n_validated_reference"], errors="coerce")
-    n_cand = pd.to_numeric(out["n_validated_candidate"], errors="coerce")
-    out["agreement_impact"] = out["abs_delta_agreement"] * pd.concat(
-        [n_ref, n_cand], axis=1
-    ).min(axis=1)
+    if "delta_agreement" in out.columns:
+        out["abs_delta_agreement"] = pd.to_numeric(
+            out["delta_agreement"], errors="coerce"
+        ).abs()
+    else:
+        out["abs_delta_agreement"] = pd.Series(pd.NA, index=out.index, dtype="Float64")
+    n_ref = pd.to_numeric(out["n_validated_reference"], errors="coerce").fillna(0.0)
+    n_cand = pd.to_numeric(out["n_validated_candidate"], errors="coerce").fillna(0.0)
+    rate_ref = pd.to_numeric(out["agreement_rate_reference"], errors="coerce").fillna(
+        0.0
+    )
+    rate_cand = pd.to_numeric(out["agreement_rate_candidate"], errors="coerce").fillna(
+        0.0
+    )
+    agree_ref = rate_ref * n_ref
+    agree_cand = rate_cand * n_cand
+    tot_ref = n_ref.groupby(out["group"]).transform("sum")
+    tot_cand = n_cand.groupby(out["group"]).transform("sum")
+    contribution = agree_ref.div(tot_ref.where(tot_ref > 0)) - agree_cand.div(
+        tot_cand.where(tot_cand > 0)
+    )
+    out["agreement_drop_contribution"] = contribution
     driver = pd.Series(False, index=out.index)
-    impact = out["agreement_impact"]
     for _group, idx in out.groupby("group").groups.items():
-        sub = impact.loc[idx].dropna()
+        sub = contribution.loc[idx].dropna()
         if not sub.empty and sub.max() > 0:
             driver.loc[cast(Any, sub.idxmax())] = True
     out["is_agreement_driver"] = driver
@@ -1143,6 +1173,39 @@ def _flag_records(
     return records
 
 
+_FASTQC_RANK = {"pass": 0, "warn": 1, "fail": 2}
+
+
+def fastqc_worsenings(qc_flags: pd.DataFrame | None) -> list[dict[str, object]]:
+    """Worsening FASTQC transitions (pass<warn<fail) as structured rows.
+
+    Shared by `build_flags` and `build_findings` so the two cannot disagree on
+    which transitions count as worsening. An improvement (e.g. warn->pass) changes
+    the flag table but is not returned.
+    """
+    out: list[dict[str, object]] = []
+    if qc_flags is None or qc_flags.empty:
+        return out
+    for idx in qc_flags.index:
+        ref_rank = _FASTQC_RANK.get(str(qc_flags.at[idx, "reference_flag"]).lower())
+        cand_rank = _FASTQC_RANK.get(str(qc_flags.at[idx, "candidate_flag"]).lower())
+        if ref_rank is None or cand_rank is None or cand_rank <= ref_rank:
+            continue
+        out.append(
+            {
+                "group": qc_flags.at[idx, "group"],
+                "sample": qc_flags.at[idx, "sample"],
+                "stage": qc_flags.at[idx, "stage"],
+                "check": qc_flags.at[idx, "check"],
+                "transition": (
+                    f"{qc_flags.at[idx, 'reference_flag']}->"
+                    f"{qc_flags.at[idx, 'candidate_flag']}"
+                ),
+            }
+        )
+    return out
+
+
 def build_flags(
     outputs: dict[str, pd.DataFrame],
     thresholds: dict[str, float] | None = None,
@@ -1179,33 +1242,19 @@ def build_flags(
         )
 
     # FASTQC flag transitions: flag only WORSENING moves (pass < warn < fail), so a
-    # pass->fail cannot slip past the deterministic Main-findings coverage rule. An
-    # improvement (e.g. warn->pass) changes the flag table but is not flagged.
-    qc_flags = outputs.get("qc_flag_changes")
-    if qc_flags is not None and not qc_flags.empty:
-        rank = {"pass": 0, "warn": 1, "fail": 2}
-        for idx in qc_flags.index:
-            ref_rank = rank.get(str(qc_flags.at[idx, "reference_flag"]).lower())
-            cand_rank = rank.get(str(qc_flags.at[idx, "candidate_flag"]).lower())
-            if ref_rank is None or cand_rank is None or cand_rank <= ref_rank:
-                continue
-            key = ", ".join(
-                f"{c}={qc_flags.at[idx, c]}"
-                for c in ("group", "sample", "stage", "check")
-            )
-            records.append(
-                {
-                    "focus": "qc",
-                    "key": key,
-                    "metric": "FASTQC flag worsened (pass<warn<fail)",
-                    "value": (
-                        f"{qc_flags.at[idx, 'reference_flag']}->"
-                        f"{qc_flags.at[idx, 'candidate_flag']}"
-                    ),
-                    "threshold": "any worsening",
-                    "flag_type": "fixed",
-                }
-            )
+    # pass->fail cannot slip past the deterministic Main-findings coverage rule.
+    for w in fastqc_worsenings(outputs.get("qc_flag_changes")):
+        key = ", ".join(f"{c}={w[c]}" for c in ("group", "sample", "stage", "check"))
+        records.append(
+            {
+                "focus": "qc",
+                "key": key,
+                "metric": "FASTQC flag worsened (pass<warn<fail)",
+                "value": w["transition"],
+                "threshold": "any worsening",
+                "flag_type": "fixed",
+            }
+        )
 
     bc = outputs.get("kraken_bray_curtis")
     if bc is not None and not bc.empty:
@@ -1306,45 +1355,49 @@ def bounding_numbers(
         value_col: str,
         key_cols: list[str],
         threshold: float,
+        direction: str = "abs",
     ) -> None:
+        # `direction` matches build_flags: "abs" counts |value| over threshold
+        # (bidirectional metrics like clade-share pp), "pos" counts only positive
+        # exceedances (one-directional metrics like an agreement *drop*, where a
+        # negative value is an improvement and must not count as flagged).
+        def null_row() -> None:
+            records.append(
+                {
+                    "metric": metric,
+                    "subset": subset,
+                    "max_abs_value": None,
+                    "max_abs_group": "",
+                    "threshold": threshold,
+                    "n_flagged": 0,
+                }
+            )
+
         if df is None or df.empty or value_col not in df.columns:
-            records.append(
-                {
-                    "metric": metric,
-                    "subset": subset,
-                    "max_abs_value": None,
-                    "max_abs_group": "",
-                    "threshold": threshold,
-                    "n_flagged": 0,
-                }
-            )
+            null_row()
             return
-        vals = pd.to_numeric(df[value_col], errors="coerce").abs()
-        if not vals.notna().any():
-            records.append(
-                {
-                    "metric": metric,
-                    "subset": subset,
-                    "max_abs_value": None,
-                    "max_abs_group": "",
-                    "threshold": threshold,
-                    "n_flagged": 0,
-                }
-            )
+        signed = pd.to_numeric(df[value_col], errors="coerce")
+        if not signed.notna().any():
+            null_row()
             return
-        i = vals.idxmax()
+        magnitude = signed.abs()
+        compare = magnitude if direction == "abs" else signed
+        i = magnitude.idxmax()
         where = ", ".join(f"{c}={df.at[i, c]}" for c in key_cols if c in df.columns)
         records.append(
             {
                 "metric": metric,
                 "subset": subset,
-                "max_abs_value": float(vals.loc[i]),
+                "max_abs_value": float(magnitude.loc[i]),
                 "max_abs_group": where,
                 "threshold": threshold,
-                "n_flagged": int((vals > threshold).sum()),
+                "n_flagged": int((compare > threshold).sum()),
             }
         )
 
+    # Every flaggable dimension gets a row, even when its source analysis was not
+    # computed (df is None): an empty `max_abs_value` then means "not computed",
+    # distinct from a real value with n_flagged 0 ("checked, within threshold").
     add(
         "QC read survival (pp)",
         "raw->cleaned",
@@ -1355,18 +1408,19 @@ def bounding_numbers(
     )
 
     qc = outputs.get("qc_numeric")
-    if qc is not None and not qc.empty:
-        others = qc[
-            ~qc["metric"].isin(["n_reads_single", "n_read_pairs", "n_bases_approx"])
-        ]
-        add(
-            "QC numeric metric (% change)",
-            "length/GC/duplication",
-            others,
-            "pct_change",
-            ["group", "sample", "stage", "metric"],
-            t["qc_pct_change"],
-        )
+    qc_others = (
+        qc[~qc["metric"].isin(["n_reads_single", "n_read_pairs", "n_bases_approx"])]
+        if qc is not None and not qc.empty
+        else None
+    )
+    add(
+        "QC numeric metric (% change)",
+        "length/GC/duplication",
+        qc_others,
+        "pct_change",
+        ["group", "sample", "stage", "metric"],
+        t["qc_pct_change"],
+    )
 
     bc = outputs.get("kraken_bray_curtis")
     if bc is not None and not bc.empty:
@@ -1382,6 +1436,66 @@ def bounding_numbers(
                 ["group"],
                 t["bray_curtis"],
             )
+    else:
+        add(
+            "Kraken Bray-Curtis",
+            "all subsets",
+            None,
+            "bray_curtis",
+            ["group"],
+            t["bray_curtis"],
+        )
+
+    status = outputs.get("viral_read_status")
+    vert = (
+        status[status["scope"] == "vertebrate"]
+        if status is not None and not status.empty
+        else None
+    )
+    for col, label, thr_key in (
+        ("pct_lost", "vertebrate-viral reads lost (%)", "viral_pct_lost"),
+        ("pct_gained", "vertebrate-viral reads gained (%)", "viral_pct_gained"),
+        (
+            "pct_reassigned",
+            "vertebrate-viral reads reassigned (%)",
+            "viral_pct_reassigned",
+        ),
+    ):
+        add(label, "vertebrate", vert, col, ["group"], t[thr_key])
+
+    clade = outputs.get("clade_rank_shares")
+    clade_total = (
+        clade[clade["count_type"] == "reads_clade_total"]
+        if clade is not None and not clade.empty
+        else None
+    )
+    add(
+        "clade share change (pp)",
+        "family/order",
+        clade_total,
+        "delta_pp",
+        ["group", "name"],
+        t["clade_share_pp"],
+    )
+
+    val = outputs.get("viral_validation_agreement")
+    agreement = None
+    if val is not None and not val.empty and "agreement_rate_reference" in val.columns:
+        agreement = val.assign(
+            agreement_drop=pd.to_numeric(
+                val["agreement_rate_reference"], errors="coerce"
+            )
+            - pd.to_numeric(val["agreement_rate_candidate"], errors="coerce")
+        )
+    add(
+        "BLAST-agreement rate drop",
+        "per group",
+        agreement,
+        "agreement_drop",
+        ["group"],
+        t["validation_agreement_drop"],
+        direction="pos",
+    )
 
     return pd.DataFrame.from_records(
         records,
@@ -1571,6 +1685,59 @@ def build_findings(
                 ),
             )
 
+    # QC threshold findings, mirroring build_flags so a QC regression that lands
+    # in flags.tsv also appears in the manifest the report author works from.
+    survival = outputs.get("qc_survival")
+    if survival is not None and not survival.empty:
+        thr = t["read_survival_pp"]
+        vals = pd.to_numeric(survival["delta_pp"], errors="coerce")
+        for idx in survival.index[(vals.abs() > thr).fillna(False)]:
+            group = survival.at[idx, "group"]
+            sample = survival.at[idx, "sample"]
+            add(
+                finding_type="qc_anomaly",
+                trigger="threshold",
+                group=group,
+                metric=f"raw->cleaned read survival change (pp), sample {sample}",
+                value=float(vals[idx]),
+                threshold=thr,
+                direction="up" if vals[idx] > 0 else "down",
+                detail_source=f"qc_survival.tsv?group={group}&sample={sample}",
+            )
+
+    qc = outputs.get("qc_numeric")
+    if qc is not None and not qc.empty:
+        thr = t["qc_pct_change"]
+        others = qc[
+            ~qc["metric"].isin(["n_reads_single", "n_read_pairs", "n_bases_approx"])
+        ]
+        vals = pd.to_numeric(others["pct_change"], errors="coerce")
+        for idx in others.index[(vals.abs() > thr).fillna(False)]:
+            group = others.at[idx, "group"]
+            add(
+                finding_type="qc_anomaly",
+                trigger="threshold",
+                group=group,
+                metric=(
+                    f"{others.at[idx, 'metric']} (% change), "
+                    f"sample {others.at[idx, 'sample']} {others.at[idx, 'stage']}"
+                ),
+                value=float(vals[idx]),
+                threshold=thr,
+                direction="up" if vals[idx] > 0 else "down",
+                detail_source=f"qc_numeric.tsv?group={group}",
+            )
+
+    for w in fastqc_worsenings(outputs.get("qc_flag_changes")):
+        add(
+            finding_type="qc_anomaly",
+            trigger="fastqc_worsening",
+            group=w["group"],
+            metric=f"FASTQC {w['check']} worsened {w['transition']} (sample {w['sample']})",
+            direction="down",
+            detail_source="qc_flag_changes.tsv",
+        )
+
     pairs = outputs.get("viral_reassignment_pairs")
     if pairs is not None and not pairs.empty and "is_severe" in pairs.columns:
         sev = pairs[pairs["is_severe"].fillna(False) & (pairs["scope"] == "all")]
@@ -1597,21 +1764,37 @@ def build_findings(
             )
 
     if inventory is not None and not inventory.empty:
-        miss = inventory[inventory["in_reference"] != inventory["in_candidate"]]
-        for idx in miss.index:
-            side = "reference" if miss.at[idx, "in_reference"] else "candidate"
-            group = miss.at[idx, "group"]
-            ft = miss.at[idx, "file_type"]
-            add(
-                finding_type="output_anomaly",
-                trigger="missing_file",
-                group=group,
-                metric=f"{ft} present on {side} only",
-                detail_source=f"file_inventory.tsv?group={group}&file_type={ft}",
-            )
+        for idx in inventory.index:
+            in_ref = bool(inventory.at[idx, "in_reference"])
+            in_cand = bool(inventory.at[idx, "in_candidate"])
+            group = inventory.at[idx, "group"]
+            ft = inventory.at[idx, "file_type"]
+            if in_ref != in_cand:
+                side = "reference" if in_ref else "candidate"
+                add(
+                    finding_type="output_anomaly",
+                    trigger="missing_file",
+                    group=group,
+                    metric=f"{ft} present on {side} only",
+                    detail_source=f"file_inventory.tsv?group={group}&file_type={ft}",
+                )
+            elif not in_ref and not in_cand:
+                # A row that is present on neither side only exists because the
+                # type is expected for this platform: an expected output absent
+                # from both runs (not a difference, but a coverage gap worth a
+                # finding rather than silent omission).
+                add(
+                    finding_type="output_anomaly",
+                    trigger="missing_both_sides",
+                    group=group,
+                    metric=f"{ft} expected but absent on both sides",
+                    detail_source=f"file_inventory.tsv?group={group}&file_type={ft}",
+                )
 
     if columns is not None and not columns.empty:
         for idx in columns.index:
+            # Real missing/extra columns (the "(empty file)" marker is handled
+            # separately because empty-on-both-sides is benign, not an anomaly).
             problems = [
                 str(columns.at[idx, c])
                 for c in (
@@ -1622,6 +1805,18 @@ def build_findings(
                 )
                 if str(columns.at[idx, c]) not in ("", "(empty file)")
             ]
+            ref_empty = str(columns.at[idx, "missing_vs_schema_reference"]) == (
+                "(empty file)"
+            )
+            cand_empty = str(columns.at[idx, "missing_vs_schema_candidate"]) == (
+                "(empty file)"
+            )
+            # An empty file on exactly one side is an anomaly; empty on both is
+            # consistent (e.g. bracken intentionally not produced).
+            if ref_empty != cand_empty:
+                problems.append(
+                    f"empty on {'reference' if ref_empty else 'candidate'} only"
+                )
             inconsistent = not (
                 bool(columns.at[idx, "groups_consistent_reference"])
                 and bool(columns.at[idx, "groups_consistent_candidate"])

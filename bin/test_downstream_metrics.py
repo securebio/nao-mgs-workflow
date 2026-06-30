@@ -688,6 +688,19 @@ class TestCladeRankShares:
         assert bool(fy.reaches_zero)
         assert not bool(out[out.taxid == 200].iloc[0].reaches_zero)
 
+    def test_reaches_zero_requires_candidate_denominator(self) -> None:
+        # Group G has no candidate clade rows at all (only group H does), so its
+        # zero candidate count is "no candidate data", not a real drop -> must NOT
+        # be flagged reaches_zero (else a one-sided clade file fabricates findings).
+        reference = self._clade([["G", dm.VIRUSES_TAXID, 100], ["G", 200, 50]])
+        candidate = self._clade([["H", dm.VIRUSES_TAXID, 100], ["H", 200, 50]])
+        out = dm.clade_rank_shares(
+            reference, candidate, self.RANK, self.NAME, rank_levels=("family",)
+        )
+        g_row = out[(out.taxid == 200) & (out.group == "G")].iloc[0]
+        assert g_row.reads_candidate == 0
+        assert not bool(g_row.reaches_zero)
+
     def test_missing_viruses_root_gives_nan_share(self) -> None:
         # No Viruses-root row -> denominator missing -> share NaN (surfaced, not 0).
         reference = self._clade([["G", 200, 50]])
@@ -1117,15 +1130,41 @@ class TestMarkAgreementDrivers:
 
     def test_driver_is_high_impact_not_one_read_flip(self) -> None:
         out = dm.mark_agreement_drivers(self._by_taxon()).set_index("taxid")
-        # The 1-read flip has the larger |delta_agreement| but the small move on
-        # hundreds of reads is the driver once weighted by validated count.
+        # The 1-read flip has the larger |delta_agreement| but the move on hundreds
+        # of reads contributes more to the group-level agreement drop.
         assert bool(out.loc[28875].is_agreement_driver)
         assert not bool(out.loc[99].is_agreement_driver)
-        assert out.loc[28875].agreement_impact > out.loc[99].agreement_impact
+        assert (
+            out.loc[28875].agreement_drop_contribution
+            > out.loc[99].agreement_drop_contribution
+        )
+
+    def test_one_sided_taxon_can_be_driver(self) -> None:
+        # A taxon validated only on the reference side (gone in the candidate)
+        # contributes its full reference agreement to the group's drop; the prior
+        # within-taxon delta ranking (null delta) could never select it.
+        by_taxon = pd.DataFrame(
+            {
+                "group": ["G", "G"],
+                "taxid": [10, 20],
+                "n_validated_reference": [100, 5],
+                "n_validated_candidate": [0, 5],
+                "agreement_rate_reference": [0.9, 0.5],
+                "agreement_rate_candidate": [None, 0.5],
+                "delta_agreement": [None, 0.0],
+            }
+        )
+        out = dm.mark_agreement_drivers(by_taxon).set_index("taxid")
+        assert bool(out.loc[10].is_agreement_driver)
+        assert not bool(out.loc[20].is_agreement_driver)
 
     def test_empty_input_gets_driver_columns(self) -> None:
         out = dm.mark_agreement_drivers(pd.DataFrame())
-        for col in ("abs_delta_agreement", "agreement_impact", "is_agreement_driver"):
+        for col in (
+            "abs_delta_agreement",
+            "agreement_drop_contribution",
+            "is_agreement_driver",
+        ):
             assert col in out.columns
 
 
@@ -1159,6 +1198,36 @@ class TestBoundingNumbers:
         s = out[out.subset == "rank=S, ribosomal=False"].iloc[0]
         assert s.max_abs_value == pytest.approx(0.18)
         assert s.n_flagged == 1  # only 0.18 exceeds the 0.15 default
+
+    def test_blast_improvement_not_counted_as_flagged(self) -> None:
+        # The agreement metric is one-directional (a drop): a large improvement
+        # (negative drop) must not count toward n_flagged.
+        val = pd.DataFrame(
+            {
+                "group": ["A", "B"],
+                "agreement_rate_reference": [0.9, 0.4],
+                "agreement_rate_candidate": [0.4, 0.9],  # A drops 0.5; B improves 0.5
+            }
+        )
+        out = dm.bounding_numbers({"viral_validation_agreement": val})
+        row = out[out.metric == "BLAST-agreement rate drop"].iloc[0]
+        assert row.n_flagged == 1  # only group A's drop
+
+    def test_not_computed_dimensions_emit_null_rows(self) -> None:
+        # With no viral/clade/kraken sources, every dimension still gets a row so
+        # the Checked section can say "not computed" (null bound) rather than omit.
+        out = dm.bounding_numbers({})
+        metrics = set(out.metric)
+        for expected in (
+            "vertebrate-viral reads reassigned (%)",
+            "clade share change (pp)",
+            "BLAST-agreement rate drop",
+            "Kraken Bray-Curtis",
+        ):
+            assert expected in metrics
+        reassigned = out[out.metric == "vertebrate-viral reads reassigned (%)"].iloc[0]
+        assert pd.isna(reassigned.max_abs_value)  # not computed
+        assert reassigned.n_flagged == 0
 
 
 class TestBuildFindings:
@@ -1244,3 +1313,52 @@ class TestBuildFindings:
         # The larger |Δpp| (famY, -9) is rank 1.
         assert shift.loc[1].entity_name == "famY"
         assert shift.loc[2].entity_name == "famX"
+
+    def test_qc_threshold_finding_enters_manifest(self) -> None:
+        # A QC survival regression that build_flags would flag must also appear in
+        # findings.tsv (the manifest the report author works from).
+        survival = pd.DataFrame(
+            {
+                "group": ["G"],
+                "sample": ["G"],
+                "platform": ["illumina"],
+                "delta_pp": [-8.0],  # exceeds the 5.0 pp default
+            }
+        )
+        out = dm.build_findings({"qc_survival": survival})
+        qc = out[out.finding_type == "qc_anomaly"]
+        assert len(qc) == 1
+        assert qc.iloc[0].direction == "down"
+
+    def test_expected_output_missing_on_both_sides_is_flagged(self) -> None:
+        inventory = pd.DataFrame(
+            {
+                "group": ["G", "G"],
+                "file_type": ["validation_hits", "bracken"],
+                "in_reference": [True, False],
+                "in_candidate": [True, False],
+            }
+        )
+        out = dm.build_findings({}, inventory=inventory)
+        anomalies = out[out.finding_type == "output_anomaly"]
+        # validation_hits is on both sides (fine); bracken is on neither (flagged).
+        assert list(anomalies.metric.str.contains("bracken")) == [True]
+        assert anomalies.iloc[0].trigger == "missing_both_sides"
+
+    def test_one_sided_empty_file_flagged_both_sided_not(self) -> None:
+        columns = pd.DataFrame(
+            {
+                "file_type": ["bracken", "kraken"],
+                "missing_vs_schema_reference": ["(empty file)", "(empty file)"],
+                "missing_vs_schema_candidate": ["(empty file)", ""],
+                "extra_vs_schema_reference": ["", ""],
+                "extra_vs_schema_candidate": ["", ""],
+                "groups_consistent_reference": [True, True],
+                "groups_consistent_candidate": [True, True],
+            }
+        )
+        out = dm.build_findings({}, columns=columns)
+        schema = out[out.finding_type == "schema_anomaly"]
+        # bracken empty on both sides is benign; kraken empty on reference only is
+        # an anomaly.
+        assert list(schema.metric) == ["kraken: empty on reference only"]
