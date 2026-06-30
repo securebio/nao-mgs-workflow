@@ -58,7 +58,11 @@ same rules.
   for any other entity — never refer to "a group", "a sample", "a reference
   genome/accession", "a species", or "a clade" without naming it; an unnamed
   entity is not actionable. Avoid vague quantifiers ("many groups", "several
-  taxa") — give the count and name the notable ones.
+  taxa") — give the count and name the notable ones. **Take the name and taxid
+  together from the same TSV row** (resolving the name via `taxonomy-names.dmp`
+  when needed) — never supply a taxid from memory for a familiar name (a
+  well-known family like Astroviridae is easy to mis-number); copy the id that
+  sits next to that name in the data.
 - **Plain language; no tool-internal jargon.** In the Summary, the findings, and
   the To-confirm lines, describe what happened observationally, not how the
   tooling detected it. Don't write "tripping the clade-share threshold", "in the

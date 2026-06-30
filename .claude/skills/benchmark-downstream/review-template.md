@@ -34,7 +34,9 @@ to compare against, a difference is neither good nor bad on its face.
 
 - **What differs between the runs:** `<list which of {pipeline code, index, QC
   parameters} actually differ — this sets how far any difference can be
-  attributed (see the attribution statement below). If only one differs, say so.>`
+  attributed (see the attribution statement below). If only one differs, say so.
+  Only the pipeline version and index identity are observable here; QC parameters
+  are not emitted, so list them as "not confirmed unchanged", NOT as differing.>`
 - **Comparison scope:** `<N>` groups (`<X>` Illumina + `<Y>` ONT), matched by
   name. `<note any group or file type missing on one side; if none, say so>`.
 - **Report generated:** `<YYYY-MM-DD HH:MM>`
@@ -347,7 +349,10 @@ signal detector. See the Methodology appendix for the pooling/subsampling note.
 | ... | | | | |
 
 `<Highest-dissimilarity group/rank/read-set rows and the top movers, named, with
-whether they are viral or environmental.>`
+whether they are viral or environmental. If you say the top movers contain no
+viral taxa, verify it against the rows first (check each top-mover taxid's
+annotation) — do not assert a category is absent unless the data confirm none;
+"the largest movers are environmental" is safer than "no viral taxa".>`
 
 ### Quality metrics
 
