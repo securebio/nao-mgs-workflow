@@ -1531,15 +1531,18 @@ def bounding_numbers(
         if not signed.notna().any():
             null_row()
             return
-        magnitude = signed.abs()
-        compare = magnitude if direction == "abs" else signed
-        i = magnitude.idxmax()
+        # Pick the bound in the flagged direction: for "abs" the largest |value|;
+        # for "pos" the largest signed value (the largest drop), so an improvement
+        # (negative) is never reported as the biggest "drop". `compare` is the same
+        # series the n_flagged count uses, keeping bound and count consistent.
+        compare = signed.abs() if direction == "abs" else signed
+        i = compare.idxmax()
         where = ", ".join(f"{c}={df.at[i, c]}" for c in key_cols if c in df.columns)
         records.append(
             {
                 "metric": metric,
                 "subset": subset,
-                "max_abs_value": float(magnitude.loc[i]),
+                "max_abs_value": float(compare.loc[i]),
                 "max_abs_group": where,
                 "threshold": threshold,
                 "n_flagged": int((compare > threshold).sum()),
