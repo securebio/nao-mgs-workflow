@@ -67,8 +67,9 @@ re-scanning the other tables to decide what to cover. Its columns:
 - `finding_type`: the dimension; write one Main-finding subsection per distinct
   value present.
 - `trigger`: `threshold` or the rule that surfaced it (`reaches_zero`,
-  `shared-higher-taxon`, `cross-root`, `missing_file`, `column_mismatch`,
-  `one_sided_input`).
+  `shared-higher-taxon`, `cross-root`, `fastqc_worsening`, `missing_file`,
+  `missing_both_sides`, `platform_mismatch`, `row_count_collapse`,
+  `column_mismatch`, `one_sided_input`).
 - `group`, `scope`, `rank`, `entity_taxid`, `entity_name`: the named subject,
   copied from a source row — use these names/ids directly.
 - `value`, `threshold`, `direction`, `rank_in_type`: the magnitude, the threshold

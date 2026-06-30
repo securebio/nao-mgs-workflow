@@ -415,6 +415,21 @@ def test_main_end_to_end(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Non
     reassign_flags = flags[flags.metric.str.contains("reassigned")]
     assert any("G_ILL" in k for k in reassign_flags.key)
 
+    # The findings manifest is written and carries the same reassignment as a
+    # routed row (so the new wiring is exercised end-to-end, not just the helper).
+    findings = pd.read_csv(out / "findings.tsv", sep="\t")
+    reassign_findings = findings[findings.finding_type == "viral_reads_reassigned"]
+    assert (reassign_findings.group == "G_ILL").any()
+    assert reassign_findings.iloc[0].detail_source.startswith(
+        "viral_reassignment_pairs.tsv"
+    )
+
+    # bounding_numbers is written with a row per checked dimension (used by the
+    # Checked section), including viral dimensions computed from the index.
+    bounding = pd.read_csv(out / "bounding_numbers.tsv", sep="\t")
+    assert (bounding.metric == "QC read survival (pp)").any()
+    assert bounding.metric.str.contains("reassigned").any()
+
 
 def test_main_skips_focus1_when_validation_hits_absent(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch

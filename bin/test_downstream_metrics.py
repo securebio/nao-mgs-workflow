@@ -1362,3 +1362,41 @@ class TestBuildFindings:
         # bracken empty on both sides is benign; kraken empty on reference only is
         # an anomaly.
         assert list(schema.metric) == ["kraken: empty on reference only"]
+
+    def test_platform_mismatch_flagged_once_per_group(self) -> None:
+        # Same file types present on both sides, but the group is a platform
+        # mismatch -> must still surface (once), not vanish because presence matches.
+        inventory = pd.DataFrame(
+            {
+                "group": ["G", "G"],
+                "platform": ["illumina/ont (mismatch)", "illumina/ont (mismatch)"],
+                "file_type": ["kraken", "read_counts"],
+                "in_reference": [True, True],
+                "in_candidate": [True, True],
+                "n_rows_reference": [5, 5],
+                "n_rows_candidate": [5, 5],
+            }
+        )
+        out = dm.build_findings({}, inventory=inventory)
+        mism = out[out.trigger == "platform_mismatch"]
+        assert len(mism) == 1
+        assert mism.iloc[0].group == "G"
+
+    def test_row_count_collapse_to_zero_is_flagged(self) -> None:
+        # A file present on both sides but collapsing to zero rows on one side is
+        # an unexpectedly empty output; a mere nonzero delta is not flagged here.
+        inventory = pd.DataFrame(
+            {
+                "group": ["G", "G"],
+                "platform": ["illumina", "illumina"],
+                "file_type": ["validation_hits", "kraken"],
+                "in_reference": [True, True],
+                "in_candidate": [True, True],
+                "n_rows_reference": [100, 80],
+                "n_rows_candidate": [0, 120],  # validation_hits collapses; kraken grows
+            }
+        )
+        out = dm.build_findings({}, inventory=inventory)
+        collapses = out[out.trigger == "row_count_collapse"]
+        assert list(collapses.metric.str.contains("validation_hits")) == [True]
+        assert "candidate only" in collapses.iloc[0].metric
