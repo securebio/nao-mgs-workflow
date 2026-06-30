@@ -77,6 +77,13 @@ re-scanning the other tables to decide what to cover. Its columns:
   each subsection with `rank_in_type == 1`).
 - `detail_source`: the TSV (and filter) holding that finding's drivers and caveats.
 
+`findings_summary.tsv` has one row per `finding_type` with the aggregates a
+subsection's topic sentence needs — `n_findings`, `n_distinct_groups` (the
+group count to cite; it dedupes the family/order double-listing),
+`n_distinct_groups_over_threshold` (the "M of N exceeded the threshold"
+sub-count), and `value_min`/`value_max` (the magnitude range). Cite these rather
+than counting `findings.tsv` rows by hand.
+
 `bounding_numbers.tsv` drives the **Checked** section: one row per checked metric
 with its largest deviation (`max_abs_value`), where it occurred (`max_abs_group`),
 the `threshold`, and `n_flagged`. `flags.tsv` is retained as a flat threshold list.
@@ -232,8 +239,14 @@ evidence, not the severity of the finding.
 
 Before handoff:
 
-- Re-derive every cited count, taxid, and group total from its source TSV (the
-  driver columns and `bounding_numbers.tsv` give most of them directly).
+- Every number in the report must come from a TSV cell, not mental arithmetic.
+  Taxids and names come from a source row; per-`finding_type` counts and ranges
+  (group tallies, "M of N over threshold", magnitude ranges) come from
+  `findings_summary.tsv`; bounding figures from `bounding_numbers.tsv`. For any
+  count or range not already in a summary cell (e.g. a sub-tally over a custom
+  cutoff, or a sum of reads), re-derive it explicitly from the relevant TSV
+  (filter and count/sum) — do not eyeball it off a table. Recompute, do not
+  estimate.
 - Confirm every `finding_type` in `findings.tsv` appears as exactly one Main
   subsection, and each manifest row is covered by its subsection.
 - Confirm stable bullets cite a `bounding_numbers.tsv` figure and skipped analyses

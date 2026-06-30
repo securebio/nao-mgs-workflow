@@ -1920,3 +1920,50 @@ def build_findings(
 def _fmt_taxid(value: Any) -> str:
     """Render a possibly-NA taxid as a bare integer string for a pair label."""
     return str(int(value)) if pd.notna(value) else "NA"
+
+
+def summarize_findings(findings: pd.DataFrame) -> pd.DataFrame:
+    """Per-finding_type aggregates for report topic sentences.
+
+    Every Main-finding subsection (and the Summary) opens with the same shape of
+    aggregate -- "<finding> in N groups, M over threshold, ranging A to B" -- which
+    the author would otherwise count by hand off `findings.tsv` and can get wrong.
+    Distinct-group counts dedupe the family/order double-listing (a co-extensive
+    family and order are one event across the same groups), so
+    `n_distinct_groups` is the count to cite, and `n_distinct_groups_over_threshold`
+    is the "M of N exceeded the threshold" sub-count.
+    """
+    cols = [
+        "finding_type",
+        "n_findings",
+        "n_distinct_groups",
+        "n_distinct_groups_over_threshold",
+        "value_min",
+        "value_max",
+    ]
+    if findings.empty or "finding_type" not in findings.columns:
+        return pd.DataFrame(columns=cols)
+
+    def real_groups(series: pd.Series) -> pd.Series:
+        s = series.astype(str)
+        return series[(s.str.len() > 0) & (s != "*")]
+
+    records: list[dict[str, object]] = []
+    for ftype, g in findings.groupby("finding_type"):
+        vals = pd.to_numeric(g["value"], errors="coerce")
+        thr_groups = real_groups(g.loc[g["trigger"] == "threshold", "group"])
+        records.append(
+            {
+                "finding_type": ftype,
+                "n_findings": int(len(g)),
+                "n_distinct_groups": int(real_groups(g["group"]).nunique()),
+                "n_distinct_groups_over_threshold": int(thr_groups.nunique()),
+                "value_min": float(vals.min()) if vals.notna().any() else None,
+                "value_max": float(vals.max()) if vals.notna().any() else None,
+            }
+        )
+    return (
+        pd.DataFrame.from_records(records, columns=cols)
+        .sort_values("finding_type")
+        .reset_index(drop=True)
+    )

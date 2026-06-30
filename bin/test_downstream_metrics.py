@@ -1403,3 +1403,42 @@ class TestBuildFindings:
         collapses = out[out.trigger == "row_count_collapse"]
         assert list(collapses.metric.str.contains("validation_hits")) == [True]
         assert "candidate only" in collapses.iloc[0].metric
+
+
+class TestSummarizeFindings:
+    def test_distinct_group_counts_dedupe_family_order(self) -> None:
+        # A co-extensive family+order reaching zero in the same 2 groups is one
+        # event: n_distinct_groups must be 2, not 4 (the "22 vs 18" class of bug),
+        # and the threshold sub-count is over distinct groups too.
+        findings = pd.DataFrame(
+            {
+                "finding_type": ["clade_reaches_zero"] * 4,
+                "trigger": ["threshold", "reaches_zero", "threshold", "reaches_zero"],
+                "group": ["G1", "G2", "G1", "G2"],  # family rows then order rows
+                "value": [-5.0, -0.5, -5.0, -0.5],
+            }
+        )
+        out = dm.summarize_findings(findings).iloc[0]
+        assert out.n_findings == 4
+        assert out.n_distinct_groups == 2
+        assert out.n_distinct_groups_over_threshold == 1  # only G1 crossed
+        assert out.value_min == pytest.approx(-5.0)
+        assert out.value_max == pytest.approx(-0.5)
+
+    def test_cross_group_and_blank_groups_excluded_from_counts(self) -> None:
+        findings = pd.DataFrame(
+            {
+                "finding_type": ["schema_anomaly", "schema_anomaly"],
+                "trigger": ["column_mismatch", "column_mismatch"],
+                "group": ["", "*"],  # not real per-group findings
+                "value": [None, None],
+            }
+        )
+        out = dm.summarize_findings(findings).iloc[0]
+        assert out.n_distinct_groups == 0
+        assert pd.isna(out.value_min)
+
+    def test_empty_returns_header_only(self) -> None:
+        out = dm.summarize_findings(pd.DataFrame())
+        assert out.empty
+        assert "n_distinct_groups_over_threshold" in out.columns

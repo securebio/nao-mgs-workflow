@@ -732,6 +732,7 @@ def main() -> None:
         name_map=name_map,
     )
     write_tsv(findings, args.out / "findings.tsv")
+    write_tsv(dm.summarize_findings(findings), args.out / "findings_summary.tsv")
     write_tsv(
         dm.bounding_numbers(outputs, thresholds=thresholds),
         args.out / "bounding_numbers.tsv",
