@@ -610,6 +610,7 @@ def main() -> None:
             "seq_id",
             "aligner_taxid_lca",
             "validation_distance_aligner",
+            "validation_staxid_lca",
         ]
         # Read-level join: restrict to groups whose validation_hits is present on
         # both sides. A one-sided file would misread every reference read for that
@@ -690,6 +691,15 @@ def main() -> None:
             write_tsv(
                 agreement_by_taxon,
                 args.out / "viral_validation_agreement_by_taxon.tsv",
+            )
+            # Which-side-moved decomposition: separate agreement losses caused by
+            # the aligner call changing (reassignment) from those caused by the
+            # validation target moving under an unchanged aligner call (rename).
+            decomposition = dm.validation_agreement_decomposition(
+                vh_reference, vh_candidate, name_map
+            )
+            write_tsv(
+                decomposition, args.out / "viral_validation_decomposition.tsv"
             )
         else:
             logger.warning(

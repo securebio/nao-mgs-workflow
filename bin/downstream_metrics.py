@@ -1088,6 +1088,128 @@ def mark_agreement_drivers(by_taxon: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
+_DECOMPOSITION_COLS = [
+    "group",
+    "n_validated_both",
+    "n_agreement_lost",
+    "n_agreement_gained",
+    "n_lost_aligner_unchanged",
+    "n_lost_aligner_changed",
+    "dominant_target_shift_taxid_reference",
+    "dominant_target_shift_taxid_candidate",
+    "dominant_target_shift_name_reference",
+    "dominant_target_shift_name_candidate",
+    "dominant_target_shift_reads",
+]
+
+
+def validation_agreement_decomposition(
+    vh_reference: pd.DataFrame,
+    vh_candidate: pd.DataFrame,
+    name_map: dict[int, str] | None = None,
+) -> pd.DataFrame:
+    """Split each group's BLAST-agreement change into aligner-moved vs target-moved.
+
+    Among reads validated on BOTH sides, an agreement loss (agree on reference,
+    disagree on candidate) can come from the aligner call changing (a reassignment)
+    or from the BLAST validation target moving under an *unchanged* aligner call
+    (e.g. a taxonomy rename that reparents the aligner's taxon below the new BLAST
+    target). These are different causes; this is the deterministic "which side
+    moved" check. For the unchanged-aligner losses it also names the dominant
+    validation-target shift (reference target -> candidate target). Emits a row per
+    group with any agreement change.
+    """
+    need = {
+        "group",
+        "seq_id",
+        "aligner_taxid_lca",
+        "validation_distance_aligner",
+        "validation_staxid_lca",
+    }
+    if (
+        vh_reference.empty
+        or vh_candidate.empty
+        or not need.issubset(vh_reference.columns)
+        or not need.issubset(vh_candidate.columns)
+    ):
+        return pd.DataFrame(columns=_DECOMPOSITION_COLS)
+    names = name_map or {}
+    key = (
+        ["group", "sample", "seq_id"]
+        if "sample" in vh_reference.columns and "sample" in vh_candidate.columns
+        else ["group", "seq_id"]
+    )
+    keep = [
+        *key,
+        "aligner_taxid_lca",
+        "validation_distance_aligner",
+        "validation_staxid_lca",
+    ]
+    ren = {
+        "aligner_taxid_lca": "aligner",
+        "validation_distance_aligner": "dist",
+        "validation_staxid_lca": "target",
+    }
+    a = vh_reference[keep].rename(columns={k: f"{v}_ref" for k, v in ren.items()})
+    b = vh_candidate[keep].rename(columns={k: f"{v}_cand" for k, v in ren.items()})
+    m = a.merge(b, on=key, how="inner")
+    dist_ref = pd.to_numeric(m["dist_ref"], errors="coerce")
+    dist_cand = pd.to_numeric(m["dist_cand"], errors="coerce")
+    m = m[dist_ref.notna() & dist_cand.notna()].copy()
+    if m.empty:
+        return pd.DataFrame(columns=_DECOMPOSITION_COLS)
+    m["agree_ref"] = pd.to_numeric(m["dist_ref"], errors="coerce") == 0
+    m["agree_cand"] = pd.to_numeric(m["dist_cand"], errors="coerce") == 0
+    aligner_ref = pd.to_numeric(m["aligner_ref"], errors="coerce")
+    aligner_cand = pd.to_numeric(m["aligner_cand"], errors="coerce")
+    m["aligner_unchanged"] = (aligner_ref == aligner_cand) & aligner_ref.notna()
+    m["lost"] = m["agree_ref"] & ~m["agree_cand"]
+    m["gained"] = ~m["agree_ref"] & m["agree_cand"]
+
+    records: list[dict[str, object]] = []
+    for group, g in m.groupby("group"):
+        n_lost = int(g["lost"].sum())
+        n_gained = int(g["gained"].sum())
+        if n_lost == 0 and n_gained == 0:
+            continue
+        lost_unchanged = g[g["lost"] & g["aligner_unchanged"]]
+        n_lost_unchanged = int(len(lost_unchanged))
+        # Dominant validation-target shift among the unchanged-aligner losses: the
+        # reads where only the BLAST target moved.
+        shift = lost_unchanged[
+            pd.to_numeric(lost_unchanged["target_ref"], errors="coerce")
+            != pd.to_numeric(lost_unchanged["target_cand"], errors="coerce")
+        ]
+        dom_ref = dom_cand = None
+        dom_reads = 0
+        if not shift.empty:
+            pair_counts = shift.groupby(["target_ref", "target_cand"]).size()
+            top_pair = cast(Any, pair_counts.idxmax())
+            dom_ref = int(top_pair[0])
+            dom_cand = int(top_pair[1])
+            dom_reads = int(pair_counts.max())
+        records.append(
+            {
+                "group": group,
+                "n_validated_both": int(len(g)),
+                "n_agreement_lost": n_lost,
+                "n_agreement_gained": n_gained,
+                "n_lost_aligner_unchanged": n_lost_unchanged,
+                "n_lost_aligner_changed": n_lost - n_lost_unchanged,
+                "dominant_target_shift_taxid_reference": dom_ref,
+                "dominant_target_shift_taxid_candidate": dom_cand,
+                "dominant_target_shift_name_reference": (
+                    names.get(dom_ref, str(dom_ref)) if dom_ref is not None else ""
+                ),
+                "dominant_target_shift_name_candidate": (
+                    names.get(dom_cand, str(dom_cand)) if dom_cand is not None else ""
+                ),
+                "dominant_target_shift_reads": dom_reads,
+            }
+        )
+    return pd.DataFrame.from_records(records, columns=_DECOMPOSITION_COLS)
+
+
 def vertebrate_status_flips(
     old_annotated: pd.DataFrame,
     new_annotated: pd.DataFrame,
@@ -1681,7 +1803,9 @@ def build_findings(
                 direction="down",
                 detail_source=(
                     f"viral_validation_agreement_by_taxon.tsv?group={group}"
-                    " (is_agreement_driver==True)"
+                    " (is_agreement_driver==True);"
+                    f" viral_validation_decomposition.tsv?group={group}"
+                    " (aligner-moved vs target-moved)"
                 ),
             )
 

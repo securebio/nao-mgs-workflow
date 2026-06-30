@@ -102,6 +102,12 @@ Then read the detail tables a finding's `detail_source` points to:
   `viral_validation_agreement_by_taxon.tsv`: group and per-taxon BLAST agreement;
   use `mean_distance_disagree` for disagreement distance and `is_agreement_driver`
   to name the taxon behind a group's agreement change.
+- `viral_validation_decomposition.tsv`: per group, splits agreement losses into
+  `n_lost_aligner_changed` (the aligner call moved — a reassignment) vs
+  `n_lost_aligner_unchanged` (the BLAST validation target moved under an unchanged
+  aligner call — e.g. a taxonomy rename), and names the dominant validation-target
+  shift. This is the deterministic which-side-moved check for a BLAST-agreement
+  finding.
 - `vertebrate_status_flips.tsv`: true annotation changes
   (`gained_vertebrate`/`lost_vertebrate`) versus taxa present on only one side
   (`added_vertebrate`/`removed_vertebrate`).
@@ -210,9 +216,13 @@ Use these checks:
 - **Vertebrate reads gained:** join gained taxids to status changes. An
   `added_vertebrate` taxon is consistent with a new genome, but taxids are compared
   as-is, so confirm it is genuinely new before calling that strongly supported.
-- **BLAST agreement changes:** use the per-taxon table, then join affected reads
-  across runs to determine whether the aligner assignment or validation target
-  moved. Agreement loss on unchanged aligner calls is not caused by reassignment.
+- **BLAST agreement changes:** read `viral_validation_decomposition.tsv` for the
+  group. `n_lost_aligner_unchanged` reads lost agreement with an unchanged aligner
+  call — their `dominant_target_shift` is the BLAST/validation target moving (e.g.
+  a taxonomy rename), **not** a reassignment; `n_lost_aligner_changed` reads are
+  the reassignment-driven losses. Attribute the cause to whichever dominates; do
+  not call a reassignment the cause of agreement loss on unchanged aligner calls.
+  Use the per-taxon table's `is_agreement_driver` to name the taxon.
 - **Kraken shifts:** a database-update explanation is speculative unless
   per-taxon reference membership was checked.
 

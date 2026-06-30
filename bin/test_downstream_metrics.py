@@ -1168,6 +1168,68 @@ class TestMarkAgreementDrivers:
             assert col in out.columns
 
 
+class TestValidationAgreementDecomposition:
+    def _vh(self, rows: list[list]) -> pd.DataFrame:
+        return pd.DataFrame(
+            rows,
+            columns=[
+                "group",
+                "sample",
+                "seq_id",
+                "aligner_taxid_lca",
+                "validation_distance_aligner",
+                "validation_staxid_lca",
+            ],
+        )
+
+    def test_splits_aligner_moved_from_target_moved(self) -> None:
+        # r1: aligner unchanged, target moved 28875->3432193 (rename) -> lost,
+        #     aligner_unchanged. r2: aligner moved 10941->28875 -> lost, changed.
+        #     r3: agrees on both sides -> not a loss.
+        reference = self._vh(
+            [
+                ["G", "s", "r1", 28875, 0, 28875],
+                ["G", "s", "r2", 10941, 0, 10941],
+                ["G", "s", "r3", 500, 0, 500],
+            ]
+        )
+        candidate = self._vh(
+            [
+                ["G", "s", "r1", 28875, 1, 3432193],
+                ["G", "s", "r2", 28875, 1, 10941],
+                ["G", "s", "r3", 500, 0, 500],
+            ]
+        )
+        out = dm.validation_agreement_decomposition(
+            reference, candidate, name_map={3432193: "Rotavirus alphagastroenteritidis"}
+        ).iloc[0]
+        assert out.n_validated_both == 3
+        assert out.n_agreement_lost == 2
+        assert out.n_lost_aligner_unchanged == 1
+        assert out.n_lost_aligner_changed == 1
+        # The unchanged-aligner loss is the validation-target rename.
+        assert out.dominant_target_shift_taxid_reference == 28875
+        assert out.dominant_target_shift_taxid_candidate == 3432193
+        assert (
+            out.dominant_target_shift_name_candidate
+            == "Rotavirus alphagastroenteritidis"
+        )
+        assert out.dominant_target_shift_reads == 1
+
+    def test_reads_validated_on_one_side_excluded(self) -> None:
+        # r1 validated only on the candidate side -> not part of the both-validated
+        # denominator, so no agreement change is attributed to it.
+        reference = self._vh([["G", "s", "r1", 10, None, 10]])
+        candidate = self._vh([["G", "s", "r1", 10, 0, 10]])
+        out = dm.validation_agreement_decomposition(reference, candidate)
+        assert out.empty
+
+    def test_missing_columns_returns_header_only(self) -> None:
+        out = dm.validation_agreement_decomposition(pd.DataFrame(), pd.DataFrame())
+        assert out.empty
+        assert "n_lost_aligner_unchanged" in out.columns
+
+
 class TestBoundingNumbers:
     def test_survival_max_and_no_flag(self) -> None:
         survival = pd.DataFrame(
