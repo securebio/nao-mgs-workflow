@@ -3,30 +3,38 @@
 
 # zlib/minizip: integer overflow in zipOpenNewFileInZip4_64 — Debian does not build
 # the vulnerable minizip code into its zlib binary packages (Debian status: ignored)
-CVE-2023-45853 exp:2026-06-30
+CVE-2023-45853 exp:2026-08-31
 
 # glibc: integer overflow in memalign — Debian bookworm marks as <no-dsa>
 # (minor issue, requires attacker control of size+alignment args)
-CVE-2026-0861 exp:2026-06-30
+CVE-2026-0861 exp:2026-08-31
 
 # ── Rust crates embedded in compiled Polars .so (multiqc dependency) ──
+# These live inside multiqc's prebuilt _polars_runtime.abi3.so; the fix requires
+# Polars to release a build against the patched crate and multiqc to pull it, so
+# no yml pin can reach the fix. Re-eval when multiqc ships a Polars with the fixes.
 # quinn-proto: QUIC protocol DoS
 # No fix available until Polars releases a build with quinn-proto >= 0.11.14
-CVE-2026-31812 exp:2026-06-30
+CVE-2026-31812 exp:2026-09-30
 # rustls-webpki: DoS via panic on malformed CRL BIT STRING.
 # No fix available until Polars releases a build with rustls-webpki >= 0.103.13.
-GHSA-82j2-j2ch-gfr8 exp:2026-06-30
+GHSA-82j2-j2ch-gfr8 exp:2026-09-30
+# pyo3: out-of-bounds read in nth/nth_back for PyList/PyTuple iterators via
+# unchecked index+n overflow (HIGH); fixed in pyo3 >= 0.29.0. Reachable only if
+# Polars runs those iterators over attacker-controlled n; multiqc feeds Polars its
+# own pipeline QC dataframes, not untrusted iterator offsets.
+GHSA-36hh-v3qg-5jq4 exp:2026-09-30
 
 # linux-pam: directory traversal (no Debian fix available as of 2026-03-14)
-CVE-2025-6020 exp:2026-06-30
+CVE-2025-6020 exp:2026-08-31
 
 # GnuPG gpgv: information disclosure / potential code execution (no Debian fix available as of 2026-03-14)
-CVE-2025-68973 exp:2026-06-30
+CVE-2025-68973 exp:2026-08-31
 
 # ── Go stdlib v1.23.4 in ncbi-datasets-cli 18.21.0 (ncbi_datasets container) ──
 # The NCBI datasets/dataformat binaries are pre-compiled Go executables distributed
 # via conda-forge. They ship Go stdlib v1.23.4.
-# Go ~= 1.25.10 or ~= 1.26.3 is required to address all vulnerabilities.
+# Go ~= 1.25.11 or ~= 1.26.4 is required to address all vulnerabilities.
 # We cannot rebuild these — only NCBI can, by updating their Go toolchain.
 #
 # Risk assessment: these binaries run in an isolated container that only downloads
@@ -35,7 +43,7 @@ CVE-2025-68973 exp:2026-06-30
 # surface for these CVEs is minimal in our pipeline context.
 #
 # TODO: Remove these ignores when a newer ncbi-datasets-cli is available on
-# conda-forge built with Go ~= 1.25.10 or ~= 1.26.3. Check with:
+# conda-forge built with Go ~= 1.25.11 or ~= 1.26.4. Check with:
 #   conda search -c conda-forge ncbi-datasets-cli
 #   strings $(conda run -n <env> which datasets) | grep '^go1\.'
 # As of 2026-06-04, 18.29.1 is the latest conda-forge build; its embedded Go
@@ -43,79 +51,109 @@ CVE-2025-68973 exp:2026-06-30
 # the Go toolchain is whatever NCBI shipped, not something conda-forge controls.
 #
 # crypto/tls: unexpected session resumption (CRITICAL)
-CVE-2025-68121 exp:2026-06-30
+CVE-2025-68121 exp:2026-09-30
 # database/sql: Postgres scan race condition (HIGH)
-CVE-2025-47907 exp:2026-06-30
+CVE-2025-47907 exp:2026-09-30
 # archive/tar: unbounded allocation parsing GNU sparse map (HIGH)
-CVE-2025-58183 exp:2026-06-30
+CVE-2025-58183 exp:2026-09-30
 # net/url: memory exhaustion in query parameter parsing (HIGH)
-CVE-2025-61726 exp:2026-06-30
+CVE-2025-61726 exp:2026-09-30
 # archive/zip: excessive CPU consumption building archive index (HIGH)
-CVE-2025-61728 exp:2026-06-30
+CVE-2025-61728 exp:2026-09-30
 # crypto/x509: DoS via crafted certificate (HIGH)
-CVE-2025-61729 exp:2026-06-30
+CVE-2025-61729 exp:2026-09-30
 # net/url: incorrect parsing of IPv6 host literals (HIGH)
-CVE-2026-25679 exp:2026-06-30
+CVE-2026-25679 exp:2026-09-30
+# crypto/x509: DoS via excessive processing of DNS SAN entries in a crafted
+# certificate (HIGH); these binaries validate only NCBI/AWS server certs.
+CVE-2026-27145 exp:2026-09-30
 # crypto/x509: excessive CPU in certificate chain building (HIGH)
-CVE-2026-32280 exp:2026-06-30
+CVE-2026-32280 exp:2026-09-30
 # internal/syscall/unix: Root.Chmod can follow symlinks out of the root (HIGH)
-CVE-2026-32282 exp:2026-06-30
+CVE-2026-32282 exp:2026-09-30
 # crypto/x509: DoS via inefficient certificate chain validation (HIGH)
-CVE-2026-32281 exp:2026-06-30
+CVE-2026-32281 exp:2026-09-30
 # crypto/tls: TLS 1.3 post-handshake key-update deadlock DoS (HIGH)
-CVE-2026-32283 exp:2026-06-30
+CVE-2026-32283 exp:2026-09-30
 # net (cgo resolver): LookupCNAME mishandling of overlong CNAME responses (HIGH)
-CVE-2026-33811 exp:2026-06-30
+CVE-2026-33811 exp:2026-09-30
 # net/http: HTTP/2 transport infinite loop on crafted SETTINGS frames (HIGH)
-CVE-2026-33814 exp:2026-06-30
+CVE-2026-33814 exp:2026-09-30
 # net/mail: DoS via crafted ParseAddress/ParseAddressList/ParseDate inputs (HIGH)
-CVE-2026-39820 exp:2026-06-30
+CVE-2026-39820 exp:2026-09-30
 # net: panic in Dial/LookupPort when handling NUL byte (HIGH)
-CVE-2026-39836 exp:2026-06-30
+CVE-2026-39836 exp:2026-09-30
 # net/mail: DoS via pathological consumePhrase inputs (HIGH)
-CVE-2026-42499 exp:2026-06-30
+CVE-2026-42499 exp:2026-09-30
 # html/template: XSS via meta-content URL escaping bypass (HIGH); server-side
 # templating, never used by these client-only metadata-download binaries.
-CVE-2026-39823 exp:2026-06-30
+CVE-2026-39823 exp:2026-09-30
 # net/http/httputil: ReverseProxy query smuggling past urlmaxqueryparams (HIGH);
 # these binaries are HTTP clients, run no reverse proxy.
-CVE-2026-39825 exp:2026-06-30
+CVE-2026-39825 exp:2026-09-30
 # html/template: XSS via script type-attribute escaper bypass (HIGH); as above,
 # no server-side templating in these CLI tools.
-CVE-2026-39826 exp:2026-06-30
+CVE-2026-39826 exp:2026-09-30
 # mime/net-mail: excessive CPU decoding crafted MIME headers with many invalid
 # encoded-words (HIGH); these CLIs fetch JSON from NCBI's API, never parse email/MIME.
-CVE-2026-42504 exp:2026-06-30
+CVE-2026-42504 exp:2026-09-30
 
 # ── Pillow in multiqc container (transitive dependency via matplotlib) ──
 # multiqc 1.33 (latest on bioconda) pulls Pillow 12.1.1; fix requires >= 12.2.0.
 # We cannot pin Pillow independently in the conda environment spec.
 # The vulnerability is a FITS GZIP decompression bomb — not a realistic attack
 # vector since multiqc only processes pipeline QC data, not untrusted FITS images.
-CVE-2026-40192 exp:2026-06-30
+CVE-2026-40192 exp:2026-09-30
 # OOB write via integer overflow in PSD tile extents (HIGH): pipeline does not
 # generate or process PSD-format images.
-CVE-2026-42311 exp:2026-06-30
+CVE-2026-42311 exp:2026-09-30
 
-# ── Debian bookworm base image: no fixes available ──
+# ── Debian trixie base image (mambaorg/micromamba): no fixes reachable ──
+# The base-image knob (container-base-image in pyproject.toml) is the only
+# permitted lever for these system packages, and the current latest micromamba
+# digest still ships the vulnerable versions — the fixes are not yet installed
+# in any published base layer. Re-eval when micromamba rebuilds against a trixie
+# apt state carrying the fix (then bump the digest and drop the entry).
+#
 # glibc: DoS via iconv() with specific character set conversions (fix_deferred)
 # Our containers don't perform attacker-controlled iconv conversions.
-CVE-2026-4046 exp:2026-06-30
+CVE-2026-4046 exp:2026-08-31
 
 # ncurses: stack-based buffer overflow in infocmp CLI tool (no-dsa, low urgency)
 # Our containers never invoke infocmp. Fix only in sid (6.6+).
-CVE-2025-69720 exp:2026-06-30
+CVE-2025-69720 exp:2026-08-31
+
+# openssl (libssl3t64, openssl-provider-legacy): use-after-free in PKCS7_verify()
+# on crafted PKCS#7 / S/MIME messages with an empty digestAlgorithms field
+# (HIGH, DSA-6335-1). Fixed in Debian trixie 3.5.6-1~deb13u2, but the container
+# Dockerfile installs only `procps` (no apt upgrade) so openssl comes straight
+# from the base layer, and no published micromamba digest carries deb13u2 yet —
+# so the fix is not reachable via the permitted base-image bump. Applications
+# using CMS APIs are unaffected; the pipeline verifies no PKCS#7/S-MIME signatures
+# (openssl is linked only for TLS to known NCBI/AWS endpoints via curl/python).
+# Re-eval: a micromamba rebuild ships deb13u2 (bump the digest and drop this).
+CVE-2026-45447 exp:2026-08-31
+
+# acl (libacl1) / attr (libattr1): symlink-traversal local privilege escalation
+# in the acl_*_file() functions and getfattr/setfattr utilities (HIGH). Fixed only
+# in Debian sid (acl 2.4.0-1, attr 1:2.6.0-1); trixie awaits a point release, so
+# no base-image digest carries the fix yet. The pipeline never invokes getfattr/
+# setfattr or the pathname-based libacl APIs, and containers run as root — outside
+# the non-root local-attacker threat model. Re-eval: trixie point release / a
+# micromamba rebuild that carries it.
+CVE-2026-54369 exp:2026-08-31
+CVE-2026-54371 exp:2026-08-31
 
 # systemd: IPC API mishandling from unprivileged callers causing service freeze
 # Our containers don't run systemd services. Fix only in sid (260.1+).
-CVE-2026-29111 exp:2026-06-30
+CVE-2026-29111 exp:2026-08-31
 
 # libgcrypt20: heap overflow / DoS via crafted ECDH ciphertext to gcry_pk_decrypt
 # (no Debian fix available as of 2026-04-29; fixed in upstream libgcrypt >= 1.12.2)
 # Our pipeline containers never decrypt attacker-controlled ECDH ciphertext.
 # Check for a Debian fix at:
 #   https://security-tracker.debian.org/tracker/CVE-2026-41989
-CVE-2026-41989 exp:2026-06-30
+CVE-2026-41989 exp:2026-08-31
 
 # libcap2: setcap (cap_set_file) exploit usable by non-root users.
 # (No Debian fix available as of 2026-05-01.) Our pipeline containers do
@@ -124,7 +162,7 @@ CVE-2026-41989 exp:2026-06-30
 # threat model of this CVE.
 # Check for a Debian fix at:
 #   https://security-tracker.debian.org/tracker/CVE-2026-4878
-CVE-2026-4878 exp:2026-06-30
+CVE-2026-4878 exp:2026-08-31
 
 # ── urllib3 2.6.3 transitive via awscli=2.34.9 in blast, bowtie2_samtools,
 # kraken2, minimap2_samtools ──
@@ -134,9 +172,9 @@ CVE-2026-4878 exp:2026-06-30
 # current conda-forge awscli build pins urllib3<=2.6.3; re-eval when the
 # feedstock relaxes the cap.
 # CVE-2026-44431 (HIGH): cross-origin header leak in proxied low-level redirects.
-CVE-2026-44431 exp:2026-06-30
+CVE-2026-44431 exp:2026-09-30
 # CVE-2026-44432 (HIGH): decompression-bomb safeguard bypass in streaming reads.
-CVE-2026-44432 exp:2026-06-30
+CVE-2026-44432 exp:2026-09-30
 
 # ── perl-base (Debian trixie 5.40.1-6): no fixed version available as of 2026-06-04 ──
 # The pipeline's only perl invocation is `update_blastdb.pl` in the maintainer-run
