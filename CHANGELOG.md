@@ -17,11 +17,12 @@
 
 - INDEX now publishes `virus-genome-metadata-raw.tsv.gz`, the full set of enumerated viral assemblies before the host-infection and assembly-status filters, so tooling (e.g. index benchmarking) can attribute why a genome was or wasn't included. (#828)
 - INDEX now publishes the host-infection overrides it applied to `input/host-infection-overrides.json`. (#852)
-- Publish the BLAST database under a fixed `results/blast_db/` directory with a constant `blast_db` alias regardless of database name. (#832)
+- Publish the BLAST database under a fixed `results/blast_db/` directory with a constant `blast_db` alias regardless of database name, and remove the now-redundant `blast_db_prefix` parameter from `configs/downstream*.config`. (#832)
 
 ## Performance
 
 - Rework `MAKE_VIRUS_GENOME_DB` to enumerate viral accessions up-front, filter by host-infection and assembly status, then fan out download chunks to parallelize evenly across the taxonomic tree. (#807)
+    - Replaces the INDEX `datasets_extra_args` parameter with the more specific `datasets_summary_extra_args` and `datasets_download_extra_args`.
 - Speed up index genome staging via parallel fetches in `ADD_GENBANK_GENOME_IDS` (#809) and `CONCATENATE_GENOME_FASTA` (#808), and local-scratch staging with batched moves in `DOWNLOAD_VIRAL_GENOMES` (#780).
 - Scale `MARK_ALIGNMENT_DUPLICATES` and `VSEARCH_CLUSTER` memory by input size to avoid OOM on large samples. (#853)
 - Add `pigz` for parallel (de)compression to the `python` (#843) and `rust-tools` (#800) containers.
