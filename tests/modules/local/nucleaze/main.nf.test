@@ -272,12 +272,13 @@ nextflow_process {
         tag "expect_failure"
         tag "paired_end"
         tag "gz_input"
-        // Regression test for the FIFO deadlock: an incompatible --binref index
-        // makes nucleaze exit during indexing, before it opens the pigz FIFOs,
-        // so the pigz helpers block in open() forever unless the module tears
-        // them down. R1.fastq is passed as the "index" — it is not a serialized
-        // nucleaze index, so nucleaze fails during indexing and the process must
-        // fail promptly rather than stalling.
+        // Regression test for the FIFO deadlock: when nucleaze is given an
+        // incompatible --binref index it exits during indexing, before it opens
+        // the pigz FIFOs, so the pigz helpers block in open() forever unless the
+        // module tears them down. Here we trigger that failure by passing R1.fastq
+        // as the index — it is a raw reads file, not a serialized nucleaze index —
+        // so nucleaze fails during indexing and the process must fail promptly
+        // rather than stalling.
         setup {
             run("GZIP_FILE", alias: "GZIP_R1") {
                 script "modules/local/gzipFile/main.nf"
@@ -309,6 +310,7 @@ nextflow_process {
                 input[0] = GZIP_R1.out.map { s, f -> [s, f] }
                     .join(GZIP_R2.out.map { s, f -> [s, f] })
                     .map { s, f1, f2 -> [s, [f1, f2]] }
+                // A raw reads file, not a real nucleaze index — this triggers the failure.
                 input[1] = "${projectDir}/test-data/tiny-index/reads/R1.fastq"
                 input[2] = params.params_map
                 '''
