@@ -1,78 +1,56 @@
-# v3.2.2.0-dev
+# v3.2.2.0
 
-- Triage the `scan-containers` Trivy failure (2 CRITICAL, 242 HIGH): refresh the batch of expired `2026-06-30` `.trivyignore` entries (Go stdlib in ncbi-datasets, urllib3 in awscli, ncurses, Polars Rust crates, Pillow, base-image system libs) and add the 5 newly-surfaced findings — openssl `CVE-2026-45447`, acl `CVE-2026-54369`, attr `CVE-2026-54371`, Go stdlib `CVE-2026-27145`, and pyo3 `GHSA-36hh-v3qg-5jq4` — all Ignore with reachability rationale, since every fix is currently unreachable (no micromamba base-image digest ships the trixie point-release libs, and the Rust/Go crates are inside prebuilt upstream binaries).
-- Replace channel-operator `.splitCsv(header: true)` with the `flatMap { f -> f.splitCsv(header: true) }` Path-method form in the loadSampleSheet (x2) and loadDownstreamData (x1) subworkflows, preparing for static typing (the channel-operator `splitCsv` is non-statically-typed). Mechanical refactor; no behavioral change.
-- Replace process/subworkflow `.out` property access (`PROCESS.out.name`) with named invocation results (`var = PROCESS(...); var.name`) across main.nf, INDEX/DOWNSTREAM workflows, and the extractViralReads/checkVersionCompatibility/validateViralAssignments subworkflows, preparing channels for static typing (typed channels don't support `.out` property access). Mechanical refactor; no behavioral change.
-- CI: Extend the deferred `26.04.0`–`3` `.nextflowignore` entries to `2026-07-31` and add `26.04.4`, keeping `check-nextflow-version` green on dev (pinned Nextflow `25.10.4` unchanged).
-- Scale `MARK_ALIGNMENT_DUPLICATES` and `VSEARCH_CLUSTER` memory by input size via per-label tier closures (~1.5× headroom) to address OOM issues on large samples.
-- Exclude five viral genome records with rRNA contamination from the genome reference via `ref/hv_patterns_exclude.txt`.
-- Add `set -euo pipefail` to `BLASTN` module.
-- Add `pigz` to the `python` container so Python processes can use parallel (de)compression.
-- CI: Fix the CHANGELOG CI check wrongly failing docs-only PRs that don't update CHANGELOG.md.
-- Publish BLAST database under a fixed `results/blast_db/` directory with a constant `blast_db` alias regardless of database name.
-    - Update `DOWNLOAD_BLAST_DB` to handle both the production named database and test tarball-URL paths.
-    - Remove the redundant `blast_db_prefix` parameter from `configs/downstream*.config` to avoid drift.
-- CI: Removed the slow and unnecessary `Maximize build space` step from the nf-test setup action
-- Hard-exclude taxids `1266451` (Mulberry vein banding virus, a plant virus) and `1629671` (Botrytis cinerea negative-stranded RNA virus 1, a mycovirus) from the surveillance set.
-- `DOWNLOAD_VIRAL_GENOMES` now retries the dehydrated `datasets download` step (not just rehydrate) with exponential backoff, so a transient NCBI stream error there no longer aborts the task.
-- INDEX now publishes `virus-genome-metadata-raw.tsv.gz`: every enumerated viral assembly before the host-infection and assembly-status filters, so tooling (e.g. index benchmarking) can attribute why a genome was or wasn't included. New output only; nothing existing changed.
-- Fix a crash in the `ADD_CONDITIONAL_TSV_COLUMN` and `COUNT_READS_PER_CLADE` TSV readers when a `query_qual` field starts with a `"` character (Phred quality score 1), by disabling CSV quote handling (`csv.QUOTE_NONE`).
-- INDEX now publishes the host-infection overrides file to `input/host-infection-overrides.json`. New output only; nothing existing changed.
-- Fix the `GET_TARBALL` process resource label, which referenced an undefined `huge_mem` label instead of `single_huge_mem`. The typo caused the process to silently fall back to default resource allocation, manifesting as exit code 140 (OOM kill) under strict resource allocation.
-- Add `tag "id=<value>"` directives to all `modules/local/` processes for per-task attribution in trace files and Nextflow logs.
-    - Per-task processes use `id=${sample/group/label}`; index work uses `id=index` (with optional `,name=<x>` for fan-outs); workflow-level singletons use `id=util`; stage-qualified processes that run multiple times across pipeline stages append a `,stage=<x>` component.
-    - Drop `env` from `trace.fields` in both logging configs (env values contain literal newlines that break TSV parsing).
-    - Add an `assertTraceTagsValid` helper to INDEX, RUN and DOWNSTREAM workflow tests asserting every trace row has a well-formed `id=...` tag (rejects empty, whitespace-only, or non-`key=value` components).
-    - Add a static `bin/check_process_tags.py` lint (CI workflow `check-process-tags.yml`) that scans `modules/local/` for any process whose `tag` directive is missing, malformed (must match `id=<value>` optionally followed by `,<key>=<value>` components), or interpolates a `${...}` variable that is not a declared input of the process (catching, e.g., a tag left referencing a renamed or removed input). This statically catches problems `assertTraceTagsValid` cannot, since the runtime helper only observes processes actually executed by a workflow (orphaned or unreached processes slip through). The runtime helper remains necessary to validate the rendered, post-interpolation tag values, which are only known at execution time.
-- Remove unused `CONCATENATE_FILES` module.
-- Drop the now-unused `CONCATENATE_TSVS` process.
-- Fix a mypy error in `FILTER_VIRAL_GENBANK_METADATA` by passing the DataFrame reduction axis as a keyword (`.max(axis=1)` rather than positional `.max(1)`); behavior unchanged.
-- Extend the deferred Nextflow `26.04.0`/`26.04.1`/`26.04.2` `.nextflowignore` entries to 2026-06-18 and add `26.04.3`, unblocking the `check-nextflow-version` CI job (pinned Nextflow `25.10.4` unchanged).
-- Ignore nine HIGH/CRITICAL CVEs surfaced by `scan-containers` after the Debian trixie base move: perl-base CVE-2026-42496 / CVE-2026-8376 / CVE-2026-42497 / CVE-2026-48962 / CVE-2026-9538 (unreachable; perl only runs `update_blastdb.pl` on trusted NCBI DBs) and Go-stdlib CVE-2026-39823 / CVE-2026-39825 / CVE-2026-39826 / CVE-2026-42504 in the `ncbi_datasets` vendored binaries (server-side / MIME-parsing bugs unreachable in client-only metadata-download CLIs).
-- Refresh index inputs: bump Kraken2 standard DB to `k2_standard_20260226.tar.gz` (from `20251015`); add taxid `38018` ("Bacteriophage sp.") to `viral_taxids_exclude_hard` in all three INDEX configs (`configs/index.config`, `configs/index-for-run-test.config`, `tests/configs/index.config`); expand the four existing entries in `ref/host-infection-overrides.json` (WNV, LCMV, Puumala, Banzi) from `["human", "vertebrate"]` to `["human", "primate", "mammal", "vertebrate"]` so the override propagates through intermediate host groups, not just the species-level and root-level groups. Together these change the annotated virus DB and Kraken2 DB on next index rebuild; no schema or output-layout changes.
-- Add `bin/benchmark_index.py` and the paired `benchmark-index` agent skill for vetting a candidate `s3://nao-mgs-index/<DATE>` build before promoting it. The script compares two index roots and writes structured staleness, size/content, genome/taxonomy, infection-status, params, and metadata-schema delta outputs; the skill turns those outputs into a standalone rollout `REVIEW.md`.
-- Add three host-infection overrides to `ref/host-infection-overrides.json` for species that lost their `infection_status_human = 1` annotation in the 20260518 → 20250825 index comparison due to upstream Virus-Host-DB no longer listing `Homo sapiens` as a host: *Mammarenavirus choriomeningitidis* (LCMV, taxid `3052303`), *Orthohantavirus puumalaense* (Puumala virus, `3052493`), and *Orthoflavivirus banziense* (Banzi virus, `3047395`). Each entry forces `MATCH` for both `human` and `vertebrate` host groups; per-entry rationales in the JSON cite the human disease association.
-- Validate the host-infection overrides JSON against a JSON Schema (via the `jsonschema` library, already a project dependency) at load time. Malformed input — missing/typoed keys, wrong-type values, empty `hosts` lists (`minItems: 1`) — raises a clear `ValueError` naming the offending JSON path instead of a `KeyError`/`TypeError` deep in the loader. Duplicate `(taxid, host)` pairs across multiple entries (a cross-entry constraint the schema can't express) also raise.
-- Reject host-infection overrides that reference an unknown host group or a taxid not present in the virus DB by raising `ValueError` in `annotate_virus_db()` before the per-host annotation loop, with the offending host names / taxids (taxid sample truncated at 10) in the error message. Previously these were silently no-op'd by `include_infections()`, and an overrides file containing *only* unknown taxids would bypass the no-direct-matches short-circuit in `check_infection()` and trip the `UNRESOLVED` assertion deep in `mark_descendant_infections`.
-- Triage libgnutls30 CVE-2026-42009 (and the previously-ignored CVE-2026-3833 / -33845 / -33846 / -42010 / -42011 in the same family): patch by bumping `container-base-image` from `mambaorg/micromamba` on Debian bookworm to the Debian trixie digest, which carries DSA-6281-1 (fixes all six). Also drops the five now-stale `.trivyignore` entries.
-- Add a hard-include override mechanism to `ANNOTATE_VIRUS_INFECTION` for taxa misannotated in Virus-Host-DB. New `params.host_infection_overrides` (default `ref/host-infection-overrides.json`) lists per-taxid host-group overrides forcing `MATCH` (status=1); applied after hard-exclude so includes win on conflict, then propagated via the existing ancestor/descendant steps. Seeded with one entry for West Nile virus (`3048448`, hosts `human`/`vertebrate`); further additions (LCMV, Puumala, Banzi, etc.) will follow in a separate PR.
-- Triage urllib3 CVE-2026-44431 / CVE-2026-44432: patch `multiqc` with an explicit `urllib3=2.7.0` pin; ignore on the four `awscli`-bearing containers, where the awscli feedstock caps urllib3 below 2.7.
-- Add Microviricetes (`10841`), Smacoviridae (`2169574`), and Picobirnaviridae (`585893`) to `viral_taxids_exclude_hard` in all three INDEX configs; these groups are routinely misflagged human-infecting by upstream Virus-Host-DB. Also fixes the `Malgrantaviricetes` → `Malgrandaviricetes` typo in the inline comment.
-- Speed up `ADD_GENBANK_GENOME_IDS` by parallel-fetching staged genomes with `xargs -P` and bumping label from `single` to `xsmall`. Inline Python is refactored into a dedicated `add_genbank_genome_ids.py` script (with pytest coverage).
-- Speed up `CONCATENATE_GENOME_FASTA` by parallel-fetching staged genomes with `xargs -P` and bumping label from `single` to `xsmall`.
-- Speed up `DOWNLOAD_VIRAL_GENOMES` by staging on local scratch and replacing per-file `find -exec mv` with batched `xargs mv`. Introduce a `use_scratch` label with a per-profile process selector in `configs/profiles.config` that enables scratch directories for profiles with Fusion enabled.
-- Rework `MAKE_VIRUS_GENOME_DB` to enumerate viral accessions up-front, filter by host-infection and assembly status, then fan out chunks to `DOWNLOAD_VIRAL_GENOMES` to evenly parallelize across the taxonomic tree.
-    - Replace `datasets_extra_args` with more specific `datasets_summary_extra_args` and `datasets_download_extra_args` parameters for `INDEX` workflow.
-- Fix the `Show version info` step in `.github/workflows/manual-reset.yml`, which was failing with `fatal: invalid reference: stable` because `actions/checkout@v4` only makes the checked-out ref available as a local branch (other branches are only present as `origin/<name>` remote-tracking refs). Replace the brittle `git checkout <ref> -- pyproject.toml` / revert pattern with `git show origin/main:pyproject.toml` and `git show origin/stable:pyproject.toml`, which reads the file content without touching the working tree.
-- Tighten protection on the manual-reset workflow by gating its `reset-stable` job on the GitHub `stable-reset` environment (restricted to `main` and human approval), and remove the unused `rebuild-benchmark-index.yml` workflow along with its now-dangling `workflow_call` triggers in `nf-test-workflows-index.yml` / `check-index-age.yml` and references in `docs/ci.md` / `docs/installation.md`. Add a "Manual stable reset" section to `docs/ci.md` documenting the workflow and its `stable-reset` environment gate, and replace the now-stale "Rebuild benchmark index" pointer in `docs/developer.md` with guidance on manual rebuild.
-- Replace the BBDuk-based viral k-mer pre-screen in `EXTRACT_VIRAL_READS_SHORT` with [Nucleaze](https://github.com/jackdougle/nucleaze) (pinned to 1.5.0-alpha). The BBDuk-based ribosomal screen in `PROFILE` is unchanged (Nucleaze has no `minkmerfraction` equivalent yet). Bumps `pipeline-min-index-version` to `3.2.2.0`.
-    - INDEX: new `NUCLEAZE_INDEX` process builds `virus-genomes-masked.nucleaze.bin` once, alongside the existing bowtie2/minimap2 viral indexes.
-    - RUN reads `nucleaze_k` from the index's `input/index-params.json` so the screen-time `k` always matches the index it screens against.
-    - `NUCLEAZE` exposes `keep_match` / `keep_nomatch` flags (default true); the viral path passes `keep_nomatch: false` to skip compressing the discarded majority.
-    - `NUCLEAZE` pipes gzipped inputs through pigz FIFOs instead of letting needletail decompress them single-threaded internally; ~22% wall reduction on the process (Illumina-100M samples, 8-core sandbox). Input-side pigz is capped at 2 threads since pigz cannot extract more parallelism from an ordinary single-stream gz. Module test covers the gz-input FIFO path.
-    - Removes the unused `BBDUK_HITS_INTERLEAVE` process and its test.
-    - Internal channel/param renames: `bbduk_match`/`bbduk_trimmed`/`min_kmer_hits`/`bbduk_suffix` → `kmer_match`/`kmer_trimmed`/`minhits`/`kmer_suffix`.
-- Add `triage-trivy` skill (`.claude/skills/triage-trivy/`) for per-CVE triage of `scan-containers` CI failures, structured to make `.trivyignore` the harder path. `CLAUDE.md`'s CI-status section points at it.
-- Add `pigz` to the `rust-tools` container.
-- Add `-X 850` to all short-read bowtie2 invocations (viral and contaminant filtering) so that concordantly paired inserts up to 850 bp are detected, up from the bowtie2 default of 500 bp.
-- Raise the minimum read length in `FASTP` from the default 15 bp to 35 bp (`--length_required 35`). Reads shorter than 35 bp cannot be meaningfully classified by any downstream kmer-based tool (BBDuk k=27, Kraken2 k~35, Bowtie2 ~34 bp floor); previously these reads passed QC but were systematically unclassifiable, deflating apparent rRNA fractions and other composition estimates.
-- Clean up Nextflow code to conform to strict syntax in preparation for adding `nextflow lint` to CI. No behavioral changes.
-    - Replace `env BAREWORD` with `env('STRING')` in process output declarations.
-    - Rename deprecated `Channel.X` factory calls to `channel.X`.
-    - Replace implicit `it` closure parameters with explicit named parameters.
-    - Restructure helper closures in `loadDownstreamData` and `clusterViralAssignments` to avoid top-level statements: in `loadDownstreamData`, convert the local `resolvePath`/`resolveDir` closures into top-level `def fn(...)` functions taking `input_base_dir` as an explicit parameter; in `clusterViralAssignments`, move the `listFiles` helper inside the workflow's `main:` block as a local closure.
-    - Drop the unused `start_time_str` parameter from `PREPARE_INPUT_LOGGING` (and its argument at the RUN call site); prefix the unused `sample` closure parameter in `splitViralTsvBySelectedTaxid` with `_`.
-    - Use `sentinel_ch.sentinel` rather than `WRITE_SENTINEL_RUN.out.sentinel` in `workflows/run.nf:54` so the assigned variable is referenced.
-    - `configs/resources.config`: remove top-level `import` statements and the `ResourceTierUtils` class (both rejected by strict syntax). Inline the tier-picking logic into the `bbmask_resources` `memory` closure using `findIndexOf` and fully-qualified `nextflow.util.MemoryUnit.of(...)` references; the single existing caller was the only consumer.
-    - `configs/run_ont.config` and `configs/downstream_ont.config`: quote the `<PATH_TO_DIRECTORY>` placeholders to match the lint-friendly form already used in `run.config` / `downstream.config`.
-    - Add `tests/configs/resources/` exercising the `bbmask_resources` memory closure end-to-end: a probe workflow uses `truncate` to create sparse inputs at each tier boundary and asserts the resolved `task.memory` matches the expected 32 / 64 / 128 GB tier.
-- Configure Ruff and apply behaviour-changing Ruff fixes in preparation for adding Ruff to CI.
-- Document Ruff lint/format commands in `CLAUDE.md` under a new "Linting / Formatting" subsection.
-- Apply the broader mechanical Ruff sweep across the Python codebase (`ruff format` + `ruff check --fix`/`--unsafe-fixes` autofixes plus a few small manual cleanups). No behavioural changes.
-    - Drop `COM` from `lint.select` in `pyproject.toml`: the formatter manages trailing commas on its own and Ruff explicitly warns that `COM812` conflicts with `ruff format`. Also extend the Ruff `exclude` list to `.venv`, `tmp`, `.nf-test`, `test-data/tiny-index/output/logging`, and `post-processing/deps` so vendored deps, scratch dirs, and stale test-fixture `pyproject.toml` files don't trigger Ruff's hierarchical config discovery.
-- Add Ruff CI gate (`.github/workflows/ruff.yml`) running `ruff check .` and `ruff format --check .` on PRs, and document the new gate in `CLAUDE.md`, `docs/ci.md`, and `docs/developer.md` (#752).
-    - Reformat seven Python files (`bin/check_nextflow_version.py`, `bin/check_version.py`, `bin/test_check_nextflow_version.py`, `modules/local/filterViralGenbankMetadata/.../{filter_viral_genbank_metadata,test_filter_viral_genbank_metadata}.py`, `modules/local/prepareViralMetadata/.../{prepare_viral_metadata,test_prepare_viral_metadata}.py`) introduced or last-edited on dev after the mechanical Ruff sweep ran, so the new gate is satisfied from day one.
-- Fix DOWNSTREAM workflow failure at `WRITE_SENTINEL_DOWNSTREAM` on large batches (~100 groups) caused by the per-group sentinel fan-out exceeding S3's per-prefix request-rate threshold (503 → SDK mark/reset retry → operator-fork-semaphore exhaustion cascade). Revert `aws.client.maxConnections` in `configs/profiles.config` from a longstanding upward override (1000) back to nf-amazon's default (50), capping head-node S3 concurrency for both the sentinel fan-out and the `HashBuilder` cache-verification burst on `-resume`. Add a new `sentinel` process label on `WRITE_SENTINEL_RUN` and `WRITE_SENTINEL_DOWNSTREAM` with `maxForks = 10` in `configs/resources.config` as a sentinel-layer belt-and-suspenders cap. (#801)
+## Screening and alignment changes
+
+- Replace the BBDuk-based viral k-mer pre-screen in `EXTRACT_VIRAL_READS_SHORT` with [Nucleaze](https://github.com/jackdougle/nucleaze) (pinned to 1.5.0-alpha), changing which reads pass the viral screen. INDEX builds a new `virus-genomes-masked.nucleaze.bin` alongside the existing bowtie2/minimap2 indexes, and RUN reads `nucleaze_k` from the index so the screen-time `k` always matches the index it screens against. Bumps `pipeline-min-index-version` to `3.2.2.0`. (#766, #861, #867)
+- Raise the minimum read length in `FASTP` from 15 bp to 35 bp, so reads too short to be classified by downstream k-mer tools no longer pass QC and deflate composition estimates. (#783)
+- Add `-X 850` to all short-read bowtie2 invocations (viral and contaminant filtering) so concordantly paired inserts up to 850 bp are detected, up from the bowtie2 default of 500 bp. (#782)
+
+## Reference and index data
+
+- Refresh index inputs: bump the Kraken2 standard DB to `k2_standard_20260226` (from `20251015`), hard-exclude phage taxid `38018` ("Bacteriophage sp."), and broaden the four existing host-infection overrides (WNV, LCMV, Puumala, Banzi) to propagate through intermediate host groups. Changes the annotated virus DB and Kraken2 DB on next index rebuild. (#819)
+- Add a host-infection override mechanism to `ANNOTATE_VIRUS_INFECTION` for taxa misannotated in Virus-Host-DB, forcing `MATCH` for listed per-taxid host groups; seeded with West Nile, LCMV, Puumala, and Banzi virus. (#811, #818)
+    - Validate the overrides file against a JSON Schema at load, and reject entries referencing unknown host groups or taxids absent from the virus DB with clear errors instead of opaque failures deep in the loader. (#812, #813)
+- Exclude viral genomes misannotated or contaminated in upstream reference data: five rRNA-contaminated records (#849), the plant/mycovirus taxa `1266451` and `1629671` (#830), and the routinely-misflagged Microviricetes, Smacoviridae, and Picobirnaviridae groups (#810).
+
+## New workflow outputs
+
+- INDEX now publishes `virus-genome-metadata-raw.tsv.gz`, the full set of enumerated viral assemblies before the host-infection and assembly-status filters, so tooling (e.g. index benchmarking) can attribute why a genome was or wasn't included. (#828)
+- INDEX now publishes the host-infection overrides it applied to `input/host-infection-overrides.json`. (#852)
+- Publish the BLAST database under a fixed `results/blast_db/` directory with a constant `blast_db` alias regardless of database name, and remove the now-redundant `blast_db_prefix` parameter from `configs/downstream*.config`. (#832)
+
+## Performance
+
+- Rework `MAKE_VIRUS_GENOME_DB` to enumerate viral accessions up-front, filter by host-infection and assembly status, then fan out download chunks to parallelize evenly across the taxonomic tree. (#807)
+    - Replaces the INDEX `datasets_extra_args` parameter with the more specific `datasets_summary_extra_args` and `datasets_download_extra_args`.
+- Speed up index genome staging via parallel fetches in `ADD_GENBANK_GENOME_IDS` (#809) and `CONCATENATE_GENOME_FASTA` (#808), and local-scratch staging with batched moves in `DOWNLOAD_VIRAL_GENOMES` (#780).
+- Scale `MARK_ALIGNMENT_DUPLICATES` and `VSEARCH_CLUSTER` memory by input size to avoid OOM on large samples. (#853)
+- Add `pigz` for parallel (de)compression to the `python` (#843) and `rust-tools` (#800) containers.
+
+## Bugfixes
+
+- Fix DOWNSTREAM failure at `WRITE_SENTINEL_DOWNSTREAM` on large batches (~100 groups) by throttling head-node S3 concurrency back to nf-amazon's default and capping the sentinel fan-out, preventing an S3 503 → retry → semaphore-exhaustion cascade. (#816)
+- Fix `GET_TARBALL` referencing an undefined `huge_mem` resource label (should be `single_huge_mem`), which caused a silent fallback to default resources and OOM kills (exit 140). (#827)
+- Fix a crash in the `ADD_CONDITIONAL_TSV_COLUMN` and `COUNT_READS_PER_CLADE` TSV readers when a `query_qual` field begins with a `"` character, by disabling CSV quote handling. (#824)
+- Make `DOWNLOAD_VIRAL_GENOMES` retry the dehydrated `datasets download` step with exponential backoff, so a transient NCBI stream error there no longer aborts the task. (#828)
+- Fix the `Show version info` step in the manual-reset workflow, which failed on non-checked-out branch refs. (#805)
+- Add `set -euo pipefail` to the `BLASTN` module. (#838)
+
+## Cleanup and best practice
+
+- Add `tag "id=<value>"` directives to all `modules/local/` processes for per-task trace attribution, with runtime (`assertTraceTagsValid`) and static (`check_process_tags.py`) validation, and remove the now-unused `CONCATENATE_FILES` and `CONCATENATE_TSVS` processes. (#756, #807)
+    - Drop the `env` column from `trace.fields` in both logging configs (its values contain literal newlines that break TSV parsing); consumers parsing the published trace file should update accordingly.
+- Add a Ruff lint/format CI gate and bring the Python codebase into conformance (config, mechanical sweep, and behaviour-affecting autofixes). (#750, #751, #752)
+- Clean up Nextflow code for strict-syntax / `nextflow lint` readiness, including the `splitCsv` flatMap refactor (#858) and removal of `.out` property access ahead of static typing (#856). (#748)
+- Refresh the `.nextflowignore` deferral window for Nextflow `26.04.x` to keep `check-nextflow-version` green (pinned Nextflow `25.10.4` unchanged). (#821, #859)
+- Triage container CVEs: move `container-base-image` to the Debian trixie digest to clear the libgnutls30 family (#815), pin/ignore the urllib3 CVEs per container (#803), waive the remaining unreachable perl-base and Go-stdlib findings (#821), and refresh the lapsed `.trivyignore` batch plus five newly-surfaced findings (openssl, acl/attr, Go-stdlib, pyo3), all unreachable in the pipeline with per-CVE re-eval triggers (#869).
+- Harden the manual-reset workflow behind a gated `stable-reset` environment, and remove the unused rebuild-benchmark-index workflow and its dangling references. (#802)
+- Fix the CHANGELOG CI check wrongly failing docs-only PRs (#840), and remove the slow, unnecessary disk-cleanup step from the nf-test setup action (#831).
+
+## Coding agents
+
+- Add `bin/benchmark_index.py` and the paired `benchmark-index` skill for vetting a candidate `s3://nao-mgs-index/<DATE>` build against the previous index before promoting it. (#814)
+- Add the `triage-trivy` skill for structured per-CVE triage of `scan-containers` CI failures, structured to make `.trivyignore` the harder path. (#790)
 
 # v3.2.1.5
 
