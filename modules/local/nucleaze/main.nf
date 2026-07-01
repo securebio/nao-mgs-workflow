@@ -79,8 +79,28 @@ process NUCLEAZE {
                 pigz -p ${task.cpus} -1 < "\${tmpdir}/nomatch.fifo" > ${nomatch_out} & PIDS+=(\$!)
                 outu="\${tmpdir}/nomatch.fifo"
             fi
-            nucleaze --in "\${in1}" --in2 "\${in2}" --outm "\${outm}" --outu "\${outu}" ${nucleaze_args} 2>&1 | tee ${stats}
+            # Capture both pipe stages separately: nucleaze failure and tee
+            # (stats-log write) failure need different handling.
+            pipestatus=(0 0)
+            nucleaze --in "\${in1}" --in2 "\${in2}" --outm "\${outm}" --outu "\${outu}" ${nucleaze_args} 2>&1 | tee ${stats} || pipestatus=("\${PIPESTATUS[@]}")
+            nucleaze_status=\${pipestatus[0]}
+            tee_status=\${pipestatus[1]}
+            if [[ "\${nucleaze_status}" -ne 0 ]]; then
+                # nucleaze exited before opening its FIFOs (e.g. an incompatible
+                # --binref index dies during indexing). The pigz helpers are then
+                # blocked in open() forever; tear them down so the task fails fast
+                # instead of stalling. kill on an already-dead pid is harmless.
+                kill "\${PIDS[@]}" 2>/dev/null || true
+                wait "\${PIDS[@]}" 2>/dev/null || true
+                exit "\${nucleaze_status}"
+            fi
+            # nucleaze succeeded: drain the pigz feeders and let the output
+            # compressors flush their gzip trailers before exiting (otherwise
+            # the .gz outputs truncate). A failing helper trips errexit.
             for pid in "\${PIDS[@]}"; do wait "\${pid}"; done
+            # A failed tee means the stats log is incomplete; fail the task
+            # rather than silently reporting success.
+            [[ "\${tee_status}" -eq 0 ]] || exit "\${tee_status}"
         fi
         ln -s ${r1} input_${r1}
         ln -s ${r2} input_${r2}
