@@ -38,6 +38,7 @@
 ## Cleanup and best practice
 
 - Add `tag "id=<value>"` directives to all `modules/local/` processes for per-task trace attribution, with runtime (`assertTraceTagsValid`) and static (`check_process_tags.py`) validation, and remove the now-unused `CONCATENATE_FILES` and `CONCATENATE_TSVS` processes. (#756, #807)
+    - Drop the `env` column from `trace.fields` in both logging configs (its values contain literal newlines that break TSV parsing); consumers parsing the published trace file should update accordingly.
 - Add a Ruff lint/format CI gate and bring the Python codebase into conformance (config, mechanical sweep, and behaviour-affecting autofixes). (#750, #751, #752)
 - Clean up Nextflow code for strict-syntax / `nextflow lint` readiness, including the `splitCsv` flatMap refactor (#858) and removal of `.out` property access ahead of static typing (#856). (#748)
 - Refresh the `.nextflowignore` deferral window for Nextflow `26.04.x` to keep `check-nextflow-version` green (pinned Nextflow `25.10.4` unchanged). (#821, #859)
