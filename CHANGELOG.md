@@ -42,7 +42,7 @@
 - Add a Ruff lint/format CI gate and bring the Python codebase into conformance (config, mechanical sweep, and behaviour-affecting autofixes). (#750, #751, #752)
 - Clean up Nextflow code for strict-syntax / `nextflow lint` readiness, including the `splitCsv` flatMap refactor (#858) and removal of `.out` property access ahead of static typing (#856). (#748)
 - Refresh the `.nextflowignore` deferral window for Nextflow `26.04.x` to keep `check-nextflow-version` green (pinned Nextflow `25.10.4` unchanged). (#821, #859)
-- Triage container CVEs: move `container-base-image` to the Debian trixie digest to clear the libgnutls30 family (#815), pin/ignore the urllib3 CVEs per container (#803), and waive the remaining unreachable perl-base and Go-stdlib findings (#821).
+- Triage container CVEs: move `container-base-image` to the Debian trixie digest to clear the libgnutls30 family (#815), pin/ignore the urllib3 CVEs per container (#803), waive the remaining unreachable perl-base and Go-stdlib findings (#821), and refresh the lapsed `.trivyignore` batch plus five newly-surfaced findings (openssl, acl/attr, Go-stdlib, pyo3), all unreachable in the pipeline with per-CVE re-eval triggers (#869).
 - Harden the manual-reset workflow behind a gated `stable-reset` environment, and remove the unused rebuild-benchmark-index workflow and its dangling references. (#802)
 - Fix the CHANGELOG CI check wrongly failing docs-only PRs (#840), and remove the slow, unnecessary disk-cleanup step from the nf-test setup action (#831).
 
