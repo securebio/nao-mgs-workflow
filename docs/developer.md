@@ -267,7 +267,7 @@ Only pipeline maintainers should author a new release. The process for going thr
     2. Quickly review the PR changes to ensure the changed files are consistent with the changes noted in `CHANGELOG.md` (no need to review file contents deeply at this stage).
     3. Double check that documentation and tests have been updated to stay consistent with changes to the pipeline.
     4. Wait for additional long-running pre-release checks to complete in Github Actions.
-    5. If any issues or test failures arise in the preceding steps, fix them with new PRs into `dev`. Since the release branch was already squash-merged (step 3.1) and the `dev`→`main` PR tracks `dev`, merging a fix into `dev` automatically includes it in the release — no rebasing is needed. Use a `release/...` branch for these fixes so `check-version` accepts the release (non-`-dev`) version that `dev` now carries, and record them under the existing release heading in `CHANGELOG.md` rather than bumping the version.
+    5. If any issues or test failures arise in the preceding steps, fix them with new PRs into `dev`; the `dev`→`main` PR tracks `dev`, so merged fixes are automatically included in the release. Use a `release/...` branch for these fixes so `check-version` accepts the release's non-`-dev` version, and record them under the existing release heading in `CHANGELOG.md` rather than bumping the version.
 
 4. Once all checks pass, merge the PR into main **without squashing**[^approval]. A Github Actions workflow will automatically create and tag a new release and reset other branches (`dev` & `ci-test`, plus `stable` if only the fourth version number has changed) to match `main`.
 
