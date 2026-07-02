@@ -194,3 +194,12 @@ CVE-2026-42497 exp:2026-08-31
 CVE-2026-48962 exp:2026-08-31
 # Archive::Tar unbounded allocation -> memory-exhaustion DoS (HIGH); trusted tarballs, worst case ephemeral OOM.
 CVE-2026-9538 exp:2026-08-31
+
+# ── gzip (Debian trixie 1.13-1): no fixed version available as of 2026-07-02 ──
+# gzip: global buffer overflow in the LZH (.lzh) decompressor on a crafted archive
+# (HIGH, CVE published 2026-06-29). gzip is a base-layer package and the container
+# Dockerfiles install only `procps` (no `apt upgrade`), so the fix is not reachable
+# via the permitted base-image bump; the pipeline also never decompresses attacker-
+# controlled .lzh archives. Re-eval when Debian trixie ships a fixed gzip (a base-
+# image rebuild then clears it).
+CVE-2026-41992 exp:2026-08-31
