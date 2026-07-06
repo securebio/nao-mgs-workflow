@@ -35,7 +35,7 @@
 - Make `DOWNLOAD_VIRAL_GENOMES` retry the dehydrated `datasets download` step with exponential backoff, so a transient NCBI stream error there no longer aborts the task. (#828)
 - Fix the `Show version info` step in the manual-reset workflow, which failed on non-checked-out branch refs. (#805)
 - Add `set -euo pipefail` to the `BLASTN` module. (#838)
-- Disable the Seqera Platform (Tower) run-monitoring observer in the `test_run` profile (`tower.enabled = false`). It was auto-enabled by `TOWER_ACCESS_TOKEN` (present for Wave container auth), but on the pinned Nextflow `25.10.4` its `onFlowComplete()` PUT lacks an HTTP read timeout and intermittently hangs JVM exit after the workflow completes, timing out `benchmark-illumina-100M` CI ([nextflow-io/nextflow#6885](https://github.com/nextflow-io/nextflow/issues/6885)). Wave still authenticates from the environment token independently. (#PRNUM)
+- Disable the Seqera Platform (Tower) run-monitoring observer in the `test_run` profile (`tower.enabled = false`). It was auto-enabled by `TOWER_ACCESS_TOKEN` (present for Wave container auth), but on the pinned Nextflow `25.10.4` its `onFlowComplete()` PUT lacks an HTTP read timeout and intermittently hangs JVM exit after the workflow completes, timing out `benchmark-illumina-100M` CI ([nextflow-io/nextflow#6885](https://github.com/nextflow-io/nextflow/issues/6885)). Wave still authenticates from the environment token independently. (#876)
 
 ## Cleanup and best practice
 
