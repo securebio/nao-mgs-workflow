@@ -42,7 +42,7 @@ Main heading represents the folder name, and subheadings represent a description
 
 - `aligner_hits_all.tsv.gz`: List of all putative viral alignments (primary, secondary and supplementary) from the aligner used in the `EXTRACT_VIRAL_READS` subworkflow (bowtie2 for short reads or minimap2 for ONT) with modified columns from the [SAM specification](https://samtools.github.io/hts-specs/SAMv1.pdf).
 - `lca_hits_all.tsv.gz`: List of putative viral reads after having applied LCA to `aligner_hits_all.tsv.gz`, along with columns representing summary statistics.
-- `reads/raw_viral/*`: Directory containing raw reads corresponding to those reads that survive initial viral screening with BBDuk. (Note: this is not currently produced for ONT data.)
+- `reads/raw_viral/*`: Directory containing raw reads corresponding to those reads that survive initial viral k-mer screening (with Nucleaze). (Note: this is not currently produced for ONT data.)
 
 ### `results/`
 
@@ -81,6 +81,7 @@ Main heading represents the folder name, and subheadings describes the tool that
 ### `input/`
 
 - `index-params.json`: JSON file giving all the parameters passed to the pipeline (useful for trying to reproduce someone else's results).
+- `host-infection-overrides.json`: the per-host taxid overrides applied when annotating the virus DB, copied verbatim from the build inputs so the index records the surveillance rules used to build it.
 
 ### `logging/`
 
@@ -93,12 +94,13 @@ Main heading represents the folder name, and subheadings describes the tool that
 #### General
 
 - `total-virus-db-annotated.tsv.gz`: Database generated from NCBI taxonomy and Virus-Host-DB giving taxonomy and host-infection information for each viral taxon.
+- `virus-genome-metadata-raw.tsv.gz`: Every viral assembly enumerated under the target taxon, before the host-infection and assembly-status filters are applied. Lets downstream tooling see each assembly's build-time taxid and release date, including those the filters drop.
 - `taxonomy-nodes.dmp`: Taxonomy dump file from NCBI mapping between taxids and their parents in the NCBI taxonomy tree structure.
 - `taxonomy-names.dmp`: Taxonomy dump file from NCBI mapping between taxids and taxon names.
 
 #### BLAST
 
-- `core_nt`: Directory containing extracted BLAST database files for BLASTing against core_nt.
+- `blast_db`: Directory containing the extracted BLAST database volume files, exposed under a constant `blast_db` alias (a `blast_db.nal` built with `blastdb_aliastool`) so consumers reference a fixed path regardless of which database (e.g. `core_nt`) was downloaded.
 
 #### Bowtie2
 
@@ -120,7 +122,8 @@ Main heading represents the folder name, and subheadings describes the tool that
 
 - `kraken_db`: Directory containing Kraken2 reference database (default: Most recent version of Standard).
 
-#### BBduk
+#### K-mer screening references
 
 - `virus-genomes-masked.fasta.gz`: FASTA file containing host-infecting viral genomes downloaded from viral Genbank (filtered to remove transgenic, contaminated, or erroneous sequences).
-- `ribo-ref-concat.fasta.gz`: Reference database of ribosomal LSU and SSU sequences from SILVA.
+- `virus-genomes-masked.nucleaze.bin`: Pre-built [Nucleaze](https://github.com/jackdougle/nucleaze) k-mer index over the masked viral genomes, consumed by RUN's viral k-mer screen.
+- `ribo-ref-concat.fasta.gz`: Reference database of ribosomal LSU and SSU sequences from SILVA, used by RUN's BBDuk-based ribosomal screen.

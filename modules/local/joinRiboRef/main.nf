@@ -2,6 +2,7 @@
 process JOIN_RIBO_REF {
     label "BBTools"
     label "single"
+    tag "id=index"
     input:
         path(ssu_ref)
         path(lsu_ref)

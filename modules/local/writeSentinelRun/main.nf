@@ -4,6 +4,8 @@
 // Shared regex/poll/timestamp helpers live in lib/SentinelUtils.groovy.
 process WRITE_SENTINEL_RUN {
     executor 'local'
+    label "sentinel"
+    tag "id=util"
     input:
         val(ready)           // Dependency signal: collected items from all output channels
         val(sample_names)    // List of sample names from samplesheet

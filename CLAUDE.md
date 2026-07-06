@@ -72,6 +72,8 @@ When the user asks you to handle PR review comments:
 
 When working on changes to an existing PR branch, proactively check CI status with `gh pr checks` to identify test failures, timeouts, or version-check errors. Don't wait for the user to point out failures — catch and address them as part of your workflow. Use the **ci-debugger** agent to diagnose failures.
 
+For **Trivy container-vulnerability scan failures** (`scan-containers` CI job), use the **`triage-trivy`** skill (`.claude/skills/triage-trivy/`). It walks per-CVE through reachability assessment and fix-search before deciding Patch / Ignore / Escalate. Don't default to adding entries to `.trivyignore` — the skill is structured to make that the harder path.
+
 ### GitHub Actions Workflows
 
 When writing or modifying GitHub Actions workflows:
@@ -151,6 +153,10 @@ All Python scripts should have corresponding Pytest scripts in the same director
 
 Mypy is enforced in CI via `.github/workflows/mypy.yml` — all Python in `bin/` and `modules/local/` must pass `python -m mypy bin/ modules/local/`. Add per-package `[[tool.mypy.overrides]]` in `pyproject.toml` for untyped third-party libraries rather than inline `# type: ignore` comments.
 
+### Ruff / Lint and Format
+
+Ruff is enforced in CI via `.github/workflows/ruff.yml` — all Python in the repo must pass both `python -m ruff check .` and `python -m ruff format --check .`. CI is read-only and never auto-fixes; run `ruff check --fix .` and `ruff format .` locally and commit the results before pushing. Lint rule selection and exclusions live under `[tool.ruff]` in `pyproject.toml`.
+
 ## Versioning and Changelog
 
 **Both of these are required for PRs to `dev` — CI will fail if they're missing.**
@@ -170,6 +176,10 @@ Mypy is enforced in CI via `.github/workflows/mypy.yml` — all Python in `bin/`
 If your changes affect pipeline output files, use the **schema-checker** agent to validate schema completeness and consistency. It checks schemas against the conventions in `docs/developer.md` and determines whether a schema version bump is needed.
 
 When creating new schemas, always include `primaryKey` and `example` fields on every schema and field respectively, matching the conventions in existing schemas (e.g. `read_counts.schema.json`).
+
+## Vetting a new index release
+
+After building a new `s3://nao-mgs-index/<DATE>` index, use the **`benchmark-index`** skill (`.claude/skills/benchmark-index/`) to vet it before adopting it for runs. It runs `bin/benchmark_index.py` to compare the new index against the previous one (per-DB size deltas, genome add/drop/per-species deltas categorized by reason, infection-status transitions, params diff) and fills in `review-template.md` to produce a structured `REVIEW.md` covering adopt-or-regenerate recommendations. Reach for it whenever an index rebuild has happened and a human needs to decide whether to adopt it.
 
 ## Maintaining This File
 

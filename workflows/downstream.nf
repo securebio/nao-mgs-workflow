@@ -49,18 +49,18 @@ workflow DOWNSTREAM {
                 "prim_align_pair_status", "prim_align_dup_exemplar"
             ].join(",")
             viral_hits_ch = PAD_ONT_COLUMNS(viral_hits_ch, pad_cols, "NA", "padded").output
-            dup_output_ch = Channel.empty()
-            clade_counts_ch = Channel.empty()
-            sim_dup_ch = Channel.empty()
+            dup_output_ch = channel.empty()
+            clade_counts_ch = channel.empty()
+            sim_dup_ch = channel.empty()
         }
         else {
             // Short-read: Mark duplicates based on alignment coordinates
-            MARK_VIRAL_DUPLICATES(concat_ch.hits, params.aln_dup_deviation)
-            viral_hits_ch = MARK_VIRAL_DUPLICATES.out.dup.map { label, tab, _stats -> [label, tab] }
-            dup_output_ch = MARK_VIRAL_DUPLICATES.out.dup.map { label, _reads, stats -> [label, stats] }
+            mark_dup_ch = MARK_VIRAL_DUPLICATES(concat_ch.hits, params.aln_dup_deviation)
+            viral_hits_ch = mark_dup_ch.dup.map { label, tab, _stats -> [label, tab] }
+            dup_output_ch = mark_dup_ch.dup.map { label, _reads, stats -> [label, stats] }
             // Generate clade counts
             clade_counts_ch = COUNT_READS_PER_CLADE(viral_hits_ch, viral_db).output
-            sim_dup_ch = MARK_VIRAL_DUPLICATES.out.sim_dup
+            sim_dup_ch = mark_dup_ch.sim_dup
         }
         // Validate taxonomic assignments
         def validation_params = params.collectEntries { k, v -> [k, v] }
@@ -68,9 +68,9 @@ workflow DOWNSTREAM {
         validate_ch = VALIDATE_VIRAL_ASSIGNMENTS(viral_hits_ch, viral_db, params.ref_dir, validation_params)
         // Prepare publishing channels
         params_str = groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(params))
-        params_ch = Channel.of(params_str).collectFile(name: "params-downstream.json")
-        pyproject_ch = COPY_PYPROJECT(Channel.fromPath(pipeline_pyproject_path), "pyproject.toml")
-        input_file_ch = COPY_INPUT(Channel.fromPath(params.input_file), "input_file.csv")
+        params_ch = channel.of(params_str).collectFile(name: "params-downstream.json")
+        pyproject_ch = COPY_PYPROJECT(channel.fromPath(pipeline_pyproject_path), "pyproject.toml")
+        input_file_ch = COPY_INPUT(channel.fromPath(params.input_file), "input_file.csv")
 
         // Pre-define publish-channel aggregates so we can both emit them and feed them into the sentinel barrier
         input_downstream_ch = params_ch.mix(input_file_ch)
@@ -86,7 +86,7 @@ workflow DOWNSTREAM {
             .map { _label, _sample, group -> group }
             .unique()
         sentinel_params = params + [output_dir: "${params.base_dir}/output", pyproject_path: "${projectDir}/pyproject.toml"]
-        WRITE_SENTINEL_DOWNSTREAM(
+        sentinel_ch = WRITE_SENTINEL_DOWNSTREAM(
             groups_only_ch,
             input_downstream_ch.mix(logging_downstream_ch, results_downstream_ch).collect(),
             start_time_str,
@@ -99,5 +99,5 @@ workflow DOWNSTREAM {
         intermediates_downstream = validate_ch.blast_results
         results_downstream = results_downstream_ch
         experimental_downstream = sim_dup_ch
-        sentinel_downstream = WRITE_SENTINEL_DOWNSTREAM.out.sentinel
+        sentinel_downstream = sentinel_ch.sentinel
 }

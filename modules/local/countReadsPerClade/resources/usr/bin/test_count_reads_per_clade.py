@@ -15,6 +15,18 @@ from count_reads_per_clade import (
 )
 
 
+def test_read_tsv_leading_quote_field(tsv_factory: Any) -> None:
+    """A field starting with '"' must not flip the reader into quoted mode (#823)."""
+    leading_quote = '"' + "I" * 50
+    content = f"seq_id\tquery_qual\nread1\t{leading_quote}\nread2\tplain\n"
+    tsv_file = tsv_factory.create_plain("reads.tsv", content)
+    rows = list(read_tsv(tsv_file))
+    assert rows == [
+        {"seq_id": "read1", "query_qual": leading_quote},
+        {"seq_id": "read2", "query_qual": "plain"},
+    ]
+
+
 def test_is_duplicate() -> None:
     # Test case where read is not a duplicate (seq_id matches exemplar)
     read_not_duplicate = {"seq_id": "read123", "prim_align_dup_exemplar": "read123"}
@@ -454,7 +466,7 @@ def test_missing_reads_columns(tsv_factory: Any, missing_column: str) -> None:
     # Remove the missing column and its corresponding value
     columns = []
     values = []
-    for col, val in zip(all_columns, test_values):
+    for col, val in zip(all_columns, test_values, strict=True):
         if col != missing_column:
             columns.append(col)
             values.append(val)
@@ -495,7 +507,9 @@ def test_group_mismatch_error(tsv_factory: Any) -> None:
     reads_file = tsv_factory.create_plain("reads.tsv", reads_content)
 
     # Try to process with wrong group
-    with pytest.raises(AssertionError, match="Expected group 'wrong_group', found 'test'"):
+    with pytest.raises(
+        AssertionError, match="Expected group 'wrong_group', found 'test'"
+    ):
         count_direct_reads_per_taxid(read_tsv(reads_file), "wrong_group")
 
 
@@ -525,7 +539,7 @@ def test_header_only_reads_file(tsv_factory: Any) -> None:
 
     # Read and verify output is header-only
     output_content = tsv_factory.read_gzip(output_file).strip()
-    lines = output_content.split('\n')
+    lines = output_content.split("\n")
 
     # Should have exactly 1 line (header only)
     assert len(lines) == 1

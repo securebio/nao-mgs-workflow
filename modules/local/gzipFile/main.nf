@@ -3,6 +3,7 @@ process GZIP_FILE {
     label "single"
     label "coreutils"
     label "testing_only" // Process is currently only used for testing
+    tag "id=${sample}"
     input:
         tuple val(sample), path(file)
     output:
@@ -17,9 +18,9 @@ process GZIP_FILE {
 process GZIP_FILE_BARE {
     label "single"
     label "coreutils"
-    label "testing_only" // Process is currently only used for testing
+    tag "id=util"
     input:
-        tuple path(file)
+        path(file)
     output:
         path("${file}.gz")
     script:

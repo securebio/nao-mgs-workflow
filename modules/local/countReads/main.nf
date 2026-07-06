@@ -1,6 +1,7 @@
 process COUNT_READS {
     label "coreutils_gzip_gawk"
     label "single"
+    tag "id=${sample}"
     input:
         tuple val(sample), path(reads)
         val(single_end)

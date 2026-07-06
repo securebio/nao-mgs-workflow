@@ -1,6 +1,7 @@
 process MULTIQC_LABELED {
     label "single"
     label "MultiQC"
+    tag "id=${sample},stage=${stage_label}"
     input:
         val(stage_label)
         tuple val(sample), path("*")

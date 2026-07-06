@@ -17,13 +17,13 @@ def isVersionLess(version1, version2) {
     def v1IntComponents
     def v2IntComponents
     try {
-        v1IntComponents = v1Components.collect{ it.toInteger() }
+        v1IntComponents = v1Components.collect{ c -> c.toInteger() }
     } catch (NumberFormatException _e) {
         def msg1 = "Invalid version format: version 1 (${version1}) contains non-integer components."
         throw new IllegalArgumentException(msg1)
     }
     try {
-        v2IntComponents = v2Components.collect{ it.toInteger() }
+        v2IntComponents = v2Components.collect{ c -> c.toInteger() }
     } catch (NumberFormatException _e) {
         def msg2 = "Invalid version format: version 2 (${version2}) contains non-integer components."
         throw new IllegalArgumentException(msg2)
@@ -44,6 +44,7 @@ def isVersionLess(version1, version2) {
 
 process CHECK_VERSIONS {
     executor 'local'
+    tag "id=util"
     input:
         val pipeline_version
         val index_version

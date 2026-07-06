@@ -3,7 +3,6 @@
 from typing import Any
 
 import pytest
-
 import select_tsv_columns
 
 
@@ -62,7 +61,9 @@ class TestSubsetLine:
         ],
         ids=["basic", "single", "reorder"],
     )
-    def test_subset_line(self, inputs: list[str], indices: list[int], expected: list[str]) -> None:
+    def test_subset_line(
+        self, inputs: list[str], indices: list[int], expected: list[str]
+    ) -> None:
         """Test subsetting a list by indices."""
         result = select_tsv_columns.subset_line(inputs, indices)
         assert result == expected
@@ -77,9 +78,18 @@ class TestSelectColumns:
             ("keep", ["col1", "col3"], "col1\tcol3\nval1\tval3\n"),
             ("drop", ["col2", "col4"], "col1\tcol3\nval1\tval3\n"),
             ("keep", ["col2"], "col2\nval2\n"),
-            ("keep", ["col1", "col2", "col3", "col4"], "col1\tcol2\tcol3\tcol4\nval1\tval2\tval3\tval4\n"),
+            (
+                "keep",
+                ["col1", "col2", "col3", "col4"],
+                "col1\tcol2\tcol3\tcol4\nval1\tval2\tval3\tval4\n",
+            ),
         ],
-        ids=["keep_mode_basic", "drop_mode_basic", "keep_single_column", "keep_all_columns"],
+        ids=[
+            "keep_mode_basic",
+            "drop_mode_basic",
+            "keep_single_column",
+            "keep_all_columns",
+        ],
     )
     def test_select_columns_success_cases(
         self, tsv_factory: Any, mode: str, columns: list[str], expected_output: str
@@ -105,7 +115,12 @@ class TestSelectColumns:
         ids=["empty_file", "header_only_file_keep", "header_only_file_drop"],
     )
     def test_select_columns_edge_cases(
-        self, tsv_factory: Any, input_content: str, columns: list[str], mode: str, expected_output: str
+        self,
+        tsv_factory: Any,
+        input_content: str,
+        columns: list[str],
+        mode: str,
+        expected_output: str,
     ) -> None:
         """Test edge cases for column selection."""
         input_file = tsv_factory.create_plain("input.tsv", input_content)
@@ -121,7 +136,9 @@ class TestSelectColumns:
         ["plain", "gzip"],
         ids=["plain_tsv", "gzipped_tsv"],
     )
-    def test_select_columns_file_formats(self, tsv_factory: Any, file_format: str) -> None:
+    def test_select_columns_file_formats(
+        self, tsv_factory: Any, file_format: str
+    ) -> None:
         """Test column selection with different file formats."""
         input_content = "col1\tcol2\tcol3\nval1\tval2\tval3\n"
         expected = "col1\tcol3\nval1\tval3\n"

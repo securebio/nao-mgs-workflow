@@ -29,9 +29,15 @@ These guidelines represent best practices to implement in new code, though some 
 - Process conventions (see `modules/local/vsearch/main.nf` for an example of a well-written process that follows these conventions):
     - All processes should have a label specifying needed resources (e.g. `label "small"`). Resources are then specified in `configs/resources.config`.
         - Most labels declare static resources (`cpus = 8; memory = 16.GB`).
-        - When a process's peak memory scales strongly with input size, the label's `memory` directive may be a closure over the process inputs — e.g. `memory = { ResourceTierUtils.pickMemoryTier(reads, ...) }`. See `bbmask_resources` and `ResourceTierUtils` in `configs/resources.config` for an example.
+        - When a process's peak memory scales strongly with input size, the label's `memory` directive may be a closure over the process inputs that picks a memory tier based on total byte size. See `bbmask_resources` in `configs/resources.config` for an example, and `tests/configs/resources/` for its associated nf-test.
     - All processes should have a label specifying the Docker container to use (e.g. `label "BBTools"`). Containers are then specified in `configs/containers.config`.
     - Any processes that are used only for testing should have `label "testing"`.
+    - All processes should have a `tag` directive that identifies the task in the Nextflow trace. Tags use a `key=value` format with `,` as the separator between components, and `id` is always the first key. Tag-component values must not contain commas (`,`) or equals signs (`=`), since these are used as delimiters; substituted variables (e.g. `${sample}`) are expected to satisfy this constraint.
+        - **Per-task processes** (one task per labeled input) use `tag "id=${sample}"` — substitute `${group}` or `${label}` to match the local input variable name.
+        - **Index-only single-shot processes** (one task per pipeline run, building or fetching index data) use `tag "id=index"`.
+        - **Index fan-out processes** (one task per item being fetched or built into the index, e.g. `BOWTIE2_INDEX`, `MINIMAP2_INDEX`, `DOWNLOAD_VIRAL_GENOMES`, `WGET`, `GET_TARBALL`, `DOWNLOAD_GENOME`) use a compound tag like `tag "id=index,name=${var}"`.
+        - **Workflow-level singletons** (sentinels, version checks, input logging) use `tag "id=util"`.
+        - **Stage-qualified processes** (per-task processes that run multiple times across different pipeline stages, e.g. `MULTIQC_LABELED`, `SUMMARIZE_MULTIQC`) append a `stage=` component, e.g. `tag "id=${sample},stage=${stage_label}"`, so each stage's invocation is distinguishable in the trace.
     - All processes should emit their input (for testing validation); use `ln -s` to link the input to the output.
     - Most processes have two output channels, `input` and `output`. If a process emits multiple types of output, use meaningful emit names describing the output types (e.g. `match`, `nomatch`, and `log` from `process BBDUK`).
     - Most, but not all, processes are *labeled* (input is a tuple of a sample name and file path). If input is labeled, output should also be labeled.
@@ -61,7 +67,7 @@ These guidelines represent best practices to implement in new code, though some 
 - Python style: 
     - Loosely follow PEP 8 conventions.
     - Type hints are encouraged. When used, prefer Python 3.12+ native syntax (e.g. `list[str]`, `str | None`) over imports from the `typing` module.
-    - Linting is encouraged using `ruff`. Type checking with `mypy` is enforced in CI (see `.github/workflows/mypy.yml`).
+    - Linting and formatting are enforced via `ruff` in CI (see `.github/workflows/ruff.yml`); CI runs `ruff check .` and `ruff format --check .` and never auto-fixes — run `ruff check --fix .` and `ruff format .` locally and commit the results. Type checking with `mypy` is enforced in CI (see `.github/workflows/mypy.yml`).
     - Formatting applied (including in nested directories) will follow the configuration in `pyproject.toml`.
     - After making any formatting changes, carefully review the diff to ensure no unintended modifications were introduced that could affect functionality.
 
@@ -138,6 +144,7 @@ You can run Python tools directly without installing them first:
 ```bash
 uv run pytest           # Run tests
 uv run ruff check .     # Lint code
+uv run ruff format .    # Auto-format code
 uv run mypy .           # Type checking
 ```
 
@@ -145,8 +152,9 @@ Alternatively, you can sync the environment once and then use the tools directly
 ```bash
 uv sync                 # Install all dependencies from pyproject.toml
 source .venv/bin/activate
-pytest                  
+pytest
 ruff check .
+ruff format .
 mypy .
 ```
 
@@ -251,7 +259,7 @@ Only pipeline maintainers should author a new release. The process for going thr
 
         1. Check for new releases of reference databases and update `configs/index.config`[^refs].
         2. Update `index-min-pipeline-version` and `pipeline-min-index-version` in the `[tool.mgs-workflow]` section of `pyproject.toml` to reflect any changes to compatibility restrictions.
-        3. Run the "Rebuild benchmark index" workflow in GitHub Actions to generate a new index at `s3://nao-testing/mgs-workflow-test/index-latest/`. See [CI documentation](./ci.md#benchmark-index-management) for details.
+        3. Rebuild the benchmark index at `s3://nao-testing/mgs-workflow-test/index-latest/`; see the [Benchmark index age check](./ci.md#benchmark-index-age-check-check-index-ageyml) section of `ci.md`.
 
 3. Open a PR to merge the release branch into `dev`, wait for CI tests to complete, and resolve any failing tests. Then:
 
@@ -259,14 +267,20 @@ Only pipeline maintainers should author a new release. The process for going thr
     2. Quickly review the PR changes to ensure the changed files are consistent with the changes noted in `CHANGELOG.md` (no need to review file contents deeply at this stage).
     3. Double check that documentation and tests have been updated to stay consistent with changes to the pipeline.
     4. Wait for additional long-running pre-release checks to complete in Github Actions.
-    5. If any issues or test failures arise in the preceding steps, fix them with new bugfix PRs into `dev`, then rebase the release branch onto `dev`.
+    5. If any issues or test failures arise in the preceding steps, fix them with new PRs into `dev`; the `dev`→`main` PR tracks `dev`, so merged fixes are automatically included in the release. Use a `release/...` branch for these fixes so `check-version` accepts the release's non-`-dev` version, and record them under the existing release heading in `CHANGELOG.md` rather than bumping the version.
 
 4. Once all checks pass, merge the PR into main **without squashing**[^approval]. A Github Actions workflow will automatically create and tag a new release and reset other branches (`dev` & `ci-test`, plus `stable` if only the fourth version number has changed) to match `main`.
 
-    1. Non-point releases are NOT automatically merged to `stable`. To update `stable` with a non-point release, use the "Manually reset stable branch to main" workflow in GitHub Actions (`manual-reset.yml`). This requires typing "reset stable" as confirmation.
+    1. Non-point releases are NOT automatically merged to `stable`. To update `stable` with a non-point release, use the "Manually reset stable branch to main" workflow in GitHub Actions (`manual-reset.yml`); see the [Manual stable reset](./ci.md#manual-stable-reset-manual-resetyml) section of `ci.md` for the protections gating that workflow.
 
 [^refs]: For reference genomes, check for updated releases for human, cow, pig, and mouse; do not update carp; update *E. coli* if there is a new release for the same strain. Check [SILVA](https://www.arb-silva.de/download/archive/) for rRNA databases and [here](https://benlangmead.github.io/aws-indexes/k2) for Kraken2 databases.
 [^approval]: Note that, to streamline the release process, we no longer require an approving review for PRs into `main`. (We still require an approving review for `release` PRs into `dev`.)
+
+## Benchmarking a new production index
+
+The INDEX workflow's reference data (NCBI taxonomy, Virus-Host-DB, Kraken2, SILVA, host/contaminant genomes) drifts over time, so a new dated index is built under `s3://nao-mgs-index/<DATE>` periodically (see [Run index/reference workflow](./installation.md#7-run-indexreference-workflow)). After building a new production index, it's important to benchmark it against the previous one to check for regressions; the easiest way to do this is to execute the `benchmark-index` skill (`.claude/skills/benchmark-index/`) within Claude Code or another coding agent, then read the `REVIEW.md` file produced.
+
+The `benchmark-index` skill calls the `benchmark_index.py` script to carry out deterministic comparisons between the indices specified. This script diffs whatever two index roots it is given, so it is not pinned to a fixed index schema; it does require the newer (`--new`) index to publish `virus-genome-metadata-raw.tsv.gz` and `input/host-infection-overrides.json`. New index outputs are not reflected in the report until comparison logic is added to the script.
 
 ## Schemas
 

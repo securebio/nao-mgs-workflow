@@ -3,7 +3,7 @@
 process COUNT_READS_PER_CLADE {
     label "python"
     label "single"
-
+    tag "id=${sample}"
     input:
     // (sample name, read table tsv)
     // read table must include columns: seq_id, prim_align_dup_exemplar, aligner_taxid_lca, group

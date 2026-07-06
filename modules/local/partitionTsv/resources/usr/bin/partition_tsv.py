@@ -2,40 +2,46 @@
 
 # Import modules
 import argparse
-import time
 import datetime
 import gzip
-import os
+import time
 from typing import IO, cast
+
 
 def print_log(message: str) -> None:
     print("[", datetime.datetime.now(), "]  ", message, sep="")
+
 
 def open_by_suffix(filename: str, mode: str = "r", debug: bool = False) -> IO[str]:
     if debug:
         print_log(f"\tOpening file object: {filename}")
         print_log(f"\tOpening mode: {mode}")
         print_log(f"\tGZIP mode: {filename.endswith('.gz')}")
-    if filename.endswith('.gz'):
-        return cast(IO[str], gzip.open(filename, mode + 't'))
-    else:
-        return open(filename, mode)
+    if filename.endswith(".gz"):
+        return cast(IO[str], gzip.open(filename, mode + "t"))
+    return open(filename, mode)
+
 
 def read_line(file: IO[str]) -> list[str] | None:
     """Read and process a line from a file."""
     line = file.readline()
     return None if not line else line.rstrip("\n").split("\t")
 
+
 def write_line(file: IO[str], fields: list[str]) -> None:
     """Write a line to a file."""
     file.write("\t".join(fields) + "\n")
 
-def initialize_output_file(input_path: str, file_index: str, headers: list[str]) -> IO[str]:
+
+def initialize_output_file(
+    input_path: str, file_index: str, headers: list[str]
+) -> IO[str]:
     """Initialize an output file for partitioned data."""
     outf_path = f"partition_{file_index}_{input_path}"
     outf = open_by_suffix(outf_path, "w")
     write_line(outf, headers)
     return outf
+
 
 def partition(input_path: str, column: str) -> None:
     """Partition a TSV file based on a specified column header."""
@@ -49,7 +55,7 @@ def partition(input_path: str, column: str) -> None:
         column_index = headers.index(column)
         # Read first line of data and initialize first output file
         fields = read_line(inf)
-        if fields is None: # Empty apart from headers
+        if fields is None:  # Empty apart from headers
             print_log("Input file has no data rows, skipping partition.")
             return
         index = fields[column_index]
@@ -59,7 +65,7 @@ def partition(input_path: str, column: str) -> None:
         try:
             while fields is not None:
                 index = fields[column_index]
-                if index < file_index: # Throw sorting error
+                if index < file_index:  # Throw sorting error
                     msg = f"Input file is not sorted by partition column {column}; found {index} after {file_index}."
                     raise ValueError(msg)
                 if index != file_index:
@@ -71,9 +77,12 @@ def partition(input_path: str, column: str) -> None:
         finally:
             outf.close()
 
+
 def main() -> None:
     # Parse arguments
-    parser = argparse.ArgumentParser(description="Partition a TSV based on a specified column header.")
+    parser = argparse.ArgumentParser(
+        description="Partition a TSV based on a specified column header."
+    )
     parser.add_argument("--input_path", "-i", help="Path to input TSV file.")
     parser.add_argument("--column", "-c", help="Column header to partition on.")
     args = parser.parse_args()
@@ -83,8 +92,8 @@ def main() -> None:
     print_log("Starting process.")
     start_time = time.time()
     # Print parameters
-    print_log("Input TSV file: {}".format(input_path))
-    print_log("Partition column header: {}".format(column))
+    print_log(f"Input TSV file: {input_path}")
+    print_log(f"Partition column header: {column}")
     # Run labeling function
     print_log("Partitioning TSV file...")
     partition(input_path, column)
@@ -92,6 +101,7 @@ def main() -> None:
     # Finish time tracking
     end_time = time.time()
     print_log("Total time elapsed: %.2f seconds" % (end_time - start_time))
+
 
 if __name__ == "__main__":
     main()

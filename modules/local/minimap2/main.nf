@@ -2,6 +2,7 @@
 process MINIMAP2_INDEX {
     label "max"
     label "minimap2_samtools"
+    tag "id=index,name=${outdir}"
     input:
         path(reference_fasta)
         val(outdir)
@@ -25,6 +26,7 @@ process MINIMAP2_INDEX {
 process MINIMAP2 {
     label "large"
     label "minimap2_samtools"
+    tag "id=${sample}"
     input:
         tuple val(sample), path(reads)
         val(index_dir)
@@ -66,6 +68,7 @@ process MINIMAP2 {
 process MINIMAP2_NON_STREAMED {
     label "max"
     label "minimap2_samtools"
+    tag "id=${sample}"
     input:
         tuple val(sample), path(reads)
         path(index_dir)

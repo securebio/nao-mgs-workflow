@@ -1,0 +1,48 @@
+nextflow_workflow {
+
+    name "Test bbmask_resources memory-tier closure"
+    script "tests/configs/resources/main.nf"
+    workflow "PROBE_RESOURCE_TIER"
+    config "tests/configs/resources/nextflow.config"
+    tag "config"
+    tag "bbmask_resources"
+
+    test("Should map input byte size to the expected memory tier") {
+        tag "expect_success"
+        when {
+            workflow {
+                """
+                input[0] = channel.of(
+                    1073741824L,   // 1 GB  -> tier 0 (<= 2 GB)  -> 32 GB
+                    2147483648L,   // 2 GB  -> tier 0 (boundary) -> 32 GB
+                    5368709120L,   // 5 GB  -> tier 1 (<= 10 GB) -> 64 GB
+                    10737418240L,  // 10 GB -> tier 1 (boundary) -> 64 GB
+                    21474836480L,  // 20 GB -> tier 2 (fallback) -> 128 GB
+                )
+                """
+            }
+        }
+        then {
+            assert workflow.success
+
+            // 32, 64, 128 GB in bytes (1 GB = 2^30).
+            def gb = 1073741824L
+            def expected = [
+                1073741824L:  32 * gb,
+                2147483648L:  32 * gb,
+                5368709120L:  64 * gb,
+                10737418240L: 64 * gb,
+                21474836480L: 128 * gb,
+            ]
+
+            // Workflow emits a single CSV (one row per input, sorted).
+            def report = path(workflow.out.report[0]).text.trim().split('\n')
+            def actual = report.collectEntries { line ->
+                def (size_bytes, allocated) = line.split(',')
+                [size_bytes as Long, allocated as Long]
+            }
+
+            assert actual == expected
+        }
+    }
+}

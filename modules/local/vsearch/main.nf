@@ -1,7 +1,8 @@
 // Cluster merged FASTQ sequences with VSEARCH
 process VSEARCH_CLUSTER_LIST {
-    label "large"
+    label "vsearch_resources"
     label "vsearch"
+    tag "id=${sample}"
     input:
         tuple val(sample), path(reads) // Single-end or merged reads
         val(identity_threshold) // Minimum required identity (0.0-1.0) required for two sequences to cluster together

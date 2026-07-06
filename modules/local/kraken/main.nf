@@ -2,6 +2,7 @@
 process KRAKEN {
     label "Kraken2"
     label "kraken_resources"
+    tag "id=${sample}"
     input:
         tuple val(sample), path(reads)
         val db_path

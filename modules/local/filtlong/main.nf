@@ -1,6 +1,7 @@
 process FILTLONG {
     label "small"
     label "filtlong"
+    tag "id=${sample}"
     input:
         tuple val(sample), path(reads)
         val(min_length)

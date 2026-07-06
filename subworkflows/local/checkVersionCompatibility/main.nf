@@ -51,16 +51,16 @@ workflow CHECK_VERSION_COMPATIBILITY {
 
         // Extract version info from pyproject.toml files using a process
         // (handles S3 paths correctly by staging files in the container)
-        EXTRACT_VERSIONS(pipeline_pyproject_path, index_pyproject_path)
+        versions_ch = EXTRACT_VERSIONS(pipeline_pyproject_path, index_pyproject_path)
 
         // Check version compatibility
         CHECK_VERSIONS(
-            EXTRACT_VERSIONS.out.pipeline_version,
-            EXTRACT_VERSIONS.out.index_version,
-            EXTRACT_VERSIONS.out.pipeline_min_index,
-            EXTRACT_VERSIONS.out.index_min_pipeline
+            versions_ch.pipeline_version,
+            versions_ch.index_version,
+            versions_ch.pipeline_min_index,
+            versions_ch.index_min_pipeline
         )
     emit:
-        pipeline_pyproject_path = Channel.fromPath(pipeline_pyproject_path)
-        index_pyproject_path = Channel.fromPath(index_pyproject_path)
+        pipeline_pyproject_path = channel.fromPath(pipeline_pyproject_path)
+        index_pyproject_path = channel.fromPath(index_pyproject_path)
 }

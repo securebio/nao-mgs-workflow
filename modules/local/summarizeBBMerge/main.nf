@@ -1,6 +1,7 @@
 process SUMMARIZE_BBMERGE {
     label "coreutils_gzip_gawk"
     label "single"
+    tag "id=${sample}"
     input:
         tuple val(sample), path(reads)
     output:
@@ -32,6 +33,7 @@ process SUMMARIZE_BBMERGE {
 process SUMMARIZE_BBMERGE_LIST {
     label "coreutils_gzip_gawk"
     label "single"
+    tag "id=${sample}"
     input:
         tuple val(sample), path(merged_reads), path(unmerged_reads)
     output:

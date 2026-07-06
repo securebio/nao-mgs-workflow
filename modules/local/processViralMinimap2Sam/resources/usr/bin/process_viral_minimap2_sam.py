@@ -5,15 +5,14 @@ import gzip
 import logging
 import math
 import sys
-from typing import Any
 import tempfile
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
+from typing import Any
 
 import pandas as pd
 import pysam
 from Bio.Seq import Seq
-
 from sort_fastq import sort_fastq
 from sort_sam import sort_sam
 
@@ -23,7 +22,7 @@ class UTCFormatter(logging.Formatter):
 
     def formatTime(self, record: logging.LogRecord, datefmt: str | None = None) -> str:
         """Format log timestamps in UTC timezone."""
-        dt = datetime.fromtimestamp(record.created, timezone.utc)
+        dt = datetime.fromtimestamp(record.created, UTC)
         return dt.strftime("%Y-%m-%d %H:%M:%S UTC")
 
 
@@ -75,7 +74,9 @@ def read_fastq_record(fh: Any) -> tuple[str, str, str] | None:
     return (read_id, seq, qual)
 
 
-def extract_viral_taxid(genome_id: str, genbank_metadata: dict[str, list[str]], viral_taxids: set[str]) -> str:
+def extract_viral_taxid(
+    genome_id: str, genbank_metadata: dict[str, list[str]], viral_taxids: set[str]
+) -> str:
     """Return taxid for a genome, preferring whichever of taxid/species_taxid is viral."""
     try:
         taxid, species_taxid = genbank_metadata[genome_id]
@@ -84,12 +85,16 @@ def extract_viral_taxid(genome_id: str, genbank_metadata: dict[str, list[str]], 
         if species_taxid in viral_taxids:
             return species_taxid
         return taxid
-    except KeyError:
-        raise ValueError(f"No matching genome ID found: {genome_id}")
+    except KeyError as e:
+        raise ValueError(f"No matching genome ID found: {genome_id}") from e
 
 
 def parse_sam_alignment(
-    read: Any, genbank_metadata: dict[str, list[str]], viral_taxids: set[str], clean_seq: str, clean_qual: str
+    read: Any,
+    genbank_metadata: dict[str, list[str]],
+    viral_taxids: set[str],
+    clean_seq: str,
+    clean_qual: str,
 ) -> dict[str, Any]:
     """Parse a Minimap2 SAM alignment into an output dict."""
     taxid = extract_viral_taxid(read.reference_name, genbank_metadata, viral_taxids)
@@ -123,13 +128,19 @@ def parse_sam_alignment(
         "classification": (
             "supplementary"
             if read.is_supplementary
-            else "secondary" if read.is_secondary else "primary"
+            else "secondary"
+            if read.is_secondary
+            else "primary"
         ),
     }
 
 
 def process_sam(
-    sam_file: str, out_file: str, genbank_metadata: dict[str, list[str]], viral_taxids: set[str], fastq_file: str
+    sam_file: str,
+    out_file: str,
+    genbank_metadata: dict[str, list[str]],
+    viral_taxids: set[str],
+    fastq_file: str,
 ) -> None:
     """Process a Minimap2 SAM file using streaming merge join with sorted FASTQ.
 
@@ -172,8 +183,7 @@ def process_sam(
                 )
             if num_reads == 0:
                 logger.warning(
-                    "Input SAM file is empty. "
-                    "Creating empty output with header only."
+                    "Input SAM file is empty. Creating empty output with header only."
                 )
 
 
@@ -218,7 +228,10 @@ def main() -> None:
         genbank_metadata = {
             genome_id: [taxid, species_taxid]
             for genome_id, taxid, species_taxid in zip(
-                meta_db["genome_id"], meta_db["taxid"], meta_db["species_taxid"]
+                meta_db["genome_id"],
+                meta_db["taxid"],
+                meta_db["species_taxid"],
+                strict=True,
             )
         }
         virus_db = pd.read_csv(args.viral_db, sep="\t", dtype=str)

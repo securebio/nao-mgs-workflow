@@ -4,6 +4,7 @@
 process SUBSET_READS_PAIRED_TARGET {
     label "seqtk"
     label "xsmall"
+    tag "id=${sample}"
     input:
         tuple val(sample), path(reads), path(counts_tsv)
         val readTarget
@@ -53,6 +54,7 @@ process SUBSET_READS_PAIRED_TARGET {
 process SUBSET_READS_SINGLE_TARGET {
     label "seqtk"
     label "xsmall"
+    tag "id=${sample}"
     input:
         tuple val(sample), path(reads), path(counts_tsv)
         val readTarget

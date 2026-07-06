@@ -2,6 +2,7 @@
 process EXTRACT_SHARED_FASTQ_READS {
     label "seqtk"
     label "single"
+    tag "id=${sample}"
     input:
         tuple val(sample), path(fastq_1), path(fastq_2)
     output:

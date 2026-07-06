@@ -2,6 +2,7 @@
 process FASTP {
     label "small"
     label "fastp"
+    tag "id=${sample}"
     input:
         tuple val(sample), path(reads)
         path(adapters)
@@ -27,7 +28,7 @@ process FASTP {
         def oh = "${sample}_fastp.html"
         def ad = adapters
         def io = "--failed_out ${of} --html ${oh} --json ${oj} --adapter_fasta ${ad} --stdin --stdout ${interleaved ? '--interleaved_in' : ''}"
-        def par = "--cut_front --cut_tail --correction --detect_adapter_for_pe --trim_poly_x --cut_mean_quality 20 --average_qual 20 --qualified_quality_phred 20 --verbose --dont_eval_duplication --thread ${task.cpus} --low_complexity_filter"
+        def par = "--cut_front --cut_tail --correction --detect_adapter_for_pe --trim_poly_x --cut_mean_quality 20 --average_qual 20 --qualified_quality_phred 20 --verbose --dont_eval_duplication --thread ${task.cpus} --low_complexity_filter --length_required 35"
         def of_trimmed = of - ~/.gz$/
         def op_trimmed = op - ~/.gz$/
         """

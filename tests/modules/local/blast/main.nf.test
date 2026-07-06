@@ -16,14 +16,13 @@ nextflow_process {
             process {
                 '''
                 def blast_params = [
-                    blast_db_prefix: params.blast_db_prefix,
                     blast_perc_id: params.blast_perc_id,
                     blast_qcov_hsp_perc: params.blast_qcov_hsp_perc,
                     db_download_timeout: params.db_download_timeout
                 ]
                 input[0] = Channel.of("test")
                     | combine(Channel.of("${projectDir}/test-data/tiny-index/reads/R1.fasta"))
-                input[1] = "${params.ref_dir}/results/${params.blast_db_prefix}"
+                input[1] = "${params.ref_dir}/results/blast_db"
                 input[2] = blast_params
                 '''
             }
@@ -42,6 +41,31 @@ nextflow_process {
             for (entry in tsv_out.columns["C0"]){
                 assert entry in ids_in
             }
+        }
+    }
+
+    test("Should fail when the blast-db alias is missing rather than emit empty output") {
+        tag "expect_failed"
+        when {
+            params {
+            }
+            process {
+                '''
+                def blast_params = [
+                    blast_perc_id: params.blast_perc_id,
+                    blast_qcov_hsp_perc: params.blast_qcov_hsp_perc,
+                    db_download_timeout: params.db_download_timeout
+                ]
+                input[0] = Channel.of("test")
+                    | combine(Channel.of("${projectDir}/test-data/tiny-index/reads/R1.fasta"))
+                input[1] = "${params.ref_dir}/results/bt2-virus-index"
+                input[2] = blast_params
+                '''
+            }
+        }
+        then {
+            assert process.failed
+            assert process.errorReport =~ /BLAST Database error/
         }
     }
 

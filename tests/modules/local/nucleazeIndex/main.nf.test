@@ -1,0 +1,34 @@
+nextflow_process {
+
+    name "Test process NUCLEAZE_INDEX"
+    script "modules/local/nucleazeIndex/main.nf"
+    process "NUCLEAZE_INDEX"
+    config "tests/configs/index.config"
+    tag "module"
+    tag "nucleaze_index"
+
+    test("Should build index from reference FASTA") {
+        tag "expect_success"
+        when {
+            process {
+                '''
+                input[0] = "${projectDir}/test-data/tiny-index/output/results/virus-genomes-masked.fasta.gz"
+                input[1] = 24
+                '''
+            }
+        }
+        then {
+            assert process.success
+            // Index file should exist and have content
+            def index_file = path(process.out.index[0])
+            assert index_file.exists()
+            assert index_file.size() > 0
+            // Built index should match the pre-built test index (deterministic)
+            def reference_index = path("${projectDir}/test-data/tiny-index/output/results/virus-genomes-masked.nucleaze.bin")
+            assert index_file.md5 == reference_index.md5
+            // Log file should exist
+            def log_file = path(process.out.log[0])
+            assert log_file.exists()
+        }
+    }
+}

@@ -65,15 +65,15 @@ workflow LOAD_SAMPLESHEET {
         }
         // Construct samplesheet channel
         if (single_end) {
-            samplesheet = Channel
+            samplesheet = channel
                 .fromPath(sample_sheet)
-                .splitCsv(header: true)
+                .flatMap { sheet -> sheet.splitCsv(header: true) }
                 .map { row -> tuple(row.sample, file(row.fastq)) }
             samplesheet_ch = samplesheet.map { sample, read -> tuple(sample, [read]) }
         } else {
-            samplesheet = Channel
+            samplesheet = channel
                 .fromPath(sample_sheet)
-                .splitCsv(header: true)
+                .flatMap { sheet -> sheet.splitCsv(header: true) }
                 .map { row -> tuple(row.sample, file(row.fastq_1), file(row.fastq_2)) }
             samplesheet_ch = samplesheet.map { sample, read1, read2 -> tuple(sample, [read1, read2]) }
         }

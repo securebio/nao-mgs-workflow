@@ -15,8 +15,8 @@ COPY rust-tools/ ./rust-tools/
 RUN cd rust-tools && cargo build --workspace --release
 
 # Install nucleaze from GitHub (external tool, not a workspace member)
-# Pinned to v1.4.2 commit hash for immutability (tags are mutable)
-RUN cargo install nucleaze --git https://github.com/jackdougle/nucleaze.git --rev 333912e
+# Pinned to v1.5.0-alpha commit hash for immutability (tags are mutable)
+RUN cargo install nucleaze --git https://github.com/jackdougle/nucleaze.git --rev 4090fe3
 
 # =============================================================================
 # Stage 2: Runtime
@@ -28,7 +28,8 @@ FROM alpine:3.21
 # bash:   Nextflow script blocks default to /bin/bash
 # grep:   GNU grep with PCRE support (-oP) used in Nextflow modules
 # procps: Nextflow resource monitoring
-RUN apk add --no-cache bash grep procps
+# pigz:   parallel (de)compression for use by module scripts
+RUN apk add --no-cache bash grep procps pigz
 
 # Copy compiled binaries from builder
 # Add additional binaries here as tools are added to the workspace

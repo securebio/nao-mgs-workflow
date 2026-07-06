@@ -1,0 +1,7 @@
+#
+# Alias file created 06/12/2026 15:52:17
+#
+TITLE blast_db
+DBLIST "tiny_blast_db" 
+NSEQ 4
+LENGTH 5222

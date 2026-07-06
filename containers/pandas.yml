@@ -5,3 +5,4 @@ channels:
   - bioconda
 dependencies:
   - conda-forge::pandas=2.3.3
+  - conda-forge::jsonschema=4.25.0

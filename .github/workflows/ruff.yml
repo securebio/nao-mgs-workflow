@@ -1,0 +1,42 @@
+name: Ruff Lint and Format Check
+
+on:
+  pull_request: # Runs on all PRs
+
+permissions:
+  contents: read
+
+jobs:
+  ruff:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: Check for relevant changes
+        uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            python:
+              - '**/*.py'
+              - 'pyproject.toml'
+              - '.github/workflows/ruff.yml'
+
+      - name: Setup Python environment
+        if: steps.filter.outputs.python == 'true'
+        uses: ./.github/actions/setup-python
+
+      - name: Run ruff check
+        if: steps.filter.outputs.python == 'true'
+        run: |
+          python -m ruff check .
+
+      - name: Run ruff format --check
+        if: steps.filter.outputs.python == 'true'
+        run: |
+          python -m ruff format --check .

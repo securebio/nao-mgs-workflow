@@ -2,6 +2,7 @@
 process FILTER_TSV {
     label "coreutils"
     label "single"
+    tag "id=${sample}"
     input:
         tuple val(sample), path(tsv)
         val(filter_cols) // One-indexed, comma-separated list of columns to filter on

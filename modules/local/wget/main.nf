@@ -2,6 +2,7 @@
 process WGET {
     label "BBTools"
     label "single"
+    tag "id=index,name=${name}"
     input:
         val(url)
         val(name)
