@@ -1,7 +1,7 @@
 # v3.2.2.1-dev
 
 - Add `bin/compare_downstream_runs.py` / `bin/downstream_metrics.py` and the paired `benchmark-downstream` agent skill for comparing two DOWNSTREAM runs (e.g. across a pipeline change) from their existing output files. Developer/agent tooling only: reads existing DOWNSTREAM outputs and adds no new pipeline outputs, behavior, or schema changes.
-- Pass `-t ${task.cpus}` to minimap2 in the `MINIMAP2` and `MINIMAP2_NON_STREAMED` modules so it uses the full allocated CPU count instead of its 3-thread default, which severely bottlenecked large ONT samples. Outputs are unchanged (thread count does not affect alignment results). Standalone AWS Batch profiling on synthetic abundant-genome (SARS-CoV-2) and ONT_2M inputs showed up to ~8.6× faster alignment on the worst case; with `-t` both modules stay CPU(alignment)-bound rather than gzip-bound (so no `pigz` change is warranted) and peak memory remains within the `large`/`max` ceilings.
+- Pass `-t ${task.cpus}` to minimap2 in the `MINIMAP2` and `MINIMAP2_NON_STREAMED` modules.
 
 # v3.2.2.0
 
