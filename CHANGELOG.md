@@ -1,6 +1,7 @@
 # v3.2.2.1-dev
 
 - Add `bin/compare_downstream_runs.py` / `bin/downstream_metrics.py` and the paired `benchmark-downstream` agent skill for comparing two DOWNSTREAM runs (e.g. across a pipeline change) from their existing output files. Developer/agent tooling only: reads existing DOWNSTREAM outputs and adds no new pipeline outputs, behavior, or schema changes.
+- Add `bin/check_index_version.py`, which fails if the benchmark `index-latest` was built from a `-dev` pipeline version, preventing a dev-built index from being promoted to production (COMP-2206). Intended to run as a `check-release` gate on PRs to `main` (workflow wiring applied separately).
 
 # v3.2.2.0
 
