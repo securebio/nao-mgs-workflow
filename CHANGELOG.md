@@ -1,6 +1,7 @@
 # v3.2.2.1-dev
 
 - Add `bin/compare_downstream_runs.py` / `bin/downstream_metrics.py` and the paired `benchmark-downstream` agent skill for comparing two DOWNSTREAM runs (e.g. across a pipeline change) from their existing output files. Developer/agent tooling only: reads existing DOWNSTREAM outputs and adds no new pipeline outputs, behavior, or schema changes.
+- Add check to `check-release` workflow that index published to `s3://nao-testing/mgs-workflow-test/index-latest/` does not include `-dev` suffix.
 
 # v3.2.2.0
 
