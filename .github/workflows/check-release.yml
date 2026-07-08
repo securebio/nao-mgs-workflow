@@ -22,7 +22,11 @@ jobs:
 
       - name: Check benchmark index is not a -dev build
         run: |
-          version=$(aws s3 cp s3://nao-testing/mgs-workflow-test/index-latest/output/logging/pyproject.toml - | grep -m1 '^version = ' | cut -d'"' -f2)
+          if ! pyproject=$(aws s3 cp s3://nao-testing/mgs-workflow-test/index-latest/output/logging/pyproject.toml -); then
+            echo "::error::could not read index-latest pyproject.toml from s3://nao-testing/mgs-workflow-test/index-latest/output/logging/; ensure the benchmark index exists and OIDC credentials are available"
+            exit 1
+          fi
+          version=$(echo "$pyproject" | grep -m1 '^version = ' | cut -d'"' -f2 || true)
           echo "Benchmark index version: $version"
           if ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             echo "::error::index-latest version '$version' is not a 4-part release version (dev-built or malformed); rebuild from a tagged release before merging to main"

@@ -135,8 +135,9 @@ Runs on PRs to `main` and `stable`. Checks the age of the benchmark index at `s3
 ### Release readiness check (`check-release.yml`)
 
 Runs only on PRs to `main`. Verifies that:
-1. The version in `pyproject.toml` has a corresponding changelog section
-2. The version has not already been released on GitHub
+1. The benchmark index at `s3://nao-testing/mgs-workflow-test/index-latest/` was built from a tagged release (its `pyproject.toml` version is a 4-part release version, not a `-dev` build)
+2. The version in `pyproject.toml` has a corresponding changelog section
+3. The version has not already been released on GitHub
 
 This check runs unconditionally (no path filtering).
 
