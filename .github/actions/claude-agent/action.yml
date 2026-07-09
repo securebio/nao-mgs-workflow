@@ -1,0 +1,56 @@
+name: 'Claude Agent'
+description: >-
+  Run an in-CI Claude Code agent against a prompt. Mints a short-lived
+  GitHub App token so the agent acts as the coding-agent app, then invokes
+  anthropics/claude-code-action with either an Anthropic API key or Amazon
+  Bedrock for model access.
+
+inputs:
+  prompt:
+    description: 'The prompt driving the agent for this run.'
+    required: true
+  anthropic-api-key:
+    description: 'Anthropic API key for direct API access. Leave empty when use-bedrock is true.'
+    required: false
+    default: ''
+  use-bedrock:
+    description: "When 'true', route model calls through Amazon Bedrock instead of the Anthropic API."
+    required: false
+    default: 'false'
+  app-id:
+    description: 'GitHub App ID used to mint the token the agent operates with.'
+    required: true
+  app-private-key:
+    description: 'Private key for the GitHub App identified by app-id.'
+    required: true
+  model:
+    description: 'Optional model override passed to claude-code-action.'
+    required: false
+    default: ''
+  allowed-tools:
+    description: 'Optional comma-separated list of tools the agent may use, passed to claude-code-action.'
+    required: false
+    default: ''
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Mint GitHub App token
+      id: app-token
+      uses: actions/create-github-app-token@v1
+      with:
+        app-id: ${{ inputs.app-id }}
+        private-key: ${{ inputs.app-private-key }}
+
+    - name: Run Claude Code agent
+      # Pin to a current stable major tag. NOTE: there is no existing usage of
+      # anthropics/claude-code-action in this org to copy — confirm the exact
+      # version (and input names) against the action's README before relying on it.
+      uses: anthropics/claude-code-action@v1
+      with:
+        prompt: ${{ inputs.prompt }}
+        anthropic_api_key: ${{ inputs.anthropic-api-key }}
+        use_bedrock: ${{ inputs.use-bedrock }}
+        github_token: ${{ steps.app-token.outputs.token }}
+        model: ${{ inputs.model }}
+        allowed_tools: ${{ inputs.allowed-tools }}

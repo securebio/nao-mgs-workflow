@@ -1,18 +1,18 @@
 ---
 name: triage-trivy
-description: Triage HIGH/CRITICAL CVEs from a Trivy container scan — either a failing `scan-containers` CI job on a PR, or the weekly scheduled scan on `dev`. For each CVE, walk through a structured per-CVE assessment (vulnerability → affected functionality → pipeline reachability → fix options) leading to a Patch / Ignore / Escalate decision, plus a PR-description block reviewers audit. Structured to make `.trivyignore` the harder path.
+description: Triage HIGH/CRITICAL CVEs from a Trivy container scan — either a failing `scan-containers` CI job on a PR, or a PR-less scan on `dev` (e.g. run by an automated caller such as a scheduled CI job). For each CVE, walk through a structured per-CVE assessment (vulnerability → affected functionality → pipeline reachability → fix options) leading to a Patch / Ignore / Escalate decision, plus a PR-description block reviewers audit. Structured to make `.trivyignore` the harder path.
 ---
 
 # Trivy CVE triage
 
-HIGH/CRITICAL vulnerabilities in any container image pinned in `configs/containers.config` that aren't already in `.trivyignore` need triage. They surface two ways: the `scan-containers` CI job failing on a PR, or the weekly scheduled scan of `dev` (`.github/workflows/trivy-scheduled.yml`) finding CVEs with no source PR. This skill triages either.
+HIGH/CRITICAL vulnerabilities in any container image pinned in `configs/containers.config` that aren't already in `.trivyignore` need triage. They surface two ways: the `scan-containers` CI job failing on a PR, or a PR-less scan of `dev` finding CVEs with no source PR. This skill triages either. The PR-less path lets the skill be invoked without a PR by an automated caller (e.g. a scheduled CI job).
 
 **Default agent behavior on Trivy failures has historically been "add to `.trivyignore` and move on" — that's the failure mode this skill exists to prevent.** Each step below asks for evidence; record what you find as you go, because the final PR-description block has to surface the assessment to a reviewer.
 
 ## When to use
 
 - `scan-containers` CI job failing on a PR.
-- The weekly scheduled scan on `dev` found HIGH/CRITICAL CVEs (no source PR).
+- A PR-less scan of `dev` found HIGH/CRITICAL CVEs (no source PR) — e.g. an automated scheduled CI job.
 - A reviewer asks for a Trivy follow-up.
 - You're updating a container yml and want to confirm no new HIGH/CRITICAL CVEs slip through.
 
@@ -21,11 +21,11 @@ HIGH/CRITICAL vulnerabilities in any container image pinned in `configs/containe
 The skill runs in one of two modes, distinguished by whether `pr_number` is given:
 
 - **PR mode** (`pr_number` set): triage the `scan-containers` failure on a specific PR. Use that PR's CI output as the input to the triage (Step 1 pulls its scan artifact).
-- **Scheduled mode** (no `pr_number`): triage a fresh scan of the current `dev` HEAD, with no source PR. This is how the weekly scheduled scan (`.github/workflows/trivy-scheduled.yml`) invokes the skill. Either consume a scan-results directory the caller already produced (`scan_results_dir`), or run `bin/scan_containers.py` directly (Step 1).
+- **Scheduled mode** (no `pr_number`): triage a fresh scan of the current `dev` HEAD, with no source PR. This is how an automated caller (e.g. a scheduled CI job) invokes the skill. Either consume a scan-results directory the caller already produced (`scan_results_dir`), or run `bin/scan_containers.py` directly (Step 1).
 
 ## Inputs (optional)
 
-- `scan_results_dir`: path to a directory of Trivy JSON results the caller already produced (e.g. the scheduled workflow's scan step). When set, skip the fetch/scan in Step 1 and read the per-container JSON from here.
+- `scan_results_dir`: path to a directory of Trivy JSON results the caller already produced (e.g. a scheduled CI job's scan step). When set, skip the fetch/scan in Step 1 and read the per-container JSON from here.
 - `local_scan`: if `true`, additionally run Trivy locally against the containers (useful when CI is broken or you want to scan against a `.trivyignore` you haven't pushed yet). Requires `trivy` binary + Docker. Scheduled mode already scans locally, so this flag is a no-op there.
 
 ## Branching: triage work goes in its own PR, not the failing PR
@@ -211,7 +211,7 @@ If multiple related CVEs share an assessment (e.g. several Go-stdlib CVEs in the
 
 The PR body has two parts: a temporary rebuild-handoff callout at the top (only when there's at least one Patch outcome), and the persistent Trivy-triage assessment block. Use this as the body of the *new* triage PR. **Exception (PR mode only):** when the failing PR's own diff introduced the CVE (a new yml pin or container change in its diff — see the Branching section above), the fix belongs inline on that PR, so append the assessment block under a `# Trivy triage` heading on the original PR instead.
 
-`<origin>` in the block below is the scan source: in PR mode, `PR #<n>`; in scheduled mode, "the weekly scheduled scan on `dev`" — do not imply a source PR when there isn't one.
+`<origin>` in the block below is the scan source: in PR mode, `PR #<n>`; in scheduled mode, "the scheduled scan on `dev`" — do not imply a source PR when there isn't one.
 
 ```markdown
 > **Rebuild required before merge — `scan-containers` is red until then.**

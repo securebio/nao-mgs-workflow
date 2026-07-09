@@ -2,6 +2,7 @@
 
 - Add `bin/compare_downstream_runs.py` / `bin/downstream_metrics.py` and the paired `benchmark-downstream` agent skill for comparing two DOWNSTREAM runs (e.g. across a pipeline change) from their existing output files. Developer/agent tooling only: reads existing DOWNSTREAM outputs and adds no new pipeline outputs, behavior, or schema changes.
 - Pass `-t ${task.cpus}` to minimap2 in the `MINIMAP2` and `MINIMAP2_NON_STREAMED` modules.
+- Add reusable composite actions `.github/actions/trivy-scan` (encapsulates the AWS-OIDC/ECR/Trivy container scan, reporting whether HIGH/CRITICAL CVEs were found) and `.github/actions/claude-agent` (mints a GitHub App token and runs an in-CI Claude Code agent), and generalize the `triage-trivy` skill's scheduled mode so it can be invoked without a PR by an automated caller. Developer/CI tooling only; no pipeline behavior change.
 
 # v3.2.2.0
 
