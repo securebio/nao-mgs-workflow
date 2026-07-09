@@ -1,33 +1,40 @@
 ---
 name: triage-trivy
-description: Triage a failing `scan-containers` Trivy CI job. For each HIGH/CRITICAL CVE, walk through a structured per-CVE assessment (vulnerability → affected functionality → pipeline reachability → fix options) leading to a Patch / Ignore / Escalate decision, plus a PR-description block reviewers audit. Structured to make `.trivyignore` the harder path.
+description: Triage HIGH/CRITICAL CVEs from a Trivy container scan — either a failing `scan-containers` CI job on a PR, or the weekly scheduled scan on `dev`. For each CVE, walk through a structured per-CVE assessment (vulnerability → affected functionality → pipeline reachability → fix options) leading to a Patch / Ignore / Escalate decision, plus a PR-description block reviewers audit. Structured to make `.trivyignore` the harder path.
 ---
 
 # Trivy CVE triage
 
-The `scan-containers` CI job fails on HIGH/CRITICAL vulnerabilities in any container image pinned in `configs/containers.config` that aren't already in `.trivyignore`. This skill triages those failures.
+HIGH/CRITICAL vulnerabilities in any container image pinned in `configs/containers.config` that aren't already in `.trivyignore` need triage. They surface two ways: the `scan-containers` CI job failing on a PR, or the weekly scheduled scan of `dev` (`.github/workflows/trivy-scheduled.yml`) finding CVEs with no source PR. This skill triages either.
 
 **Default agent behavior on Trivy failures has historically been "add to `.trivyignore` and move on" — that's the failure mode this skill exists to prevent.** Each step below asks for evidence; record what you find as you go, because the final PR-description block has to surface the assessment to a reviewer.
 
 ## When to use
 
 - `scan-containers` CI job failing on a PR.
+- The weekly scheduled scan on `dev` found HIGH/CRITICAL CVEs (no source PR).
 - A reviewer asks for a Trivy follow-up.
 - You're updating a container yml and want to confirm no new HIGH/CRITICAL CVEs slip through.
 
-## Inputs (required from caller)
+## Inputs
 
-- `pr_number`: the PR number whose `scan-containers` CI job is failing.
+The skill runs in one of two modes, distinguished by whether `pr_number` is given:
+
+- **PR mode** (`pr_number` set): triage the `scan-containers` failure on a specific PR. Use that PR's CI output as the input to the triage (Step 1 pulls its scan artifact).
+- **Scheduled mode** (no `pr_number`): triage a fresh scan of the current `dev` HEAD, with no source PR. This is how the weekly scheduled scan (`.github/workflows/trivy-scheduled.yml`) invokes the skill. Either consume a scan-results directory the caller already produced (`scan_results_dir`), or run `bin/scan_containers.py` directly (Step 1).
 
 ## Inputs (optional)
 
-- `local_scan`: if `true`, additionally run Trivy locally against the PR's containers (useful when CI is broken or you want to scan against a `.trivyignore` you haven't pushed yet). Requires `trivy` binary + Docker.
+- `scan_results_dir`: path to a directory of Trivy JSON results the caller already produced (e.g. the scheduled workflow's scan step). When set, skip the fetch/scan in Step 1 and read the per-container JSON from here.
+- `local_scan`: if `true`, additionally run Trivy locally against the containers (useful when CI is broken or you want to scan against a `.trivyignore` you haven't pushed yet). Requires `trivy` binary + Docker. Scheduled mode already scans locally, so this flag is a no-op there.
 
 ## Branching: triage work goes in its own PR, not the failing PR
 
 **Default: branch off `dev` and open a separate triage PR.** Most `scan-containers` failures surface global-state CVEs (libcap2, libgnutls30, Go-stdlib, etc.) that have no causal link to the failing PR's actual changes; piling security patches onto an unrelated PR conflates reviewer concerns. Use the failing PR's CI output as the *input* to the triage; deliver the fix separately.
 
-Exception: if the failing PR itself introduced the CVE (a new yml pin in its diff), the fix belongs inline on that PR. When in doubt, ask.
+Exception (PR mode only): if the failing PR itself introduced the CVE (a new yml pin in its diff), the fix belongs inline on that PR. When in doubt, ask.
+
+In scheduled mode there is no source PR, so this always branches off `dev` and always opens a separate triage PR — the exception above never applies.
 
 ## Procedure
 
@@ -38,11 +45,19 @@ git fetch origin dev --quiet
 git checkout -b coding-agent/trivy-triage-YYYY-MM-DD origin/dev
 ```
 
-(If Step 1 confirms the CVE is PR-local per the Branching section above, switch to the failing PR's branch instead.)
+(PR mode only: if Step 1 confirms the CVE is PR-local per the Branching section above, switch to the failing PR's branch instead. In scheduled mode stay on this branch.)
 
 ### Step 1 — Fetch the scan results
 
-From the latest `scan-containers` run on the PR:
+**Scheduled mode (no `pr_number`):** you're already on `dev` HEAD from Step 0. If the caller passed `scan_results_dir`, use that directory of Trivy JSON as-is. Otherwise run the scan directly against the dev container set:
+
+```bash
+python bin/scan_containers.py --config configs/containers.config --output-dir /tmp/trivy
+```
+
+This produces the same `<container>.json` + `summary.json` layout described below. Then continue at Step 2. (The rest of this step is the PR-mode artifact fetch.)
+
+**PR mode:** from the latest `scan-containers` run on the PR:
 
 ```bash
 # Resolve the PR's branch from the PR number, then find the latest *completed* run ID.
@@ -194,7 +209,9 @@ If multiple related CVEs share an assessment (e.g. several Go-stdlib CVEs in the
 
 ### Step 5 — Generate the PR description
 
-The PR body has two parts: a temporary rebuild-handoff callout at the top (only when there's at least one Patch outcome), and the persistent Trivy-triage assessment block. Use this as the body of the *new* triage PR. **Exception:** when the failing PR's own diff introduced the CVE (a new yml pin or container change in its diff — see the Branching section above), the fix belongs inline on that PR, so append the assessment block under a `# Trivy triage` heading on the original PR instead.
+The PR body has two parts: a temporary rebuild-handoff callout at the top (only when there's at least one Patch outcome), and the persistent Trivy-triage assessment block. Use this as the body of the *new* triage PR. **Exception (PR mode only):** when the failing PR's own diff introduced the CVE (a new yml pin or container change in its diff — see the Branching section above), the fix belongs inline on that PR, so append the assessment block under a `# Trivy triage` heading on the original PR instead.
+
+`<origin>` in the block below is the scan source: in PR mode, `PR #<n>`; in scheduled mode, "the weekly scheduled scan on `dev`" — do not imply a source PR when there isn't one.
 
 ```markdown
 > **Rebuild required before merge — `scan-containers` is red until then.**
