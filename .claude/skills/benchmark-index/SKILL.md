@@ -131,6 +131,7 @@ Two reminders that are not obvious from the template alone:
 
 - Trust the script's annotations. If a row has `covered_by_hard_exclude = 2169574`, the script verified the lineage; do not manually re-classify. The "Categorization buckets" glossary below explains what each script-emitted label means.
 - Err on the side of inclusion in §Recommendations. Every plausible candidate change should appear, even at `low` confidence. In particular: any stale reference in §1, every uncovered promotion in §4, and every override policy gap in §4 should each appear as a candidate change.
+- Sanity-check `rust_tools_version` in `params_changes.tsv`. It selects the Rust-tools container used to build the index and defaults to `main`, so a value of `main` on an index built from a `dev` checkout means the index was built with main's (older) Rust tools by accident — flag it in §5, and note that RUN must later use a matching version.
 
 ### Step 6 - Hand off
 
