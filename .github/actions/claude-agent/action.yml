@@ -13,6 +13,9 @@ inputs:
   app-private-key:
     description: 'Private key for the coding-agent GitHub App used to mint the token.'
     required: true
+  app-id:
+    description: 'Numeric App id of the coding-agent GitHub App used to mint the token.'
+    required: true
 
 runs:
   using: 'composite'
@@ -21,8 +24,7 @@ runs:
       id: app-token
       uses: actions/create-github-app-token@v1
       with:
-        # Public numeric App id of the coding-agent GitHub App (not a secret).
-        app-id: '3941495'
+        app-id: ${{ inputs.app-id }}
         private-key: ${{ inputs.app-private-key }}
 
     - name: Run Claude Code agent
