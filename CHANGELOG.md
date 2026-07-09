@@ -4,6 +4,7 @@
 - Pass `-t ${task.cpus}` to minimap2 in the `MINIMAP2` and `MINIMAP2_NON_STREAMED` modules.
 - Add a `.github/actions/trivy-scan` composite action and a PR-less invocation mode for the `triage-trivy` skill (developer/CI tooling; no pipeline change).
 - Publish a `rust-tools:stable` container image by adding `stable` to the `rust-tools.yml` push triggers and deriving the ECR image tag from the branch name (CI only; no pipeline change).
+- Gate the Trivy container vulnerability scan (`scan-containers`) behind a paths-filter so it only runs when `containers/**` or `configs/containers.config` change.
 
 # v3.2.2.0
 
