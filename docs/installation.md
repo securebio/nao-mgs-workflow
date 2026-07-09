@@ -110,6 +110,9 @@ nextflow run REPO_DIR \
 
 Replace `<BASE_DIR>` with the directory (likely on S3) where you want to store your index files, and `<BATCH_QUEUE_NAME>` with your AWS Batch job queue name. (You shouldn't need to modify anything else at this stage. However, if you'd like to, you can [learn more about what each parameter does here](./config.md).)
 
+> [!NOTE]
+> The Rust-tools container version defaults to `main`. When building an index from an unmerged `dev` checkout (or any branch not yet on `main`), pass `--rust_tools_version dev` (or set `export RUST_TOOLS_VERSION=dev`) so the index is built with dev's Rust tools rather than the older versions pinned on `main`. Use the same version when you later run the pipeline against this index.
+
 > [!TIP]
 > You don't need to point `nextflow run` at `main.nf` any other workflow file; pointing to the directory will cause Nextflow to automatically run `main.nf` from that directory.
 
