@@ -1,36 +1,18 @@
 name: 'Claude Agent'
 description: >-
-  Run an in-CI Claude Code agent against a prompt. Mints a short-lived
-  GitHub App token so the agent acts as the coding-agent app, then invokes
-  anthropics/claude-code-action with either an Anthropic API key or Amazon
-  Bedrock for model access.
+  Run an in-CI Claude Code agent against a prompt, minting a short-lived
+  GitHub App token so the agent acts as the coding-agent app (Anthropic API-key auth).
 
 inputs:
   prompt:
     description: 'The prompt driving the agent for this run.'
     required: true
   anthropic-api-key:
-    description: 'Anthropic API key for direct API access. Leave empty when use-bedrock is true.'
-    required: false
-    default: ''
-  use-bedrock:
-    description: "When 'true', route model calls through Amazon Bedrock instead of the Anthropic API."
-    required: false
-    default: 'false'
-  app-id:
-    description: 'GitHub App ID used to mint the token the agent operates with.'
+    description: 'Anthropic API key for direct API access.'
     required: true
   app-private-key:
-    description: 'Private key for the GitHub App identified by app-id.'
+    description: 'Private key for the coding-agent GitHub App used to mint the token.'
     required: true
-  model:
-    description: 'Optional model override passed to claude-code-action.'
-    required: false
-    default: ''
-  allowed-tools:
-    description: 'Optional comma-separated list of tools the agent may use, passed to claude-code-action.'
-    required: false
-    default: ''
 
 runs:
   using: 'composite'
@@ -39,7 +21,8 @@ runs:
       id: app-token
       uses: actions/create-github-app-token@v1
       with:
-        app-id: ${{ inputs.app-id }}
+        # Public numeric App id of the coding-agent GitHub App (not a secret).
+        app-id: '3941495'
         private-key: ${{ inputs.app-private-key }}
 
     - name: Run Claude Code agent
@@ -50,7 +33,4 @@ runs:
       with:
         prompt: ${{ inputs.prompt }}
         anthropic_api_key: ${{ inputs.anthropic-api-key }}
-        use_bedrock: ${{ inputs.use-bedrock }}
         github_token: ${{ steps.app-token.outputs.token }}
-        model: ${{ inputs.model }}
-        allowed_tools: ${{ inputs.allowed-tools }}

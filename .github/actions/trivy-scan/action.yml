@@ -1,44 +1,17 @@
 name: 'Trivy Container Scan'
 description: >-
-  Scan the container images pinned in the Nextflow config with Trivy
-  (AWS OIDC login, ECR Public login, pinned Trivy install, then
-  bin/scan_containers.py). Reports whether HIGH/CRITICAL CVEs were found
-  and can optionally upload the results as an artifact. This action does
-  not gate on which files changed and does not schedule itself — those are
-  workflow-trigger concerns owned by the calling workflow.
+  Scan the containers pinned in configs/containers.config with Trivy and always
+  upload the results; sets a `found` output for HIGH/CRITICAL CVEs (does not gate).
 
 inputs:
   aws-role-arn:
     description: 'ARN of the IAM role to assume via OIDC for ECR Public access. Passed as an input (not read from secrets) because composite actions cannot read secrets directly.'
     required: true
-  config:
-    description: 'Path to the Nextflow config file listing containers to scan.'
-    required: false
-    default: 'configs/containers.config'
-  output-dir:
-    description: 'Directory for the Trivy JSON results.'
-    required: false
-    default: 'trivy_results'
-  fail-on-findings:
-    description: "When 'true', the scan step exits nonzero if HIGH/CRITICAL CVEs are found (matching the PR-gate behaviour). When 'false', the step always succeeds and callers branch on the found output."
-    required: false
-    default: 'true'
-  upload-artifact:
-    description: "When 'true', upload the results directory as a workflow artifact."
-    required: false
-    default: 'true'
-  artifact-name:
-    description: 'Name of the uploaded artifact.'
-    required: false
-    default: 'trivy-scan-results'
 
 outputs:
   found:
     description: "'true' if HIGH/CRITICAL vulnerabilities were found, 'false' otherwise."
     value: ${{ steps.scan.outputs.found }}
-  results-dir:
-    description: 'Directory containing the Trivy JSON results.'
-    value: ${{ steps.scan.outputs.results-dir }}
 
 runs:
   using: 'composite'
@@ -74,26 +47,22 @@ runs:
       shell: bash
       run: |
         set +e
-        python bin/scan_containers.py --config "${{ inputs.config }}" --output-dir "${{ inputs.output-dir }}"
+        python bin/scan_containers.py --config "configs/containers.config" --output-dir "trivy_results"
         code=$?
         set -e
-        echo "results-dir=${{ inputs.output-dir }}" >> "$GITHUB_OUTPUT"
         if [ "$code" -eq 0 ]; then
           echo "found=false" >> "$GITHUB_OUTPUT"
         elif [ "$code" -eq 1 ]; then
           # scan_containers.py exits 1 when HIGH/CRITICAL vulnerabilities are found.
           echo "found=true" >> "$GITHUB_OUTPUT"
-          if [ "${{ inputs.fail-on-findings }}" = "true" ]; then
-            exit 1
-          fi
         else
           echo "::error::bin/scan_containers.py failed with exit code $code" >&2
           exit "$code"
         fi
 
     - name: Upload scan results
-      if: ${{ always() && inputs.upload-artifact == 'true' }}
+      if: always()
       uses: actions/upload-artifact@v4
       with:
-        name: ${{ inputs.artifact-name }}
-        path: ${{ inputs.output-dir }}/
+        name: trivy-scan-results
+        path: trivy_results/
