@@ -24,7 +24,6 @@ jobs:
             containers:
               - 'containers/**'
               - 'configs/containers.config'
-              - '.github/workflows/trivy-scan.yml'
 
       - name: Configure AWS credentials
         if: steps.filter.outputs.containers == 'true'
