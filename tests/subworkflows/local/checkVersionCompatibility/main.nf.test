@@ -136,6 +136,29 @@ nextflow_workflow {
         }
     }
 
+    test("Should synthesize the legacy fallback table under a non-default tool name") {
+        // Legacy (text-file) index format with a custom tool_name. The index's
+        // min-pipeline version (2.0.0.0) exceeds the pipeline (1.0.0.0), so the
+        // check fails only if getIndexPyprojectPath synthesizes the fallback
+        // content under [tool.custom-tool] (not the hardcoded mgs-workflow table).
+        tag "expect_failed"
+        config "tests/configs/run.config"
+        when {
+            params {}
+            workflow {
+                """
+                input[0] = "${projectDir}/test-data/checkVersionCompatibility/legacy-custom-tool"
+                input[1] = "${projectDir}/test-data/checkVersionCompatibility/legacy-custom-tool"
+                input[2] = "custom-tool"
+                """
+            }
+        }
+        then {
+            assert workflow.failed
+            assert workflow.stdout.any{ it.contains("Pipeline version is older than index minimum") && !it.contains('${') }
+        }
+    }
+
     test("Should fail if index is invalid") {
         tag "expect_failed"
         config "tests/configs/run.config"
