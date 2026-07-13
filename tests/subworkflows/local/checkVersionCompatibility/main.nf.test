@@ -112,6 +112,30 @@ nextflow_workflow {
         }
     }
 
+    test("Should read compatibility fields from a non-default tool table") {
+        // The fixture stores compatibility fields under [tool.custom-tool] only,
+        // with an index older than the pipeline minimum. The check fails only if
+        // tool_name is actually threaded through and the custom table is read;
+        // reading the default [tool.mgs-workflow] table would find no fields and
+        // (incorrectly) pass.
+        tag "expect_failed"
+        config "tests/configs/run.config"
+        when {
+            params {}
+            workflow {
+                """
+                input[0] = "${projectDir}/test-data/checkVersionCompatibility/custom-tool-name"
+                input[1] = "${projectDir}/test-data/checkVersionCompatibility/custom-tool-name"
+                input[2] = "custom-tool"
+                """
+            }
+        }
+        then {
+            assert workflow.failed
+            assert workflow.stdout.any{ it.contains("Index version is older than pipeline minimum") && !it.contains('${') }
+        }
+    }
+
     test("Should fail if index is invalid") {
         tag "expect_failed"
         config "tests/configs/run.config"

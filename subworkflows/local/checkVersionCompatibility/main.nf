@@ -13,21 +13,23 @@ include { CHECK_VERSIONS } from "../../../modules/local/checkVersions"
 | AUXILIARY FUNCTIONS |
 ***********************/
 
-def getIndexPyprojectPath(ref_dir) {
+def getIndexPyprojectPath(ref_dir, tool_name) {
     /* Get the pyproject.toml path for an index, with backwards compatibility
     for old indexes that use separate version text files. */
     def index_pyproject_file = file("${ref_dir}/logging/pyproject.toml")
     if (index_pyproject_file.exists()) {
         return index_pyproject_file
     }
-    // Fall back to old format - generate pyproject content from old files
+    // Fall back to old format - generate pyproject content from old files.
+    // Write the compatibility field under the caller's tool table so the
+    // synthesized content is read correctly regardless of tool_name.
     def index_version = file("${ref_dir}/logging/pipeline-version.txt").text.trim()
     def index_min_pipeline = file("${ref_dir}/logging/index-min-pipeline-version.txt").text.trim()
     def pyproject_content = """\
 [project]
 version = "${index_version}"
 
-[tool.mgs-workflow]
+[tool.${tool_name}]
 index-min-pipeline-version = "${index_min_pipeline}"
 """
     def temp_file = File.createTempFile("index-pyproject", ".toml")
@@ -48,7 +50,7 @@ workflow CHECK_VERSION_COMPATIBILITY {
     main:
         // Derive pyproject.toml paths from directories
         pipeline_pyproject_path = file("${project_dir}/pyproject.toml")
-        index_pyproject_path = getIndexPyprojectPath(ref_dir)
+        index_pyproject_path = getIndexPyprojectPath(ref_dir, tool_name)
 
         // Extract version info from pyproject.toml files using a process
         // (handles S3 paths correctly by staging files in the container)
