@@ -2,7 +2,7 @@ name: Rust Tools CI
 
 on:
   push:
-    branches: [dev, main]
+    branches: [dev, main, stable]
   pull_request:
 
 permissions:
@@ -107,12 +107,13 @@ jobs:
           aws-region: us-east-1
 
       - name: Push to ECR
+        env:
+          BRANCH_TAG: ${{ github.ref_name }}
         run: |
           aws ecr-public get-login-password --region us-east-1 | \
             docker login --username AWS --password-stdin public.ecr.aws
 
-          BRANCH_TAG=${{ github.ref == 'refs/heads/main' && 'main' || 'dev' }}
           REPO=public.ecr.aws/q0n1c7g8/nao-mgs-workflow/rust-tools
 
-          docker tag nao-rust-tools:local $REPO:$BRANCH_TAG
-          docker push $REPO:$BRANCH_TAG
+          docker tag nao-rust-tools:local "$REPO:$BRANCH_TAG"
+          docker push "$REPO:$BRANCH_TAG"
