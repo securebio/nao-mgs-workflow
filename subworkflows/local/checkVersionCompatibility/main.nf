@@ -44,6 +44,7 @@ workflow CHECK_VERSION_COMPATIBILITY {
     take:
         ref_dir      // Index directory (contains logging/pyproject.toml)
         project_dir  // Local project directory for the current pipeline execution (contains pyproject.toml)
+        tool_name    // Name of the [tool.<name>] pyproject table holding the compatibility fields
     main:
         // Derive pyproject.toml paths from directories
         pipeline_pyproject_path = file("${project_dir}/pyproject.toml")
@@ -51,7 +52,7 @@ workflow CHECK_VERSION_COMPATIBILITY {
 
         // Extract version info from pyproject.toml files using a process
         // (handles S3 paths correctly by staging files in the container)
-        versions_ch = EXTRACT_VERSIONS(pipeline_pyproject_path, index_pyproject_path)
+        versions_ch = EXTRACT_VERSIONS(pipeline_pyproject_path, index_pyproject_path, tool_name)
 
         // Check version compatibility
         CHECK_VERSIONS(

@@ -92,6 +92,34 @@ class TestExtractVersionInfo:
         assert extract_version_info(toml_data) == expected
 
     @pytest.mark.parametrize(
+        "tool_name,expected",
+        [
+            ("mgs-workflow", VersionInfo("3.0.0", "1.0.0", "1.5.0")),
+            ("other-tool", VersionInfo("3.0.0", "2.0.0", "2.5.0")),
+            ("missing-tool", VersionInfo("3.0.0", None, None)),
+        ],
+        ids=["default_table", "custom_table", "missing_table"],
+    )
+    def test_extract_version_info_tool_name(
+        self, tool_name: str, expected: VersionInfo
+    ) -> None:
+        """The tool table read is selectable via tool_name."""
+        toml_data = {
+            "project": {"version": "3.0.0"},
+            "tool": {
+                "mgs-workflow": {
+                    "pipeline-min-index-version": "1.0.0",
+                    "index-min-pipeline-version": "1.5.0",
+                },
+                "other-tool": {
+                    "pipeline-min-index-version": "2.0.0",
+                    "index-min-pipeline-version": "2.5.0",
+                },
+            },
+        }
+        assert extract_version_info(toml_data, tool_name) == expected
+
+    @pytest.mark.parametrize(
         "toml_data",
         [
             {"project": {}},
@@ -152,3 +180,29 @@ class TestExtractVersionsIntegration:
         lines = captured.out.strip().split("\n")
         for expected in expected_lines:
             assert expected in lines
+
+    def test_extract_versions_output_custom_tool_name(
+        self,
+        temp_file_helper: Any,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        """Compatibility fields are read from the requested tool table."""
+        pipeline_toml = (
+            '[project]\nversion = "2.1.0"\n'
+            '[tool.custom-tool]\npipeline-min-index-version = "1.0.0"'
+        )
+        index_toml = (
+            '[project]\nversion = "1.5.0"\n'
+            '[tool.custom-tool]\nindex-min-pipeline-version = "2.0.0"'
+        )
+        pipeline_file = temp_file_helper.create_file("pipeline.toml", pipeline_toml)
+        index_file = temp_file_helper.create_file("index.toml", index_toml)
+
+        extract_versions.extract_versions(
+            pipeline_file, index_file, tool_name="custom-tool"
+        )
+
+        captured = capsys.readouterr()
+        lines = captured.out.strip().split("\n")
+        assert "PIPELINE_MIN_INDEX=1.0.0" in lines
+        assert "INDEX_MIN_PIPELINE=2.0.0" in lines
