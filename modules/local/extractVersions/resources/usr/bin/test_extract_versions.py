@@ -89,7 +89,7 @@ class TestExtractVersionInfo:
         self, toml_data: dict[str, Any], expected: VersionInfo
     ) -> None:
         """Test extracting version info from various TOML structures."""
-        assert extract_version_info(toml_data) == expected
+        assert extract_version_info(toml_data, "mgs-workflow") == expected
 
     @pytest.mark.parametrize(
         "tool_name,expected",
@@ -130,7 +130,7 @@ class TestExtractVersionInfo:
     def test_extract_version_info_raises(self, toml_data: dict[str, Any]) -> None:
         """Test that missing required fields raise KeyError."""
         with pytest.raises(KeyError):
-            extract_version_info(toml_data)
+            extract_version_info(toml_data, "mgs-workflow")
 
 
 class TestExtractVersionsIntegration:
@@ -174,7 +174,7 @@ class TestExtractVersionsIntegration:
         pipeline_file = temp_file_helper.create_file("pipeline.toml", pipeline_toml)
         index_file = temp_file_helper.create_file("index.toml", index_toml)
 
-        extract_versions.extract_versions(pipeline_file, index_file)
+        extract_versions.extract_versions(pipeline_file, index_file, "mgs-workflow")
 
         captured = capsys.readouterr()
         lines = captured.out.strip().split("\n")

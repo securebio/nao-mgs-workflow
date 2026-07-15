@@ -41,8 +41,7 @@ def parse_args() -> argparse.Namespace:
         default="mgs-workflow",
         help=(
             "Name of the [tool.<name>] table holding the compatibility fields "
-            "(default: mgs-workflow). Set this for pipelines that vendor this "
-            "subworkflow but store their config under a different tool table."
+            "(default: mgs-workflow)."
         ),
     )
     return parser.parse_args()
@@ -76,9 +75,7 @@ def get_nested_value(data: dict[str, Any], *keys: str, default: Any = None) -> A
     return current
 
 
-def extract_version_info(
-    toml_data: dict[str, Any], tool_name: str = "mgs-workflow"
-) -> VersionInfo:
+def extract_version_info(toml_data: dict[str, Any], tool_name: str) -> VersionInfo:
     """
     Extract version information from parsed TOML data.
 
@@ -104,9 +101,7 @@ def extract_version_info(
     )
 
 
-def extract_versions(
-    pipeline_path: str, index_path: str, tool_name: str = "mgs-workflow"
-) -> None:
+def extract_versions(pipeline_path: str, index_path: str, tool_name: str) -> None:
     """
     Extract version information from pyproject.toml files and print as
     shell variable assignments.
