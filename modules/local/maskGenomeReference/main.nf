@@ -24,6 +24,6 @@ process MASK_GENOME_REFERENCE {
             ref=${human_fasta} \
             stats=${params_map.name_pattern}-human-mask.stats.txt \
             k=${params_map.k} hdist=${params_map.hdist} mm=f mask=N rcomp=t \
-            -Xmx${task.memory.toGiga()}g
+            t=${task.cpus} -Xmx${task.memory.toGiga()}g
         """
 }
