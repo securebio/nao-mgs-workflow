@@ -1,6 +1,7 @@
 # v3.2.3.0-dev
 
 - Mask human (CHM13) k-mers out of the viral genomes before building the Nucleaze viral screen index (`virus-genomes-masked.nucleaze.bin`), so reads from human-contaminated viral genome regions no longer clear RUN's k-mer screen and inflate the count of putative viral reads. INDEX gains a `MASK_GENOME_REFERENCE` BBDuk step (masking at `k = nucleaze_k`, `hdist=0`, `rcomp=t`) that feeds only the Nucleaze screen index; the bowtie2/minimap2 viral alignment indexes are unchanged. INDEX also publishes a `virus-genomes-human-mask.stats.txt` log. Changes which reads survive the k-mer screen on next index rebuild.
+- Exclude the two fully-human "viral" genome records `AY037928.1` and `NC_022518.1` (Human endogenous retrovirus K113, 100% aligned to CHM13) from the viral genome DB via `ref/hv_patterns_exclude.txt`. These endogenous-retrovirus records are pure human contamination in a viral screen; k-mer masking would N-mask them entirely, so structural exclusion is cleaner.
 - Add `bin/compare_downstream_runs.py` / `bin/downstream_metrics.py` and the paired `benchmark-downstream` agent skill for comparing two DOWNSTREAM runs (e.g. across a pipeline change) from their existing output files. Developer/agent tooling only: reads existing DOWNSTREAM outputs and adds no new pipeline outputs, behavior, or schema changes.
 
 # v3.2.2.0
