@@ -1,7 +1,8 @@
-// Mask k-mers in a genome FASTA that are shared with a contaminant reference
-// (e.g. the human genome), N-masking any k-mer present in the reference. Used
-// to strip host/contaminant contamination from viral genomes before building
-// the nucleaze k-mer screen index, so contaminant reads don't clear the screen.
+// N-mask k-mers in the viral genome FASTA that are shared with the human genome
+// (CHM13), stripping human-contaminated regions before the nucleaze k-mer screen
+// index is built so human reads don't clear the screen. The `ref_fasta` input is
+// the reference to mask against and the output filenames use a "human" infix; this
+// process is human-specific by design (see the hardcoded infix below).
 process MASK_GENOME_REFERENCE {
     label "BBTools"
     label "bbduk_ref_mask_resources"
