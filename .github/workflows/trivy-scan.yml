@@ -16,22 +16,35 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Check for relevant changes
+        uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            containers:
+              - 'containers/**'
+              - 'configs/containers.config'
+
       - name: Configure AWS credentials
+        if: steps.filter.outputs.containers == 'true'
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
           aws-region: us-east-1
 
       - name: Login to ECR Public
+        if: steps.filter.outputs.containers == 'true'
         run: |
           aws ecr-public get-login-password --region us-east-1 | docker login --username AWS --password-stdin public.ecr.aws
 
       - name: Set up Python
+        if: steps.filter.outputs.containers == 'true'
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
 
       - name: Install Trivy
+        if: steps.filter.outputs.containers == 'true'
         env:
           TRIVY_VERSION: "0.69.3"
           TRIVY_SHA256: "a484057aafde31089cf2558ca0f79a4bc835125a5ee6834183a5bcf0735af358"
@@ -41,10 +54,11 @@ jobs:
           sudo dpkg -i "trivy_${TRIVY_VERSION}_Linux-64bit.deb"
 
       - name: Run Trivy scan
+        if: steps.filter.outputs.containers == 'true'
         run: python bin/scan_containers.py --config configs/containers.config --output-dir trivy_results
 
       - name: Upload scan results
-        if: always()
+        if: always() && steps.filter.outputs.containers == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: trivy-scan-results
