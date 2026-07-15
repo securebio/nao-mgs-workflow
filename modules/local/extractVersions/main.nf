@@ -6,6 +6,7 @@ process EXTRACT_VERSIONS {
     input:
         path pipeline_pyproject, stageAs: "pipeline_pyproject.toml"
         path index_pyproject, stageAs: "index_pyproject.toml"
+        val tool_name
     output:
         env('PIPELINE_VERSION'), emit: pipeline_version
         env('INDEX_VERSION'), emit: index_version
@@ -13,6 +14,6 @@ process EXTRACT_VERSIONS {
         env('INDEX_MIN_PIPELINE'), emit: index_min_pipeline
     script:
         """
-        eval \$(extract_versions.py pipeline_pyproject.toml index_pyproject.toml)
+        eval \$(extract_versions.py pipeline_pyproject.toml index_pyproject.toml --tool-name '${tool_name}')
         """
 }

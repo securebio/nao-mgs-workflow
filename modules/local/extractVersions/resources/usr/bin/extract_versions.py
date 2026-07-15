@@ -36,6 +36,14 @@ def parse_args() -> argparse.Namespace:
         "index_pyproject",
         help="Path to index pyproject.toml file",
     )
+    parser.add_argument(
+        "--tool-name",
+        default="mgs-workflow",
+        help=(
+            "Name of the [tool.<name>] table holding the compatibility fields "
+            "(default: mgs-workflow)."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -67,22 +75,24 @@ def get_nested_value(data: dict[str, Any], *keys: str, default: Any = None) -> A
     return current
 
 
-def extract_version_info(toml_data: dict[str, Any]) -> VersionInfo:
+def extract_version_info(toml_data: dict[str, Any], tool_name: str) -> VersionInfo:
     """
     Extract version information from parsed TOML data.
 
     Args:
         toml_data: Parsed TOML data as a dictionary
+        tool_name: Name of the [tool.<tool_name>] table holding the
+            compatibility fields
 
     Returns:
         VersionInfo with extracted version data
     """
     version = toml_data["project"]["version"]
     min_index_version = get_nested_value(
-        toml_data, "tool", "mgs-workflow", "pipeline-min-index-version"
+        toml_data, "tool", tool_name, "pipeline-min-index-version"
     )
     min_pipeline_version = get_nested_value(
-        toml_data, "tool", "mgs-workflow", "index-min-pipeline-version"
+        toml_data, "tool", tool_name, "index-min-pipeline-version"
     )
     return VersionInfo(
         version=version,
@@ -91,7 +101,7 @@ def extract_version_info(toml_data: dict[str, Any]) -> VersionInfo:
     )
 
 
-def extract_versions(pipeline_path: str, index_path: str) -> None:
+def extract_versions(pipeline_path: str, index_path: str, tool_name: str) -> None:
     """
     Extract version information from pyproject.toml files and print as
     shell variable assignments.
@@ -99,9 +109,11 @@ def extract_versions(pipeline_path: str, index_path: str) -> None:
     Args:
         pipeline_path: Path to pipeline pyproject.toml
         index_path: Path to index pyproject.toml
+        tool_name: Name of the [tool.<tool_name>] table holding the
+            compatibility fields
     """
-    pipeline_info = extract_version_info(read_toml(pipeline_path))
-    index_info = extract_version_info(read_toml(index_path))
+    pipeline_info = extract_version_info(read_toml(pipeline_path), tool_name)
+    index_info = extract_version_info(read_toml(index_path), tool_name)
 
     # Output as shell variable assignments
     print(f"PIPELINE_VERSION={pipeline_info.version}")
@@ -113,7 +125,7 @@ def extract_versions(pipeline_path: str, index_path: str) -> None:
 def main() -> None:
     """Main entry point."""
     args = parse_args()
-    extract_versions(args.pipeline_pyproject, args.index_pyproject)
+    extract_versions(args.pipeline_pyproject, args.index_pyproject, args.tool_name)
 
 
 if __name__ == "__main__":

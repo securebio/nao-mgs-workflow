@@ -1,5 +1,6 @@
 # v3.2.2.1-dev
 
+- Make the `[tool.<name>]` table read by `CHECK_VERSION_COMPATIBILITY` configurable.
 - Add `bin/compare_downstream_runs.py` / `bin/downstream_metrics.py` and the paired `benchmark-downstream` agent skill for comparing two DOWNSTREAM runs (e.g. across a pipeline change) from their existing output files. Developer/agent tooling only: reads existing DOWNSTREAM outputs and adds no new pipeline outputs, behavior, or schema changes.
 - Pass `-t ${task.cpus}` to minimap2 in the `MINIMAP2` and `MINIMAP2_NON_STREAMED` modules.
 - Add a `.github/actions/trivy-scan` composite action and a PR-less invocation mode for the `triage-trivy` skill (developer/CI tooling; no pipeline change).
