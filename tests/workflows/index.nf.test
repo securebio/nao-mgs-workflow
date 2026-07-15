@@ -42,6 +42,9 @@ nextflow_pipeline {
             def fastaLines = path("${launchDir}/output/results/virus-genomes-masked.fasta.gz").linesGzip
             assert fastaLines.any { it.startsWith(">") } :
                 "Masked FASTA should contain at least one sequence header"
+            // Human k-mer masking of the viral screen index publishes a BBDuk stats log.
+            assert path("${launchDir}/output/logging/virus-genomes-human-mask.stats.txt").exists() :
+                "Human-mask BBDuk stats should be published under logging/"
             // Pre-filter assembly metadata is published with the enumerate schema.
             def rawMeta = path("${launchDir}/output/results/virus-genome-metadata-raw.tsv.gz").csv(sep: "\t", decompress: true)
             assert rawMeta.columnNames == ["assembly_accession", "taxid", "organism_name", "source_database", "assembly_status", "release_date"]

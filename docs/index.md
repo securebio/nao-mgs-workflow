@@ -16,6 +16,7 @@ Key [inputs](./config.md) to the index workflow include:
 Given these inputs, the index workflow:
 - Generates a TSV of viral taxa, incorporating taxonomic information from NCBI, and annotates each taxon with infection status for each host taxon of interest (using Virus-Host-DB).
 - Makes Minimap2 and Bowtie2 indices from (1) all vertebrate-infecting viral genomes in Genbank[^genbank], (2) the human genome, (3) common non-human contaminants, plus BBMap indices for (2) and (3).
+- Builds a [Nucleaze](https://github.com/jackdougle/nucleaze) k-mer index over the viral genomes for RUN's viral k-mer screen. Before indexing, it uses BBDuk to N-mask any k-mer the viral genomes share with the human genome (CHM13), so human-contaminated regions of viral assemblies don't let human reads pass the screen. This masking applies only to the k-mer screen index, not to the viral Minimap2/Bowtie2 alignment indices.
 - Downloads and extracts local copies of (1) the BLAST nt database, (2) the specified Kraken2 DB, (3) the SILVA rRNA reference files.
 - Makes a Minimap2 index from the joined SILVA rRNA reference files.
 
