@@ -1,13 +1,13 @@
 nextflow_process {
 
-    name "Test process MASK_GENOME_REFERENCE"
-    script "modules/local/maskGenomeReference/main.nf"
-    process "MASK_GENOME_REFERENCE"
+    name "Test process MASK_GENOME_FASTA_WITH_HUMAN"
+    script "modules/local/maskGenomeFastaWithHuman/main.nf"
+    process "MASK_GENOME_FASTA_WITH_HUMAN"
     config "tests/configs/index.config"
     tag "module"
-    tag "maskGenomeReference"
+    tag "maskGenomeFastaWithHuman"
 
-    test("Should N-mask genome k-mers shared with the reference and leave clean sequence untouched") {
+    test("Should N-mask genome k-mers shared with the human reference and leave clean sequence untouched") {
         tag "expect_success"
         setup {
             run("GZIP_FILE_BARE") {

@@ -22,10 +22,8 @@ nextflow_process {
         when {
             process {
                 '''
-                // Use the real production exclusion list, which contains AY037928.1
-                // (HERV-K113) — this guards that the excluded accession is filtered.
                 input[0] = GZIP_FILE_BARE.out
-                input[1] = "${projectDir}/ref/hv_patterns_exclude.txt"
+                input[1] = "${projectDir}/test-data/toy-data/test-hv-patterns-exclude.txt"
                 input[2] = "genomes-filtered"
                 '''
             }

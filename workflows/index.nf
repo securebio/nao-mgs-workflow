@@ -48,10 +48,8 @@ workflow INDEX {
         lsu_ch = WGET_LSU(params.lsu_url, "lsu_ref.fasta.gz")
         // Build alignment indices
         ribo_ref_ch = JOIN_RIBO_REF(ssu_ch.file, lsu_ch.file)
-        // Build the human index first so its downloaded FASTA can be reused to
-        // mask human k-mers out of the viral screen index.
         human_index_ch = MAKE_HUMAN_INDEX(params.human_url)
-        virus_index_ch = MAKE_VIRUS_INDEX(genome_ch.fasta, human_index_ch.genome, params.nucleaze_k)
+        virus_index_ch = MAKE_VIRUS_INDEX(genome_ch.fasta, human_index_ch.human_genome, params.nucleaze_k)
         contaminant_index_ch = MAKE_CONTAMINANT_INDEX(params.genome_urls, params.contaminants)
         ribo_index_ch = MAKE_RIBO_INDEX(ribo_ref_ch.ribo_ref)
         // Other index files

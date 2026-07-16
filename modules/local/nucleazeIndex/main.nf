@@ -7,7 +7,7 @@ process NUCLEAZE_INDEX {
     input:
         path(ref_fasta)
         val(k)
-        val(index_basename) // basename for the .nucleaze.bin (decouples it from ref_fasta's name)
+        val(index_basename)
     output:
         path("*.nucleaze.bin"), emit: index
         path("nucleaze_index.log"), emit: log

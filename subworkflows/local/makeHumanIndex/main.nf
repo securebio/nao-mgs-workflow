@@ -22,5 +22,5 @@ workflow MAKE_HUMAN_INDEX {
     emit:
         bt2 = bowtie2_ch
         mm2 = minimap2_ch.output
-        genome = genome_ch  // downloaded human FASTA, reused to mask the viral screen index
+        human_genome = genome_ch  // downloaded human FASTA
 }
