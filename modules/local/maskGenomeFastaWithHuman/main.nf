@@ -2,7 +2,7 @@
 // (CHM13).
 process MASK_GENOME_FASTA_WITH_HUMAN {
     label "BBTools"
-    label "bbduk_ref_mask_resources"
+    label "human_mask_resources"
     tag "id=index"
     input:
         path(genome_fasta)
