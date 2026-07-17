@@ -1,0 +1,42 @@
+nextflow_process {
+
+    name "Test process FILTER_GENOME_FASTA"
+    script "modules/local/filterGenomeFasta/main.nf"
+    process "FILTER_GENOME_FASTA"
+    config "tests/configs/index.config"
+    tag "module"
+    tag "filterGenomeFasta"
+
+    test("Should drop sequences whose headers match an exclusion pattern and keep the rest") {
+        tag "expect_success"
+        setup {
+            run("GZIP_FILE_BARE") {
+                script "modules/local/gzipFile/main.nf"
+                process {
+                    '''
+                    input[0] = Channel.of("${projectDir}/test-data/toy-data/test-genome-exclude.fasta")
+                    '''
+                }
+            }
+        }
+        when {
+            process {
+                '''
+                input[0] = GZIP_FILE_BARE.out
+                input[1] = "${projectDir}/test-data/toy-data/test-hv-patterns-exclude.txt"
+                input[2] = "genomes-filtered"
+                '''
+            }
+        }
+        then {
+            assert process.success
+            assert process.out[0][0].toString().contains('genomes-filtered.fasta.gz')
+            def fasta_map = path(process.out[0][0]).fasta
+            // Both excluded HERV-K113 accessions are gone; the unmatched sequence survives.
+            assert fasta_map.size() == 1
+            def survivor = fasta_map.keySet().first()
+            assert survivor.contains('KEEP_ME')
+            assert !fasta_map.keySet().any { it.contains('AY037928') || it.contains('NC_022518') }
+        }
+    }
+}

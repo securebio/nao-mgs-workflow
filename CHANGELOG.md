@@ -1,5 +1,7 @@
-# v3.2.2.1-dev
+# v3.2.3.0-dev
 
+- Mask human (CHM13) k-mers out of the viral genomes before building the Nucleaze k-mer index.
+- Exclude two viral genome records (`AY037928.1` and `NC_022518.1`) that are pure human contamination.
 - Make the `[tool.<name>]` table read by `CHECK_VERSION_COMPATIBILITY` configurable.
 - Add `bin/compare_downstream_runs.py` / `bin/downstream_metrics.py` and the paired `benchmark-downstream` agent skill for comparing two DOWNSTREAM runs (e.g. across a pipeline change) from their existing output files. Developer/agent tooling only: reads existing DOWNSTREAM outputs and adds no new pipeline outputs, behavior, or schema changes.
 - Pass `-t ${task.cpus}` to minimap2 in the `MINIMAP2` and `MINIMAP2_NON_STREAMED` modules.
