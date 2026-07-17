@@ -39,9 +39,7 @@ nextflow_process {
             assert process.success
             // Output files created with expected names
             assert path(process.out.masked[0]).exists()
-            assert path(process.out.log[0]).exists()
             assert process.out.masked[0].toString().contains('test-genomes-human-masked.fasta.gz')
-            assert process.out.log[0].toString().contains('test-genomes-human-mask.stats.txt')
             // The embedded 100 bp exact-human region should be fully N-masked
             // (a few boundary bases may also be masked); the clean sequence,
             // which shares no k-mer with the reference, should be untouched.

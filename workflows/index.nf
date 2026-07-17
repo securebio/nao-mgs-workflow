@@ -69,7 +69,7 @@ workflow INDEX {
 
     emit:
         input_index = params_ch.mix(overrides_ch)
-        logging_index = time_ch.mix(pyproject_ch, virus_index_ch.human_mask_log)
+        logging_index = time_ch.mix(pyproject_ch)
         // Lots of results; split across 2 channels (reference databases and bowtie2/minimap2 indexes)
         ref_dbs = taxonomy_ch.db.mix( // Taxonomy and virus databases
             taxonomy_ch.nodes,

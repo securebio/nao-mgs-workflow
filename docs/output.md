@@ -88,7 +88,6 @@ Main heading represents the folder name, and subheadings describes the tool that
 - `pyproject.toml`: Project configuration file containing the pipeline version and compatibility version constraints (copied from repository).
 - `time.txt`: Start time of index workflow run.
 - `trace.txt`: Nextflow trace file containing logging information for each process performed during the workflow run.
-- `virus-genomes-human-mask.stats.txt`: BBDuk statistics from masking human (CHM13) k-mers out of the viral genomes before building the Nucleaze viral screen index.
 
 ### `results/`
 

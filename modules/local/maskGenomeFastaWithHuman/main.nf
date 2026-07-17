@@ -10,14 +10,12 @@ process MASK_GENOME_FASTA_WITH_HUMAN {
         val(params_map) // k, hdist, name_pattern
     output:
         path("${params_map.name_pattern}-human-masked.fasta.gz"), emit: masked
-        path("${params_map.name_pattern}-human-mask.stats.txt"), emit: log
     script:
         """
         bbduk.sh \
             in=${genome_fasta} \
             out=${params_map.name_pattern}-human-masked.fasta.gz \
             ref=${human_fasta} \
-            stats=${params_map.name_pattern}-human-mask.stats.txt \
             k=${params_map.k} hdist=${params_map.hdist} mm=f mask=N rcomp=t \
             t=${task.cpus} -Xmx${task.memory.toGiga()}g
         """

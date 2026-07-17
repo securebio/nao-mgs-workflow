@@ -34,6 +34,5 @@ workflow MAKE_VIRUS_INDEX {
         bt2 = bowtie2_ch
         mm2 = minimap2_ch.output
         nucleaze = nucleaze_ch.index
-        human_mask_log = human_masked_ch.log
 }
 // TODO: Consider changing masking tool
