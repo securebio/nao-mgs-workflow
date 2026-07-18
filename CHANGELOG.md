@@ -8,6 +8,7 @@
 - Add a `.github/actions/trivy-scan` composite action and a PR-less invocation mode for the `triage-trivy` skill (developer/CI tooling; no pipeline change).
 - Publish a `rust-tools:stable` container image by adding `stable` to the `rust-tools.yml` push triggers and deriving the ECR image tag from the branch name (CI only; no pipeline change).
 - Gate the Trivy container vulnerability scan (`scan-containers`) behind a paths-filter so it only runs when `containers/**` or `configs/containers.config` change.
+- Fix the ribosomal `BBDUK` step in `PROFILE` storing the `interleaved` flag as an unresolved dataflow channel inside its params map. The stored `DataflowVariable` was always truthy inside the process (so single-end reads were incorrectly treated as interleaved) and could not be Kryo-serialized, which disabled `-resume` for the process. It now resolves to a plain boolean by mapping over the `single_end` value channel. Changes ribosomal separation results for single-end short-read runs; paired-end results are unaffected.
 
 # v3.2.2.0
 

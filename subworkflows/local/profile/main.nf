@@ -37,7 +37,13 @@ workflow PROFILE {
             noribo_in = ribo_ch.reads_unmapped
         } else {
             ribo_path = "${params_map.ref_dir}/results/ribo-ref-concat.fasta.gz"
-            ribo_bbduk_params = params_map + [interleaved: single_end.map { v -> !v }]
+            // Build the params map by mapping over the single_end value channel so
+            // interleaved resolves to a plain boolean inside the map. Adding the
+            // channel directly (params_map + [interleaved: single_end.map{...}])
+            // stores a DataflowVariable in the map, which is always truthy inside
+            // the process (so single-end reads were wrongly treated as interleaved)
+            // and cannot be Kryo-serialized (breaking -resume for BBDUK).
+            ribo_bbduk_params = single_end.map { se -> params_map + [interleaved: !se] }
             ribo_ch = BBDUK(reads_ch, ribo_path, ribo_bbduk_params)
             ribo_in = ribo_ch.match
             noribo_in = ribo_ch.nomatch
