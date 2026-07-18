@@ -17,9 +17,9 @@
 
 nextflow.enable.dsl = 2
 
-process DOWNSAMPLE_PAIRED_LANES {
+process SUBSAMPLE_LANE {
     tag "${source_prefix}:${r1.name}"
-    label 'seqkit'
+    label 'seqtk'
     cpus 2
     memory '8 GB'
 
@@ -27,31 +27,47 @@ process DOWNSAMPLE_PAIRED_LANES {
     tuple val(source_prefix), val(barcoded_id), val(na_id), val(barcoded_reads), val(na_reads), val(total_fraction), val(seed), path(r1), path(r2)
 
     output:
-    tuple val(barcoded_id), path("barcoded_${r1}"), path("barcoded_${r2}")
-    tuple val(na_id), path("na_${r1}"), path("na_${r2}")
+    tuple val(source_prefix), val(barcoded_id), val(na_id), val(barcoded_reads), val(na_reads), val(seed), path("sampled_${r1.baseName}.fastq"), path("sampled_${r2.baseName}.fastq")
 
     script:
-    def total_reads = barcoded_reads + na_reads
-    def barcoded_lines = barcoded_reads * 4
-    def na_lines_start = barcoded_lines + 1
     """
-    # Downsample to total reads needed for both samples
-    seqtk sample -s${seed} ${r1} ${total_fraction} > temp_r1.fastq
-    seqtk sample -s${seed} ${r2} ${total_fraction} > temp_r2.fastq
+    seqtk sample -s${seed} ${r1} ${total_fraction} > sampled_${r1.baseName}.fastq
+    seqtk sample -s${seed} ${r2} ${total_fraction} > sampled_${r2.baseName}.fastq
+    """
+}
 
-    # Shuffle to eliminate order bias
-    seqkit shuffle -s${seed} temp_r1.fastq > shuffled_r1.fastq
-    seqkit shuffle -s${seed} temp_r2.fastq > shuffled_r2.fastq
+process SHUFFLE_AND_SPLIT {
+    tag "${source_prefix}:${r1.name}"
+    label 'seqkit'
+    label 'single_huge_mem'
 
-    # Split sequentially: first N reads to barcoded, remaining to NA
-    head -n ${barcoded_lines} shuffled_r1.fastq | gzip -1 > barcoded_${r1}
-    head -n ${barcoded_lines} shuffled_r2.fastq | gzip -1 > barcoded_${r2}
+    input:
+    tuple val(source_prefix), val(barcoded_id), val(na_id), val(barcoded_reads), val(na_reads), val(seed), path(r1), path(r2)
 
-    tail -n +${na_lines_start} shuffled_r1.fastq | gzip -1 > na_${r1}
-    tail -n +${na_lines_start} shuffled_r2.fastq | gzip -1 > na_${r2}
+    output:
+    tuple val(barcoded_id), path("barcoded_R1_${source_prefix}_*.fastq.gz"), path("barcoded_R2_${source_prefix}_*.fastq.gz")
+    tuple val(na_id), path("na_R1_${source_prefix}_*.fastq.gz"), path("na_R2_${source_prefix}_*.fastq.gz")
 
-    # Cleanup temp files
-    rm temp_r1.fastq temp_r2.fastq shuffled_r1.fastq shuffled_r2.fastq
+    script:
+    def barcoded_frac = (barcoded_reads as Double) / ((barcoded_reads as Double) + (na_reads as Double))
+    def uid = r1.baseName.replaceAll(/^sampled_/, '')
+    """
+    seqkit shuffle -s${seed} ${r1} > shuffled_r1.fastq
+    seqkit shuffle -s${seed} ${r2} > shuffled_r2.fastq
+
+    total_lines=\$(wc -l < shuffled_r1.fastq)
+    total_reads=\$((total_lines / 4))
+    barcoded_reads_lane=\$(awk "BEGIN {printf \\"%d\\", int(\${total_reads} * ${barcoded_frac} + 0.5)}")
+    barcoded_lines=\$((barcoded_reads_lane * 4))
+    na_lines_start=\$((barcoded_lines + 1))
+
+    head -n \${barcoded_lines} shuffled_r1.fastq | gzip -1 > barcoded_R1_${source_prefix}_${uid}.fastq.gz
+    head -n \${barcoded_lines} shuffled_r2.fastq | gzip -1 > barcoded_R2_${source_prefix}_${uid}.fastq.gz
+
+    tail -n +\${na_lines_start} shuffled_r1.fastq | gzip -1 > na_R1_${source_prefix}_${uid}.fastq.gz
+    tail -n +\${na_lines_start} shuffled_r2.fastq | gzip -1 > na_R2_${source_prefix}_${uid}.fastq.gz
+
+    rm shuffled_r1.fastq shuffled_r2.fastq
     """
 }
 
@@ -140,17 +156,18 @@ workflow {
         }
         .set { paired_lanes_ch }
 
-    // Process paired downsampling for each lane
-    DOWNSAMPLE_PAIRED_LANES(paired_lanes_ch)
+    // Subsample with seqtk, then shuffle and split with seqkit
+    SUBSAMPLE_LANE(paired_lanes_ch)
+    SHUFFLE_AND_SPLIT(SUBSAMPLE_LANE.out)
 
     // Separate outputs and group by sample ID for concatenation
-    def barcoded_ch = DOWNSAMPLE_PAIRED_LANES.out[0]
+    def barcoded_ch = SHUFFLE_AND_SPLIT.out[0]
         .groupTuple()
         .map { output_id, r1_list, r2_list ->
             tuple(output_id, r1_list.sort(), r2_list.sort())
         }
 
-    def na_ch = DOWNSAMPLE_PAIRED_LANES.out[1]
+    def na_ch = SHUFFLE_AND_SPLIT.out[1]
         .groupTuple()
         .map { output_id, r1_list, r2_list ->
             tuple(output_id, r1_list.sort(), r2_list.sort())
