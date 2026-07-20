@@ -21,6 +21,9 @@ process ENUMERATE_VIRAL_ACCESSIONS {
     output:
         path("virus-genome-metadata-raw.tsv"), emit: metadata
     script:
+        // Single source of truth for the reconciled column header, so the two
+        // branches cannot drift (their union is taken upstream).
+        def schema_header = 'assembly_accession\\ttaxid\\torganism_name\\tsource_database\\tassembly_status\\trelease_date'
         if (source_type == "sequence") {
             // Map `assembly_source` onto the virus dataset's source filter. It
             // supports RefSeq-only (`--refseq`) but has no GenBank-only filter,
@@ -43,27 +46,30 @@ process ENUMERATE_VIRAL_ACCESSIONS {
 
             # 2. Convert to TSV and rewrite to the shared schema. Sequence rows
             # have no assembly status (empty column). `source_database` is
-            # normalized to the assembly path's SOURCE_DATABASE_* vocabulary, and
-            # the release date is truncated to YYYY-MM-DD (the virus dataset emits
-            # a full ISO timestamp; the assembly path emits a bare date).
-            # NOTE: this header must stay identical to the assembly branch's
-            # header below (the two are unioned upstream).
-            dataformat tsv virus-genome \\
-                --inputfile virus_data_report.jsonl \\
-                --fields accession,virus-tax-id,virus-name,sourcedb,release-date \\
-                | awk 'BEGIN{FS=OFS="\\t"}
-                    NR==1 {print "assembly_accession","taxid","organism_name","source_database","assembly_status","release_date"; next}
-                    {
-                        db=\$4
-                        if (db=="RefSeq") db="SOURCE_DATABASE_REFSEQ"
-                        else if (db=="GenBank") db="SOURCE_DATABASE_GENBANK"
-                        print \$1,\$2,\$3,db,"",substr(\$5,1,10)
-                    }' \\
-                > virus-genome-metadata-raw.tsv
+            # normalized to the assembly path's SOURCE_DATABASE_* vocabulary
+            # (failing loudly on any other value so the contract can't silently
+            # break), and the release date is truncated to YYYY-MM-DD (the virus
+            # dataset emits a full ISO timestamp; the assembly path emits a bare
+            # date). The header is printed once from the shared definition.
+            {
+                printf '${schema_header}\\n'
+                dataformat tsv virus-genome \\
+                    --inputfile virus_data_report.jsonl \\
+                    --fields accession,virus-tax-id,virus-name,sourcedb,release-date \\
+                    | awk 'BEGIN{FS=OFS="\\t"}
+                        NR==1 {next}
+                        {
+                            db=\$4
+                            if (db=="RefSeq") db="SOURCE_DATABASE_REFSEQ"
+                            else if (db=="GenBank") db="SOURCE_DATABASE_GENBANK"
+                            else {print "ERROR: unexpected sourcedb value: " \$4 > "/dev/stderr"; exit 1}
+                            print \$1,\$2,\$3,db,"",substr(\$5,1,10)
+                        }'
+            } > virus-genome-metadata-raw.tsv
             rm -f virus_data_report.jsonl
             echo "Enumerated \$((  \$(wc -l < virus-genome-metadata-raw.tsv) - 1  )) sequences for taxid ${taxid}"
             """
-        } else {
+        } else if (source_type == "assembly") {
             """
             # 1. Enumerate all assemblies under ${taxid} via `datasets summary`.
             # Taxids with no assemblies will hard fail at this step.
@@ -78,16 +84,18 @@ process ENUMERATE_VIRAL_ACCESSIONS {
             # non-current assemblies (the `datasets` `--assembly-version` does not allow
             # this when using `--assembly-source all`; see ncbi/datasets#576).
             # `assminfo-release-date` is carried through for downstream tooling (index
-            # benchmarking) to date each assembly.
-            # NOTE: this header must stay identical to the sequence branch's awk
-            # header above (the two are unioned upstream).
+            # benchmarking) to date each assembly. The header is printed once from
+            # the shared definition.
             dataformat tsv genome \\
                 --inputfile assembly_data_report.jsonl \\
                 --fields accession,organism-tax-id,organism-name,source_database,assminfo-status,assminfo-release-date \\
-                | { printf 'assembly_accession\\ttaxid\\torganism_name\\tsource_database\\tassembly_status\\trelease_date\\n'; tail -n +2; } \\
+                | { printf '${schema_header}\\n'; tail -n +2; } \\
                 > virus-genome-metadata-raw.tsv
             rm -f assembly_data_report.jsonl
             echo "Enumerated \$((  \$(wc -l < virus-genome-metadata-raw.tsv) - 1  )) assemblies for taxid ${taxid}"
             """
+        } else {
+            throw new IllegalArgumentException(
+                "ENUMERATE_VIRAL_ACCESSIONS: invalid source_type '${source_type}' (expected 'assembly' or 'sequence')")
         }
 }
