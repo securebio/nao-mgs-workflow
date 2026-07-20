@@ -34,7 +34,7 @@ workflow MAKE_VIRUS_GENOME_DB {
     main:
         // 1. Enumerate every assembly under the viral root in a single
         //    `datasets summary` call. No genome data is fetched here.
-        enum_ch = ENUMERATE_VIRAL_ACCESSIONS(virus_taxid, assembly_source, other_params.datasets_summary_extra_args)
+        enum_ch = ENUMERATE_VIRAL_ACCESSIONS(virus_taxid, assembly_source, other_params.datasets_summary_extra_args, "assembly")
         // 1b. Publish the full pre-filter assembly metadata (gzipped).
         raw_metadata_ch = GZIP_FILE_BARE(enum_ch.metadata)
         // 2. Filter accessions by host infection status and assembly status
