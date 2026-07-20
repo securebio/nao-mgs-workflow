@@ -75,6 +75,9 @@ process ENUMERATE_VIRAL_ACCESSIONS {
             """
         } else if (source_type == "assembly") {
             """
+            # Fail loudly if any stage of the dataformat|tail pipe below errors
+            # (Nextflow runs scripts under `bash -ue` without pipefail).
+            set -o pipefail
             # 1. Enumerate all assemblies under ${taxid} via `datasets summary`.
             # Taxids with no assemblies will hard fail at this step.
             datasets summary genome taxon ${taxid} \\
