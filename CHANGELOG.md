@@ -1,5 +1,6 @@
 # v3.2.3.0-dev
 
+- Add a sequence-based enumeration path to `ENUMERATE_VIRAL_ACCESSIONS`, selectable via a new `source_type` input (`"assembly"` | `"sequence"`). The sequence path sources viral genomes from NCBI Virus / nuccore sequence records (`datasets summary virus genome`) rather than genome assemblies, recovering recent non-influenza viral genomes that NCBI no longer publishes as assemblies. Dormant capability — the pipeline still enumerates assemblies only, so outputs are unchanged; groundwork for COMP-2466.
 - Mask human (CHM13) k-mers out of the viral genomes before building the Nucleaze k-mer index.
 - Exclude two viral genome records (`AY037928.1` and `NC_022518.1`) that are pure human contamination.
 - Make the `[tool.<name>]` table read by `CHECK_VERSION_COMPATIBILITY` configurable.
