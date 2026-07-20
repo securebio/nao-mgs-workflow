@@ -28,8 +28,14 @@ process ENUMERATE_VIRAL_ACCESSIONS {
             // Map `assembly_source` onto the virus dataset's source filter. It
             // supports RefSeq-only (`--refseq`) but has no GenBank-only filter,
             // so for "genbank" we warn and enumerate all sources (RefSeq copies
-            // are dropped later by cross-source dedup).
+            // are dropped later by cross-source dedup). Validate up front so a
+            // typo fails fast rather than silently enumerating all sources (the
+            // assembly branch gets this for free from `datasets --assembly-source`).
             def src = assembly_source.toLowerCase()
+            if (!(src in ["refseq", "genbank", "all"])) {
+                throw new IllegalArgumentException(
+                    "ENUMERATE_VIRAL_ACCESSIONS: invalid assembly_source '${assembly_source}' (expected 'genbank', 'refseq', or 'all')")
+            }
             def source_flag = src == "refseq" ? "--refseq" : ""
             def warn = src == "genbank" \
                 ? '>&2 echo "Warning: sequence-based enumeration cannot filter for GenBank-only sequences; enumerating all sources for taxid ' + taxid + '."' \
