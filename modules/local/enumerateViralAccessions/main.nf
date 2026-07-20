@@ -46,6 +46,8 @@ process ENUMERATE_VIRAL_ACCESSIONS {
             # normalized to the assembly path's SOURCE_DATABASE_* vocabulary, and
             # the release date is truncated to YYYY-MM-DD (the virus dataset emits
             # a full ISO timestamp; the assembly path emits a bare date).
+            # NOTE: this header must stay identical to the assembly branch's
+            # header below (the two are unioned upstream).
             dataformat tsv virus-genome \\
                 --inputfile virus_data_report.jsonl \\
                 --fields accession,virus-tax-id,virus-name,sourcedb,release-date \\
@@ -77,6 +79,8 @@ process ENUMERATE_VIRAL_ACCESSIONS {
             # this when using `--assembly-source all`; see ncbi/datasets#576).
             # `assminfo-release-date` is carried through for downstream tooling (index
             # benchmarking) to date each assembly.
+            # NOTE: this header must stay identical to the sequence branch's awk
+            # header above (the two are unioned upstream).
             dataformat tsv genome \\
                 --inputfile assembly_data_report.jsonl \\
                 --fields accession,organism-tax-id,organism-name,source_database,assminfo-status,assminfo-release-date \\
