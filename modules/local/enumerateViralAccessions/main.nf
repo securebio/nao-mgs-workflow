@@ -35,6 +35,10 @@ process ENUMERATE_VIRAL_ACCESSIONS {
                 ? '>&2 echo "Warning: sequence-based enumeration cannot filter for GenBank-only sequences; enumerating all sources for taxid ' + taxid + '."' \
                 : "true"
             """
+            # Fail loudly if any stage of the dataformat|awk pipe below errors
+            # (Nextflow runs scripts under `bash -ue` without pipefail, so a
+            # `dataformat` failure would otherwise be masked by a succeeding awk).
+            set -o pipefail
             # 1. Enumerate sequence records under ${taxid} via NCBI Virus.
             # Taxids with no sequences will hard fail at this step.
             ${warn}
