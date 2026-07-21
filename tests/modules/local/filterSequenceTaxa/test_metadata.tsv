@@ -1,0 +1,4 @@
+assembly_accession	taxid	organism_name	source_database	assembly_status	release_date
+NC_FLU1.1	11320	Influenza A virus	SOURCE_DATABASE_REFSEQ		2024-01-01
+NC_FLU2.1	11520	Influenza A strain	SOURCE_DATABASE_GENBANK		2024-02-01
+NC_SARS.1	2697049	SARS-CoV-2	SOURCE_DATABASE_REFSEQ		2024-03-01

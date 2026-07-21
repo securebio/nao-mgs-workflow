@@ -1,0 +1,41 @@
+nextflow_process {
+
+    name "Test process FILTER_SEQUENCE_TAXA"
+    script "modules/local/filterSequenceTaxa/main.nf"
+    process "FILTER_SEQUENCE_TAXA"
+    config "tests/configs/index.config"
+    tag "module"
+    tag "filter_sequence_taxa"
+
+    test("Should drop the excluded clade (flu) and keep other taxa") {
+        // Fixture taxonomy: flu family 11308 -> genus 11320 -> strain 11520;
+        // SARS-CoV-2 (2697049) is in a separate lineage. Excluding root 11308
+        // must drop both flu rows (taxids 11320, 11520) and keep SARS-CoV-2.
+        tag "expect_success"
+        when {
+            params {}
+            process {
+                """
+                input[0] = file("${projectDir}/tests/modules/local/filterSequenceTaxa/test_metadata.tsv")
+                input[1] = file("${projectDir}/tests/modules/local/filterSequenceTaxa/test_nodes.dmp")
+                input[2] = "11308"
+                """
+            }
+        }
+        then {
+            assert process.success
+            def meta = path(process.out.metadata[0]).csv(sep: "\t")
+            // Column schema preserved.
+            assert meta.columnNames == [
+                "assembly_accession", "taxid", "organism_name",
+                "source_database", "assembly_status", "release_date",
+            ]
+            // Only the non-flu row survives.
+            assert meta.columns["assembly_accession"] == ["NC_SARS.1"]
+            def taxids = meta.columns["taxid"].toSet()
+            assert !("11320" in taxids)
+            assert !("11520" in taxids)
+        }
+    }
+
+}
