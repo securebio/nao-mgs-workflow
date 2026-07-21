@@ -62,4 +62,20 @@ nextflow_process {
         }
     }
 
+    test("Should fail loudly when given no genome FASTA files") {
+        // The empty-input guard must exit 1 rather than emit an empty FASTA.
+        tag "expect_failed"
+        when {
+            params {}
+            process {
+                """
+                input[0] = []
+                """
+            }
+        }
+        then {
+            assert process.failed
+        }
+    }
+
 }
