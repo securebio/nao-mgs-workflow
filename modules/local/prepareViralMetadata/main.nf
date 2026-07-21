@@ -1,4 +1,9 @@
-// Prepare viral genome metadata for downstream filtering and genome ID extraction
+// Prepare viral genome metadata: join the filtered assembly metadata with the
+// per-chunk accession -> genome_id map, add species_taxid, and expand to one
+// row per (assembly_accession, genome_id). Replaces the previous
+// PREPARE + ADD_GENBANK_GENOME_IDS pair: the genome_id linkage now comes from
+// the map emitted by DOWNLOAD_VIRAL_GENOMES rather than from re-reading each
+// downloaded genome file.
 process PREPARE_VIRAL_METADATA {
     label "python"
     label "single_cpu_16GB_memory"
@@ -6,19 +11,15 @@ process PREPARE_VIRAL_METADATA {
     input:
         path(merged_metadata)
         path(virus_db)
-        path(genome_files)
+        path(accession_map)
     output:
-        path("ncbi_metadata.txt"), emit: metadata
-        path("ncbi_genomes"), emit: genomes
-        path("ncbi_paths.txt"), emit: paths
+        path("virus-genome-metadata-gid.tsv.gz"), emit: metadata
     script:
         """
         prepare_viral_metadata.py \\
             ${merged_metadata} \\
             ${virus_db} \\
-            . \\
-            ncbi_metadata.txt \\
-            ncbi_genomes \\
-            ncbi_paths.txt
+            ${accession_map} \\
+            virus-genome-metadata-gid.tsv.gz
         """
 }

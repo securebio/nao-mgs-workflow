@@ -14,6 +14,10 @@ nextflow_process {
     // If these NCBI assembly accessions are removed or are no longer current,
     // pick new accessions using the command
     // `datasets summary genome taxon 2847173 --assembly-source all --as-json-lines`
+    //
+    // Each chunk yields ONE combined `<chunk>.fna.gz` plus ONE
+    // `<chunk>.map.tsv` (assembly_accession -> genome_id), regardless of how
+    // many accessions the chunk contains.
 
     test("Should download a single-accession chunk (HDV refseq)") {
         tag "expect_success"
@@ -31,8 +35,14 @@ nextflow_process {
         }
         then {
             assert process.success
+            // One combined FASTA + one map per chunk.
             assert process.out.genomes.size() == 1
             assert process.out.genomes[0].toString().endsWith('.fna.gz')
+            assert process.out.accession_map.size() == 1
+            def amap = path(process.out.accession_map[0]).csv(sep: "\t")
+            assert amap.columnNames == ["assembly_accession", "genome_id"]
+            assert amap.rowCount >= 1
+            assert "GCF_018547865.1" in amap.columns["assembly_accession"].toSet()
         }
     }
 
@@ -52,11 +62,13 @@ nextflow_process {
         }
         then {
             assert process.success
-            // Multi-match glob emit: process.out.genomes == [[Path, Path]] (one channel
-            // emission containing the list of matches). Single-match emit flattens to
-            // [Path], hence the difference from the single-accession test above.
-            assert process.out.genomes[0].size() == 2
-            assert process.out.genomes[0].every { it.toString().endsWith('.fna.gz') }
+            // Still one combined FASTA + one map for the whole chunk.
+            assert process.out.genomes.size() == 1
+            assert process.out.genomes[0].toString().endsWith('.fna.gz')
+            def amap = path(process.out.accession_map[0]).csv(sep: "\t")
+            def accs = amap.columns["assembly_accession"].toSet()
+            assert "GCF_018547865.1" in accs
+            assert "GCA_018547865.1" in accs
         }
     }
 
@@ -98,6 +110,7 @@ nextflow_process {
             assert process.success
             assert process.out.genomes.size() == 1
             assert process.out.genomes[0].toString().endsWith('.fna.gz')
+            assert process.out.accession_map.size() == 1
         }
     }
 

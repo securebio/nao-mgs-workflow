@@ -6,7 +6,6 @@ include { ENUMERATE_VIRAL_ACCESSIONS } from "../../../modules/local/enumerateVir
 include { FILTER_VIRAL_GENBANK_METADATA } from "../../../modules/local/filterViralGenbankMetadata"
 include { DOWNLOAD_VIRAL_GENOMES } from "../../../modules/local/downloadViralGenomes"
 include { PREPARE_VIRAL_METADATA } from "../../../modules/local/prepareViralMetadata"
-include { ADD_GENBANK_GENOME_IDS } from "../../../modules/local/addGenbankGenomeIDs"
 include { CONCATENATE_GENOME_FASTA } from "../../../modules/local/concatenateGenomeFasta"
 include { FILTER_GENOME_FASTA } from "../../../modules/local/filterGenomeFasta"
 include { MASK_GENOME_FASTA } from "../../../modules/local/maskGenomeFasta"
@@ -46,18 +45,18 @@ workflow MAKE_VIRUS_GENOME_DB {
         )
         // 3. Download genomes per chunk in parallel. `flatten()` turns the
         //    list of chunk files into one channel emission per chunk so
-        //    Nextflow can fan out tasks.
+        //    Nextflow can fan out tasks. Each task emits a single combined
+        //    FASTA plus an assembly_accession -> genome_id map.
         chunk_ch = filter_ch.accession_chunks.flatten()
         download_ch = DOWNLOAD_VIRAL_GENOMES(chunk_ch, assembly_source, other_params.datasets_download_extra_args, 5)
-        // 4. Match downloaded files to filtered metadata, populate
-        //    species_taxid + local_filename, and emit symlinked dir + paths.
-        prepare_ch = PREPARE_VIRAL_METADATA(
-            filter_ch.db, virus_db, download_ch.genomes.collect()
+        // 4. Merge the per-chunk maps, then join with the filtered metadata to
+        //    add species_taxid and expand each assembly to one row per genome_id.
+        merged_map_ch = download_ch.accession_map.collectFile(
+            name: "accession_map.tsv", keepHeader: true, skip: 1
         )
-        // 5. Add per-sequence genome IDs by reading FASTA headers.
-        gid_ch = ADD_GENBANK_GENOME_IDS(prepare_ch.metadata, prepare_ch.genomes, "virus-genome").output
-        // 6. Concatenate matching genomes.
-        genome_concat_ch = CONCATENATE_GENOME_FASTA(prepare_ch.genomes, prepare_ch.paths)
+        gid_ch = PREPARE_VIRAL_METADATA(filter_ch.db, virus_db, merged_map_ch).metadata
+        // 5. Concatenate the per-chunk combined genome FASTAs (dedup by name).
+        genome_concat_ch = CONCATENATE_GENOME_FASTA(download_ch.genomes.collect())
         // 7. Filter to remove undesired/contaminated genomes by sequence-header
         //    pattern (genome_patterns_exclude only matchable post-download).
         filter_genome_ch = FILTER_GENOME_FASTA(genome_concat_ch, other_params.genome_patterns_exclude, "virus-genomes-filtered")
