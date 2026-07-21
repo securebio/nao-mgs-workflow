@@ -85,9 +85,24 @@ process DOWNLOAD_VIRAL_GENOMES {
             printf 'assembly_accession\\tgenome_id\\n' > "\${CHUNK_ID}.map.tsv"
             awk '/^>/{ id=substr(\$1,2); print id"\\t"id }' \\
                 output/ncbi_dataset/data/genomic.fna >> "\${CHUNK_ID}.map.tsv"
+            # A non-empty genomic.fna must contain headers; empty map => malformed.
+            n_seqs=\$(( \$(wc -l < "\${CHUNK_ID}.map.tsv") - 1 ))
+            if [ "\$n_seqs" -le 0 ]; then
+                echo "No sequence headers extracted from genomic.fna (malformed package?)" >&2
+                exit 1
+            fi
+            # `datasets download virus genome accession` skips unresolvable or
+            # withdrawn accessions with a warning yet still exits 0 (unlike the
+            # assembly path, which hard-fails on a bad accession), and `--refseq`
+            # legitimately filters non-RefSeq accessions. Partial results are
+            # therefore tolerated; report any shortfall for visibility.
+            n_req=\$(grep -cve '^[[:space:]]*\$' ${accession_chunk})
+            if [ "\$n_seqs" -lt "\$n_req" ]; then
+                echo "Note: downloaded \$n_seqs of \$n_req requested accessions (unresolved/filtered skipped)." >&2
+            fi
             gzip -c output/ncbi_dataset/data/genomic.fna > "\${CHUNK_ID}.fna.gz"
             rm -rf output/ output.zip
-            echo "Combined \$(( \$(wc -l < "\${CHUNK_ID}.map.tsv") - 1 )) sequences for chunk \$CHUNK_ID"
+            echo "Combined \$n_seqs sequences for chunk \$CHUNK_ID"
             """
         } else if (source_type == "assembly") {
             """
