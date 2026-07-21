@@ -59,6 +59,9 @@ process DOWNLOAD_VIRAL_GENOMES {
             """
             set -euo pipefail
             CHUNK_ID=\$(basename ${accession_chunk} .txt)
+            # Suffix outputs with the branch so assembly/sequence chunks of the
+            # same name don't collide when collected in the union.
+            OUT="\${CHUNK_ID}_${source_type}"
             ${retry_fn}
 
             # 1. Download the virus genome package for this chunk's nuccore
@@ -82,11 +85,11 @@ process DOWNLOAD_VIRAL_GENOMES {
                 echo "No genomic.fna in downloaded virus package (unexpected?)" >&2
                 exit 1
             fi
-            printf 'assembly_accession\\tgenome_id\\n' > "\${CHUNK_ID}.map.tsv"
+            printf 'assembly_accession\\tgenome_id\\n' > "\${OUT}.map.tsv"
             awk '/^>/{ id=substr(\$1,2); print id"\\t"id }' \\
-                output/ncbi_dataset/data/genomic.fna >> "\${CHUNK_ID}.map.tsv"
+                output/ncbi_dataset/data/genomic.fna >> "\${OUT}.map.tsv"
             # A non-empty genomic.fna must contain headers; empty map => malformed.
-            n_seqs=\$(( \$(wc -l < "\${CHUNK_ID}.map.tsv") - 1 ))
+            n_seqs=\$(( \$(wc -l < "\${OUT}.map.tsv") - 1 ))
             if [ "\$n_seqs" -le 0 ]; then
                 echo "No sequence headers extracted from genomic.fna (malformed package?)" >&2
                 exit 1
@@ -100,7 +103,7 @@ process DOWNLOAD_VIRAL_GENOMES {
             if [ "\$n_seqs" -lt "\$n_req" ]; then
                 echo "Note: downloaded \$n_seqs of \$n_req requested accessions (unresolved/filtered skipped)." >&2
             fi
-            gzip -c output/ncbi_dataset/data/genomic.fna > "\${CHUNK_ID}.fna.gz"
+            gzip -c output/ncbi_dataset/data/genomic.fna > "\${OUT}.fna.gz"
             rm -rf output/ output.zip
             echo "Combined \$n_seqs sequences for chunk \$CHUNK_ID"
             """
@@ -108,6 +111,9 @@ process DOWNLOAD_VIRAL_GENOMES {
             """
             set -euo pipefail
             CHUNK_ID=\$(basename ${accession_chunk} .txt)
+            # Suffix outputs with the branch so assembly/sequence chunks of the
+            # same name don't collide when collected in the union.
+            OUT="\${CHUNK_ID}_${source_type}"
             ${retry_fn}
 
             # 1. Download dehydrated package (manifest only) for the accessions in
@@ -135,7 +141,7 @@ process DOWNLOAD_VIRAL_GENOMES {
             # accession is the path component directly under data/, and each sequence
             # header's first token is the genome_id. Reads are local scratch here, so
             # per-file reads are cheap; only the two combined outputs are staged out.
-            printf 'assembly_accession\\tgenome_id\\n' > "\${CHUNK_ID}.map.tsv"
+            printf 'assembly_accession\\tgenome_id\\n' > "\${OUT}.map.tsv"
             : > combined.fna
             find output/ncbi_dataset/data -mindepth 2 -name '*.fna.gz' | sort \\
                 | while IFS= read -r f; do
@@ -144,18 +150,18 @@ process DOWNLOAD_VIRAL_GENOMES {
                     # extract genome_ids (header first token) for the map in one pass.
                     zcat "\$f" | tee -a combined.fna \\
                         | awk -v a="\$acc" '/^>/{ id=substr(\$1,2); print a"\\t"id }' \\
-                        >> "\${CHUNK_ID}.map.tsv"
+                        >> "\${OUT}.map.tsv"
                 done
             # A successful rehydrate must yield sequences; an empty map means the
             # layout assumption broke — fail loudly rather than emit an empty DB.
-            if [ "\$(wc -l < "\${CHUNK_ID}.map.tsv")" -le 1 ]; then
+            if [ "\$(wc -l < "\${OUT}.map.tsv")" -le 1 ]; then
                 echo "No genome sequences found under output/ncbi_dataset/data (unexpected layout?)" >&2
                 exit 1
             fi
-            gzip -c combined.fna > "\${CHUNK_ID}.fna.gz"
+            gzip -c combined.fna > "\${OUT}.fna.gz"
             rm -f combined.fna
             rm -rf output/ output.zip
-            echo "Combined \$(( \$(wc -l < "\${CHUNK_ID}.map.tsv") - 1 )) sequences for chunk \$CHUNK_ID"
+            echo "Combined \$(( \$(wc -l < "\${OUT}.map.tsv") - 1 )) sequences for chunk \$CHUNK_ID"
             """
         } else {
             throw new IllegalArgumentException(

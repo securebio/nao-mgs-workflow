@@ -56,4 +56,34 @@ nextflow_pipeline {
                 "Published overrides should retain the overrides JSON structure"
         }
     }
+
+    test("Should run the assembly+sequence union (virus_source=both)") {
+        tag "index"
+        tag "index_both"
+        // Exercise the union end-to-end on HDV. RefSeq + no date floor keeps the
+        // sequence branch small but non-empty (HDV RefSeq sequences exist), so the
+        // assembly and sequence branches overlap and cross-source dedup runs.
+        when {
+            params {
+                virus_source = "both"
+                assembly_source = "refseq"
+                datasets_summary_seq_extra_args = "--complete-only"
+            }
+        }
+        then {
+            assert workflow.success
+            assertTraceTagsValid("${launchDir}")
+            def metadata = path("${launchDir}/output/results/virus-genome-metadata-gid.tsv.gz").csv(sep: "\t", decompress: true)
+            assert metadata.rowCount >= 1 : "union metadata should be non-empty"
+            // genome_ids are unique after cross-source dedup.
+            def gids = metadata.columns["genome_id"]
+            assert gids.size() == gids.toSet().size() : "genome_id should be unique after dedup"
+            def fastaLines = path("${launchDir}/output/results/virus-genomes-masked.fasta.gz").linesGzip
+            assert fastaLines.any { it.startsWith(">") }
+            // Raw metadata unions both branches (assembly rows carry a status;
+            // sequence rows have an empty status).
+            def rawMeta = path("${launchDir}/output/results/virus-genome-metadata-raw.tsv.gz").csv(sep: "\t", decompress: true)
+            assert rawMeta.columnNames == ["assembly_accession", "taxid", "organism_name", "source_database", "assembly_status", "release_date"]
+        }
+    }
 }

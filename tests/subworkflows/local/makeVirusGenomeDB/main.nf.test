@@ -1,0 +1,30 @@
+nextflow_workflow {
+
+    name "Test workflow MAKE_VIRUS_GENOME_DB"
+    script "subworkflows/local/makeVirusGenomeDB/main.nf"
+    workflow "MAKE_VIRUS_GENOME_DB"
+    config "tests/configs/index.config"
+    tag "subworkflow"
+    tag "make_virus_genome_db"
+
+    test("Should reject an invalid virus_source") {
+        // The virus_source guard throws before any process runs, so the file
+        // inputs are never read (any existing files suffice as placeholders).
+        tag "expect_failed"
+        when {
+            workflow {
+                """
+                input[0] = "2847173"
+                input[1] = "all"
+                input[2] = file("${projectDir}/tests/modules/local/filterSequenceTaxa/test_metadata.tsv")
+                input[3] = file("${projectDir}/tests/modules/local/filterSequenceTaxa/test_nodes.dmp")
+                input[4] = [virus_source: "not-a-valid-source"]
+                """
+            }
+        }
+        then {
+            assert workflow.failed
+        }
+    }
+
+}
