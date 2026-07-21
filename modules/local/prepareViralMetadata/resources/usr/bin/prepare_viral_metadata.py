@@ -46,7 +46,7 @@ def build_species_taxid_map(virus_db_path: str) -> dict[str, str]:
     Returns:
         Dictionary mapping taxid to species-level taxid.
     """
-    with open_by_suffix(virus_db_path) as f:
+    with open_by_suffix(virus_db_path, newline="") as f:
         result = {
             row["taxid"]: row["taxid_species"]
             for row in csv.DictReader(f, delimiter="\t")
@@ -65,7 +65,7 @@ def read_accession_map(accession_map_path: str) -> dict[str, list[str]]:
         genome IDs (order preserved as encountered).
     """
     result: dict[str, list[str]] = {}
-    with open_by_suffix(accession_map_path) as f:
+    with open_by_suffix(accession_map_path, newline="") as f:
         for row in csv.DictReader(f, delimiter="\t"):
             result.setdefault(row["assembly_accession"], []).append(row["genome_id"])
     logger.info(
@@ -91,7 +91,7 @@ def prepare_metadata(
     """
     taxid_to_species = build_species_taxid_map(virus_db_path)
     acc_to_gids = read_accession_map(accession_map_path)
-    with open_by_suffix(merged_metadata_path) as f:
+    with open_by_suffix(merged_metadata_path, newline="") as f:
         reader = csv.DictReader(f, delimiter="\t")
         in_fields = reader.fieldnames or []
         rows = list(reader)
