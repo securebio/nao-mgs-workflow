@@ -108,8 +108,8 @@ class TestFilterMetadata:
         expected: list[tuple[str, str, str]],
     ) -> None:
         """Drops superseded assemblies and rows failing host-taxa screen, keeping
-        only `current` host-infecting rows. Strain-level taxids match through
-        species-level rollup (`taxid_species`)."""
+        `current` host-infecting rows and status-less sequence rows. Strain-level
+        taxids match through species-level rollup (`taxid_species`)."""
         result = filter_metadata(_meta(meta_rows), VIRUS_DB, ["vertebrate"])
         actual = list(
             zip(

@@ -37,7 +37,7 @@ logger.addHandler(handler)
 def filter_metadata(
     meta_db: pd.DataFrame, virus_db: pd.DataFrame, host_taxa: list[str]
 ) -> pd.DataFrame:
-    """Filter the viral metadata TSV to host-infecting, current assemblies.
+    """Filter the viral metadata TSV to host-infecting current assemblies plus status-less sequence rows.
 
     Args:
         meta_db: Viral metadata table from `datasets summary` (must include
@@ -73,9 +73,7 @@ def filter_metadata(
     # Keep "current" assemblies and status-less sequence rows (empty/NaN);
     # drop only genuinely non-current assemblies (previous/replaced/…).
     status = host_infecting["assembly_status"]
-    current = host_infecting.loc[
-        (status == "current") | status.isna() | (status == "")
-    ]
+    current = host_infecting.loc[(status == "current") | status.isna() | (status == "")]
     logger.info("Dropped %d non-current assemblies.", before - len(current))
     return current
 
