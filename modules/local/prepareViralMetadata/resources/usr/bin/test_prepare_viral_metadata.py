@@ -229,6 +229,46 @@ class TestPrepareMetadata:
         assert rows[0]["genome_id"] == "NC_045512.2"
         assert rows[0]["assembly_accession"] == expected_accession
 
+    def test_dedup_preserves_first_seen_order(self, tmp_path: Path) -> None:
+        """The winning row keeps the genome_id's first-seen position even when the
+        assembly (winning) row appears after the sequence row in the input."""
+        meta = _write_tsv(
+            tmp_path / "m.tsv",
+            META_HEADER,
+            [
+                ["NC_SHARED.1", "12345", "Seq", "SOURCE_DATABASE_REFSEQ", ""],
+                [
+                    "GCA_000009.1",
+                    "99999",
+                    "Other",
+                    "SOURCE_DATABASE_GENBANK",
+                    "current",
+                ],
+                ["GCA_000001.1", "12345", "Asm", "SOURCE_DATABASE_GENBANK", "current"],
+            ],
+        )
+        db = _write_tsv(
+            tmp_path / "db.tsv",
+            DB_HEADER,
+            [["12345", "12345", "V"], ["99999", "99000", "W"]],
+        )
+        amap = _write_tsv(
+            tmp_path / "map.tsv",
+            MAP_HEADER,
+            [
+                ["NC_SHARED.1", "NC_SHARED.1"],
+                ["GCA_000009.1", "other.1"],
+                ["GCA_000001.1", "NC_SHARED.1"],
+            ],
+        )
+        out_meta = tmp_path / "out.tsv.gz"
+        prepare_metadata(str(meta), str(db), str(amap), str(out_meta))
+        rows = _read_tsv(out_meta)
+        # NC_SHARED.1 keeps its first-seen position (before other.1) but takes the
+        # assembly row's data.
+        assert [r["genome_id"] for r in rows] == ["NC_SHARED.1", "other.1"]
+        assert rows[0]["assembly_accession"] == "GCA_000001.1"
+
     def test_same_branch_collision_keeps_first_seen(self, tmp_path: Path) -> None:
         """When neither colliding row is an assembly (tie-break inapplicable),
         the first-seen row wins and the genome_id appears once."""

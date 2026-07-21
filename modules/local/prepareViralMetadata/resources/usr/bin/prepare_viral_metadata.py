@@ -5,7 +5,8 @@ virus taxonomy DB to add `species_taxid`, and expands each assembly row into one
 row per constituent `genome_id` using the accession -> genome_id map emitted by
 DOWNLOAD_VIRAL_GENOMES. Rows whose accession is absent from the map (i.e. the
 genome failed to download) are dropped so the metadata stays consistent with the
-concatenated genome FASTA.
+concatenated genome FASTA. Output rows are also deduplicated by `genome_id`
+(assembly-branch row preferred) so metadata is 1:1 with the deduplicated FASTA.
 """
 
 import argparse
