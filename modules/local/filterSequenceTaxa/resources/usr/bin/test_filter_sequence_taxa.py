@@ -1,12 +1,15 @@
 """Tests for filter_sequence_taxa.py."""
 
 import io
+import sys
+from pathlib import Path
 
 import pandas as pd
 import pytest
 from filter_sequence_taxa import (
     descendant_taxids,
     filter_sequence_taxa,
+    main,
     read_parent_map,
 )
 
@@ -81,7 +84,7 @@ class TestFilterSequenceTaxa:
 
 
 class TestReadParentMap:
-    def test_reads_nodes_dmp_columns_0_and_2(self, tmp_path) -> None:
+    def test_reads_nodes_dmp_columns_0_and_2(self, tmp_path: Path) -> None:
         """nodes.dmp fields are `\\t|\\t`-separated; taxid is col 0, parent col 2."""
         nodes = tmp_path / "nodes.dmp"
         nodes.write_text(
@@ -91,7 +94,7 @@ class TestReadParentMap:
 
 
 @pytest.mark.parametrize("root,expected_in", [("11308", "11520"), ("11118", "2697049")])
-def test_read_then_descend(tmp_path, root: str, expected_in: str) -> None:
+def test_read_then_descend(tmp_path: Path, root: str, expected_in: str) -> None:
     """Integration: build the parent map from a dmp, then descend from a root."""
     lines = "".join(f"{t}\t|\t{p}\t|\tno rank\t|\t\t|\n" for t, p in PARENT_OF.items())
     nodes = io.StringIO(lines)
@@ -99,3 +102,20 @@ def test_read_then_descend(tmp_path, root: str, expected_in: str) -> None:
     dmp.write_text(nodes.getvalue())
     parent_of = read_parent_map(str(dmp))
     assert expected_in in descendant_taxids(parent_of, root)
+
+
+def test_main_rejects_unknown_exclude_taxid(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A typo/obsolete exclude_taxid must fail loudly, not silently no-op."""
+    lines = "".join(f"{t}\t|\t{p}\t|\tno rank\t|\t\t|\n" for t, p in PARENT_OF.items())
+    dmp = tmp_path / "nodes.dmp"
+    dmp.write_text(lines)
+    meta = tmp_path / "meta.tsv"
+    meta.write_text("assembly_accession\ttaxid\nNC_1.1\t11320\n")
+    out = tmp_path / "out.tsv.gz"
+    monkeypatch.setattr(
+        sys, "argv", ["prog", str(meta), str(dmp), "99999999", str(out)]
+    )
+    with pytest.raises(ValueError, match="not found in nodes.dmp"):
+        main()

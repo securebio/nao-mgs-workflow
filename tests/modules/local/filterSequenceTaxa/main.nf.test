@@ -24,7 +24,7 @@ nextflow_process {
         }
         then {
             assert process.success
-            def meta = path(process.out.metadata[0]).csv(sep: "\t")
+            def meta = path(process.out.metadata[0]).csv(sep: "\t", decompress: true)
             // Column schema preserved.
             assert meta.columnNames == [
                 "assembly_accession", "taxid", "organism_name",

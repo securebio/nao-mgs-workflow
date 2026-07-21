@@ -60,7 +60,7 @@ def read_parent_map(nodes_path: str) -> dict[str, str]:
     Args:
         nodes_path: Path to NCBI `nodes.dmp`. Fields are separated by `\\t|\\t`,
             so tab-splitting places taxid at column 0 and parent_taxid at
-            column 2 (matching how ANNOTATE_VIRUS_INFECTION reads it).
+            column 2 (the raw positional convention used by BUILD_VIRUS_TAXID_DB).
 
     Returns:
         Dictionary mapping each taxid to its parent taxid.
@@ -147,6 +147,14 @@ def main() -> None:
     logger.info("Starting filter_sequence_taxa.")
     args = parse_arguments()
     parent_of = read_parent_map(args.nodes_dmp)
+    # Fail loudly on a bad exclude_taxid: if it isn't a known taxid, the clade
+    # would be a silent no-op (dropping nothing) despite a plausible log line.
+    known_taxids = set(parent_of) | set(parent_of.values())
+    if args.exclude_taxid not in known_taxids:
+        raise ValueError(
+            f"exclude_taxid {args.exclude_taxid!r} not found in nodes.dmp; "
+            "refusing to run a no-op exclusion (check the taxid)."
+        )
     exclude_taxids = descendant_taxids(parent_of, args.exclude_taxid)
     logger.info(
         "Excluding %d taxids in the clade rooted at %s.",

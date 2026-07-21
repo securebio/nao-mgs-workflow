@@ -12,13 +12,13 @@ process FILTER_SEQUENCE_TAXA {
         path(nodes_dmp)
         val(exclude_taxid)
     output:
-        path("virus-genome-metadata-seqfiltered.tsv"), emit: metadata
+        path("virus-genome-metadata-seqfiltered.tsv.gz"), emit: metadata
     script:
         """
         filter_sequence_taxa.py \\
             ${metadata} \\
             ${nodes_dmp} \\
             ${exclude_taxid} \\
-            virus-genome-metadata-seqfiltered.tsv
+            virus-genome-metadata-seqfiltered.tsv.gz
         """
 }
