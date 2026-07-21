@@ -20,7 +20,7 @@ process DOWNLOAD_VIRAL_GENOMES {
         path("*.map.tsv"), emit: accession_map
     script:
         """
-        set -o pipefail
+        set -euo pipefail
         CHUNK_ID=\$(basename ${accession_chunk} .txt)
 
         # Retry with exponential backoff: both the download and rehydrate hit
@@ -71,8 +71,10 @@ process DOWNLOAD_VIRAL_GENOMES {
             acc=\$(basename "\$accdir")
             for f in "\$accdir"*.fna.gz; do
                 [ -e "\$f" ] || continue
-                zcat "\$f" >> combined.fna
-                zcat "\$f" | awk -v a="\$acc" '/^>/{ id=substr(\$1,2); print a"\\t"id }' \\
+                # Decompress once: append the sequences to the combined FASTA and
+                # extract genome_ids (header first token) for the map in one pass.
+                zcat "\$f" | tee -a combined.fna \\
+                    | awk -v a="\$acc" '/^>/{ id=substr(\$1,2); print a"\\t"id }' \\
                     >> "\${CHUNK_ID}.map.tsv"
             done
         done

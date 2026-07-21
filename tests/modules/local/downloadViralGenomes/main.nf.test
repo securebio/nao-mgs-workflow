@@ -43,6 +43,14 @@ nextflow_process {
             assert amap.columnNames == ["assembly_accession", "genome_id"]
             assert amap.rowCount >= 1
             assert "GCF_018547865.1" in amap.columns["assembly_accession"].toSet()
+            // The map's genome_ids must be exactly the combined FASTA's headers
+            // (first token), verifying the awk header-extraction in the module.
+            def headers = path(process.out.genomes[0]).linesGzip
+                .findAll { it.startsWith(">") }
+                .collect { it.substring(1).split(/\s/)[0] }
+                .toSet()
+            assert amap.columns["genome_id"].toSet() == headers :
+                "map genome_ids ${amap.columns['genome_id'].toSet()} != FASTA headers ${headers}"
         }
     }
 

@@ -22,8 +22,9 @@ process CONCATENATE_GENOME_FASTA {
             exit 1
         fi
         # Concatenate in sorted filename order so `seqkit rmdup --by-name`
-        # first-occurrence behaviour is deterministic across runs.
-        ls -1 *.fna.gz | sort \\
+        # first-occurrence behaviour is deterministic across runs (`ls -1`
+        # already sorts lexicographically).
+        ls -1 *.fna.gz \\
             | xargs cat \\
             | seqkit rmdup --by-name --threads ${task.cpus} \\
                 -D genomes-duplicates.tsv -o genomes.fasta.gz
