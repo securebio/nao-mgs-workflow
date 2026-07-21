@@ -80,6 +80,17 @@ class TestFilterMetadata:
                 [("GCA_031.1", "31", "current")],
                 [],
             ),
+            (
+                # Sequence-sourced rows (NCBI Virus / nuccore) carry no assembly
+                # status (empty); they pass the status filter alongside current
+                # assemblies, while non-current assemblies are still dropped.
+                [
+                    ("NC_045512.2", "1", ""),
+                    ("GCA_001.1", "1", "current"),
+                    ("GCA_002.1", "2", "previous"),
+                ],
+                [("NC_045512.2", "1", ""), ("GCA_001.1", "1", "current")],
+            ),
         ],
         ids=[
             "drops_previous",
@@ -88,6 +99,7 @@ class TestFilterMetadata:
             "drops_other_non_current",
             "rolls_up_to_species",
             "rolls_up_to_non_infecting_species",
+            "keeps_sequence_rows_empty_status",
         ],
     )
     def test_filter(
@@ -96,8 +108,8 @@ class TestFilterMetadata:
         expected: list[tuple[str, str, str]],
     ) -> None:
         """Drops superseded assemblies and rows failing host-taxa screen, keeping
-        only `current` host-infecting rows. Strain-level taxids match through
-        species-level rollup (`taxid_species`)."""
+        `current` host-infecting rows and status-less sequence rows. Strain-level
+        taxids match through species-level rollup (`taxid_species`)."""
         result = filter_metadata(_meta(meta_rows), VIRUS_DB, ["vertebrate"])
         actual = list(
             zip(
@@ -121,6 +133,21 @@ class TestFilterMetadata:
         meta = _meta([("GCA_001.1", "1", "current"), ("GCA_999.1", "999", "current")])
         result = filter_metadata(meta, virus_db, ["vertebrate"])
         assert list(result["assembly_accession"]) == ["GCA_001.1"]
+
+    def test_nan_assembly_status_passes(self) -> None:
+        """Sequence rows read from TSV have an empty assembly_status cell, which
+        pd.read_csv(dtype=str) parses as NaN; those rows must still pass."""
+        meta = pd.read_csv(
+            io.StringIO(
+                "assembly_accession\ttaxid\torganism_name\tsource_database\tassembly_status\n"
+                "NC_045512.2\t1\tOrg\tSOURCE_DATABASE_REFSEQ\t\n"
+                "GCA_002.1\t2\tOrg\tSOURCE_DATABASE_GENBANK\tprevious\n"
+            ),
+            sep="\t",
+            dtype=str,
+        )
+        result = filter_metadata(meta, VIRUS_DB, ["vertebrate"])
+        assert list(result["assembly_accession"]) == ["NC_045512.2"]
 
     def test_missing_assembly_status_column_raises(self) -> None:
         """Pandas raises KeyError when the schema-required `assembly_status` column is absent."""

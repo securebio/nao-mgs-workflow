@@ -37,7 +37,7 @@ logger.addHandler(handler)
 def filter_metadata(
     meta_db: pd.DataFrame, virus_db: pd.DataFrame, host_taxa: list[str]
 ) -> pd.DataFrame:
-    """Filter the viral metadata TSV to host-infecting, current assemblies.
+    """Filter the viral metadata TSV to host-infecting current assemblies plus status-less sequence rows.
 
     Args:
         meta_db: Viral metadata table from `datasets summary` (must include
@@ -50,9 +50,12 @@ def filter_metadata(
     Returns:
         Filtered metadata: rows whose `taxid` (or rolled-up species-level
         taxid) matches a host-infecting virus and whose `assembly_status`
-        is `current`. Other statuses ('previous', 'replaced', 'suppressed',
-        etc., per NCBI's datasets OpenAPI enum) can introduce duplicate
-        sequence IDs alongside the live record.
+        is `current` **or empty**. Non-current assembly statuses ('previous',
+        'replaced', 'suppressed', etc., per NCBI's datasets OpenAPI enum) can
+        introduce duplicate sequence IDs alongside the live record and are
+        dropped. Sequence-sourced rows (from NCBI Virus / nuccore) carry no
+        assembly status, so an empty status passes — they have no assembly
+        supersession to screen on.
     """
     screen_cols = ["infection_status_" + t for t in host_taxa]
     screen_status = (virus_db[screen_cols] == "1").max(axis=1)
@@ -67,7 +70,10 @@ def filter_metadata(
         meta_db["taxid"].isin(virus_taxids) | species_taxid.isin(virus_taxids)
     ]
     before = len(host_infecting)
-    current = host_infecting.loc[host_infecting["assembly_status"] == "current"]
+    # Keep "current" assemblies and status-less sequence rows (empty/NaN);
+    # drop only genuinely non-current assemblies (previous/replaced/…).
+    status = host_infecting["assembly_status"]
+    current = host_infecting.loc[(status == "current") | status.isna() | (status == "")]
     logger.info("Dropped %d non-current assemblies.", before - len(current))
     return current
 
