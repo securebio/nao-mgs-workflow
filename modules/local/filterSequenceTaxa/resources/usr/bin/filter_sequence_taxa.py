@@ -2,7 +2,7 @@
 """Drop rows whose taxid falls under an excluded taxonomic clade from a viral
 genome metadata TSV.
 
-Used to exclude influenza (Orthomyxoviridae, taxid 11308 by default) from the
+Used to exclude influenza (Orthomyxoviridae, taxid 11308) from the
 sequence-sourcing branch of ENUMERATE_VIRAL_ACCESSIONS: NCBI keeps flu on
 grouped genome assemblies (which the assembly branch captures), so the sequence
 branch would otherwise re-add thousands of ungrouped flu segments. Exclusion is
