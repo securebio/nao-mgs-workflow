@@ -1,19 +1,19 @@
 #!/usr/bin/env python
 """Prepare viral genome metadata from NCBI datasets CLI output for downstream
-filtering and genome ID extraction. Reads merged metadata TSV, joins with the
-virus taxonomy DB to add species_taxid, matches genome files to accessions, and
-outputs metadata compatible with filter_viral_genbank_metadata.py.
+filtering. Reads the merged (filtered) assembly metadata TSV, joins it with the
+virus taxonomy DB to add `species_taxid`, and expands each assembly row into one
+row per constituent `genome_id` using the accession -> genome_id map emitted by
+DOWNLOAD_VIRAL_GENOMES. Rows whose accession is absent from the map (i.e. the
+genome failed to download) are dropped so the metadata stays consistent with the
+concatenated genome FASTA.
 """
 
 import argparse
 import csv
 import gzip
 import logging
-import os
-import re
 import time
 from datetime import UTC, datetime
-from pathlib import Path
 from typing import IO, cast
 
 
@@ -32,11 +32,11 @@ logger.handlers.clear()
 logger.addHandler(handler)
 
 
-def open_by_suffix(path: str, mode: str = "r") -> IO[str]:
-    """Open a file, transparently handling .gz compression."""
+def open_by_suffix(path: str, mode: str = "r", newline: str | None = None) -> IO[str]:
+    """Open a file, transparently handling .gz compression (text mode)."""
     if path.endswith(".gz"):
-        return cast(IO[str], gzip.open(path, mode + "t"))
-    return cast(IO[str], open(path, mode))
+        return cast(IO[str], gzip.open(path, mode + "t", newline=newline))
+    return cast(IO[str], open(path, mode, newline=newline))
 
 
 def build_species_taxid_map(virus_db_path: str) -> dict[str, str]:
@@ -46,7 +46,7 @@ def build_species_taxid_map(virus_db_path: str) -> dict[str, str]:
     Returns:
         Dictionary mapping taxid to species-level taxid.
     """
-    with open_by_suffix(virus_db_path) as f:
+    with open_by_suffix(virus_db_path, newline="") as f:
         result = {
             row["taxid"]: row["taxid_species"]
             for row in csv.DictReader(f, delimiter="\t")
@@ -55,90 +55,69 @@ def build_species_taxid_map(virus_db_path: str) -> dict[str, str]:
     return result
 
 
-ACCESSION_RE = re.compile(r"^(GC[AF]_\d+\.\d+)")
-
-
-def match_genomes_to_accessions(
-    genome_dir: Path, accessions: list[str]
-) -> dict[str, str]:
-    """Match genome .fna.gz files to assembly accessions by filename prefix.
+def read_accession_map(accession_map_path: str) -> dict[str, list[str]]:
+    """Read the assembly_accession -> genome_id map emitted by download.
     Args:
-        genome_dir: Directory containing genome .fna.gz files.
-        accessions: List of assembly accessions to match.
+        accession_map_path: Path to TSV with 'assembly_accession' and 'genome_id'
+            columns (one row per downloaded sequence).
     Returns:
-        Dictionary mapping assembly accession to genome filename.
+        Dictionary mapping each assembly accession to its ordered list of
+        genome IDs (order preserved as encountered).
     """
-    acc_set = set(accessions)
-    result = {}
-    for f in sorted(genome_dir.glob("*.fna.gz")):
-        m = ACCESSION_RE.match(f.name)
-        if m and m.group(1) in acc_set and m.group(1) not in result:
-            result[m.group(1)] = f.name
+    result: dict[str, list[str]] = {}
+    with open_by_suffix(accession_map_path, newline="") as f:
+        for row in csv.DictReader(f, delimiter="\t"):
+            result.setdefault(row["assembly_accession"], []).append(row["genome_id"])
+    logger.info(
+        "Read map for %d accessions (%d genome IDs)",
+        len(result),
+        sum(len(v) for v in result.values()),
+    )
     return result
 
 
 def prepare_metadata(
     merged_metadata_path: str,
     virus_db_path: str,
-    genomes_dir: str,
+    accession_map_path: str,
     output_metadata_path: str,
-    output_genomes_dir: str,
-    output_paths_path: str,
 ) -> None:
-    """Read metadata + virus DB, add species_taxid and local_filename, symlink genomes.
+    """Add species_taxid and expand each assembly row to one row per genome_id.
     Args:
-        merged_metadata_path: Path to merged metadata TSV (may be gzipped).
+        merged_metadata_path: Path to merged (filtered) metadata TSV (may be gz).
         virus_db_path: Path to virus taxonomy DB TSV.
-        genomes_dir: Directory containing downloaded genome .fna.gz files.
-        output_metadata_path: Output path for prepared metadata TSV.
-        output_genomes_dir: Output directory for symlinked genome files.
-        output_paths_path: Output path for newline-delimited list of
-            symlinked genome file paths (consumed by CONCATENATE_GENOME_FASTA;
-            mirrors the column order of `output_metadata_path`).
+        accession_map_path: Path to accession -> genome_id map TSV.
+        output_metadata_path: Output path for the expanded metadata TSV (gzip).
     """
     taxid_to_species = build_species_taxid_map(virus_db_path)
-    with open_by_suffix(merged_metadata_path) as f:
+    acc_to_gids = read_accession_map(accession_map_path)
+    with open_by_suffix(merged_metadata_path, newline="") as f:
         reader = csv.DictReader(f, delimiter="\t")
         in_fields = reader.fieldnames or []
         rows = list(reader)
     logger.info("Read %d metadata rows", len(rows))
-    genome_dir, output_dir = Path(genomes_dir), Path(output_genomes_dir)
-    output_dir.mkdir(parents=True, exist_ok=True)
-    out_fields = list(in_fields) + ["species_taxid", "local_filename"]
-    if not rows:
-        logger.info("No metadata rows to process. Writing header-only output file.")
-        with open(output_metadata_path, "w", newline="") as f:
-            writer = csv.DictWriter(f, fieldnames=out_fields, delimiter="\t")
-            writer.writeheader()
-        Path(output_paths_path).write_text("")
-        return
-    accessions = sorted({r["assembly_accession"] for r in rows})
-    acc_to_file = match_genomes_to_accessions(genome_dir, accessions)
-    logger.info(
-        "Matched %d/%d accessions to genome files", len(acc_to_file), len(accessions)
-    )
-    # Symlink matched genomes into output directory
-    for filename in acc_to_file.values():
-        os.symlink(os.path.abspath(genome_dir / filename), output_dir / filename)
-    n_written = 0
-    with (
-        open(output_metadata_path, "w", newline="") as f,
-        open(output_paths_path, "w") as paths_f,
-    ):
+    out_fields = list(in_fields) + ["species_taxid", "genome_id"]
+    n_in = n_dropped = n_out = 0
+    with open_by_suffix(output_metadata_path, "w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=out_fields, delimiter="\t")
         writer.writeheader()
         for row in rows:
-            if row["assembly_accession"] not in acc_to_file:
+            n_in += 1
+            gids = acc_to_gids.get(row["assembly_accession"])
+            if not gids:
+                n_dropped += 1
                 continue
             row["species_taxid"] = taxid_to_species.get(row["taxid"], "")
-            row["local_filename"] = (
-                f"{output_genomes_dir}/{acc_to_file[row['assembly_accession']]}"
-            )
-            writer.writerow(row)
-            paths_f.write(f"{row['local_filename']}\n")
-            n_written += 1
+            for gid in gids:
+                out_row = dict(row)
+                out_row["genome_id"] = gid
+                writer.writerow(out_row)
+                n_out += 1
     logger.info(
-        "Wrote %d rows (dropped %d unmatched)", n_written, len(rows) - n_written
+        "Wrote %d genome rows from %d assemblies (dropped %d undownloaded)",
+        n_out,
+        n_in,
+        n_dropped,
     )
 
 
@@ -146,13 +125,9 @@ def parse_arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("merged_metadata", help="Path to merged metadata TSV.")
     parser.add_argument("virus_db", help="Path to virus taxonomy DB TSV.")
-    parser.add_argument("genomes_dir", help="Directory containing .fna.gz files.")
+    parser.add_argument("accession_map", help="Path to accession -> genome_id map TSV.")
     parser.add_argument(
-        "output_metadata", help="Output path for prepared metadata TSV."
-    )
-    parser.add_argument("output_genomes_dir", help="Output directory for genome files.")
-    parser.add_argument(
-        "output_paths", help="Output path for list of symlinked genome file paths."
+        "output_metadata", help="Output path for expanded metadata TSV (gzip)."
     )
     return parser.parse_args()
 
@@ -164,10 +139,8 @@ def main() -> None:
     prepare_metadata(
         args.merged_metadata,
         args.virus_db,
-        args.genomes_dir,
+        args.accession_map,
         args.output_metadata,
-        args.output_genomes_dir,
-        args.output_paths,
     )
     logger.info("Total time elapsed: %.2f seconds", time.time() - start_time)
 

@@ -19,14 +19,14 @@ nextflow_process {
         //   - different names + identical sequence (DIFF_NAME_SAME_SEQ_A/B): keep both
         // The committed fixtures are plain `.fna` for legibility; gzipFixtureDir
         // produces a temp dir of `.fna.gz` copies so the process consumes the
-        // production .gz form.
+        // production .gz form. The process concatenates in sorted filename order
+        // (GCA_001, GCA_002, GCA_003), so first-occurrence dedup is deterministic.
         tag "expect_success"
         when {
             params {}
             process {
                 """
-                input[0] = file("${helpers.gzipFixtureDir("${projectDir}/test-data/concatenateGenomeFasta/genomes")}")
-                input[1] = file("${projectDir}/test-data/concatenateGenomeFasta/paths.csv")
+                input[0] = file("${helpers.gzipFixtureDir("${projectDir}/test-data/concatenateGenomeFasta/genomes")}/*.fna.gz")
                 """
             }
         }
@@ -42,23 +42,39 @@ nextflow_process {
                 "UNIQUE_B",
                 "UNIQUE_C",
             ]
-            // `--by-name` keeps the first occurrence (from GCA_002.fna.gz, which
-            // paths.csv lists before GCA_003.fna.gz) and drops the duplicate.
+            // `--by-name` keeps the first occurrence. SHARED_NAME_DIFF_SEQ first
+            // appears in GCA_002 (before GCA_003 in sorted order).
             assert fasta["SHARED_NAME_DIFF_SEQ"] == "AAAAAAAA"
-            // Output is in path-file order, not readdir order.
-            // (paths.csv lists files non-alphabetically to make this assertion meaningful.)
+            // Output is in sorted filename order (GCA_001, GCA_002, GCA_003),
+            // with GCA_003's duplicate SHARED_NAME_* dropped.
             def headers = path(process.out[0][0]).linesGzip
                 .findAll { it.startsWith(">") }
                 .collect { it.substring(1) }
             assert headers == [
-                "UNIQUE_B",            // GCA_002
+                "UNIQUE_A",             // GCA_001
+                "DIFF_NAME_SAME_SEQ_A",
+                "UNIQUE_B",             // GCA_002
                 "SHARED_NAME_DIFF_SEQ",
                 "SHARED_NAME_SAME_SEQ",
-                "UNIQUE_C",            // GCA_003 (SHARED_NAME_* dropped by dedup)
+                "UNIQUE_C",             // GCA_003 (SHARED_NAME_* dropped by dedup)
                 "DIFF_NAME_SAME_SEQ_B",
-                "UNIQUE_A",            // GCA_001
-                "DIFF_NAME_SAME_SEQ_A",
             ]
+        }
+    }
+
+    test("Should fail loudly when given no genome FASTA files") {
+        // The empty-input guard must exit 1 rather than emit an empty FASTA.
+        tag "expect_failed"
+        when {
+            params {}
+            process {
+                """
+                input[0] = []
+                """
+            }
+        }
+        then {
+            assert process.failed
         }
     }
 
