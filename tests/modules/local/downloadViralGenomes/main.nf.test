@@ -77,6 +77,14 @@ nextflow_process {
             def accs = amap.columns["assembly_accession"].toSet()
             assert "GCF_018547865.1" in accs
             assert "GCA_018547865.1" in accs
+            // Map genome_ids must match the combined FASTA headers even when the
+            // chunk spans multiple accessions merged into one combined file.
+            def headers = path(process.out.genomes[0]).linesGzip
+                .findAll { it.startsWith(">") }
+                .collect { it.substring(1).split(/\s/)[0] }
+                .toSet()
+            assert amap.columns["genome_id"].toSet() == headers :
+                "map genome_ids ${amap.columns['genome_id'].toSet()} != FASTA headers ${headers}"
         }
     }
 
