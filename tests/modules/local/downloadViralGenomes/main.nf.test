@@ -147,7 +147,7 @@ nextflow_process {
         }
     }
 
-    test("Should download all-source sequences, warning on genbank (sequence mode)") {
+    test("Should download all-source sequences under genbank (sequence mode)") {
         tag "expect_success"
         config "tests/configs/index.config"
         when {
