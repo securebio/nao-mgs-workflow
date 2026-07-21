@@ -41,6 +41,7 @@ workflow INDEX {
             params.download_virus_taxid ?: params.virus_taxid,
             params.assembly_source,
             taxonomy_ch.db,
+            taxonomy_ch.nodes,
             virus_genome_params
         )
         // Download ribosomal references

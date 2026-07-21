@@ -12,7 +12,10 @@ process FILTER_VIRAL_GENBANK_METADATA {
         val(chunk_size)
         val(name_pattern)
     output:
-        path("${name_pattern}-metadata-filtered.tsv.gz"), emit: db
+        // Uncompressed so the subworkflow can merge the per-branch filtered
+        // metadata with `collectFile(keepHeader:...)` before PREPARE_VIRAL_METADATA
+        // (which reads either form). Intermediate only; not a published output.
+        path("${name_pattern}-metadata-filtered.tsv"), emit: db
         path("${name_pattern}-accession-chunks/chunk_*.txt"), emit: accession_chunks
     script:
         """
@@ -20,7 +23,7 @@ process FILTER_VIRAL_GENBANK_METADATA {
             ${metadata_db} \\
             ${virus_db} \\
             "${host_taxa}" \\
-            ${name_pattern}-metadata-filtered.tsv.gz \\
+            ${name_pattern}-metadata-filtered.tsv \\
             ${name_pattern}-accession-chunks \\
             ${chunk_size}
         """
