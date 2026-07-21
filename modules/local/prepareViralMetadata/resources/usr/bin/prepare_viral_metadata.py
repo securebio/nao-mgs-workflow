@@ -95,11 +95,15 @@ def prepare_metadata(
 ) -> None:
     """Add species_taxid and expand each assembly row to one row per genome_id.
 
-    When both sourcing branches feed in (virus_source="both"), a nuccore genome
-    can be reached twice — once inside an assembly (assembly branch) and once as
-    its own sequence record (sequence branch). Such rows are deduplicated by
-    `genome_id`, keeping the assembly-branch row (GCA_/GCF_ accession) so the
-    genome retains its assembly provenance.
+    Output rows are deduplicated by `genome_id` unconditionally, keeping the FASTA
+    (which `CONCATENATE_GENOME_FASTA` already dedups by name) and metadata 1:1 on
+    `genome_id`. When both sourcing branches feed in (virus_source="both"), a
+    nuccore genome reached both inside an assembly (assembly branch) and as its
+    own sequence record (sequence branch) collapses to one row, preferring the
+    assembly-branch row (GCA_/GCF_ accession) so the genome keeps its assembly
+    provenance; otherwise the first-seen row wins. In the assembly-only path this
+    is inert in practice — distinct assemblies do not share a constituent nuccore
+    accession — but it is applied unconditionally for consistency.
 
     Args:
         merged_metadata_path: Path to merged (filtered) metadata TSV (may be gz).
@@ -144,7 +148,7 @@ def prepare_metadata(
             writer.writerow(out_row)
     logger.info(
         "Wrote %d genome rows from %d assemblies (dropped %d undownloaded, "
-        "collapsed %d cross-source duplicate genome_ids)",
+        "collapsed %d duplicate genome_ids)",
         len(best),
         n_in,
         n_dropped,

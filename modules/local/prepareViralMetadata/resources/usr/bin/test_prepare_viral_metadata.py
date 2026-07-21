@@ -229,6 +229,31 @@ class TestPrepareMetadata:
         assert rows[0]["genome_id"] == "NC_045512.2"
         assert rows[0]["assembly_accession"] == expected_accession
 
+    def test_same_branch_collision_keeps_first_seen(self, tmp_path: Path) -> None:
+        """When neither colliding row is an assembly (tie-break inapplicable),
+        the first-seen row wins and the genome_id appears once."""
+        meta = _write_tsv(
+            tmp_path / "m.tsv",
+            META_HEADER,
+            [
+                ["NC_A.1", "12345", "First", "SOURCE_DATABASE_REFSEQ", ""],
+                ["NC_B.1", "12345", "Second", "SOURCE_DATABASE_REFSEQ", ""],
+            ],
+        )
+        db = _write_tsv(tmp_path / "db.tsv", DB_HEADER, [["12345", "12345", "V"]])
+        # Both sequence rows map to the same genome_id (a name collision).
+        amap = _write_tsv(
+            tmp_path / "map.tsv",
+            MAP_HEADER,
+            [["NC_A.1", "SHARED.1"], ["NC_B.1", "SHARED.1"]],
+        )
+        out_meta = tmp_path / "out.tsv.gz"
+        prepare_metadata(str(meta), str(db), str(amap), str(out_meta))
+        rows = _read_tsv(out_meta)
+        assert len(rows) == 1
+        assert rows[0]["genome_id"] == "SHARED.1"
+        assert rows[0]["assembly_accession"] == "NC_A.1"  # first-seen
+
     def test_empty_metadata_writes_header_only(
         self, tmp_path: Path, standard_inputs: tuple[Path, Path, Path]
     ) -> None:
