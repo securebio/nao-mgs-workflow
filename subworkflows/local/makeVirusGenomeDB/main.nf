@@ -57,10 +57,10 @@ workflow MAKE_VIRUS_GENOME_DB {
         gid_ch = PREPARE_VIRAL_METADATA(filter_ch.db, virus_db, merged_map_ch).metadata
         // 5. Concatenate the per-chunk combined genome FASTAs (dedup by name).
         genome_concat_ch = CONCATENATE_GENOME_FASTA(download_ch.genomes.collect())
-        // 7. Filter to remove undesired/contaminated genomes by sequence-header
+        // 6. Filter to remove undesired/contaminated genomes by sequence-header
         //    pattern (genome_patterns_exclude only matchable post-download).
         filter_genome_ch = FILTER_GENOME_FASTA(genome_concat_ch, other_params.genome_patterns_exclude, "virus-genomes-filtered")
-        // 8. Mask to remove adapters, low-entropy regions, and polyX.
+        // 7. Mask to remove adapters, low-entropy regions, and polyX.
         mask_params = other_params + [name_pattern: "virus-genomes"]
         mask_ch = MASK_GENOME_FASTA(filter_genome_ch, other_params.adapters, mask_params)
     emit:

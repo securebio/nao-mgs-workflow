@@ -13,18 +13,18 @@ process CONCATENATE_GENOME_FASTA {
     script:
         """
         set -euo pipefail
-        # Diagnostics
-        n=\$(ls -1 *.fna.gz 2>/dev/null | wc -l)
-        echo "Concatenating \$n combined genome FASTA file(s):"
-        ls -1 *.fna.gz 2>/dev/null | head || true
-        if [ "\$n" -eq 0 ]; then
+        # Diagnostics. Use `find` (not a glob) so the no-match case yields an
+        # empty list instead of tripping errexit before the guard below.
+        files=\$(find . -maxdepth 1 -name '*.fna.gz' | sort)
+        if [ -z "\$files" ]; then
             echo "No genome FASTA files found!"
             exit 1
         fi
+        echo "Concatenating \$(printf '%s\\n' "\$files" | wc -l) combined genome FASTA file(s):"
+        printf '%s\\n' "\$files" | head
         # Concatenate in sorted filename order so `seqkit rmdup --by-name`
-        # first-occurrence behaviour is deterministic across runs (`ls -1`
-        # already sorts lexicographically).
-        ls -1 *.fna.gz \\
+        # first-occurrence behaviour is deterministic across runs.
+        printf '%s\\n' "\$files" \\
             | xargs cat \\
             | seqkit rmdup --by-name --threads ${task.cpus} \\
                 -D genomes-duplicates.tsv -o genomes.fasta.gz
