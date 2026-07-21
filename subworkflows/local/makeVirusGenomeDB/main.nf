@@ -48,7 +48,7 @@ workflow MAKE_VIRUS_GENOME_DB {
         //    Nextflow can fan out tasks. Each task emits a single combined
         //    FASTA plus an assembly_accession -> genome_id map.
         chunk_ch = filter_ch.accession_chunks.flatten()
-        download_ch = DOWNLOAD_VIRAL_GENOMES(chunk_ch, assembly_source, other_params.datasets_download_extra_args, 5)
+        download_ch = DOWNLOAD_VIRAL_GENOMES(chunk_ch, assembly_source, other_params.datasets_download_extra_args, 5, "assembly")
         // 4. Merge the per-chunk maps, then join with the filtered metadata to
         //    add species_taxid and expand each assembly to one row per genome_id.
         merged_map_ch = download_ch.accession_map.collectFile(
