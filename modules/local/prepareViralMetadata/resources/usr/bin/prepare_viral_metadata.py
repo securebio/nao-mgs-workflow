@@ -5,16 +5,28 @@ virus taxonomy DB to add `species_taxid`, and expands each assembly row into one
 row per constituent `genome_id` using the accession -> genome_id map emitted by
 DOWNLOAD_VIRAL_GENOMES. Rows whose accession is absent from the map (i.e. the
 genome failed to download) are dropped so the metadata stays consistent with the
-concatenated genome FASTA.
+concatenated genome FASTA. Output rows are also deduplicated by `genome_id`
+(assembly-branch row preferred) so metadata is 1:1 with the deduplicated FASTA.
 """
 
 import argparse
 import csv
 import gzip
 import logging
+import re
 import time
 from datetime import UTC, datetime
 from typing import IO, cast
+
+# Assembly accessions are GCA_/GCF_ (assembly branch); anything else is a
+# sequence-branch nuccore accession. Used to prefer the assembly-branch row when
+# the same genome_id is reached via both branches.
+ASSEMBLY_ACCESSION_RE = re.compile(r"^GC[AF]_")
+
+
+def is_assembly_accession(accession: str) -> bool:
+    """True if `accession` is an assembly (GCA_/GCF_) rather than a nuccore accession."""
+    return bool(ASSEMBLY_ACCESSION_RE.match(accession))
 
 
 class UTCFormatter(logging.Formatter):
@@ -83,6 +95,17 @@ def prepare_metadata(
     output_metadata_path: str,
 ) -> None:
     """Add species_taxid and expand each assembly row to one row per genome_id.
+
+    Output rows are deduplicated by `genome_id` unconditionally, keeping the FASTA
+    (which `CONCATENATE_GENOME_FASTA` already dedups by name) and metadata 1:1 on
+    `genome_id`. When both sourcing branches feed in (virus_source="both"), a
+    nuccore genome reached both inside an assembly (assembly branch) and as its
+    own sequence record (sequence branch) collapses to one row, preferring the
+    assembly-branch row (GCA_/GCF_ accession) so the genome keeps its assembly
+    provenance; otherwise the first-seen row wins. In the assembly-only path this
+    is inert in practice — distinct assemblies do not share a constituent nuccore
+    accession — but it is applied unconditionally for consistency.
+
     Args:
         merged_metadata_path: Path to merged (filtered) metadata TSV (may be gz).
         virus_db_path: Path to virus taxonomy DB TSV.
@@ -97,27 +120,40 @@ def prepare_metadata(
         rows = list(reader)
     logger.info("Read %d metadata rows", len(rows))
     out_fields = list(in_fields) + ["species_taxid", "genome_id"]
-    n_in = n_dropped = n_out = 0
+    n_in = n_dropped = n_expanded = 0
+    # First-seen order preserved; on a genome_id collision, prefer the
+    # assembly-branch row over a sequence-branch row.
+    best: dict[str, dict[str, str]] = {}
+    for row in rows:
+        n_in += 1
+        gids = acc_to_gids.get(row["assembly_accession"])
+        if not gids:
+            n_dropped += 1
+            continue
+        species = taxid_to_species.get(row["taxid"], "")
+        for gid in gids:
+            n_expanded += 1
+            out_row = dict(row)
+            out_row["species_taxid"] = species
+            out_row["genome_id"] = gid
+            existing = best.get(gid)
+            if existing is None or (
+                is_assembly_accession(out_row["assembly_accession"])
+                and not is_assembly_accession(existing["assembly_accession"])
+            ):
+                best[gid] = out_row
     with open_by_suffix(output_metadata_path, "w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=out_fields, delimiter="\t")
         writer.writeheader()
-        for row in rows:
-            n_in += 1
-            gids = acc_to_gids.get(row["assembly_accession"])
-            if not gids:
-                n_dropped += 1
-                continue
-            row["species_taxid"] = taxid_to_species.get(row["taxid"], "")
-            for gid in gids:
-                out_row = dict(row)
-                out_row["genome_id"] = gid
-                writer.writerow(out_row)
-                n_out += 1
+        for out_row in best.values():
+            writer.writerow(out_row)
     logger.info(
-        "Wrote %d genome rows from %d assemblies (dropped %d undownloaded)",
-        n_out,
+        "Wrote %d genome rows from %d assemblies (dropped %d undownloaded, "
+        "collapsed %d duplicate genome_ids)",
+        len(best),
         n_in,
         n_dropped,
+        n_expanded - len(best),
     )
 
 

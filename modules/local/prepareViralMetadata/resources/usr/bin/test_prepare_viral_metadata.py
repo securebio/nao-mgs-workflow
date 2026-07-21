@@ -179,6 +179,121 @@ class TestPrepareMetadata:
         assert rows[0]["assembly_accession"] == "GCA_000001.1"
         assert rows[0]["genome_id"] == "seq1.1"
 
+    @pytest.mark.parametrize(
+        ("meta_rows", "map_rows", "expected_accession"),
+        [
+            # Assembly row appears first; assembly wins.
+            (
+                [
+                    [
+                        "GCA_000001.1",
+                        "12345",
+                        "V",
+                        "SOURCE_DATABASE_GENBANK",
+                        "current",
+                    ],
+                    ["NC_045512.2", "12345", "V", "SOURCE_DATABASE_REFSEQ", ""],
+                ],
+                [["GCA_000001.1", "NC_045512.2"], ["NC_045512.2", "NC_045512.2"]],
+                "GCA_000001.1",
+            ),
+            # Sequence row appears first; assembly still wins (order-independent).
+            (
+                [
+                    ["NC_045512.2", "12345", "V", "SOURCE_DATABASE_REFSEQ", ""],
+                    ["GCF_000001.1", "12345", "V", "SOURCE_DATABASE_REFSEQ", "current"],
+                ],
+                [["NC_045512.2", "NC_045512.2"], ["GCF_000001.1", "NC_045512.2"]],
+                "GCF_000001.1",
+            ),
+        ],
+        ids=["assembly_first", "sequence_first"],
+    )
+    def test_dedups_genome_id_preferring_assembly_row(
+        self,
+        tmp_path: Path,
+        meta_rows: list[list[str]],
+        map_rows: list[list[str]],
+        expected_accession: str,
+    ) -> None:
+        """A genome_id reached via both an assembly and a sequence record collapses
+        to one row, keeping the assembly-branch (GCA_/GCF_) provenance regardless
+        of input order."""
+        meta = _write_tsv(tmp_path / "m.tsv", META_HEADER, meta_rows)
+        db = _write_tsv(tmp_path / "db.tsv", DB_HEADER, [["12345", "12345", "V"]])
+        amap = _write_tsv(tmp_path / "map.tsv", MAP_HEADER, map_rows)
+        out_meta = tmp_path / "out.tsv.gz"
+        prepare_metadata(str(meta), str(db), str(amap), str(out_meta))
+        rows = _read_tsv(out_meta)
+        assert len(rows) == 1
+        assert rows[0]["genome_id"] == "NC_045512.2"
+        assert rows[0]["assembly_accession"] == expected_accession
+
+    def test_dedup_preserves_first_seen_order(self, tmp_path: Path) -> None:
+        """The winning row keeps the genome_id's first-seen position even when the
+        assembly (winning) row appears after the sequence row in the input."""
+        meta = _write_tsv(
+            tmp_path / "m.tsv",
+            META_HEADER,
+            [
+                ["NC_SHARED.1", "12345", "Seq", "SOURCE_DATABASE_REFSEQ", ""],
+                [
+                    "GCA_000009.1",
+                    "99999",
+                    "Other",
+                    "SOURCE_DATABASE_GENBANK",
+                    "current",
+                ],
+                ["GCA_000001.1", "12345", "Asm", "SOURCE_DATABASE_GENBANK", "current"],
+            ],
+        )
+        db = _write_tsv(
+            tmp_path / "db.tsv",
+            DB_HEADER,
+            [["12345", "12345", "V"], ["99999", "99000", "W"]],
+        )
+        amap = _write_tsv(
+            tmp_path / "map.tsv",
+            MAP_HEADER,
+            [
+                ["NC_SHARED.1", "NC_SHARED.1"],
+                ["GCA_000009.1", "other.1"],
+                ["GCA_000001.1", "NC_SHARED.1"],
+            ],
+        )
+        out_meta = tmp_path / "out.tsv.gz"
+        prepare_metadata(str(meta), str(db), str(amap), str(out_meta))
+        rows = _read_tsv(out_meta)
+        # NC_SHARED.1 keeps its first-seen position (before other.1) but takes the
+        # assembly row's data.
+        assert [r["genome_id"] for r in rows] == ["NC_SHARED.1", "other.1"]
+        assert rows[0]["assembly_accession"] == "GCA_000001.1"
+
+    def test_same_branch_collision_keeps_first_seen(self, tmp_path: Path) -> None:
+        """When neither colliding row is an assembly (tie-break inapplicable),
+        the first-seen row wins and the genome_id appears once."""
+        meta = _write_tsv(
+            tmp_path / "m.tsv",
+            META_HEADER,
+            [
+                ["NC_A.1", "12345", "First", "SOURCE_DATABASE_REFSEQ", ""],
+                ["NC_B.1", "12345", "Second", "SOURCE_DATABASE_REFSEQ", ""],
+            ],
+        )
+        db = _write_tsv(tmp_path / "db.tsv", DB_HEADER, [["12345", "12345", "V"]])
+        # Both sequence rows map to the same genome_id (a name collision).
+        amap = _write_tsv(
+            tmp_path / "map.tsv",
+            MAP_HEADER,
+            [["NC_A.1", "SHARED.1"], ["NC_B.1", "SHARED.1"]],
+        )
+        out_meta = tmp_path / "out.tsv.gz"
+        prepare_metadata(str(meta), str(db), str(amap), str(out_meta))
+        rows = _read_tsv(out_meta)
+        assert len(rows) == 1
+        assert rows[0]["genome_id"] == "SHARED.1"
+        assert rows[0]["assembly_accession"] == "NC_A.1"  # first-seen
+
     def test_empty_metadata_writes_header_only(
         self, tmp_path: Path, standard_inputs: tuple[Path, Path, Path]
     ) -> None:

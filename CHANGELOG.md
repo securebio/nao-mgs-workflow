@@ -1,5 +1,6 @@
 # v3.2.3.0-dev
 
+- Add cross-source `genome_id` deduplication to `PREPARE_VIRAL_METADATA`: when both sourcing branches feed in, a nuccore genome reached via both an assembly (assembly branch) and its own sequence record (sequence branch) collapses to a single row, keeping the assembly-branch (`GCA_`/`GCF_`) provenance regardless of input order. Dormant until `virus_source=both`; groundwork for COMP-2466.
 - Add a `FILTER_SEQUENCE_TAXA` module that drops rows under an excluded taxonomic clade (descendant taxids computed from the NCBI `nodes.dmp`) from viral genome metadata, defaulting to influenza (Orthomyxoviridae, taxid 11308). This lets the sequence-sourcing branch exclude flu — which NCBI keeps on grouped genome assemblies — so it does not re-add ungrouped flu segments. Dormant (not yet wired into the subworkflow); groundwork for COMP-2466.
 
 - Make `FILTER_VIRAL_GENBANK_METADATA` branch-aware: sequence-sourced rows (NCBI Virus / nuccore) carry no assembly status, so an empty/NA `assembly_status` now passes the status filter alongside `current` assemblies (genuinely non-current assemblies are still dropped). Dormant until the sequence branch is wired in; groundwork for COMP-2466.
