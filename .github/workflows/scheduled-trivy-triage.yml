@@ -21,10 +21,12 @@ permissions:
   id-token: write
 
 # Schedule and manual dispatch can otherwise overlap and race to open duplicate
-# triage PRs; serialize and cancel any in-progress run.
+# triage PRs. cancel-in-progress is false so a second run queues behind the active
+# one rather than cancelling it mid-triage, after it has pushed a branch or opened
+# a PR but before it finishes.
 concurrency:
   group: scheduled-trivy-triage
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   scan-and-triage:
