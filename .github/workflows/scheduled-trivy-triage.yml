@@ -1,0 +1,72 @@
+# Weekly scheduled Trivy container scan + auto-triage of HIGH/CRITICAL findings.
+#
+# Required configuration:
+#   - secrets.AWS_OIDC_ROLE_ARN                        (OIDC role for ECR Public, used by trivy-scan)
+#   - secrets.CI_AGENT_ANTHROPIC_API_KEY               (Claude API key; ORGANIZATION secret, visible to this repo)
+#   - vars.DETECTION_ROUTINE_SCANNER_APP_ID            (GitHub App id for the triage bot)
+#   - secrets.DETECTION_ROUTINE_SCANNER_PRIVATE_KEY    (GitHub App private key)
+
+name: Scheduled Trivy scan and triage
+
+# Every Monday (06:00 UTC)
+on:
+  schedule:
+    - cron: '0 6 * * 1'
+  workflow_dispatch: {}
+
+# The triage PR is created with the GitHub App token; workflow-level permissions
+# stay minimal. `id-token: write` is for the trivy-scan action's OIDC AWS auth.
+permissions:
+  contents: read
+  id-token: write
+
+# Schedule and manual dispatch can otherwise overlap and race to open duplicate
+# triage PRs; serialize and cancel any in-progress run.
+concurrency:
+  group: scheduled-trivy-triage
+  cancel-in-progress: true
+
+jobs:
+  scan-and-triage:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout dev
+        uses: actions/checkout@v4
+        with:
+          ref: dev
+
+      - name: Run Trivy scan
+        id: scan
+        uses: ./.github/actions/trivy-scan
+        with:
+          aws-role-arn: ${{ secrets.AWS_OIDC_ROLE_ARN }}
+
+      - name: Generate triage-bot app token
+        id: app-token
+        if: steps.scan.outputs.found == 'true'
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ vars.DETECTION_ROUTINE_SCANNER_APP_ID }}
+          private-key: ${{ secrets.DETECTION_ROUTINE_SCANNER_PRIVATE_KEY }}
+
+      - name: Triage HIGH/CRITICAL findings
+        if: steps.scan.outputs.found == 'true'
+        uses: anthropics/claude-code-action@v1
+        with:
+          github_token: ${{ steps.app-token.outputs.token }}
+          anthropic_api_key: ${{ secrets.CI_AGENT_ANTHROPIC_API_KEY }}
+          prompt: |
+            Run the `triage-trivy` skill in SCHEDULED MODE against the `dev` branch.
+
+            The Trivy scan has already run for this workflow: its results are in
+            the `trivy_results` directory in the workspace. Pass that directory to
+            the skill as the scan results directory and do NOT re-run the scan.
+
+            Follow the skill to triage the HIGH/CRITICAL findings and open a single
+            DRAFT triage pull request against `dev` with the appropriate remediation
+            per finding (apply a patch, add a `.trivyignore` entry, or escalate the
+            finding as an issue), exactly as the skill specifies.
+
+            This is a scheduled run with no associated pull request or issue, so do
+            not look for or reference any PR/issue event context.
