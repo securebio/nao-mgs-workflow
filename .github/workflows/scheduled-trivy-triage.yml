@@ -5,6 +5,9 @@
 #   - secrets.CI_AGENT_ANTHROPIC_API_KEY               (Claude API key; ORGANIZATION secret, visible to this repo)
 #   - vars.DETECTION_ROUTINE_SCANNER_APP_ID            (GitHub App id for the triage bot)
 #   - secrets.DETECTION_ROUTINE_SCANNER_PRIVATE_KEY    (GitHub App private key)
+#
+# The triage-bot GitHub App needs contents:write, pull-requests:write, and
+# issues:write: it pushes a branch, opens the triage PR, and files tracking issues.
 
 name: Scheduled Trivy scan and triage
 
@@ -65,10 +68,20 @@ jobs:
             the `trivy_results` directory in the workspace. Pass that directory to
             the skill as the scan results directory and do NOT re-run the scan.
 
-            Follow the skill to triage the HIGH/CRITICAL findings and open a single
-            DRAFT triage pull request against `dev` with the appropriate remediation
-            per finding (apply a patch, add a `.trivyignore` entry, or escalate the
-            finding as an issue), exactly as the skill specifies.
+            Follow the skill to triage the HIGH/CRITICAL findings, applying the
+            appropriate remediation per finding (apply a patch, add a `.trivyignore`
+            entry, or escalate) exactly as the skill specifies.
+
+            Then route the results so a human notices them:
+
+            - If any finding was patched or ignored (i.e. there are file changes),
+              open a single DRAFT triage PR against `dev` with those changes.
+            - Always open one GitHub tracking issue summarizing every finding and
+              its outcome. Link the triage PR from the issue when one was opened,
+              and record any escalated findings in the issue. This issue is the
+              entry point for our triage queue, so open it even when there is a PR.
+            - If every finding was escalated (no file changes), open the tracking
+              issue only and do NOT open an empty PR.
 
             This is a scheduled run with no associated pull request or issue, so do
             not look for or reference any PR/issue event context.
