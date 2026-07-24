@@ -81,6 +81,10 @@ Runs Rust unit tests and builds the `nao-rust-tools` container when Rust source 
 
 Scans all containers defined in `configs/containers.config` for security vulnerabilities using [Trivy](https://trivy.dev/).
 
+### Scheduled Trivy scan and triage (`scheduled-trivy-triage.yml`)
+
+Runs the same Trivy scan on a weekly schedule (Mondays 06:00 UTC) rather than per-PR, so HIGH/CRITICAL container CVEs are caught even in weeks with no container-touching PR. The job checks out and scans `dev`; when the scan reports HIGH/CRITICAL findings, it invokes the `triage-trivy` skill (in its PR-less scheduled mode) via `anthropics/claude-code-action` to open a draft triage PR against `dev`.
+
 ### Version and changelog checks
 
 These checks run unconditionally (no path filtering) to ensure version consistency across the codebase.
