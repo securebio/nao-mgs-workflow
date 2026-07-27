@@ -96,11 +96,12 @@ def prepare_metadata(
         in_fields = reader.fieldnames or []
         rows = list(reader)
     logger.info("Read %d metadata rows", len(rows))
-    # Every mapped accession should have a metadata row: DOWNLOAD_VIRAL_GENOMES
-    # restricts its output to the accessions each chunk requested, which come
-    # from the same filtered set as these rows. Anything left over would end up
-    # in the concatenated FASTA without a metadata row, which RUN rejects with
-    # "No matching genome ID found", so surface it rather than passing silently.
+    # Every mapped accession must have a metadata row. DOWNLOAD_VIRAL_GENOMES
+    # builds the map and the combined FASTA in one pass over the same file list,
+    # so a mapped accession with no metadata row means the concatenated FASTA
+    # carries sequences this metadata does not describe — and RUN rejects those
+    # with "No matching genome ID found". This is the only place the two sides
+    # are compared, so it aborts rather than warning.
     unmapped = sorted(set(acc_to_gids) - {r["assembly_accession"] for r in rows})
     if unmapped:
         raise ValueError(

@@ -42,19 +42,10 @@ nextflow_process {
             def amap = path(process.out.accession_map[0]).csv(sep: "\t")
             assert amap.columnNames == ["assembly_accession", "genome_id"]
             assert amap.rowCount >= 1
-            // Set equality, not membership: the module restricts its output to
-            // the accessions the chunk requested, so an unrequested assembly
-            // version leaking through must fail the test (#758).
-            //
-            // Coverage gap, stated so it doesn't look covered: this asserts the
-            // restriction's *result*, not its skip arm. The module feeds the
-            // same chunk file to `--inputfile` and to the membership test, so
-            // the arm only fires when `datasets` returns an assembly nobody
-            // asked for — which cannot be induced on demand. Checked live:
-            // requesting only GCF_018547865.1 with `--assembly-source all`
-            // returns only GCF_018547865.1, so it does not reproduce the #758
-            // shape either. The arm becomes unit-testable if the collapse moves
-            // into a Python script.
+            // Set equality, not membership: the map must describe exactly the
+            // accessions the chunk asked for. An extra one would mean the
+            // combined FASTA carries sequences the metadata won't describe,
+            // which PREPARE_VIRAL_METADATA's join aborts on.
             assert amap.columns["assembly_accession"].toSet() == ["GCF_018547865.1"].toSet()
             // The map's genome_ids must be exactly the combined FASTA's headers
             // (first token), verifying the awk header-extraction in the module.
@@ -91,7 +82,7 @@ nextflow_process {
             assert process.out.genomes[0].toString().endsWith('.fna.gz')
             def amap = path(process.out.accession_map[0]).csv(sep: "\t")
             def accs = amap.columns["assembly_accession"].toSet()
-            // Exactly the requested pair — nothing extra from `datasets` (#758).
+            // Exactly the requested pair — nothing extra from `datasets`.
             assert accs == ["GCF_018547865.1", "GCA_018547865.1"].toSet() :
                 "map accessions ${accs} != requested chunk contents"
             // Map genome_ids must match the combined FASTA headers even when the

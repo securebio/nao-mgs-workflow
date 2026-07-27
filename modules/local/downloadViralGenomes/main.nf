@@ -65,36 +65,29 @@ process DOWNLOAD_VIRAL_GENOMES {
         # header's first token is the genome_id. Reads are local scratch here, so
         # per-file reads are cheap; only the two combined outputs are staged out.
         #
-        # Genome files are restricted to the accessions this chunk asked for.
-        # `datasets` can return superseded assembly versions alongside the
-        # requested ones (see #758), and those are absent from the filtered
-        # metadata that PREPARE_VIRAL_METADATA expands; emitting them here would
-        # put untracked sequences in the genome DB, which RUN rejects with
-        # "No matching genome ID found". One awk pass does the accession
-        # extraction and the membership test for the whole file list, rather
-        # than forking per genome file.
-        # `-printf '%P'` prints the path relative to the `find` root, so the
-        # accession is everything before the first '/' — no need to match on a
-        # '/data/' component, which a greedy regex could find again deeper in
-        # the tree and mis-parse.
+        # `-printf '%P'` prints the path relative to the `find` root, so each
+        # line is `<ASSEMBLY_ACC>/<file>.fna.gz` and the accession is everything
+        # before the first '/'. `\${rel%%/*}` strips it with shell parameter
+        # expansion — a builtin, so no fork per genome file.
+        #
+        # No filtering against the requested accession list here: the map and
+        # the combined FASTA are built in the same loop from the same list, so a
+        # file that contributes sequences always contributes map rows too. If
+        # `datasets` ever returned an accession nobody asked for, it would reach
+        # PREPARE_VIRAL_METADATA's map-vs-metadata join and abort the build,
+        # which is louder and easier to diagnose than silently dropping it here.
         find output/ncbi_dataset/data -mindepth 2 -name '*.fna.gz' -printf '%P\\n' \\
             | sort > all_files.txt
-        awk -F/ 'NR==FNR { requested[\$0] = 1; next }
-             { if (\$1 in requested) { print \$1 "\\toutput/ncbi_dataset/data/" \$0 }
-               else { n_skipped++ } }
-             END { if (n_skipped > 0) {
-                       printf "Skipped %d unrequested genome file(s)\\n", n_skipped \\
-                           > "/dev/stderr" } }' \\
-            ${accession_chunk} all_files.txt > kept_files.tsv
         printf 'assembly_accession\\tgenome_id\\n' > "\${CHUNK_ID}.map.tsv"
         : > combined.fna
-        while IFS=\$'\\t' read -r acc f; do
+        while IFS= read -r rel; do
+            acc=\${rel%%/*}
             # Decompress once: append sequences to the combined FASTA and
             # extract genome_ids (header first token) for the map in one pass.
-            zcat "\$f" | tee -a combined.fna \\
+            zcat "output/ncbi_dataset/data/\$rel" | tee -a combined.fna \\
                 | awk -v a="\$acc" '/^>/{ id=substr(\$1,2); print a"\\t"id }' \\
                 >> "\${CHUNK_ID}.map.tsv"
-        done < kept_files.tsv
+        done < all_files.txt
         # A successful rehydrate must yield sequences; an empty map means the
         # layout assumption broke — fail loudly rather than emit an empty DB.
         if [ "\$(wc -l < "\${CHUNK_ID}.map.tsv")" -le 1 ]; then
@@ -102,7 +95,7 @@ process DOWNLOAD_VIRAL_GENOMES {
             exit 1
         fi
         gzip -c combined.fna > "\${CHUNK_ID}.fna.gz"
-        rm -f combined.fna all_files.txt kept_files.tsv
+        rm -f combined.fna all_files.txt
         rm -rf output/ output.zip
         echo "Combined \$(( \$(wc -l < "\${CHUNK_ID}.map.tsv") - 1 )) sequences for chunk \$CHUNK_ID"
         """
