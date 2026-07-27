@@ -54,7 +54,7 @@ workflow MAKE_VIRUS_GENOME_DB {
         merged_map_ch = download_ch.accession_map.collectFile(
             name: "accession_map.tsv", keepHeader: true, skip: 1
         )
-        gid_ch = PREPARE_VIRAL_METADATA(filter_ch.db, virus_db, merged_map_ch).metadata
+        gid_ch = PREPARE_VIRAL_METADATA(filter_ch.db, virus_db, merged_map_ch, "virus-genome").metadata
         // 5. Concatenate the per-chunk combined genome FASTAs (dedup by name).
         genome_concat_ch = CONCATENATE_GENOME_FASTA(download_ch.genomes.collect())
         // 6. Filter to remove undesired/contaminated genomes by sequence-header

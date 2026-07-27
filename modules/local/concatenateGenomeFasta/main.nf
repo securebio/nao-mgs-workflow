@@ -21,7 +21,9 @@ process CONCATENATE_GENOME_FASTA {
             exit 1
         fi
         echo "Concatenating \$(printf '%s\\n' "\$files" | wc -l) combined genome FASTA file(s):"
-        printf '%s\\n' "\$files" | head
+        # `|| true` guards the SIGPIPE (exit 141) that `head` raises against
+        # errexit once the list outgrows the pipe buffer (see #779).
+        printf '%s\\n' "\$files" | head || true
         # Concatenate in sorted filename order so `seqkit rmdup --by-name`
         # first-occurrence behaviour is deterministic across runs.
         printf '%s\\n' "\$files" \\

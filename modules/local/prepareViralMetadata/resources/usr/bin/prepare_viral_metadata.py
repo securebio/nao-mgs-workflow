@@ -96,6 +96,19 @@ def prepare_metadata(
         in_fields = reader.fieldnames or []
         rows = list(reader)
     logger.info("Read %d metadata rows", len(rows))
+    # Every mapped accession should have a metadata row: DOWNLOAD_VIRAL_GENOMES
+    # restricts its output to the accessions each chunk requested, which come
+    # from the same filtered set as these rows. Anything left over would end up
+    # in the concatenated FASTA without a metadata row, which RUN rejects with
+    # "No matching genome ID found", so surface it rather than passing silently.
+    unmapped = sorted(set(acc_to_gids) - {r["assembly_accession"] for r in rows})
+    if unmapped:
+        logger.warning(
+            "%d mapped accession(s) have no metadata row (e.g. %s); their "
+            "sequences would be untracked in the genome DB",
+            len(unmapped),
+            ", ".join(unmapped[:5]),
+        )
     out_fields = list(in_fields) + ["species_taxid", "genome_id"]
     n_in = n_dropped = n_out = 0
     with open_by_suffix(output_metadata_path, "w", newline="") as f:

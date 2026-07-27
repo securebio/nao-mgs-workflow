@@ -16,6 +16,7 @@ nextflow_process {
                 input[0] = "${projectDir}/test-data/prepareViralMetadata/merged_metadata.tsv"
                 input[1] = "${projectDir}/test-data/prepareViralMetadata/virus_db.tsv"
                 input[2] = "${projectDir}/test-data/prepareViralMetadata/accession_map.tsv"
+                input[3] = "virus-genome"
                 """
             }
         }

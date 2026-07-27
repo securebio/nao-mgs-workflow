@@ -12,14 +12,15 @@ process PREPARE_VIRAL_METADATA {
         path(merged_metadata)
         path(virus_db)
         path(accession_map)
+        val(name_pattern)
     output:
-        path("virus-genome-metadata-gid.tsv.gz"), emit: metadata
+        path("${name_pattern}-metadata-gid.tsv.gz"), emit: metadata
     script:
         """
         prepare_viral_metadata.py \\
             ${merged_metadata} \\
             ${virus_db} \\
             ${accession_map} \\
-            virus-genome-metadata-gid.tsv.gz
+            ${name_pattern}-metadata-gid.tsv.gz
         """
 }

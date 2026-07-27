@@ -2,6 +2,7 @@
 
 import csv
 import gzip
+import logging
 from pathlib import Path
 
 import pytest
@@ -178,6 +179,28 @@ class TestPrepareMetadata:
         assert len(rows) == 1
         assert rows[0]["assembly_accession"] == "GCA_000001.1"
         assert rows[0]["genome_id"] == "seq1.1"
+
+    def test_warns_on_mapped_accession_without_metadata_row(
+        self,
+        tmp_path: Path,
+        standard_inputs: tuple[Path, Path, Path],
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        _, db_path, _ = standard_inputs
+        meta = _write_tsv(tmp_path / "m.tsv", META_HEADER, [META_ROWS[0]])
+        # Map carries an accession the filtered metadata never mentions; its
+        # sequences would be untracked in the genome DB.
+        amap = _write_tsv(
+            tmp_path / "map.tsv",
+            MAP_HEADER,
+            [["GCA_000001.1", "seq1.1"], ["GCA_EXTRA.1", "extra1.1"]],
+        )
+        out_meta = tmp_path / "out.tsv.gz"
+        with caplog.at_level(logging.WARNING):
+            prepare_metadata(str(meta), str(db_path), str(amap), str(out_meta))
+        assert "GCA_EXTRA.1" in caplog.text
+        rows = _read_tsv(out_meta)
+        assert [r["genome_id"] for r in rows] == ["seq1.1"]
 
     def test_empty_metadata_writes_header_only(
         self, tmp_path: Path, standard_inputs: tuple[Path, Path, Path]
