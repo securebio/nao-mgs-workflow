@@ -19,7 +19,7 @@ process CONCATENATE_GENOME_FASTA {
         # `xargs -d '\\n'` consumes it verbatim — no word splitting or quote
         # interpretation on the staged filenames.
         find . -maxdepth 1 -name '*.fna.gz' | sort > genome_files.txt
-        if [ ! -s genome_files.txt ]; then
+        if [[ ! -s genome_files.txt ]]; then
             echo "No genome FASTA files found!"
             exit 1
         fi
