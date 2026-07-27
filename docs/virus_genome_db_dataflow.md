@@ -20,7 +20,7 @@ a second sourcing branch.
 | Identifier | Example | What it keys | Where it comes from |
 | --- | --- | --- | --- |
 | `assembly_accession` | `GCA_009858895.3` | An NCBI **assembly** record. The unit of enumeration, filtering, chunking and download. | `datasets summary genome`, column `accession` |
-| `genome_id` | `NC_045512.2` | A single **nucleotide sequence** (nuccore accession.version). The FASTA header's first token. | Parsed out of the downloaded FASTA headers |
+| `genome_id` | `MN908947.3` | A single **nucleotide sequence** (nuccore accession.version). The FASTA header's first token. | Parsed out of the downloaded FASTA headers |
 | `taxid` | `2697049` | The taxon NCBI assigned to the record. May be strain-level rather than species-level. | `datasets summary genome`, column `organism-tax-id` |
 | `species_taxid` | `694009` | Species-level rollup of `taxid`. | `total-virus-db-annotated.tsv.gz`, via `taxid` → `taxid_species` |
 
@@ -30,6 +30,29 @@ viruses, e.g. influenza). The pipeline enumerates, filters and downloads on
 `assembly_accession`, but every consumer of the index — the FASTA, the aligners,
 and RUN's `PROCESS_VIRAL_BOWTIE2_SAM` / `PROCESS_VIRAL_MINIMAP2_SAM` — keys on
 `genome_id`. `assembly_accession` never leaves INDEX.
+
+### Paired GenBank/RefSeq records
+
+NCBI mints a curated RefSeq copy of many GenBank records, and the pairing runs
+all the way up to the assembly. For SARS-CoV-2 isolate Wuhan-Hu-1:
+
+| Assembly | Source | Contained `genome_id` |
+| --- | --- | --- |
+| `GCA_009858895.3` | GenBank | `MN908947.3` |
+| `GCF_009858895.2` | RefSeq | `NC_045512.2` |
+
+The two sequences are byte-identical; only the accessions differ. Because
+`assembly_source = "all"` (the default, `configs/index.config`) enumerates both
+members of the pair, and both are `assembly_status == "current"` under the same
+`taxid`, **both survive filtering and both land in the FASTA under different
+names**. `seqkit rmdup --by-name` does not collapse them. So the viral genome DB
+currently carries one copy of the sequence per source database, and the ~4,900
+"gained" genome IDs seen when the default flipped from `genbank` to `all` were
+the RefSeq halves of existing pairs, not new data.
+
+This is a *different* kind of duplication from the cross-source overlap
+discussed below, and no `genome_id`-based dedup can address it: paired records
+have different `genome_id`s by construction.
 
 ## Current flow (assembly sourcing)
 
@@ -245,8 +268,10 @@ There are four distinct merge points, and they use different mechanisms:
    "current **or empty**", otherwise every sequence row is silently dropped.
 3. **FASTA** — concatenate per-chunk FASTAs and let `seqkit rmdup --by-name`
    collapse the overlap. Every sequence inside an assembly is also its own
-   nuccore record, so the two branches overlap almost completely outside the
-   post-2025 window; this is where that overlap is resolved, for free.
+   nuccore record *under the same accession*, so the two branches overlap almost
+   completely outside the post-2025 window; this is where that overlap is
+   resolved, for free. It does not resolve GenBank/RefSeq pairs, which are
+   distinct accessions and are already duplicated today.
 4. **`genome_id` → metadata** — the one that needs real logic. Deduping the
    FASTA is not enough; the metadata table must be deduped the same way or it
    will carry two rows (one per branch) for every overlapping genome. This means
@@ -272,8 +297,13 @@ FASTA headers a second time in `ADD_GENBANK_GENOME_IDS`.
 - **RefSeq/GenBank duplicates.** The virus dataset returns both the `NC_`
   RefSeq copy and its GenBank original by default, and has no GenBank-only
   filter (only `--refseq`). Using `--refseq` would return exactly the curated
-  set that already exists as assemblies, i.e. would miss the point; so the
-  duplicates have to be resolved by the `genome_id` dedup instead.
+  set that already exists as assemblies, i.e. would miss the point. Note that
+  the `genome_id` dedup does **not** clean this up: as above, paired records
+  carry different accessions, so both survive. Suppressing one side needs an
+  explicit rule keyed on the pairing (e.g. `source_database`, or the
+  `assminfo-paired-assm-accession` field on the assembly side), and it is the
+  same rule the assembly branch already needs — the sequence branch inherits
+  the problem rather than creating it.
 - **Completeness.** `--complete-only` bounds volume and matches the assembly
   path's curated notion of a genome, at the cost of dropping legitimately
   fragmentary recent deposits.
