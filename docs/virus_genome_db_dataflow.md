@@ -29,7 +29,21 @@ sequences**, so `assembly_accession` → `genome_id` is 1:N (N > 1 for segmented
 viruses, e.g. influenza). The pipeline enumerates, filters and downloads on
 `assembly_accession`, but every consumer of the index — the FASTA, the aligners,
 and RUN's `PROCESS_VIRAL_BOWTIE2_SAM` / `PROCESS_VIRAL_MINIMAP2_SAM` — keys on
-`genome_id`. `assembly_accession` never leaves INDEX.
+`genome_id`.
+
+### Where each identifier is used
+
+| | `assembly_accession` | `genome_id` |
+| --- | --- | --- |
+| **INDEX** | The working key throughout: enumerate → filter → chunk → download → filename-prefix match (`prepare_viral_metadata.py`). Published in both metadata TSVs. | Created last, in `ADD_GENBANK_GENOME_IDS`. Becomes the aligner reference name, since bowtie2, minimap2 and Nucleaze all index the FASTA by header. |
+| **RUN** | Unused. | The SAM `RNAME`. `PROCESS_VIRAL_BOWTIE2_SAM` / `PROCESS_VIRAL_MINIMAP2_SAM` look it up in `virus-genome-metadata-gid.tsv.gz` to get `(taxid, species_taxid)`. Emitted as `genome_id`, `genome_id_all`, `genome_id_fwd`/`_rev`, then prefixed to `prim_align_*` by `extractViralReads{Short,ONT}`. |
+| **DOWNSTREAM** | Unused. | `prim_align_genome_id_all` is a **partition key** in `MARK_ALIGNMENT_DUPLICATES`, the sort key for `duplicate_stats.tsv.gz`, and a schema'd column in `duplicate_stats` and `validation_hits`. |
+| **Dev tooling** | `bin/benchmark_index.py` joins gained/lost genomes back to the raw metadata on it, for attribution. | The unit of diff in `bin/benchmark_index.py`. |
+
+So `assembly_accession` reaches no pipeline workflow beyond INDEX — but it is not
+private to INDEX either, because index benchmarking reads it out of the published
+outputs. BLAST validation in DOWNSTREAM does not use `genome_id` at all; it works
+off core_nt subject accessions.
 
 ### Paired GenBank/RefSeq records
 
@@ -167,7 +181,7 @@ unique `genome_id`.
   duplicates resolve last-wins. Neither is currently harmful — but a sequence
   branch makes cross-source `genome_id` collisions common rather than rare, and
   last-wins is not a defensible tie-break once two branches disagree.
-- **Only `genome_id` crosses the INDEX boundary.** Nothing downstream reads
+- **Only `genome_id` crosses into RUN and DOWNSTREAM.** Neither reads
   `assembly_accession` or `assembly_status`, which is what makes an alternative
   sourcing branch tractable: it must produce sequences with correct
   `genome_id`/`taxid`, and need not produce assemblies.
@@ -287,6 +301,63 @@ linkage has to be captured at download time instead — an explicit
 the identity map for sequences. Emitting the map also removes the need to parse
 FASTA headers a second time in `ADD_GENBANK_GENOME_IDS`.
 
+### Invariants the union must preserve
+
+RUN and DOWNSTREAM need no code change under the union — both key exclusively on
+`genome_id`, whose meaning is identical on both sides. But they do impose two
+constraints on what INDEX may emit.
+
+**1. The metadata table must be a superset of the FASTA's sequence IDs.** RUN
+raises rather than defaulting on an unknown reference:
+
+```python
+except KeyError as e:
+    msg = f"No matching genome ID found: {genome_id}"
+    raise ValueError(msg) from e
+```
+
+(`process_viral_bowtie2_sam.py`, and the equivalent in
+`process_viral_minimap2_sam.py`.) Any sequence in the aligner index without a
+metadata row therefore crashes RUN. Today this holds for a structural reason —
+the metadata branch forks before `FILTER_GENOME_FASTA`, so metadata is a strict
+superset. Under the union it holds only if the accession map and the
+concatenated FASTA are derived from the same download output, since
+`PREPARE_VIRAL_METADATA` drops rows whose accession is absent from the map. This
+is worth asserting inside INDEX: otherwise a mismatch surfaces a whole workflow
+later, as a RUN-time crash rather than an INDEX-time error.
+
+**2. `genome_id` is a duplicate-detection partition key.** `mark_duplicates`
+partitions reads by `genome_id` and requires an exact match before considering
+alignment coordinates:
+
+```rust
+fn match_reads(a: &ReadEntry, b: &ReadEntry) -> bool {
+    a.genome_id == b.genome_id &&
+    unsafe { compare_positions(a.aln_start, b.aln_start, DEVIATION) } && ...
+```
+
+(`rust-tools/mark_duplicates/src/main.rs`.) So two PCR duplicates of the same
+fragment are only recognised as duplicates if they aligned to the *same*
+accession. This is where redundant references stop being merely wasteful: with
+`MN908947.3` and `NC_045512.2` both in the index, the aligner picks between two
+identical references arbitrarily and a duplicate family can split across them
+and go unmarked. That is a property of `assembly_source = "all"` today rather
+than something the union introduces, but the union adds a second redundancy axis
+on top of it. (`MARK_SIMILARITY_DUPLICATES` does not use `genome_id`, so it
+partially compensates.)
+
+### Tooling that does need updating
+
+`bin/benchmark_index.py` is the one consumer that reads `assembly_status`, and
+it will mis-attribute sequence-branch rows. `categorize_loss` tests
+`_new_status.eq("current")`; sequence rows carry an empty status, so
+`in_raw & ~current` fires and every lost sequence-sourced genome is labelled
+`non_current_genome_version` — a lifecycle nuccore records do not have. Since
+this is the same script used to validate that the migration gained recent
+genomes without losing old ones, the fix has to land with the union rather than
+after it. `categorize_gain` is unaffected: it keys on `release_date`, which both
+branches populate.
+
 ### Decisions this design forces
 
 - **Influenza.** NCBI still mints grouped assemblies for flu, and those group an
@@ -306,7 +377,13 @@ FASTA headers a second time in `ADD_GENBANK_GENOME_IDS`.
   the problem rather than creating it.
 - **Completeness.** `--complete-only` bounds volume and matches the assembly
   path's curated notion of a genome, at the cost of dropping legitimately
-  fragmentary recent deposits.
+  fragmentary recent deposits. Note that it also breaks the "sequence branch is
+  a superset" assumption: the segments of assembly `GCA_037915005.1`
+  (`OR133592.1`–`OR133599.2`) come back from the sequence API as
+  `completeness = PARTIAL`, so `--complete-only` would exclude sequences the
+  assembly branch includes. Flu specifically is moot — that clade is excluded
+  from the sequence branch anyway — but there is no reason to assume flu is the
+  only case, which bears directly on any plan to retire the assembly branch.
 - **Volume and chunking.** The sequence resource is far larger than the assembly
   resource (SARS-CoV-2 alone has tens of thousands of recent records), so
   `viral_accession_chunk_size` and the download retry budget need revisiting.
