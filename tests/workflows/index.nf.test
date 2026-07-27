@@ -42,6 +42,18 @@ nextflow_pipeline {
             def fastaLines = path("${launchDir}/output/results/virus-genomes-masked.fasta.gz").linesGzip
             assert fastaLines.any { it.startsWith(">") } :
                 "Masked FASTA should contain at least one sequence header"
+            // Every published sequence must carry a metadata row: this is the
+            // invariant RUN enforces ("No matching genome ID found"), and the
+            // only place the cross-chunk collectFile merge, the accession
+            // restriction in download, and the map-driven row expansion are
+            // exercised together.
+            def fastaIds = fastaLines
+                .findAll { it.startsWith(">") }
+                .collect { it.substring(1).split(/\s/)[0] }
+                .toSet()
+            def metadataIds = metadata.columns["genome_id"].toSet()
+            assert metadataIds.containsAll(fastaIds) :
+                "Genome DB carries sequences with no metadata row: ${(fastaIds - metadataIds).take(5)}"
             assert path("${launchDir}/output/results/virus-genomes-masked.nucleaze.bin").exists() :
                 "Nucleaze screen index should be published as virus-genomes-masked.nucleaze.bin"
             // Pre-filter assembly metadata is published with the enumerate schema.

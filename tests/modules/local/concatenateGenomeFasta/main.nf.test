@@ -75,6 +75,10 @@ nextflow_process {
         }
         then {
             assert process.failed
+            // Assert on the guard's own message, so an unrelated failure
+            // (missing container, seqkit error) can't pass this test.
+            assert process.errorReport.contains("No genome FASTA files found") :
+                "Expected the empty-input guard to fire, got: ${process.errorReport}"
         }
     }
 

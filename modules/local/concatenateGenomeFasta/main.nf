@@ -24,9 +24,7 @@ process CONCATENATE_GENOME_FASTA {
             exit 1
         fi
         echo "Concatenating \$(wc -l < genome_files.txt) combined genome FASTA file(s):"
-        # `|| true` guards the SIGPIPE (exit 141) that `head` raises against
-        # errexit once the list outgrows the pipe buffer (see #779).
-        head genome_files.txt || true
+        head genome_files.txt
         # Concatenate in sorted filename order so `seqkit rmdup --by-name`
         # first-occurrence behaviour is deterministic across runs.
         xargs -d '\\n' -a genome_files.txt cat \\

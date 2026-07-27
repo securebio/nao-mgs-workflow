@@ -51,8 +51,13 @@ workflow MAKE_VIRUS_GENOME_DB {
         download_ch = DOWNLOAD_VIRAL_GENOMES(chunk_ch, assembly_source, other_params.datasets_download_extra_args, 5)
         // 4. Merge the per-chunk maps, then join with the filtered metadata to
         //    add species_taxid and expand each assembly to one row per genome_id.
+        // `sort: { it.name }` pins the merge to chunk-filename order (the same
+        // ordering CONCATENATE_GENOME_FASTA uses for the FASTAs); without it
+        // Nextflow's default ordering derives from per-run work-directory
+        // paths, so the merged file is not byte-stable and needlessly
+        // invalidates `-resume` caching of PREPARE_VIRAL_METADATA.
         merged_map_ch = download_ch.accession_map.collectFile(
-            name: "accession_map.tsv", keepHeader: true, skip: 1
+            name: "accession_map.tsv", keepHeader: true, skip: 1, sort: { it.name }
         )
         gid_ch = PREPARE_VIRAL_METADATA(filter_ch.db, virus_db, merged_map_ch, "virus-genome").metadata
         // 5. Concatenate the per-chunk combined genome FASTAs (dedup by name).
