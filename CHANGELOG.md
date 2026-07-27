@@ -1,5 +1,6 @@
 # v3.2.3.0-dev
 
+- Docs: add `docs/virus_genome_db_dataflow.md`, tracing the identifiers, join keys and file granularity through `MAKE_VIRUS_GENOME_DB` up to the concatenated viral FASTA, and the merge points a sequence-sourced (NCBI Virus / nuccore) branch would need.
 - Mask human (CHM13) k-mers out of the viral genomes before building the Nucleaze k-mer index.
 - Exclude two viral genome records (`AY037928.1` and `NC_022518.1`) that are pure human contamination.
 - Make the `[tool.<name>]` table read by `CHECK_VERSION_COMPATIBILITY` configurable.

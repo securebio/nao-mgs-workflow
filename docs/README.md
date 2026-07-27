@@ -7,6 +7,7 @@
     - [Troubleshooting](./troubleshooting.md)
 - **Workflow details:**
     - [INDEX workflow](./index.md)
+        - [Viral genome DB data flow](./virus_genome_db_dataflow.md)
     - [RUN workflow](./run.md)
     - [DOWNSTREAM workflow](./downstream.md)
 - **Configuration and output:**
