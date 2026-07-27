@@ -42,11 +42,7 @@ nextflow_pipeline {
             def fastaLines = path("${launchDir}/output/results/virus-genomes-masked.fasta.gz").linesGzip
             assert fastaLines.any { it.startsWith(">") } :
                 "Masked FASTA should contain at least one sequence header"
-            // Every published sequence must carry a metadata row: this is the
-            // invariant RUN enforces ("No matching genome ID found"), and the
-            // only place the cross-chunk collectFile merge, the accession
-            // restriction in download, and the map-driven row expansion are
-            // exercised together.
+            // Every published sequence must carry a metadata row.
             def fastaIds = fastaLines
                 .findAll { it.startsWith(">") }
                 .collect { it.substring(1).split(/\s/)[0] }

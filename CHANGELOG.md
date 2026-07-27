@@ -1,6 +1,6 @@
 # v3.2.3.0-dev
 
-- Refactor viral genome download to emit one combined FASTA plus an `assembly_accession`→`genome_id` map per chunk instead of one file per accession, and consume those downstream. `DOWNLOAD_VIRAL_GENOMES` now emits `<chunk>.fna.gz` + `<chunk>.map.tsv`; `PREPARE_VIRAL_METADATA` absorbs the former `ADD_GENBANK_GENOME_IDS` step, joining the map to add `species_taxid` and expand to one row per `genome_id` (no longer re-reads genome files); `CONCATENATE_GENOME_FASTA` concatenates the per-chunk combined FASTAs. This removes the per-genome file staging that crippled Fusion at index build (a ~10× stage-in/stage-out speedup at 10k files), and drops the vestigial `local_filename` column from `virus-genome-metadata-gid.tsv.gz`. The genome set and remaining metadata are otherwise unchanged.
+- Refactor `DOWNLOAD_VIRAL_GENOMES` to emit one combined FASTA plus an assembly to sequence map per chunk. Consolidate `PREPARE_VIRAL_METADATA` and `ADD_GENBANK_GENOME_IDS` into one step joining filtered taxid metadata and expanding to one row per `genome_id`.
 - Mask human (CHM13) k-mers out of the viral genomes before building the Nucleaze k-mer index.
 - Exclude two viral genome records (`AY037928.1` and `NC_022518.1`) that are pure human contamination.
 - Make the `[tool.<name>]` table read by `CHECK_VERSION_COMPATIBILITY` configurable.

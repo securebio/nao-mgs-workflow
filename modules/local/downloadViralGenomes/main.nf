@@ -1,10 +1,7 @@
 // Download viral genomes for a chunk of pre-filtered assembly accessions
 // using NCBI datasets CLI. Emits a single combined FASTA plus an
-// assembly-accession -> genome_id map per chunk, rather than one file per
-// accession: staging many small files cripples Fusion on Batch (both stage-out
-// here and the downstream `.collect()` stage-in), while one combined file per
-// chunk keeps staging cheap. The map preserves the assembly -> constituent
-// sequence linkage that downstream metadata preparation needs.
+// assembly-accession -> genome_id map per chunk to avoid staging out
+// many small files via Fusion.
 process DOWNLOAD_VIRAL_GENOMES {
     label "ncbi_datasets"
     label "large"
@@ -59,23 +56,8 @@ process DOWNLOAD_VIRAL_GENOMES {
             --max-workers ${task.cpus} --no-progressbar --gzip || exit 1
 
         # 3. Collapse the rehydrate output into a single combined FASTA plus an
-        # assembly_accession -> genome_id map. A recursive `find` (robust to any
-        # nesting under data/<ASSEMBLY_ACC>/) locates every genome file; the
-        # accession is the path component directly under data/, and each sequence
-        # header's first token is the genome_id. Reads are local scratch here, so
-        # per-file reads are cheap; only the two combined outputs are staged out.
-        #
-        # `-printf '%P'` prints the path relative to the `find` root, so each
-        # line is `<ASSEMBLY_ACC>/<file>.fna.gz` and the accession is everything
-        # before the first '/'. `\${rel%%/*}` strips it with shell parameter
-        # expansion — a builtin, so no fork per genome file.
-        #
-        # No filtering against the requested accession list here: the map and
-        # the combined FASTA are built in the same loop from the same list, so a
-        # file that contributes sequences always contributes map rows too. If
-        # `datasets` ever returned an accession nobody asked for, it would reach
-        # PREPARE_VIRAL_METADATA's map-vs-metadata join and abort the build,
-        # which is louder and easier to diagnose than silently dropping it here.
+        # assembly_accession -> genome_id map, using a recursive `find`
+        # to locate every downloaded genome file.
         find output/ncbi_dataset/data -mindepth 2 -name '*.fna.gz' -printf '%P\\n' \\
             | sort > all_files.txt
         printf 'assembly_accession\\tgenome_id\\n' > "\${CHUNK_ID}.map.tsv"

@@ -42,20 +42,13 @@ nextflow_process {
             def amap = path(process.out.accession_map[0]).csv(sep: "\t")
             assert amap.columnNames == ["assembly_accession", "genome_id"]
             assert amap.rowCount >= 1
-            // Set equality, not membership: the map must describe exactly the
-            // accessions the chunk asked for. An extra one would mean the
-            // combined FASTA carries sequences the metadata won't describe,
-            // which PREPARE_VIRAL_METADATA's join aborts on.
             assert amap.columns["assembly_accession"].toSet() == ["GCF_018547865.1"].toSet()
-            // The map's genome_ids must be exactly the combined FASTA's headers
-            // (first token), verifying the awk header-extraction in the module.
+            // The map must describe exactly the combined FASTA's headers.
             def headers = path(process.out.genomes[0]).linesGzip
                 .findAll { it.startsWith(">") }
                 .collect { it.substring(1).split(/\s/)[0] }
             assert amap.columns["genome_id"].toSet() == headers.toSet() :
                 "map genome_ids ${amap.columns['genome_id'].toSet()} != FASTA headers ${headers.toSet()}"
-            // Counts too, so a genome file processed twice by the collapse loop
-            // can't hide behind set-vs-set comparison.
             assert amap.rowCount == headers.size() :
                 "map has ${amap.rowCount} rows but FASTA has ${headers.size()} sequences"
         }
@@ -82,11 +75,8 @@ nextflow_process {
             assert process.out.genomes[0].toString().endsWith('.fna.gz')
             def amap = path(process.out.accession_map[0]).csv(sep: "\t")
             def accs = amap.columns["assembly_accession"].toSet()
-            // Exactly the requested pair — nothing extra from `datasets`.
             assert accs == ["GCF_018547865.1", "GCA_018547865.1"].toSet() :
                 "map accessions ${accs} != requested chunk contents"
-            // Map genome_ids must match the combined FASTA headers even when the
-            // chunk spans multiple accessions merged into one combined file.
             def headers = path(process.out.genomes[0]).linesGzip
                 .findAll { it.startsWith(">") }
                 .collect { it.substring(1).split(/\s/)[0] }
@@ -94,12 +84,8 @@ nextflow_process {
                 "map genome_ids ${amap.columns['genome_id'].toSet()} != FASTA headers ${headers.toSet()}"
             assert amap.rowCount == headers.size() :
                 "map has ${amap.rowCount} rows but FASTA has ${headers.size()} sequences"
-            // Pairing, not just the two sets: the collapse loop's
-            // `awk -v a="$acc"` is what ties each genome_id to its own
-            // assembly, and that linkage is what makes the per-genome taxid /
-            // species_taxid in the published metadata correct. Swapping the
-            // awk fields or hoisting `a` out of the loop would satisfy every
-            // assertion above.
+            // Each genome_id must be paired with its own assembly, not just
+            // present somewhere in the map.
             def byAcc = [:].withDefault { [] as Set }
             def accCol = amap.columns["assembly_accession"]
             def gidCol = amap.columns["genome_id"]

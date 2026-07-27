@@ -129,22 +129,17 @@ class TestPrepareMetadata:
     ) -> None:
         meta_path, db_path, map_path = standard_inputs
         rows = _run_prepare(tmp_path, meta_path, db_path, map_path)
-        # 4 genome IDs total (GCA_000002.1 contributes two).
-        assert len(rows) == 4
-        assert [r["genome_id"] for r in rows] == [
-            "seq1.1",
-            "seq2a.1",
-            "seq2b.1",
-            "seq3.1",
+        # GCA_000002.1 contributes two genome IDs, so both the 1:1 and the
+        # 1:many expansions are covered, along with the assembly each genome
+        # is paired with and the species_taxid joined from the virus DB.
+        assert [
+            (r["assembly_accession"], r["genome_id"], r["species_taxid"]) for r in rows
+        ] == [
+            ("GCA_000001.1", "seq1.1", "12345"),
+            ("GCA_000002.1", "seq2a.1", "67000"),
+            ("GCA_000002.1", "seq2b.1", "67000"),
+            ("GCA_000003.1", "seq3.1", "99000"),
         ]
-        # species_taxid joined from the virus DB; local_filename is gone.
-        assert {r["genome_id"]: r["species_taxid"] for r in rows} == {
-            "seq1.1": "12345",
-            "seq2a.1": "67000",
-            "seq2b.1": "67000",
-            "seq3.1": "99000",
-        }
-        assert "local_filename" not in rows[0]
 
     def test_output_columns(
         self, tmp_path: Path, standard_inputs: tuple[Path, Path, Path]
@@ -184,10 +179,6 @@ class TestPrepareMetadata:
     ) -> None:
         _, db_path, _ = standard_inputs
         meta = _write_tsv(tmp_path / "m.tsv", META_HEADER, [META_ROWS[0]])
-        # Map carries an accession the filtered metadata never mentions; its
-        # sequences would be untracked in the genome DB, so this must not pass
-        # silently — DOWNLOAD_VIRAL_GENOMES restricts its output to the
-        # requested accessions precisely so this cannot happen.
         amap = _write_tsv(
             tmp_path / "map.tsv",
             MAP_HEADER,
@@ -215,9 +206,6 @@ class TestPrepareMetadata:
     ) -> None:
         _, db_path, _ = standard_inputs
         meta = _write_tsv(tmp_path / "empty.tsv", META_HEADER, [])
-        # Zero filtered accessions means zero download chunks, so the merged
-        # map is empty too; a populated map here would be an invariant
-        # violation (see test_raises_on_mapped_accession_without_metadata_row).
         amap = _write_tsv(tmp_path / "map.tsv", MAP_HEADER, [])
         out_meta = tmp_path / "out.tsv.gz"
         prepare_metadata(str(meta), str(db_path), str(amap), str(out_meta))

@@ -96,27 +96,17 @@ def prepare_metadata(
         in_fields = reader.fieldnames or []
         rows = list(reader)
     logger.info("Read %d metadata rows", len(rows))
-    # Every mapped accession must have a metadata row. DOWNLOAD_VIRAL_GENOMES
-    # builds the map and the combined FASTA in one pass over the same file list,
-    # so a mapped accession with no metadata row means the concatenated FASTA
-    # carries sequences this metadata does not describe — and RUN rejects those
-    # with "No matching genome ID found". This is the only place the two sides
-    # are compared, so it aborts rather than warning.
+    # Ensure every downloaded accession has a metadata row.
     unmapped = sorted(set(acc_to_gids) - {r["assembly_accession"] for r in rows})
     if unmapped:
         raise ValueError(
             f"{len(unmapped)} mapped accession(s) have no metadata row "
             f"(e.g. {', '.join(unmapped[:5])}); their sequences would be "
-            "untracked in the genome DB and RUN would fail against this index "
-            "with 'No matching genome ID found'"
+            "untracked in the genome DB"
         )
     out_fields = list(in_fields) + ["species_taxid", "genome_id"]
     n_dropped = n_out = 0
     with open_by_suffix(output_metadata_path, "w", newline="") as f:
-        # `csv`'s default excel dialect terminates rows with CRLF; this file is
-        # a published index artifact, so pin LF to match every other TSV the
-        # pipeline emits and to keep shell/awk consumers from picking up a
-        # trailing \r on the last column.
         writer = csv.DictWriter(
             f, fieldnames=out_fields, delimiter="\t", lineterminator="\n"
         )

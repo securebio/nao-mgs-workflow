@@ -26,12 +26,14 @@ nextflow_process {
             assert "assembly_accession" in meta.columnNames
             assert "species_taxid" in meta.columnNames
             assert "genome_id" in meta.columnNames
-            // The vestigial local_filename column is gone under the map-driven refactor.
-            assert !("local_filename" in meta.columnNames)
-            // One assembly (GCA_000000000.0, taxid 12475) with one mapped genome_id.
-            assert meta.rowCount == 1
-            assert meta.columns["genome_id"][0] == "NC_TEST.1"
-            assert meta.columns["species_taxid"][0].toString() == "12475"
+            // GCA_000000000.0 has one genome_id, GCA_000000001.0 has two, so the
+            // 1:many expansion is covered as well as the 1:1 case.
+            assert meta.rowCount == 3
+            assert meta.columns["genome_id"] == ["NC_TEST.1", "NC_SEG_A.1", "NC_SEG_B.1"]
+            assert meta.columns["assembly_accession"] ==
+                ["GCA_000000000.0", "GCA_000000001.0", "GCA_000000001.0"]
+            assert meta.columns["species_taxid"].collect { it.toString() } ==
+                ["12475", "12475", "12475"]
         }
     }
 

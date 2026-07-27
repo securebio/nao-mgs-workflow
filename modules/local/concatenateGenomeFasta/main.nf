@@ -13,11 +13,7 @@ process CONCATENATE_GENOME_FASTA {
     script:
         """
         set -euo pipefail
-        # Diagnostics. Use `find` (not a glob) so the no-match case yields an
-        # empty list instead of tripping errexit before the guard below.
-        # Sorted filename order, held in a file rather than a shell variable so
-        # `xargs -d '\\n'` consumes it verbatim — no word splitting or quote
-        # interpretation on the staged filenames.
+        # Write sorted matching filenames to file for deterministic concatenation and deduplication
         find . -maxdepth 1 -name '*.fna.gz' | sort > genome_files.txt
         if [[ ! -s genome_files.txt ]]; then
             echo "No genome FASTA files found!"
