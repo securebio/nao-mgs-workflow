@@ -73,12 +73,14 @@ process DOWNLOAD_VIRAL_GENOMES {
         # "No matching genome ID found". One awk pass does the accession
         # extraction and the membership test for the whole file list, rather
         # than forking per genome file.
-        find output/ncbi_dataset/data -mindepth 2 -name '*.fna.gz' | sort > all_files.txt
-        awk 'NR==FNR { requested[\$0] = 1; next }
-             { path = \$0
-               sub(/.*\\/data\\//, "", path)
-               sub(/\\/.*/, "", path)
-               if (path in requested) { print path "\\t" \$0 }
+        # `-printf '%P'` prints the path relative to the `find` root, so the
+        # accession is everything before the first '/' — no need to match on a
+        # '/data/' component, which a greedy regex could find again deeper in
+        # the tree and mis-parse.
+        find output/ncbi_dataset/data -mindepth 2 -name '*.fna.gz' -printf '%P\\n' \\
+            | sort > all_files.txt
+        awk -F/ 'NR==FNR { requested[\$0] = 1; next }
+             { if (\$1 in requested) { print \$1 "\\toutput/ncbi_dataset/data/" \$0 }
                else { n_skipped++ } }
              END { if (n_skipped > 0) {
                        printf "Skipped %d unrequested genome file(s)\\n", n_skipped \\

@@ -42,15 +42,21 @@ nextflow_process {
             def amap = path(process.out.accession_map[0]).csv(sep: "\t")
             assert amap.columnNames == ["assembly_accession", "genome_id"]
             assert amap.rowCount >= 1
-            assert "GCF_018547865.1" in amap.columns["assembly_accession"].toSet()
+            // Set equality, not membership: the module restricts its output to
+            // the accessions the chunk requested, so an unrequested assembly
+            // version leaking through must fail the test (#758).
+            assert amap.columns["assembly_accession"].toSet() == ["GCF_018547865.1"].toSet()
             // The map's genome_ids must be exactly the combined FASTA's headers
             // (first token), verifying the awk header-extraction in the module.
             def headers = path(process.out.genomes[0]).linesGzip
                 .findAll { it.startsWith(">") }
                 .collect { it.substring(1).split(/\s/)[0] }
-                .toSet()
-            assert amap.columns["genome_id"].toSet() == headers :
-                "map genome_ids ${amap.columns['genome_id'].toSet()} != FASTA headers ${headers}"
+            assert amap.columns["genome_id"].toSet() == headers.toSet() :
+                "map genome_ids ${amap.columns['genome_id'].toSet()} != FASTA headers ${headers.toSet()}"
+            // Counts too, so a genome file processed twice by the collapse loop
+            // can't hide behind set-vs-set comparison.
+            assert amap.rowCount == headers.size() :
+                "map has ${amap.rowCount} rows but FASTA has ${headers.size()} sequences"
         }
     }
 
@@ -75,16 +81,18 @@ nextflow_process {
             assert process.out.genomes[0].toString().endsWith('.fna.gz')
             def amap = path(process.out.accession_map[0]).csv(sep: "\t")
             def accs = amap.columns["assembly_accession"].toSet()
-            assert "GCF_018547865.1" in accs
-            assert "GCA_018547865.1" in accs
+            // Exactly the requested pair — nothing extra from `datasets` (#758).
+            assert accs == ["GCF_018547865.1", "GCA_018547865.1"].toSet() :
+                "map accessions ${accs} != requested chunk contents"
             // Map genome_ids must match the combined FASTA headers even when the
             // chunk spans multiple accessions merged into one combined file.
             def headers = path(process.out.genomes[0]).linesGzip
                 .findAll { it.startsWith(">") }
                 .collect { it.substring(1).split(/\s/)[0] }
-                .toSet()
-            assert amap.columns["genome_id"].toSet() == headers :
-                "map genome_ids ${amap.columns['genome_id'].toSet()} != FASTA headers ${headers}"
+            assert amap.columns["genome_id"].toSet() == headers.toSet() :
+                "map genome_ids ${amap.columns['genome_id'].toSet()} != FASTA headers ${headers.toSet()}"
+            assert amap.rowCount == headers.size() :
+                "map has ${amap.rowCount} rows but FASTA has ${headers.size()} sequences"
         }
     }
 

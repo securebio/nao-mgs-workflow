@@ -2,7 +2,6 @@
 
 import csv
 import gzip
-import logging
 from pathlib import Path
 
 import pytest
@@ -180,35 +179,48 @@ class TestPrepareMetadata:
         assert rows[0]["assembly_accession"] == "GCA_000001.1"
         assert rows[0]["genome_id"] == "seq1.1"
 
-    def test_warns_on_mapped_accession_without_metadata_row(
-        self,
-        tmp_path: Path,
-        standard_inputs: tuple[Path, Path, Path],
-        caplog: pytest.LogCaptureFixture,
+    def test_raises_on_mapped_accession_without_metadata_row(
+        self, tmp_path: Path, standard_inputs: tuple[Path, Path, Path]
     ) -> None:
         _, db_path, _ = standard_inputs
         meta = _write_tsv(tmp_path / "m.tsv", META_HEADER, [META_ROWS[0]])
         # Map carries an accession the filtered metadata never mentions; its
-        # sequences would be untracked in the genome DB.
+        # sequences would be untracked in the genome DB, so this must not pass
+        # silently — DOWNLOAD_VIRAL_GENOMES restricts its output to the
+        # requested accessions precisely so this cannot happen.
         amap = _write_tsv(
             tmp_path / "map.tsv",
             MAP_HEADER,
             [["GCA_000001.1", "seq1.1"], ["GCA_EXTRA.1", "extra1.1"]],
         )
         out_meta = tmp_path / "out.tsv.gz"
-        with caplog.at_level(logging.WARNING):
+        with pytest.raises(ValueError, match="GCA_EXTRA.1"):
             prepare_metadata(str(meta), str(db_path), str(amap), str(out_meta))
-        assert "GCA_EXTRA.1" in caplog.text
-        rows = _read_tsv(out_meta)
-        assert [r["genome_id"] for r in rows] == ["seq1.1"]
+
+    def test_output_uses_lf_line_endings(
+        self, tmp_path: Path, standard_inputs: tuple[Path, Path, Path]
+    ) -> None:
+        # The output is a published index artifact; csv's default excel dialect
+        # would terminate rows with CRLF, which shell/awk consumers would read
+        # as a trailing \r on the last column.
+        meta_path, db_path, map_path = standard_inputs
+        out_meta = tmp_path / "out.tsv.gz"
+        prepare_metadata(str(meta_path), str(db_path), str(map_path), str(out_meta))
+        raw = gzip.decompress(out_meta.read_bytes())
+        assert b"\r" not in raw
+        assert raw.endswith(b"\n")
 
     def test_empty_metadata_writes_header_only(
         self, tmp_path: Path, standard_inputs: tuple[Path, Path, Path]
     ) -> None:
-        _, db_path, map_path = standard_inputs
+        _, db_path, _ = standard_inputs
         meta = _write_tsv(tmp_path / "empty.tsv", META_HEADER, [])
+        # Zero filtered accessions means zero download chunks, so the merged
+        # map is empty too; a populated map here would be an invariant
+        # violation (see test_raises_on_mapped_accession_without_metadata_row).
+        amap = _write_tsv(tmp_path / "map.tsv", MAP_HEADER, [])
         out_meta = tmp_path / "out.tsv.gz"
-        prepare_metadata(str(meta), str(db_path), str(map_path), str(out_meta))
+        prepare_metadata(str(meta), str(db_path), str(amap), str(out_meta))
         rows = _read_tsv(out_meta)
         assert len(rows) == 0
         with gzip.open(out_meta, "rt") as f:
