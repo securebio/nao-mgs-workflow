@@ -110,7 +110,7 @@ def prepare_metadata(
             "with 'No matching genome ID found'"
         )
     out_fields = list(in_fields) + ["species_taxid", "genome_id"]
-    n_in = n_dropped = n_out = 0
+    n_dropped = n_out = 0
     with open_by_suffix(output_metadata_path, "w", newline="") as f:
         # `csv`'s default excel dialect terminates rows with CRLF; this file is
         # a published index artifact, so pin LF to match every other TSV the
@@ -121,7 +121,6 @@ def prepare_metadata(
         )
         writer.writeheader()
         for row in rows:
-            n_in += 1
             gids = acc_to_gids.get(row["assembly_accession"])
             if not gids:
                 n_dropped += 1
@@ -135,7 +134,7 @@ def prepare_metadata(
     logger.info(
         "Wrote %d genome rows from %d assemblies (dropped %d undownloaded)",
         n_out,
-        n_in,
+        len(rows),
         n_dropped,
     )
 

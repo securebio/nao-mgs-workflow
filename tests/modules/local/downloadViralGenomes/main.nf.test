@@ -45,6 +45,16 @@ nextflow_process {
             // Set equality, not membership: the module restricts its output to
             // the accessions the chunk requested, so an unrequested assembly
             // version leaking through must fail the test (#758).
+            //
+            // Coverage gap, stated so it doesn't look covered: this asserts the
+            // restriction's *result*, not its skip arm. The module feeds the
+            // same chunk file to `--inputfile` and to the membership test, so
+            // the arm only fires when `datasets` returns an assembly nobody
+            // asked for — which cannot be induced on demand. Checked live:
+            // requesting only GCF_018547865.1 with `--assembly-source all`
+            // returns only GCF_018547865.1, so it does not reproduce the #758
+            // shape either. The arm becomes unit-testable if the collapse moves
+            // into a Python script.
             assert amap.columns["assembly_accession"].toSet() == ["GCF_018547865.1"].toSet()
             // The map's genome_ids must be exactly the combined FASTA's headers
             // (first token), verifying the awk header-extraction in the module.
