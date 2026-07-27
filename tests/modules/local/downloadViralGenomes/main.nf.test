@@ -93,6 +93,23 @@ nextflow_process {
                 "map genome_ids ${amap.columns['genome_id'].toSet()} != FASTA headers ${headers.toSet()}"
             assert amap.rowCount == headers.size() :
                 "map has ${amap.rowCount} rows but FASTA has ${headers.size()} sequences"
+            // Pairing, not just the two sets: the collapse loop's
+            // `awk -v a="$acc"` is what ties each genome_id to its own
+            // assembly, and that linkage is what makes the per-genome taxid /
+            // species_taxid in the published metadata correct. Swapping the
+            // awk fields or hoisting `a` out of the loop would satisfy every
+            // assertion above.
+            def byAcc = [:].withDefault { [] as Set }
+            def accCol = amap.columns["assembly_accession"]
+            def gidCol = amap.columns["genome_id"]
+            accCol.eachWithIndex { a, i -> byAcc[a] << gidCol[i] }
+            assert byAcc.size() == 2 : "expected 2 accession groups, got ${byAcc.keySet()}"
+            byAcc.each { a, gids ->
+                assert !gids.isEmpty() : "accession ${a} contributed no genome_ids"
+            }
+            def gidSets = byAcc.values() as List
+            assert gidSets[0].disjoint(gidSets[1]) :
+                "genome_ids shared between accessions: ${gidSets[0].intersect(gidSets[1])}"
         }
     }
 
