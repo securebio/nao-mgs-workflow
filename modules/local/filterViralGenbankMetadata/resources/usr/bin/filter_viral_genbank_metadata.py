@@ -82,12 +82,8 @@ def write_accession_chunks(
 ) -> int:
     """Write accessions to fixed-size chunk files for parallel download fan-out.
 
-    Accessions are sorted first, so chunk membership depends only on which
-    accessions passed the filter and not on the order NCBI returned them in.
-    Downstream ordering is otherwise deterministic (chunk files are zero-padded
-    and concatenated in name order; each chunk's records are sorted by
-    accession), and record order decides which member of a set of duplicate
-    sequences DEDUP_GENOME_FASTA keeps.
+    Sorted first, so chunk membership does not depend on the order NCBI
+    returned accessions in; record order decides which duplicate dedup keeps.
 
     Args:
         accessions: Series of assembly accessions to chunk.
