@@ -159,7 +159,16 @@ reasons are checked before taxonomy/policy reasons, so the policy buckets mean
 - `hard_excluded`: build-time leaf taxid or an ancestor is in `viral_taxids_exclude_hard` in the new build.
 - `reassigned_to_excluded`: build-time leaf taxid differs from the old leaf taxid and the new leaf/species rollup is no longer surveilled.
 - `infection_status_demotion`: build-time leaf taxid equals the old leaf taxid and the leaf/species rollup is no longer surveilled.
-- `other`: present, current, surveilled, yet absent from the new gid set. Should be near zero; if not, investigate downstream sequence-level filtering.
+- `other`: present, current, surveilled, yet absent from the new gid set (see below).
+
+Genomes whose *sequence* was removed after the metadata was written land in
+`other`, because `categorize_loss` has no category for sequence-level filtering.
+Header-pattern exclusion (`ref/hv_patterns_exclude.txt`) puts them there. Expect
+a one-off spike — roughly 1k genomes — in any comparison spanning the v3.2.3.0
+boundary, where the published metadata began being reconciled to the FASTA
+(#898) and those drops became visible for the first time. Between two
+post-v3.2.3.0 indexes the bucket should be near zero, and anything beyond that
+is worth investigating.
 
 **Gained gid categories** (priority order). Keyed on the genome's assigned leaf
 taxon, using the assembly's `release_date` and `source_database` from the raw

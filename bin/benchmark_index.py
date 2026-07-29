@@ -477,6 +477,10 @@ def categorize_loss(
     surveilled = new.isin(surveilled_taxids(new_db, hosts))
     excluded = new.map(lambda t: _ancestor_in(t, cov.parent_map, cov.excluded_taxids))
     unsurveilled = present & ~surveilled
+    # "other" is the fallthrough. Sequence-level filtering has no category of
+    # its own, so genomes dropped by header-pattern exclusion land here; from
+    # v3.2.3.0 the published metadata is reconciled to the FASTA, so those drops
+    # became visible. See the `other` bullet in the benchmark-index skill.
     out["reason"], out["reason_taxid"] = "other", new
     set_reason(out, unsurveilled & new.eq(old), "infection_status_demotion", new)
     set_reason(out, unsurveilled & new.ne(old), "reassigned_to_excluded", new)
