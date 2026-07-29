@@ -84,6 +84,7 @@ def write_accession_chunks(
 
     Sorted first, so chunk membership does not depend on the order NCBI
     returned accessions in; record order decides which duplicate dedup keeps.
+    Only chunking is sorted: the filtered metadata keeps its input row order.
 
     Args:
         accessions: Series of assembly accessions to chunk.
@@ -99,11 +100,11 @@ def write_accession_chunks(
     if chunk_size < 1:
         raise ValueError(f"chunk_size must be >= 1, got {chunk_size}")
     chunk_dir.mkdir(parents=True, exist_ok=True)
+    accessions = accessions.sort_values()
     n = len(accessions)
     if n == 0:
         raise ValueError("No accessions passed filter; cannot build virus genome DB.")
     n_chunks = (n + chunk_size - 1) // chunk_size
-    accessions = accessions.sort_values()
     for i in range(n_chunks):
         chunk = accessions.iloc[i * chunk_size : (i + 1) * chunk_size]
         chunk.to_csv(chunk_dir / f"chunk_{i + 1:04d}.txt", index=False, header=False)
