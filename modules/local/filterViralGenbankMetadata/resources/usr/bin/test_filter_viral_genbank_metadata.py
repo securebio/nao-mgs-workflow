@@ -182,6 +182,25 @@ class TestWriteAccessionChunks:
         actual = {p.name: p.read_text() for p in tmp_path.iterdir()}
         assert actual == expected_chunks
 
+    def test_chunking_is_independent_of_input_order(self, tmp_path: Path) -> None:
+        # Chunk membership must depend only on which accessions passed the
+        # filter: record order decides which duplicate DEDUP_GENOME_FASTA keeps.
+        shuffled = tmp_path / "shuffled"
+        ordered = tmp_path / "ordered"
+        write_accession_chunks(
+            pd.Series(["GCA_C", "GCA_A", "GCA_D", "GCA_B"], dtype=str), shuffled, 2
+        )
+        write_accession_chunks(
+            pd.Series(["GCA_A", "GCA_B", "GCA_C", "GCA_D"], dtype=str), ordered, 2
+        )
+        assert {p.name: p.read_text() for p in shuffled.iterdir()} == {
+            "chunk_0001.txt": "GCA_A\nGCA_B\n",
+            "chunk_0002.txt": "GCA_C\nGCA_D\n",
+        }
+        assert {p.name: p.read_text() for p in shuffled.iterdir()} == {
+            p.name: p.read_text() for p in ordered.iterdir()
+        }
+
     def test_empty_input_raises(self, tmp_path: Path) -> None:
         with pytest.raises(ValueError, match="No accessions passed filter"):
             write_accession_chunks(pd.Series([], dtype=str), tmp_path, 10)

@@ -82,6 +82,13 @@ def write_accession_chunks(
 ) -> int:
     """Write accessions to fixed-size chunk files for parallel download fan-out.
 
+    Accessions are sorted first, so chunk membership depends only on which
+    accessions passed the filter and not on the order NCBI returned them in.
+    Downstream ordering is otherwise deterministic (chunk files are zero-padded
+    and concatenated in name order; each chunk's records are sorted by
+    accession), and record order decides which member of a set of duplicate
+    sequences DEDUP_GENOME_FASTA keeps.
+
     Args:
         accessions: Series of assembly accessions to chunk.
         chunk_dir: Output directory for `chunk_NNNN.txt` files (created if absent).
@@ -100,6 +107,7 @@ def write_accession_chunks(
     if n == 0:
         raise ValueError("No accessions passed filter; cannot build virus genome DB.")
     n_chunks = (n + chunk_size - 1) // chunk_size
+    accessions = accessions.sort_values()
     for i in range(n_chunks):
         chunk = accessions.iloc[i * chunk_size : (i + 1) * chunk_size]
         chunk.to_csv(chunk_dir / f"chunk_{i + 1:04d}.txt", index=False, header=False)
