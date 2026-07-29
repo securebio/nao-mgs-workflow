@@ -1,0 +1,2 @@
+assembly_accession	taxid	organism_name	source_database	assembly_status	release_date	species_taxid
+GCA_000000001.1	11111	Test virus A	SOURCE_DATABASE_GENBANK	current	2020-01-01	11111

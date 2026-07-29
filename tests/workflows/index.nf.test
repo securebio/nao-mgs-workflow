@@ -1,14 +1,19 @@
-// Verify the trace has a tag column populated with id=... values on every row.
+// Read the run trace into a header/rows pair.
 // nf-test overrides trace.file via -with-trace=meta/trace.csv, so the trace lands
 // at ${launchDir}/meta/trace.csv during tests (not the logging/ path used in production).
-def assertTraceTagsValid = { launchDir ->
+def readTrace = { launchDir ->
     def trace = new File("${launchDir}/meta/trace.csv")
     assert trace.exists() : "trace not found at ${trace}"
     def lines = trace.text.split("\n").findAll { it.trim() }
-    def header = lines[0].split("\t")
-    def tagIdx = header.findIndexOf { it == "tag" }
+    return [header: lines[0].split("\t"), rows: lines.drop(1)]
+}
+
+// Verify the trace has a tag column populated with id=... values on every row.
+def assertTraceTagsValid = { launchDir ->
+    def trace = readTrace(launchDir)
+    def tagIdx = trace.header.findIndexOf { it == "tag" }
     assert tagIdx >= 0 : "tag column missing from trace header"
-    def malformed = lines.drop(1).findAll { line ->
+    def malformed = trace.rows.findAll { line ->
         def tagValue = line.split("\t")[tagIdx]
         def parts = tagValue.split(",")
         // Every part must be `key=value` with a non-empty key (no `=`), and a value whose first
@@ -18,6 +23,23 @@ def assertTraceTagsValid = { launchDir ->
             parts.any { !(it ==~ /[^=]+=[^=\s][^=]*/) }
     }
     assert malformed.isEmpty() : "Found ${malformed.size()} trace rows with malformed tag: ${malformed.take(3)}"
+}
+
+// Count the tasks the trace recorded for a given process name.
+// Counts first attempts rather than rows: the trace carries one row per attempt,
+// so under the retry-enabled profiles (batch, test_run, ec2_s3) a single retried
+// task would otherwise pass for fan-out. Keyed on `attempt` rather than distinct
+// `name` because Nextflow renders `name` as "PROCESS (tag)", which collapses to
+// one value for the constant tags most modules declare.
+def countTraceTasks = { launchDir, processName ->
+    def trace = readTrace(launchDir)
+    def procIdx = trace.header.findIndexOf { it == "process" }
+    def attemptIdx = trace.header.findIndexOf { it == "attempt" }
+    assert procIdx >= 0 && attemptIdx >= 0 : "process/attempt column missing from trace header"
+    return trace.rows.count {
+        def cols = it.split("\t")
+        cols[procIdx].endsWith(processName) && cols[attemptIdx].trim() == "1"
+    }
 }
 
 nextflow_pipeline {
@@ -33,20 +55,37 @@ nextflow_pipeline {
         then {
             assert workflow.success
             assertTraceTagsValid("${launchDir}")
+            // Chunk fan-out, asserted on the tasks that actually ran. It used
+            // to be inferred from the published metadata row count, which no
+            // longer tracks it: the HDV assemblies this builds are
+            // sequence-identical twins that dedup collapses to one genome.
+            def nDownloadTasks = countTraceTasks("${launchDir}", "DOWNLOAD_VIRAL_GENOMES")
+            assert nDownloadTasks >= 2 :
+                "Expected ≥2 DOWNLOAD_VIRAL_GENOMES tasks to prove chunk fan-out (got ${nDownloadTasks}). " +
+                "If NCBI now publishes only one HDV assembly, broaden download_virus_taxid in the test config."
 
             // === MAKE_VIRUS_GENOME_DB outputs ===
             def metadata = path("${launchDir}/output/results/virus-genome-metadata-gid.tsv.gz").csv(sep: "\t", decompress: true)
-            assert metadata.rowCount >= 2 :
-                "Expected ≥2 metadata rows to prove chunk fan-out (got ${metadata.rowCount}). " +
-                "If NCBI now publishes only one HDV assembly, broaden download_virus_taxid in the test config."
             def fastaLines = path("${launchDir}/output/results/virus-genomes-masked.fasta.gz").linesGzip
             assert fastaLines.any { it.startsWith(">") } :
                 "Masked FASTA should contain at least one sequence header"
-            // The published metadata and published FASTA have the same IDs.
-            def fastaIds = fastaLines
+            // No sequence ID may appear twice: bowtie2-build accepts duplicate
+            // reference names silently and samtools then fails in RUN (#758).
+            def fastaIdList = fastaLines
                 .findAll { it.startsWith(">") }
                 .collect { it.substring(1).split(/\s/)[0] }
-                .toSet()
+            def fastaIds = fastaIdList.toSet()
+            assert fastaIdList.size() == fastaIds.size() :
+                "Published genome DB carries duplicate sequence IDs: " +
+                "${fastaIdList.countBy { it }.findAll { it.value > 1 }.keySet().take(5)}"
+            // Nor may two records carry an identical sequence. The test config
+            // builds taxid 2847173 with assembly_source = "all", so the
+            // RefSeq/GenBank twins sequence dedup exists to collapse are present.
+            def fastaSeqs = path("${launchDir}/output/results/virus-genomes-masked.fasta.gz").fasta.values()
+            assert fastaSeqs.size() == fastaSeqs.toSet().size() :
+                "Published genome DB carries ${fastaSeqs.size() - fastaSeqs.toSet().size()} " +
+                "record(s) duplicating another record's sequence"
+            // The published metadata and published FASTA have the same IDs.
             def metadataIds = metadata.columns["genome_id"].toSet()
             assert metadataIds == fastaIds :
                 "Metadata and genome DB disagree; sequences with no row: " +

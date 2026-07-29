@@ -20,6 +20,6 @@ Given these inputs, the index workflow:
 - Downloads and extracts local copies of (1) the BLAST nt database, (2) the specified Kraken2 DB, (3) the SILVA rRNA reference files.
 - Makes a Minimap2 index from the joined SILVA rRNA reference files.
 
-[^genbank]: Excluding transgenic, contaminated, or erroneous sequences, which are excluded according to a list of sequence ID patterns specified in the config file.
+[^genbank]: Excluding transgenic, contaminated, or erroneous sequences, which are excluded according to a list of sequence header patterns specified in the config file. The remaining genomes are then deduplicated by sequence ID and by sequence, so that records sharing an ID, and records whose sequence duplicates another on either strand, are collapsed to one — preferring the RefSeq-derived record where the duplicates span both databases.
 
 Run the index workflow by setting `mode = "index"` in the relevant config file. For more information, see `workflows/index.nf` and the associated subworkflows and modules.

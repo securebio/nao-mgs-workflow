@@ -61,11 +61,11 @@ workflow MAKE_VIRUS_GENOME_DB {
         // 6. Filter to remove undesired/contaminated genomes by sequence-header
         //    pattern (genome_patterns_exclude only matchable post-download).
         filter_genome_ch = FILTER_GENOME_FASTA(genome_concat_ch, other_params.genome_patterns_exclude, "virus-genomes-filtered")
-        // 7. Drop duplicate records. After the pattern filter: a no-op for
-        //    today's `--by-name` pass, but the position the stricter dedup that
-        //    replaces it requires, so that an excluded record cannot win dedup
-        //    against a clean twin and take the genome with it.
-        dedup_genome_ch = DEDUP_GENOME_FASTA(filter_genome_ch, "virus-genomes-deduplicated")
+        // 7. Drop duplicate IDs and duplicate sequences. After the pattern
+        //    filter, so an excluded record can't win dedup against a clean twin
+        //    and then be filtered out, taking the genome with it. Takes the
+        //    metadata so RefSeq-derived records win against GenBank ones.
+        dedup_genome_ch = DEDUP_GENOME_FASTA(filter_genome_ch, gid_ch, "virus-genomes-deduplicated")
         // 8. Mask to remove adapters, low-entropy regions, and polyX.
         mask_params = other_params + [name_pattern: "virus-genomes"]
         mask_ch = MASK_GENOME_FASTA(dedup_genome_ch, other_params.adapters, mask_params)

@@ -185,7 +185,7 @@ reasons are checked before taxonomy/policy reasons, so the policy buckets mean
 - `hard_excluded`: build-time leaf taxid or an ancestor is in `viral_taxids_exclude_hard` in the new build.
 - `reassigned_to_excluded`: build-time leaf taxid differs from the old leaf taxid and the new leaf/species rollup is no longer surveilled.
 - `infection_status_demotion`: build-time leaf taxid equals the old leaf taxid and the leaf/species rollup is no longer surveilled.
-- `other`: present, current, surveilled, yet absent from the new gid set. Should be near zero; if not, investigate downstream sequence-level filtering in `MAKE_VIRUS_GENOME_DB`.
+- `other`: present, current, surveilled, yet absent from the new gid set. Should be near zero; if not, investigate downstream sequence-level filtering in `MAKE_VIRUS_GENOME_DB`. Expect a one-off spike of roughly 14k genomes across the boundary where sequence dedup was introduced (#898), then a steady-state trickle as newly deposited RefSeq records displace their GenBank twins.
 
 **Gained gid categories** (priority order). Keyed on the genome's assigned leaf
 taxon, using the assembly's `release_date` and `source_database` from the raw

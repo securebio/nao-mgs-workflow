@@ -11,15 +11,23 @@ nextflow_process {
     def shell = new GroovyShell()
     def helpers = shell.parse(new File("tests/helpers/FileHelpers.groovy"))
 
-    test("Collapses records with identical headers, keeping the first") {
-        // The fixture covers both sides of what `--by-name` does:
-        //   - SHARED_NAME twice with byte-identical headers: collapsed to the
-        //     first occurrence (AAAAAAAA, not GGGGGGGG)
-        //   - SAME_ID twice with differing descriptions: both retained, because
-        //     `--by-name` keys on the full header rather than the ID. That is
-        //     the #758 gap this step inherits from CONCATENATE_GENOME_FASTA and
-        //     does not yet close; closing it is a behavioural change handled
-        //     separately.
+    test("Drops duplicate IDs and duplicate sequences, preferring RefSeq") {
+        // The fixture exercises every case the two passes have to separate:
+        //   - same ID + same description (SHARED_NAME_SAME_SEQ): keep first
+        //   - same ID + different description (SHARED_ID_DIFF_DESC): keep first.
+        //     `--by-name` kept both, which is the gap #758 left open -- samtools
+        //     keys on the ID alone and fails when it sees one twice.
+        //   - same ID + different sequence (SHARED_NAME_DIFF_SEQ): keep first
+        //   - different IDs + identical sequence (DIFF_NAME_SAME_SEQ_A/B): keep first
+        //   - different IDs + reverse-complement sequence (RC_FWD/RC_REV): keep
+        //     first, since aligners are strand-agnostic
+        //   - GenBank record and its RefSeq copy (AB000001.1/NC_000001.1),
+        //     identical sequence: keep the RefSeq one even though the GenBank
+        //     one comes first in the file
+        //   - a record with no metadata row (UNMAPPED_1): partitioned with
+        //     GenBank and retained, not dropped. Dedup does not police that
+        //     condition; FILTER_METADATA_TO_FASTA owns it and fails the build
+        //     on it downstream, so it is not silently accepted overall.
         // The committed fixture is plain text for legibility; gzipFixtureDir
         // produces temp .gz copies so the process consumes the production form.
         tag "expect_success"
@@ -28,7 +36,67 @@ nextflow_process {
             process {
                 """
                 input[0] = file("${helpers.gzipFixtureDir("${projectDir}/test-data/dedupGenomeFasta/genomes")}/virus-genomes-filtered.fasta.gz")
-                input[1] = "test-deduplicated"
+                input[1] = file("${helpers.gzipFixtureDir("${projectDir}/test-data/dedupGenomeFasta/metadata")}/virus-genome-metadata-gid.tsv.gz")
+                input[2] = "test-deduplicated"
+                """
+            }
+        }
+        then {
+            assert process.success
+            def headers = path(process.out[0][0]).linesGzip
+                .findAll { it.startsWith(">") }
+                .collect { it.substring(1) }
+            def ids = headers.collect { it.split(/\s/)[0] }
+            assert ids.sort() == [
+                "DIFF_NAME_SAME_SEQ_A",
+                "NC_000001.1",
+                "RC_FWD",
+                "SHARED_ID_DIFF_DESC",
+                "SHARED_NAME_DIFF_SEQ",
+                "SHARED_NAME_SAME_SEQ",
+                "UNIQUE_A",
+                "UNIQUE_B",
+                "UNIQUE_C",
+                "UNMAPPED_1",
+            ]
+            // The RefSeq copy survives and its GenBank twin is dropped, the
+            // reverse of what file order alone would give.
+            assert !ids.contains("AB000001.1") :
+                "GenBank record should lose sequence dedup to its RefSeq copy"
+            // Records are emitted RefSeq-first, then GenBank in input order.
+            assert headers == [
+                "NC_000001.1 RefSeq copy of AB000001.1",
+                "UNIQUE_A",
+                "DIFF_NAME_SAME_SEQ_A",
+                "RC_FWD",
+                "UNIQUE_B",
+                "SHARED_NAME_DIFF_SEQ",
+                "SHARED_NAME_SAME_SEQ",
+                "SHARED_ID_DIFF_DESC description alpha",
+                "UNMAPPED_1",
+                "UNIQUE_C",
+            ]
+            def fasta = path(process.out[0][0]).fasta
+            // Both ID-level collisions keep the first occurrence.
+            assert fasta.find { it.key.startsWith("SHARED_NAME_DIFF_SEQ") }.value == "AACCTTGGAACC"
+            assert fasta.find { it.key.startsWith("SHARED_ID_DIFF_DESC") }.key.endsWith("alpha") :
+                "Expected the first-occurring description to survive by-ID dedup"
+        }
+    }
+
+    test("Dedups in input order when the metadata lists no RefSeq records") {
+        // A GenBank-only build (assembly_source = "genbank") leaves the RefSeq
+        // partition empty, which must not fail: dedup simply falls back to
+        // input order, so the GenBank record wins the pair the RefSeq-aware
+        // run resolves the other way.
+        tag "expect_success"
+        when {
+            params {}
+            process {
+                """
+                input[0] = file("${helpers.gzipFixtureDir("${projectDir}/test-data/dedupGenomeFasta/genomes")}/virus-genomes-filtered.fasta.gz")
+                input[1] = file("${helpers.gzipFixtureDir("${projectDir}/test-data/dedupGenomeFasta/metadata-genbank-only")}/virus-genome-metadata-gid.tsv.gz")
+                input[2] = "test-deduplicated"
                 """
             }
         }
@@ -39,15 +107,174 @@ nextflow_process {
                 .collect { it.substring(1) }
             assert headers == [
                 "UNIQUE_A",
-                "SHARED_NAME",
-                "SAME_ID first description",
-                "SAME_ID second description",
+                "DIFF_NAME_SAME_SEQ_A",
+                "AB000001.1 GenBank record copied into RefSeq as NC_000001.1",
+                "RC_FWD",
                 "UNIQUE_B",
+                "SHARED_NAME_DIFF_SEQ",
+                "SHARED_NAME_SAME_SEQ",
+                "SHARED_ID_DIFF_DESC description alpha",
+                "UNMAPPED_1",
+                "UNIQUE_C",
             ]
-            // First occurrence wins, so the retained SHARED_NAME carries the
-            // sequence from the earlier record.
-            def fasta = path(process.out[0][0]).fasta
-            assert fasta["SHARED_NAME"] == "AAAAAAAA"
+        }
+    }
+
+    test("Falls back to input order when the metadata's RefSeq records are all absent") {
+        // Distinct from an ID-namespace mismatch: the GenBank IDs still match,
+        // so the metadata describes this FASTA -- its RefSeq records simply
+        // aren't in it, which FILTER_GENOME_FASTA can legitimately cause on a
+        // narrow build. That must fall back to input order, not fail. The
+        // accompanying warning goes to the task log, which nf-test's
+        // process.stdout does not expose, so only the fallback is asserted.
+        tag "expect_success"
+        when {
+            params {}
+            process {
+                """
+                input[0] = file("${helpers.gzipFixtureDir("${projectDir}/test-data/dedupGenomeFasta/genomes")}/virus-genomes-filtered.fasta.gz")
+                input[1] = file("${helpers.gzipFixtureDir("${projectDir}/test-data/dedupGenomeFasta/metadata-refseq-absent")}/virus-genome-metadata-gid.tsv.gz")
+                input[2] = "test-deduplicated"
+                """
+            }
+        }
+        then {
+            assert process.success
+            def headers = path(process.out[0][0]).linesGzip
+                .findAll { it.startsWith(">") }
+                .collect { it.substring(1) }
+            assert headers == [
+                "UNIQUE_A",
+                "DIFF_NAME_SAME_SEQ_A",
+                "AB000001.1 GenBank record copied into RefSeq as NC_000001.1",
+                "RC_FWD",
+                "UNIQUE_B",
+                "SHARED_NAME_DIFF_SEQ",
+                "SHARED_NAME_SAME_SEQ",
+                "SHARED_ID_DIFF_DESC description alpha",
+                "UNMAPPED_1",
+                "UNIQUE_C",
+            ]
+        }
+    }
+
+    test("Should fail loudly when the metadata lacks the genome ID column") {
+        tag "expect_failed"
+        when {
+            params {}
+            process {
+                """
+                input[0] = file("${helpers.gzipFixtureDir("${projectDir}/test-data/dedupGenomeFasta/genomes")}/virus-genomes-filtered.fasta.gz")
+                input[1] = file("${helpers.gzipFixtureDir("${projectDir}/test-data/dedupGenomeFasta/metadata-no-gid")}/virus-genome-metadata-gid.tsv.gz")
+                input[2] = "test-deduplicated"
+                """
+            }
+        }
+        then {
+            assert process.failed
+            assert process.errorReport.contains("metadata lacks a genome_id column") :
+                "Expected the metadata-schema guard to fire, got: ${process.errorReport}"
+        }
+    }
+
+    test("Should fail loudly when the metadata lacks the source column") {
+        // Without the column, ordering would silently degrade to "everything is
+        // GenBank" and hand sequence dedup to the wrong records.
+        tag "expect_failed"
+        when {
+            params {}
+            process {
+                """
+                input[0] = file("${helpers.gzipFixtureDir("${projectDir}/test-data/dedupGenomeFasta/genomes")}/virus-genomes-filtered.fasta.gz")
+                input[1] = file("${helpers.gzipFixtureDir("${projectDir}/test-data/dedupGenomeFasta/metadata-no-source")}/virus-genome-metadata-gid.tsv.gz")
+                input[2] = "test-deduplicated"
+                """
+            }
+        }
+        then {
+            assert process.failed
+            assert process.errorReport.contains("metadata lacks a source_database column") :
+                "Expected the metadata-schema guard to fire, got: ${process.errorReport}"
+        }
+    }
+
+    test("Handles an empty GenBank partition") {
+        // The mirror of the RefSeq-free case: with assembly_source = "refseq"
+        // every record is RefSeq-derived and genbank.fna stays empty, which the
+        // pre-created partition files exist to keep working. Order is unchanged
+        // because the partition is a no-op when everything lands on one side.
+        tag "expect_success"
+        when {
+            params {}
+            process {
+                """
+                input[0] = file("${helpers.gzipFixtureDir("${projectDir}/test-data/dedupGenomeFasta/genomes")}/virus-genomes-filtered.fasta.gz")
+                input[1] = file("${helpers.gzipFixtureDir("${projectDir}/test-data/dedupGenomeFasta/metadata-refseq-only")}/virus-genome-metadata-gid.tsv.gz")
+                input[2] = "test-deduplicated"
+                """
+            }
+        }
+        then {
+            assert process.success
+            def headers = path(process.out[0][0]).linesGzip
+                .findAll { it.startsWith(">") }
+                .collect { it.substring(1) }
+            assert headers == [
+                "UNIQUE_A",
+                "DIFF_NAME_SAME_SEQ_A",
+                "AB000001.1 GenBank record copied into RefSeq as NC_000001.1",
+                "RC_FWD",
+                "UNIQUE_B",
+                "SHARED_NAME_DIFF_SEQ",
+                "SHARED_NAME_SAME_SEQ",
+                "SHARED_ID_DIFF_DESC description alpha",
+                "UNMAPPED_1",
+                "UNIQUE_C",
+            ]
+        }
+    }
+
+    test("Should fail loudly on an unrecognised source_database value") {
+        // The preference keys on the SOURCE_DATABASE_REFSEQ literal, so a
+        // renamed or re-cased enum would empty the RefSeq set and resolve every
+        // twin the wrong way while looking like a legitimate GenBank-only build.
+        tag "expect_failed"
+        when {
+            params {}
+            process {
+                """
+                input[0] = file("${helpers.gzipFixtureDir("${projectDir}/test-data/dedupGenomeFasta/genomes")}/virus-genomes-filtered.fasta.gz")
+                input[1] = file("${helpers.gzipFixtureDir("${projectDir}/test-data/dedupGenomeFasta/metadata-bad-source")}/virus-genome-metadata-gid.tsv.gz")
+                input[2] = "test-deduplicated"
+                """
+            }
+        }
+        then {
+            assert process.failed
+            assert process.errorReport.contains("unexpected source_database value") :
+                "Expected the source_database enum guard to fire, got: ${process.errorReport}"
+        }
+    }
+
+    test("Should fail loudly when no metadata genome ID matches a header") {
+        // Metadata genome_ids and FASTA headers drifting out of the same
+        // namespace would leave every record partitioned as GenBank and the
+        // preference silently disabled.
+        tag "expect_failed"
+        when {
+            params {}
+            process {
+                """
+                input[0] = file("${helpers.gzipFixtureDir("${projectDir}/test-data/dedupGenomeFasta/genomes")}/virus-genomes-filtered.fasta.gz")
+                input[1] = file("${helpers.gzipFixtureDir("${projectDir}/test-data/dedupGenomeFasta/metadata-unmatched-refseq")}/virus-genome-metadata-gid.tsv.gz")
+                input[2] = "test-deduplicated"
+                """
+            }
+        }
+        then {
+            assert process.failed
+            assert process.errorReport.contains("none matched a FASTA header") :
+                "Expected the ID-namespace guard to fire, got: ${process.errorReport}"
         }
     }
 
