@@ -182,20 +182,24 @@ class TestWriteAccessionChunks:
         actual = {p.name: p.read_text() for p in tmp_path.iterdir()}
         assert actual == expected_chunks
 
-    def test_chunking_is_independent_of_input_order(self, tmp_path: Path) -> None:
+    @pytest.mark.parametrize(
+        "accessions",
+        [
+            ["GCA_C", "GCA_A", "GCA_D", "GCA_B"],
+            ["GCA_A", "GCA_B", "GCA_C", "GCA_D"],
+        ],
+        ids=["shuffled", "already_sorted"],
+    )
+    def test_chunking_is_independent_of_input_order(
+        self, tmp_path: Path, accessions: list[str]
+    ) -> None:
         # Chunk membership must depend only on which accessions passed the
         # filter: record order decides which duplicate seqkit rmdup keeps.
-        expected = {
+        write_accession_chunks(pd.Series(accessions, dtype=str), tmp_path, 2)
+        assert {p.name: p.read_text() for p in tmp_path.iterdir()} == {
             "chunk_0001.txt": "GCA_A\nGCA_B\n",
             "chunk_0002.txt": "GCA_C\nGCA_D\n",
         }
-        for name, accessions in [
-            ("shuffled", ["GCA_C", "GCA_A", "GCA_D", "GCA_B"]),
-            ("ordered", ["GCA_A", "GCA_B", "GCA_C", "GCA_D"]),
-        ]:
-            out = tmp_path / name
-            write_accession_chunks(pd.Series(accessions, dtype=str), out, 2)
-            assert {p.name: p.read_text() for p in out.iterdir()} == expected
 
     def test_empty_input_raises(self, tmp_path: Path) -> None:
         with pytest.raises(ValueError, match="No accessions passed filter"):
