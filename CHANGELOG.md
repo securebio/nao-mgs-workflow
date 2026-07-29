@@ -1,6 +1,7 @@
 # v3.2.3.0-dev
 
 - Compare indexes in `bin/benchmark_index.py` after restricting to genomes published in final FASTA and report each index's build-time pipeline version.
+- Add `FILTER_METADATA_TO_FASTA`, which filters `virus-genome-metadata-gid.tsv.gz` down to the sequences present in the published genome FASTA. The metadata previously described every genome that survived metadata-level filtering, including ones whose sequences header-pattern exclusion had removed, so it overstated the contents of the index it shipped with. The step is anchored on the final FASTA's headers rather than re-deriving which sequences were removed, and fails the build if a published sequence has no metadata row. (#898)
 - Refactor `DOWNLOAD_VIRAL_GENOMES` to emit one combined FASTA plus an assembly to sequence map per chunk. Consolidate `PREPARE_VIRAL_METADATA` and `ADD_GENBANK_GENOME_IDS` into one step joining filtered taxid metadata and expanding to one row per `genome_id`.
 - Mask human (CHM13) k-mers out of the viral genomes before building the Nucleaze k-mer index.
 - Exclude two viral genome records (`AY037928.1` and `NC_022518.1`) that are pure human contamination.
