@@ -42,14 +42,19 @@ nextflow_pipeline {
             def fastaLines = path("${launchDir}/output/results/virus-genomes-masked.fasta.gz").linesGzip
             assert fastaLines.any { it.startsWith(">") } :
                 "Masked FASTA should contain at least one sequence header"
-            // Every published sequence must carry a metadata row.
+            // The published metadata describes exactly the published genome DB:
+            // every sequence has a row, and no row describes a sequence that
+            // pattern exclusion removed. Equality is the invariant this
+            // reconciliation establishes end to end.
             def fastaIds = fastaLines
                 .findAll { it.startsWith(">") }
                 .collect { it.substring(1).split(/\s/)[0] }
                 .toSet()
             def metadataIds = metadata.columns["genome_id"].toSet()
-            assert metadataIds.containsAll(fastaIds) :
-                "Genome DB carries sequences with no metadata row: ${(fastaIds - metadataIds).take(5)}"
+            assert metadataIds == fastaIds :
+                "Metadata and genome DB disagree; sequences with no row: " +
+                "${(fastaIds - metadataIds).take(5)}, rows with no sequence: " +
+                "${(metadataIds - fastaIds).take(5)}"
             assert path("${launchDir}/output/results/virus-genomes-masked.nucleaze.bin").exists() :
                 "Nucleaze screen index should be published as virus-genomes-masked.nucleaze.bin"
             // Pre-filter assembly metadata is published with the enumerate schema.
