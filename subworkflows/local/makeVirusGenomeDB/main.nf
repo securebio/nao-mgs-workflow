@@ -8,6 +8,7 @@ include { DOWNLOAD_VIRAL_GENOMES } from "../../../modules/local/downloadViralGen
 include { PREPARE_VIRAL_METADATA } from "../../../modules/local/prepareViralMetadata"
 include { CONCATENATE_GENOME_FASTA } from "../../../modules/local/concatenateGenomeFasta"
 include { FILTER_GENOME_FASTA } from "../../../modules/local/filterGenomeFasta"
+include { DEDUP_GENOME_FASTA } from "../../../modules/local/dedupGenomeFasta"
 include { MASK_GENOME_FASTA } from "../../../modules/local/maskGenomeFasta"
 include { FILTER_METADATA_TO_FASTA } from "../../../modules/local/filterMetadataToFasta"
 include { GZIP_FILE_BARE } from "../../../modules/local/gzipFile"
@@ -60,11 +61,16 @@ workflow MAKE_VIRUS_GENOME_DB {
         // 6. Filter to remove undesired/contaminated genomes by sequence-header
         //    pattern (genome_patterns_exclude only matchable post-download).
         filter_genome_ch = FILTER_GENOME_FASTA(genome_concat_ch, other_params.genome_patterns_exclude, "virus-genomes-filtered")
-        // 7. Mask to remove adapters, low-entropy regions, and polyX.
+        // 7. Drop duplicate records. After the pattern filter: a no-op for
+        //    today's `--by-name` pass, but the position the stricter dedup that
+        //    replaces it requires, so that an excluded record cannot win dedup
+        //    against a clean twin and take the genome with it.
+        dedup_genome_ch = DEDUP_GENOME_FASTA(filter_genome_ch, "virus-genomes-deduplicated")
+        // 8. Mask to remove adapters, low-entropy regions, and polyX.
         mask_params = other_params + [name_pattern: "virus-genomes"]
-        mask_ch = MASK_GENOME_FASTA(filter_genome_ch, other_params.adapters, mask_params)
+        mask_ch = MASK_GENOME_FASTA(dedup_genome_ch, other_params.adapters, mask_params)
         published_fasta_ch = mask_ch.masked
-        // 8. Filter genome metadata down to the sequences present in the genome FASTA.
+        // 9. Filter genome metadata down to the sequences present in the genome FASTA.
         metadata_ch = FILTER_METADATA_TO_FASTA(published_fasta_ch, gid_ch, "virus-genome")
     emit:
         fasta = published_fasta_ch

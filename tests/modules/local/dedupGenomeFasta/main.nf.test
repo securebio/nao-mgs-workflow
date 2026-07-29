@@ -1,0 +1,54 @@
+nextflow_process {
+
+    name "Test process DEDUP_GENOME_FASTA"
+    script "modules/local/dedupGenomeFasta/main.nf"
+    process "DEDUP_GENOME_FASTA"
+    config "tests/configs/index.config"
+    tag "module"
+    tag "dedup_genome_fasta"
+
+    // Load shared helper functions
+    def shell = new GroovyShell()
+    def helpers = shell.parse(new File("tests/helpers/FileHelpers.groovy"))
+
+    test("Collapses records with identical headers, keeping the first") {
+        // The fixture covers both sides of what `--by-name` does:
+        //   - SHARED_NAME twice with byte-identical headers: collapsed to the
+        //     first occurrence (AAAAAAAA, not GGGGGGGG)
+        //   - SAME_ID twice with differing descriptions: both retained, because
+        //     `--by-name` keys on the full header rather than the ID. That is
+        //     the #758 gap this step inherits from CONCATENATE_GENOME_FASTA and
+        //     does not yet close; closing it is a behavioural change handled
+        //     separately.
+        // The committed fixture is plain text for legibility; gzipFixtureDir
+        // produces temp .gz copies so the process consumes the production form.
+        tag "expect_success"
+        when {
+            params {}
+            process {
+                """
+                input[0] = file("${helpers.gzipFixtureDir("${projectDir}/test-data/dedupGenomeFasta/genomes")}/virus-genomes-filtered.fasta.gz")
+                input[1] = "test-deduplicated"
+                """
+            }
+        }
+        then {
+            assert process.success
+            def headers = path(process.out[0][0]).linesGzip
+                .findAll { it.startsWith(">") }
+                .collect { it.substring(1) }
+            assert headers == [
+                "UNIQUE_A",
+                "SHARED_NAME",
+                "SAME_ID first description",
+                "SAME_ID second description",
+                "UNIQUE_B",
+            ]
+            // First occurrence wins, so the retained SHARED_NAME carries the
+            // sequence from the earlier record.
+            def fasta = path(process.out[0][0]).fasta
+            assert fasta["SHARED_NAME"] == "AAAAAAAA"
+        }
+    }
+
+}
