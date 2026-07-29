@@ -25,8 +25,7 @@ nextflow_process {
             params {}
             process {
                 """
-                input[0] = file("${helpers.gzipFixtureDir("${projectDir}/test-data/concatenateGenomeFasta/genomes")}")
-                input[1] = file("${projectDir}/test-data/concatenateGenomeFasta/paths.csv")
+                input[0] = file("${helpers.gzipFixtureDir("${projectDir}/test-data/concatenateGenomeFasta/genomes")}/*.fna.gz")
                 """
             }
         }
@@ -43,22 +42,41 @@ nextflow_process {
                 "UNIQUE_C",
             ]
             // `--by-name` keeps the first occurrence (from GCA_002.fna.gz, which
-            // paths.csv lists before GCA_003.fna.gz) and drops the duplicate.
+            // sorts before GCA_003.fna.gz) and drops the duplicate.
             assert fasta["SHARED_NAME_DIFF_SEQ"] == "AAAAAAAA"
-            // Output is in path-file order, not readdir order.
-            // (paths.csv lists files non-alphabetically to make this assertion meaningful.)
+            // Output is in sorted filename order.
             def headers = path(process.out[0][0]).linesGzip
                 .findAll { it.startsWith(">") }
                 .collect { it.substring(1) }
             assert headers == [
-                "UNIQUE_B",            // GCA_002
+                "UNIQUE_A",             // GCA_001
+                "DIFF_NAME_SAME_SEQ_A",
+                "UNIQUE_B",             // GCA_002
                 "SHARED_NAME_DIFF_SEQ",
                 "SHARED_NAME_SAME_SEQ",
-                "UNIQUE_C",            // GCA_003 (SHARED_NAME_* dropped by dedup)
+                "UNIQUE_C",             // GCA_003 (SHARED_NAME_* dropped by dedup)
                 "DIFF_NAME_SAME_SEQ_B",
-                "UNIQUE_A",            // GCA_001
-                "DIFF_NAME_SAME_SEQ_A",
             ]
+        }
+    }
+
+    test("Should fail loudly when given no genome FASTA files") {
+        // The empty-input guard must exit 1 rather than emit an empty FASTA.
+        tag "expect_failed"
+        when {
+            params {}
+            process {
+                """
+                input[0] = []
+                """
+            }
+        }
+        then {
+            assert process.failed
+            // Assert on the guard's own message, so an unrelated failure
+            // (missing container, seqkit error) can't pass this test.
+            assert process.errorReport.contains("No genome FASTA files found") :
+                "Expected the empty-input guard to fire, got: ${process.errorReport}"
         }
     }
 

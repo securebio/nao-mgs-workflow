@@ -1,5 +1,6 @@
 # v3.2.3.0-dev
 
+- Refactor `DOWNLOAD_VIRAL_GENOMES` to emit one combined FASTA plus an assembly to sequence map per chunk. Consolidate `PREPARE_VIRAL_METADATA` and `ADD_GENBANK_GENOME_IDS` into one step joining filtered taxid metadata and expanding to one row per `genome_id`.
 - Mask human (CHM13) k-mers out of the viral genomes before building the Nucleaze k-mer index.
 - Exclude two viral genome records (`AY037928.1` and `NC_022518.1`) that are pure human contamination.
 - Make the `[tool.<name>]` table read by `CHECK_VERSION_COMPATIBILITY` configurable.
