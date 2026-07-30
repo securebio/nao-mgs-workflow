@@ -37,6 +37,14 @@ If any is missing, ask the user; do not guess. These map to the script's `--new`
 `--old`, and `--out` (Step 1). Coverage annotations are derived from `new_index`
 itself, so no repo checkout is needed.
 
+Both indexes must publish `output/results/virus-genomes-masked.fasta.gz`, which
+the script reads to compare the two genome DBs by membership; `new_index` must
+additionally publish `virus-genome-metadata-raw.tsv.gz` and
+`input/host-infection-overrides.json`. An index whose objects have been
+transitioned to Glacier cannot be staged at all and so cannot be used on either
+side — the resulting `Could not stage ...` abort is that, not a script defect.
+Restoring the objects, or picking a still-warm reference index, is the fix.
+
 ## Procedure
 
 ### Step 1 - Run the script
