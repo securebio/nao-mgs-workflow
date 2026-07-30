@@ -2,6 +2,10 @@
 
 - **Target index:** `s3://path/to/new/index` (built with pipeline `X.Y.Z.W`)
 - **Reference index:** `s3://path/to/old/index` (built with pipeline `X.Y.Z.W`)
+
+<!-- Versions come from index_versions.json. Where it carries null, write
+     "pipeline version unrecorded" rather than guessing or leaving X.Y.Z.W. -->
+
 - **Report timestamp:** YYYY-MM-DD HH:MM
 
 ---
