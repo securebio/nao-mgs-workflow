@@ -414,20 +414,24 @@ def genome_db_ids(prefix: str, work_dir: Path) -> set[str]:
             " indexes on genome DB membership."
         ) from exc
     ids, records = set(), 0
-    with gzip.open(path, "rt") as f:
-        for line_no, line in enumerate(f, start=1):
-            if not line.startswith(">"):
-                continue
-            tokens = line[1:].split(maxsplit=1)
-            if not tokens:
-                path.unlink()
-                raise ValueError(
-                    f"Header with no sequence ID at line {line_no} of"
-                    f" {prefix}'s genome DB."
-                )
-            ids.add(tokens[0])
-            records += 1
-    path.unlink()
+    # `finally`, not a plain unlink after the loop: a truncated or non-gzip
+    # FASTA would otherwise leave its ~600 MB copy resident for the rest of
+    # the run, which is what staging it separately is meant to avoid.
+    try:
+        with gzip.open(path, "rt") as f:
+            for line_no, line in enumerate(f, start=1):
+                if not line.startswith(">"):
+                    continue
+                tokens = line[1:].split(maxsplit=1)
+                if not tokens:
+                    raise ValueError(
+                        f"Header with no sequence ID at line {line_no} of"
+                        f" {prefix}'s genome DB."
+                    )
+                ids.add(tokens[0])
+                records += 1
+    finally:
+        path.unlink(missing_ok=True)
     if not ids:
         raise ValueError(f"Index {prefix} publishes a genome DB with no sequences.")
     logger.info(

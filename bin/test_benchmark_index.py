@@ -12,6 +12,7 @@ staging.
 
 import gzip
 import json
+import logging
 from pathlib import Path
 
 import pandas as pd
@@ -190,10 +191,25 @@ class TestGenomeDbIds:
         with pytest.raises(ValueError, match="no sequence ID at line 3"):
             genome_db_ids(str(tmp_path / "index"), tmp_path / "work")
 
-    def test_counts_records_separately_from_ids(self, tmp_path: Path) -> None:
-        # Records sharing an ID collapse; the metadata joins on ID.
+    def test_counts_records_separately_from_ids(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        # Records sharing an ID collapse, because the metadata joins on ID. The
+        # record count is logged beside the ID count so the gap from sizes.tsv's
+        # `records` metric for the same file reads as expected.
         self._write_fasta(tmp_path / "index", ">G1 one\nAC\n>G1 two\nGT\n>G2\nTT\n")
-        assert genome_db_ids(str(tmp_path / "index"), tmp_path / "work") == {"G1", "G2"}
+        with caplog.at_level(logging.INFO):
+            ids = genome_db_ids(str(tmp_path / "index"), tmp_path / "work")
+        assert ids == {"G1", "G2"}
+        assert "2 sequence ID(s) from 3 record(s)" in caplog.text
+
+    def test_staged_copy_is_dropped_when_parsing_fails(self, tmp_path: Path) -> None:
+        # The staged FASTA is ~600 MB; a malformed one must not stay resident.
+        self._write_fasta(tmp_path / "index", ">G1 fine\nACGT\n>\nTT\n")
+        work_dir = tmp_path / "work"
+        with pytest.raises(ValueError):
+            genome_db_ids(str(tmp_path / "index"), work_dir)
+        assert list(work_dir.iterdir()) == []
 
 
 class TestRestrictToGenomeDb:
