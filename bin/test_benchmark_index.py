@@ -1694,6 +1694,22 @@ class TestWriteGenomeTaxonomyTables:
         )
         assert lost["genome_id"].tolist() == ["g1"]
 
+    def test_faults_are_reported_before_the_genome_dbs_are_staged(
+        self, tmp_path: Path
+    ) -> None:
+        # Both indexes are missing their FASTA, so if the column check ran after
+        # staging this would abort with "Could not stage" instead. Staging is
+        # ~600 MB a side on a real index; cheap faults must surface first.
+        old_meta, new_meta, raw, old_db, new_db = self._frames()
+        old_root = tmp_path / "old-index"
+        new_root = tmp_path / "new-index"
+        self._write_index(old_root, old_meta.drop(columns="species_taxid"), None)
+        self._write_index(new_root, new_meta, raw)
+        for root in (old_root, new_root):
+            (root / "output" / "results" / "virus-genomes-masked.fasta.gz").unlink()
+        with pytest.raises(ValueError, match="missing required columns"):
+            self._run(tmp_path, old_root, new_root, old_db, new_db)
+
     def test_missing_release_date_raises(self, tmp_path: Path) -> None:
         old_meta, new_meta, raw, old_db, new_db = self._frames()
         old_root = tmp_path / "old-index"
