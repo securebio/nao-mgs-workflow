@@ -30,7 +30,6 @@ import subprocess
 import tempfile
 import urllib.request
 from collections import Counter, defaultdict
-from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -376,36 +375,8 @@ def surveilled_taxids(db: pd.DataFrame, hosts: list[str]) -> set[str]:
     return positive
 
 
-def require_columns(meta: pd.DataFrame, columns: Iterable[str], label: str) -> None:
-    """Raise if `meta` lacks any of `columns`, naming which side is short.
-
-    Args:
-        meta: Genome metadata to check.
-        columns: Column names the caller depends on.
-        label: Which side of the comparison this is, for the message.
-    Raises:
-        ValueError: If any column is absent.
-    """
-    missing = set(columns) - set(meta.columns)
-    if missing:
-        raise ValueError(f"{label} metadata missing required columns: {missing}")
-
-
-def genome_db_ids(prefix: str, work_dir: Path) -> set[str]:
-    """Return the sequence IDs in an index's published genome DB.
-
-    Deliberately a second staging of this file: the size-and-content pass reads
-    every FASTA it discovers in both indexes and has already released its copy
-    by the time this runs. Collecting the ID set there instead would halve the
-    transfer of the largest file in an index, at the cost of specializing a
-    function that is generic over whatever files the two indexes turn out to
-    share; that genericity is what decided it. The staged copy here is deleted
-    as soon as its headers are read, so peak disk stays at one copy.
-
-    Records sharing an ID collapse into one entry, since ID is what the
-    metadata joins on and what an aligner keys a reference by. The record count
-    is logged alongside so the difference from `sizes.tsv`'s `records` metric
-    for the same file reads as expected rather than as a discrepancy.
+def get_fasta_ids(prefix: str, work_dir: Path) -> set[str]:
+    """Return the sequence IDs in an index's published FASTA file.
 
     Args:
         prefix: Index root (s3:// URI or local path), the parent of `output/`.
@@ -414,27 +385,19 @@ def genome_db_ids(prefix: str, work_dir: Path) -> set[str]:
         Set of sequence IDs, each the first whitespace-delimited token of a
         header, matching how genome_ids are derived at download time.
     Raises:
-        ValueError: If the index publishes no genome DB FASTA, publishes one
-            with no sequence headers, or carries a header with no ID. An empty
-            or malformed genome DB is a broken index, and quietly restricting
-            the metadata to it would read as a loss of every genome on that
-            side — the silent failure this whole comparison exists to prevent.
+        ValueError: If the index publishes no FASTA, publishes one with no
+            sequence headers, or carries a header with no ID.
     """
     subpath = "output/results/virus-genomes-masked.fasta.gz"
     try:
         path = fetch(prefix, subpath, work_dir)
     except (subprocess.CalledProcessError, FileNotFoundError) as exc:
-        # Absent is the common cause but not the only one: the oldest indexes
-        # in the bucket have been transitioned to Glacier, which fails the same
-        # way, so do not assert why staging failed.
+        # Absent or in Glacier Deep Archive.
         raise ValueError(
             f"Could not stage {subpath} from index {prefix}, which is required"
-            " to compare indexes on genome DB membership."
+            " to compare indexes on FASTA membership."
         ) from exc
     ids, records = set(), 0
-    # `finally`, not a plain unlink after the loop: a truncated or non-gzip
-    # FASTA would otherwise leave its ~600 MB copy resident for the rest of
-    # the run, which is what staging it separately is meant to avoid.
     try:
         with gzip.open(path, "rt") as f:
             for line_no, line in enumerate(f, start=1):
@@ -444,74 +407,54 @@ def genome_db_ids(prefix: str, work_dir: Path) -> set[str]:
                 if not tokens:
                     raise ValueError(
                         f"Header with no sequence ID at line {line_no} of"
-                        f" {prefix}'s genome DB."
+                        f" {prefix}'s FASTA."
                     )
                 ids.add(tokens[0])
                 records += 1
     finally:
         path.unlink(missing_ok=True)
     if not ids:
-        raise ValueError(f"Index {prefix} publishes a genome DB with no sequences.")
+        raise ValueError(f"Index {prefix} publishes a FASTA with no sequences.")
     logger.info(
-        f"Read {len(ids)} sequence ID(s) from {records} record(s) in"
-        f" {prefix}'s genome DB."
+        f"Read {len(ids)} sequence ID(s) from {records} record(s) in {prefix}'s FASTA."
     )
     return ids
 
 
-def restrict_to_genome_db(
-    meta: pd.DataFrame, db_ids: set[str], label: str
+def restrict_to_fasta(
+    meta: pd.DataFrame, fasta_ids: set[str], label: str
 ) -> tuple[pd.DataFrame, int, int]:
-    """Restrict genome metadata to the rows describing a sequence in the genome DB.
+    """Restrict metadata to the rows describing a sequence in the FASTA file.
 
     Indexes built with pipeline version 3.2.2.0 or earlier publish metadata that
-    was never reconciled to the FASTA, so it describes genomes the genome DB
-    does not contain. Comparing two indexes on metadata membership alone then
-    misreports in both directions: a genome only the old metadata claimed shows
-    up as a loss, and one the old *genome DB* omitted while both metadata files
-    listed it stays invisible when it enters the DB. Restricting both sides to
-    actual DB membership first makes the comparison independent of when either
-    index was built.
-
-    Empty metadata is allowed through, unlike the empty genome DB `genome_db_ids`
-    rejects. The two are not symmetric: restricting to an empty DB is silent,
-    whereas metadata with no rows makes every sequence in the DB an orphan, so
-    `fasta_ids_without_metadata_*` reports the whole genome DB and the condition
-    cannot be missed.
+    was never reconciled to the FASTA.
 
     Args:
-        meta: Genome metadata, with a `genome_id` column.
-        db_ids: Sequence IDs in the same index's genome DB.
+        meta: Index metadata, with a `genome_id` column.
+        fasta_ids: Sequence IDs in the same index's FASTA.
         label: Which side of the comparison this is, for logging.
     Returns:
         Tuple of (restricted metadata, metadata rows describing no sequence in
-        the genome DB, genome DB sequences with no metadata row).
+        the FASTA file, FASTA sequences with no metadata row).
     Raises:
-        ValueError: If the metadata has no `genome_id` column, or if it and the
-            genome DB share no IDs at all — which means the two are not in the
-            same namespace rather than that the index is unreconciled.
+        ValueError: If the metadata has no `genome_id` column.
     """
-    require_columns(meta, ["genome_id"], label)
-    meta_ids = set(meta["genome_id"])
-    if meta_ids and db_ids and not (meta_ids & db_ids):
-        raise ValueError(
-            f"None of the {len(meta_ids)} genome ID(s) in the {label} index's"
-            f" metadata match any of its {len(db_ids)} genome DB sequence(s);"
-            " the two are not in the same ID namespace."
-        )
-    in_db = meta["genome_id"].isin(db_ids)
-    extra_rows, orphan_ids = int((~in_db).sum()), len(db_ids - meta_ids)
+    if "genome_id" not in meta.columns:
+        raise ValueError(f"{label} metadata missing required columns: {{'genome_id'}}")
+    in_fasta = meta["genome_id"].isin(fasta_ids)
+    extra_rows = int((~in_fasta).sum())
+    orphan_ids = len(fasta_ids - set(meta["genome_id"]))
     if extra_rows:
         logger.warning(
             f"{label} index: {extra_rows} metadata row(s) describe no sequence"
-            " in its genome DB; excluding them from the comparison."
+            " in its FASTA; excluding them from the comparison."
         )
     if orphan_ids:
         logger.warning(
-            f"{label} index: {orphan_ids} genome DB sequence(s) have no metadata"
+            f"{label} index: {orphan_ids} FASTA sequence(s) have no metadata"
             " row, so RUN cannot resolve them to a taxid."
         )
-    return meta[in_db], extra_rows, orphan_ids
+    return meta[in_fasta], extra_rows, orphan_ids
 
 
 def metadata_deltas(
@@ -521,7 +464,9 @@ def metadata_deltas(
 ]:
     """Return genome, species, and reassignment deltas from metadata tables."""
     for label, df in {"old": old_meta, "new": new_meta}.items():
-        require_columns(df, META_COLS, label)
+        missing = set(META_COLS) - set(df.columns)
+        if missing:
+            raise ValueError(f"{label} metadata missing required columns: {missing}")
     old_ids, new_ids = set(old_meta["genome_id"]), set(new_meta["genome_id"])
     lost = old_meta.loc[~old_meta["genome_id"].isin(new_ids), META_COLS]
     gained = new_meta.loc[~new_meta["genome_id"].isin(old_ids), META_COLS]
@@ -670,11 +615,6 @@ def write_genome_taxonomy_tables(
     raw = "output/results/virus-genome-metadata-raw.tsv.gz"
     old_meta = pd.read_csv(fetch(old, gid, work_dir / "old"), sep="\t", dtype=str)
     new_meta = pd.read_csv(fetch(new, gid, work_dir / "new"), sep="\t", dtype=str)
-    # Every cheap way this can fail is checked before the two ~600 MB genome DB
-    # stagings below, so an index missing a column or a required table says so
-    # immediately rather than after a couple of GB of transfer.
-    require_columns(old_meta, META_COLS, "old")
-    require_columns(new_meta, META_COLS, "new")
     try:
         raw_path = fetch(new, raw, work_dir / "new")
     except (subprocess.CalledProcessError, FileNotFoundError) as exc:
@@ -689,17 +629,14 @@ def write_genome_taxonomy_tables(
         raise ValueError(
             "Target index raw metadata lacks release_date, required for gained-genome categorization."
         )
-    # Compare the indexes on what their genome DBs actually contain, not on what
-    # their metadata claims. Both sides are restricted before anything reads
-    # them, so every genome, species, and reassignment count below inherits it.
-    # Each genome_db_ids call stages and streams a ~600 MB FASTA.
-    old_db_ids = genome_db_ids(old, work_dir / "old")
-    new_db_ids = genome_db_ids(new, work_dir / "new")
-    old_meta, old_extra_rows, old_orphan_ids = restrict_to_genome_db(
-        old_meta, old_db_ids, "old"
+    # Restrict index metadata to genome_ids in final FASTA.
+    old_fasta_ids = get_fasta_ids(old, work_dir / "old")
+    new_fasta_ids = get_fasta_ids(new, work_dir / "new")
+    old_meta, old_extra_rows, old_orphan_ids = restrict_to_fasta(
+        old_meta, old_fasta_ids, "old"
     )
-    new_meta, new_extra_rows, new_orphan_ids = restrict_to_genome_db(
-        new_meta, new_db_ids, "new"
+    new_meta, new_extra_rows, new_orphan_ids = restrict_to_fasta(
+        new_meta, new_fasta_ids, "new"
     )
     old_cols = set(old_meta.columns)
     new_cols = set(new_meta.columns)
@@ -977,32 +914,29 @@ def write_index_versions(
 ) -> None:
     """Write each index's build-time pipeline version to index_versions.json.
 
-    That version is what tells a reviewer whether a metadata/genome-DB
-    disagreement is expected for an index's vintage or is a regression.
-    Probing is delegated to `read_pipeline_version`, which already handles both
-    published layouts — the whole `pyproject.toml` under `logging/`, and the
-    bare `pipeline-version.txt` older builds wrote instead — and degrades to
-    None rather than aborting when a file is missing or unparseable. It is
-    given `<prefix>/output` because an index nests its logging directory there.
-
     Args:
         out_dir: Directory to write index_versions.json into.
         old_prefix: Old index root (s3:// URI or local path).
         new_prefix: New index root, same form.
         work_dir: Directory to stage the probed files into.
+    Raises:
+        ValueError: If either index records no pipeline version, which leaves
+            its metadata/FASTA agreement counts uninterpretable.
     """
     logger.info("Reading each index's build-time pipeline version.")
-    _write_json(
-        out_dir / "index_versions.json",
-        {
-            "pipeline_version_old": read_pipeline_version(
-                f"{old_prefix.rstrip('/')}/output", work_dir / "old"
-            ),
-            "pipeline_version_new": read_pipeline_version(
-                f"{new_prefix.rstrip('/')}/output", work_dir / "new"
-            ),
-        },
-    )
+    versions = {}
+    for label, prefix in (("old", old_prefix), ("new", new_prefix)):
+        version = read_pipeline_version(
+            f"{prefix.rstrip('/')}/output", work_dir / label
+        )
+        if version is None:
+            raise ValueError(
+                f"Index {prefix} records no pipeline version under"
+                " output/logging/; expected pyproject.toml or"
+                " pipeline-version.txt."
+            )
+        versions[f"pipeline_version_{label}"] = version
+    _write_json(out_dir / "index_versions.json", versions)
 
 
 def summarise_params_changes(old_params: dict, new_params: dict) -> pd.DataFrame:

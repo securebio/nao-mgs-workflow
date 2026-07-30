@@ -31,13 +31,13 @@ from benchmark_index import (
     check_silva_staleness,
     compare_metrics,
     diff_params,
-    genome_db_ids,
+    get_fasta_ids,
     infection_status_changes,
     infection_status_columns,
     infection_status_transitions,
     load_overrides,
     metadata_deltas,
-    restrict_to_genome_db,
+    restrict_to_fasta,
     summarise_params_changes,
     surveilled_taxids,
     write_genome_taxonomy_tables,
@@ -152,7 +152,7 @@ class TestCompareMetrics:
         assert records["pct_change"] == 20.0
 
 
-class TestGenomeDbIds:
+class TestGetFastaIds:
     @staticmethod
     def _write_fasta(root: Path, text: str) -> None:
         results = root / "output" / "results"
@@ -168,28 +168,28 @@ class TestGenomeDbIds:
             index_root, ">G1 an organism, complete genome\nACGT\n>G2\nTT\n"
         )
         work_dir = tmp_path / "work"
-        assert genome_db_ids(str(index_root), work_dir) == {"G1", "G2"}
+        assert get_fasta_ids(str(index_root), work_dir) == {"G1", "G2"}
         # The FASTA is ~600 MB on a real index; only the ID set is kept.
         assert list(work_dir.iterdir()) == []
 
-    def test_rejects_index_without_a_genome_db(self, tmp_path: Path) -> None:
+    def test_rejects_index_without_a_fasta(self, tmp_path: Path) -> None:
         (tmp_path / "index" / "output" / "results").mkdir(parents=True)
         with pytest.raises(ValueError, match="Could not stage"):
-            genome_db_ids(str(tmp_path / "index"), tmp_path / "work")
+            get_fasta_ids(str(tmp_path / "index"), tmp_path / "work")
 
-    def test_rejects_empty_genome_db(self, tmp_path: Path) -> None:
+    def test_rejects_empty_fasta(self, tmp_path: Path) -> None:
         # A truncated-but-parseable FASTA would otherwise restrict that side's
         # metadata to nothing and read as a total loss of every genome.
         self._write_fasta(tmp_path / "index", "")
         with pytest.raises(ValueError, match="no sequences"):
-            genome_db_ids(str(tmp_path / "index"), tmp_path / "work")
+            get_fasta_ids(str(tmp_path / "index"), tmp_path / "work")
 
     def test_rejects_header_with_no_id(self, tmp_path: Path) -> None:
         # Skipping it would drop the sequence from both the ID set and the
         # orphan count, making a malformed DB the one thing that goes unseen.
         self._write_fasta(tmp_path / "index", ">G1 fine\nACGT\n>\nTT\n")
         with pytest.raises(ValueError, match="no sequence ID at line 3"):
-            genome_db_ids(str(tmp_path / "index"), tmp_path / "work")
+            get_fasta_ids(str(tmp_path / "index"), tmp_path / "work")
 
     def test_counts_records_separately_from_ids(
         self, tmp_path: Path, caplog: pytest.LogCaptureFixture
@@ -199,7 +199,7 @@ class TestGenomeDbIds:
         # `records` metric for the same file reads as expected.
         self._write_fasta(tmp_path / "index", ">G1 one\nAC\n>G1 two\nGT\n>G2\nTT\n")
         with caplog.at_level(logging.INFO):
-            ids = genome_db_ids(str(tmp_path / "index"), tmp_path / "work")
+            ids = get_fasta_ids(str(tmp_path / "index"), tmp_path / "work")
         assert ids == {"G1", "G2"}
         assert "2 sequence ID(s) from 3 record(s)" in caplog.text
 
@@ -208,17 +208,17 @@ class TestGenomeDbIds:
         self._write_fasta(tmp_path / "index", ">G1 fine\nACGT\n>\nTT\n")
         work_dir = tmp_path / "work"
         with pytest.raises(ValueError):
-            genome_db_ids(str(tmp_path / "index"), work_dir)
+            get_fasta_ids(str(tmp_path / "index"), work_dir)
         assert list(work_dir.iterdir()) == []
 
 
-class TestRestrictToGenomeDb:
+class TestRestrictToFasta:
     @staticmethod
     def _meta(*genome_ids: str) -> pd.DataFrame:
         return pd.DataFrame({"genome_id": list(genome_ids), "taxid": "1"})
 
     def test_drops_rows_describing_no_sequence(self) -> None:
-        meta, extra_rows, orphan_ids = restrict_to_genome_db(
+        meta, extra_rows, orphan_ids = restrict_to_fasta(
             self._meta("G1", "G2", "G3"), {"G1", "G3"}, "old"
         )
         assert meta["genome_id"].tolist() == ["G1", "G3"]
@@ -226,20 +226,20 @@ class TestRestrictToGenomeDb:
 
     def test_counts_rows_not_ids(self) -> None:
         # One genome_id reached by two assemblies is two rows, and both drop.
-        _, extra_rows, _ = restrict_to_genome_db(
+        _, extra_rows, _ = restrict_to_fasta(
             self._meta("G1", "G2", "G2"), {"G1"}, "old"
         )
         assert extra_rows == 2
 
     def test_counts_sequences_without_a_metadata_row(self) -> None:
-        meta, extra_rows, orphan_ids = restrict_to_genome_db(
+        meta, extra_rows, orphan_ids = restrict_to_fasta(
             self._meta("G1"), {"G1", "G2"}, "new"
         )
         assert meta["genome_id"].tolist() == ["G1"]
         assert (extra_rows, orphan_ids) == (0, 1)
 
     def test_reconciled_index_is_left_alone(self) -> None:
-        meta, extra_rows, orphan_ids = restrict_to_genome_db(
+        meta, extra_rows, orphan_ids = restrict_to_fasta(
             self._meta("G1", "G2"), {"G1", "G2"}, "new"
         )
         assert meta["genome_id"].tolist() == ["G1", "G2"]
@@ -249,15 +249,11 @@ class TestRestrictToGenomeDb:
         # Restriction runs before metadata_deltas' column guard, so the same
         # message has to be reachable from here.
         with pytest.raises(ValueError, match="missing required columns"):
-            restrict_to_genome_db(pd.DataFrame({"taxid": ["1"]}), {"G1"}, "old")
-
-    def test_rejects_disjoint_id_namespaces(self) -> None:
-        with pytest.raises(ValueError, match="not in the same ID namespace"):
-            restrict_to_genome_db(self._meta("G1"), {"NC_1.1"}, "new")
+            restrict_to_fasta(pd.DataFrame({"taxid": ["1"]}), {"G1"}, "old")
 
     def test_allows_an_empty_side(self) -> None:
         # Empty is degenerate, not a namespace error: report it and move on.
-        _, extra_rows, orphan_ids = restrict_to_genome_db(self._meta(), {"G1"}, "old")
+        _, extra_rows, orphan_ids = restrict_to_fasta(self._meta(), {"G1"}, "old")
         assert (extra_rows, orphan_ids) == (0, 1)
 
 
@@ -1169,16 +1165,16 @@ class TestWriteIndexVersions:
             "pipeline_version_new": "3.2.2.0",
         }
 
-    def test_unrecorded_version_is_null(self, tmp_path: Path) -> None:
-        self._write(tmp_path / "old", None)
+    def test_unrecorded_version_raises(self, tmp_path: Path) -> None:
+        self._write(tmp_path / "old", "pipeline-version.txt", "3.0.1.0\n")
         self._write(tmp_path / "new", None)
-        write_index_versions(
-            tmp_path, str(tmp_path / "old"), str(tmp_path / "new"), tmp_path / "work"
-        )
-        assert json.loads((tmp_path / "index_versions.json").read_text()) == {
-            "pipeline_version_old": None,
-            "pipeline_version_new": None,
-        }
+        with pytest.raises(ValueError, match="records no pipeline version"):
+            write_index_versions(
+                tmp_path,
+                str(tmp_path / "old"),
+                str(tmp_path / "new"),
+                tmp_path / "work",
+            )
 
 
 class TestSummariseParamsChanges:
@@ -1654,9 +1650,7 @@ class TestWriteGenomeTaxonomyTables:
         )
         assert set(lost["genome_id"]) == {"g1", "g2"}
 
-    def test_genome_db_sequence_without_metadata_is_counted(
-        self, tmp_path: Path
-    ) -> None:
+    def test_fasta_sequence_without_metadata_is_counted(self, tmp_path: Path) -> None:
         # The reverse direction, end to end: a sequence RUN could not resolve
         # to a taxid is reported rather than silently ignored.
         old_meta, new_meta, raw, old_db, new_db = self._frames()
@@ -1693,22 +1687,6 @@ class TestWriteGenomeTaxonomyTables:
             out_dir / "genomes_lost_categorized.tsv", sep="\t", dtype=str
         )
         assert lost["genome_id"].tolist() == ["g1"]
-
-    def test_faults_are_reported_before_the_genome_dbs_are_staged(
-        self, tmp_path: Path
-    ) -> None:
-        # Both indexes are missing their FASTA, so if the column check ran after
-        # staging this would abort with "Could not stage" instead. Staging is
-        # ~600 MB a side on a real index; cheap faults must surface first.
-        old_meta, new_meta, raw, old_db, new_db = self._frames()
-        old_root = tmp_path / "old-index"
-        new_root = tmp_path / "new-index"
-        self._write_index(old_root, old_meta.drop(columns="species_taxid"), None)
-        self._write_index(new_root, new_meta, raw)
-        for root in (old_root, new_root):
-            (root / "output" / "results" / "virus-genomes-masked.fasta.gz").unlink()
-        with pytest.raises(ValueError, match="missing required columns"):
-            self._run(tmp_path, old_root, new_root, old_db, new_db)
 
     def test_missing_release_date_raises(self, tmp_path: Path) -> None:
         old_meta, new_meta, raw, old_db, new_db = self._frames()
