@@ -23,8 +23,6 @@ process CONCATENATE_GENOME_FASTA {
         head genome_files.txt
         # Concatenate in sorted filename order so `seqkit rmdup`
         # first-occurrence behaviour is deterministic across runs.
-        # Dedup on sequence ID (rmdup's default), not the full header: records
-        # sharing an ID break downstream tools regardless of their description.
         xargs -d '\\n' -a genome_files.txt cat \\
             | seqkit rmdup --threads ${task.cpus} \\
                 -D genomes-duplicates.tsv -o genomes.fasta.gz

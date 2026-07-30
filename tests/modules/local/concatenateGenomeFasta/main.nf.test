@@ -33,8 +33,7 @@ nextflow_process {
         then {
             assert process.success
             def fasta = path(process.out[0][0]).fasta
-            // Keys are full headers, so the retained SHARED_ID_DIFF_DESC record
-            // is the one from GCA_002.fna.gz.
+            // Keys are full headers
             assert fasta.keySet().sort() == [
                 "DIFF_NAME_SAME_SEQ_A",
                 "DIFF_NAME_SAME_SEQ_B",
