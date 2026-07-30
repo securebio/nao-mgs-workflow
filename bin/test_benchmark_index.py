@@ -1461,14 +1461,21 @@ class TestWriteGenomeTaxonomyTables:
             f.write("".join(f">{i} description\nACGT\n" for i in ids))
 
     @staticmethod
-    def _run(tmp_path: Path, old_root: Path, new_root: Path, dbs: tuple) -> Path:
+    def _run(
+        tmp_path: Path,
+        old_root: Path,
+        new_root: Path,
+        old_db: pd.DataFrame,
+        new_db: pd.DataFrame,
+    ) -> Path:
         out_dir = tmp_path / "out"
         out_dir.mkdir(exist_ok=True)
         write_genome_taxonomy_tables(
             out_dir,
             str(old_root),
             str(new_root),
-            *dbs,
+            old_db,
+            new_db,
             Coverage({}, set(), {}),
             {"trace_timestamp": "2025-01-01T00:00:00Z"},
             {"host_taxa_screen": "vertebrate"},
@@ -1482,7 +1489,7 @@ class TestWriteGenomeTaxonomyTables:
         new_root = tmp_path / "new-index"
         self._write_index(old_root, old_meta, None)
         self._write_index(new_root, new_meta, raw)
-        out_dir = self._run(tmp_path, old_root, new_root, (old_db, new_db))
+        out_dir = self._run(tmp_path, old_root, new_root, old_db, new_db)
         assert {p.name for p in out_dir.glob("*.tsv")} == {
             "genomes_reassigned.tsv",
             "species_lost_all_genomes.tsv",
@@ -1545,7 +1552,7 @@ class TestWriteGenomeTaxonomyTables:
         new_root = tmp_path / "new-index"
         self._write_index(old_root, old_meta, None, db_ids=["g1"])
         self._write_index(new_root, new_meta, raw)
-        out_dir = self._run(tmp_path, old_root, new_root, (old_db, new_db))
+        out_dir = self._run(tmp_path, old_root, new_root, old_db, new_db)
         summary = json.loads((out_dir / "genomes_summary.json").read_text())
         assert summary["lost_total"] == 0
         assert summary["metadata_rows_not_in_fasta_old"] == 1
@@ -1568,7 +1575,7 @@ class TestWriteGenomeTaxonomyTables:
         new_root = tmp_path / "new-index"
         self._write_index(old_root, old_meta, None, db_ids=["g1", "g2"])
         self._write_index(new_root, new_meta, raw)
-        out_dir = self._run(tmp_path, old_root, new_root, (old_db, new_db))
+        out_dir = self._run(tmp_path, old_root, new_root, old_db, new_db)
         summary = json.loads((out_dir / "genomes_summary.json").read_text())
         assert summary["gained_total"] == 1
         assert summary["metadata_rows_not_in_fasta_old"] == 1
