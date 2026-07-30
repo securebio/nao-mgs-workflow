@@ -116,12 +116,10 @@ the report.
   genomes it does not ship, so anything reading that file as the genome set —
   including this script, before it restricts to DB membership — is wrong about
   the candidate.
-- `fasta_ids_without_metadata_old` / `_new` — a defect on either side, and the
-  more serious direction: RUN resolves `genome_id` to taxid through the metadata,
-  so a sequence with no row is a reference RUN cannot attribute. Builds after
-  3.2.2.0 fail rather than publish this, so a non-zero count means either a
-  pre-3.2.2.0 index or a corrupted publish. Raise it in §5 and carry it into
-  §Recommendations.
+- `fasta_ids_without_metadata_old` / `_new` — a defect on either side, whatever
+  the vintage, and the more serious direction: RUN resolves `genome_id` to taxid
+  through the metadata, so a sequence with no row is a reference RUN cannot
+  attribute. Raise it in §5 and carry it into §Recommendations.
 
 Report all four in §5 whenever any is non-zero, with the two pipeline versions
 alongside so a reader can tell "expected for its vintage" from "regression".
