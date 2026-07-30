@@ -180,8 +180,6 @@ class TestGetFastaIds:
     def test_rejects_unusable_fasta(
         self, tmp_path: Path, text: str | None, match: str
     ) -> None:
-        # Each of these would otherwise restrict a side's metadata silently:
-        # to nothing, or to a set missing the sequences it could not parse.
         if text is None:
             (tmp_path / "index" / "output" / "results").mkdir(parents=True)
         else:
@@ -205,7 +203,6 @@ class TestGetFastaIds:
         "text", [">G1 fine\nACGT\n", ">G1 fine\nACGT\n>\nTT\n"], ids=["ok", "malformed"]
     )
     def test_staged_copy_is_always_dropped(self, tmp_path: Path, text: str) -> None:
-        # The staged FASTA is ~600 MB, so neither path may leave it resident.
         self._write_fasta(tmp_path / "index", text)
         work_dir = tmp_path / "work"
         with contextlib.suppress(ValueError):
@@ -246,8 +243,6 @@ class TestRestrictToFasta:
         assert (extra, orphans) == (extra_rows, orphan_ids)
 
     def test_rejects_metadata_without_a_genome_id_column(self) -> None:
-        # Restriction runs before metadata_deltas' column guard, so the same
-        # message has to be reachable from here.
         with pytest.raises(ValueError, match="missing required columns"):
             restrict_to_fasta(pd.DataFrame({"taxid": ["1"]}), {"G1"}, "old")
 
@@ -1144,8 +1139,6 @@ class TestWriteIndexVersions:
             (logging_dir / name).write_text(text)
 
     def test_reads_both_published_layouts(self, tmp_path: Path) -> None:
-        # Newer indexes publish the whole pyproject.toml; older ones wrote a
-        # bare version file, and both must still resolve.
         self._write(tmp_path / "old", "pipeline-version.txt", "3.0.1.0\n")
         self._write(
             tmp_path / "new",
@@ -1499,7 +1492,7 @@ class TestWriteGenomeTaxonomyTables:
             f.write("".join(f">{i} description\nACGT\n" for i in ids))
 
     @staticmethod
-    def _run(
+    def _write_genome_tables(
         tmp_path: Path,
         old_root: Path,
         new_root: Path,
@@ -1527,7 +1520,9 @@ class TestWriteGenomeTaxonomyTables:
         new_root = tmp_path / "new-index"
         self._write_index(old_root, old_meta, None)
         self._write_index(new_root, new_meta, raw)
-        out_dir = self._run(tmp_path, old_root, new_root, old_db, new_db)
+        out_dir = self._write_genome_tables(
+            tmp_path, old_root, new_root, old_db, new_db
+        )
         assert {p.name for p in out_dir.glob("*.tsv")} == {
             "genomes_reassigned.tsv",
             "species_lost_all_genomes.tsv",
@@ -1582,8 +1577,9 @@ class TestWriteGenomeTaxonomyTables:
     @pytest.mark.parametrize(
         "old_fasta_ids,new_fasta_ids,expected",
         [
-            # The old index describes g2 without publishing it, so comparing
-            # metadata alone would call g2 a loss it never had to lose.
+            # Old lists g1,g2 but publishes only g1; new publishes g1,g3.
+            # g2 was never in the old FASTA so it is no loss, and g3 is new to
+            # the FASTA, so the totals are 0 lost and 1 gained.
             (
                 ["g1"],
                 None,
@@ -1594,9 +1590,9 @@ class TestWriteGenomeTaxonomyTables:
                     "metadata_rows_not_in_fasta_new": 0,
                 },
             ),
-            # g1 leaves the published FASTA while both metadata files still list
-            # it: on metadata membership alone it reads as kept, inflating
-            # kept_genomes and skewing reassigned_pct_of_kept.
+            # New still lists g1 in metadata but drops it from the FASTA, so
+            # g1 is a real loss on top of g2 and nothing is in both FASTAs:
+            # 2 lost, 0 kept.
             (
                 None,
                 ["g3"],
@@ -1606,8 +1602,8 @@ class TestWriteGenomeTaxonomyTables:
                     "metadata_rows_not_in_fasta_new": 1,
                 },
             ),
-            # The reverse direction: a sequence RUN could not resolve to a taxid
-            # is counted, and stays out of the deltas.
+            # New publishes `orphan`, which has no metadata row: counted once,
+            # but it carries no taxid to categorize, so the gain stays g3 alone.
             (
                 None,
                 ["g1", "g3", "orphan"],
@@ -1633,7 +1629,9 @@ class TestWriteGenomeTaxonomyTables:
         new_root = tmp_path / "new-index"
         self._write_index(old_root, old_meta, None, db_ids=old_fasta_ids)
         self._write_index(new_root, new_meta, raw, db_ids=new_fasta_ids)
-        out_dir = self._run(tmp_path, old_root, new_root, old_db, new_db)
+        out_dir = self._write_genome_tables(
+            tmp_path, old_root, new_root, old_db, new_db
+        )
         summary = json.loads((out_dir / "genomes_summary.json").read_text())
         assert {k: summary[k] for k in expected} == expected
 
@@ -1651,7 +1649,9 @@ class TestWriteGenomeTaxonomyTables:
         new_root = tmp_path / "new-index"
         self._write_index(old_root, old_meta, None, db_ids=["g1", "g2"])
         self._write_index(new_root, new_meta, raw)
-        out_dir = self._run(tmp_path, old_root, new_root, old_db, new_db)
+        out_dir = self._write_genome_tables(
+            tmp_path, old_root, new_root, old_db, new_db
+        )
         summary = json.loads((out_dir / "genomes_summary.json").read_text())
         assert summary["gained_total"] == 1
         assert summary["lost_total"] == 1  # g2 still lost
@@ -1675,7 +1675,9 @@ class TestWriteGenomeTaxonomyTables:
         new_root = tmp_path / "new-index"
         self._write_index(old_root, old_meta, None, db_ids=["g1"])
         self._write_index(new_root, new_meta, raw, db_ids=["g1", "g3"])
-        out_dir = self._run(tmp_path, old_root, new_root, old_db, new_db)
+        out_dir = self._write_genome_tables(
+            tmp_path, old_root, new_root, old_db, new_db
+        )
         summary = json.loads((out_dir / "genomes_summary.json").read_text())
         assert summary["fasta_ids_without_metadata_new"] == 1
         lost = pd.read_csv(
@@ -1690,7 +1692,7 @@ class TestWriteGenomeTaxonomyTables:
         self._write_index(old_root, old_meta, None)
         self._write_index(new_root, new_meta, raw.drop(columns="release_date"))
         with pytest.raises(ValueError, match="release_date"):
-            self._run(tmp_path, old_root, new_root, old_db, new_db)
+            self._write_genome_tables(tmp_path, old_root, new_root, old_db, new_db)
 
 
 if __name__ == "__main__":
