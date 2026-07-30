@@ -80,11 +80,7 @@ def filter_metadata(
 def write_accession_chunks(
     accessions: pd.Series, chunk_dir: Path, chunk_size: int
 ) -> int:
-    """Write accessions to fixed-size chunk files for parallel download fan-out.
-
-    Sorted first, so chunk membership does not depend on the order NCBI
-    returned accessions in; record order decides which duplicate dedup keeps.
-    Only chunking is sorted: the filtered metadata keeps its input row order.
+"""Write sorted accessions to fixed-size chunk files for parallel download fan-out.
 
     Args:
         accessions: Series of assembly accessions to chunk.

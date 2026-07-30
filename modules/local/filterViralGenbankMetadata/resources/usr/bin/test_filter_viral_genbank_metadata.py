@@ -193,8 +193,6 @@ class TestWriteAccessionChunks:
     def test_chunking_is_independent_of_input_order(
         self, tmp_path: Path, accessions: list[str]
     ) -> None:
-        # Chunk membership must depend only on which accessions passed the
-        # filter: record order decides which duplicate seqkit rmdup keeps.
         write_accession_chunks(pd.Series(accessions, dtype=str), tmp_path, 2)
         assert {p.name: p.read_text() for p in tmp_path.iterdir()} == {
             "chunk_0001.txt": "GCA_A\nGCA_B\n",
