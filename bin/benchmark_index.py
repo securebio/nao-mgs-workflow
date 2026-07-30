@@ -409,9 +409,12 @@ def genome_db_ids(prefix: str, work_dir: Path) -> set[str]:
     try:
         path = fetch(prefix, subpath, work_dir)
     except (subprocess.CalledProcessError, FileNotFoundError) as exc:
+        # Absent is the common cause but not the only one: the oldest indexes
+        # in the bucket have been transitioned to Glacier, which fails the same
+        # way, so do not assert why staging failed.
         raise ValueError(
-            f"Index {prefix} has no {subpath}, which is required to compare"
-            " indexes on genome DB membership."
+            f"Could not stage {subpath} from index {prefix}, which is required"
+            " to compare indexes on genome DB membership."
         ) from exc
     ids, records = set(), 0
     # `finally`, not a plain unlink after the loop: a truncated or non-gzip
