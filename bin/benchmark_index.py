@@ -28,6 +28,7 @@ import re
 import shutil
 import subprocess
 import tempfile
+import tomllib
 import urllib.request
 from collections import Counter, defaultdict
 from dataclasses import dataclass
@@ -374,6 +375,89 @@ def surveilled_taxids(db: pd.DataFrame, hosts: list[str]) -> set[str]:
     return positive
 
 
+def genome_db_ids(prefix: str, work_dir: Path) -> set[str]:
+    """Return the sequence IDs in an index's published genome DB.
+
+    The staged FASTA is deleted as soon as its headers have been read. It is by
+    far the largest file in an index (~600 MB), only the ID set is needed here,
+    and the size-and-content pass has already released its own copy by this
+    point; staging it twice costs transfer but keeps peak disk to one copy.
+
+    Args:
+        prefix: Index root (s3:// URI or local path), the parent of `output/`.
+        work_dir: Directory to stage the FASTA into.
+    Returns:
+        Set of sequence IDs, each the first whitespace-delimited token of a
+        header, matching how genome_ids are derived at download time.
+    Raises:
+        ValueError: If the index publishes no genome DB FASTA.
+    """
+    subpath = "output/results/virus-genomes-masked.fasta.gz"
+    try:
+        path = fetch(prefix, subpath, work_dir)
+    except (subprocess.CalledProcessError, FileNotFoundError) as exc:
+        raise ValueError(
+            f"Index {prefix} has no {subpath}, which is required to compare"
+            " indexes on genome DB membership."
+        ) from exc
+    with gzip.open(path, "rt") as f:
+        ids = {
+            line[1:].split(maxsplit=1)[0]
+            for line in f
+            if line.startswith(">") and line[1:].strip()
+        }
+    path.unlink()
+    logger.info(f"Read {len(ids)} sequence ID(s) from {prefix}'s genome DB.")
+    return ids
+
+
+def restrict_to_genome_db(
+    meta: pd.DataFrame, db_ids: set[str], label: str
+) -> tuple[pd.DataFrame, int, int]:
+    """Restrict genome metadata to the rows describing a sequence in the genome DB.
+
+    Indexes built with pipeline version 3.2.2.0 or earlier publish metadata that
+    was never reconciled to the FASTA, so it describes genomes the genome DB
+    does not contain. Comparing two indexes on metadata membership alone then
+    misreports in both directions: a genome only the old metadata claimed shows
+    up as a loss, and one only the old metadata omitted stays invisible when it
+    enters the DB. Restricting both sides to actual DB membership first makes
+    the comparison independent of when either index was built.
+
+    Args:
+        meta: Genome metadata, with a `genome_id` column.
+        db_ids: Sequence IDs in the same index's genome DB.
+        label: Which side of the comparison this is, for logging.
+    Returns:
+        Tuple of (restricted metadata, metadata rows describing no sequence in
+        the genome DB, genome DB sequences with no metadata row).
+    Raises:
+        ValueError: If the metadata and the genome DB share no IDs at all,
+            which means the two are not in the same namespace rather than that
+            the index is unreconciled.
+    """
+    meta_ids = set(meta["genome_id"])
+    if meta_ids and db_ids and not (meta_ids & db_ids):
+        raise ValueError(
+            f"None of the {len(meta_ids)} genome ID(s) in the {label} index's"
+            f" metadata match any of its {len(db_ids)} genome DB sequence(s);"
+            " the two are not in the same ID namespace."
+        )
+    in_db = meta["genome_id"].isin(db_ids)
+    extra_rows, orphan_ids = int((~in_db).sum()), len(db_ids - meta_ids)
+    if extra_rows:
+        logger.warning(
+            f"{label} index: {extra_rows} metadata row(s) describe no sequence"
+            " in its genome DB; excluding them from the comparison."
+        )
+    if orphan_ids:
+        logger.warning(
+            f"{label} index: {orphan_ids} genome DB sequence(s) have no metadata"
+            " row, so RUN cannot resolve them to a taxid."
+        )
+    return meta[in_db], extra_rows, orphan_ids
+
+
 def metadata_deltas(
     old_meta: pd.DataFrame, new_meta: pd.DataFrame
 ) -> tuple[
@@ -532,6 +616,15 @@ def write_genome_taxonomy_tables(
     raw = "output/results/virus-genome-metadata-raw.tsv.gz"
     old_meta = pd.read_csv(fetch(old, gid, work_dir / "old"), sep="\t", dtype=str)
     new_meta = pd.read_csv(fetch(new, gid, work_dir / "new"), sep="\t", dtype=str)
+    # Compare the indexes on what their genome DBs actually contain, not on what
+    # their metadata claims. Both sides are restricted before anything reads
+    # them, so every genome, species, and reassignment count below inherits it.
+    old_meta, old_extra_rows, old_orphan_ids = restrict_to_genome_db(
+        old_meta, genome_db_ids(old, work_dir / "old"), "old"
+    )
+    new_meta, new_extra_rows, new_orphan_ids = restrict_to_genome_db(
+        new_meta, genome_db_ids(new, work_dir / "new"), "new"
+    )
     try:
         raw_path = fetch(new, raw, work_dir / "new")
     except (subprocess.CalledProcessError, FileNotFoundError) as exc:
@@ -607,6 +700,10 @@ def write_genome_taxonomy_tables(
             ),
             "taxa_added": len(new_taxids - old_taxids),
             "taxa_removed": len(old_taxids - new_taxids),
+            "metadata_rows_not_in_fasta_old": old_extra_rows,
+            "metadata_rows_not_in_fasta_new": new_extra_rows,
+            "fasta_ids_without_metadata_old": old_orphan_ids,
+            "fasta_ids_without_metadata_new": new_orphan_ids,
         },
     )
 
@@ -813,6 +910,37 @@ def write_infection_status_tables(
 ##################
 
 
+def index_pipeline_version(prefix: str, work_dir: Path) -> str | None:
+    """Return the pipeline version an index was built with, or None if unrecorded.
+
+    Recent indexes publish the whole `pyproject.toml` under `output/logging/`;
+    older ones published a bare `pipeline-version.txt` instead. Both are read,
+    newest form first, so any index in the bucket resolves.
+
+    Args:
+        prefix: Index root (s3:// URI or local path), the parent of `output/`.
+        work_dir: Directory to stage the version file into.
+    Returns:
+        Version string, or None if the index records no pipeline version.
+    """
+    for subpath in (
+        "output/logging/pyproject.toml",
+        "output/logging/pipeline-version.txt",
+    ):
+        try:
+            text = fetch(prefix, subpath, work_dir).read_text()
+        except (subprocess.CalledProcessError, FileNotFoundError):
+            continue
+        if subpath.endswith(".toml"):
+            version = tomllib.loads(text).get("project", {}).get("version")
+            if version:
+                return str(version)
+        elif text.strip():
+            return text.strip()
+    logger.warning(f"Index {prefix} records no pipeline version.")
+    return None
+
+
 def summarise_params_changes(old_params: dict, new_params: dict) -> pd.DataFrame:
     """Return changed top-level params as key/kind/old/new rows."""
     rows: list[tuple[str, str, str, str]] = []
@@ -864,6 +992,17 @@ def write_params_tables(
     (out_dir / "params_diff.txt").write_text(diff_params(old_params, new_params))
     summarise_params_changes(old_params, new_params).to_csv(
         out_dir / "params_changes.tsv", sep="\t", index=False
+    )
+    _write_json(
+        out_dir / "index_versions.json",
+        {
+            "pipeline_version_old": index_pipeline_version(
+                old_prefix, work_dir / "old"
+            ),
+            "pipeline_version_new": index_pipeline_version(
+                new_prefix, work_dir / "new"
+            ),
+        },
     )
     return old_params, new_params
 
