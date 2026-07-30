@@ -80,7 +80,7 @@ def filter_metadata(
 def write_accession_chunks(
     accessions: pd.Series, chunk_dir: Path, chunk_size: int
 ) -> int:
-"""Write sorted accessions to fixed-size chunk files for parallel download fan-out.
+    """Write sorted accessions to fixed-size chunk files for parallel download fan-out.
 
     Args:
         accessions: Series of assembly accessions to chunk.
