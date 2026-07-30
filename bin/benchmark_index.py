@@ -967,9 +967,9 @@ def write_infection_status_tables(
     )
 
 
-##################
-# 5. PARAMS DIFF #
-##################
+#############################
+# 5. PARAMS AND PROVENANCE  #
+#############################
 
 
 def write_index_versions(
