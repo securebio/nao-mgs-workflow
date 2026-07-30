@@ -245,6 +245,12 @@ class TestRestrictToGenomeDb:
         assert meta["genome_id"].tolist() == ["G1", "G2"]
         assert (extra_rows, orphan_ids) == (0, 0)
 
+    def test_rejects_metadata_without_a_genome_id_column(self) -> None:
+        # Restriction runs before metadata_deltas' column guard, so the same
+        # message has to be reachable from here.
+        with pytest.raises(ValueError, match="missing required columns"):
+            restrict_to_genome_db(pd.DataFrame({"taxid": ["1"]}), {"G1"}, "old")
+
     def test_rejects_disjoint_id_namespaces(self) -> None:
         with pytest.raises(ValueError, match="not in the same ID namespace"):
             restrict_to_genome_db(self._meta("G1"), {"NC_1.1"}, "new")
@@ -1663,6 +1669,8 @@ class TestWriteGenomeTaxonomyTables:
         assert summary["fasta_ids_without_metadata_new"] == 1
         assert summary["fasta_ids_without_metadata_old"] == 0
         assert summary["metadata_rows_not_in_fasta_new"] == 0
+        # Reported, but not folded into the deltas: g3 alone is the gain.
+        assert summary["gained_total"] == 1
 
     def test_missing_release_date_raises(self, tmp_path: Path) -> None:
         old_meta, new_meta, raw, old_db, new_db = self._frames()

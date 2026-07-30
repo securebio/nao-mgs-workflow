@@ -454,6 +454,12 @@ def restrict_to_genome_db(
     enters the DB. Restricting both sides to actual DB membership first makes
     the comparison independent of when either index was built.
 
+    Empty metadata is allowed through, unlike the empty genome DB `genome_db_ids`
+    rejects. The two are not symmetric: restricting to an empty DB is silent,
+    whereas metadata with no rows makes every sequence in the DB an orphan, so
+    `fasta_ids_without_metadata_*` reports the whole genome DB and the condition
+    cannot be missed.
+
     Args:
         meta: Genome metadata, with a `genome_id` column.
         db_ids: Sequence IDs in the same index's genome DB.
@@ -462,10 +468,12 @@ def restrict_to_genome_db(
         Tuple of (restricted metadata, metadata rows describing no sequence in
         the genome DB, genome DB sequences with no metadata row).
     Raises:
-        ValueError: If the metadata and the genome DB share no IDs at all,
-            which means the two are not in the same namespace rather than that
-            the index is unreconciled.
+        ValueError: If the metadata has no `genome_id` column, or if it and the
+            genome DB share no IDs at all — which means the two are not in the
+            same namespace rather than that the index is unreconciled.
     """
+    if "genome_id" not in meta.columns:
+        raise ValueError(f"{label} metadata missing required columns: {{'genome_id'}}")
     meta_ids = set(meta["genome_id"])
     if meta_ids and db_ids and not (meta_ids & db_ids):
         raise ValueError(
