@@ -1588,8 +1588,8 @@ class TestWriteGenomeTaxonomyTables:
         self, tmp_path: Path
     ) -> None:
         # An old index built before metadata was reconciled to the genome DB
-        # describes g2 without shipping it. Comparing metadata alone would call
-        # g2 a loss; it was never in the DB to lose.
+        # describes g2 without including it in the published FASTA. Comparing
+        # metadata alone would call g2 a loss; it was never in the DB to lose.
         old_meta, new_meta, raw, old_db, new_db = self._frames()
         old_root = tmp_path / "old-index"
         new_root = tmp_path / "new-index"
@@ -1609,8 +1609,9 @@ class TestWriteGenomeTaxonomyTables:
     def test_unreconciled_old_metadata_reveals_hidden_gain(
         self, tmp_path: Path
     ) -> None:
-        # The mirror case: the old index described g3 but never shipped it, and
-        # the new index does. Comparing metadata alone would call g3 unchanged.
+        # The mirror case: the old index described g3 but never included it in
+        # its published FASTA, and the new index does. Comparing metadata alone
+        # would call g3 unchanged.
         old_meta, new_meta, raw, old_db, new_db = self._frames()
         old_meta = pd.concat(
             [old_meta, old_meta.tail(1).assign(genome_id="g3", taxid="300")]
@@ -1672,8 +1673,8 @@ class TestWriteGenomeTaxonomyTables:
         # The limit of the restriction, pinned deliberately. g1 stays in the new
         # genome DB but loses its metadata row, so it has no taxid or assembly
         # for the categorizer to work from and cannot appear as kept. It is
-        # reported lost despite still being shipped; fasta_ids_without_metadata
-        # is the count that tells a reviewer not to trust that row.
+        # reported lost despite still being in the published FASTA;
+        # fasta_ids_without_metadata is the count that flags it.
         old_meta, new_meta, raw, old_db, new_db = self._frames()
         new_meta = new_meta[new_meta["genome_id"].ne("g1")]  # row dropped, seq kept
         old_root = tmp_path / "old-index"
