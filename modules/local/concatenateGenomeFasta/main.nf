@@ -21,10 +21,10 @@ process CONCATENATE_GENOME_FASTA {
         fi
         echo "Concatenating \$(wc -l < genome_files.txt) combined genome FASTA file(s):"
         head genome_files.txt
-        # Concatenate in sorted filename order so `seqkit rmdup --by-name`
+        # Concatenate in sorted filename order so `seqkit rmdup`
         # first-occurrence behaviour is deterministic across runs.
         xargs -d '\\n' -a genome_files.txt cat \\
-            | seqkit rmdup --by-name --threads ${task.cpus} \\
+            | seqkit rmdup --threads ${task.cpus} \\
                 -D genomes-duplicates.tsv -o genomes.fasta.gz
         if [[ -s genomes-duplicates.tsv ]]; then
             echo "Duplicate sequence IDs removed:"

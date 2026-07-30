@@ -11,12 +11,13 @@ nextflow_process {
     def shell = new GroovyShell()
     def helpers = shell.parse(new File("tests/helpers/FileHelpers.groovy"))
 
-    test("Drops duplicate-name sequences and keeps first occurrence") {
-        // Fixtures contain three FASTA files exercising the three relevant
-        // cases for `seqkit rmdup --by-name`:
-        //   - same name + different sequence (SHARED_NAME_DIFF_SEQ): keep first occurrence
-        //   - same name + identical sequence (SHARED_NAME_SAME_SEQ): keep first occurrence
-        //   - different names + identical sequence (DIFF_NAME_SAME_SEQ_A/B): keep both
+    test("Drops duplicate-ID sequences and keeps first occurrence") {
+        // Fixtures contain three FASTA files exercising the four relevant
+        // cases for `seqkit rmdup`:
+        //   - same ID + different sequence (SHARED_NAME_DIFF_SEQ): keep first occurrence
+        //   - same ID + identical sequence (SHARED_NAME_SAME_SEQ): keep first occurrence
+        //   - same ID + different description (SHARED_ID_DIFF_DESC): keep first occurrence
+        //   - different IDs + identical sequence (DIFF_NAME_SAME_SEQ_A/B): keep both
         // The committed fixtures are plain `.fna` for legibility; gzipFixtureDir
         // produces a temp dir of `.fna.gz` copies so the process consumes the
         // production .gz form.
@@ -32,16 +33,18 @@ nextflow_process {
         then {
             assert process.success
             def fasta = path(process.out[0][0]).fasta
+            // Keys are full headers
             assert fasta.keySet().sort() == [
                 "DIFF_NAME_SAME_SEQ_A",
                 "DIFF_NAME_SAME_SEQ_B",
+                "SHARED_ID_DIFF_DESC first description",
                 "SHARED_NAME_DIFF_SEQ",
                 "SHARED_NAME_SAME_SEQ",
                 "UNIQUE_A",
                 "UNIQUE_B",
                 "UNIQUE_C",
             ]
-            // `--by-name` keeps the first occurrence (from GCA_002.fna.gz, which
+            // rmdup keeps the first occurrence (from GCA_002.fna.gz, which
             // sorts before GCA_003.fna.gz) and drops the duplicate.
             assert fasta["SHARED_NAME_DIFF_SEQ"] == "AAAAAAAA"
             // Output is in sorted filename order.
@@ -54,7 +57,8 @@ nextflow_process {
                 "UNIQUE_B",             // GCA_002
                 "SHARED_NAME_DIFF_SEQ",
                 "SHARED_NAME_SAME_SEQ",
-                "UNIQUE_C",             // GCA_003 (SHARED_NAME_* dropped by dedup)
+                "SHARED_ID_DIFF_DESC first description",
+                "UNIQUE_C",             // GCA_003 (SHARED_* dropped by dedup)
                 "DIFF_NAME_SAME_SEQ_B",
             ]
         }
