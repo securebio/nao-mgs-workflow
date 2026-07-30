@@ -192,12 +192,20 @@ These are the labels the script writes into `genomes_lost_categorized.tsv`,
 `genomes_gained_categorized.tsv`, and `genomes_summary.json` reason-count
 objects. The template uses them as the §3.1 row labels.
 
-"Lost" and "gained" throughout mean membership of the published genome DB
-FASTA, not of the published metadata: each side's metadata is restricted to the
-sequences its own index actually ships before anything is compared. A genome an
+"Lost" and "gained" throughout mean membership of the set of genomes an index
+both ships *and* describes — its metadata restricted to the sequences present
+in its own genome DB FASTA — not membership of the metadata alone. A genome an
 index's metadata described but never shipped is therefore neither lost nor
 gained when it disappears from the metadata, and one that enters the DB is a
 gain even if both indexes' metadata always listed it.
+
+The two definitions coincide unless an index ships a sequence with no metadata
+row, which `fasta_ids_without_metadata_*` counts. Such a sequence carries no
+taxid or assembly for the categorizer to work from, so it cannot appear in
+either table: if the old index described it and the new one does not, it is
+reported lost even though the new index still ships it. When that count is
+non-zero on either side, say so in §5 and treat the loss and gain figures as
+unreliable for those specific IDs.
 
 **Lost gid categories** (priority order; each gid gets the first applicable
 bucket). The categorizer recovers each lost genome's build-time taxid and

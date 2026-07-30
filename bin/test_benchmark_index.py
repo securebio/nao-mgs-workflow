@@ -174,7 +174,7 @@ class TestGenomeDbIds:
 
     def test_rejects_index_without_a_genome_db(self, tmp_path: Path) -> None:
         (tmp_path / "index" / "output" / "results").mkdir(parents=True)
-        with pytest.raises(ValueError, match="required to compare"):
+        with pytest.raises(ValueError, match="Could not stage"):
             genome_db_ids(str(tmp_path / "index"), tmp_path / "work")
 
     def test_rejects_empty_genome_db(self, tmp_path: Path) -> None:
@@ -1671,6 +1671,28 @@ class TestWriteGenomeTaxonomyTables:
         assert summary["metadata_rows_not_in_fasta_new"] == 0
         # Reported, but not folded into the deltas: g3 alone is the gain.
         assert summary["gained_total"] == 1
+
+    def test_orphan_sequence_the_old_index_described_reads_as_lost(
+        self, tmp_path: Path
+    ) -> None:
+        # The limit of the restriction, pinned deliberately. g1 stays in the new
+        # genome DB but loses its metadata row, so it has no taxid or assembly
+        # for the categorizer to work from and cannot appear as kept. It is
+        # reported lost despite still being shipped; fasta_ids_without_metadata
+        # is the count that tells a reviewer not to trust that row.
+        old_meta, new_meta, raw, old_db, new_db = self._frames()
+        new_meta = new_meta[new_meta["genome_id"].ne("g1")]  # row dropped, seq kept
+        old_root = tmp_path / "old-index"
+        new_root = tmp_path / "new-index"
+        self._write_index(old_root, old_meta, None, db_ids=["g1"])
+        self._write_index(new_root, new_meta, raw, db_ids=["g1", "g3"])
+        out_dir = self._run(tmp_path, old_root, new_root, old_db, new_db)
+        summary = json.loads((out_dir / "genomes_summary.json").read_text())
+        assert summary["fasta_ids_without_metadata_new"] == 1
+        lost = pd.read_csv(
+            out_dir / "genomes_lost_categorized.tsv", sep="\t", dtype=str
+        )
+        assert lost["genome_id"].tolist() == ["g1"]
 
     def test_missing_release_date_raises(self, tmp_path: Path) -> None:
         old_meta, new_meta, raw, old_db, new_db = self._frames()
