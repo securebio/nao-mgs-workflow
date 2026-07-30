@@ -1,5 +1,7 @@
 # v3.2.3.0-dev
 
+- Compare indexes on genome DB membership rather than metadata membership in `bin/benchmark_index.py`: each side's `virus-genome-metadata-gid.tsv.gz` is restricted to the sequences in its own `virus-genomes-masked.fasta.gz` before any delta is computed, and the two directions of metadata/FASTA disagreement are reported per side in `genomes_summary.json`. Also records each index's build-time pipeline version in a new `index_versions.json`. Developer/agent tooling only: reads existing index outputs and adds no new pipeline outputs, behavior, or schema changes.
+
 - Refactor `DOWNLOAD_VIRAL_GENOMES` to emit one combined FASTA plus an assembly to sequence map per chunk. Consolidate `PREPARE_VIRAL_METADATA` and `ADD_GENBANK_GENOME_IDS` into one step joining filtered taxid metadata and expanding to one row per `genome_id`.
 - Mask human (CHM13) k-mers out of the viral genomes before building the Nucleaze k-mer index.
 - Exclude two viral genome records (`AY037928.1` and `NC_022518.1`) that are pure human contamination.

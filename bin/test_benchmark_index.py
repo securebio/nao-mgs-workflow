@@ -30,11 +30,14 @@ from benchmark_index import (
     check_silva_staleness,
     compare_metrics,
     diff_params,
+    genome_db_ids,
+    index_pipeline_version,
     infection_status_changes,
     infection_status_columns,
     infection_status_transitions,
     load_overrides,
     metadata_deltas,
+    restrict_to_genome_db,
     summarise_params_changes,
     surveilled_taxids,
     write_genome_taxonomy_tables,
@@ -146,6 +149,75 @@ class TestCompareMetrics:
         records = block[block["metric"] == "records"].iloc[0]
         assert records["delta"] == 2
         assert records["pct_change"] == 20.0
+
+
+class TestGenomeDbIds:
+    @staticmethod
+    def _write_fasta(root: Path, text: str) -> None:
+        results = root / "output" / "results"
+        results.mkdir(parents=True)
+        with gzip.open(results / "virus-genomes-masked.fasta.gz", "wt") as f:
+            f.write(text)
+
+    def test_reads_first_header_token_and_drops_staged_copy(
+        self, tmp_path: Path
+    ) -> None:
+        index_root = tmp_path / "index"
+        self._write_fasta(
+            index_root, ">G1 an organism, complete genome\nACGT\n>G2\nTT\n"
+        )
+        work_dir = tmp_path / "work"
+        assert genome_db_ids(str(index_root), work_dir) == {"G1", "G2"}
+        # The FASTA is ~600 MB on a real index; only the ID set is kept.
+        assert list(work_dir.iterdir()) == []
+
+    def test_rejects_index_without_a_genome_db(self, tmp_path: Path) -> None:
+        (tmp_path / "index" / "output" / "results").mkdir(parents=True)
+        with pytest.raises(ValueError, match="required to compare"):
+            genome_db_ids(str(tmp_path / "index"), tmp_path / "work")
+
+
+class TestRestrictToGenomeDb:
+    @staticmethod
+    def _meta(*genome_ids: str) -> pd.DataFrame:
+        return pd.DataFrame({"genome_id": list(genome_ids), "taxid": "1"})
+
+    def test_drops_rows_describing_no_sequence(self) -> None:
+        meta, extra_rows, orphan_ids = restrict_to_genome_db(
+            self._meta("G1", "G2", "G3"), {"G1", "G3"}, "old"
+        )
+        assert meta["genome_id"].tolist() == ["G1", "G3"]
+        assert (extra_rows, orphan_ids) == (1, 0)
+
+    def test_counts_rows_not_ids(self) -> None:
+        # One genome_id reached by two assemblies is two rows, and both drop.
+        _, extra_rows, _ = restrict_to_genome_db(
+            self._meta("G1", "G2", "G2"), {"G1"}, "old"
+        )
+        assert extra_rows == 2
+
+    def test_counts_sequences_without_a_metadata_row(self) -> None:
+        meta, extra_rows, orphan_ids = restrict_to_genome_db(
+            self._meta("G1"), {"G1", "G2"}, "new"
+        )
+        assert meta["genome_id"].tolist() == ["G1"]
+        assert (extra_rows, orphan_ids) == (0, 1)
+
+    def test_reconciled_index_is_left_alone(self) -> None:
+        meta, extra_rows, orphan_ids = restrict_to_genome_db(
+            self._meta("G1", "G2"), {"G1", "G2"}, "new"
+        )
+        assert meta["genome_id"].tolist() == ["G1", "G2"]
+        assert (extra_rows, orphan_ids) == (0, 0)
+
+    def test_rejects_disjoint_id_namespaces(self) -> None:
+        with pytest.raises(ValueError, match="not in the same ID namespace"):
+            restrict_to_genome_db(self._meta("G1"), {"NC_1.1"}, "new")
+
+    def test_allows_an_empty_side(self) -> None:
+        # Empty is degenerate, not a namespace error: report it and move on.
+        _, extra_rows, orphan_ids = restrict_to_genome_db(self._meta(), {"G1"}, "old")
+        assert (extra_rows, orphan_ids) == (0, 1)
 
 
 class TestMetadataDeltas:
@@ -1029,6 +1101,39 @@ class TestRefStaleness:
         assert "status" in df.columns
 
 
+class TestIndexPipelineVersion:
+    @staticmethod
+    def _write(root: Path, name: str, text: str) -> None:
+        logging_dir = root / "output" / "logging"
+        logging_dir.mkdir(parents=True, exist_ok=True)
+        (logging_dir / name).write_text(text)
+
+    def test_reads_pyproject(self, tmp_path: Path) -> None:
+        self._write(
+            tmp_path / "index",
+            "pyproject.toml",
+            '[project]\nname = "mgs-workflow"\nversion = "3.2.2.0"\n',
+        )
+        assert (
+            index_pipeline_version(str(tmp_path / "index"), tmp_path / "work")
+            == "3.2.2.0"
+        )
+
+    def test_falls_back_to_pipeline_version_txt(self, tmp_path: Path) -> None:
+        # Indexes predating the published pyproject.toml carry a bare version.
+        self._write(tmp_path / "index", "pipeline-version.txt", "3.0.1.0\n")
+        assert (
+            index_pipeline_version(str(tmp_path / "index"), tmp_path / "work")
+            == "3.0.1.0"
+        )
+
+    def test_returns_none_when_unrecorded(self, tmp_path: Path) -> None:
+        (tmp_path / "index" / "output" / "logging").mkdir(parents=True)
+        assert (
+            index_pipeline_version(str(tmp_path / "index"), tmp_path / "work") is None
+        )
+
+
 class TestSummariseParamsChanges:
     def test_added_removed_changed(self) -> None:
         out = summarise_params_changes(
@@ -1329,7 +1434,13 @@ class TestWriteGenomeTaxonomyTables:
         return old_meta, new_meta, raw, old_db, new_db
 
     @staticmethod
-    def _write_index(root: Path, gid: pd.DataFrame, raw: pd.DataFrame | None) -> None:
+    def _write_index(
+        root: Path,
+        gid: pd.DataFrame,
+        raw: pd.DataFrame | None,
+        db_ids: list[str] | None = None,
+    ) -> None:
+        """Write an index; `db_ids` defaults to the metadata being reconciled."""
         results = root / "output" / "results"
         results.mkdir(parents=True)
         gid.to_csv(
@@ -1345,26 +1456,33 @@ class TestWriteGenomeTaxonomyTables:
                 index=False,
                 compression="gzip",
             )
+        ids = gid["genome_id"].tolist() if db_ids is None else db_ids
+        with gzip.open(results / "virus-genomes-masked.fasta.gz", "wt") as f:
+            f.write("".join(f">{i} description\nACGT\n" for i in ids))
 
-    def test_writes_tables_and_summary(self, tmp_path: Path) -> None:
-        old_meta, new_meta, raw, old_db, new_db = self._frames()
-        old_root = tmp_path / "old-index"
-        new_root = tmp_path / "new-index"
+    @staticmethod
+    def _run(tmp_path: Path, old_root: Path, new_root: Path, dbs: tuple) -> Path:
         out_dir = tmp_path / "out"
-        out_dir.mkdir()
-        self._write_index(old_root, old_meta, None)
-        self._write_index(new_root, new_meta, raw)
+        out_dir.mkdir(exist_ok=True)
         write_genome_taxonomy_tables(
             out_dir,
             str(old_root),
             str(new_root),
-            old_db,
-            new_db,
+            *dbs,
             Coverage({}, set(), {}),
             {"trace_timestamp": "2025-01-01T00:00:00Z"},
             {"host_taxa_screen": "vertebrate"},
             tmp_path / "work",
         )
+        return out_dir
+
+    def test_writes_tables_and_summary(self, tmp_path: Path) -> None:
+        old_meta, new_meta, raw, old_db, new_db = self._frames()
+        old_root = tmp_path / "old-index"
+        new_root = tmp_path / "new-index"
+        self._write_index(old_root, old_meta, None)
+        self._write_index(new_root, new_meta, raw)
+        out_dir = self._run(tmp_path, old_root, new_root, (old_db, new_db))
         assert {p.name for p in out_dir.glob("*.tsv")} == {
             "genomes_reassigned.tsv",
             "species_lost_all_genomes.tsv",
@@ -1411,6 +1529,53 @@ class TestWriteGenomeTaxonomyTables:
             "pre_existing_reincluded": 0,
             "no_release_date": 0,
         }
+        assert summary["metadata_rows_not_in_fasta_old"] == 0
+        assert summary["metadata_rows_not_in_fasta_new"] == 0
+        assert summary["fasta_ids_without_metadata_old"] == 0
+        assert summary["fasta_ids_without_metadata_new"] == 0
+
+    def test_unreconciled_old_metadata_yields_no_phantom_loss(
+        self, tmp_path: Path
+    ) -> None:
+        # An old index built before metadata was reconciled to the genome DB
+        # describes g2 without shipping it. Comparing metadata alone would call
+        # g2 a loss; it was never in the DB to lose.
+        old_meta, new_meta, raw, old_db, new_db = self._frames()
+        old_root = tmp_path / "old-index"
+        new_root = tmp_path / "new-index"
+        self._write_index(old_root, old_meta, None, db_ids=["g1"])
+        self._write_index(new_root, new_meta, raw)
+        out_dir = self._run(tmp_path, old_root, new_root, (old_db, new_db))
+        summary = json.loads((out_dir / "genomes_summary.json").read_text())
+        assert summary["lost_total"] == 0
+        assert summary["metadata_rows_not_in_fasta_old"] == 1
+        assert summary["metadata_rows_not_in_fasta_new"] == 0
+        lost = pd.read_csv(
+            out_dir / "genomes_lost_categorized.tsv", sep="\t", dtype=str
+        )
+        assert lost.empty
+
+    def test_unreconciled_old_metadata_reveals_hidden_gain(
+        self, tmp_path: Path
+    ) -> None:
+        # The mirror case: the old index described g3 but never shipped it, and
+        # the new index does. Comparing metadata alone would call g3 unchanged.
+        old_meta, new_meta, raw, old_db, new_db = self._frames()
+        old_meta = pd.concat(
+            [old_meta, old_meta.tail(1).assign(genome_id="g3", taxid="300")]
+        )
+        old_root = tmp_path / "old-index"
+        new_root = tmp_path / "new-index"
+        self._write_index(old_root, old_meta, None, db_ids=["g1", "g2"])
+        self._write_index(new_root, new_meta, raw)
+        out_dir = self._run(tmp_path, old_root, new_root, (old_db, new_db))
+        summary = json.loads((out_dir / "genomes_summary.json").read_text())
+        assert summary["gained_total"] == 1
+        assert summary["metadata_rows_not_in_fasta_old"] == 1
+        gained = pd.read_csv(
+            out_dir / "genomes_gained_categorized.tsv", sep="\t", dtype=str
+        )
+        assert gained["genome_id"].tolist() == ["g3"]
 
     def test_missing_release_date_raises(self, tmp_path: Path) -> None:
         old_meta, new_meta, raw, old_db, new_db = self._frames()

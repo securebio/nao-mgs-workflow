@@ -60,9 +60,14 @@ Read the compact script-produced summaries before interpreting detail rows:
 - `sizes_summary.json`: counts of top-level output entries that grew, shrank,
   or stayed unchanged.
 - `genomes_summary.json`: headline genome/taxonomy counts — lost/gained totals,
-  per-reason counts, all-lost / all-gained species, reassignments, net delta, and
-  taxa added/removed. If `lost_total` or `gained_total` is zero, §3.2 / §3.3
-  collapse to "No genome IDs lost/gained".
+  per-reason counts, all-lost / all-gained species, reassignments, net delta,
+  taxa added/removed, and the four metadata/genome-DB agreement counts read in
+  Step 2a. If `lost_total` or `gained_total` is zero, §3.2 / §3.3 collapse to
+  "No genome IDs lost/gained".
+- `index_versions.json`: the pipeline version each index was built with
+  (`pipeline_version_old`, `pipeline_version_new`), read from the index's own
+  published `pyproject.toml`, or from the bare `pipeline-version.txt` older
+  indexes published instead. `null` means the index records neither.
 - `infection_status_summary.json`: per-host species promotion/demotion counts,
   uncovered counts, and override scope-gap counts.
 - `params_changes.tsv`: compact top-level params changes (`key`, `kind`, `old`,
@@ -90,6 +95,39 @@ For appendix tables, paste Markdown tables generated from the TSV rows. For
 large category tables, include the top rows requested by the template and state
 the total row count in the appendix heading; do not rely on an external TSV path
 as the table.
+
+### Step 2a - Check metadata against the genome DB
+
+An index's published metadata and its published genome DB FASTA should describe
+the same set of genomes. Four counts in `genomes_summary.json` measure whether
+they do, per side. The script compares the two indexes on genome DB membership,
+not on metadata membership, so the genome deltas in §3 are already correct
+whatever these counts say — but they are a fact about each index that belongs in
+the report.
+
+- `metadata_rows_not_in_fasta_old` — expected to be non-zero for any index built
+  with pipeline version **3.2.2.0 or earlier** (check `index_versions.json`),
+  which published metadata that was never reconciled to the genome DB; roughly a
+  thousand rows on the last such index. Historical and benign: note it in §5 as
+  the reason the old index's own metadata overstates its genome DB, and move on.
+- `metadata_rows_not_in_fasta_new` — a finding. Either the candidate was also
+  built with **3.2.2.0 or earlier**, or reconciliation has regressed. Say which,
+  using `pipeline_version_new`. The candidate's published metadata describes
+  genomes it does not ship, so anything reading that file as the genome set —
+  including this script, before it restricts to DB membership — is wrong about
+  the candidate.
+- `fasta_ids_without_metadata_old` / `_new` — a defect on either side, and the
+  more serious direction: RUN resolves `genome_id` to taxid through the metadata,
+  so a sequence with no row is a reference RUN cannot attribute. Builds after
+  3.2.2.0 fail rather than publish this, so a non-zero count means either a
+  pre-3.2.2.0 index or a corrupted publish. Raise it in §5 and carry it into
+  §Recommendations.
+
+Report all four in §5 whenever any is non-zero, with the two pipeline versions
+alongside so a reader can tell "expected for its vintage" from "regression".
+The counts are measured from the index itself and are authoritative; the version
+only sets the expectation. A `-dev` version is mid-cycle and settles nothing on
+its own, so judge those indexes on the counts alone.
 
 ### Step 3 - Build §4 groupings
 
@@ -147,6 +185,13 @@ These are the labels the script writes into `genomes_lost_categorized.tsv`,
 `genomes_gained_categorized.tsv`, and `genomes_summary.json` reason-count
 objects. The template uses them as the §3.1 row labels.
 
+"Lost" and "gained" throughout mean membership of the published genome DB
+FASTA, not of the published metadata: each side's metadata is restricted to the
+sequences its own index actually ships before anything is compared. A genome an
+index's metadata described but never shipped is therefore neither lost nor
+gained when it disappears from the metadata, and one that enters the DB is a
+gain even if both indexes' metadata always listed it.
+
 **Lost gid categories** (priority order; each gid gets the first applicable
 bucket). The categorizer recovers each lost genome's build-time taxid and
 `assembly_status` by joining its `assembly_accession` into the target index's
@@ -159,7 +204,7 @@ reasons are checked before taxonomy/policy reasons, so the policy buckets mean
 - `hard_excluded`: build-time leaf taxid or an ancestor is in `viral_taxids_exclude_hard` in the new build.
 - `reassigned_to_excluded`: build-time leaf taxid differs from the old leaf taxid and the new leaf/species rollup is no longer surveilled.
 - `infection_status_demotion`: build-time leaf taxid equals the old leaf taxid and the leaf/species rollup is no longer surveilled.
-- `other`: present, current, surveilled, yet absent from the new gid set. Should be near zero; if not, investigate downstream sequence-level filtering.
+- `other`: present, current, surveilled, yet absent from the new genome DB — so the sequence was removed after its metadata row was written, which no bucket names. Sequence-header pattern exclusion (`ref/hv_patterns_exclude.txt`) is the mechanism today. Should be near zero; if not, investigate sequence-level filtering in `MAKE_VIRUS_GENOME_DB`.
 
 **Gained gid categories** (priority order). Keyed on the genome's assigned leaf
 taxon, using the assembly's `release_date` and `source_database` from the raw
