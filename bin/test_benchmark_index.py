@@ -31,7 +31,6 @@ from benchmark_index import (
     compare_metrics,
     diff_params,
     genome_db_ids,
-    index_pipeline_version,
     infection_status_changes,
     infection_status_columns,
     infection_status_transitions,
@@ -41,6 +40,7 @@ from benchmark_index import (
     summarise_params_changes,
     surveilled_taxids,
     write_genome_taxonomy_tables,
+    write_index_versions,
     write_metrics_table,
     write_staleness_table,
 )
@@ -174,6 +174,13 @@ class TestGenomeDbIds:
     def test_rejects_index_without_a_genome_db(self, tmp_path: Path) -> None:
         (tmp_path / "index" / "output" / "results").mkdir(parents=True)
         with pytest.raises(ValueError, match="required to compare"):
+            genome_db_ids(str(tmp_path / "index"), tmp_path / "work")
+
+    def test_rejects_empty_genome_db(self, tmp_path: Path) -> None:
+        # A truncated-but-parseable FASTA would otherwise restrict that side's
+        # metadata to nothing and read as a total loss of every genome.
+        self._write_fasta(tmp_path / "index", "")
+        with pytest.raises(ValueError, match="no sequences"):
             genome_db_ids(str(tmp_path / "index"), tmp_path / "work")
 
 
@@ -1101,37 +1108,43 @@ class TestRefStaleness:
         assert "status" in df.columns
 
 
-class TestIndexPipelineVersion:
+class TestWriteIndexVersions:
+    """Pins the JSON keys the benchmark-index skill tells reviewers to read."""
+
     @staticmethod
-    def _write(root: Path, name: str, text: str) -> None:
+    def _write(root: Path, name: str | None, text: str = "") -> None:
         logging_dir = root / "output" / "logging"
         logging_dir.mkdir(parents=True, exist_ok=True)
-        (logging_dir / name).write_text(text)
+        if name is not None:
+            (logging_dir / name).write_text(text)
 
-    def test_reads_pyproject(self, tmp_path: Path) -> None:
+    def test_reads_both_published_layouts(self, tmp_path: Path) -> None:
+        # Newer indexes publish the whole pyproject.toml; older ones wrote a
+        # bare version file, and both must still resolve.
+        self._write(tmp_path / "old", "pipeline-version.txt", "3.0.1.0\n")
         self._write(
-            tmp_path / "index",
+            tmp_path / "new",
             "pyproject.toml",
             '[project]\nname = "mgs-workflow"\nversion = "3.2.2.0"\n',
         )
-        assert (
-            index_pipeline_version(str(tmp_path / "index"), tmp_path / "work")
-            == "3.2.2.0"
+        write_index_versions(
+            tmp_path, str(tmp_path / "old"), str(tmp_path / "new"), tmp_path / "work"
         )
+        assert json.loads((tmp_path / "index_versions.json").read_text()) == {
+            "pipeline_version_old": "3.0.1.0",
+            "pipeline_version_new": "3.2.2.0",
+        }
 
-    def test_falls_back_to_pipeline_version_txt(self, tmp_path: Path) -> None:
-        # Indexes predating the published pyproject.toml carry a bare version.
-        self._write(tmp_path / "index", "pipeline-version.txt", "3.0.1.0\n")
-        assert (
-            index_pipeline_version(str(tmp_path / "index"), tmp_path / "work")
-            == "3.0.1.0"
+    def test_unrecorded_version_is_null(self, tmp_path: Path) -> None:
+        self._write(tmp_path / "old", None)
+        self._write(tmp_path / "new", None)
+        write_index_versions(
+            tmp_path, str(tmp_path / "old"), str(tmp_path / "new"), tmp_path / "work"
         )
-
-    def test_returns_none_when_unrecorded(self, tmp_path: Path) -> None:
-        (tmp_path / "index" / "output" / "logging").mkdir(parents=True)
-        assert (
-            index_pipeline_version(str(tmp_path / "index"), tmp_path / "work") is None
-        )
+        assert json.loads((tmp_path / "index_versions.json").read_text()) == {
+            "pipeline_version_old": None,
+            "pipeline_version_new": None,
+        }
 
 
 class TestSummariseParamsChanges:
@@ -1555,6 +1568,7 @@ class TestWriteGenomeTaxonomyTables:
         out_dir = self._run(tmp_path, old_root, new_root, old_db, new_db)
         summary = json.loads((out_dir / "genomes_summary.json").read_text())
         assert summary["lost_total"] == 0
+        assert summary["gained_total"] == 1  # g3 still gained
         assert summary["metadata_rows_not_in_fasta_old"] == 1
         assert summary["metadata_rows_not_in_fasta_new"] == 0
         lost = pd.read_csv(
@@ -1578,11 +1592,49 @@ class TestWriteGenomeTaxonomyTables:
         out_dir = self._run(tmp_path, old_root, new_root, old_db, new_db)
         summary = json.loads((out_dir / "genomes_summary.json").read_text())
         assert summary["gained_total"] == 1
+        assert summary["lost_total"] == 1  # g2 still lost
         assert summary["metadata_rows_not_in_fasta_old"] == 1
         gained = pd.read_csv(
             out_dir / "genomes_gained_categorized.tsv", sep="\t", dtype=str
         )
         assert gained["genome_id"].tolist() == ["g3"]
+
+    def test_unreconciled_new_metadata_reveals_hidden_loss(
+        self, tmp_path: Path
+    ) -> None:
+        # The other invisible quadrant: g1 leaves the genome DB while both
+        # metadata files still list it. On metadata membership alone it reads
+        # as kept, inflating kept_genomes and skewing reassigned_pct_of_kept.
+        old_meta, new_meta, raw, old_db, new_db = self._frames()
+        old_root = tmp_path / "old-index"
+        new_root = tmp_path / "new-index"
+        self._write_index(old_root, old_meta, None)
+        self._write_index(new_root, new_meta, raw, db_ids=["g3"])
+        out_dir = self._run(tmp_path, old_root, new_root, old_db, new_db)
+        summary = json.loads((out_dir / "genomes_summary.json").read_text())
+        assert summary["lost_total"] == 2  # g2 as before, plus g1
+        assert summary["kept_genomes"] == 0
+        assert summary["metadata_rows_not_in_fasta_new"] == 1
+        lost = pd.read_csv(
+            out_dir / "genomes_lost_categorized.tsv", sep="\t", dtype=str
+        )
+        assert set(lost["genome_id"]) == {"g1", "g2"}
+
+    def test_genome_db_sequence_without_metadata_is_counted(
+        self, tmp_path: Path
+    ) -> None:
+        # The reverse direction, end to end: a sequence RUN could not resolve
+        # to a taxid is reported rather than silently ignored.
+        old_meta, new_meta, raw, old_db, new_db = self._frames()
+        old_root = tmp_path / "old-index"
+        new_root = tmp_path / "new-index"
+        self._write_index(old_root, old_meta, None)
+        self._write_index(new_root, new_meta, raw, db_ids=["g1", "g3", "orphan"])
+        out_dir = self._run(tmp_path, old_root, new_root, old_db, new_db)
+        summary = json.loads((out_dir / "genomes_summary.json").read_text())
+        assert summary["fasta_ids_without_metadata_new"] == 1
+        assert summary["fasta_ids_without_metadata_old"] == 0
+        assert summary["metadata_rows_not_in_fasta_new"] == 0
 
     def test_missing_release_date_raises(self, tmp_path: Path) -> None:
         old_meta, new_meta, raw, old_db, new_db = self._frames()

@@ -28,7 +28,6 @@ import re
 import shutil
 import subprocess
 import tempfile
-import tomllib
 import urllib.request
 from collections import Counter, defaultdict
 from dataclasses import dataclass
@@ -37,6 +36,7 @@ from pathlib import Path
 from typing import Any
 
 import pandas as pd
+from compare_downstream_runs import read_pipeline_version
 
 ###########
 # LOGGING #
@@ -390,7 +390,10 @@ def genome_db_ids(prefix: str, work_dir: Path) -> set[str]:
         Set of sequence IDs, each the first whitespace-delimited token of a
         header, matching how genome_ids are derived at download time.
     Raises:
-        ValueError: If the index publishes no genome DB FASTA.
+        ValueError: If the index publishes no genome DB FASTA, or publishes one
+            with no sequence headers. An empty genome DB is a broken index, and
+            silently restricting the metadata to it would read as a total loss
+            of every genome on that side.
     """
     subpath = "output/results/virus-genomes-masked.fasta.gz"
     try:
@@ -407,6 +410,8 @@ def genome_db_ids(prefix: str, work_dir: Path) -> set[str]:
             if line.startswith(">") and line[1:].strip()
         }
     path.unlink()
+    if not ids:
+        raise ValueError(f"Index {prefix} publishes a genome DB with no sequences.")
     logger.info(f"Read {len(ids)} sequence ID(s) from {prefix}'s genome DB.")
     return ids
 
@@ -910,35 +915,37 @@ def write_infection_status_tables(
 ##################
 
 
-def index_pipeline_version(prefix: str, work_dir: Path) -> str | None:
-    """Return the pipeline version an index was built with, or None if unrecorded.
+def write_index_versions(
+    out_dir: Path, old_prefix: str, new_prefix: str, work_dir: Path
+) -> None:
+    """Write each index's build-time pipeline version to index_versions.json.
 
-    Recent indexes publish the whole `pyproject.toml` under `output/logging/`;
-    older ones published a bare `pipeline-version.txt` instead. Both are read,
-    newest form first, so any index in the bucket resolves.
+    That version is what tells a reviewer whether a metadata/genome-DB
+    disagreement is expected for an index's vintage or is a regression.
+    Probing is delegated to `read_pipeline_version`, which already handles both
+    published layouts — the whole `pyproject.toml` under `logging/`, and the
+    bare `pipeline-version.txt` older builds wrote instead — and degrades to
+    None rather than aborting when a file is missing or unparseable. It is
+    given `<prefix>/output` because an index nests its logging directory there.
 
     Args:
-        prefix: Index root (s3:// URI or local path), the parent of `output/`.
-        work_dir: Directory to stage the version file into.
-    Returns:
-        Version string, or None if the index records no pipeline version.
+        out_dir: Directory to write index_versions.json into.
+        old_prefix: Old index root (s3:// URI or local path).
+        new_prefix: New index root, same form.
+        work_dir: Directory to stage the probed files into.
     """
-    for subpath in (
-        "output/logging/pyproject.toml",
-        "output/logging/pipeline-version.txt",
-    ):
-        try:
-            text = fetch(prefix, subpath, work_dir).read_text()
-        except (subprocess.CalledProcessError, FileNotFoundError):
-            continue
-        if subpath.endswith(".toml"):
-            version = tomllib.loads(text).get("project", {}).get("version")
-            if version:
-                return str(version)
-        elif text.strip():
-            return text.strip()
-    logger.warning(f"Index {prefix} records no pipeline version.")
-    return None
+    logger.info("Reading each index's build-time pipeline version.")
+    _write_json(
+        out_dir / "index_versions.json",
+        {
+            "pipeline_version_old": read_pipeline_version(
+                f"{old_prefix.rstrip('/')}/output", work_dir / "old"
+            ),
+            "pipeline_version_new": read_pipeline_version(
+                f"{new_prefix.rstrip('/')}/output", work_dir / "new"
+            ),
+        },
+    )
 
 
 def summarise_params_changes(old_params: dict, new_params: dict) -> pd.DataFrame:
@@ -993,17 +1000,6 @@ def write_params_tables(
     summarise_params_changes(old_params, new_params).to_csv(
         out_dir / "params_changes.tsv", sep="\t", index=False
     )
-    _write_json(
-        out_dir / "index_versions.json",
-        {
-            "pipeline_version_old": index_pipeline_version(
-                old_prefix, work_dir / "old"
-            ),
-            "pipeline_version_new": index_pipeline_version(
-                new_prefix, work_dir / "new"
-            ),
-        },
-    )
     return old_params, new_params
 
 
@@ -1047,6 +1043,7 @@ def main() -> None:
         old_params, new_params = write_params_tables(
             args.out, args.old, args.new, work_dir
         )
+        write_index_versions(args.out, args.old, args.new, work_dir)
         old_db, new_db, coverage = load_taxonomy_context(
             args.old, args.new, new_params, work_dir
         )

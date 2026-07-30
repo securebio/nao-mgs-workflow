@@ -48,8 +48,11 @@ python bin/benchmark_index.py \
   --out <output-dir>
 ```
 
-Use **absolute** paths for `--out` (e.g. `/tmp/bench-...`). Takes about 60
-seconds. If `<outdir>` already contains benchmark outputs, reuse them only if
+Use **absolute** paths for `--out` (e.g. `/tmp/bench-...`). Takes a couple of
+minutes, most of it spent staging each index's genome DB FASTA — the largest
+file in an index, and read twice per side: once for its content metrics and
+once for its sequence IDs. If `<outdir>` already contains benchmark outputs,
+reuse them only if
 the user asked you to avoid rerunning; otherwise rerun so the reference
 freshness checks are current.
 
