@@ -149,15 +149,21 @@ def read_pipeline_version(
 ) -> str | None:
     """Resolve a run's pipeline version: explicit override, else probe `root`.
 
-    The DOWNSTREAM output root may carry the version in a `logging*/pyproject.toml`
-    (newer layout) or `logging*/pipeline-version.txt` (older layout). DOWNSTREAM-
-    only outputs whose logging directory holds no version file return None; in
-    that case the caller is expected to supply `override` (read from the matching
+    An output root may carry the version in a `logging*/pyproject.toml` (newer
+    layout) or `logging*/pipeline-version.txt` (older layout). DOWNSTREAM-only
+    outputs whose logging directory holds no version file return None; in that
+    case the caller is expected to supply `override` (read from the matching
     RUN output's `logging/pyproject.toml`, where the version lives). Network/parse
     errors degrade to None rather than aborting the comparison.
 
+    Both layouts must keep working: `benchmark_index.py` also calls this, passing
+    an index's `<root>/output`, so narrowing this to DOWNSTREAM-only paths would
+    quietly turn that script's `index_versions.json` into two nulls.
+
     Args:
-        root: DOWNSTREAM output root (s3:// URI or local path).
+        root: Output root holding a `logging*/` directory (s3:// URI or local
+            path). DOWNSTREAM writes one directly; an index nests it under
+            `output/`, so its caller passes that subpath.
         work_dir: Scratch directory for staging the probed file.
         override: Explicit version string to use verbatim if given.
 

@@ -52,9 +52,8 @@ Use **absolute** paths for `--out` (e.g. `/tmp/bench-...`). Takes a couple of
 minutes, most of it spent staging each index's genome DB FASTA — the largest
 file in an index, and read twice per side: once for its content metrics and
 once for its sequence IDs. If `<outdir>` already contains benchmark outputs,
-reuse them only if
-the user asked you to avoid rerunning; otherwise rerun so the reference
-freshness checks are current.
+reuse them only if the user asked you to avoid rerunning; otherwise rerun so
+the reference freshness checks are current.
 
 ### Step 2 - Read summaries and TSVs
 
@@ -85,7 +84,8 @@ Then read the detailed TSVs needed by the template:
   `latest_date`, `status`). A `status` of `error` means the freshness check
   could not run; note the inability to verify in §1 and continue.
 - `sizes.tsv`, `sizes_summary.json`, `params_changes.tsv`, `params_diff.txt`,
-  `metadata_schema_summary.json`, and `metadata_schema_diff.tsv` for §2 and §5.
+  `index_versions.json`, `metadata_schema_summary.json`, and
+  `metadata_schema_diff.tsv` for §2 and §5.
   `sizes.tsv` is long-format (one row per `name`, `metric`): `metric == bytes`
   rows give per-entry byte sizes for the §2 size table; the content metrics
   (`records`, `total_bp`, `n_bp` for FASTAs; `rows` for TSVs) feed the §2 content
@@ -113,6 +113,12 @@ the report.
   which published metadata that was never reconciled to the genome DB; roughly a
   thousand rows on the last such index. Historical and benign: note it in §5 as
   the reason the old index's own metadata overstates its genome DB, and move on.
+  Sanity-check the scale first, against that index's total metadata rows in
+  `sizes.tsv` (the `rows` metric for `virus-genome-metadata-gid.tsv.gz`). A few
+  percent is vintage drift; a large share is not. The script only rejects an ID
+  mismatch when the metadata and the FASTA are *entirely* disjoint, so a partial
+  namespace or accession-format change lands here looking like ordinary drift —
+  treat an implausibly large count as that, not as vintage.
 - `metadata_rows_not_in_fasta_new` — a finding. Either the candidate was also
   built with **3.2.2.0 or earlier**, or reconciliation has regressed. Say which,
   using `pipeline_version_new`. The candidate's published metadata describes

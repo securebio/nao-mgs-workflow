@@ -183,6 +183,18 @@ class TestGenomeDbIds:
         with pytest.raises(ValueError, match="no sequences"):
             genome_db_ids(str(tmp_path / "index"), tmp_path / "work")
 
+    def test_rejects_header_with_no_id(self, tmp_path: Path) -> None:
+        # Skipping it would drop the sequence from both the ID set and the
+        # orphan count, making a malformed DB the one thing that goes unseen.
+        self._write_fasta(tmp_path / "index", ">G1 fine\nACGT\n>\nTT\n")
+        with pytest.raises(ValueError, match="no sequence ID at line 3"):
+            genome_db_ids(str(tmp_path / "index"), tmp_path / "work")
+
+    def test_counts_records_separately_from_ids(self, tmp_path: Path) -> None:
+        # Records sharing an ID collapse; the metadata joins on ID.
+        self._write_fasta(tmp_path / "index", ">G1 one\nAC\n>G1 two\nGT\n>G2\nTT\n")
+        assert genome_db_ids(str(tmp_path / "index"), tmp_path / "work") == {"G1", "G2"}
+
 
 class TestRestrictToGenomeDb:
     @staticmethod
@@ -1640,22 +1652,10 @@ class TestWriteGenomeTaxonomyTables:
         old_meta, new_meta, raw, old_db, new_db = self._frames()
         old_root = tmp_path / "old-index"
         new_root = tmp_path / "new-index"
-        out_dir = tmp_path / "out"
-        out_dir.mkdir()
         self._write_index(old_root, old_meta, None)
         self._write_index(new_root, new_meta, raw.drop(columns="release_date"))
         with pytest.raises(ValueError, match="release_date"):
-            write_genome_taxonomy_tables(
-                out_dir,
-                str(old_root),
-                str(new_root),
-                old_db,
-                new_db,
-                Coverage({}, set(), {}),
-                {"trace_timestamp": "2025-01-01T00:00:00Z"},
-                {"host_taxa_screen": "vertebrate"},
-                tmp_path / "work",
-            )
+            self._run(tmp_path, old_root, new_root, old_db, new_db)
 
 
 if __name__ == "__main__":
