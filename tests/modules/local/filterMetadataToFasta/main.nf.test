@@ -12,18 +12,13 @@ nextflow_process {
     def helpers = shell.parse(new File("tests/helpers/FileHelpers.groovy"))
 
     test("Drops metadata rows for sequences absent from the genome DB") {
-        // The fixture metadata carries two rows the FASTA does not: AB000001.1,
-        // the GenBank twin dropped by sequence dedup, and EXCLUDED_BY_PATTERN,
-        // standing in for a record removed by header-pattern exclusion.
-        // The committed fixtures are plain text for legibility; gzipFixtureDir
-        // produces temp .gz copies so the process consumes the production form.
         tag "expect_success"
         when {
             params {}
             process {
                 """
                 input[0] = file("${helpers.gzipFixtureDir("${projectDir}/test-data/filterMetadataToFasta/genomes")}/virus-genomes-masked.fasta.gz")
-                input[1] = file("${helpers.gzipFixtureDir("${projectDir}/test-data/filterMetadataToFasta/metadata")}/virus-genome-metadata-gid.tsv.gz")
+                input[1] = file("${helpers.gzipFixtureDir("${projectDir}/test-data/filterMetadataToFasta/metadata")}/virus-genome-metadata-gid-unfiltered.tsv.gz")
                 input[2] = "virus-genome"
                 """
             }
@@ -33,7 +28,7 @@ nextflow_process {
             assert process.out[0][0].toString().contains("virus-genome-metadata-gid.tsv.gz")
             def metadata = path(process.out[0][0]).csv(sep: "\t", decompress: true)
             assert metadata.columns["genome_id"] == ["NC_000001.1", "UNIQUE_A", "UNIQUE_B"]
-            // Column set is untouched: this is a row filter, not a schema change.
+            // Column set is untouched
             assert metadata.columnNames == [
                 "assembly_accession",
                 "taxid",
@@ -48,15 +43,13 @@ nextflow_process {
     }
 
     test("Should fail loudly when a sequence has no metadata row") {
-        // A published sequence RUN cannot resolve to a taxid is a build-time
-        // bug: process_viral_bowtie2_sam.py would silently never match it.
         tag "expect_failed"
         when {
             params {}
             process {
                 """
                 input[0] = file("${helpers.gzipFixtureDir("${projectDir}/test-data/filterMetadataToFasta/genomes")}/virus-genomes-masked.fasta.gz")
-                input[1] = file("${helpers.gzipFixtureDir("${projectDir}/test-data/filterMetadataToFasta/metadata-missing-row")}/virus-genome-metadata-gid.tsv.gz")
+                input[1] = file("${helpers.gzipFixtureDir("${projectDir}/test-data/filterMetadataToFasta/metadata-missing-row")}/virus-genome-metadata-gid-unfiltered.tsv.gz")
                 input[2] = "virus-genome"
                 """
             }

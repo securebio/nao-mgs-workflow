@@ -1,10 +1,6 @@
 #!/usr/bin/env python
 """Filter genome metadata down to the sequences present in a genome FASTA.
-Streams the FASTA's headers to collect the genome IDs actually in the database,
-then writes out only the metadata rows whose `genome_id` is among them, so the
-published metadata describes the published genome DB rather than everything that
-was downloaded. Raises if the FASTA carries a genome ID with no metadata row,
-which would leave a reference sequence RUN cannot resolve to a taxid.
+Raises if the FASTA carries a genome ID with no metadata row.
 """
 
 import argparse
@@ -87,11 +83,6 @@ def filter_metadata(
         open_by_suffix(metadata_path, newline="") as f_in,
         open_by_suffix(output_path, "w", newline="") as f_out,
     ):
-        # Default (QUOTE_MINIMAL) dialect on both ends, deliberately: this is a
-        # row filter over a file PREPARE_VIRAL_METADATA wrote with the same
-        # default, so an NCBI organism_name containing a quote character round
-        # trips byte-identically. QUOTE_NONE would not -- the writer raises on
-        # any field it cannot emit unquoted.
         reader = csv.DictReader(f_in, delimiter="\t")
         if reader.fieldnames is None or "genome_id" not in reader.fieldnames:
             raise ValueError(f"Metadata {metadata_path} lacks a genome_id column")

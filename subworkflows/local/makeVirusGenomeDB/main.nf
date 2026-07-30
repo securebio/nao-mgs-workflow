@@ -63,14 +63,8 @@ workflow MAKE_VIRUS_GENOME_DB {
         // 7. Mask to remove adapters, low-entropy regions, and polyX.
         mask_params = other_params + [name_pattern: "virus-genomes"]
         mask_ch = MASK_GENOME_FASTA(filter_genome_ch, other_params.adapters, mask_params)
-        // The FASTA this subworkflow publishes. Bound once so the metadata
-        // filter below and the `fasta` emit below cannot drift apart if a step
-        // is ever inserted between them.
         published_fasta_ch = mask_ch.masked
-        // 8. Drop metadata rows for genomes that pattern exclusion removed, so
-        //    the published metadata describes the published DB. Anchored on the
-        //    published FASTA's headers rather than re-deriving what was
-        //    removed, so it cannot drift from the steps that removed it.
+        // 8. Filter genome metadata down to the sequences present in the genome FASTA.
         metadata_ch = FILTER_METADATA_TO_FASTA(published_fasta_ch, gid_ch, "virus-genome")
     emit:
         fasta = published_fasta_ch
