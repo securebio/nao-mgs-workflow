@@ -396,12 +396,11 @@ def genome_db_ids(prefix: str, work_dir: Path) -> set[str]:
 
     Deliberately a second staging of this file: the size-and-content pass reads
     every FASTA it discovers in both indexes and has already released its copy
-    by the time this runs. Collecting the ID set in that pass instead would
-    halve the transfer of the largest file in an index, at the cost of keeping
-    both copies resident for the whole run and specializing a function that is
-    generic over whatever files the two indexes turn out to share. The staged
-    copy here is deleted as soon as its headers are read, so peak disk stays at
-    one copy.
+    by the time this runs. Collecting the ID set there instead would halve the
+    transfer of the largest file in an index, at the cost of specializing a
+    function that is generic over whatever files the two indexes turn out to
+    share; that genericity is what decided it. The staged copy here is deleted
+    as soon as its headers are read, so peak disk stays at one copy.
 
     Records sharing an ID collapse into one entry, since ID is what the
     metadata joins on and what an aligner keys a reference by. The record count
@@ -469,9 +468,10 @@ def restrict_to_genome_db(
     was never reconciled to the FASTA, so it describes genomes the genome DB
     does not contain. Comparing two indexes on metadata membership alone then
     misreports in both directions: a genome only the old metadata claimed shows
-    up as a loss, and one only the old metadata omitted stays invisible when it
-    enters the DB. Restricting both sides to actual DB membership first makes
-    the comparison independent of when either index was built.
+    up as a loss, and one the old *genome DB* omitted while both metadata files
+    listed it stays invisible when it enters the DB. Restricting both sides to
+    actual DB membership first makes the comparison independent of when either
+    index was built.
 
     Empty metadata is allowed through, unlike the empty genome DB `genome_db_ids`
     rejects. The two are not symmetric: restricting to an empty DB is silent,
@@ -685,6 +685,10 @@ def write_genome_taxonomy_tables(
             " metadata."
         ) from exc
     new_raw_meta = pd.read_csv(raw_path, sep="\t", dtype=str)
+    if "release_date" not in new_raw_meta.columns:
+        raise ValueError(
+            "Target index raw metadata lacks release_date, required for gained-genome categorization."
+        )
     # Compare the indexes on what their genome DBs actually contain, not on what
     # their metadata claims. Both sides are restricted before anything reads
     # them, so every genome, species, and reassignment count below inherits it.
@@ -710,10 +714,6 @@ def write_genome_taxonomy_tables(
         out_dir / "metadata_schema_summary.json",
         {"added": schema_counts["added"], "removed": schema_counts["removed"]},
     )
-    if "release_date" not in new_raw_meta.columns:
-        raise ValueError(
-            "Target index raw metadata lacks release_date, required for gained-genome categorization."
-        )
     (
         lost_g,
         gained_g,
