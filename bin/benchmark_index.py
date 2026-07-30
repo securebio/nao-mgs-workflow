@@ -30,6 +30,7 @@ import subprocess
 import tempfile
 import urllib.request
 from collections import Counter, defaultdict
+from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -375,6 +376,21 @@ def surveilled_taxids(db: pd.DataFrame, hosts: list[str]) -> set[str]:
     return positive
 
 
+def require_columns(meta: pd.DataFrame, columns: Iterable[str], label: str) -> None:
+    """Raise if `meta` lacks any of `columns`, naming which side is short.
+
+    Args:
+        meta: Genome metadata to check.
+        columns: Column names the caller depends on.
+        label: Which side of the comparison this is, for the message.
+    Raises:
+        ValueError: If any column is absent.
+    """
+    missing = set(columns) - set(meta.columns)
+    if missing:
+        raise ValueError(f"{label} metadata missing required columns: {missing}")
+
+
 def genome_db_ids(prefix: str, work_dir: Path) -> set[str]:
     """Return the sequence IDs in an index's published genome DB.
 
@@ -475,8 +491,7 @@ def restrict_to_genome_db(
             genome DB share no IDs at all — which means the two are not in the
             same namespace rather than that the index is unreconciled.
     """
-    if "genome_id" not in meta.columns:
-        raise ValueError(f"{label} metadata missing required columns: {{'genome_id'}}")
+    require_columns(meta, ["genome_id"], label)
     meta_ids = set(meta["genome_id"])
     if meta_ids and db_ids and not (meta_ids & db_ids):
         raise ValueError(
@@ -506,9 +521,7 @@ def metadata_deltas(
 ]:
     """Return genome, species, and reassignment deltas from metadata tables."""
     for label, df in {"old": old_meta, "new": new_meta}.items():
-        missing = set(META_COLS) - set(df.columns)
-        if missing:
-            raise ValueError(f"{label} metadata missing required columns: {missing}")
+        require_columns(df, META_COLS, label)
     old_ids, new_ids = set(old_meta["genome_id"]), set(new_meta["genome_id"])
     lost = old_meta.loc[~old_meta["genome_id"].isin(new_ids), META_COLS]
     gained = new_meta.loc[~new_meta["genome_id"].isin(old_ids), META_COLS]
@@ -657,6 +670,21 @@ def write_genome_taxonomy_tables(
     raw = "output/results/virus-genome-metadata-raw.tsv.gz"
     old_meta = pd.read_csv(fetch(old, gid, work_dir / "old"), sep="\t", dtype=str)
     new_meta = pd.read_csv(fetch(new, gid, work_dir / "new"), sep="\t", dtype=str)
+    # Every cheap way this can fail is checked before the two ~600 MB genome DB
+    # stagings below, so an index missing a column or a required table says so
+    # immediately rather than after a couple of GB of transfer.
+    require_columns(old_meta, META_COLS, "old")
+    require_columns(new_meta, META_COLS, "new")
+    try:
+        raw_path = fetch(new, raw, work_dir / "new")
+    except (subprocess.CalledProcessError, FileNotFoundError) as exc:
+        raise ValueError(
+            "Target index has no output/results/virus-genome-metadata-raw.tsv.gz,"
+            " which is required for genome-ID categorization. Rebuild the index"
+            " with a pipeline version that publishes the pre-filter assembly"
+            " metadata."
+        ) from exc
+    new_raw_meta = pd.read_csv(raw_path, sep="\t", dtype=str)
     # Compare the indexes on what their genome DBs actually contain, not on what
     # their metadata claims. Both sides are restricted before anything reads
     # them, so every genome, species, and reassignment count below inherits it.
@@ -669,16 +697,6 @@ def write_genome_taxonomy_tables(
     new_meta, new_extra_rows, new_orphan_ids = restrict_to_genome_db(
         new_meta, new_db_ids, "new"
     )
-    try:
-        raw_path = fetch(new, raw, work_dir / "new")
-    except (subprocess.CalledProcessError, FileNotFoundError) as exc:
-        raise ValueError(
-            "Target index has no output/results/virus-genome-metadata-raw.tsv.gz,"
-            " which is required for genome-ID categorization. Rebuild the index"
-            " with a pipeline version that publishes the pre-filter assembly"
-            " metadata."
-        ) from exc
-    new_raw_meta = pd.read_csv(raw_path, sep="\t", dtype=str)
     old_cols = set(old_meta.columns)
     new_cols = set(new_meta.columns)
     schema_rows = [
