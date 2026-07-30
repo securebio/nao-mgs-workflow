@@ -91,8 +91,9 @@ Gains or losses of viral species assigned to each host category, ignoring hard i
 ### 5. Other notable changes
 
 - Concise bullet list of other changes to the index of relevance to the benchmark
-- Where any of the four metadata / genome-DB agreement counts is non-zero, state
-  all four with both pipeline versions, and say whether each is expected (see Step 2a)
+- Where any of the four metadata / genome-DB agreement counts is non-zero,
+  state all four with both pipeline versions, and say whether each is expected
+  (see Step 2a)
 - Link out to tables in appendix where appropriate
 
 ---

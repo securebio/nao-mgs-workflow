@@ -101,18 +101,21 @@ An index's published metadata and its published genome DB FASTA should describe
 the same set of genomes. Four counts in `genomes_summary.json` measure whether
 they do, per side:
 
-- `metadata_rows_not_in_fasta_old` / `_new` — expected to be non-zero for any index built
-  with pipeline version **3.2.2.0 or earlier** (check `index_versions.json`),
-  which published metadata that was never reconciled to the genome DB. This case is
-  historical and benign if it's a few percentage points relative to the total metadata rows in `sizes.tsv`: note it in §5 and move on. For indexes built with later versions or for large changes,
-  this is a significant finding. Raise it in §5 and carry it into §Recommendations.
-- `fasta_ids_without_metadata_old` / `_new` — a defect on either side for any pipeline version,
-  and the more serious direction: RUN resolves `genome_id` to taxid
-  through the metadata, so a sequence with no row is a reference RUN cannot
-  attribute. Raise it in §5 and carry it into §Recommendations.
+- `metadata_rows_not_in_fasta_old` / `_new` — expected to be non-zero for any
+  index built with pipeline version **3.2.2.0 or earlier** (check
+  `index_versions.json`), which published metadata that was never reconciled to
+  the genome DB. This case is historical and benign if it is a few percentage
+  points relative to the total metadata rows in `sizes.tsv`: note it in §5 and
+  move on. For indexes built with later versions, or for large changes, this is
+  a significant finding. Raise it in §5 and carry it into §Recommendations.
+- `fasta_ids_without_metadata_old` / `_new` — a defect on either side for any
+  pipeline version, and the more serious direction: RUN resolves `genome_id` to
+  taxid through the metadata, so a sequence with no row is a reference RUN
+  cannot attribute. Raise it in §5 and carry it into §Recommendations.
 
 Report all four in §5 whenever any is non-zero, with the two pipeline versions
-alongside so a reader can tell "expected for its pipeline version" from "regression".
+alongside so a reader can tell "expected for its pipeline version" from
+"regression".
 
 ### Step 3 - Build §4 groupings
 
