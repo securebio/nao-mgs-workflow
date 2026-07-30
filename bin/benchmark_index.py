@@ -378,10 +378,19 @@ def surveilled_taxids(db: pd.DataFrame, hosts: list[str]) -> set[str]:
 def genome_db_ids(prefix: str, work_dir: Path) -> set[str]:
     """Return the sequence IDs in an index's published genome DB.
 
-    The staged FASTA is deleted as soon as its headers have been read. It is by
-    far the largest file in an index (~600 MB), only the ID set is needed here,
-    and the size-and-content pass has already released its own copy by this
-    point; staging it twice costs transfer but keeps peak disk to one copy.
+    Deliberately a second staging of this file: the size-and-content pass reads
+    every FASTA it discovers in both indexes and has already released its copy
+    by the time this runs. Collecting the ID set in that pass instead would
+    halve the transfer of the largest file in an index, at the cost of keeping
+    both copies resident for the whole run and specializing a function that is
+    generic over whatever files the two indexes turn out to share. The staged
+    copy here is deleted as soon as its headers are read, so peak disk stays at
+    one copy.
+
+    Records sharing an ID collapse into one entry, since ID is what the
+    metadata joins on and what an aligner keys a reference by. The record count
+    is logged alongside so the difference from `sizes.tsv`'s `records` metric
+    for the same file reads as expected rather than as a discrepancy.
 
     Args:
         prefix: Index root (s3:// URI or local path), the parent of `output/`.
@@ -390,10 +399,11 @@ def genome_db_ids(prefix: str, work_dir: Path) -> set[str]:
         Set of sequence IDs, each the first whitespace-delimited token of a
         header, matching how genome_ids are derived at download time.
     Raises:
-        ValueError: If the index publishes no genome DB FASTA, or publishes one
-            with no sequence headers. An empty genome DB is a broken index, and
-            silently restricting the metadata to it would read as a total loss
-            of every genome on that side.
+        ValueError: If the index publishes no genome DB FASTA, publishes one
+            with no sequence headers, or carries a header with no ID. An empty
+            or malformed genome DB is a broken index, and quietly restricting
+            the metadata to it would read as a loss of every genome on that
+            side — the silent failure this whole comparison exists to prevent.
     """
     subpath = "output/results/virus-genomes-masked.fasta.gz"
     try:
@@ -403,16 +413,27 @@ def genome_db_ids(prefix: str, work_dir: Path) -> set[str]:
             f"Index {prefix} has no {subpath}, which is required to compare"
             " indexes on genome DB membership."
         ) from exc
+    ids, records = set(), 0
     with gzip.open(path, "rt") as f:
-        ids = {
-            line[1:].split(maxsplit=1)[0]
-            for line in f
-            if line.startswith(">") and line[1:].strip()
-        }
+        for line_no, line in enumerate(f, start=1):
+            if not line.startswith(">"):
+                continue
+            tokens = line[1:].split(maxsplit=1)
+            if not tokens:
+                path.unlink()
+                raise ValueError(
+                    f"Header with no sequence ID at line {line_no} of"
+                    f" {prefix}'s genome DB."
+                )
+            ids.add(tokens[0])
+            records += 1
     path.unlink()
     if not ids:
         raise ValueError(f"Index {prefix} publishes a genome DB with no sequences.")
-    logger.info(f"Read {len(ids)} sequence ID(s) from {prefix}'s genome DB.")
+    logger.info(
+        f"Read {len(ids)} sequence ID(s) from {records} record(s) in"
+        f" {prefix}'s genome DB."
+    )
     return ids
 
 
@@ -624,11 +645,14 @@ def write_genome_taxonomy_tables(
     # Compare the indexes on what their genome DBs actually contain, not on what
     # their metadata claims. Both sides are restricted before anything reads
     # them, so every genome, species, and reassignment count below inherits it.
+    # Each genome_db_ids call stages and streams a ~600 MB FASTA.
+    old_db_ids = genome_db_ids(old, work_dir / "old")
+    new_db_ids = genome_db_ids(new, work_dir / "new")
     old_meta, old_extra_rows, old_orphan_ids = restrict_to_genome_db(
-        old_meta, genome_db_ids(old, work_dir / "old"), "old"
+        old_meta, old_db_ids, "old"
     )
     new_meta, new_extra_rows, new_orphan_ids = restrict_to_genome_db(
-        new_meta, genome_db_ids(new, work_dir / "new"), "new"
+        new_meta, new_db_ids, "new"
     )
     try:
         raw_path = fetch(new, raw, work_dir / "new")
