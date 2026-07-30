@@ -1,7 +1,7 @@
 # `mgs-workflow` index benchmark report
 
-- **Target index:** `s3://path/to/new/index` (built with pipeline `X.Y.Z.W`, or "pipeline version unrecorded" where `index_versions.json` is null)
-- **Reference index:** `s3://path/to/old/index` (built with pipeline `X.Y.Z.W`, same fallback)
+- **Target index:** `s3://path/to/new/index` (built with pipeline `X.Y.Z.W`)
+- **Reference index:** `s3://path/to/old/index` (built with pipeline `X.Y.Z.W`)
 - **Report timestamp:** YYYY-MM-DD HH:MM
 
 ---
@@ -92,8 +92,7 @@ Gains or losses of viral species assigned to each host category, ignoring hard i
 
 - Concise bullet list of other changes to the index of relevance to the benchmark
 - Where any of the four metadata / genome-DB agreement counts is non-zero, state
-  all four with both pipeline versions, and say whether each is expected for that
-  index's vintage or a regression (see Step 2a)
+  all four with both pipeline versions, and say whether each is expected (see Step 2a)
 - Link out to tables in appendix where appropriate
 
 ---

@@ -156,10 +156,6 @@ def read_pipeline_version(
     RUN output's `logging/pyproject.toml`, where the version lives). Network/parse
     errors degrade to None rather than aborting the comparison.
 
-    Both layouts must keep working: `benchmark_index.py` also calls this, passing
-    an index's `<root>/output`, so narrowing this to DOWNSTREAM-only paths would
-    quietly turn that script's `index_versions.json` into two nulls.
-
     Args:
         root: Output root holding a `logging*/` directory (s3:// URI or local
             path). DOWNSTREAM writes one directly; an index nests it under

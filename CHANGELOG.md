@@ -1,6 +1,7 @@
 # v3.2.3.0-dev
 
 - Require Nextflow `>=26.04.6` (from `25.10.4`), the first of a stacked series upgrading the pipeline to Nextflow 26. Set `aws.client.socketTimeout` to `3600000` (NF 26.04 rejects the previous `0`), bump the `nft-fastq`/`nft-bam` nf-test plugins for compatibility with nf-test `0.9.5`, pin nf-test to `0.9.5` in CI, and drop the now-moot `26.04.x` `.nextflowignore` deferral entries. Replace the `as List<String>` cast in `WRITE_SENTINEL_RUN` with a raw `as List`, which the NF 26.04 compiler requires (parameterized-type casts now fail at runtime).
+- Compare indexes in `bin/benchmark_index.py` after restricting to genomes published in final FASTA and report each index's build-time pipeline version.
 - Sort accessions before chunking them in `FILTER_VIRAL_GENBANK_METADATA`.
 - Deduplicate the viral genome FASTA by sequence ID rather than by full header in `CONCATENATE_GENOME_FASTA`, so records sharing an ID but differing in their description no longer both survive.
 - Compare indexes on genome DB membership rather than metadata membership in `bin/benchmark_index.py`: each side's `virus-genome-metadata-gid.tsv.gz` is restricted to the sequences in its own `virus-genomes-masked.fasta.gz` before any delta is computed, and the two directions of metadata/FASTA disagreement are reported per side in `genomes_summary.json`. Also records each index's build-time pipeline version in a new `index_versions.json`. Developer/agent tooling only: reads existing index outputs and adds no new pipeline outputs, behavior, or schema changes.

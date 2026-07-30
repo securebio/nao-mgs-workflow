@@ -37,14 +37,6 @@ If any is missing, ask the user; do not guess. These map to the script's `--new`
 `--old`, and `--out` (Step 1). Coverage annotations are derived from `new_index`
 itself, so no repo checkout is needed.
 
-Both indexes must publish `output/results/virus-genomes-masked.fasta.gz`, which
-the script reads to compare the two genome DBs by membership; `new_index` must
-additionally publish `virus-genome-metadata-raw.tsv.gz` and
-`input/host-infection-overrides.json`. An index whose objects have been
-transitioned to Glacier cannot be staged at all and so cannot be used on either
-side — the resulting `Could not stage ...` abort is that, not a script defect.
-Restoring the objects, or picking a still-warm reference index, is the fix.
-
 ## Procedure
 
 ### Step 1 - Run the script
@@ -56,12 +48,10 @@ python bin/benchmark_index.py \
   --out <output-dir>
 ```
 
-Use **absolute** paths for `--out` (e.g. `/tmp/bench-...`). Takes a couple of
-minutes, most of it spent staging each index's genome DB FASTA — the largest
-file in an index, and read twice per side: once for its content metrics and
-once for its sequence IDs. If `<outdir>` already contains benchmark outputs,
-reuse them only if the user asked you to avoid rerunning; otherwise rerun so
-the reference freshness checks are current.
+Use **absolute** paths for `--out` (e.g. `/tmp/bench-...`). Takes about two
+minutes. If `<outdir>` already contains benchmark outputs, reuse them only if
+the user asked you to avoid rerunning; otherwise rerun so the reference
+freshness checks are current.
 
 ### Step 2 - Read summaries and TSVs
 
@@ -75,9 +65,7 @@ Read the compact script-produced summaries before interpreting detail rows:
   Step 2a. If `lost_total` or `gained_total` is zero, §3.2 / §3.3 collapse to
   "No genome IDs lost/gained".
 - `index_versions.json`: the pipeline version each index was built with
-  (`pipeline_version_old`, `pipeline_version_new`), read from the index's own
-  published `pyproject.toml`, or from the bare `pipeline-version.txt` older
-  indexes published instead. `null` means the index records neither.
+  (`pipeline_version_old`, `pipeline_version_new`).
 - `infection_status_summary.json`: per-host species promotion/demotion counts,
   uncovered counts, and override scope-gap counts.
 - `params_changes.tsv`: compact top-level params changes (`key`, `kind`, `old`,
@@ -111,39 +99,20 @@ as the table.
 
 An index's published metadata and its published genome DB FASTA should describe
 the same set of genomes. Four counts in `genomes_summary.json` measure whether
-they do, per side. The script restricts each index's metadata to the sequences
-it ships before comparing, so a non-zero `metadata_rows_not_in_fasta_*` does not
-distort the §3 deltas at all — but it is a fact about that index that belongs in
-the report. A non-zero `fasta_ids_without_metadata_*` is different: it does
-affect the deltas, for the IDs it counts. See the glossary below.
+they do, per side:
 
-- `metadata_rows_not_in_fasta_old` — expected to be non-zero for any index built
+- `metadata_rows_not_in_fasta_old` / `_new` — expected to be non-zero for any index built
   with pipeline version **3.2.2.0 or earlier** (check `index_versions.json`),
-  which published metadata that was never reconciled to the genome DB; roughly a
-  thousand rows on the last such index. Historical and benign: note it in §5 as
-  the reason the old index's own metadata overstates its genome DB, and move on.
-  Sanity-check the scale first, against that index's total metadata rows in
-  `sizes.tsv` (the `rows` metric for `virus-genome-metadata-gid.tsv.gz`). A few
-  percent is vintage drift; a large share is not. The script only rejects an ID
-  mismatch when the metadata and the FASTA are *entirely* disjoint, so a partial
-  namespace or accession-format change lands here looking like ordinary drift —
-  treat an implausibly large count as that, not as vintage.
-- `metadata_rows_not_in_fasta_new` — a finding. Either the candidate was also
-  built with **3.2.2.0 or earlier**, or reconciliation has regressed. Say which,
-  using `pipeline_version_new`. The candidate's published metadata describes
-  genomes it does not ship, so anything reading that file as the genome set —
-  including this script, before it restricts to DB membership — is wrong about
-  the candidate.
-- `fasta_ids_without_metadata_old` / `_new` — a defect on either side, whatever
-  the vintage, and the more serious direction: RUN resolves `genome_id` to taxid
+  which published metadata that was never reconciled to the genome DB. This case is
+  historical and benign if it's a few percentage points relative to the total metadata rows in `sizes.tsv`: note it in §5 and move on. For indexes built with later versions or for large changes,
+  this is a significant finding. Raise it in §5 and carry it into §Recommendations.
+- `fasta_ids_without_metadata_old` / `_new` — a defect on either side for any pipeline version,
+  and the more serious direction: RUN resolves `genome_id` to taxid
   through the metadata, so a sequence with no row is a reference RUN cannot
   attribute. Raise it in §5 and carry it into §Recommendations.
 
 Report all four in §5 whenever any is non-zero, with the two pipeline versions
-alongside so a reader can tell "expected for its vintage" from "regression".
-The counts are measured from the index itself and are authoritative; the version
-only sets the expectation. A `-dev` version is mid-cycle and settles nothing on
-its own, so judge those indexes on the counts alone.
+alongside so a reader can tell "expected for its pipeline version" from "regression".
 
 ### Step 3 - Build §4 groupings
 
@@ -201,22 +170,6 @@ These are the labels the script writes into `genomes_lost_categorized.tsv`,
 `genomes_gained_categorized.tsv`, and `genomes_summary.json` reason-count
 objects. The template uses them as the §3.1 row labels.
 
-"Lost" and "gained" throughout mean membership of the set of genomes an index
-both ships *and* describes — its metadata restricted to the sequences present
-in its own genome DB FASTA — not membership of the metadata alone. A genome an
-index's metadata described but never shipped is therefore neither lost nor
-gained when it disappears from the metadata, and one that enters the DB is a
-gain even if both indexes' metadata always listed it.
-
-"Ships and describes" and plain genome DB membership coincide unless an index
-ships a sequence with no metadata row, which `fasta_ids_without_metadata_*`
-counts. Such a sequence carries no
-taxid or assembly for the categorizer to work from, so it cannot appear in
-either table: if the old index described it and the new one does not, it is
-reported lost even though the new index still ships it. When that count is
-non-zero on either side, say so in §5 and treat the loss and gain figures as
-unreliable for those specific IDs.
-
 **Lost gid categories** (priority order; each gid gets the first applicable
 bucket). The categorizer recovers each lost genome's build-time taxid and
 `assembly_status` by joining its `assembly_accession` into the target index's
@@ -229,7 +182,7 @@ reasons are checked before taxonomy/policy reasons, so the policy buckets mean
 - `hard_excluded`: build-time leaf taxid or an ancestor is in `viral_taxids_exclude_hard` in the new build.
 - `reassigned_to_excluded`: build-time leaf taxid differs from the old leaf taxid and the new leaf/species rollup is no longer surveilled.
 - `infection_status_demotion`: build-time leaf taxid equals the old leaf taxid and the leaf/species rollup is no longer surveilled.
-- `other`: present, current, surveilled, yet absent from the new genome DB — so the sequence was removed after its metadata row was written, which no bucket names. Sequence-header pattern exclusion (`ref/hv_patterns_exclude.txt`) is the mechanism today. Should be near zero; if not, investigate sequence-level filtering in `MAKE_VIRUS_GENOME_DB`.
+- `other`: present, current, surveilled, yet absent from the new gid set. Should be near zero; if not, investigate downstream sequence-level filtering in `MAKE_VIRUS_GENOME_DB`.
 
 **Gained gid categories** (priority order). Keyed on the genome's assigned leaf
 taxon, using the assembly's `release_date` and `source_database` from the raw
