@@ -111,10 +111,11 @@ as the table.
 
 An index's published metadata and its published genome DB FASTA should describe
 the same set of genomes. Four counts in `genomes_summary.json` measure whether
-they do, per side. The script compares the two indexes on genome DB membership,
-not on metadata membership, so the genome deltas in §3 are already correct
-whatever these counts say — but they are a fact about each index that belongs in
-the report.
+they do, per side. The script restricts each index's metadata to the sequences
+it ships before comparing, so a non-zero `metadata_rows_not_in_fasta_*` does not
+distort the §3 deltas at all — but it is a fact about that index that belongs in
+the report. A non-zero `fasta_ids_without_metadata_*` is different: it does
+affect the deltas, for the IDs it counts. See the glossary below.
 
 - `metadata_rows_not_in_fasta_old` — expected to be non-zero for any index built
   with pipeline version **3.2.2.0 or earlier** (check `index_versions.json`),
@@ -207,8 +208,9 @@ index's metadata described but never shipped is therefore neither lost nor
 gained when it disappears from the metadata, and one that enters the DB is a
 gain even if both indexes' metadata always listed it.
 
-The two definitions coincide unless an index ships a sequence with no metadata
-row, which `fasta_ids_without_metadata_*` counts. Such a sequence carries no
+"Ships and describes" and plain genome DB membership coincide unless an index
+ships a sequence with no metadata row, which `fasta_ids_without_metadata_*`
+counts. Such a sequence carries no
 taxid or assembly for the categorizer to work from, so it cannot appear in
 either table: if the old index described it and the new one does not, it is
 reported lost even though the new index still ships it. When that count is
