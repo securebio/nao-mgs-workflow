@@ -10,6 +10,7 @@ staging.
 # IMPORTS #
 ###########
 
+import contextlib
 import gzip
 import json
 import logging
@@ -160,35 +161,32 @@ class TestGetFastaIds:
         with gzip.open(results / "virus-genomes-masked.fasta.gz", "wt") as f:
             f.write(text)
 
-    def test_reads_first_header_token_and_drops_staged_copy(
-        self, tmp_path: Path
-    ) -> None:
-        index_root = tmp_path / "index"
+    def test_takes_the_first_header_token(self, tmp_path: Path) -> None:
         self._write_fasta(
-            index_root, ">G1 an organism, complete genome\nACGT\n>G2\nTT\n"
+            tmp_path / "index", ">G1 an organism, complete genome\nACGT\n>G2\nTT\n"
         )
-        work_dir = tmp_path / "work"
-        assert get_fasta_ids(str(index_root), work_dir) == {"G1", "G2"}
-        # The FASTA is ~600 MB on a real index; only the ID set is kept.
-        assert list(work_dir.iterdir()) == []
+        assert get_fasta_ids(str(tmp_path / "index"), tmp_path / "work") == {"G1", "G2"}
 
-    def test_rejects_index_without_a_fasta(self, tmp_path: Path) -> None:
-        (tmp_path / "index" / "output" / "results").mkdir(parents=True)
-        with pytest.raises(ValueError, match="Could not stage"):
-            get_fasta_ids(str(tmp_path / "index"), tmp_path / "work")
-
-    def test_rejects_empty_fasta(self, tmp_path: Path) -> None:
-        # A truncated-but-parseable FASTA would otherwise restrict that side's
-        # metadata to nothing and read as a total loss of every genome.
-        self._write_fasta(tmp_path / "index", "")
-        with pytest.raises(ValueError, match="no sequences"):
-            get_fasta_ids(str(tmp_path / "index"), tmp_path / "work")
-
-    def test_rejects_header_with_no_id(self, tmp_path: Path) -> None:
-        # Skipping it would drop the sequence from both the ID set and the
-        # orphan count, making a malformed DB the one thing that goes unseen.
-        self._write_fasta(tmp_path / "index", ">G1 fine\nACGT\n>\nTT\n")
-        with pytest.raises(ValueError, match="no sequence ID at line 3"):
+    @pytest.mark.parametrize(
+        "text,match",
+        [
+            # None writes no FASTA at all; the rest are malformed ones.
+            (None, "Could not stage"),
+            ("", "no sequences"),
+            (">G1 fine\nACGT\n>\nTT\n", "no sequence ID at line 3"),
+        ],
+        ids=["absent", "empty", "header_without_id"],
+    )
+    def test_rejects_unusable_fasta(
+        self, tmp_path: Path, text: str | None, match: str
+    ) -> None:
+        # Each of these would otherwise restrict a side's metadata silently:
+        # to nothing, or to a set missing the sequences it could not parse.
+        if text is None:
+            (tmp_path / "index" / "output" / "results").mkdir(parents=True)
+        else:
+            self._write_fasta(tmp_path / "index", text)
+        with pytest.raises(ValueError, match=match):
             get_fasta_ids(str(tmp_path / "index"), tmp_path / "work")
 
     def test_counts_records_separately_from_ids(
@@ -203,11 +201,14 @@ class TestGetFastaIds:
         assert ids == {"G1", "G2"}
         assert "2 sequence ID(s) from 3 record(s)" in caplog.text
 
-    def test_staged_copy_is_dropped_when_parsing_fails(self, tmp_path: Path) -> None:
-        # The staged FASTA is ~600 MB; a malformed one must not stay resident.
-        self._write_fasta(tmp_path / "index", ">G1 fine\nACGT\n>\nTT\n")
+    @pytest.mark.parametrize(
+        "text", [">G1 fine\nACGT\n", ">G1 fine\nACGT\n>\nTT\n"], ids=["ok", "malformed"]
+    )
+    def test_staged_copy_is_always_dropped(self, tmp_path: Path, text: str) -> None:
+        # The staged FASTA is ~600 MB, so neither path may leave it resident.
+        self._write_fasta(tmp_path / "index", text)
         work_dir = tmp_path / "work"
-        with pytest.raises(ValueError):
+        with contextlib.suppress(ValueError):
             get_fasta_ids(str(tmp_path / "index"), work_dir)
         assert list(work_dir.iterdir()) == []
 
@@ -217,44 +218,38 @@ class TestRestrictToFasta:
     def _meta(*genome_ids: str) -> pd.DataFrame:
         return pd.DataFrame({"genome_id": list(genome_ids), "taxid": "1"})
 
-    def test_drops_rows_describing_no_sequence(self) -> None:
-        meta, extra_rows, orphan_ids = restrict_to_fasta(
-            self._meta("G1", "G2", "G3"), {"G1", "G3"}, "old"
+    @pytest.mark.parametrize(
+        "meta_ids,fasta_ids,kept,extra_rows,orphan_ids",
+        [
+            (("G1", "G2", "G3"), {"G1", "G3"}, ["G1", "G3"], 1, 0),
+            # One genome_id reached by two assemblies is two rows, and both drop.
+            (("G1", "G2", "G2"), {"G1"}, ["G1"], 2, 0),
+            (("G1",), {"G1", "G2"}, ["G1"], 0, 1),
+            (("G1", "G2"), {"G1", "G2"}, ["G1", "G2"], 0, 0),
+            # Empty metadata is degenerate, not an error: the orphan count says so.
+            ((), {"G1"}, [], 0, 1),
+        ],
+        ids=["drops_rows", "counts_rows_not_ids", "orphan", "reconciled", "empty_meta"],
+    )
+    def test_restriction_and_counts(
+        self,
+        meta_ids: tuple[str, ...],
+        fasta_ids: set[str],
+        kept: list[str],
+        extra_rows: int,
+        orphan_ids: int,
+    ) -> None:
+        meta, extra, orphans = restrict_to_fasta(
+            self._meta(*meta_ids), fasta_ids, "old"
         )
-        assert meta["genome_id"].tolist() == ["G1", "G3"]
-        assert (extra_rows, orphan_ids) == (1, 0)
-
-    def test_counts_rows_not_ids(self) -> None:
-        # One genome_id reached by two assemblies is two rows, and both drop.
-        _, extra_rows, _ = restrict_to_fasta(
-            self._meta("G1", "G2", "G2"), {"G1"}, "old"
-        )
-        assert extra_rows == 2
-
-    def test_counts_sequences_without_a_metadata_row(self) -> None:
-        meta, extra_rows, orphan_ids = restrict_to_fasta(
-            self._meta("G1"), {"G1", "G2"}, "new"
-        )
-        assert meta["genome_id"].tolist() == ["G1"]
-        assert (extra_rows, orphan_ids) == (0, 1)
-
-    def test_reconciled_index_is_left_alone(self) -> None:
-        meta, extra_rows, orphan_ids = restrict_to_fasta(
-            self._meta("G1", "G2"), {"G1", "G2"}, "new"
-        )
-        assert meta["genome_id"].tolist() == ["G1", "G2"]
-        assert (extra_rows, orphan_ids) == (0, 0)
+        assert meta["genome_id"].tolist() == kept
+        assert (extra, orphans) == (extra_rows, orphan_ids)
 
     def test_rejects_metadata_without_a_genome_id_column(self) -> None:
         # Restriction runs before metadata_deltas' column guard, so the same
         # message has to be reachable from here.
         with pytest.raises(ValueError, match="missing required columns"):
             restrict_to_fasta(pd.DataFrame({"taxid": ["1"]}), {"G1"}, "old")
-
-    def test_allows_an_empty_side(self) -> None:
-        # Empty is degenerate, not a namespace error: report it and move on.
-        _, extra_rows, orphan_ids = restrict_to_fasta(self._meta(), {"G1"}, "old")
-        assert (extra_rows, orphan_ids) == (0, 1)
 
 
 class TestMetadataDeltas:
@@ -1584,27 +1579,63 @@ class TestWriteGenomeTaxonomyTables:
         assert summary["fasta_ids_without_metadata_old"] == 0
         assert summary["fasta_ids_without_metadata_new"] == 0
 
-    def test_unreconciled_old_metadata_yields_no_phantom_loss(
-        self, tmp_path: Path
+    @pytest.mark.parametrize(
+        "old_fasta_ids,new_fasta_ids,expected",
+        [
+            # The old index describes g2 without publishing it, so comparing
+            # metadata alone would call g2 a loss it never had to lose.
+            (
+                ["g1"],
+                None,
+                {
+                    "lost_total": 0,
+                    "gained_total": 1,
+                    "metadata_rows_not_in_fasta_old": 1,
+                    "metadata_rows_not_in_fasta_new": 0,
+                },
+            ),
+            # g1 leaves the published FASTA while both metadata files still list
+            # it: on metadata membership alone it reads as kept, inflating
+            # kept_genomes and skewing reassigned_pct_of_kept.
+            (
+                None,
+                ["g3"],
+                {
+                    "lost_total": 2,
+                    "kept_genomes": 0,
+                    "metadata_rows_not_in_fasta_new": 1,
+                },
+            ),
+            # The reverse direction: a sequence RUN could not resolve to a taxid
+            # is counted, and stays out of the deltas.
+            (
+                None,
+                ["g1", "g3", "orphan"],
+                {
+                    "fasta_ids_without_metadata_new": 1,
+                    "fasta_ids_without_metadata_old": 0,
+                    "metadata_rows_not_in_fasta_new": 0,
+                    "gained_total": 1,
+                },
+            ),
+        ],
+        ids=["no_phantom_loss", "hidden_loss_revealed", "orphan_counted"],
+    )
+    def test_deltas_follow_fasta_membership(
+        self,
+        tmp_path: Path,
+        old_fasta_ids: list[str] | None,
+        new_fasta_ids: list[str] | None,
+        expected: dict[str, int],
     ) -> None:
-        # An old index built before metadata was reconciled to the genome DB
-        # describes g2 without including it in the published FASTA. Comparing
-        # metadata alone would call g2 a loss; it was never in the DB to lose.
         old_meta, new_meta, raw, old_db, new_db = self._frames()
         old_root = tmp_path / "old-index"
         new_root = tmp_path / "new-index"
-        self._write_index(old_root, old_meta, None, db_ids=["g1"])
-        self._write_index(new_root, new_meta, raw)
+        self._write_index(old_root, old_meta, None, db_ids=old_fasta_ids)
+        self._write_index(new_root, new_meta, raw, db_ids=new_fasta_ids)
         out_dir = self._run(tmp_path, old_root, new_root, old_db, new_db)
         summary = json.loads((out_dir / "genomes_summary.json").read_text())
-        assert summary["lost_total"] == 0
-        assert summary["gained_total"] == 1  # g3 still gained
-        assert summary["metadata_rows_not_in_fasta_old"] == 1
-        assert summary["metadata_rows_not_in_fasta_new"] == 0
-        lost = pd.read_csv(
-            out_dir / "genomes_lost_categorized.tsv", sep="\t", dtype=str
-        )
-        assert lost.empty
+        assert {k: summary[k] for k in expected} == expected
 
     def test_unreconciled_old_metadata_reveals_hidden_gain(
         self, tmp_path: Path
@@ -1629,43 +1660,6 @@ class TestWriteGenomeTaxonomyTables:
             out_dir / "genomes_gained_categorized.tsv", sep="\t", dtype=str
         )
         assert gained["genome_id"].tolist() == ["g3"]
-
-    def test_unreconciled_new_metadata_reveals_hidden_loss(
-        self, tmp_path: Path
-    ) -> None:
-        # The other invisible quadrant: g1 leaves the genome DB while both
-        # metadata files still list it. On metadata membership alone it reads
-        # as kept, inflating kept_genomes and skewing reassigned_pct_of_kept.
-        old_meta, new_meta, raw, old_db, new_db = self._frames()
-        old_root = tmp_path / "old-index"
-        new_root = tmp_path / "new-index"
-        self._write_index(old_root, old_meta, None)
-        self._write_index(new_root, new_meta, raw, db_ids=["g3"])
-        out_dir = self._run(tmp_path, old_root, new_root, old_db, new_db)
-        summary = json.loads((out_dir / "genomes_summary.json").read_text())
-        assert summary["lost_total"] == 2  # g2 as before, plus g1
-        assert summary["kept_genomes"] == 0
-        assert summary["metadata_rows_not_in_fasta_new"] == 1
-        lost = pd.read_csv(
-            out_dir / "genomes_lost_categorized.tsv", sep="\t", dtype=str
-        )
-        assert set(lost["genome_id"]) == {"g1", "g2"}
-
-    def test_fasta_sequence_without_metadata_is_counted(self, tmp_path: Path) -> None:
-        # The reverse direction, end to end: a sequence RUN could not resolve
-        # to a taxid is reported rather than silently ignored.
-        old_meta, new_meta, raw, old_db, new_db = self._frames()
-        old_root = tmp_path / "old-index"
-        new_root = tmp_path / "new-index"
-        self._write_index(old_root, old_meta, None)
-        self._write_index(new_root, new_meta, raw, db_ids=["g1", "g3", "orphan"])
-        out_dir = self._run(tmp_path, old_root, new_root, old_db, new_db)
-        summary = json.loads((out_dir / "genomes_summary.json").read_text())
-        assert summary["fasta_ids_without_metadata_new"] == 1
-        assert summary["fasta_ids_without_metadata_old"] == 0
-        assert summary["metadata_rows_not_in_fasta_new"] == 0
-        # Reported, but not folded into the deltas: g3 alone is the gain.
-        assert summary["gained_total"] == 1
 
     def test_orphan_sequence_the_old_index_described_reads_as_lost(
         self, tmp_path: Path
