@@ -68,8 +68,6 @@ class TestReadFastaGenomeIds:
     def test_rejects_malformed_fasta(
         self, tmp_path: Path, text: str, match: str
     ) -> None:
-        # A bare '>' would otherwise raise a bare IndexError, undiagnosable from
-        # the Nextflow error report.
         fasta = tmp_path / "genomes.fasta"
         fasta.write_text(text)
         with pytest.raises(ValueError, match=match):
