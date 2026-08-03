@@ -80,8 +80,6 @@ class TestFilterMetadata:
         [
             (["AB1.1"], ["AB1.1", "AB2.1", "AB3.1"], (1, 2), ["AB1.1"]),
             (["AB1.1", "AB2.1"], ["AB1.1", "AB2.1"], (2, 0), ["AB1.1", "AB2.1"]),
-            # One genome_id can carry several metadata rows (the same sequence
-            # reached the DB under more than one assembly); all are retained.
             (["AB1.1"], ["AB1.1", "AB1.1"], (2, 0), ["AB1.1", "AB1.1"]),
         ],
         ids=["drops_absent", "keeps_all", "keeps_duplicate_rows"],
