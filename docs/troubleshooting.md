@@ -22,7 +22,16 @@ When running the pipeline via Seqera Platform, you may encounter errors like:
 error [io.seqera.wave.plugin.exception.BadResponseException]: Wave invalid response: POST https://wave.seqera.io/v1alpha2/container [400] {"message":"Container image 'public.ecr.aws/q0n1c7g8/nao-mgs-workflow/python:cb756b23e8c4f9cd' does not exist or access is not authorized"}
 ```
 
-This occurs because Wave needs AWS ECR registry credentials to pull container images. To fix this, configure AWS ECR credentials in your Seqera account as described in the [installation guide](./installation.md#4-configure-seqera-ecr-credentials).
+Wave resolves the source image's digest on every container request, and reports *any*
+failure of that lookup with this message — a genuinely missing tag, a credentials
+problem, or an upstream registry that throttled Wave. Configure AWS ECR credentials in
+your Seqera account as described in the [installation guide](./installation.md#4-configure-seqera-ecr-credentials);
+besides granting access, this raises the rate limit on Wave's own lookups from 1 to 10
+per second.
+
+If the tag does exist and is publicly pullable, the error was transient. Nextflow does
+not retry a Wave `400`, so a single throttled lookup aborts the run. See
+[Wave containers and pull rate limits](./wave.md) for the full analysis.
 
 ## Resource constraint errors
 
@@ -39,9 +48,12 @@ Jobs may sometimes fail due to using up [too many API requests to get the contai
 Task failed to start - CannotPullImageManifestError: Error response from daemon: toomanyrequests: Request exceeded pull rate limit for IP XX.XXX.XX.XX
 ```
 
-To fix this, create a Seqera account and configure your access token as described in the [installation guide](./installation.md#3-create-seqera-account). This increases your API rate limit by 4x.
+To fix this, create a Seqera account and configure your access token as described in the [installation guide](./installation.md#3-create-seqera-account). Authenticating raises the limit from 100 pulls/hour to 2,000 pulls/minute.
 
-If you still keep running into this issue, you may consider contacting Seqera for more options.
+The same error appears as `... for user <your-seqera-email>` once you are authenticated,
+because the quota is per Seqera user and is shared across all your concurrent runs. See
+[Wave containers and pull rate limits](./wave.md) for why we consume so much of it and
+what to change.
 
 ## Automatic reference file caching
 - With the `standard`/`batch` profiles, the pipeline implements automatic caching of large reference files in the `/scratch/` directory 

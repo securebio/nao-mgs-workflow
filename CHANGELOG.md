@@ -1,5 +1,6 @@
 # v3.2.3.0-dev
 
+- Add `docs/wave.md`, documenting why Wave sits on the critical path of every container pull, where the rate limits are, and what to change to stop hitting them. Corrects the `400 does not exist or access is not authorized` and `toomanyrequests` entries in `docs/troubleshooting.md`, which attributed both to missing ECR credentials. Documentation only; no pipeline change.
 - Require Nextflow `>=26.04.6` (from `25.10.4`), the first of a stacked series upgrading the pipeline to Nextflow 26. Set `aws.client.socketTimeout` to `3600000` (NF 26.04 rejects the previous `0`), bump the `nft-fastq`/`nft-bam` nf-test plugins for compatibility with nf-test `0.9.5`, pin nf-test to `0.9.5` in CI, and drop the now-moot `26.04.x` `.nextflowignore` deferral entries. Replace the `as List<String>` cast in `WRITE_SENTINEL_RUN` with a raw `as List`, which the NF 26.04 compiler requires (parameterized-type casts now fail at runtime).
 - Sort accessions before chunking them in `FILTER_VIRAL_GENBANK_METADATA`.
 - Deduplicate the viral genome FASTA by sequence ID rather than by full header in `CONCATENATE_GENOME_FASTA`, so records sharing an ID but differing in their description no longer both survive.

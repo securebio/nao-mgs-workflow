@@ -12,6 +12,7 @@
 - **Configuration and output:**
     - [Configuration files](./config.md)
     - [Pipeline outputs](./output.md)
+    - [Wave containers and pull rate limits](./wave.md)
 - **Other:**
     - [Versioning](./versioning.md)
     - [Developer docs](./developer.md)
