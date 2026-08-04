@@ -13,15 +13,13 @@ nextflow_workflow {
         tag "duplicate_input"
         when {
             params {
-                n_clusters = 3
+                n_sample = 3
                 taxid_artificial = 81077
             }
             workflow {
                 '''
                 def validation_params = [
-                    validation_cluster_identity: params.validation_cluster_identity,
-                    cluster_min_len: 15,
-                    validation_n_clusters: params.n_clusters,
+                    validation_n_sample: params.n_sample,
                     blast_perc_id: params.blast_perc_id,
                     blast_qcov_hsp_perc: params.blast_qcov_hsp_perc,
                     blast_max_rank: params.blast_max_rank,
@@ -39,7 +37,6 @@ nextflow_workflow {
             }
         }
         then {
-            // Should run without failures
             assert workflow.failed
             assert workflow.exitStatus == 1
             assert workflow.errorReport.contains("ValueError: Duplicate value found in field seq_id")
@@ -50,15 +47,13 @@ nextflow_workflow {
         tag "expect_success"
         when {
             params {
-                n_clusters = 3
+                n_sample = 3
                 taxid_artificial = 81077
             }
             workflow {
                 '''
                 def validation_params = [
-                    validation_cluster_identity: params.validation_cluster_identity,
-                    cluster_min_len: 15,
-                    validation_n_clusters: params.n_clusters,
+                    validation_n_sample: params.n_sample,
                     blast_perc_id: params.blast_perc_id,
                     blast_qcov_hsp_perc: params.blast_qcov_hsp_perc,
                     blast_max_rank: params.blast_max_rank,
@@ -76,58 +71,42 @@ nextflow_workflow {
             }
         }
         then {
-            // Should run without failures
             assert workflow.success
-            // Clustering should preserve reads (test_split_tsv and test_cluster_tab are now list-wrapped)
-            def tabs_split = workflow.out.test_split_tsv.collect{it[1]}.flatten().collect{path(it).csv(sep: "\t",decompress: true)}
-            def tabs_clust = workflow.out.test_cluster_tab.collect{it[1]}.flatten().collect{path(it).csv(sep: "\t",decompress: true)}
-            assert tabs_split.size() == tabs_clust.size()
-            for (int i = 0; i < tabs_split.size(); i++) {
-                assert tabs_split[i].rowCount == tabs_clust[i].rowCount
+            def tabs_in = workflow.out.test_in.collect{path(it[1]).csv(sep: "\t")}
+            // Partitioning then reassembling should preserve the read set exactly
+            def tabs_split = workflow.out.test_split_tsv.collect{it[1]}.flatten().collect{path(it).csv(sep: "\t", decompress: true)}
+            def tabs_concat = workflow.out.test_concat_hits.collect{path(it[1]).csv(sep: "\t", decompress: true)}
+            assert tabs_concat.size() == tabs_in.size()
+            for (int i = 0; i < tabs_concat.size(); i++) {
+                assert tabs_concat[i].rowCount == tabs_in[i].rowCount
+                assert tabs_concat[i].columns["seq_id"].toSorted() == tabs_in[i].columns["seq_id"].toSorted()
             }
-            // Concatenation should work correctly (test_reps_fasta is list-wrapped, test_concat_fasta is glob)
-            def cluster_fasta = workflow.out.test_reps_fasta.collect{it[1]}.flatten().collect{path(it).fasta}
+            // Sampling should cap each species partition at validation_n_sample reads,
+            // and should be a subset of that partition
+            def sampled = workflow.out.test_sampled_tsv.collect{it[1]}.flatten().collect{path(it).csv(sep: "\t", decompress: true)}
+            assert sampled.size() == tabs_split.size()
+            for (int i = 0; i < sampled.size(); i++) {
+                assert sampled[i].rowCount <= params.n_sample
+                assert sampled[i].rowCount == Math.min(params.n_sample, tabs_split[i].rowCount)
+                assert tabs_split[i].columns["seq_id"].containsAll(sampled[i].columns["seq_id"])
+            }
+            // Concatenation across species should preserve every sampled sequence
+            def sampled_fasta = workflow.out.test_sampled_fasta.collect{it[1]}.flatten().collect{path(it).fasta}
             def concat_fasta = workflow.out.test_concat_fasta.collect{path(it[1]).fasta}
-            // Reconstruct group_species labels from filenames (e.g., "gs1_10239_vsearch_reps.fasta.gz")
-            def cluster_labels = workflow.out.test_reps_fasta.collect{sample, files ->
-                files.collect{file ->
-                    def filepath = file.toString()
-                    def basename = filepath.tokenize('/')[-1]
-                    def species = (basename =~ /${sample}_(\d+)_/)[0][1]
-                    "${sample}_${species}"
-                }
-            }.flatten()
-            def groups_from_species = cluster_labels.collect { label ->
-                def pattern = /^(.*?)_(\d+)$/
-                def matcher = (label =~ pattern)
-                return matcher[0][1]  // Extract group part
-            }.unique()
-            // Concatenated data should have exactly one file per unique group
-            assert concat_fasta.size() == groups_from_species.size()
             def concat_labels = workflow.out.test_concat_fasta.collect{it[0]}
-            assert concat_labels.toSet() == groups_from_species.toSet()
-            // For each group, verify all species sequences are concatenated
-            groups_from_species.each { group ->
-                // Find all species files for this group
-                def species_files = cluster_fasta.withIndex().findAll { fasta, idx ->
-                    cluster_labels[idx].startsWith("${group}_")
-                }.collect { it[0] }
-                
-                // Find concatenated file for this group
-                def concat_file = concat_fasta[concat_labels.indexOf(group)]
-                
-                // Total sequences should match
-                def species_seq_count = species_files.sum { it.keySet().size() }
-                def concat_seq_count = concat_file.keySet().size()
-                assert species_seq_count == concat_seq_count
+            assert concat_fasta.size() == tabs_in.size()
+            assert sampled_fasta.sum{ it.keySet().size() } == concat_fasta.sum{ it.keySet().size() }
+            // The sampled-ID list should name exactly the reads that were sampled
+            def sampled_ids = workflow.out.test_sampled_ids.collect{path(it[1]).csv(sep: "\t", decompress: true)}
+            for (int i = 0; i < sampled_ids.size(); i++) {
+                assert sampled_ids[i].columnNames == ["seq_id"]
             }
             // Basic BLAST invocation should work as expected
-            def blast_db = workflow.out.test_blast_db.collect{path(it[1]).csv(sep: "\t",decompress: true)}
+            def blast_db = workflow.out.test_blast_db.collect{path(it[1]).csv(sep: "\t", decompress: true)}
             def blast_query = workflow.out.test_blast_query.collect{path(it[1]).fasta}
-            def blast_lca = workflow.out.test_blast_lca.collect{path(it[1]).csv(sep: "\t",decompress: true)}
+            def blast_lca = workflow.out.test_blast_lca.collect{path(it[1]).csv(sep: "\t", decompress: true)}
             assert blast_query == concat_fasta
             assert blast_db.size() == blast_query.size()
-            // BLAST now runs on concatenated data, so we have 1 job per group instead of 1 per group/species
             for (int i=0; i < blast_db.size(); i++) {
                 if (blast_db[i].rowCount == 0) {
                     continue
@@ -139,35 +118,98 @@ nextflow_workflow {
                 // LCA output should have one row per sequence in BLAST output
                 assert blast_lca[i].rowCount == blast_db[i].columns["qseqid"].toSet().size()
             }
-            // Taxid validation should work as expected
+            // Taxid validation should cover exactly the reads BLAST returned hits for
             def tabs_validate = workflow.out.test_validate.collect{path(it[1]).csv(sep: "\t", decompress: true)}
             assert tabs_validate.size() == blast_lca.size()
             for (int i=0; i < tabs_validate.size(); i++) {
                 if (tabs_validate[i].rowCount > 0) {
-                    assert tabs_validate[i].columns["vsearch_cluster_rep_id"].unique().toSorted() == blast_lca[i].columns["qseqid"].unique().toSorted()
+                    assert tabs_validate[i].columns["seq_id"].unique().toSorted() == blast_lca[i].columns["qseqid"].unique().toSorted()
                 }
             }
-            // Propagation should work as expected (now working on group-level data)
-            def tabs_propagate = workflow.out.test_propagate.collect{path(it[1]).csv(sep: "\t", decompress: true)}
-            def tabs_in = workflow.out.test_in.collect{path(it[1]).csv(sep: "\t")}
-            def concat_cluster = workflow.out.test_concat_cluster.collect{path(it[1]).csv(sep: "\t", decompress: true)}
-            assert tabs_propagate.size() == tabs_validate.size()
-            for (int i=0; i < tabs_propagate.size(); i++) {
-                assert tabs_propagate[i].rowCount == tabs_in[i].rowCount
-                assert tabs_propagate[i].columns["seq_id"].toSorted() == tabs_in[i].columns["seq_id"].toSorted()
-                if (tabs_validate[i].rowCount > 0) {
-                    def col_exp = tabs_in[i].columnNames.toSet() + tabs_validate[i].columnNames.toSet() + concat_cluster[i].columnNames.toSet()
-                    def ncol_exp = col_exp.size()
-                    assert tabs_propagate[i].columnCount == ncol_exp
+            // Annotation should preserve the read set and label every read exactly once
+            def tabs_annotate = workflow.out.test_annotate.collect{path(it[1]).csv(sep: "\t", decompress: true)}
+            assert tabs_annotate.size() == tabs_in.size()
+            for (int i=0; i < tabs_annotate.size(); i++) {
+                assert tabs_annotate[i].rowCount == tabs_in[i].rowCount
+                assert tabs_annotate[i].columns["seq_id"].toSorted() == tabs_in[i].columns["seq_id"].toSorted()
+                // Statuses must be drawn from the documented vocabulary
+                def statuses = tabs_annotate[i].columns["validation_status"].toSet()
+                assert statuses.every{ it in ["aligned", "no_alignment", "not_sampled"] }
+                // A read may only be "aligned" if it was actually sampled
+                def sampled_here = sampled_ids[i].columns["seq_id"].toSet()
+                def rows = tabs_annotate[i]
+                def ids = rows.columns["seq_id"]
+                def sts = rows.columns["validation_status"]
+                for (int j = 0; j < ids.size(); j++) {
+                    if (sts[j] != "not_sampled") {
+                        assert sampled_here.contains(ids[j])
+                    } else {
+                        assert !sampled_here.contains(ids[j])
+                    }
+                }
+                // Validation columns must be missing for every read that was not
+                // aligned (the csv plugin reads NA back as null in typed columns)
+                for (int j = 0; j < ids.size(); j++) {
+                    if (sts[j] != "aligned") {
+                        def v = rows.columns["validation_staxid_lca"][j]
+                        assert v == null || v.toString() == "NA"
+                    }
                 }
             }
-            // Regrouping should work as expected
-            def tabs_regrouped = workflow.out.annotated_hits.collect{path(it[1]).csv(sep: "\t",decompress: true)}
+            // Final output should preserve the read set and drop the internal taxid column
+            def tabs_regrouped = workflow.out.annotated_hits.collect{path(it[1]).csv(sep: "\t", decompress: true)}
             assert tabs_regrouped.size() == tabs_in.size()
             for (int i=0; i < tabs_regrouped.size(); i++) {
                 assert tabs_regrouped[i].rowCount == tabs_in[i].rowCount
                 assert tabs_regrouped[i].columns["seq_id"].unique().toSorted() == tabs_in[i].columns["seq_id"].unique().toSorted()
+                assert !tabs_regrouped[i].columnNames.contains("taxid_species")
+                assert tabs_regrouped[i].columnNames.contains("selected_taxid")
+                assert tabs_regrouped[i].columnNames.contains("validation_status")
+                // No cluster machinery should survive in the output
+                assert tabs_regrouped[i].columnNames.every{ !it.startsWith("vsearch_") }
+                assert !tabs_regrouped[i].columnNames.contains("group_species")
             }
+        }
+    }
+
+    test("Should select the same reads on a repeat run") {
+        tag "expect_success"
+        tag "reproducibility"
+        when {
+            params {
+                n_sample = 3
+                taxid_artificial = 81077
+            }
+            workflow {
+                '''
+                def validation_params = [
+                    validation_n_sample: params.n_sample,
+                    blast_perc_id: params.blast_perc_id,
+                    blast_qcov_hsp_perc: params.blast_qcov_hsp_perc,
+                    blast_max_rank: params.blast_max_rank,
+                    blast_min_frac: params.blast_min_frac,
+                    taxid_artificial: params.taxid_artificial,
+                    db_download_timeout: params.db_download_timeout,
+                    platform: params.platform
+                ]
+                input[0] = Channel.of("test")
+                    | combine(Channel.of("${projectDir}/test-data/validateViralAssignments/input_valid.tsv")) // groups
+                input[1] = Channel.of("${params.ref_dir}/results/total-virus-db-annotated.tsv.gz") // db
+                input[2] = params.ref_dir
+                input[3] = validation_params
+                '''
+            }
+        }
+        then {
+            assert workflow.success
+            // Hash-based selection is a pure function of seq_id, so the sampled read set
+            // is stable across runs. Snapshot it to catch any accidental reintroduction
+            // of run-dependent (e.g. RNG- or order-dependent) selection.
+            assert snapshot(
+                workflow.out.test_sampled_ids.collect{ label, f ->
+                    [label, path(f).csv(sep: "\t", decompress: true).columns["seq_id"].toSorted()]
+                }
+            ).match("sampled_ids")
         }
     }
 
@@ -176,15 +218,13 @@ nextflow_workflow {
         tag "empty_input"
         when {
             params {
-                n_clusters = 3
+                n_sample = 3
                 taxid_artificial = 81077
             }
             workflow {
                 '''
                 def validation_params = [
-                    validation_cluster_identity: params.validation_cluster_identity,
-                    cluster_min_len: 15,
-                    validation_n_clusters: params.n_clusters,
+                    validation_n_sample: params.n_sample,
                     blast_perc_id: params.blast_perc_id,
                     blast_qcov_hsp_perc: params.blast_qcov_hsp_perc,
                     blast_max_rank: params.blast_max_rank,
@@ -202,7 +242,6 @@ nextflow_workflow {
             }
         }
         then {
-            // Should run without failures
             assert workflow.success
             // Should produce one empty validation_hits file for the group
             assert workflow.out.annotated_hits.size() == 1

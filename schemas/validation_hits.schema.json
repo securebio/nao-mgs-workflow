@@ -1,7 +1,7 @@
 {
   "$schema": "https://datapackage.org/profiles/2.0/tableschema.json",
   "title": "Validated Viral Hits",
-  "description": "Per-read viral hit assignments with post-hoc BLAST validation results, as produced by the DOWNSTREAM workflow. Each row represents a single putative viral read. The `aligner_*` columns are inherited from the RUN workflow, where reads are aligned by Bowtie2 (short-read) or Minimap2 (ONT) and then processed into per-read summary statistics; LCA and score statistics are calculated post-hoc across all alignments for each read. Reference sequences are partitioned into three subsets: natural (non-artificial NCBI sequences, unsuffixed columns), artificial (descendants of NCBI taxid 81077, i.e. synthetic constructs and vectors, `_artificial` suffix), and combined (both natural and artificial, `_combined` suffix). The `prim_align_*` columns contain data extracted from the primary alignment record (not secondary or supplementary) in the aligner SAM output. Reads are clustered by species using VSEARCH, cluster representatives are BLASTed against the NCBI core_nt database, and validation results are propagated back to all reads in each cluster. Produced for both short-read and ONT platforms; paired-end-specific columns (not marked `required`) contain NA values for ONT and appear at the end of the ONT output rather than in schema order.",
+  "description": "Per-read viral hit assignments with post-hoc BLAST validation results, as produced by the DOWNSTREAM workflow. Each row represents a single putative viral read. The `aligner_*` columns are inherited from the RUN workflow, where reads are aligned by Bowtie2 (short-read) or Minimap2 (ONT) and then processed into per-read summary statistics; LCA and score statistics are calculated post-hoc across all alignments for each read. Reference sequences are partitioned into three subsets: natural (non-artificial NCBI sequences, unsuffixed columns), artificial (descendants of NCBI taxid 81077, i.e. synthetic constructs and vectors, `_artificial` suffix), and combined (both natural and artificial, `_combined` suffix). The `prim_align_*` columns contain data extracted from the primary alignment record (not secondary or supplementary) in the aligner SAM output. For validation, reads are grouped by `selected_taxid`, downsampled to at most `params.validation_n_sample` reads per group, and the retained reads are BLASTed against the NCBI core_nt database; the `validation_*` columns therefore describe each read's own alignments and are NA for reads that were not sampled or produced no alignment, as recorded in `validation_status`. Produced for both short-read and ONT platforms; paired-end-specific columns (not marked `required`) contain NA values for ONT and appear at the end of the ONT output rather than in schema order.",
   "fieldsMatch": "equal",
   "missingValues": ["NA"],
   "primaryKey": ["group", "seq_id"],
@@ -334,103 +334,15 @@
       "example": "NC_059681.1_0_0"
     },
     {
-      "name": "vsearch_cluster_id",
-      "title": "VSEARCH Cluster ID",
-      "description": "Numeric identifier for the VSEARCH cluster this read was assigned to during validation clustering.",
-      "type": "integer",
-      "constraints": {
-        "required": true,
-        "minimum": 0
-      },
-      "example": 4
-    },
-    {
-      "name": "vsearch_cluster_rep_id",
-      "title": "VSEARCH Cluster Representative ID",
-      "description": "Read ID of the cluster representative for this read's cluster. Validation results from this representative are propagated to all reads in the cluster.",
-      "type": "string",
-      "constraints": {
-        "required": true,
-        "minLength": 1
-      },
-      "example": "NC_059681.1_0_0"
-    },
-    {
-      "name": "vsearch_seq_length",
-      "title": "VSEARCH Sequence Length",
-      "description": "Length of the sequence used for VSEARCH clustering. May differ from query_len if the sequence was trimmed.",
-      "type": "integer",
-      "constraints": {
-        "required": true,
-        "minimum": 0
-      },
-      "example": 297
-    },
-    {
-      "name": "vsearch_is_cluster_rep",
-      "title": "Is Cluster Representative",
-      "description": "Whether this read is the representative of its VSEARCH cluster.",
-      "type": "boolean",
-      "constraints": {
-        "required": true
-      },
-      "example": true
-    },
-    {
-      "name": "vsearch_percent_identity",
-      "title": "VSEARCH Percent Identity",
-      "description": "Percent identity between this read's sequence and the cluster representative's sequence. 100.0 for the cluster representative itself.",
-      "type": "number",
-      "constraints": {
-        "required": true,
-        "minimum": 0,
-        "maximum": 100
-      },
-      "example": 100.0
-    },
-    {
-      "name": "vsearch_orientation",
-      "title": "VSEARCH Alignment Orientation",
-      "description": "Orientation of the alignment to the cluster representative. '+' for same strand, '-' for reverse complement.",
-      "type": "string",
-      "constraints": {
-        "required": true,
-        "enum": ["+", "-"]
-      },
-      "example": "+"
-    },
-    {
-      "name": "vsearch_cigar",
-      "title": "VSEARCH CIGAR String",
-      "description": "CIGAR string describing the alignment of this read to the cluster representative.",
-      "type": "string",
-      "constraints": {
-        "required": true,
-        "minLength": 1
-      },
-      "example": "297M"
-    },
-    {
-      "name": "vsearch_cluster_size",
-      "title": "VSEARCH Cluster Size",
-      "description": "Number of sequences in this VSEARCH cluster.",
+      "name": "selected_taxid",
+      "title": "Selected Taxon ID",
+      "description": "Taxon ID used to group reads for validation: the species-level ancestor of the aligner LCA assignment where one exists, otherwise the aligner LCA taxon ID itself. Reads are downsampled independently within each selected taxid, so this is the stratum the read's validation sample was drawn from.",
       "type": "integer",
       "constraints": {
         "required": true,
         "minimum": 1
       },
-      "example": 1
-    },
-    {
-      "name": "group_species",
-      "title": "Group-Species Identifier",
-      "description": "Composite identifier combining group and species-level taxon ID, used internally for partitioning sequences during validation (format: group_taxid).",
-      "type": "string",
-      "constraints": {
-        "required": true,
-        "minLength": 1
-      },
-      "example": "group_1_12475"
+      "example": 12475
     },
     {
       "name": "validation_staxid_lca_combined",
@@ -666,7 +578,7 @@
     {
       "name": "validation_distance_aligner",
       "title": "Validation Distance (Aligner)",
-      "description": "Taxonomic distance (number of parent-child steps) from the original aligner LCA taxon ID to the LCA of both the aligner and validation assignments. NA when the cluster representative was not selected for BLAST validation, or when no natural hits were retained after filtering.",
+      "description": "Taxonomic distance (number of parent-child steps) from the original aligner LCA taxon ID to the LCA of both the aligner and validation assignments. NA unless `validation_status` is `aligned` and natural hits were retained after filtering.",
       "type": "integer",
       "constraints": {
         "minimum": 0
@@ -676,12 +588,23 @@
     {
       "name": "validation_distance_validation",
       "title": "Validation Distance (Validation)",
-      "description": "Taxonomic distance (number of parent-child steps) from the validation LCA taxon ID to the LCA of both the aligner and validation assignments. NA when the cluster representative was not selected for BLAST validation, or when no natural hits were retained after filtering.",
+      "description": "Taxonomic distance (number of parent-child steps) from the validation LCA taxon ID to the LCA of both the aligner and validation assignments. NA unless `validation_status` is `aligned` and natural hits were retained after filtering.",
       "type": "integer",
       "constraints": {
         "minimum": 0
       },
       "example": 0
+    },
+    {
+      "name": "validation_status",
+      "title": "Validation Status",
+      "description": "Whether this read was validated on its own evidence. `aligned`: the read was selected for validation and BLAST returned at least one hit passing the score filters, so the `validation_*` columns describe this read's own alignments. `no_alignment`: the read was selected for validation but no hit survived filtering, so the `validation_*` columns are NA. `not_sampled`: the read was not selected for validation, so the `validation_*` columns are NA. Validation results are never propagated between reads.",
+      "type": "string",
+      "constraints": {
+        "required": true,
+        "enum": ["aligned", "no_alignment", "not_sampled"]
+      },
+      "example": "aligned"
     }
   ]
 }

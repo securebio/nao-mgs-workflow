@@ -1,0 +1,101 @@
+nextflow_process {
+
+    name "Test process ANNOTATE_VALIDATION_STATUS"
+    script "modules/local/annotateValidationStatus/main.nf"
+    process "ANNOTATE_VALIDATION_STATUS"
+    config "tests/configs/downstream.config"
+    tag "module"
+    tag "annotate_validation_status"
+
+    test("Should annotate every hit with its own validation status") {
+        tag "expect_success"
+        when {
+            process {
+                '''
+                input[0] = ["test",
+                    "${projectDir}/test-data/annotateValidationStatus/hits.tsv.gz",
+                    "${projectDir}/test-data/annotateValidationStatus/validation.tsv.gz",
+                    "${projectDir}/test-data/annotateValidationStatus/sampled.tsv.gz"
+                ]
+                input[1] = "seq_id"
+                input[2] = "validation_status"
+                '''
+            }
+        }
+        then {
+            assert process.success
+            assert process.out.output[0][0] == "test"
+            def tab_out = path(process.out.output[0][1]).csv(sep: "\t", decompress: true)
+            def tab_hits = path(process.out.input[0][1]).csv(sep: "\t", decompress: true)
+            def tab_val = path(process.out.input[0][2]).csv(sep: "\t", decompress: true)
+            // Every hit survives exactly once, in input order
+            assert tab_out.rowCount == tab_hits.rowCount
+            assert tab_out.columns["seq_id"] == tab_hits.columns["seq_id"]
+            // Columns are hits columns, then validation columns, then the status column
+            def val_cols = tab_val.columnNames - ["seq_id"]
+            assert tab_out.columnNames == tab_hits.columnNames + val_cols + ["validation_status"]
+            // Test data has 2 aligned, 1 sampled-without-alignment, 3 unsampled reads
+            def statuses = [:]
+            tab_out.columns["validation_status"].each{ statuses[it] = (statuses[it] ?: 0) + 1 }
+            assert statuses == ["aligned": 2, "no_alignment": 1, "not_sampled": 3]
+            // Validation values appear only on the reads they were measured from
+            def by_id = [:]
+            def ids = tab_out.columns["seq_id"]
+            def lca = tab_out.columns["validation_staxid_lca"]
+            def sts = tab_out.columns["validation_status"]
+            for (int i = 0; i < ids.size(); i++) {
+                by_id[ids[i]] = [lca[i], sts[i]]
+            }
+            // The csv plugin types this column, so NA is read back as null
+            assert by_id["read_0"] == [11676, "aligned"]
+            assert by_id["read_1"] == [10239, "aligned"]
+            assert by_id["read_2"] == [null, "no_alignment"]
+            assert by_id["read_5"] == [null, "not_sampled"]
+        }
+    }
+
+    test("Should fail when an alignment exists for a read that was not sampled") {
+        tag "expect_failed"
+        when {
+            process {
+                '''
+                input[0] = ["test",
+                    "${projectDir}/test-data/annotateValidationStatus/hits.tsv.gz",
+                    "${projectDir}/test-data/annotateValidationStatus/validation.tsv.gz",
+                    "${projectDir}/test-data/annotateValidationStatus/sampled_incomplete.tsv.gz"
+                ]
+                input[1] = "seq_id"
+                input[2] = "validation_status"
+                '''
+            }
+        }
+        then {
+            // read_0 has an alignment but is absent from the sampled list, which means
+            // the sampled read set and the alignment results have diverged.
+            assert process.failed
+            assert process.errorReport.contains("absent from the")
+        }
+    }
+
+    test("Should fail when the join key is absent from the hits table") {
+        tag "expect_failed"
+        when {
+            process {
+                '''
+                input[0] = ["test",
+                    "${projectDir}/test-data/annotateValidationStatus/hits.tsv.gz",
+                    "${projectDir}/test-data/annotateValidationStatus/validation.tsv.gz",
+                    "${projectDir}/test-data/annotateValidationStatus/sampled.tsv.gz"
+                ]
+                input[1] = "nonexistent_column"
+                input[2] = "validation_status"
+                '''
+            }
+        }
+        then {
+            assert process.failed
+            assert process.errorReport.contains("not found in header")
+        }
+    }
+
+}

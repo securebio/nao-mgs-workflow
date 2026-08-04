@@ -179,12 +179,33 @@ style H fill:#000,color:#fff,stroke:#000
 This subworkflow uses BLAST to validate the taxonomic assignments given to putative viral reads by the RUN workflow. Specifically, it:
 
 - Takes in annotated hits TSVs from `MARK_VIRAL_DUPLICATES`
-- Splits the data by the assigned taxid at the species level if the LCA assignment is at or below that level; otherwise, splits by the raw LCA taxid. This result is the taxid group.
-- Clusters reads within each taxid group using VSEARCH to identify cluster representatives
-- Aligns cluster representatives against the NCBI core_nt database with BLAST
+- Splits the data by the assigned taxid at the species level if the LCA assignment is at or below that level; otherwise, splits by the raw LCA taxid. This result is the taxid group, recorded in the output as `selected_taxid`.
+- Downsamples each taxid group to at most `params.validation_n_sample` reads
+- Aligns the retained reads against the NCBI core_nt database with BLAST
 - Filters BLAST hits by bitscore and calculates the [lowest common ancestor (LCA)](https://en.wikipedia.org/wiki/Lowest_common_ancestor) of remaining hits
 - Calculates the taxonomic distance between each BLAST LCA assignment and the corresponding raw assignment from the RUN workflow
-- Propagates this information back from cluster representatives to other sequences in each cluster.
+- Annotates every hit with its own validation result and a `validation_status` column.
+
+Downsampling per taxid group keeps rare taxa thoroughly validated (a group smaller than `validation_n_sample` is validated in its entirety) while capping the cost of abundant ones. Because the cap applies within each group rather than across the whole sample, a sample dominated by one abundant virus does not crowd out validation of everything else.
+
+> [!IMPORTANT]
+> **Validation results are never extrapolated between reads.** Each read's `validation_*` columns describe that read's own BLAST alignments, or are NA. The `validation_status` column records which case applies:
+>
+> | `validation_status` | Meaning |
+> | --- | --- |
+> | `aligned` | The read was selected for validation and BLAST returned at least one hit passing the score filters. The `validation_*` columns describe this read's own alignments. |
+> | `no_alignment` | The read was selected for validation, but no hit survived filtering. The `validation_*` columns are NA. |
+> | `not_sampled` | The read was not selected for validation. The `validation_*` columns are NA. |
+>
+> This replaces the earlier approach of clustering reads with VSEARCH, BLASTing one representative per cluster, and propagating that representative's verdict to the rest of its cluster. That propagation could assign a verdict to a read whose own sequence was never aligned, and clusters formed at 95% identity were not always homogeneous enough for the verdict to transfer safely. Reads that are not validated are now labelled as such rather than being given an inferred result.
+
+### Which reads get sampled
+
+Selection is a **bottom-N hash sample**: each read's `seq_id` is hashed, and the reads with the N smallest hashes in each taxid group are retained. This is a uniform random sample of the group, but because the hash is a pure function of `seq_id` it has three useful properties:
+
+- **Reproducible.** Re-running the workflow on the same input selects the same reads, so validation results are stable across runs and under `-resume`.
+- **Order-independent.** The sample does not depend on the order in which upstream processes emitted rows.
+- **Nested.** Raising `validation_n_sample` only adds reads to the sample; it never swaps out reads that were previously selected.
 
 This is a complex analysis with a number of steps, which have been grouped into component subworkflows for comprehensibility. See the [appendix](./downstream.md#appendix-detailed-breakdown-of-post-hoc-validation-subworkflows) for more detailed information on each component.
 
@@ -197,30 +218,32 @@ config:
 flowchart LR
 C("Viral taxonomy DB") --> B[SPLIT_VIRAL_TSV_BY_SELECTED_TAXID]
 A("Annotated hits TSVs <br> (MARK_VIRAL_DUPLICATES)") --> B
-B --> D[CLUSTER_VIRAL_ASSIGNMENTS]
+B --> D[SAMPLE_VIRAL_ASSIGNMENTS]
+B --> F[CONCAT_PARTITIONED_HITS]
 D --> E[CONCATENATE_FILES_BY_EXTENSION]
-D --> F[CONCATENATE_TSVS_LABELED]
+D --> S[CONCAT_SAMPLED_HITS]
 E --> G[BLAST_FASTA]
-G --> H[VALIDATE_CLUSTER_REPRESENTATIVES]
+G --> H[VALIDATE_SAMPLED_READS]
 A --> H
-F --> I[PROPAGATE_VALIDATION_INFORMATION]
+F --> I[ANNOTATE_VALIDATION_STATUS]
+S --> I
 H --> I
-A --> I
 I --> J(Validation hits TSV)
 G --> K(BLAST results TSV)
-subgraph "Partition and cluster by selected taxid"
+subgraph "Partition and downsample by selected taxid"
 B
 D
 end
 subgraph "Concatenate by sample group"
 E
 F
+S
 end
-subgraph "BLAST validation of cluster representatives"
+subgraph "BLAST validation of sampled reads"
 G
 H
 end
-subgraph "Propagate results from representatives to all hits"
+subgraph "Annotate all hits with their own status"
 I
 end
 style A fill:#fff,stroke:#000
@@ -285,9 +308,8 @@ To run the `DOWNSTREAM` workflow, you need:
     - The base directory in which to put the working and output directories (`params.base_dir`);
     - The reference directory containing databases and indices (`params.ref_dir`);
     - The permitted deviation when identifying alignment duplicates (`params.aln_dup_deviation`); **Note: Only used for short-read platforms**
-    - Parameters for sequence clustering during validation (different for short-read and long-read):
-        - `params.validation_cluster_identity`: Minimum sequence identity for cluster formation (default 0.95 for short-read, 1 for long-read)
-        - `params.validation_n_clusters`: Maximum clusters per selected taxid to validate (default 20 for short-read, 1000000 for long-read[^max_clusters])
+    - Parameter for downsampling during validation:
+        - `params.validation_n_sample`: Maximum reads per selected taxid to validate (default 1000 for short-read, 1000000 for long-read[^max_sample])
     - Parameters for BLAST validation:
         - INDEX always publishes the BLAST database to `results/blast_db/`; the originally downloaded database is recorded via the index's `params.blast_db_name`
         - `params.blast_perc_id`: Percentage identity threshold for BLAST hits (default 60 for short-read, 0 for long-read)
@@ -296,7 +318,7 @@ To run the `DOWNSTREAM` workflow, you need:
         - `params.blast_min_frac`: Minimum fraction of best bitscore to retain hits (default 0.9)
         - `params.taxid_artificial`: Parent taxid for artificial sequences (default 81077)
 
-[^max_clusters]: For ONT data, we don't need to limit the number of clusters to validate, as the total number of viral reads is typically much smaller than for short-read data.
+[^max_sample]: For ONT data, we don't need to limit the number of reads to validate, as the total number of viral reads is typically much smaller than for short-read data. The effectively-unlimited default therefore validates every read.
 
 > [!NOTE]
 > Currently, the input file and grouping TSV must be generated manually. We intend to implement programmatic generation of these files in the future.
@@ -305,7 +327,7 @@ To run the `DOWNSTREAM` workflow, you need:
 > We recommend starting each pipeline run in a clean launch directory, containing only your input file and config file.
 
 > [!TIP]
-> For ONT data, use `configs/downstream_ont.config` as your starting template, which includes parameters for clustering and BLAST validation more appropriate for ONT data.
+> For ONT data, use `configs/downstream_ont.config` as your starting template, which includes downsampling and BLAST validation parameters more appropriate for ONT data.
 
 
 Given these input files, you must choose a run profile as described [here](./usage.md#2-choosing-a-profile). You can then run the pipeline as follows:
@@ -344,43 +366,41 @@ D --> E
 E --> F[Partition joined TSV by taxid group]
 F --> G[Flatten channel]
 G --> H(Partitioned hits TSVs)
-G --> I[Extract read sequences from each hits TSV into interleaved FASTQ]
-I --> J(Partitioned FASTQ)
 style A fill:#fff,stroke:#000
 style C fill:#fff,stroke:#000
 style H fill:#000,color:#fff,stroke:#000
-style J fill:#000,color:#fff,stroke:#000
 ```
 
-#### Cluster hits within taxid group and obtain representative sequences (`CLUSTER_VIRAL_ASSIGNMENTS`)
+> [!NOTE]
+> This subworkflow no longer extracts read sequences into FASTQ. Extraction happens in `SAMPLE_VIRAL_ASSIGNMENTS`, after downsampling, so only the reads actually being validated are ever converted.
 
-This subworkflow takes in partitioned FASTQ sequences from `SPLIT_VIRAL_TSV_BY_SELECTED_TAXID`, clusters them using [VSEARCH](https://github.com/torognes/vsearch), and returns representative sequences from the largest clusters, along with a TSV mapping each hit to its corresponding cluster representative. By clustering sequences within each taxid group, the subworkflow reduces the computational cost of validation by selecting only representative sequences rather than validating every individual hit.
+#### Downsample hits within each taxid group (`SAMPLE_VIRAL_ASSIGNMENTS`)
+
+This subworkflow takes the partitioned hits TSVs from `SPLIT_VIRAL_TSV_BY_SELECTED_TAXID` and reduces each taxid group to at most `params.validation_n_sample` reads, then renders the retained reads as FASTA ready for BLAST. Reads are selected by hashing `seq_id` and keeping the smallest N hashes, which is a uniform random sample of the group that is also reproducible and order-independent (see [above](#which-reads-get-sampled)).
+
+Sampling happens before FASTQ extraction and pair merging, so those steps only ever process reads that are actually going to be validated. This is what removes the workflow's worst scaling behaviour: the previous VSEARCH clustering step had to compare all reads within a taxid group against each other, so a single sample dominated by one abundant virus could occupy a task for days.
 
 ```mermaid
 ---
-title: CLUSTER_VIRAL_ASSIGNMENTS
+title: SAMPLE_VIRAL_ASSIGNMENTS
 config:
   layout: horizontal
 ---
 flowchart LR
-A("Partitioned FASTQ <br> (SPLIT_VIRAL_TSV_BY_SELECTED_TAXID)") --> B[MERGE_JOIN_READS]
-B --> C[VSEARCH_CLUSTER]
-C --> D[PROCESS_VSEARCH_CLUSTER_OUTPUT]
-D --> E[DOWNSAMPLE_FASTN_BY_ID]
-E --> F[CONVERT_FASTQ_FASTA]
-F --> G(FASTA of representative sequences)
-E --> H(FASTQ of representative sequences)
-D --> I(Clustering information TSV)
-subgraph "Merge paired reads"
+A("Partitioned hits TSVs <br> (SPLIT_VIRAL_TSV_BY_SELECTED_TAXID)") --> B[SAMPLE_TSV_BY_HASH_LIST]
+B --> C[EXTRACT_VIRAL_HITS_TO_FASTQ_NOREF]
+C --> D[MERGE_JOIN_READS]
+D --> E[CONVERT_FASTQ_FASTA]
+B --> H(Sampled hits TSVs)
+C --> I(FASTQ of sampled reads)
+E --> G(FASTA of sampled reads)
+subgraph "Downsample"
 B
 end
-subgraph "Cluster sequences with VSEARCH"
+subgraph "Render for alignment"
 C
 D
-end
-subgraph "Extract representatives"
 E
-F
 end
 style A fill:#fff,stroke:#000
 style G fill:#000,color:#fff,stroke:#000
@@ -390,7 +410,7 @@ style I fill:#000,color:#fff,stroke:#000
 
 #### Perform BLAST validation (`BLAST_FASTA`)
 
-This subworkflow takes concatenated representative sequences from `CLUSTER_VIRAL_ASSIGNMENTS` (concatenated by sample group using `CONCATENATE_FILES_BY_EXTENSION`) and validates them against the NCBI core_nt database using BLAST. The subworkflow then filters BLAST results to retain only high-quality alignments: specifically, it filters to only the best alignment for each query/subject combination, then filters these to only include those whose bitscore is:
+This subworkflow takes the concatenated sampled sequences from `SAMPLE_VIRAL_ASSIGNMENTS` (concatenated by sample group using `CONCATENATE_FILES_BY_EXTENSION`) and validates them against the NCBI core_nt database using BLAST. The subworkflow then filters BLAST results to retain only high-quality alignments: specifically, it filters to only the best alignment for each query/subject combination, then filters these to only include those whose bitscore is:
 
 1. In the top-N alignments by bitscore for that query (for some N);
 2. At least P% of the bitscore of the best alignment for that query (for some P).
@@ -404,7 +424,7 @@ config:
   layout: horizontal
 ---
 flowchart LR
-A("Representative FASTA <br> (CLUSTER_VIRAL_ASSIGNMENTS)") --> B[BLASTN]
+A("Sampled-read FASTA <br> (SAMPLE_VIRAL_ASSIGNMENTS)") --> B[BLASTN]
 B --> C[Sort by query, subject, bitscore]
 C --> D[Filter to best hit per query/subject]
 D --> E[Sort by query, bitscore]
@@ -426,13 +446,13 @@ style H fill:#000,color:#fff,stroke:#000
 style I fill:#000,color:#fff,stroke:#000
 ```
 
-#### Compare original and BLAST assignments (`VALIDATE_CLUSTER_REPRESENTATIVES`)
+#### Compare original and BLAST assignments (`VALIDATE_SAMPLED_READS`)
 
-This subworkflow takes the original viral hits from `MARK_VIRAL_DUPLICATES` and the LCA results from `BLAST_FASTA`; computes an inner-join on sequence ID to restrict the result to cluster representatives; then compares the initial taxonomic assignments with the LCA assignments from BLAST. The subworkflow computes the taxonomic distance between the original assignment and the BLAST-derived LCA by counting the steps from each taxid assignment to their lowest common ancestor, providing a quantitative measure of assignment accuracy.
+This subworkflow takes the original viral hits from `MARK_VIRAL_DUPLICATES` and the LCA results from `BLAST_FASTA`; computes an inner join on sequence ID to restrict the result to those sampled reads that produced at least one surviving alignment; then compares the initial taxonomic assignments with the LCA assignments from BLAST. The subworkflow computes the taxonomic distance between the original assignment and the BLAST-derived LCA by counting the steps from each taxid assignment to their lowest common ancestor, providing a quantitative measure of assignment accuracy.
 
 ```mermaid
 ---
-title: VALIDATE_CLUSTER_REPRESENTATIVES
+title: VALIDATE_SAMPLED_READS
 config:
   layout: horizontal
 ---
@@ -442,8 +462,7 @@ C("LCA assignments TSV <br> (BLAST_FASTA)") --> D[Rename qseqid to seq_id]
 B --> E[Inner join by seq_id]
 D --> E
 E --> F[Compute taxonomic distance]
-F --> G[Rename seq_id to vsearch_cluster_rep_id]
-G --> H(Validation results TSV)
+F --> H(Validation results TSV)
 subgraph "Prepare for joining"
 B
 D
@@ -451,45 +470,35 @@ end
 subgraph "Compare assignments"
 E
 F
-G
 end
 style A fill:#fff,stroke:#000
 style C fill:#fff,stroke:#000
 style H fill:#000,color:#fff,stroke:#000
 ```
 
-#### Propagate validation to individual hits (`PROPAGATE_VALIDATION_INFORMATION`)
+#### Annotate all hits with their validation status (`ANNOTATE_VALIDATION_STATUS`)
 
-This subworkflow takes three inputs: the original hits TSV, the clustering information TSV from `CLUSTER_VIRAL_ASSIGNMENTS` (concatenated by sample group), and the validation results from `VALIDATE_CLUSTER_REPRESENTATIVES`. Through a series of left-joins, it combines information from all of these into a single output TSV. The result is a TSV for which each hit is annotated with (a) its cluster representative status and ID, and (b) validation information for that representative, allowing indirect validation of each hit without BLASTing each of them individually.
+This process takes three inputs: the reassembled partitioned hits TSV (every hit, carrying its `selected_taxid`), the list of reads that were selected for validation, and the validation results from `VALIDATE_SAMPLED_READS`. In a single streaming pass it joins the validation results onto the hits table by `seq_id` and appends a `validation_status` column recording, for each read, whether it was `aligned`, produced `no_alignment`, or was `not_sampled` (see the [status table above](#validate-viral-taxonomic-assignments-validate_viral_assignments)).
+
+Reads that were not aligned receive NA in every `validation_*` column. Nothing is inferred from one read to another, so a populated validation column is always first-hand evidence about the read in whose row it appears. The process fails loudly if the validation results reference a read absent from the sampled-read list, since that would mean the sample and the alignment results had diverged.
+
+Memory use is proportional to the number of *sampled* reads rather than the number of hits, so the full hits table — which can run to millions of rows — is streamed rather than held in memory. The annotated table is then re-sorted by `seq_id` to restore the ordering that partitioning disturbed.
 
 ```mermaid
 ---
-title: PROPAGATE_VALIDATION_INFORMATION
+title: ANNOTATE_VALIDATION_STATUS
 config:
   layout: horizontal
 ---
 flowchart LR
-A("Original hits TSV <br> (MARK_VIRAL_DUPLICATES)") --> B[Sort by seq_id]
-C("Clustering TSV <br> (CLUSTER_VIRAL_ASSIGNMENTS)") --> D[Sort by cluster_rep_id]
-E("Validation TSV <br> (VALIDATE_CLUSTER_REPRESENTATIVES)") --> F[Sort by cluster_rep_id]
-D --> G[Left join validation TSV into clustering TSV]
-F --> G
-G --> H[Sort by seq_id]
-B --> I[Left-join clustering/validation TSV into hits TSV]
-H --> I
-I --> J(Annotated hits TSV)
-subgraph "Join cluster and validation data"
-D
-F
-G
-end
-subgraph "Propagate to individual hits"
-B
-H
-I
-end
+A("Reassembled hits TSV <br> (CONCAT_PARTITIONED_HITS)") --> I[Join by seq_id and assign status]
+B("Sampled read IDs <br> (CONCAT_SAMPLED_HITS)") --> I
+C("Validation TSV <br> (VALIDATE_SAMPLED_READS)") --> I
+I --> D[Sort by seq_id]
+D --> E[Drop internal taxonomy column]
+E --> J(Annotated hits TSV)
 style A fill:#fff,stroke:#000
+style B fill:#fff,stroke:#000
 style C fill:#fff,stroke:#000
-style E fill:#fff,stroke:#000
 style J fill:#000,color:#fff,stroke:#000
 ```

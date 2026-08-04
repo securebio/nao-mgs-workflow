@@ -1,0 +1,76 @@
+nextflow_workflow {
+
+    name "Test workflow SAMPLE_VIRAL_ASSIGNMENTS"
+    script "subworkflows/local/sampleViralAssignments/main.nf"
+    workflow "SAMPLE_VIRAL_ASSIGNMENTS"
+    config "tests/configs/downstream.config"
+    tag "subworkflow"
+    tag "downstream"
+    tag "sample_viral_assignments"
+
+    test("Should downsample interleaved partitions and emit one FASTA per partition") {
+        tag "expect_success"
+        when {
+            params {
+                n_sample = 4
+            }
+            workflow {
+                '''
+                input[0] = Channel.of(["test", [
+                    "${projectDir}/test-data/sampleViralAssignments/partition_10239_hits.tsv.gz",
+                    "${projectDir}/test-data/sampleViralAssignments/partition_186538_hits.tsv.gz"
+                ]])
+                input[1] = params.n_sample
+                input[2] = Channel.of(false)
+                '''
+            }
+        }
+        then {
+            assert workflow.success
+            def sampled = workflow.out.tsv.collectMany{it[1]}.collect{path(it).csv(sep: "\t", decompress: true)}
+            assert sampled.size() == 2
+            // 10-row partition capped at 4; 3-row partition passed through whole
+            assert sampled.collect{it.rowCount}.toSorted() == [3, 4]
+            // Each retained read pair becomes two interleaved FASTQ records...
+            def fastqs = workflow.out.fastq.collectMany{it[1]}.collect{path(it).fastq}
+            assert fastqs.size() == 2
+            for (int i = 0; i < sampled.size(); i++) {
+                assert fastqs[i].sequences.size() == sampled[i].rowCount * 2
+            }
+            // ...and then a single merged/joined FASTA record per pair
+            def fastas = workflow.out.fasta.collectMany{it[1]}.collect{path(it).fasta}
+            assert fastas.size() == 2
+            for (int i = 0; i < sampled.size(); i++) {
+                assert fastas[i].keySet().size() == sampled[i].rowCount
+            }
+        }
+    }
+
+    test("Should handle single-end input without merging") {
+        tag "expect_success"
+        when {
+            params {
+                n_sample = 4
+            }
+            workflow {
+                '''
+                input[0] = Channel.of(["test", [
+                    "${projectDir}/test-data/sampleViralAssignments/partition_10239_hits_single.tsv.gz"
+                ]])
+                input[1] = params.n_sample
+                input[2] = Channel.of(true)
+                '''
+            }
+        }
+        then {
+            assert workflow.success
+            def sampled = workflow.out.tsv.collectMany{it[1]}.collect{path(it).csv(sep: "\t", decompress: true)}
+            def fastas = workflow.out.fasta.collectMany{it[1]}.collect{path(it).fasta}
+            assert sampled[0].rowCount == params.n_sample
+            assert fastas[0].keySet().size() == params.n_sample
+            // No BBMerge summary is produced on the single-end path
+            assert workflow.out.test_bbmerge_summary.size() == 0
+        }
+    }
+
+}

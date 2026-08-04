@@ -2,8 +2,9 @@
 Split a virus hit TSV by assigned taxonomic species, inferred from assigned
 taxid by traversing the viral taxonomy tree.
 
-Returns split hits in TSV and FASTQ formats, each as a flattened channel of
-2-tuples ["group_species", FILE]
+Returns the split hits as a channel of 2-tuples [label, [TSV files]], one file per
+selected taxid. Conversion to FASTQ happens downstream, after downsampling, so that
+only the reads actually being validated are ever extracted.
 */
 
 /***************************
@@ -19,7 +20,6 @@ include { JOIN_TSVS } from "../../../modules/local/joinTsvs"
 include { PARTITION_TSV } from "../../../modules/local/partitionTsv"
 include { SORT_TSV as SORT_GROUP_TAXID } from "../../../modules/local/sortTsv"
 include { SORT_TSV as SORT_JOINED_SPECIES } from "../../../modules/local/sortTsv"
-include { EXTRACT_VIRAL_HITS_TO_FASTQ_NOREF_LABELED_LIST as EXTRACT_FASTQ_LIST } from "../../../modules/local/extractViralHitsToFastqNoref"
 include { ADD_CONDITIONAL_TSV_COLUMN } from "../../../modules/local/addConditionalTsvColumn"
 
 /***********
@@ -66,16 +66,8 @@ workflow SPLIT_VIRAL_TSV_BY_SELECTED_TAXID {
             def filtered = file_list.findAll { f -> !f.name.startsWith("partition_empty_") }
             [sample, filtered]
         }.filter { _sample, files -> files.size() > 0 }
-        // 5. Extract into interleaved FASTQ format
-        fastq_raw_ch = EXTRACT_FASTQ_LIST(part_filtered_ch, false).output
-        // Again, ensure [label, [files]] structure even if there is only one partition
-        fastq_ch = fastq_raw_ch.map { sample, files ->
-            def file_list = files instanceof List ? files : [files]
-            [sample, file_list]
-        }
     emit:
         tsv = part_filtered_ch
-        fastq = fastq_ch
         test_in   = groups
         test_db   = db
         test_sort = sorted_ch
