@@ -207,6 +207,13 @@ Selection is a **bottom-N hash sample**: each read's `seq_id` is hashed, and the
 - **Order-independent.** The sample does not depend on the order in which upstream processes emitted rows.
 - **Nested.** Raising `validation_n_sample` only adds reads to the sample; it never swaps out reads that were previously selected.
 
+> [!IMPORTANT]
+> **Most reads will have `validation_status = not_sampled`, and that is expected.** The short-read default of 20 reads per taxid group is deliberately set to match the number of reads the previous cluster-exemplar approach actually aligned, so validation costs the same as before. What changed is that the reads whose sequences were never aligned are now labelled `not_sampled` instead of inheriting a cluster representative's verdict.
+>
+> The practical consequence: in a large sample group, the fraction of reads carrying a populated `validation_*` value drops sharply (in one 767,964-read production group, from ~81% propagated values to 280 first-hand ones). This is a reporting change, not a loss of validation power — the same ~280 alignments underlay the old 81% too. The question the step is designed to answer, "is each assigned species really present in this group?", is answered by those alignments exactly as well as before.
+>
+> If you need per-read validation coverage rather than per-species evidence, raise `validation_n_sample`. Because sampling is nested, raising it only adds reads, and BLAST's cost against `core_nt` is dominated by traversing the database rather than by the number of queries — so a substantially larger sample is expected to cost little. That trade-off has not yet been benchmarked directly, which is why the default stays at parity.
+
 This is a complex analysis with a number of steps, which have been grouped into component subworkflows for comprehensibility. See the [appendix](./downstream.md#appendix-detailed-breakdown-of-post-hoc-validation-subworkflows) for more detailed information on each component.
 
 ```mermaid
@@ -309,7 +316,7 @@ To run the `DOWNSTREAM` workflow, you need:
     - The reference directory containing databases and indices (`params.ref_dir`);
     - The permitted deviation when identifying alignment duplicates (`params.aln_dup_deviation`); **Note: Only used for short-read platforms**
     - Parameter for downsampling during validation:
-        - `params.validation_n_sample`: Maximum reads per selected taxid to validate (default 1000 for short-read, 1000000 for long-read[^max_sample])
+        - `params.validation_n_sample`: Maximum reads per selected taxid to validate (default 20 for short-read, 1000000 for long-read[^max_sample]). The short-read default matches the number of reads the previous cluster-exemplar approach sent to BLAST, so the alignment cost is unchanged; see the note on coverage [below](#which-reads-get-sampled).
     - Parameters for BLAST validation:
         - INDEX always publishes the BLAST database to `results/blast_db/`; the originally downloaded database is recorded via the index's `params.blast_db_name`
         - `params.blast_perc_id`: Percentage identity threshold for BLAST hits (default 60 for short-read, 0 for long-read)
