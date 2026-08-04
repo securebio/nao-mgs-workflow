@@ -1,5 +1,6 @@
 # v3.2.3.0-dev
 
+- Add a `SAMPLE_TSV_BY_HASH_LIST` module that deterministically downsamples a TSV to at most N rows, selecting rows by hash of a key column. Not yet called by any workflow; it is the first of a stacked series replacing VSEARCH cluster-exemplar selection in DOWNSTREAM's viral validation with downsampling.
 - Require Nextflow `>=26.04.6` (from `25.10.4`), the first of a stacked series upgrading the pipeline to Nextflow 26. Set `aws.client.socketTimeout` to `3600000` (NF 26.04 rejects the previous `0`), bump the `nft-fastq`/`nft-bam` nf-test plugins for compatibility with nf-test `0.9.5`, pin nf-test to `0.9.5` in CI, and drop the now-moot `26.04.x` `.nextflowignore` deferral entries. Replace the `as List<String>` cast in `WRITE_SENTINEL_RUN` with a raw `as List`, which the NF 26.04 compiler requires (parameterized-type casts now fail at runtime).
 - Sort accessions before chunking them in `FILTER_VIRAL_GENBANK_METADATA`.
 - Deduplicate the viral genome FASTA by sequence ID rather than by full header in `CONCATENATE_GENOME_FASTA`, so records sharing an ID but differing in their description no longer both survive.
