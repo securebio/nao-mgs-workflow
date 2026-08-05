@@ -34,24 +34,44 @@ nextflow_workflow {
             assert sampled.size() == 2
             // The cap applies per partition: 10-row partition capped at 4, 3-row passed whole
             assert sampled.collect{it.rowCount}.toSorted() == [3, 4]
-            // Each retained read pair becomes two interleaved FASTQ records...
-            def fastqs = workflow.out.fastq.collectMany{it[1]}.collect{path(it).fastq}
-            assert fastqs.size() == 2
-            assert fastqs.sum{ it.sequences.size() } == sampled.sum{ it.rowCount } * 2
-            // ...and then a single merged/joined FASTA record per pair
-            def fastas = workflow.out.fasta.collectMany{it[1]}.collect{path(it).fasta}
-            assert fastas.size() == 2
-            assert fastas.sum{ it.keySet().size() } == sampled.sum{ it.rowCount }
-            // Retained reads must come from the partition they were drawn from
-            def by_taxid = [:]
+
+            // Every output file carries its partition taxid, and FASTQ/FASTA record names
+            // carry a " 1"/" 2" mate suffix on top of the seq_id
+            def taxidOf = { f -> (f.toString() =~ /_(\d+)_/)[0][1] }
+            def seqIdOf = { name -> name.tokenize(" ")[0] }
+
+            // Track identities per partition, not just totals: comparing only aggregate
+            // counts would survive a read being dropped from one partition and duplicated
+            // in another, or reads being cross-wired between partitions.
+            def sampled_ids = [:]
             workflow.out.tsv[0][1].each { f ->
-                def taxid = (f.toString() =~ /partition_(\d+)_/)[0][1]
-                by_taxid[taxid] = path(f).csv(sep: "\t").columns["seq_id"]
+                sampled_ids[taxidOf(f)] = path(f).csv(sep: "\t").columns["seq_id"].toSet()
             }
-            assert by_taxid.keySet().toSorted() == ["10239", "186538"]
-            by_taxid.each { taxid, ids ->
+            assert sampled_ids.keySet().toSorted() == ["10239", "186538"]
+            // Retained reads must come from the partition they were drawn from
+            sampled_ids.each { taxid, ids ->
                 ids.each { id -> assert id.startsWith("read_${taxid}_") }
             }
+
+            // Each retained read pair becomes exactly two interleaved FASTQ records, and
+            // the FASTQ holds precisely the reads that were sampled for that partition
+            def fastq_ids = [:]
+            workflow.out.fastq[0][1].each { f ->
+                def fq = path(f).fastq
+                fastq_ids[taxidOf(f)] = fq.readNames.collect{ n -> seqIdOf(n) }.toSet()
+                assert fq.sequences.size() == sampled_ids[taxidOf(f)].size() * 2
+            }
+            assert fastq_ids == sampled_ids
+
+            // ...and then exactly one merged/joined FASTA record per sampled pair
+            def fasta_ids = [:]
+            workflow.out.fasta[0][1].each { f ->
+                def fa = path(f).fasta
+                fasta_ids[taxidOf(f)] = fa.keySet().collect{ n -> seqIdOf(n) }.toSet()
+                assert fa.keySet().size() == sampled_ids[taxidOf(f)].size()
+            }
+            assert fasta_ids == sampled_ids
+
             def names = workflow.out.tsv[0][1].collect{ it.toString().tokenize("/")[-1] }
             assert names == names.toSorted()
         }
@@ -116,6 +136,10 @@ nextflow_workflow {
             def fastas = workflow.out.fasta.collectMany{it[1]}.collect{path(it).fasta}
             assert sampled[0].rowCount == params.n_sample
             assert fastas[0].keySet().size() == params.n_sample
+            // The FASTA must hold precisely the sampled reads, not merely the right number
+            def seqIdOf = { name -> name.tokenize(" ")[0] }
+            def sampled_ids = sampled[0].columns["seq_id"].toSet()
+            assert fastas[0].keySet().collect{ n -> seqIdOf(n) }.toSet() == sampled_ids
             // No BBMerge summary is produced on the single-end path
             assert workflow.out.test_bbmerge_summary.size() == 0
         }
