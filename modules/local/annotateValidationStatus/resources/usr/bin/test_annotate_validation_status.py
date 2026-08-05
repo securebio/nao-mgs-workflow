@@ -433,11 +433,17 @@ def test_annotate_accepts_unsampled_reads_in_hits(tmp_path: Path) -> None:
 
 
 def test_annotate_rejects_missing_key_column_in_hits(tmp_path: Path) -> None:
-    """A hits table without the join key is a hard error."""
+    """A hits table without the join key is a hard error.
+
+    The validation and sampled tables keep the key so their readers, which run first,
+    succeed and execution reaches the hits-header check. Matching on the hits filename
+    rather than the shared "not found in header" wording is what pins the test to that
+    check: all three readers emit the same phrase.
+    """
     hits = write_tsv(tmp_path / "hits.tsv", "other\tsample", ["x\ts1"])
     validation = write_tsv(tmp_path / "v.tsv", VAL_HEADER, [])
     sampled = write_tsv(tmp_path / "s.tsv", "seq_id", [])
-    with pytest.raises(ValueError, match="not found in header"):
+    with pytest.raises(ValueError, match=r"not found in header of .*hits\.tsv"):
         annotate_validation_status(
             str(hits),
             str(validation),
