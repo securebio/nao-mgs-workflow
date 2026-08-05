@@ -52,12 +52,44 @@ nextflow_workflow {
             by_taxid.each { taxid, ids ->
                 ids.each { id -> assert id.startsWith("read_${taxid}_") }
             }
-            // The grouped list is emitted in filename order. Note this is an assertion
-            // about output shape, not proof that the subworkflow's sort is load-bearing:
-            // at two partitions groupTuple happens to preserve submission order, so this
-            // passes with or without the sort. The sort is there because groupTuple makes
-            // no ordering guarantee, and downstream steps pair files positionally.
             def names = workflow.out.tsv[0][1].collect{ it.toString().tokenize("/")[-1] }
+            assert names == names.toSorted()
+        }
+    }
+
+    test("Should emit the grouped partitions in filename order") {
+        tag "expect_success"
+        tag "grouping_order"
+        when {
+            params {
+                n_sample = 2
+            }
+            workflow {
+                // Partitions are downsampled as independent tasks and regrouped, and
+                // groupTuple emits in completion order -- a race between those tasks.
+                // Six partitions are supplied in reverse-lexicographic order so that an
+                // unsorted regrouping would have to win a 1-in-720 shuffle to look sorted,
+                // while the sort in the subworkflow makes this pass every time. Two
+                // partitions were not enough: unsorted output came out sorted by chance
+                // roughly three runs in four.
+                '''
+                input[0] = channel.of(["test", [
+                    "${projectDir}/test-data/downsampleViralAssignments/partition_31631_hits.tsv",
+                    "${projectDir}/test-data/downsampleViralAssignments/partition_2697049_hits.tsv",
+                    "${projectDir}/test-data/downsampleViralAssignments/partition_186538_hits.tsv",
+                    "${projectDir}/test-data/downsampleViralAssignments/partition_12475_hits.tsv",
+                    "${projectDir}/test-data/downsampleViralAssignments/partition_11676_hits.tsv",
+                    "${projectDir}/test-data/downsampleViralAssignments/partition_10239_hits.tsv"
+                ]])
+                input[1] = params.n_sample
+                input[2] = channel.of(false)
+                '''
+            }
+        }
+        then {
+            assert workflow.success
+            def names = workflow.out.tsv[0][1].collect{ it.toString().tokenize("/")[-1] }
+            assert names.size() == 6
             assert names == names.toSorted()
         }
     }

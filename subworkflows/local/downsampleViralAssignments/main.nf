@@ -48,8 +48,12 @@ workflow DOWNSAMPLE_VIRAL_ASSIGNMENTS {
         // The cap applies per partition, which is what keeps rare species fully validated.
         partition_ch = tsv_ch.transpose()
         downsampled_ch = DOWNSAMPLE_TSV_BY_HASH(partition_ch, "seq_id", n_sample).output
-        // groupTuple does not preserve input order, so sort by name to keep the grouped
-        // list deterministic for the downstream processes that pair files positionally
+        // groupTuple emits in task-completion order, which is a race between the
+        // per-partition tasks, so sort by name. This is not a correctness requirement --
+        // the consumers below are order-insensitive, and MERGE_JOIN_READS_LIST sorts its
+        // own inputs before pairing them -- but the grouped list reaches those processes
+        // as a command-line argument, so leaving it unordered would change their task
+        // hashes between otherwise identical runs and defeat -resume caching.
         sampled_ch = downsampled_ch.groupTuple()
             .map { label, files -> [label, files.sort { f -> f.name }] }
         // 2. Extract the retained reads into interleaved FASTQ
