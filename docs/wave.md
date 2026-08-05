@@ -96,11 +96,19 @@ doesn't, which is why the mitigation has to live on the client side.
 ## The dependency chain
 
 Two questions worth answering up front, because the error messages don't make it
-obvious: **Docker Hub is not in the runtime path at all** (it is a build-time
-dependency only), and **layer bytes never flow through Wave** — Wave serves the
-manifest and `307`-redirects every blob to ECR Public's CloudFront distribution or to
-`fusionfs.seqera.io`. Wave is a control-plane dependency, not a bandwidth one. That is
-also why its limit is counted in manifests: a 15-layer image is one "pull".
+obvious. **Docker Hub is not in the runtime path at all** — it is a build-time dependency
+only. And **Wave is not a proxy for the image bytes**: it serves the augmented manifest
+and then `307`-redirects each blob to ECR Public's CloudFront distribution or to
+`fusionfs.seqera.io`. The one exception is the small bundle layer carrying the project
+`bin/` and the module's scripts, which Nextflow uploads inline in the request body
+(`location: data:<base64>`) and Wave therefore serves itself — about 62 KB, against
+~3.4 GB of base layers that go straight from CloudFront to the instance.
+
+So Wave is a control-plane dependency, not a bandwidth one, and "augmentation" at pull
+time means appending layer *descriptors* to a manifest rather than reprocessing content.
+That is why the limit is counted in manifests — a 15-layer image is one "pull" — and why
+a pull onto an instance that already has the layers moves no bytes at all yet still
+costs a full unit of quota.
 
 Build time, run by hand whenever a `containers/*.yml` spec changes. This is the only
 point at which Docker Hub is involved:
@@ -160,6 +168,7 @@ flowchart TB
     TASK["task container<br/><i>Fusion mounts s3://…</i>"]
     CDN[("ECR Public CloudFront<br/><i>base layer bytes</i>")]
     FUSECDN[("fusionfs.seqera.io<br/><i>Fusion client layer bytes</i>")]
+    DATALAYER[("bundle layer<br/><i>project bin/ + module scripts,<br/>served by Wave itself</i>")]
 
     CACHE -- "hit → reuse the cached image name" --> JOBDEF
     CACHE -- "miss or >30 min old →<br/>POST, ≤1/s, 5 retries over ~6 s" --> WAVE
@@ -168,8 +177,9 @@ flowchart TB
     JOBDEF --> ECSAGENT
     ECSAGENT -- "<b>GET manifest = 1 Wave pull</b><br/><i>2,000/min per Seqera user</i>" --> WAVEREG
     WAVEREG --> TASK
-    WAVEREG -- "307 base layers" --> CDN
-    WAVEREG -- "307 Fusion layer" --> FUSECDN
+    WAVEREG -- "307<br/>~3.4 GB" --> CDN
+    WAVEREG -- "307<br/>~41–65 MB" --> FUSECDN
+    WAVEREG -- "200<br/>~62 KB" --> DATALAYER
     CDN -. "same bytes we pushed" .-> SRC
     FUSEJSON -. "names the layer<br/>fetched here" .-> FUSECDN
 
@@ -178,7 +188,7 @@ flowchart TB
     classDef reg fill:#e8eaf6,stroke:#3f51b5,color:#000
     class CACHE,ECSAGENT,WAVEREG hot
     class ERR400,ERR429 fail
-    class SRC,CDN,FUSECDN reg
+    class SRC,CDN,FUSECDN,DATALAYER reg
     style HEAD fill:#fafafa,stroke:#9e9e9e
     style WAVESVC fill:#fafafa,stroke:#9e9e9e
 ```
