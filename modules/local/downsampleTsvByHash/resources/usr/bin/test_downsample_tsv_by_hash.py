@@ -74,9 +74,18 @@ def test_hash_key_is_deterministic_across_calls() -> None:
     assert hash_key("read_1") == hash_key("read_1")
 
 
-def test_hash_key_is_128_bit() -> None:
-    """Digests span the full 128-bit range, so ties are unreachable in practice."""
-    assert 0 <= hash_key("read_1") < 2**128
+def test_hash_key_spans_the_full_128_bit_range() -> None:
+    """Digests must be 128 bits wide, not merely below 2**128.
+
+    An upper bound alone is satisfied by any narrower hash -- BLAKE2s at digest_size=8,
+    or the CRC32 the module explicitly rejects -- so it would not catch a narrowing.
+    Collision-freedom, and with it the order-independence guarantee, depends on the real
+    width, so assert that some key actually reaches the top nibble. Deterministic: the
+    keys and the hash are both fixed, so this either always passes or always fails.
+    """
+    values = [hash_key(f"read_{i}") for i in range(1000)]
+    assert all(0 <= value < 2**128 for value in values)
+    assert max(values) > 2**124
 
 
 def test_hash_key_distinguishes_similar_keys() -> None:
