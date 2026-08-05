@@ -321,13 +321,41 @@ of 30-minute windows its tasks span predicts **45** distinct Wave image URLs aga
 |---|---|---|---|
 | tasks retried | 4 | 57 | 2 |
 | as a share of tasks | 0.028% | 0.342% | 0.010% |
-| exit `-` (never produced an exit code) | 3 | 34 | 2 |
-| exit `143` (SIGTERM — spot reclamation) | 1 | 15 | 0 |
-| exit `0` (ran, then failed at stage-out) | 0 | 8 | 0 |
 | retries that then succeeded | 4/4 | 57/57 | 2/2 |
-| distinct processes affected | 4 | 21 | 2 |
+| distinct minutes the failures fall in | 2 | 8 | 1 |
+| exit `-` / `143` / `0` | 3 / 1 / 0 | 34 / 15 / 8 | 2 / 0 / 0 |
 
 Every retry in all three runs succeeded on the second attempt.
+
+**All three exit signatures are the same event.** They are one instance loss observed at
+different points in a task's lifecycle: `-` when the host disappeared before the
+container could record an exit code, `143` when the container got far enough to be
+SIGTERM'd, and `0` when the container had already exited cleanly but Batch marked the
+job `FAILED` before it could be reaped. Three lines of evidence:
+
+- Both 2026-08-03 failures — the `exit -` kind — still have Batch job records, and both
+  say `Host EC2 (instance i-…) terminated.`
+- The failures are not spread through the runs. All 57 of the 2026-07-27 failures fall
+  in **8 minutes of a 43-minute run**, in bursts of 19, 13, 12, 6 and 4. The other two
+  runs are worse still: 2 minutes and 1 minute respectively.
+- Each burst spans **up to 7 unrelated processes at once** (e.g. `BBDUK`, `FASTP`,
+  `FASTQC`, `MULTIQC`, `KRAKEN`, `JOIN_FASTQ`, `SUMMARIZE_BBMERGE` in a single minute),
+  and mixes all three exit signatures within that same minute. A per-process bug —
+  a missing output file, say — would correlate with the process and spread over the run;
+  this correlates with the clock.
+
+So the 0.342% retry rate on 2026-07-27 is not a steady background rate. It is a handful
+of bad minutes for spot capacity, and the pipeline rode them out.
+
+One caveat that matters for diagnosis: **`exit -` is not exclusively a reclamation.** A
+Batch image-pull failure produces exactly the same trace signature — reproducing one
+deliberately gave `exitStatus = Integer.MAX_VALUE` and a `-` in the trace. Only the
+Batch `statusReason` distinguishes them, and Batch drops job records after about a week,
+so the 2026-07-20 and 2026-07-27 records are already gone. During a Wave rate-limit
+storm the `CannotPullContainerError` failures would be indistinguishable from spot
+reclamations in the trace alone. That is fine for [fix 4](#4-back-off-task-retries-without-weakening-the-fail-fast-behaviour),
+which wants to treat both the same way, but it means the trace cannot be used after the
+fact to size how much of a bad run was Wave's fault.
 
 ### Wave request and pull anatomy
 
@@ -490,10 +518,17 @@ the worst run spanned 21 processes — so a few tens of seconds on a 43-minute r
 case. Against that, the current setting turns a second consecutive infra blip into a
 dead run that has to be relaunched with `-resume`.
 
-`task.exitStatus` was verified to be populated and correct inside the closure
-(a process exiting `3` reported `exitStatus=3` on every attempt). Note that `137`
-(SIGKILL) is deliberately **not** in the infra list: it is also what an OOM kill looks
-like, and none of the three runs produced one.
+`task.exitStatus` was verified to be populated and correct inside the closure: a process
+exiting `3` reported `exitStatus=3` on every attempt, and a deliberately broken image
+pull on Batch reported `exitStatus=2147483647` on every attempt.
+
+Two exit codes are deliberately left out of the infra branch. `137` (SIGKILL) is also
+what an OOM kill looks like, and none of the three runs produced one. And the `exit 0`
+reclamations described above — 8 of the 57 failures in the worst run — stay on the
+fail-fast path, because `exit 0` with a failed task is genuinely ambiguous: it is also
+what a missing declared output looks like, and giving that five backed-off retries is
+exactly the erosion of fail-fast we are trying to avoid. Those tasks keep today's single
+retry, which was enough for all 8.
 
 ### 5. Take Wave out of the pull path entirely — `wave.freeze`
 
