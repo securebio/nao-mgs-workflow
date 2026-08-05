@@ -48,16 +48,17 @@ If you still keep running into this issue, you may consider contacting Seqera fo
 Expected on every run, not a misconfiguration. The key is absent from the Nextflow and
 Wave configuration references — it exists only in `WaveConfig.groovy` — so Nextflow warns
 about it while still applying it. We set it in `configs/profiles.config` to stop Wave
-renaming the same image mid-run; see the comment there. The warning goes to the console
-only, not `.nextflow.log`. To confirm the setting took effect on a given run:
+renaming the same image mid-run; see the comment there. Because the warning fires whether
+or not the value is still being applied, it can't tell you the setting is working. To
+confirm that on a given run:
 
 ```bash
 grep -o "Wave config: .*" .nextflow.log | head -1 | tr ',' '\n' | grep -i tokensCache
 ```
 
 Nextflow normalises the duration, so `'24h'` reads back as `1d`. If it prints `30m`, or
-prints nothing, the setting has stopped working — `tests/workflows/wave.nf.test` checks
-exactly this and is worth running after a Nextflow upgrade.
+prints nothing, the setting has stopped working. `tests/workflows/wave.nf.test` checks
+exactly this on every PR, via the `nf-test-wave-config.yml` CI workflow.
 
 ## Automatic reference file caching
 - With the `standard`/`batch` profiles, the pipeline implements automatic caching of large reference files in the `/scratch/` directory 

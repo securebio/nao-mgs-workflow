@@ -51,7 +51,7 @@ These tests run on PRs to `main`, `dev`, `stable`, and `ci-test`. They must pass
 
 ### nf-test
 
-We have five nf-test workflows that test different parts of the pipeline:
+We have six nf-test workflows that test different parts of the pipeline:
 
 | Workflow | Tests |
 |----------|-------|
@@ -60,10 +60,15 @@ We have five nf-test workflows that test different parts of the pipeline:
 | `nf-test-workflows-index.yml` | `tests/workflows/index.nf.test` |
 | `nf-test-workflows-run.yml` | `tests/workflows/run.nf.test` |
 | `nf-test-workflows-downstream.yml` | `tests/workflows/downstream.nf.test` |
+| `nf-test-wave-config.yml` | `tests/workflows/wave.nf.test` |
 
-`tests/workflows/wave.nf.test` is deliberately absent from that table: nothing runs it in
-CI yet. It checks that the Wave settings in `configs/profiles.config` survive Nextflow's
-config parsing, so run it locally after a Nextflow upgrade.
+`nf-test-wave-config.yml` is the odd one out: it checks that the undocumented
+`wave.tokens.cache.maxDuration` setting in `configs/profiles.config` still reaches the
+Wave client after Nextflow parses the config, which matters most after a Nextflow
+upgrade. It runs a containerless probe pipeline, so unlike the other five it needs
+neither the Rust container nor an image pull, and finishes in seconds. It calls `nf-test`
+directly rather than `bin/run-nf-test.sh`, which exists to parallelise test suites and
+fix up Docker-created file ownership — neither of which applies here.
 
 ### Python unit tests (`pytest.yml`)
 

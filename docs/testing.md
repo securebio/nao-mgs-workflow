@@ -159,7 +159,7 @@ Unlike nf-test, `pytest` tests are very fast and cheap to run. Consequently, we 
 
 ## Automated testing
 
-We run the full test suite automatically on each pull request using GitHub Actions with larger runners and parallelization, as specified by configuration files in `.github/workflows`. This includes all `pytest` tests and all `nf-test` tests (modules, subworkflows, and workflows), with one exception: `tests/workflows/wave.nf.test` is not yet wired into any workflow and must be run by hand. We also run [Trivy](https://trivy.dev/) on all containers used by the workflow to check for security vulnerabilities.
+We run the full test suite automatically on each pull request using GitHub Actions with larger runners and parallelization, as specified by configuration files in `.github/workflows`. This includes all `pytest` tests and all `nf-test` tests (modules, subworkflows, and workflows). We also run [Trivy](https://trivy.dev/) on all containers used by the workflow to check for security vulnerabilities.
 
 Because the CI runs the complete test suite, **running tests locally before pushing is no longer required**. However, running relevant tests locally can still be useful for faster feedback during development, especially when iterating on a specific module or workflow.
 
