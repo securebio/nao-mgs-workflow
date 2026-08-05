@@ -95,13 +95,21 @@ def read_header(input_file: IO[str], path: str) -> list[str]:
         List of column names.
 
     Raises:
-        ValueError: If the file is empty.
+        ValueError: If the file is empty, or if a column name is repeated. A repeated
+            name makes every lookup by that name ambiguous, and would pass through to a
+            duplicate column in the output, so it is rejected here for all three inputs
+            rather than at each use site.
     """
     line = input_file.readline()
     if not line:
         msg = f"Input file is empty (no header line): {path}"
         raise ValueError(msg)
-    return line.rstrip("\n").split("\t")
+    header = line.rstrip("\n").split("\t")
+    duplicates = sorted(name for name, n in Counter(header).items() if n > 1)
+    if duplicates:
+        msg = f"Duplicate column name(s) in header of {path}: {duplicates}"
+        raise ValueError(msg)
+    return header
 
 
 def read_key_set(path: str, key_column: str) -> set[str]:
@@ -115,7 +123,11 @@ def read_key_set(path: str, key_column: str) -> set[str]:
         Set of values found in that column.
 
     Raises:
-        ValueError: If the file is empty or lacks key_column.
+        ValueError: If the file is empty, lacks key_column, or contains a row whose field
+            count does not match the header. A short row was previously skipped, which
+            silently dropped that read from the set and so mislabelled it downstream as
+            never having been sampled; the other two readers reject ragged rows, and this
+            one now matches them.
     """
     with open_by_suffix(path) as inf:
         header = read_header(inf, path)
@@ -128,8 +140,10 @@ def read_key_set(path: str, key_column: str) -> set[str]:
             if not line.strip():
                 continue
             fields = line.rstrip("\n").split("\t")
-            if len(fields) > index:
-                keys.add(fields[index])
+            if len(fields) != len(header):
+                msg = f"Row in {path} has {len(fields)} fields, expected {len(header)}"
+                raise ValueError(msg)
+            keys.add(fields[index])
     return keys
 
 
