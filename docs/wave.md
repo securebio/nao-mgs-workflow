@@ -474,14 +474,10 @@ today's numbers. Two arguments decide it for `prefer-cached`:
 - **`once` reintroduces the failure we are fixing.** Its re-pull path is a Wave manifest
   request, arriving precisely on the long runs most at risk of the quota.
 
-The cost of `prefer-cached` is bounded and small. The union of all 14 images used in a
-run is **3.4 GB compressed, roughly 8–9 GB on disk**, and an instance that ran every one
-of them still only holds that much. The caveat is that we could not read the launch
-template's root volume size (`ec2:DescribeLaunchTemplateVersions` is not granted to the
-sandbox role), and this pipeline has a history of `no space left on device`
-(see [troubleshooting](./troubleshooting.md#docker-image-failures)) with `use_scratch`
-writing to local disk. Check that headroom before switching; if it is tight, `once` costs
-nothing measurable today and keeps the cleanup safety valve.
+Disabling cleanup costs us nothing. The union of all 14 images used in a run is **3.4 GB
+compressed, roughly 8–9 GB on disk**, so an instance that ran every one of them still
+holds under **1% of the 1,000 GiB EBS volume** our launch templates provision. There is
+no headroom argument for keeping cleanup enabled.
 
 ### 2. Stop the token churn — `configs/profiles.config`
 
