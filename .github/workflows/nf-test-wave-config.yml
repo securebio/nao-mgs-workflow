@@ -1,7 +1,7 @@
 name: nf-test Wave config test
 
 on:
-  pull_request: # Runs on all PRs
+  pull_request:
 
 permissions:
   id-token: write
@@ -35,8 +35,6 @@ jobs:
         uses: ./.github/actions/setup-nf-test
         with:
           role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
-      # The probe declares no container, so this pulls no images and needs neither the
-      # Rust container nor run-nf-test.sh's Docker-ownership fixup. It takes a few seconds.
       - name: Run Wave config test
         if: steps.filter.outputs.wave == 'true'
         run: nf-test test tests/workflows/wave.nf.test

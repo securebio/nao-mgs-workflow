@@ -1,6 +1,4 @@
-// Minimal pipeline for tests/workflows/wave.nf.test. Nextflow only builds its Wave
-// client (and logs the resolved Wave config) once a task is submitted, so this runs one
-// containerless task and nothing else.
+// Minimal pipeline for tests/workflows/wave.nf.test.
 
 process WAVE_PROBE {
     script:

@@ -6,13 +6,9 @@ nextflow_pipeline {
 
     // wave.tokens.cache.maxDuration is read by WaveConfig but unknown to Nextflow's
     // ConfigValidator, which warns "Unrecognized config option" while the value is still
-    // applied. That warning fires identically whether or not the key still works, so its
-    // presence says nothing about whether the value took effect and we assert on the Wave
-    // config Nextflow logs after parsing instead. Its absence does mean something, though
-    // — see the tripwire below.
-    // wave.retryPolicy.maxAttempts, set alongside it, is a documented option and would
-    // get a deprecation cycle if renamed, so it needs no such guard.
-    test("Undocumented Wave token-cache setting should reach the Wave client") {
+    // applied. Fail if the setting is not applied to the Wave config in the Nextflow logs.
+    // Also fail if the warning disappears, which would indicate the setting is now documented.
+    test("Private Wave token-cache setting should reach the Wave client") {
         config "tests/configs/wave.config"
         tag "wave_config"
         then {
@@ -20,11 +16,8 @@ nextflow_pipeline {
             def log = new File("${launchDir}/meta/nextflow.log").text
             def waveConfig = (log =~ /Wave config: .*/)
             assert waveConfig.size() > 0 : "Wave client never initialised"
-            // '24h' normalises to 1d. Anchored on the trailing delimiter so a longer
-            // duration that merely starts with 1d can't pass on a prefix match.
-            assert waveConfig[0] =~ /tokensCacheMaxDuration:1d[,)]/
-            // Tripwire on the premise above: the warning stops once Nextflow registers
-            // the option, at which point this whole test has served its purpose.
+            assert waveConfig[0] =~ /tokensCacheMaxDuration:12h[,)]/
+            // Fail test if option is now valid in ConfigValidator.
             assert log.contains("Unrecognized config option 'wave.tokens.cache.maxDuration'") :
                 "Nextflow now recognises wave.tokens.cache.maxDuration, so it is covered " +
                 "by the usual deprecation cycle. Delete this test, tests/configs/wave.config, " +
