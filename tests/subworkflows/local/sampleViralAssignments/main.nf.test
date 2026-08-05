@@ -16,33 +16,49 @@ nextflow_workflow {
             }
             workflow {
                 '''
-                input[0] = Channel.of(["test", [
-                    "${projectDir}/test-data/sampleViralAssignments/partition_10239_hits.tsv.gz",
-                    "${projectDir}/test-data/sampleViralAssignments/partition_186538_hits.tsv.gz"
+                input[0] = channel.of(["test", [
+                    "${projectDir}/test-data/sampleViralAssignments/partition_10239_hits.tsv",
+                    "${projectDir}/test-data/sampleViralAssignments/partition_186538_hits.tsv"
                 ]])
                 input[1] = params.n_sample
-                input[2] = Channel.of(false)
+                input[2] = channel.of(false)
                 '''
             }
         }
         then {
             assert workflow.success
-            def sampled = workflow.out.tsv.collectMany{it[1]}.collect{path(it).csv(sep: "\t", decompress: true)}
+            // One grouped emission per label, regardless of how many partitions it held
+            assert workflow.out.tsv.size() == 1
+            assert workflow.out.tsv[0][0] == "test"
+            def sampled = workflow.out.tsv.collectMany{it[1]}.collect{path(it).csv(sep: "\t")}
             assert sampled.size() == 2
-            // 10-row partition capped at 4; 3-row partition passed through whole
+            // The cap applies per partition: 10-row partition capped at 4, 3-row passed whole
             assert sampled.collect{it.rowCount}.toSorted() == [3, 4]
             // Each retained read pair becomes two interleaved FASTQ records...
             def fastqs = workflow.out.fastq.collectMany{it[1]}.collect{path(it).fastq}
             assert fastqs.size() == 2
-            for (int i = 0; i < sampled.size(); i++) {
-                assert fastqs[i].sequences.size() == sampled[i].rowCount * 2
-            }
+            assert fastqs.sum{ it.sequences.size() } == sampled.sum{ it.rowCount } * 2
             // ...and then a single merged/joined FASTA record per pair
             def fastas = workflow.out.fasta.collectMany{it[1]}.collect{path(it).fasta}
             assert fastas.size() == 2
-            for (int i = 0; i < sampled.size(); i++) {
-                assert fastas[i].keySet().size() == sampled[i].rowCount
+            assert fastas.sum{ it.keySet().size() } == sampled.sum{ it.rowCount }
+            // Retained reads must come from the partition they were drawn from
+            def by_taxid = [:]
+            workflow.out.tsv[0][1].each { f ->
+                def taxid = (f.toString() =~ /partition_(\d+)_/)[0][1]
+                by_taxid[taxid] = path(f).csv(sep: "\t").columns["seq_id"]
             }
+            assert by_taxid.keySet().toSorted() == ["10239", "186538"]
+            by_taxid.each { taxid, ids ->
+                ids.each { id -> assert id.startsWith("read_${taxid}_") }
+            }
+            // The grouped list is emitted in filename order. Note this is an assertion
+            // about output shape, not proof that the subworkflow's sort is load-bearing:
+            // at two partitions groupTuple happens to preserve submission order, so this
+            // passes with or without the sort. The sort is there because groupTuple makes
+            // no ordering guarantee, and downstream steps pair files positionally.
+            def names = workflow.out.tsv[0][1].collect{ it.toString().tokenize("/")[-1] }
+            assert names == names.toSorted()
         }
     }
 
@@ -54,17 +70,17 @@ nextflow_workflow {
             }
             workflow {
                 '''
-                input[0] = Channel.of(["test", [
-                    "${projectDir}/test-data/sampleViralAssignments/partition_10239_hits_single.tsv.gz"
+                input[0] = channel.of(["test", [
+                    "${projectDir}/test-data/sampleViralAssignments/partition_10239_hits_single.tsv"
                 ]])
                 input[1] = params.n_sample
-                input[2] = Channel.of(true)
+                input[2] = channel.of(true)
                 '''
             }
         }
         then {
             assert workflow.success
-            def sampled = workflow.out.tsv.collectMany{it[1]}.collect{path(it).csv(sep: "\t", decompress: true)}
+            def sampled = workflow.out.tsv.collectMany{it[1]}.collect{path(it).csv(sep: "\t")}
             def fastas = workflow.out.fasta.collectMany{it[1]}.collect{path(it).fasta}
             assert sampled[0].rowCount == params.n_sample
             assert fastas[0].keySet().size() == params.n_sample

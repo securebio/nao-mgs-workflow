@@ -16,7 +16,7 @@ see the retained reads rather than the whole viral read pool.
 | MODULES AND SUBWORKFLOWS |
 ***************************/
 
-include { SAMPLE_TSV_BY_HASH_LIST } from "../../../modules/local/sampleTsvByHash"
+include { DOWNSAMPLE_TSV_BY_HASH } from "../../../modules/local/downsampleTsvByHash"
 include { EXTRACT_VIRAL_HITS_TO_FASTQ_NOREF_LABELED_LIST as EXTRACT_FASTQ } from "../../../modules/local/extractViralHitsToFastqNoref"
 include { MERGE_JOIN_READS_LIST as MERGE_JOIN_READS } from "../../../subworkflows/local/mergeJoinReadsList"
 include { CONVERT_FASTQ_FASTA } from "../../../modules/local/convertFastqFasta"
@@ -37,8 +37,16 @@ workflow SAMPLE_VIRAL_ASSIGNMENTS {
             def file_list = files instanceof List ? files : [files]
             return [label, file_list]
         }
-        // 1. Downsample each species partition to at most n_sample reads
-        sampled_ch = SAMPLE_TSV_BY_HASH_LIST(tsv_ch, "seq_id", n_sample).output.map(listFiles)
+        // 1. Downsample each species partition to at most n_sample reads.
+        // DOWNSAMPLE_TSV_BY_HASH takes one file, so flatten to one item per partition and
+        // let Nextflow run them concurrently, then regroup for the list-based steps below.
+        // The cap applies per partition, which is what keeps rare species fully validated.
+        partition_ch = tsv_ch.transpose()
+        downsampled_ch = DOWNSAMPLE_TSV_BY_HASH(partition_ch, "seq_id", n_sample).output
+        // groupTuple does not preserve input order, so sort by name to keep the grouped
+        // list deterministic for the downstream processes that pair files positionally
+        sampled_ch = downsampled_ch.groupTuple()
+            .map { label, files -> [label, files.sort { f -> f.name }] }
         // 2. Extract the retained reads into interleaved FASTQ
         fastq_ch = EXTRACT_FASTQ(sampled_ch, false).output.map(listFiles)
         // 3. Merge and join pairs to produce a single sequence per retained read pair
