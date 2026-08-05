@@ -194,9 +194,13 @@ def annotate_validation_status(
         Counter of how many hits fell into each status.
 
     Raises:
-        ValueError: If any input is empty or missing key_column, if the validation table
-            contains a duplicate key, or if a validated read is absent from the sampled
-            set (which would mean the sample and the alignment disagree).
+        ValueError: If any input is empty or missing key_column; if the validation table
+            contains a duplicate key; if status_column or a validation column would
+            collide with an existing column, which would emit a duplicate column name;
+            or if the three inputs disagree about which reads exist -- either a validated
+            read absent from the sampled set, or a sampled read absent from the hits
+            table. Each disagreement means the inputs describe different read sets, so
+            the status column could not be trusted.
     """
     value_columns, validation = read_validation_table(validation_path, key_column)
     sampled = read_key_set(sampled_path, key_column)
@@ -224,7 +228,17 @@ def annotate_validation_status(
         if overlap:
             msg = f"Validation columns collide with hits columns: {sorted(overlap)}"
             raise ValueError(msg)
+        if status_column in set(header) | set(value_columns):
+            msg = (
+                f"Status column {status_column!r} is already present in the input "
+                f"columns, which would emit two columns of that name"
+            )
+            raise ValueError(msg)
         outf.write("\t".join([*header, *value_columns, status_column]) + "\n")
+        # Track which sampled reads are actually seen. A sampled read missing from the
+        # hits table means the table being annotated is not the one that was sampled, and
+        # would otherwise be dropped silently -- no row, no status, no error.
+        unseen_sampled = set(sampled)
         for line in inf:
             if not line.strip():
                 continue
@@ -233,6 +247,7 @@ def annotate_validation_status(
                 msg = f"Row in {hits_path} has {len(fields)} fields, expected {len(header)}"
                 raise ValueError(msg)
             key = fields[key_index]
+            unseen_sampled.discard(key)
             values = validation.get(key)
             if values is not None:
                 status = STATUS_ALIGNED
@@ -241,6 +256,14 @@ def annotate_validation_status(
                 status = STATUS_NO_ALIGNMENT if key in sampled else STATUS_NOT_SAMPLED
             counts[status] += 1
             outf.write("\t".join([*fields, *values, status]) + "\n")
+    if unseen_sampled:
+        example = sorted(unseen_sampled)[:3]
+        msg = (
+            f"{len(unseen_sampled)} sampled read(s) are absent from the hits table, "
+            f"e.g. {example}. The hits table and the downsampled read set are "
+            f"inconsistent."
+        )
+        raise ValueError(msg)
     return counts
 
 

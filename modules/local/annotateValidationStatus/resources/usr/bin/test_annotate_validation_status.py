@@ -301,6 +301,82 @@ def test_annotate_rejects_colliding_columns(tmp_path: Path) -> None:
         )
 
 
+def test_annotate_rejects_status_column_present_in_hits(tmp_path: Path) -> None:
+    """A status column already in the hits table would emit a duplicate column name."""
+    hits = write_tsv(
+        tmp_path / "hits.tsv",
+        f"{HITS_HEADER}\tvalidation_status",
+        ["read_a\ts1\t10239\tstale"],
+    )
+    validation = write_tsv(tmp_path / "v.tsv", VAL_HEADER, [])
+    sampled = write_tsv(tmp_path / "s.tsv", "seq_id", [])
+    with pytest.raises(ValueError, match="already present"):
+        annotate_validation_status(
+            str(hits),
+            str(validation),
+            str(sampled),
+            str(tmp_path / "out.tsv"),
+            "seq_id",
+            "validation_status",
+        )
+
+
+def test_annotate_rejects_status_column_present_in_validation(tmp_path: Path) -> None:
+    """The same applies when the validation table supplies the status column name."""
+    hits = write_tsv(tmp_path / "hits.tsv", HITS_HEADER, ["read_a\ts1\t10239"])
+    validation = write_tsv(
+        tmp_path / "v.tsv", "seq_id\tvalidation_status", ["read_a\taligned"]
+    )
+    sampled = write_tsv(tmp_path / "s.tsv", "seq_id", ["read_a"])
+    with pytest.raises(ValueError, match="already present"):
+        annotate_validation_status(
+            str(hits),
+            str(validation),
+            str(sampled),
+            str(tmp_path / "out.tsv"),
+            "seq_id",
+            "validation_status",
+        )
+
+
+def test_annotate_rejects_sampled_read_absent_from_hits(tmp_path: Path) -> None:
+    """A sampled read missing from the hits table means the inputs disagree.
+
+    Without this check the read is dropped silently: no row, no status, no error.
+    """
+    hits = write_tsv(tmp_path / "hits.tsv", HITS_HEADER, ["read_a\ts1\t10239"])
+    validation = write_tsv(tmp_path / "v.tsv", VAL_HEADER, [])
+    sampled = write_tsv(tmp_path / "s.tsv", "seq_id", ["read_a", "read_ghost"])
+    with pytest.raises(ValueError, match="absent from the hits table"):
+        annotate_validation_status(
+            str(hits),
+            str(validation),
+            str(sampled),
+            str(tmp_path / "out.tsv"),
+            "seq_id",
+            "validation_status",
+        )
+
+
+def test_annotate_accepts_unsampled_reads_in_hits(tmp_path: Path) -> None:
+    """The consistency check is one-directional: hits may exceed the sampled set.
+
+    That is the normal case -- most reads are never sampled -- so the new check must not
+    reject it.
+    """
+    hits, validation, sampled = build_case(tmp_path)
+    out = tmp_path / "out.tsv"
+    counts = annotate_validation_status(
+        str(hits),
+        str(validation),
+        str(sampled),
+        str(out),
+        "seq_id",
+        "validation_status",
+    )
+    assert counts[STATUS_NOT_SAMPLED] == 1
+
+
 def test_annotate_rejects_missing_key_column_in_hits(tmp_path: Path) -> None:
     """A hits table without the join key is a hard error."""
     hits = write_tsv(tmp_path / "hits.tsv", "other\tsample", ["x\ts1"])
