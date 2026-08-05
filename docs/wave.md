@@ -720,6 +720,46 @@ cached. Note also that we never established *which* transient condition produced
 production `400` — only that the tag existed and the repository was public, ruling out the
 two causes the message suggests.
 
+### Would retrying `400`s be safe?
+
+Before asking Seqera or Nextflow to change anything, it is worth establishing whether
+retrying is sound. Two parts of that are already answered.
+
+**Only one `400` from this endpoint is non-deterministic.** `ContainerController` and
+`ValidationServiceImpl` between them throw roughly 40 distinct `BadRequestException`s,
+and every one except line 517 is a static complaint about the request itself —
+conflicting attributes, malformed image or repository names, a missing access token,
+size limits, mirror/freeze misconfiguration. All of those would fail identically on
+every attempt. Only "does not exist or access is not authorized" depends on a live
+lookup against a third party, so **blanket** retry is not what we would want anyway;
+retry scoped to that one message covers the entire transient surface.
+
+**Retrying the genuinely-permanent case is bounded, not dangerous.** Requesting a tag
+that really is missing returned the identical `400` on 5 of 5 attempts, so a retry policy
+costs its budget and then fails correctly. The only harm is delaying a real
+misconfiguration by the length of the backoff.
+
+That leaves the case the message conflates: is *this* `400` a missing tag, or a lookup
+that failed? Three ways to settle it, in increasing cost:
+
+1. **Check the premise independently.** The head node can resolve the tag itself —
+   `HEAD https://public.ecr.aws/v2/<repo>/manifests/<tag>` with an anonymous ECR Public
+   token, which costs nothing and does not touch Wave. If that returns `200`, "does not
+   exist or access is not authorized" is false by construction and the `400` was
+   transient. If it returns `404`, the tag is genuinely gone and we should fail fast.
+   This turns the judgement call into a test, and is the design any retry we propose
+   should be built on.
+2. **Measure the base rate.** We currently cannot: runs publish only `trace_*.tsv` to
+   `output/logging/`, not `.nextflow.log`, so past `400`s are unattributable. Either
+   archive the log alongside the trace, or run a standalone prober that requests a
+   container token for every tag in `configs/containers.config` on a schedule and records
+   each non-`200` together with whether an immediate re-request succeeded. That measures
+   the transient rate and the backoff actually needed, without touching production runs.
+3. **Preflight the tags.** Independent of retries, resolving all ~27 tags against ECR
+   before launch turns "a genuinely deleted tag kills the run 40 minutes in" into a
+   ten-second failure at submission. Same `HEAD` request as (1), run over
+   `configs/containers.config`.
+
 ## References
 
 - [Wave container provisioning](https://docs.seqera.io/wave/provisioning) (augmentation, ephemeral containers, `<id_token>`)
