@@ -1,12 +1,12 @@
 nextflow_workflow {
 
-    name "Test workflow SAMPLE_VIRAL_ASSIGNMENTS"
-    script "subworkflows/local/sampleViralAssignments/main.nf"
-    workflow "SAMPLE_VIRAL_ASSIGNMENTS"
+    name "Test workflow DOWNSAMPLE_VIRAL_ASSIGNMENTS"
+    script "subworkflows/local/downsampleViralAssignments/main.nf"
+    workflow "DOWNSAMPLE_VIRAL_ASSIGNMENTS"
     config "tests/configs/downstream.config"
     tag "subworkflow"
     tag "downstream"
-    tag "sample_viral_assignments"
+    tag "downsample_viral_assignments"
 
     test("Should downsample interleaved partitions and emit one FASTA per partition") {
         tag "expect_success"
@@ -17,8 +17,8 @@ nextflow_workflow {
             workflow {
                 '''
                 input[0] = channel.of(["test", [
-                    "${projectDir}/test-data/sampleViralAssignments/partition_10239_hits.tsv",
-                    "${projectDir}/test-data/sampleViralAssignments/partition_186538_hits.tsv"
+                    "${projectDir}/test-data/downsampleViralAssignments/partition_10239_hits.tsv",
+                    "${projectDir}/test-data/downsampleViralAssignments/partition_186538_hits.tsv"
                 ]])
                 input[1] = params.n_sample
                 input[2] = channel.of(false)
@@ -71,7 +71,7 @@ nextflow_workflow {
             workflow {
                 '''
                 input[0] = channel.of(["test", [
-                    "${projectDir}/test-data/sampleViralAssignments/partition_10239_hits_single.tsv"
+                    "${projectDir}/test-data/downsampleViralAssignments/partition_10239_hits_single.tsv"
                 ]])
                 input[1] = params.n_sample
                 input[2] = channel.of(true)

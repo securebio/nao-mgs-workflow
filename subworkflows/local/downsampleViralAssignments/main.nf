@@ -10,6 +10,11 @@ split means rare species are still validated thoroughly while abundant ones are 
 
 Because sampling happens before FASTQ extraction and pair merging, those steps only ever
 see the retained reads rather than the whole viral read pool.
+
+Note that only the downsampling step runs one task per partition. The steps after it are
+still list-based processes that loop internally over the grouped files, so they do not
+parallelise across partitions. Converting them would be a separate change: they predate
+this work and MERGE_JOIN_READS_LIST is shared with other code paths.
 */
 
 /***************************
@@ -25,7 +30,7 @@ include { CONVERT_FASTQ_FASTA } from "../../../modules/local/convertFastqFasta"
 | WORKFLOW |
 ***********/
 
-workflow SAMPLE_VIRAL_ASSIGNMENTS {
+workflow DOWNSAMPLE_VIRAL_ASSIGNMENTS {
     take:
         tsv_ch // Viral hit TSVs partitioned by selected taxid, as [label, [files]]
         n_sample // Maximum reads to validate per selected taxid
