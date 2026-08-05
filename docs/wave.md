@@ -79,9 +79,12 @@ says nothing about which Fusion version or which module scripts to graft on.
 The token also carries identity. A Batch instance holds no Seqera credentials — the
 `wt/` manifest is fetchable with anonymous `curl` — yet the pull is still attributed to
 the requesting Seqera user's quota and still uses that user's registry credentials to
-reach the source layers. The token is what supplies both. Nextflow's fingerprint can't
-serve as the address instead: it is a client-supplied hash that Wave records but never
-reads, so addressing by it would let anyone name someone else's augmented image.
+reach the source layers. Seqera's [container provisioning
+page](https://docs.seqera.io/wave/provisioning) says as much: the `<id_token>` "is
+uniquely assigned and is used to identify and authorize the following container
+request". Nextflow's fingerprint can't serve as the address instead: it is a
+client-supplied hash that Wave records but never reads, so addressing by it would let
+anyone name someone else's augmented image.
 
 None of that requires a *new* token per request, which is the part that costs us. The two
 requests tabulated in [root cause 2](#2-wave-renames-the-image-on-every-request-and-nextflow-re-requests-every-30-minutes)
@@ -224,6 +227,30 @@ manifests, and different tokens:
 
 Same bytes, two names. The first token had 35 hours of life left when Nextflow stopped
 using it.
+
+#### What Seqera documents, and what it doesn't
+
+Half of this is documented, on the Wave side. [Container
+provisioning](https://docs.seqera.io/wave/provisioning) states that "augmented containers
+are ephemeral: they are not stored in a container repository, and they can only be
+accessed for a short period of time", and that the returned name carries a per-request
+`<id_token>`. [Reducing Wave API calls](https://docs.seqera.io/wave/guides/reduce-api-calls)
+adds that "without freeze, all tasks communicate with Wave for every container used
+within your pipeline".
+
+The operationally important half is documented nowhere:
+
+- The **Nextflow** Wave page contains no occurrence of "ephemeral", "augment", or `wt/`.
+  Nothing on the Nextflow side tells you the image name is not stable.
+- The **30-minute client-side cache** is not documented, and neither is the setting that
+  controls it (see [fix 2](#2-stop-the-token-churn--configsprofilesconfig)).
+- **"A short period of time" is doing a lot of work.** Measured, a token is valid for
+  36 hours. Nextflow discards it after 30 minutes — a 72× margin. The vague phrasing is
+  precisely what hides the fact that the client is far more conservative than it needs
+  to be.
+
+So the ephemerality is a documented design choice; the churn it causes in a long run is
+an undocumented client default.
 
 Note the two clocks are unrelated: each **token stays valid for 36 hours**, but
 Nextflow throws it away after **30 minutes** and asks for another. Nothing expired; the
@@ -657,6 +684,7 @@ mirror would silently disable Fusion.
 
 ## References
 
+- [Wave container provisioning](https://docs.seqera.io/wave/provisioning) (augmentation, ephemeral containers, `<id_token>`)
 - [Reduce Wave API calls](https://docs.seqera.io/wave/guides/reduce-api-calls)
 - [Wave API limits](https://docs.seqera.io/wave/api#api-limits)
 - [`wave` configuration scope](https://docs.seqera.io/nextflow/reference/config/wave)
