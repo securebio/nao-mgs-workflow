@@ -13,9 +13,9 @@ nextflow_process {
             process {
                 '''
                 input[0] = ["test",
-                    "${projectDir}/test-data/annotateValidationStatus/hits.tsv.gz",
-                    "${projectDir}/test-data/annotateValidationStatus/validation.tsv.gz",
-                    "${projectDir}/test-data/annotateValidationStatus/sampled.tsv.gz"
+                    "${projectDir}/test-data/annotateValidationStatus/hits.tsv",
+                    "${projectDir}/test-data/annotateValidationStatus/validation.tsv",
+                    "${projectDir}/test-data/annotateValidationStatus/sampled.tsv"
                 ]
                 input[1] = "seq_id"
                 input[2] = "validation_status"
@@ -25,9 +25,9 @@ nextflow_process {
         then {
             assert process.success
             assert process.out.output[0][0] == "test"
-            def tab_out = path(process.out.output[0][1]).csv(sep: "\t", decompress: true)
-            def tab_hits = path(process.out.input[0][1]).csv(sep: "\t", decompress: true)
-            def tab_val = path(process.out.input[0][2]).csv(sep: "\t", decompress: true)
+            def tab_out = path(process.out.output[0][1]).csv(sep: "\t")
+            def tab_hits = path(process.out.input[0][1]).csv(sep: "\t")
+            def tab_val = path(process.out.input[0][2]).csv(sep: "\t")
             // Every hit survives exactly once, in input order
             assert tab_out.rowCount == tab_hits.rowCount
             assert tab_out.columns["seq_id"] == tab_hits.columns["seq_id"]
@@ -60,9 +60,9 @@ nextflow_process {
             process {
                 '''
                 input[0] = ["test",
-                    "${projectDir}/test-data/annotateValidationStatus/hits.tsv.gz",
-                    "${projectDir}/test-data/annotateValidationStatus/validation.tsv.gz",
-                    "${projectDir}/test-data/annotateValidationStatus/sampled_incomplete.tsv.gz"
+                    "${projectDir}/test-data/annotateValidationStatus/hits.tsv",
+                    "${projectDir}/test-data/annotateValidationStatus/validation.tsv",
+                    "${projectDir}/test-data/annotateValidationStatus/sampled_incomplete.tsv"
                 ]
                 input[1] = "seq_id"
                 input[2] = "validation_status"
@@ -83,9 +83,9 @@ nextflow_process {
             process {
                 '''
                 input[0] = ["test",
-                    "${projectDir}/test-data/annotateValidationStatus/hits.tsv.gz",
-                    "${projectDir}/test-data/annotateValidationStatus/validation.tsv.gz",
-                    "${projectDir}/test-data/annotateValidationStatus/sampled.tsv.gz"
+                    "${projectDir}/test-data/annotateValidationStatus/hits.tsv",
+                    "${projectDir}/test-data/annotateValidationStatus/validation.tsv",
+                    "${projectDir}/test-data/annotateValidationStatus/sampled.tsv"
                 ]
                 input[1] = "nonexistent_column"
                 input[2] = "validation_status"
