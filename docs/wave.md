@@ -462,12 +462,49 @@ name. It also stops the pipeline registering a new Batch job definition every 30
 minutes per container.
 
 Two caveats. **The option is undocumented** — it appears nowhere in the Nextflow
-configuration reference or the Wave docs, only in
-`WaveConfig.groovy` (`opts.navigate('tokens.cache.maxDuration', '30m')`). Nextflow
-26.04.6 therefore logs `WARN Unrecognized config option 'wave.tokens.cache.maxDuration'`
-while still applying it — confirmed in every run above by the `tokensCacheMaxDuration`
-value in the `Wave config:` debug line. Being undocumented, it could be renamed without
-a deprecation cycle, so re-check it on Nextflow upgrades.
+configuration reference or the Wave docs, only in `WaveConfig.groovy`. Nextflow 26.04.6
+therefore logs `WARN Unrecognized config option 'wave.tokens.cache.maxDuration'` while
+still applying it, because `opts.navigate` bypasses the config validator. Being
+undocumented, it could be renamed without a deprecation cycle, so re-check it on
+Nextflow upgrades with the three commands below.
+
+Where the key and its default are defined (pin the tag to the version you run):
+
+```bash
+curl -s https://raw.githubusercontent.com/nextflow-io/nextflow/v26.04.6/plugins/nf-wave/src/main/io/seqera/wave/plugin/config/WaveConfig.groovy \
+  | grep -n "tokensCacheMaxDuration"
+```
+
+```
+95:    final private Duration tokensCacheMaxDuration
+114:        this.tokensCacheMaxDuration = opts.navigate('tokens.cache.maxDuration', '30m') as Duration
+215:    Duration tokensCacheMaxDuration() {
+216:        return tokensCacheMaxDuration
+```
+
+That the key is really in the plugin build you have installed, not just on `master`
+(Nextflow unpacks plugins to `classes/`, so the string is in the compiled constant pool):
+
+```bash
+strings ~/.nextflow/plugins/nf-wave-*/classes/io/seqera/wave/plugin/config/WaveConfig.class \
+  | grep "tokens.cache.maxDuration"
+```
+
+And that it took effect on a given run, despite the warning — run against that run's
+`.nextflow.log`:
+
+```bash
+grep -o "Wave config: .*" .nextflow.log | head -1 | tr ',' '\n' | grep -i tokensCache
+```
+
+```
+ tokensCacheMaxDuration:1d)
+```
+
+Note Nextflow normalises the duration, so `'24h'` reads back as `1d` — don't grep for
+the literal string you set. If this prints `30m` when the config says otherwise, or
+prints nothing, the setting has stopped working and every run is back to churning image
+names.
 
 ### 3. Widen the Wave retry window — `configs/profiles.config`
 
