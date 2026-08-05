@@ -7,13 +7,19 @@ Because the hash is a pure function of the key, this yields:
 
 - A uniform random sample of the input rows, with respect to the key.
 - Exactly min(N, n_rows) output rows, without needing to know n_rows in advance.
-- Identical output for identical input keys, regardless of input row order, of how
-  the input is partitioned across files, or of how many times the pipeline is re-run.
+- Identical output for an identical set of input keys, regardless of the order in which
+  the rows appear and of how many times the pipeline is re-run.
 - A sample that is nested in N: raising N only ever adds rows to the selection.
 
 The order-independence is what makes this suitable for a Nextflow pipeline: the selection
 is stable under `-resume` and under re-running the workflow, and it does not depend on the
 order in which upstream processes happened to emit rows.
+
+Note that the guarantee is per file, and so is the cap: each file is sampled
+independently against its own N. The same keys divided differently across files therefore
+give a different overall selection, so a caller that wants a group sampled as a unit must
+present it as a single file. See test_downsample_is_independent_per_file for a worked
+example of the difference.
 
 Keys are assumed unique within a file; upstream, CHECK_TSV_DUPLICATES enforces this on
 seq_id. Given unique keys and a 128-bit digest, hash ties cannot occur in practice, which
