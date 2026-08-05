@@ -1,17 +1,18 @@
-"""Tests for sample_tsv_by_hash.py."""
+"""Tests for downsample_tsv_by_hash.py."""
 
 import gzip
 from pathlib import Path
 from typing import Any
 
 import pytest
-from sample_tsv_by_hash import (
+from downsample_tsv_by_hash import (
+    downsample_tsv_by_hash,
     hash_key,
     open_by_suffix,
     read_data_lines,
     read_key,
     read_key_index,
-    sample_tsv_by_hash,
+    same_compression,
     select_indices,
 )
 
@@ -20,6 +21,10 @@ from sample_tsv_by_hash import (
 #############
 
 HEADER = "seq_id\tspecies\tscore"
+
+####################
+# HELPER FUNCTIONS #
+####################
 
 
 def make_tsv(tmp_path: Path, name: str, n_rows: int, header: str = HEADER) -> Path:
@@ -44,9 +49,9 @@ def seq_ids(data_lines: list[str]) -> list[str]:
     return [line.split("\t")[0] for line in data_lines]
 
 
-####################
-# open_by_suffix   #
-####################
+##################
+# open_by_suffix #
+##################
 
 
 @pytest.mark.parametrize("name", ["plain.tsv", "compressed.tsv.gz"])
@@ -104,21 +109,45 @@ def test_read_data_lines_skips_blank_lines(tmp_path: Path) -> None:
         assert len(list(read_data_lines(fh))) == 2
 
 
+def test_read_data_lines_skips_whitespace_only_lines(tmp_path: Path) -> None:
+    """A line of only spaces or tabs counts as blank, not as a ragged row."""
+    path = tmp_path / "in.tsv"
+    path.write_text(f"{HEADER}\nread_0\t10239\t0\n   \t \n")
+    with open_by_suffix(str(path)) as fh:
+        fh.readline()
+        assert len(list(read_data_lines(fh))) == 1
+
+
 ############
 # read_key #
 ############
 
 
-def test_read_key_extracts_named_column() -> None:
-    """The key is taken from the given column index."""
-    assert read_key("read_0\t10239\t5\n", 0) == "read_0"
-    assert read_key("read_0\t10239\t5\n", 1) == "10239"
+@pytest.mark.parametrize(
+    ("line", "key_index", "expected"),
+    [
+        ("read_0\t10239\t5\n", 0, "read_0"),  # first column
+        ("read_0\t10239\t5\n", 1, "10239"),  # middle column
+        ("read_0\t10239\t5\n", 2, "5"),  # last column: newline must be stripped
+        ("read_0\t10239\t5", 2, "5"),  # last column, no trailing newline
+    ],
+)
+def test_read_key_extracts_named_column(
+    line: Any, key_index: Any, expected: Any
+) -> None:
+    """The key is taken from the given column index, without the line terminator."""
+    assert read_key(line, key_index) == expected
 
 
 def test_read_key_rejects_short_row() -> None:
     """A row too short to contain the key column is a hard error."""
     with pytest.raises(ValueError, match="not have enough fields"):
         read_key("only_one_field\n", 2)
+
+
+def test_read_key_tolerates_tabs_beyond_the_key() -> None:
+    """Bounded splitting must not corrupt a key that precedes further columns."""
+    assert read_key("read_0\ta\tb\tc\td\n", 0) == "read_0"
 
 
 ##################
@@ -153,6 +182,25 @@ def test_read_key_index_rejects_missing_column(tmp_path: Path) -> None:
         read_key_index(fh, "missing", str(path))
 
 
+####################
+# same_compression #
+####################
+
+
+@pytest.mark.parametrize(
+    ("a", "b", "expected"),
+    [
+        ("x.tsv", "y.tsv", True),
+        ("x.tsv.gz", "y.tsv.gz", True),
+        ("x.tsv", "y.tsv.gz", False),
+        ("x.tsv.gz", "y.tsv", False),
+    ],
+)
+def test_same_compression(a: Any, b: Any, expected: Any) -> None:
+    """Compression is compared by suffix, in both directions."""
+    assert same_compression(a, b) is expected
+
+
 ##################
 # select_indices #
 ##################
@@ -162,8 +210,8 @@ def test_read_key_index_rejects_missing_column(tmp_path: Path) -> None:
     ("n_rows", "n_sample", "expected"),
     [
         (100, 10, 10),  # normal downsampling
-        (10, 100, 10),  # target exceeds input: keep everything
-        (10, 10, 10),  # target equals input
+        (10, 10, 10),  # target equals input: everything retained
+        (10, 11, 10),  # target one above input
         (10, 0, 0),  # zero target keeps nothing
         (10, -5, 0),  # negative target keeps nothing
         (0, 10, 0),  # empty input
@@ -175,8 +223,32 @@ def test_select_indices_returns_expected_count(
     """Selection size is min(n_sample, n_rows), clamped at zero."""
     keys = iter(f"read_{i}" for i in range(n_rows))
     selected, n_total = select_indices(keys, n_sample)
-    assert len(selected) == expected
+    # None signals "everything retained", which is n_rows rows
+    assert (n_rows if selected is None else len(selected)) == expected
     assert n_total == n_rows
+
+
+@pytest.mark.parametrize(("n_rows", "n_sample"), [(10, 10), (10, 11), (0, 5)])
+def test_select_indices_signals_all_retained(n_rows: Any, n_sample: Any) -> None:
+    """Inputs that fit under the cap return None, so the caller can copy verbatim."""
+    keys = iter(f"read_{i}" for i in range(n_rows))
+    selected, _ = select_indices(keys, n_sample)
+    assert selected is None
+
+
+def test_select_indices_does_not_signal_all_retained_when_capping() -> None:
+    """One row over the cap is enough to switch to real selection."""
+    keys = iter(f"read_{i}" for i in range(11))
+    selected, _ = select_indices(keys, 10)
+    assert selected is not None
+    assert len(selected) == 10
+
+
+def test_select_indices_zero_sample_is_not_all_retained() -> None:
+    """A zero cap keeps nothing, which must not be confused with keeping everything."""
+    selected, n_total = select_indices(iter(["a", "b"]), 0)
+    assert selected == set()
+    assert n_total == 2
 
 
 def test_select_indices_is_order_independent() -> None:
@@ -184,14 +256,18 @@ def test_select_indices_is_order_independent() -> None:
     keys = [f"read_{i}" for i in range(200)]
     forward, _ = select_indices(iter(keys), 20)
     backward, _ = select_indices(iter(reversed(keys)), 20)
-    assert {keys[i] for i in forward} == {list(reversed(keys))[i] for i in backward}
+    assert forward is not None and backward is not None
+    reversed_keys = list(reversed(keys))
+    assert {keys[i] for i in forward} == {reversed_keys[i] for i in backward}
 
 
-def test_select_indices_selects_smallest_hashes() -> None:
+@pytest.mark.parametrize("n_sample", [1, 2, 20, 199])
+def test_select_indices_selects_smallest_hashes(n_sample: Any) -> None:
     """Selection is exactly the bottom-N of the hash distribution."""
     keys = [f"read_{i}" for i in range(200)]
-    selected, _ = select_indices(iter(keys), 20)
-    assert {keys[i] for i in selected} == set(sorted(keys, key=hash_key)[:20])
+    selected, _ = select_indices(iter(keys), n_sample)
+    assert selected is not None
+    assert {keys[i] for i in selected} == set(sorted(keys, key=hash_key)[:n_sample])
 
 
 def test_select_indices_is_nested_across_sample_sizes() -> None:
@@ -199,6 +275,7 @@ def test_select_indices_is_nested_across_sample_sizes() -> None:
     keys = [f"read_{i}" for i in range(500)]
     small, _ = select_indices(iter(keys), 10)
     large, _ = select_indices(iter(keys), 50)
+    assert small is not None and large is not None
     assert small <= large
 
 
@@ -206,56 +283,112 @@ def test_select_indices_is_approximately_uniform() -> None:
     """Selection does not favour any region of the input (no order bias)."""
     keys = [f"read_{i}" for i in range(10000)]
     selected, _ = select_indices(iter(keys), 1000)
+    assert selected is not None
     first_half = sum(1 for i in selected if i < 5000)
     # Under uniform sampling this is Binomial(1000, 0.5): 350/650 is ~9 sigma out.
     assert 350 < first_half < 650
 
 
-#######################
-# sample_tsv_by_hash  #
-#######################
+##########################
+# downsample_tsv_by_hash #
+##########################
 
 
 @pytest.mark.parametrize("suffix", ["tsv", "tsv.gz"])
-def test_sample_tsv_by_hash_writes_header_and_sample(
-    tmp_path: Path, suffix: Any
-) -> None:
+def test_downsample_writes_header_and_sample(tmp_path: Path, suffix: Any) -> None:
     """Output carries the header plus exactly n_sample rows, compressed or not."""
     in_path = make_tsv(tmp_path, f"in.{suffix}", 100)
     out_path = tmp_path / f"out.{suffix}"
-    sample_tsv_by_hash(str(in_path), str(out_path), "seq_id", 10)
+    downsample_tsv_by_hash(str(in_path), str(out_path), "seq_id", 10)
     header, data = read_tsv(out_path)
     assert header == HEADER
     assert len(data) == 10
 
 
-def test_sample_tsv_by_hash_is_reproducible(tmp_path: Path) -> None:
+def test_downsample_is_reproducible(tmp_path: Path) -> None:
     """Two independent invocations select the same rows."""
     in_path = make_tsv(tmp_path, "in.tsv", 100)
     out_a, out_b = tmp_path / "a.tsv", tmp_path / "b.tsv"
-    sample_tsv_by_hash(str(in_path), str(out_a), "seq_id", 10)
-    sample_tsv_by_hash(str(in_path), str(out_b), "seq_id", 10)
+    downsample_tsv_by_hash(str(in_path), str(out_a), "seq_id", 10)
+    downsample_tsv_by_hash(str(in_path), str(out_b), "seq_id", 10)
     assert read_tsv(out_a) == read_tsv(out_b)
 
 
-def test_sample_tsv_by_hash_header_only_input(tmp_path: Path) -> None:
+def test_downsample_preserves_input_order(tmp_path: Path) -> None:
+    """Selected rows are written in input order, so upstream sorting survives."""
+    in_path = make_tsv(tmp_path, "in.tsv", 200)
+    out_path = tmp_path / "out.tsv"
+    downsample_tsv_by_hash(str(in_path), str(out_path), "seq_id", 20)
+    _header, data = read_tsv(out_path)
+    positions = [int(sid.removeprefix("read_")) for sid in seq_ids(data)]
+    assert positions == sorted(positions)
+
+
+@pytest.mark.parametrize("suffix", ["tsv", "tsv.gz"])
+def test_downsample_retains_everything_under_the_cap(
+    tmp_path: Path, suffix: Any
+) -> None:
+    """When the cap exceeds the row count, every row survives unchanged.
+
+    This exercises the verbatim-copy path, so the content must still be correct.
+    """
+    in_path = make_tsv(tmp_path, f"in.{suffix}", 10)
+    out_path = tmp_path / f"out.{suffix}"
+    downsample_tsv_by_hash(str(in_path), str(out_path), "seq_id", 1000)
+    assert read_tsv(out_path) == read_tsv(in_path)
+
+
+def test_downsample_recompresses_when_compression_differs(tmp_path: Path) -> None:
+    """The verbatim-copy shortcut must not fire when in/out compression differs.
+
+    A raw copy would otherwise write gzip bytes to a .tsv path (or vice versa).
+    """
+    in_path = make_tsv(tmp_path, "in.tsv.gz", 10)
+    out_path = tmp_path / "out.tsv"
+    downsample_tsv_by_hash(str(in_path), str(out_path), "seq_id", 1000)
+    # Readable as plaintext, and complete
+    assert out_path.read_text().startswith(HEADER)
+    assert read_tsv(out_path) == read_tsv(in_path)
+
+
+def test_downsample_compresses_plain_input_to_gz(tmp_path: Path) -> None:
+    """The reverse direction is also handled: plaintext in, gzip out."""
+    in_path = make_tsv(tmp_path, "in.tsv", 10)
+    out_path = tmp_path / "out.tsv.gz"
+    downsample_tsv_by_hash(str(in_path), str(out_path), "seq_id", 1000)
+    with gzip.open(out_path, "rt") as fh:  # would raise if not really gzipped
+        assert fh.readline().rstrip("\n") == HEADER
+    assert read_tsv(out_path) == read_tsv(in_path)
+
+
+def test_downsample_header_only_input(tmp_path: Path) -> None:
     """A header-only input yields a header-only output rather than failing."""
     in_path = make_tsv(tmp_path, "in.tsv", 0)
     out_path = tmp_path / "out.tsv"
-    sample_tsv_by_hash(str(in_path), str(out_path), "seq_id", 10)
+    downsample_tsv_by_hash(str(in_path), str(out_path), "seq_id", 10)
     header, data = read_tsv(out_path)
     assert header == HEADER
     assert data == []
 
 
-def test_sample_tsv_by_hash_uses_named_key_column(tmp_path: Path) -> None:
+def test_downsample_zero_sample_keeps_header_only(tmp_path: Path) -> None:
+    """A zero cap writes the header and no rows."""
+    in_path = make_tsv(tmp_path, "in.tsv", 10)
+    out_path = tmp_path / "out.tsv"
+    downsample_tsv_by_hash(str(in_path), str(out_path), "seq_id", 0)
+    header, data = read_tsv(out_path)
+    assert header == HEADER
+    assert data == []
+
+
+def test_downsample_uses_named_key_column(tmp_path: Path) -> None:
     """Selection keys on the named column, not on column position."""
     in_path = tmp_path / "in.tsv"
     # seq_id is the third column; all rows share species and score
     rows = [f"10239\t0\tread_{i}" for i in range(100)]
     in_path.write_text("species\tscore\tseq_id\n" + "\n".join(rows) + "\n")
     out_path = tmp_path / "out.tsv"
-    sample_tsv_by_hash(str(in_path), str(out_path), "seq_id", 10)
+    downsample_tsv_by_hash(str(in_path), str(out_path), "seq_id", 10)
     _header, data = read_tsv(out_path)
     keys = [line.split("\t")[2] for line in data]
     assert set(keys) == set(
@@ -263,36 +396,26 @@ def test_sample_tsv_by_hash_uses_named_key_column(tmp_path: Path) -> None:
     )
 
 
-def test_sample_tsv_by_hash_preserves_input_order(tmp_path: Path) -> None:
-    """Selected rows are written in input order, so upstream sorting survives."""
-    in_path = make_tsv(tmp_path, "in.tsv", 200)
-    out_path = tmp_path / "out.tsv"
-    sample_tsv_by_hash(str(in_path), str(out_path), "seq_id", 20)
-    _header, data = read_tsv(out_path)
-    positions = [int(sid.removeprefix("read_")) for sid in seq_ids(data)]
-    assert positions == sorted(positions)
-
-
-def test_sample_tsv_by_hash_propagates_input_errors(tmp_path: Path) -> None:
+def test_downsample_propagates_input_errors(tmp_path: Path) -> None:
     """Header validation errors surface from the top-level entry point too."""
     in_path = make_tsv(tmp_path, "in.tsv", 10)
     with pytest.raises(ValueError, match="not found in header"):
-        sample_tsv_by_hash(str(in_path), str(tmp_path / "out.tsv"), "missing", 5)
+        downsample_tsv_by_hash(str(in_path), str(tmp_path / "out.tsv"), "missing", 5)
 
 
-def test_sample_tsv_by_hash_partition_independence(tmp_path: Path) -> None:
-    """Sampling is per-file: splitting a species across files changes the sample.
+def test_downsample_is_independent_per_file(tmp_path: Path) -> None:
+    """Sampling is per-file: splitting rows across files changes the sample.
 
-    This documents the requirement that each species arrives as a single partition.
+    This documents the requirement that each partition arrives as a single file.
     """
     all_path = make_tsv(tmp_path, "all.tsv", 100)
     out_all = tmp_path / "out_all.tsv"
-    sample_tsv_by_hash(str(all_path), str(out_all), "seq_id", 10)
+    downsample_tsv_by_hash(str(all_path), str(out_all), "seq_id", 10)
     half_path = tmp_path / "half.tsv"
     rows = [f"read_{i}\t10239\t{i}" for i in range(50)]
     half_path.write_text(HEADER + "\n" + "\n".join(rows) + "\n")
     out_half = tmp_path / "out_half.tsv"
-    sample_tsv_by_hash(str(half_path), str(out_half), "seq_id", 10)
+    downsample_tsv_by_hash(str(half_path), str(out_half), "seq_id", 10)
     # The half-file sample is drawn only from the rows it contains
     assert set(seq_ids(read_tsv(out_half)[1])) <= {f"read_{i}" for i in range(50)}
     # ...and is therefore generally not the same as the whole-file sample
