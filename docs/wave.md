@@ -692,6 +692,34 @@ name, tag, and checksum", which cannot carry the Fusion layer; Nextflow drops th
 container config with a warning when both are set (`WaveClient.makeRequest`). Enabling
 mirror would silently disable Fusion.
 
+## What this plan does not fix: the `400`
+
+None of the fixes above handles [root cause 5](#5-a-wave-400-is-never-retried--and-wave-uses-400-for-transient-failures).
+They reduce how often we are exposed to it; none makes a `400` survivable.
+
+| Fix | Effect on the `400` |
+|---|---|
+| 1 — `prefer-cached` | **None.** The `400` is answered to the head node's `POST`, not to an instance's pull. |
+| 2 — 24 h token cache | **Indirect.** A `400` can only arrive in response to a `POST`, so fewer requests means fewer chances: 44 → 26 on the measured 83-minute run, and proportionally more on longer ones. |
+| 3 — `wave.retryPolicy.maxAttempts` | **None.** Verified: with `maxAttempts = 10` a stub `400` still produces exactly **one** request and an immediate abort. The retry policy only covers retryable statuses, and `400` is treated as permanent. |
+| 4 — `errorStrategy` backoff | **None.** The abort happens during container resolution, before the task exists, so no process-level strategy is consulted. |
+| 5 — `wave.freeze` | **Large, but not elimination.** Freeze does not skip the lookup: `freezeBuildRequest` rewrites the request via `copyWith(containerFile: …)`, which preserves `containerImage`, so `getContainerDigest` still runs and can still return `null`. What freeze changes is the *number* of requests — one per content change, cached across runs and branches — so exposure drops by more than an order of magnitude. |
+
+The gap is real and sits upstream of us. Closing it properly needs one of:
+
+- **Wave** returning a retryable status (`429`/`503`) when its own upstream lookup fails
+  transiently, instead of collapsing every cause into `400`. Worth raising with Seqera,
+  quoting `RegistryProxyService.getImageDigest`, which catches every exception and
+  returns `null`.
+- **Nextflow** not treating a Wave `400` as unconditionally fatal, or exposing a setting
+  to make it retryable.
+
+Until then the mitigation is operational: relaunch with `-resume`, which is cheap because
+the task hash keys on the fingerprint rather than the image name, so completed tasks stay
+cached. Note also that we never established *which* transient condition produced the
+production `400` — only that the tag existed and the repository was public, ruling out the
+two causes the message suggests.
+
 ## References
 
 - [Wave container provisioning](https://docs.seqera.io/wave/provisioning) (augmentation, ephemeral containers, `<id_token>`)
