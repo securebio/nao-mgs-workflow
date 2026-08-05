@@ -4,11 +4,11 @@ nextflow_pipeline {
     script "tests/helpers/wave_probe.nf"
     tag "workflow"
 
-    // wave.tokens.cache.maxDuration is read by WaveConfig but unknown to Nextflow's
-    // ConfigValidator, which warns "Unrecognized config option" while the value is still
-    // applied. Fail if the setting is not applied to the Wave config in the Nextflow logs.
-    // Also fail if the warning disappears, which would indicate the setting is now documented.
-    test("Private Wave token-cache setting should reach the Wave client") {
+    // wave.tokens.cache.maxDuration is valid but not declared as a ConfigOption, so
+    // ConfigValidator warns while still applying the option.
+    // Fail if the option is not applied to the Wave config in the Nextflow logs.
+    // Also fail if the warning disappears, which would indicate the option is now a ConfigOption.
+    test("Private Wave token-cache option should reach the Wave client") {
         config "tests/configs/wave.config"
         tag "wave_config"
         then {
@@ -16,6 +16,7 @@ nextflow_pipeline {
             def log = new File("${launchDir}/meta/nextflow.log").text
             def waveConfig = (log =~ /Wave config: .*/)
             assert waveConfig.size() > 0 : "Wave client never initialised"
+            // Fail if option was not applied to the Wave config.
             assert waveConfig[0] =~ /tokensCacheMaxDuration:12h[,)]/
             // Fail test if option is now valid in ConfigValidator.
             assert log.contains("Unrecognized config option 'wave.tokens.cache.maxDuration'") :

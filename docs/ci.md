@@ -63,7 +63,7 @@ We have several nf-test workflows that test different parts of the pipeline:
 | `nf-test-wave-config.yml` | `tests/workflows/wave.nf.test` |
 
 The `nf-test-wave-config.yml` CI workflow checks that the private
-`wave.tokens.cache.maxDuration` setting in `configs/profiles.config` is applied at runtime.
+`wave.tokens.cache.maxDuration` option in `configs/profiles.config` is applied at runtime.
 
 ### Python unit tests (`pytest.yml`)
 
