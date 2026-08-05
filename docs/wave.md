@@ -96,7 +96,8 @@ flowchart LR
     class DH,CONDA,DBUILD step
 ```
 
-Run time. Orange boxes are where a limit or a failure bites:
+Run time. **Orange** marks the three places a rate limit is consumed or amplified;
+**red** marks the two responses that end the run outright:
 
 ```mermaid
 flowchart TB
@@ -117,9 +118,11 @@ flowchart TB
     subgraph WAVESVC["Wave service"]
         WAVE["POST /v1alpha2/container"]
         DIGEST{"resolve source digest<br/><i>HEAD the source manifest</i>"}
-        ERR400["<b>400</b> 'does not exist or<br/>access is not authorized'<br/><i>Nextflow never retries → run aborts</i>"]
+        ERR429["<b>429</b> pull rate limit<br/><i>5 retries over ~6 s, then aborts</i>"]
+        ERR400["<b>400</b> 'does not exist or<br/>access is not authorized'<br/><i>never retried → aborts</i>"]
         TOKEN["mint a <b>new token</b><br/><i>random per request; valid 36 h</i>"]
         IMG["<b>Wave image name</b><br/>wave.seqera.io/wt/&lt;token&gt;/…"]
+        WAVE -- "over quota" --> ERR429
         WAVE --> DIGEST
         DIGEST -- "no digest returned" --> ERR400
         DIGEST -- "digest ok" --> TOKEN --> IMG
@@ -149,7 +152,7 @@ flowchart TB
     classDef fail fill:#ffcdd2,stroke:#c62828,stroke-width:2px,color:#000
     classDef reg fill:#e8eaf6,stroke:#3f51b5,color:#000
     class CACHE,ECSAGENT,WAVEREG hot
-    class ERR400 fail
+    class ERR400,ERR429 fail
     class SRC,CDN,FUSECDN reg
     style HEAD fill:#fafafa,stroke:#9e9e9e
     style WAVESVC fill:#fafafa,stroke:#9e9e9e
