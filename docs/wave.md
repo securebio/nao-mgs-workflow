@@ -68,6 +68,28 @@ things. In the order Wave uses them:
 | **Wave image** | The name Batch actually pulls: `wave.seqera.io/wt/<token>/<source path>:<tag>`. Same tag as the source, but a new `wt/<token>/` segment each time. Called `targetImage` in the API response. |
 | **Expiration** | How long a token stays valid: **36 hours** after it is minted. Unrelated to Nextflow's 30-minute cache (see [root cause 2](#2-wave-renames-the-image-on-every-request-and-nextflow-re-requests-every-30-minutes)). |
 
+### Why is there a token at all?
+
+Because the image Batch pulls exists in no registry. Wave synthesises the manifest per
+request — our source manifest plus the appended Fusion layer and data layers — and
+nobody ever pushed that combination anywhere, so the pull needs an address that resolves
+to *this synthesis recipe*. The source name can't carry it: `coreutils:e405c169027d032d`
+says nothing about which Fusion version or which module scripts to graft on.
+
+The token also carries identity. A Batch instance holds no Seqera credentials — the
+`wt/` manifest is fetchable with anonymous `curl` — yet the pull is still attributed to
+the requesting Seqera user's quota and still uses that user's registry credentials to
+reach the source layers. The token is what supplies both. Nextflow's fingerprint can't
+serve as the address instead: it is a client-supplied hash that Wave records but never
+reads, so addressing by it would let anyone name someone else's augmented image.
+
+None of that requires a *new* token per request, which is the part that costs us. The two
+requests tabulated in [root cause 2](#2-wave-renames-the-image-on-every-request-and-nextflow-re-requests-every-30-minutes)
+have the same fingerprint and produce the **same Wave digest** —
+byte-identical augmented manifests — under two different names. Wave could return the
+existing token for a matching (fingerprint, identity) inside the 36 h window; it simply
+doesn't, which is why the mitigation has to live on the client side.
+
 ## The dependency chain
 
 Two questions worth answering up front, because the error messages don't make it
@@ -192,13 +214,16 @@ to **30 minutes**. Because tasks are created continuously as upstream processes 
 the cache expires and refills for the whole life of the run.
 
 The Seqera containers view for any of our runs shows this directly — two requests for
-the same container, 31 minutes apart, with an *identical* fingerprint and different
-tokens:
+the same container, 31 minutes apart, with identical fingerprints, identical resulting
+manifests, and different tokens:
 
-| Token | Fingerprint | Timestamp | Expiration |
-|---|---|---|---|
-| `5eefc1e826d5` | `04658e7c…b657` | 07:55 | next day 19:55 |
-| `499b276f43ad` | `04658e7c…b657` | 08:26 | next day 20:26 |
+| Token | Fingerprint | Wave digest | Timestamp | Expiration |
+|---|---|---|---|---|
+| `5eefc1e826d5` | `04658e7c…b657` | `sha256:ff69b9f8…` | 07:55 | next day 19:55 |
+| `499b276f43ad` | `04658e7c…b657` | `sha256:ff69b9f8…` | 08:26 | next day 20:26 |
+
+Same bytes, two names. The first token had 35 hours of life left when Nextflow stopped
+using it.
 
 Note the two clocks are unrelated: each **token stays valid for 36 hours**, but
 Nextflow throws it away after **30 minutes** and asks for another. Nothing expired; the
