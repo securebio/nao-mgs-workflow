@@ -10,42 +10,72 @@ Task failed to start - CannotPullContainerError: Error response from daemon: too
 
 This document explains what Wave is actually doing for this pipeline, where the
 limits are, why we hit them, and the smallest set of changes that would stop it.
+It assumes the Seqera and ECR credentials from the
+[installation guide](./installation.md) are configured, so only authenticated
+limits apply.
 
 ## Summary
 
 We do not use Wave to *build* containers — `bin/build_ecr_container.py` builds them
-and pushes them to our own ECR Public repository. We use Wave for exactly one
-thing: it appends the Fusion client as an extra layer at pull time. Fusion cannot be
-enabled without it — Nextflow refuses to start with `Fusion feature requires enabling
-Wave service`. The cost of that one layer is that **Wave sits on the critical path of
-every container pull in every task**, and its rate limits become ours.
+and pushes them to our own ECR Public repository. We use Wave for exactly one thing:
+it appends the Fusion client as an extra layer at pull time. Fusion cannot be enabled
+without it (Nextflow aborts with `Fusion feature requires enabling Wave service`). The
+cost of that one layer is that **Wave sits on the critical path of every container
+pull in every task**, and its 2,000 pulls/minute quota becomes ours.
 
-Three properties of the current setup multiply how much of that limit we consume:
+Measured on a real 83-minute RUN of 19,976 tasks (see
+[Empirical results](#empirical-results)):
+
+| | |
+|---|---|
+| Manifest pulls the run made against Wave | **19,976** — one per task |
+| Peak pull rate | **1,039/min**, against a 2,000/min quota |
+| Pulls actually needed (one per image per instance) | **1,795** — an 11× overshoot |
+
+A single RUN peaks at about half the account quota. The quota is **per Seqera user,
+shared across every concurrent run**, so two runs in parallel — main and stable, which
+we do routinely — is enough to exceed it. That is the whole story behind the `429`s.
+
+Three properties of the current setup produce that overshoot:
 
 | # | Root cause | Effect |
 |---|---|---|
-| 1 | Wave hands out an **ephemeral token** per request, and Nextflow re-requests one every **30 minutes** (`wave.tokens.cache.maxDuration`) | The image *name* changes mid-run, so every host's image cache is invalidated and a new Batch job definition is registered |
-| 2 | `nextflow.enable.moduleBinaries` gives **each process its own Wave container**, not each image | ~47 distinct Wave containers per cache window, not the 27 in `configs/containers.config` |
-| 3 | ECS's default image-pull behaviour re-pulls the manifest on **every task start** | One Wave "pull" per task, even when the image is already on the instance |
+| 1 | ECS's default image-pull behaviour re-pulls the manifest on **every task start** | One Wave pull per task, even for the 400th task of the same image on the same instance |
+| 2 | Wave mints a **new, uniquely-named image** on every request, and Nextflow re-requests one every 30 minutes | The image *name* changes mid-run, defeating any host-side image cache and registering a new Batch job definition each time |
+| 3 | Fusion makes Nextflow bundle each module's `resources/` into the image, so the unit is the **process**, not the image | 26 distinct Wave containers in that run for 14 underlying images |
 
 And two properties make the failure fatal rather than transient:
 
 | # | Root cause | Effect |
 |---|---|---|
-| 4 | Nextflow retries a Wave `429` five times over **~6 seconds**, then aborts the whole session | A rate limit that clears in a minute kills a multi-hour run |
+| 4 | Nextflow retries a Wave `429` five times over **~6 seconds**, then aborts the whole session | A per-minute quota needs a per-minute retry window |
 | 5 | Nextflow **never** retries a Wave `400`, but Wave returns `400` for transient upstream failures | One throttled digest lookup inside Wave aborts the run |
 
-The 80:20 fix is a handful of config lines in `configs/profiles.config` plus one line
-in the Batch launch template. See [Proposed fixes](#proposed-fixes).
+See [Proposed fixes](#proposed-fixes).
+
+## Terminology
+
+The error messages and the Seqera UI use several similar-sounding terms for different
+things. In the order Wave uses them:
+
+| Term | What it is |
+|---|---|
+| **Source image** | The image we built and pushed, e.g. `public.ecr.aws/…/coreutils:e405c169027d032d`. Also shown as "Request container" / "Container image". |
+| **Manifest** | The small JSON document listing an image's layers. Pulling it is one registry round trip, and it is the unit Wave rate-limits. |
+| **Digest** | The `sha256:…` content hash of a manifest. "Container digest" is the source image's; "Wave digest" is the augmented image's, and they differ because Wave added a layer. |
+| **Request fingerprint** | A hash Nextflow computes over (source image + module bundle + Fusion layer + platform). It is Nextflow's **client-side cache key**. Wave records it but does not act on it. |
+| **Token** | A short random string Wave mints **per request**, e.g. `5eefc1e826d5`. |
+| **Wave image** | The name Batch actually pulls: `wave.seqera.io/wt/<token>/<source path>:<tag>`. Same tag as the source, but a new `wt/<token>/` segment each time. Called `targetImage` in the API response. |
+| **Expiration** | How long a token stays valid: **36 hours** after it is minted. Unrelated to Nextflow's 30-minute cache (see [root cause 2](#2-wave-renames-the-image-on-every-request-and-nextflow-re-requests-every-30-minutes)). |
 
 ## The dependency chain
 
 Two questions worth answering up front, because the error messages don't make it
 obvious: **Docker Hub is not in the runtime path at all** (it is a build-time
 dependency only), and **layer bytes never flow through Wave** — Wave serves the
-manifest and `307`-redirects every blob to ECR Public's CloudFront distribution or
-to `fusionfs.seqera.io`. Wave is a control-plane dependency, not a bandwidth one.
-That is also why its limit is counted in manifests: a 15-layer image is one "pull".
+manifest and `307`-redirects every blob to ECR Public's CloudFront distribution or to
+`fusionfs.seqera.io`. Wave is a control-plane dependency, not a bandwidth one. That is
+also why its limit is counted in manifests: a 15-layer image is one "pull".
 
 Build time, run by hand whenever a `containers/*.yml` spec changes. This is the only
 point at which Docker Hub is involved:
@@ -59,139 +89,167 @@ flowchart LR
     DH --> DBUILD
     CONDA --> DBUILD
     DBUILD -- "docker push" --> ECR
+
+    classDef reg fill:#e8eaf6,stroke:#3f51b5,color:#000
+    classDef step fill:#fff,stroke:#666,color:#000
+    class ECR reg
+    class DH,CONDA,DBUILD step
 ```
 
-Run time. Everything below happens on every run; the highlighted boxes are where the
-limits bite:
+Run time. Orange boxes are where a limit or a failure bites:
 
 ```mermaid
 flowchart TB
     subgraph HEAD["Nextflow head node"]
-        direction TB
         CFG["configs/containers.config<br/><i>process label → image tag</i>"]
-        BUNDLE["module binaries<br/><i>modules/*/resources/usr/bin</i><br/><i>one layer per process</i>"]
-        FUSEJSON["fusionfs.seqera.io<br/>releases/v2.6-amd64.json<br/><i>Fusion layer descriptor</i>"]
-        FP{{"<b>fingerprint</b><br/>image + bundle + Fusion"}}
+        BUNDLE["module bundle<br/><i>this module's own resources/usr/bin</i>"]
+        BIN["project bin/<br/><i>same for every container</i>"]
+        FUSEJSON["Fusion release descriptor<br/><i>fusionfs.seqera.io/releases/…json</i>"]
+        FP{{"<b>request fingerprint</b><br/><i>hash of all four</i>"}}
         CACHE["<b>token cache</b><br/>wave.tokens.cache.maxDuration<br/><b>default 30m</b>"]
         CFG --> FP
         BUNDLE --> FP
+        BIN --> FP
         FUSEJSON --> FP
-        FP --> CACHE
+        FP -- "look up fingerprint" --> CACHE
     end
 
     subgraph WAVESVC["Wave service"]
-        direction TB
         WAVE["POST /v1alpha2/container"]
-        DIGEST{"resolve source digest<br/>HEAD upstream manifest"}
-        ERR400["<b>400</b> 'does not exist or<br/>access is not authorized'<br/><i>never retried → run aborts</i>"]
-        TOKEN["mint <b>ephemeral token</b><br/>wave.seqera.io/wt/&lt;token&gt;/…<br/><i>expires 36 h after issue</i>"]
+        DIGEST{"resolve source digest<br/><i>HEAD the source manifest</i>"}
+        ERR400["<b>400</b> 'does not exist or<br/>access is not authorized'<br/><i>Nextflow never retries → run aborts</i>"]
+        TOKEN["mint a <b>new token</b><br/><i>random per request; valid 36 h</i>"]
+        IMG["<b>Wave image name</b><br/>wave.seqera.io/wt/&lt;token&gt;/…"]
         WAVE --> DIGEST
-        DIGEST -- "null: missing tag,<br/>throttled, or error" --> ERR400
-        DIGEST -- ok --> TOKEN
+        DIGEST -- "no digest returned" --> ERR400
+        DIGEST -- "digest ok" --> TOKEN --> IMG
     end
 
-    subgraph INSTANCE["AWS Batch compute instance"]
-        direction TB
-        ECSAGENT["<b>ECS agent</b><br/>ECS_IMAGE_PULL_BEHAVIOR<br/><b>default</b> → pull every task start"]
-        TASK["task container<br/><i>Fusion mounts s3://…</i>"]
-        ECSAGENT -- "dockerd" --> TASK
-    end
-
-    SRC[("ECR Public<br/><i>source image</i>")]
-    WAVEREG["<b>Wave registry proxy</b><br/>wave.seqera.io/v2/wt/&lt;token&gt;/…"]
+    SRC[("<b>ECR Public</b><br/><i>source image</i>")]
+    JOBDEF["Batch job definition<br/><i>named after the token,<br/>so a new one per token</i>"]
+    ECSAGENT["<b>ECS agent</b> on the instance<br/>ECS_IMAGE_PULL_BEHAVIOR=default<br/><i>→ pulls on every task start</i>"]
+    WAVEREG["<b>Wave registry proxy</b><br/><i>serves the augmented manifest</i>"]
+    TASK["task container<br/><i>Fusion mounts s3://…</i>"]
     CDN[("ECR Public CloudFront<br/><i>base layer bytes</i>")]
-    FUSECDN[("fusionfs.seqera.io<br/><i>65 MB Fusion client</i>")]
-    JOBDEF["Batch job definition<br/>nf-wave-seqera-io-wt-…<br/><i>new revision per token</i>"]
+    FUSECDN[("fusionfs.seqera.io<br/><i>Fusion client layer bytes</i>")]
 
-    CACHE -- "miss: ≤1 req/s,<br/>retry 5× over ~6 s" --> WAVE
-    DIGEST -. "1 pull/s anonymous,<br/>10/s authenticated" .-> SRC
-    TOKEN -- targetImage --> JOBDEF
+    CACHE -- "hit → reuse the cached image name" --> JOBDEF
+    CACHE -- "miss or >30 min old →<br/>POST, ≤1/s, 5 retries over ~6 s" --> WAVE
+    DIGEST -. "Wave pulls our manifest:<br/>10/s authenticated" .-> SRC
+    IMG --> JOBDEF
     JOBDEF --> ECSAGENT
-    ECSAGENT -- "<b>GET manifest = 1 Wave pull</b><br/>2,000/min per Seqera user" --> WAVEREG
-    WAVEREG -- "307" --> CDN
-    WAVEREG -- "307" --> FUSECDN
-    CDN -. "layer bytes,<br/>not rate limited" .-> SRC
+    ECSAGENT -- "<b>GET manifest = 1 Wave pull</b><br/><i>2,000/min per Seqera user</i>" --> WAVEREG
+    WAVEREG --> TASK
+    WAVEREG -- "307 base layers" --> CDN
+    WAVEREG -- "307 Fusion layer" --> FUSECDN
+    CDN -. "same bytes we pushed" .-> SRC
+    FUSEJSON -. "names the layer<br/>fetched here" .-> FUSECDN
 
-    classDef fail fill:#fdd,stroke:#c33,color:#000
-    classDef limit fill:#ffd,stroke:#cc0,color:#000
+    classDef hot fill:#ffe0b2,stroke:#e65100,stroke-width:2px,color:#000
+    classDef fail fill:#ffcdd2,stroke:#c62828,stroke-width:2px,color:#000
+    classDef reg fill:#e8eaf6,stroke:#3f51b5,color:#000
+    class CACHE,ECSAGENT,WAVEREG hot
     class ERR400 fail
-    class CACHE,ECSAGENT,WAVEREG limit
+    class SRC,CDN,FUSECDN reg
+    style HEAD fill:#fafafa,stroke:#9e9e9e
+    style WAVESVC fill:#fafafa,stroke:#9e9e9e
 ```
 
 ## Where the limits are
 
-| Service | Limit | Notes |
+| Service | Limit (authenticated) | Notes |
 |---|---|---|
-| Wave, authenticated | 250 builds/hour, **2,000 pulls/minute** | A "pull" is one *manifest* request; layers and blobs are free. A 15-layer image is 1 pull. |
-| Wave, anonymous | 25 builds/day, 100 pulls/hour | Counted per source IP, which is why the unauthenticated form of the error names an IP. |
-| ECR Public, unauthenticated | 1 pull/second, **not adjustable** | Applies to Wave's own upstream digest lookups. |
-| ECR Public, authenticated | 10 pulls/second, adjustable | Requires ECR credentials registered in Seqera. |
+| Wave pulls | **2,000/minute** | Per Seqera user, shared across concurrent runs. A "pull" is one *manifest* request; layers and blobs are free, so a 15-layer image is 1 pull. |
+| Wave builds | 250/hour | Not relevant to us: we never ask Wave to build. |
+| ECR Public pulls | 10/second (adjustable) | Applies to Wave's own digest lookups against our registry, not to our tasks. |
 
-The Wave quota is **per Seqera user**, aggregated across every concurrent run. The
-production 429s name a user, not a run — one delivery's fan-out can starve another's.
+Unauthenticated, the same limits are 100 pulls/hour and 1 ECR Public pull/second; that
+is why the error sometimes names an IP instead of a user.
 
 ## Root causes
 
-### 1. Ephemeral tokens churn every 30 minutes
+### 1. Every task start is a fresh manifest pull
 
-Wave's response to `POST /v1alpha2/container` is not deterministic. Three identical
-requests for an unchanged image returned three different tokens, hence three
-different image URLs. Nextflow papers over this with an in-memory cache
-(`WaveClient.cache`), but that cache is built with
-`expireAfterWrite(wave.tokens.cache.maxDuration)`, defaulting to **30 minutes**.
+The ECS agent's `ECS_IMAGE_PULL_BEHAVIOR` defaults to `default`: "the image/digest will
+be pulled remotely, if the pull fails then the cached image/digest on the instance will
+be used". A `docker pull` of an already-present image still fetches the manifest —
+verified by blackholing the registry in `/etc/hosts`, at which point pulling a
+fully-cached image fails outright.
 
-In a real pipeline, tasks are created continuously as upstream processes finish, so
-the cache expires and re-fills for the whole life of the run. Every refill produces
-a *new image name* for byte-identical content, which:
+So under `default`, pulls = tasks. In the measured run that is 19,976 pulls where 1,795
+would do. This is the single largest factor, and it is fixed outside this repository.
 
-- invalidates the Docker image cache on every instance (the name is the cache key),
-- makes `ECS_IMAGE_PULL_BEHAVIOR=prefer-cached` useless on its own,
-- registers a new AWS Batch job definition,
-- and costs a fresh manifest pull from every instance that runs it.
+### 2. Wave renames the image on every request, and Nextflow re-requests every 30 minutes
 
-This matches the timing of the failure that prompted this investigation: the run made
-its first Wave requests at `14:10`, and the `CannotPullContainerError` storm and the
+Wave's response to `POST /v1alpha2/container` is not deterministic: it mints a fresh
+random token per request and returns `wave.seqera.io/wt/<token>/…` as the image name.
+Nextflow papers over this with an in-memory cache keyed on the request fingerprint, but
+that cache is built with `expireAfterWrite(wave.tokens.cache.maxDuration)`, defaulting
+to **30 minutes**. Because tasks are created continuously as upstream processes finish,
+the cache expires and refills for the whole life of the run.
+
+The Seqera containers view for any of our runs shows this directly — two requests for
+the same container, 31 minutes apart, with an *identical* fingerprint and different
+tokens:
+
+| Token | Fingerprint | Timestamp | Expiration |
+|---|---|---|---|
+| `5eefc1e826d5` | `04658e7c…b657` | 07:55 | next day 19:55 |
+| `499b276f43ad` | `04658e7c…b657` | 08:26 | next day 20:26 |
+
+Note the two clocks are unrelated: each **token stays valid for 36 hours**, but
+Nextflow throws it away after **30 minutes** and asks for another. Nothing expired; the
+client just stopped using a perfectly good name.
+
+Each new name:
+
+- gives every instance a cache miss on a name it has never seen (the layers are
+  content-addressed, so no bytes move — but the manifest pull is the thing that counts);
+- registers a new AWS Batch job definition, since Nextflow derives the job-definition
+  name from the image name;
+- costs 754 extra manifest pulls in the measured run, 42% above the floor.
+
+This also matches the timing of the failure that prompted this investigation: the run
+made its first Wave requests at `14:10` and the `CannotPullContainerError` storm and the
 `429` both landed at `14:38` — one cache window later.
 
-Note this does **not** affect `-resume`: the task hash uses the Wave *fingerprint*
-(`ContainerInfo.hashKey`), not the token URL.
+It does **not** affect `-resume`: the task hash uses the fingerprint
+(`ContainerInfo.hashKey`), not the image name.
 
-### 2. Module binaries multiply the container count
+### 3. Fusion turns each module into its own Wave container
 
-`configs/profiles.config` sets `nextflow.enable.moduleBinaries = true`, and 33 of our
-modules carry a `resources/usr/bin` bundle. Wave packs each bundle into its own layer,
-so the fingerprint is per *process*, not per *image*:
+Enabling Fusion makes Nextflow set `wave.bundleProjectResources = true` and disable the
+remote bin directory (`WaveFactory.checkWaveRequirement`), so the pipeline's `bin/` is
+shipped as a container layer instead of being staged at runtime. On top of that,
+`nextflow.enable.moduleBinaries = true` ships each module's own binaries as a second
+layer. The scope of that second bundle is
+`scriptPath.resolveSibling('resources')` (`ScriptMeta.getModuleBundle`) — the
+`resources/` directory **next to that module's `main.nf`**, and nothing else.
+
+So `ADD_FIXED_COLUMN` gets an image containing the `python` base + the project `bin/` +
+*only* `modules/local/addFixedColumn/resources/usr/bin/*`. `ADD_SAMPLE_COLUMN` gets a
+different image with only its own script. There is no shared `python` container:
 
 | | count |
 |---|---|
-| processes | 98 |
-| … with module binaries → one Wave container each | 33 |
-| … without, spanning 14 distinct images | 65 |
-| **distinct Wave containers per cache window** | **~47** |
+| processes in the repo | 97 |
+| … with a module bundle → one Wave container each | 32 |
+| … without, sharing 21 distinct images | 65 |
+| **distinct Wave fingerprints, whole repo** | **53** |
+| of which use the `python` image | 23 |
 
-So the unit of Wave traffic is ~47, not the 27 labels in `configs/containers.config`.
-
-### 3. Every task start is a fresh manifest pull
-
-The ECS agent's `ECS_IMAGE_PULL_BEHAVIOR` defaults to `default`: "the image/digest
-will be pulled remotely, if the pull fails then the cached image/digest on the
-instance will be used". A `docker pull` of an already-present image still fetches the
-manifest — verified by blackholing the registry, at which point pulling a cached
-image fails outright. Under `default`, therefore, **each task start costs one Wave
-pull**, even for the hundredth task of the same image on the same instance.
-
-`once` and `prefer-cached` skip the pull entirely when the image is already present.
-`prefer-cached` additionally disables automated image cleanup on the instance.
+The project `bin/` layer is identical everywhere, so it does not multiply anything; the
+per-module layer does.
 
 ### 4. The Wave retry window is ~6 seconds
 
-`wave.retryPolicy` defaults to `maxAttempts = 5`, `delay = 450ms`, `multiplier = 2`,
-`maxDelay = 90s`. Measured against a stub Wave that always answers `429`, Nextflow
-made 5 attempts spanning **6.4 seconds** and then threw `BadResponseException`, which
-aborts the session. No process-level `errorStrategy` applies — this happens during
-container resolution, not task execution.
+`wave.retryPolicy` defaults to `maxAttempts = 5`, `delay = 450ms`, `maxDelay = 90s`,
+`jitter = 0.25`. Measured against a stub Wave that always answers `429`, Nextflow made
+5 attempts spanning **6.4 seconds** and then threw `BadResponseException`, which aborts
+the session. No process-level `errorStrategy` applies — this happens during container
+resolution, not task execution.
 
-Six seconds is the wrong order of magnitude for an account-wide, per-minute quota.
+Six seconds is the wrong order of magnitude for a per-minute quota.
 
 ### 5. A Wave `400` is never retried — and Wave uses `400` for transient failures
 
@@ -201,39 +259,81 @@ method catches **every** exception and returns `null`, and a `null` digest becom
 
 > `Container image '…' does not exist or access is not authorized`
 
-So a missing tag, a credential problem, an upstream `429` from ECR Public, and a
-network blip are all reported identically — and Nextflow retries `400` **zero** times
-(verified: one request, immediate abort).
+So a missing tag, a credential problem, an upstream `429` from ECR Public, and a network
+blip are all reported identically — and Nextflow retries `400` **zero** times (verified:
+one request, immediate abort).
 
 The tag from the production error, `python:1f76d576c5f5e441`, resolves in ECR Public
-today and Wave returns `200` for it today. It was never missing, and our repository is
-public, so this was not a credentials problem either. The advice currently in
-[troubleshooting.md](./troubleshooting.md) — register ECR credentials in Seqera — is
-worth doing (it raises Wave's own upstream limit from 1 to 10 pulls/second) but is not
-the cause of that error.
+today and Wave returns `200` for it today. It was never missing, and the repository is
+public, so this was not a credentials problem either.
 
 ### 6. Task-level retries have no backoff
 
 `configs/profiles.config` sets `errorStrategy = "retry"` with `maxRetries = 1`.
 `CannotPullContainerError: … toomanyrequests` is classified as retryable by
-`AwsBatchTaskHandler` (only reasons containing `unauthorized` are unrecoverable), so
-the retry does fire — but Nextflow resubmits immediately, so both attempts usually
-land inside the same throttled window.
+`AwsBatchTaskHandler` (only reasons containing `unauthorized` are unrecoverable), so the
+retry does fire — but Nextflow resubmits immediately, so both attempts can land inside
+the same throttled window.
 
 ## Empirical results
 
-Measurements on Nextflow `26.04.6` unless noted. Methods are described inline, and
-every number below is reproducible against public endpoints and this repository's own
-container tags.
+Measurements on Nextflow `26.04.6` unless noted, plus three production RUN traces from
+`output/logging/trace_*.tsv`.
+
+### Production: what a run actually costs Wave
+
+| | 2026-07-20 | 2026-07-27 | 2026-08-03 |
+|---|---|---|---|
+| tasks | 14,156 | 16,705 | 19,978 |
+| wall clock | 57 min | 43 min | 83 min |
+| distinct Wave image URLs | 28 | 28 | 44 |
+| distinct underlying images | 14 | 14 | 14 |
+| manifest pulls (= tasks) | 14,156 | 16,705 | 19,978 |
+| **peak pulls/minute** | **924** | **1,126** | **1,039** |
+| peak as % of the 2,000/min quota | 46% | 56% | 52% |
+
+One run is not enough to breach the quota; two overlapping runs are.
+
+### Production: the two multipliers, separated
+
+Joining the 2026-08-03 trace against the Batch job records for all 19,976 tasks:
+
+| | |
+|---|---|
+| compute instances used | 223 |
+| tasks per instance | mean 89.6, median 51, max 447 |
+| manifest pulls today (one per task) | 19,976 |
+| … with `prefer-cached`, today's churning names | 2,549 (7.8× fewer) |
+| … with `prefer-cached` **and** stable names | **1,795 (11.1× fewer)** |
+| pulls attributable purely to token churn | 754 |
+
+The distinct-URL count is predictable from the two mechanisms. For that run there were
+26 active fingerprints (15 of them per-module bundles); multiplying each by the number
+of 30-minute windows its tasks span predicts **45** distinct Wave image URLs against
+**44** observed.
+
+### Production: retries and spot reclamations
+
+| | 2026-07-20 | 2026-07-27 | 2026-08-03 |
+|---|---|---|---|
+| tasks retried | 4 | 57 | 2 |
+| as a share of tasks | 0.028% | 0.342% | 0.010% |
+| exit `-` (never produced an exit code) | 3 | 34 | 2 |
+| exit `143` (SIGTERM — spot reclamation) | 1 | 15 | 0 |
+| exit `0` (ran, then failed at stage-out) | 0 | 8 | 0 |
+| retries that then succeeded | 4/4 | 57/57 | 2/2 |
+| distinct processes affected | 4 | 21 | 2 |
+
+Every retry in all three runs succeeded on the second attempt.
 
 ### Wave request and pull anatomy
 
 | Observation | Result |
 |---|---|
-| 3 identical `POST /v1alpha2/container` for an unchanged image | 3 **different** tokens / image URLs |
-| Token lifetime (`expiration` − request time) | **36 hours**, measured twice |
+| 3 identical `POST /v1alpha2/container` for an unchanged image | 3 **different** tokens / image names |
+| Token lifetime (`expiration` − request time) | **36 hours** |
 | Manifest served by Wave with no `containerConfig` | byte-identical to the ECR Public manifest (same 15 layer digests) |
-| Manifest served with the Fusion `containerConfig` | 16 layers — exactly one appended, 65,304,313 B, the Fusion v2.6 amd64 client |
+| Manifest served with the Fusion `containerConfig` | 16 layers — exactly one appended, the Fusion client |
 | Base-layer blob request to Wave | `307` → ECR Public CloudFront |
 | Fusion-layer blob request to Wave | `307` → `fusionfs.seqera.io` |
 
@@ -246,34 +346,30 @@ container tags.
 | Same token again ("Image is up to date") | 0.50 s | none | **yes** |
 | Same token, registry blackholed in `/etc/hosts` | — | — | **fails** |
 
-Token churn is therefore cheap in bandwidth and expensive in quota: it costs no layer
-transfer but a full manifest pull, which is the thing that is rate limited.
+Token churn is cheap in bandwidth and expensive in quota.
 
-### Token churn A/B, local executor
+### Controlled A/B on the token cache
 
-Same pipeline, tasks created steadily over 7 minutes, one container:
+Same pipeline, tasks created steadily so the cache expires mid-run. Local executor,
+one container, 7 minutes:
 
-| `wave.tokens.cache.maxDuration` | Wave requests | distinct image URLs |
+| `wave.tokens.cache.maxDuration` | Wave requests | distinct image names |
 |---|---|---|
 | `1m` | 7 | 7 |
 | `24h` | **1** | **1** |
 
-### Token churn A/B, AWS Batch
-
-Same pipeline on AWS Batch: 18 staggered rounds creating 54 tasks across two
-containers over ~40 minutes. Both arms completed with zero task failures; only
-`wave.tokens.cache.maxDuration` differs between them.
+On AWS Batch, 54 tasks across **two** containers over ~40 minutes:
 
 | Arm | Wave requests | Batch job definitions registered |
 |---|---|---|
 | `2m` (compressed stand-in for the 30m default) | 15 | 15 |
 | `24h` | **2** | **2** |
 
-The same pair run on Nextflow `25.10.5` gave 13 vs 2 — this is not a version-specific
-behaviour. Note the second column: every new token also registers a new Batch job
-definition, so token churn consumes Batch API calls and job-definition quota too.
+The `24h` arm makes 2 requests, not 1, because the pipeline uses two distinct
+containers and each needs one request. Two is the floor for that pipeline; 15 is what
+churn turns it into. The same pair on Nextflow `25.10.5` gave 13 vs 2.
 
-### Module binaries multiply the count
+### Module bundles multiply the count
 
 Three processes, one image, `nextflow.enable.moduleBinaries = true`; two of the three
 carry a `resources/usr/bin` bundle:
@@ -297,57 +393,16 @@ Observed backoff with `maxAttempts = 10`: 0.42, 1.11, 1.74, 4.02, 8.04, 16.86, 3
 ### Not reproduced
 
 We did not trigger a Wave `429` ourselves. 150 anonymous container requests issued in
-3 seconds (≈3,000/min) all returned `200`, and we stopped there rather than
-deliberately exhausting a shared quota. The 2,000 pulls/minute figure is Seqera's
-documented limit, not a measured one.
+3 seconds (≈3,000/min) all returned `200`, and we stopped there rather than deliberately
+exhausting a shared quota. The 2,000 pulls/minute figure is Seqera's documented limit,
+not a measured one — but the measured peak of 1,039/min from a single run makes the
+mechanism clear regardless.
 
 ## Proposed fixes
 
 Ordered by benefit per unit of risk.
 
-### 1. Stop the token churn — `configs/profiles.config`
-
-```groovy
-// Wave mints a new ephemeral image URL per request; re-requesting every 30 min
-// (the default) invalidates every instance's image cache mid-run. Tokens live 36 h.
-wave.tokens.cache.maxDuration = '24h'
-```
-
-One line, and it collapses per-container Wave traffic to once per run. It is the
-prerequisite for fix 3 doing anything, because `prefer-cached` can only hit when the
-image name is stable. Keep the value comfortably under the 36 h token lifetime.
-
-Two caveats. The option is undocumented, so Nextflow 26.04.6 logs
-`WARN Unrecognized config option 'wave.tokens.cache.maxDuration'` — it is nonetheless
-applied (`WaveConfig` reads it via `opts.navigate`, which the config validator doesn't
-see), confirmed in every run above by the `tokensCacheMaxDuration` value in the
-`Wave config:` debug line. And being undocumented, it could be renamed without a
-deprecation cycle, so it is worth re-checking on Nextflow upgrades.
-
-### 2. Widen the retry windows — `configs/profiles.config`
-
-```groovy
-// A per-minute account quota needs a retry window measured in minutes, not seconds.
-wave.retryPolicy.maxAttempts = 10   // ~3 min instead of ~6 s
-
-process {
-    errorStrategy = { sleep(Math.pow(2, task.attempt) * 2000 as long); return 'retry' }
-    maxRetries    = 5
-}
-```
-
-The `errorStrategy` closure is the idiom from the Nextflow docs. It replaces the bare
-`errorStrategy = "retry"` / `maxRetries = 1` in the Batch profiles, and gives
-`CannotPullContainerError` retries 4 s / 8 s / 16 s / 32 s / 64 s of separation instead
-of resubmitting immediately. It also helps spot reclamations, which are retried today
-with the same zero delay.
-
-There is no useful pattern to match on: "Task failed to start" carries no exit status,
-and the retryable/unrecoverable split for `CannotPullContainerError` is already made
-inside `AwsBatchTaskHandler` before `errorStrategy` sees the task. A general backoff is
-both simpler and strictly better than the current behaviour.
-
-### 3. Stop re-pulling per task — Batch launch template
+### 1. Stop re-pulling per task — Batch launch template
 
 Set on the ECS agent in the launch template's user data (this lives in
 `nao-aws-terraform/batch-template`, not in this repo):
@@ -356,24 +411,92 @@ Set on the ECS agent in the launch template's user data (this lives in
 ECS_IMAGE_PULL_BEHAVIOR=prefer-cached
 ```
 
-With fix 1 in place, the image name is stable for the whole run, so the second and
-subsequent tasks using an image on a given instance skip the registry entirely. That
-turns "one Wave pull per task" into "one Wave pull per image per instance", and it
-needs no pipeline change.
+Worth **7.8× fewer pulls on its own**, and 11.1× combined with fix 2 — by far the
+biggest single win, and it needs no pipeline change. `prefer-cached` also disables
+automated image cleanup on the instance, which is fine for Batch instances that are torn
+down after the run but is worth checking against the root volume size if any compute
+environment is long-lived.
 
-How big that win is depends on how densely production packs tasks onto instances,
-which we did not measure — our test workload was too small and too sparse to be
-representative. The mechanism is certain; the multiplier is not.
+### 2. Stop the token churn — `configs/profiles.config`
 
-`prefer-cached` also disables automated image cleanup on the instance, which is fine
-for Batch instances that are torn down after the run but is worth checking against the
-root volume size on long-lived compute environments.
+```groovy
+// Wave mints a new image name per request; re-requesting every 30 min (the default)
+// gives every instance a cache miss on a name it has never seen. Tokens live 36 h.
+wave.tokens.cache.maxDuration = '24h'
+```
 
-### 4. Take Wave out of the pull path entirely — `wave.freeze`
+Worth 754 of the 19,976 pulls in the measured run on its own — but its real value is
+that it makes fix 1 work properly, because `prefer-cached` can only hit on a stable
+name. It also stops the pipeline registering a new Batch job definition every 30
+minutes per container.
 
-The complete fix. With freeze mode Wave builds the Fusion-augmented image *once* and
-pushes it to a repository we own, and Nextflow then hands Batch a stable URL in our own
-registry:
+Two caveats. **The option is undocumented** — it appears nowhere in the Nextflow
+configuration reference or the Wave docs, only in
+`WaveConfig.groovy` (`opts.navigate('tokens.cache.maxDuration', '30m')`). Nextflow
+26.04.6 therefore logs `WARN Unrecognized config option 'wave.tokens.cache.maxDuration'`
+while still applying it — confirmed in every run above by the `tokensCacheMaxDuration`
+value in the `Wave config:` debug line. Being undocumented, it could be renamed without
+a deprecation cycle, so re-check it on Nextflow upgrades.
+
+### 3. Widen the Wave retry window — `configs/profiles.config`
+
+```groovy
+wave.retryPolicy.maxAttempts = 10   // ~3 min of tolerance instead of ~6 s
+```
+
+The other `wave.retryPolicy` keys (`delay`, `maxDelay`, `jitter`) keep their defaults.
+Note that the exponential growth factor is **not** a documented setting: `RetryOpts` has
+a `multiplier` field defaulting to `2`, but it is absent from the
+[configuration reference](https://docs.seqera.io/nextflow/reference/config/wave), so
+don't rely on setting it.
+
+### 4. Back off task retries, without weakening the fail-fast behaviour
+
+We deliberately run `maxRetries = 1` so a genuinely broken process fails fast on the
+on-demand fallback queue. That can be kept, because **infrastructure failures are
+distinguishable from process failures inside the `errorStrategy` closure**:
+`task.exitStatus` is `Integer.MAX_VALUE` when the task never produced an exit code
+(failed to start, image pull error, host terminated) — this is the value the trace
+renders as `-` (`TraceRecord.fmtString`) — and `143` when the container was
+SIGTERM'd, which on a spot queue means reclamation. Anything else is the script's own
+exit status.
+
+```groovy
+process {
+    // Infra failures (no exit code, or SIGTERM from a spot reclamation) get several
+    // backed-off attempts; a real non-zero exit from the script still fails fast.
+    errorStrategy = {
+        if( task.exitStatus == Integer.MAX_VALUE || task.exitStatus == 143 ) {
+            sleep(Math.pow(2, task.attempt) * 2000 as long)
+            return task.attempt <= 5 ? 'retry' : 'terminate'
+        }
+        return task.attempt <= 1 ? 'retry' : 'terminate'
+    }
+    maxRetries = 5
+}
+```
+
+`maxRetries` has to be raised to 5 because it caps what the closure is allowed to ask
+for; the closure, not `maxRetries`, is what limits real process errors to one retry.
+
+**Cost of the backoff, from the traces:** retries affect 0.01–0.34% of tasks, every one
+of them succeeded on the second attempt, and the first backoff is 4 seconds. Added
+task-time across a whole run is 16 s / 228 s / 8 s for the three runs measured. Wall
+clock is affected only where a retried task is on the critical path, and the retries in
+the worst run spanned 21 processes — so a few tens of seconds on a 43-minute run, worst
+case. Against that, the current setting turns a second consecutive infra blip into a
+dead run that has to be relaunched with `-resume`.
+
+`task.exitStatus` was verified to be populated and correct inside the closure
+(a process exiting `3` reported `exitStatus=3` on every attempt). Note that `137`
+(SIGKILL) is deliberately **not** in the infra list: it is also what an OOM kill looks
+like, and none of the three runs produced one.
+
+### 5. Take Wave out of the pull path entirely — `wave.freeze`
+
+The complete fix, and the answer to sharing containers across parallel runs. With freeze
+mode Wave builds the Fusion-augmented image *once* and pushes it to a repository we own,
+and Nextflow then hands Batch a stable URL in our own registry:
 
 ```groovy
 wave.enabled          = true
@@ -381,32 +504,32 @@ wave.freeze           = true
 wave.build.repository = '<our ECR repo>'
 ```
 
-Wave then makes at most one API call per container per content change, and task pulls
-go straight to ECR with no Wave involvement and no Wave quota. Freeze is compatible
-with Fusion: Wave rewrites the augmentation into the build (`freezeService.freezeBuildRequest`),
-so the Fusion layer is baked in.
+The frozen image is **content-addressed**: Wave's `containerId` is "a consistent hash
+generated from the container build assets… the same container build request should
+result in the same `id`" (`BuildRequest`), and on a later request with a matching hash
+Wave returns the existing registry URL without rebuilding. So this caches across runs,
+across branches, and across concurrent invocations automatically — main and stable share
+whichever containers they have in common and get separate images for the ones they
+don't, with no coordination. Task pulls then go to ECR with no Wave involvement and no
+Wave quota at all.
 
-This is larger than the other three: it needs push credentials for the target registry
+This is larger than the other fixes: it needs push credentials for the target repository
 registered in Seqera Platform, a decision about which repository to write to, and a
-cache repository for build layers. Worth doing, but not the 80:20.
+`wave.build.cacheRepository` for build layers. Freeze is compatible with Fusion — Wave
+rewrites the augmentation into the build (`freezeService.freezeBuildRequest`), so the
+Fusion layer is baked in.
 
 **`wave.mirror` is not an alternative.** Mirror copies the source image "with the same
-name, tag, and checksum", which cannot carry the Fusion layer — Nextflow drops the
-container config with a warning when both are set. Enabling mirror would silently
-disable Fusion.
-
-### 5. Register ECR credentials in Seqera
-
-Already recommended by [troubleshooting.md](./troubleshooting.md), and still worth
-doing — not for the reason given there, but because it raises the ceiling on Wave's own
-upstream digest lookups from 1 to 10 pulls/second, which is what the `400` in root
-cause 5 is most likely bumping into.
+name, tag, and checksum", which cannot carry the Fusion layer; Nextflow drops the
+container config with a warning when both are set (`WaveClient.makeRequest`). Enabling
+mirror would silently disable Fusion.
 
 ## References
 
 - [Reduce Wave API calls](https://docs.seqera.io/wave/guides/reduce-api-calls)
 - [Wave API limits](https://docs.seqera.io/wave/api#api-limits)
 - [`wave` configuration scope](https://docs.seqera.io/nextflow/reference/config/wave)
-- [Amazon ECS container agent configuration](https://github.com/aws/amazon-ecs-agent/blob/master/README.md)
+- [Wave containers in Nextflow](https://docs.seqera.io/nextflow/wave) (freeze and mirror modes)
+- [Amazon ECS container agent configuration](https://github.com/aws/amazon-ecs-agent/blob/master/README.md) (`ECS_IMAGE_PULL_BEHAVIOR`)
 - [Amazon ECR Public service quotas](https://docs.aws.amazon.com/AmazonECR/latest/public/public-service-quotas.html)
-- [`errorStrategy` retry with backoff](https://docs.seqera.io/nextflow/reference/process#errorstrategy)
+- [`errorStrategy`](https://docs.seqera.io/nextflow/reference/process#errorstrategy) and [retry with backoff](https://docs.seqera.io/nextflow/process#dynamic-retry-with-backoff)
