@@ -16,8 +16,8 @@ nextflow_pipeline {
             def log = new File("${launchDir}/meta/nextflow.log").text
             def waveConfig = (log =~ /Wave config: .*/)
             assert waveConfig.size() > 0 : "Wave client never initialised"
-            // Fail if option was not applied to the Wave config.
-            assert waveConfig[0] =~ /tokensCacheMaxDuration:12h[,)]/
+            // Fail if option was not applied to the Wave config (24h is normalized to 1d).
+            assert waveConfig[0] =~ /tokensCacheMaxDuration:1d[,)]/
             // Fail test if option is now valid in ConfigValidator.
             assert log.contains("Unrecognized config option 'wave.tokens.cache.maxDuration'") :
                 "Nextflow now recognises wave.tokens.cache.maxDuration, so it is covered " +
