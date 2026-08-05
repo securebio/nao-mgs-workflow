@@ -443,10 +443,45 @@ ECS_IMAGE_PULL_BEHAVIOR=prefer-cached
 ```
 
 Worth **7.8× fewer pulls on its own**, and 11.1× combined with fix 2 — by far the
-biggest single win, and it needs no pipeline change. `prefer-cached` also disables
-automated image cleanup on the instance, which is fine for Batch instances that are torn
-down after the run but is worth checking against the root volume size if any compute
-environment is long-lived.
+biggest single win, and it needs no pipeline change.
+
+#### `prefer-cached` or `once`?
+
+Both skip the pull when the image is already on the instance, so both deliver the full
+saving above. They differ in one respect: `once` re-pulls if the image "was removed by
+image cleanup", whereas `prefer-cached` disables automated image cleanup outright.
+
+**Within a single run they are provably equivalent on our workload.** ECS only considers
+an image for cleanup once it is unreferenced *and* older than
+`ECS_IMAGE_MINIMUM_CLEANUP_AGE` (default 1 h). Across all 1,795 (instance, image) pairs
+in the measured run, **zero** met both conditions — instances are too short-lived:
+
+| | |
+|---|---|
+| instance lifetime, first task start → last task complete | median 21 min, p90 47 min, max 71 min |
+| instances alive longer than the 1 h cleanup age | 3% |
+| distinct images per instance | median 9, max 14 |
+| (instance, image) pairs cleanup could have evicted | **0 of 1,795** |
+
+So pick on which failure mode you would rather have as the workload changes, not on
+today's numbers. Two arguments decide it for `prefer-cached`:
+
+- **Instances that outlive a run.** If a compute environment doesn't scale to zero
+  between our frequent, overlapping runs, idle instances are exactly where cleanup does
+  fire — images sit unreferenced and age past 1 h. Under `once` the next run re-pulls
+  them; under `prefer-cached` it doesn't. We could not confirm whether instances are
+  reused across runs, because Batch retains job records for only about a week.
+- **`once` reintroduces the failure we are fixing.** Its re-pull path is a Wave manifest
+  request, arriving precisely on the long runs most at risk of the quota.
+
+The cost of `prefer-cached` is bounded and small. The union of all 14 images used in a
+run is **3.4 GB compressed, roughly 8–9 GB on disk**, and an instance that ran every one
+of them still only holds that much. The caveat is that we could not read the launch
+template's root volume size (`ec2:DescribeLaunchTemplateVersions` is not granted to the
+sandbox role), and this pipeline has a history of `no space left on device`
+(see [troubleshooting](./troubleshooting.md#docker-image-failures)) with `use_scratch`
+writing to local disk. Check that headroom before switching; if it is tight, `once` costs
+nothing measurable today and keeps the cleanup safety valve.
 
 ### 2. Stop the token churn — `configs/profiles.config`
 
