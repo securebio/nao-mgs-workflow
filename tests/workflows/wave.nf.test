@@ -1,0 +1,24 @@
+nextflow_pipeline {
+
+    name "Test Wave configuration"
+    script "tests/helpers/wave_probe.nf"
+    tag "workflow"
+
+    // Nextflow ignores config keys it doesn't recognise, and wave.tokens.cache.maxDuration
+    // is undocumented, so assert on the Wave config Nextflow logs after parsing rather
+    // than on the config file.
+    test("Production Wave settings should reach the Wave client") {
+        config "tests/configs/wave.config"
+        tag "wave_config"
+        then {
+            assert workflow.success
+            def log = new File("${launchDir}/meta/nextflow.log").text
+            def waveConfig = (log =~ /Wave config: .*/)
+            assert waveConfig.size() > 0 : "Wave client never initialised"
+            // Anchored on the trailing delimiter so 100 doesn't satisfy 10, and matched
+            // inside RetryOpts so an unrelated maxAttempts can't. '24h' normalises to 1d.
+            assert waveConfig[0] =~ /tokensCacheMaxDuration:1d[,)]/
+            assert waveConfig[0] =~ /RetryOpts\([^)]*maxAttempts:10[,)]/
+        }
+    }
+}

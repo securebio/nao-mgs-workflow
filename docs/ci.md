@@ -61,6 +61,10 @@ We have five nf-test workflows that test different parts of the pipeline:
 | `nf-test-workflows-run.yml` | `tests/workflows/run.nf.test` |
 | `nf-test-workflows-downstream.yml` | `tests/workflows/downstream.nf.test` |
 
+`tests/workflows/wave.nf.test` is deliberately absent from that table: nothing runs it in
+CI yet. It checks that the Wave settings in `configs/profiles.config` survive Nextflow's
+config parsing, so run it locally after a Nextflow upgrade.
+
 ### Python unit tests (`pytest.yml`)
 
 Runs our entire pytest suite across `bin`, `modules`, and `post-processing/tests/`.
