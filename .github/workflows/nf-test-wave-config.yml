@@ -1,0 +1,40 @@
+name: nf-test Wave config test
+
+on:
+  pull_request:
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: ci-nf-test-wave-config-pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  test-wave-config:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Check for relevant changes
+        uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            wave:
+              - 'configs/profiles.config'
+              - 'tests/workflows/wave*'
+              - 'tests/configs/wave.config'
+              - 'tests/helpers/wave_probe.nf'
+              - '.github/workflows/nf-test-wave-config.yml'
+              - '.github/actions/setup-nf-test/**'
+      - name: Setup nf-test environment
+        if: steps.filter.outputs.wave == 'true'
+        uses: ./.github/actions/setup-nf-test
+        with:
+          role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
+      - name: Run Wave config test
+        if: steps.filter.outputs.wave == 'true'
+        run: nf-test test tests/workflows/wave.nf.test
