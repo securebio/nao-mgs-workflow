@@ -3,7 +3,7 @@
 - Replace clustering with downsampling in DOWNSTREAM's post-hoc viral validation: each per-species partition is downsampled to at most `params.validation_n_sample` reads, those reads are BLASTed, and every hit carries its own validation result instead of one inherited from a cluster representative. Changes the schema and contents of `validation_hits.tsv.gz`.
     - Add a `validation_status` column: `aligned` / `no_alignment` / `not_sampled`.
     - Remove the eight `vsearch_*` columns and replace the string `group_species` (`<group>_<taxid>`) with the integer `selected_taxid`: 66 to 59 fields, and the md5 changes.
-    - Replace the `validation_cluster_identity` and `validation_n_clusters` parameters with `validation_n_sample` (default `20` for short reads, `1000000` for ONT), and drop the injected `cluster_min_len`. Most reads are now labelled `not_sampled` instead of inheriting a representative's verdict.
+    - Replace the `validation_cluster_identity` and `validation_n_clusters` parameters with `validation_n_sample` (default `20` for non-ONT platforms, `1000000` for ONT), and drop the injected `cluster_min_len`. Most reads are now labelled `not_sampled` instead of inheriting a representative's verdict.
     - Remove the VSEARCH clustering step from the validation path; the now-unused clustering components are deleted in a follow-up.
 
 - Add an `annotated` output to `SPLIT_VIRAL_TSV_BY_SELECTED_TAXID`: the whole joined table before partitioning, with `selected_taxid` added and `taxid_species` dropped. Existing outputs are unchanged. Nothing consumes it yet, so it costs one extra task per sample group until the consumer lands.

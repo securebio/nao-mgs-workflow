@@ -127,6 +127,26 @@ nextflow_workflow {
                 // final sort must put it back in seq_id order. Every other assertion here
                 // compares sorted collections and so cannot see ordering at all.
                 assert tabs_regrouped[i].columns["seq_id"] == tabs_regrouped[i].columns["seq_id"].toSorted()
+                // All three statuses must be reachable end to end. no_alignment is the one
+                // that depends on wiring rather than on the annotation module's own logic:
+                // the inner join in VALIDATE_SAMPLED_READS drops a sampled read that BLAST
+                // returned nothing for, and it has to be re-labelled rather than lost.
+                def sts = tabs_regrouped[i].columns["validation_status"]
+                assert sts.toSet() == ["aligned", "no_alignment", "not_sampled"] as Set
+                // Unvalidated reads carry no validation result of any kind. Read the raw
+                // table rather than the typed view: the csv plugin renders NA as an empty
+                // string in these columns, which would not be distinguishable from a
+                // genuinely blank field.
+                def raw = path(workflow.out.annotated_hits[i][1]).linesGzip
+                def hdr = raw[0].split("\t") as List
+                def vIdx = hdr.findIndexValues{ it.startsWith("validation_") && it != "validation_status" }
+                def sIdx = hdr.indexOf("validation_status")
+                raw.drop(1).each { line ->
+                    def f = line.split("\t", -1) as List
+                    if (f[sIdx] != "aligned") {
+                        vIdx.each { k -> assert f[k as int] == "NA" }
+                    }
+                }
             }
         }
     }
