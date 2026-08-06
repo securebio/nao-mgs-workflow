@@ -49,6 +49,14 @@ nextflow_workflow {
             assert workflow.success
             // TSV output should be empty (partition_empty_* filtered out)
             assert workflow.out.tsv.collect{it[1]}.flatten().size() == 0
+            // annotated is not filtered, so unlike tsv it still emits one table per
+            // group -- header-only, and already shaped for consumers
+            assert workflow.out.annotated.size() == 1
+            def lines = path(workflow.out.annotated[0][1]).linesGzip
+            assert lines.size() == 1
+            def header = lines[0].split("\t") as List
+            assert header.contains("selected_taxid")
+            assert !header.contains("taxid_species")
         }
     }
 
