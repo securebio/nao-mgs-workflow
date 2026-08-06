@@ -4,6 +4,11 @@ taxid by traversing the viral taxonomy tree.
 
 Returns split hits in TSV and FASTQ formats, each as a flattened channel of
 2-tuples ["group_species", FILE]
+
+Also returns the whole joined table as `annotated`, before it is partitioned: the same
+rows as the input, annotated with the selected_taxid each was grouped by. Consumers that
+need every read alongside its taxid group can take that directly instead of
+reassembling the partitions.
 */
 
 /***************************
@@ -12,7 +17,8 @@ Returns split hits in TSV and FASTQ formats, each as a flattened channel of
 
 include { SORT_TSV as SORT_SEQ_ID } from "../../../modules/local/sortTsv"
 include { CHECK_TSV_DUPLICATES } from "../../../modules/local/checkTsvDuplicates"
-include { SELECT_TSV_COLUMNS } from "../../../modules/local/selectTsvColumns"
+include { SELECT_TSV_COLUMNS as SELECT_DB_COLUMNS } from "../../../modules/local/selectTsvColumns"
+include { SELECT_TSV_COLUMNS as DROP_SPECIES_TAXID } from "../../../modules/local/selectTsvColumns"
 include { REHEAD_TSV } from "../../../modules/local/reheadTsv"
 include { SORT_TSV as SORT_DB_TAXID } from "../../../modules/local/sortTsv"
 include { JOIN_TSVS } from "../../../modules/local/joinTsvs"
@@ -36,7 +42,7 @@ workflow SPLIT_VIRAL_TSV_BY_SELECTED_TAXID {
         check_ch = CHECK_TSV_DUPLICATES(sort_seq_id_ch, "seq_id").output
         // 1. Prepare taxonomy DB for joining
         db_ch = channel.of("db").combine(db)
-        db_select_ch = SELECT_TSV_COLUMNS(db_ch, "taxid,taxid_species", "keep").output
+        db_select_ch = SELECT_DB_COLUMNS(db_ch, "taxid,taxid_species", "keep").output
         db_rehead_ch = REHEAD_TSV(db_select_ch, "taxid", "aligner_taxid_lca").output
         db_sorted_ch = SORT_DB_TAXID(db_rehead_ch, "aligner_taxid_lca").sorted
         db_raw_ch = db_sorted_ch.map{ _db_label, db_contents -> db_contents }
@@ -73,9 +79,14 @@ workflow SPLIT_VIRAL_TSV_BY_SELECTED_TAXID {
             def file_list = files instanceof List ? files : [files]
             [sample, file_list]
         }
+        // 6. Emit the whole joined table for consumers that need every read.
+        // taxid_species is scaffolding for computing selected_taxid and carries no
+        // further information, so it is dropped here rather than left for callers.
+        annotated_ch = DROP_SPECIES_TAXID(join_sorted_ch, "taxid_species", "drop").output
     emit:
         tsv = part_filtered_ch
         fastq = fastq_ch
+        annotated = annotated_ch
         test_in   = groups
         test_db   = db
         test_sort = sorted_ch
