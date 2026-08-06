@@ -22,8 +22,8 @@ this work and MERGE_JOIN_READS_LIST is shared with other code paths.
 ***************************/
 
 include { DOWNSAMPLE_TSV_BY_HASH } from "../../../modules/local/downsampleTsvByHash"
-include { EXTRACT_VIRAL_HITS_TO_FASTQ_NOREF_LABELED_LIST as EXTRACT_FASTQ } from "../../../modules/local/extractViralHitsToFastqNoref"
-include { MERGE_JOIN_READS_LIST as MERGE_JOIN_READS } from "../../../subworkflows/local/mergeJoinReadsList"
+include { EXTRACT_VIRAL_HITS_TO_FASTQ_NOREF_LABELED_LIST } from "../../../modules/local/extractViralHitsToFastqNoref"
+include { MERGE_JOIN_READS_LIST } from "../../../subworkflows/local/mergeJoinReadsList"
 include { CONVERT_FASTQ_FASTA } from "../../../modules/local/convertFastqFasta"
 
 /***********
@@ -57,9 +57,9 @@ workflow DOWNSAMPLE_VIRAL_ASSIGNMENTS {
         sampled_ch = downsampled_ch.groupTuple()
             .map { label, files -> [label, files.sort { f -> f.name }] }
         // 2. Extract the retained reads into interleaved FASTQ
-        fastq_ch = EXTRACT_FASTQ(sampled_ch, false).output.map(listFiles)
+        fastq_ch = EXTRACT_VIRAL_HITS_TO_FASTQ_NOREF_LABELED_LIST(sampled_ch, false).output.map(listFiles)
         // 3. Merge and join pairs to produce a single sequence per retained read pair
-        merge_ch = MERGE_JOIN_READS(fastq_ch, single_end)
+        merge_ch = MERGE_JOIN_READS_LIST(fastq_ch, single_end)
         // 4. Convert to FASTA for alignment
         fasta_ch = CONVERT_FASTQ_FASTA(merge_ch.single_reads).output.map(listFiles)
     emit:
