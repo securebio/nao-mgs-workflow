@@ -1,17 +1,18 @@
 # v3.3.0.0-dev
 
-- Replace clustering with downsampling in DOWNSTREAM's post-hoc viral validation: each per-species partition is now downsampled to at most `params.validation_n_sample` reads, those reads are BLASTed, and every hit carries its own validation result rather than one inherited from a cluster representative. This changes the schema and contents of `validation_hits.tsv.gz`.
-    - Add a `validation_status` column (`aligned` / `no_alignment` / `not_sampled`) recording whether a read was sampled for validation and whether BLAST found an alignment for it. No validation result is propagated between reads.
-    - Remove the eight `vsearch_*` columns (`vsearch_cluster_id`, `vsearch_cluster_rep_id`, `vsearch_seq_length`, `vsearch_is_cluster_rep`, `vsearch_percent_identity`, `vsearch_orientation`, `vsearch_cigar`, `vsearch_cluster_size`), and replace the string `group_species` column (`<group>_<taxid>`) with the integer `selected_taxid`. `validation_hits.tsv.gz` goes from 66 to 59 fields and its md5 changes.
-    - Replace the `validation_cluster_identity` and `validation_n_clusters` parameters with `validation_n_sample` (default `20` for short reads, `1000000` for ONT), and drop the injected `cluster_min_len`. The short-read default is set at parity with the number of reads the cluster-exemplar approach actually aligned, so BLAST cost is unchanged; because propagation is gone, most reads are now labelled `not_sampled` rather than inheriting a representative's verdict, so far fewer reads carry populated `validation_*` columns while the same alignments underlie the result.
     - Remove the VSEARCH clustering step from the validation path. Clustering compared all reads within a taxid group against each other, making it a large fraction of the workflow's cost with a severe tail on groups dominated by one abundant virus. The now-unused clustering components are removed in a follow-up.
-    - Delete the components the change leaves unused: the `clusterViralAssignments`, `propagateValidationInformation`, and `validateClusterRepresentatives` subworkflows; the `vsearch`, `processVsearchClusterOutput`, and `downsampleFastnById` modules; the `vsearch` container label, spec, and `vsearch_resources` resource labels; the now-uncalled `ADD_SAMPLE_COLUMN_LIST` process; and the `fastq` output of `SPLIT_VIRAL_TSV_BY_SELECTED_TAXID`, which nothing consumes now that extraction happens after downsampling. The `rust-tools` `process_vsearch_cluster_output` crate is also unreachable but is left in place, since removing it changes the `rust-tools` image and its version wiring.
+    - Delete the components the change leaves unused: the `clusterViralAssignments`, `propagateValidationInformation`, and `validateClusterRepresentatives` subworkflows; the `vsearch`, `processVsearchClusterOutput`, and `downsampleFastnById` modules; the `vsearch` container and `vsearch_resources` resource labels; the uncalled `ADD_SAMPLE_COLUMN_LIST` process; and the `fastq` output of `SPLIT_VIRAL_TSV_BY_SELECTED_TAXID`. The `rust-tools` `process_vsearch_cluster_output` crate is left in place, since removing it changes the `rust-tools` image.
+- Replace clustering with downsampling in DOWNSTREAM's post-hoc viral validation: each per-species partition is downsampled to at most `params.validation_n_sample` reads, those reads are BLASTed, and every hit carries its own validation result instead of one inherited from a cluster representative. Changes the schema and contents of `validation_hits.tsv.gz`.
+    - Add a `validation_status` column: `aligned` / `no_alignment` / `not_sampled`.
+    - Remove the eight `vsearch_*` columns and replace the string `group_species` (`<group>_<taxid>`) with the integer `selected_taxid`: 66 to 59 fields, and the md5 changes.
+    - Replace the `validation_cluster_identity` and `validation_n_clusters` parameters with `validation_n_sample` (default `20` for short reads, `1000000` for ONT), and drop the injected `cluster_min_len`. Most reads are now labelled `not_sampled` instead of inheriting a representative's verdict.
+    - Remove the VSEARCH clustering step from the validation path; the now-unused clustering components are deleted in a follow-up.
 
-- Add an `annotated` output to `SPLIT_VIRAL_TSV_BY_SELECTED_TAXID` carrying the whole joined table before partitioning, annotated with each read's `selected_taxid` and with the intermediate `taxid_species` column dropped. Additive: the existing `tsv` and `fastq` outputs are unchanged. No workflow consumes the new output yet, but because process invocation is eager it is still produced, costing one extra column-drop task per sample group until the consumer lands.
-- Add a `VALIDATE_SAMPLED_READS` subworkflow that computes the taxonomic distance between the original and validated assignments for the reads selected for validation, emitting a table keyed on `seq_id` that can be joined onto the full hits table. Not yet called by any workflow.
-- Add a `DOWNSAMPLE_VIRAL_ASSIGNMENTS` subworkflow that downsamples per-species partitions of viral hits to a fixed number of reads each and renders the retained reads as FASTA for alignment. Not yet called by any workflow.
-- Add an `ANNOTATE_VALIDATION_STATUS` module that joins post-hoc validation results onto a full viral hits TSV and appends a `validation_status` column (`aligned` / `no_alignment` / `not_sampled`) recording, per read, whether that read was validated on its own evidence. Not yet called by any workflow.
-- Add a `DOWNSAMPLE_TSV_BY_HASH` module that deterministically downsamples a TSV to at most N rows, selecting rows by hash of a key column. The selection is reproducible across runs, independent of input row order, and nested in N. Not yet called by any workflow; it is the first of a stacked series replacing VSEARCH cluster-exemplar selection in DOWNSTREAM's viral validation with downsampling.
+- Add an `annotated` output to `SPLIT_VIRAL_TSV_BY_SELECTED_TAXID`: the whole joined table before partitioning, with `selected_taxid` added and `taxid_species` dropped. Existing outputs are unchanged. Nothing consumes it yet, so it costs one extra task per sample group until the consumer lands.
+- Add a `VALIDATE_SAMPLED_READS` subworkflow that computes the taxonomic distance between original and validated assignments, keyed on `seq_id`. Not yet called by any workflow.
+- Add a `DOWNSAMPLE_VIRAL_ASSIGNMENTS` subworkflow that downsamples each per-species hit partition and renders the retained reads as FASTA. Not yet called by any workflow.
+- Add an `ANNOTATE_VALIDATION_STATUS` module that joins validation results onto a full viral hits TSV and appends a `validation_status` column (`aligned` / `no_alignment` / `not_sampled`). Not yet called by any workflow.
+- Add a `DOWNSAMPLE_TSV_BY_HASH` module that downsamples a TSV to at most N rows, selecting by hash of a key column so the choice is reproducible, order-independent, and nested in N. Not yet called by any workflow.
 - Require Nextflow `>=26.04.6` (from `25.10.4`), the first of a stacked series upgrading the pipeline to Nextflow 26. Set `aws.client.socketTimeout` to `3600000` (NF 26.04 rejects the previous `0`), bump the `nft-fastq`/`nft-bam` nf-test plugins for compatibility with nf-test `0.9.5`, pin nf-test to `0.9.5` in CI, and drop the now-moot `26.04.x` `.nextflowignore` deferral entries. Replace the `as List<String>` cast in `WRITE_SENTINEL_RUN` with a raw `as List`, which the NF 26.04 compiler requires (parameterized-type casts now fail at runtime).
 - Compare indexes in `bin/benchmark_index.py` after restricting to genomes published in final FASTA and report each index's build-time pipeline version.
 - Sort accessions before chunking them in `FILTER_VIRAL_GENBANK_METADATA`.
@@ -131,7 +132,6 @@
 
 - Make `bin/run-nf-test.sh` and `bin/run_nf_test_parallel.py` symlink-safe for dependent repos
 - Add authenticated ECR Public login to Trivy scan workflow to avoid anonymous pull rate limits
-- Add several Trivy CVEs to `.trivyignore` (no fix currently available; expiry set in June 2026 to force review)
 - Extract shared Groovy code for sentinel file generation to `lib/SentinelUtils.groovy`
 - Remove `logging/time.txt` and `logging_downstream/time.txt`; superseded by new sentinel JSONs
 - Make RUN workflow clearer and more readable by moving derived variables and conditional statements into subworkflows, including new `PREPARE_INPUT_LOGGING` and `EXTRACT_VIRAL_READS` subworkflows
@@ -382,7 +382,6 @@ This version involved numerous changes intended to make new releases easier, fas
     - Updated our PR process.
     - Updated our release process.
     - Added preference for using pytest over nf-test for Python unit tests.
-- Added `pyproject.toml` to the top level directory to standardize our Python file formatting and type checking rules.
 
 # v3.0.1.0
 

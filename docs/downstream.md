@@ -323,7 +323,7 @@ To run the `DOWNSTREAM` workflow, you need:
         - `params.blast_min_frac`: Minimum fraction of best bitscore to retain hits (default 0.9)
         - `params.taxid_artificial`: Parent taxid for artificial sequences (default 81077)
 
-[^max_sample]: For ONT data, we don't need to limit the number of reads to validate, as the total number of viral reads is typically much smaller than for short-read data. The effectively-unlimited default therefore validates every read.
+[^max_sample]: For ONT data, we don't need to limit the number of reads to validate, as the total number of viral reads is typically much smaller than for short-read data.
 
 > [!NOTE]
 > Currently, the input file and grouping TSV must be generated manually. We intend to implement programmatic generation of these files in the future.
@@ -486,11 +486,7 @@ style H fill:#000,color:#fff,stroke:#000
 
 #### Annotate all hits with their validation status (`ANNOTATE_VALIDATION_STATUS`)
 
-This process takes three inputs: the annotated hits TSV from `SPLIT_VIRAL_TSV_BY_SELECTED_TAXID` (every hit, carrying its `selected_taxid`), the list of reads that were selected for validation, and the validation results from `VALIDATE_SAMPLED_READS`. In a single streaming pass it joins the validation results onto the hits table by `seq_id` and appends a `validation_status` column recording, for each read, whether it was `aligned`, produced `no_alignment`, or was `not_sampled` (see the [status table above](#validate-viral-taxonomic-assignments-validate_viral_assignments)).
-
-Reads that were not aligned receive NA in every `validation_*` column. Nothing is inferred from one read to another, so a populated validation column is always first-hand evidence about the read in whose row it appears. The process fails loudly if the validation results reference a read absent from the sampled-read list, since that would mean the sample and the alignment results had diverged.
-
-Memory use is proportional to the number of *sampled* reads rather than the number of hits, so the full hits table — which can run to millions of rows — is streamed rather than held in memory. The annotated table is then re-sorted by `seq_id` to restore the ordering that partitioning disturbed.
+This process takes the annotated hits TSV from `SPLIT_VIRAL_TSV_BY_SELECTED_TAXID`, the concatenated sampled hits TSV, and the validation results from `VALIDATE_SAMPLED_READS`. It joins the validation results onto the hits table by `seq_id` and appends a `validation_status` column recording whether each read was `aligned`, produced `no_alignment`, or was `not_sampled`. Reads that were not aligned receive NA in every `validation_*` column.
 
 ```mermaid
 ---
@@ -500,11 +496,10 @@ config:
 ---
 flowchart LR
 A("Annotated hits TSV <br> (SPLIT_VIRAL_TSV_BY_SELECTED_TAXID)") --> I[Join by seq_id and assign status]
-B("Sampled read IDs <br> (CONCATENATE_TSVS_LABELED)") --> I
+B("Sampled hits TSV <br> (CONCATENATE_TSVS_LABELED)") --> I
 C("Validation TSV <br> (VALIDATE_SAMPLED_READS)") --> I
 I --> D[Sort by seq_id]
-D --> E[Drop internal taxonomy column]
-E --> J(Annotated hits TSV)
+D --> J(Annotated hits TSV)
 style A fill:#fff,stroke:#000
 style B fill:#fff,stroke:#000
 style C fill:#fff,stroke:#000
