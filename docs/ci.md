@@ -51,7 +51,7 @@ These tests run on PRs to `main`, `dev`, `stable`, and `ci-test`. They must pass
 
 ### nf-test
 
-We have five nf-test workflows that test different parts of the pipeline:
+We have several nf-test workflows that test different parts of the pipeline:
 
 | Workflow | Tests |
 |----------|-------|
@@ -60,6 +60,10 @@ We have five nf-test workflows that test different parts of the pipeline:
 | `nf-test-workflows-index.yml` | `tests/workflows/index.nf.test` |
 | `nf-test-workflows-run.yml` | `tests/workflows/run.nf.test` |
 | `nf-test-workflows-downstream.yml` | `tests/workflows/downstream.nf.test` |
+| `nf-test-wave-config.yml` | `tests/workflows/wave.nf.test` |
+
+The `nf-test-wave-config.yml` CI workflow checks that the private
+`wave.tokens.cache.maxDuration` option in `configs/profiles.config` is applied at runtime.
 
 ### Python unit tests (`pytest.yml`)
 
