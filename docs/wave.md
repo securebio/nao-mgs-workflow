@@ -415,9 +415,10 @@ deliberately gave `exitStatus = Integer.MAX_VALUE` and a `-` in the trace. Only 
 Batch `statusReason` distinguishes them, and Batch drops job records after about a week,
 so the 2026-07-20 and 2026-07-27 records are already gone. During a Wave rate-limit
 storm the `CannotPullContainerError` failures would be indistinguishable from spot
-reclamations in the trace alone. That is fine for [fix 4](#4-back-off-task-retries-without-weakening-the-fail-fast-behaviour),
-which wants to treat both the same way, but it means the trace cannot be used after the
-fact to size how much of a bad run was Wave's fault.
+reclamations in the trace alone. That was fine for
+[fix 4](#4-back-off-task-retries--considered-and-rejected), which wanted to treat both
+the same way, but it means the trace cannot be used after the fact to size how much of a
+bad run was Wave's fault.
 
 ### Wave request and pull anatomy
 
@@ -493,7 +494,8 @@ mechanism clear regardless.
 
 ## Proposed fixes
 
-Ordered by benefit per unit of risk.
+Ordered by benefit per unit of risk. Fix 4 was considered and rejected; see the decision
+note in that section.
 
 ### 1. Stop re-pulling per task — Batch launch template
 
@@ -611,7 +613,45 @@ a `multiplier` field defaulting to `2`, but it is absent from the
 [configuration reference](https://docs.seqera.io/nextflow/reference/config/wave), so
 don't rely on setting it.
 
-### 4. Back off task retries, without weakening the fail-fast behaviour
+### 4. Back off task retries — considered and rejected
+
+> **Decision: not proceeding.** We are shipping
+> [#845](https://github.com/securebio/nao-mgs-workflow/pull/845) instead — a dynamic
+> `errorStrategy` that returns `ignore` once retries are exhausted, with
+> `workflow.failOnIgnore = true`, holding `maxRetries = 1`. The analysis below is kept
+> because it documents what was measured and why the alternative was not taken.
+
+Four things decided it:
+
+- **The backoff serializes and blocks more than the failing tasks.**
+  `TaskProcessor.resumeOrDie()` is `synchronized` on the `TaskProcessor` instance, and
+  `bindOutputs()` is synchronized on the same object, so a sleeping closure holds that
+  process's monitor. Measured on 26.04.6: eight failing tasks in one process serialize
+  into 40 s despite running on eight distinct `TaskFinalizer` threads; two *different*
+  processes sleep concurrently, so the lock is per-process; and in a process with four
+  failing and four immediately-succeeding tasks, the successes emit nothing downstream
+  until 20 s. A Wave storm concentrated in one wide fan-out process would stall that
+  process entirely — the scenario this fix exists for is the one that triggers it.
+- **The wall-clock cost lands on the longest tasks.** Some processes run 12 h–2 days. A
+  further retry only fires when the previous one already failed, so it risks adding days
+  to a run that will fail at the end anyway.
+- **One retry has been enough, and not by luck.** All 63 observed failures succeeded on
+  attempt 2. The failures are bursty and correlated, so that is not independence — it is
+  the `process.queue` fallback (see [batch.md](./batch.md#spot-instance-fallback))
+  moving attempt 2 to on-demand, which *decorrelates* the retry from the spot capacity
+  shortage that caused the burst.
+- **For the Wave class, more immediate retries are the wrong instrument.** A Wave quota
+  is per Seqera user and shared across queues, so the fallback does not decorrelate it
+  and a second immediate retry lands in the same window. The problem is timing, not
+  count. Fixes 1 and 2 remove the condition (1,039 → ~93 pulls/min), and `ignore` plus
+  `-resume` gives a better recovery path: the run completes what it can and re-executes
+  only the ignored tasks, which was verified — successful tasks stay cached on resume.
+
+Revisit if, once fix 1 is deployed, ignored tasks still cluster on pull failures. The
+lever then is [fix 5](#5-take-wave-out-of-the-pull-path-entirely--wavefreeze) or a
+bounded constant backoff, not a higher retry count.
+
+---
 
 We deliberately run `maxRetries = 1` so a genuinely broken process fails fast on the
 on-demand fallback queue. That can be kept, because **infrastructure failures are
