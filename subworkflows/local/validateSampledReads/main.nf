@@ -23,10 +23,10 @@ for computing taxonomic distance between the original and validated taxids:
 | MODULES AND SUBWORKFLOWS |
 ***************************/
 
-include { SELECT_TSV_COLUMNS as KEEP_TAXID_COLUMNS } from "../../../modules/local/selectTsvColumns"
+include { SELECT_TSV_COLUMNS } from "../../../modules/local/selectTsvColumns"
 include { SELECT_TSV_COLUMNS as DROP_ALIGNER_TAXID } from "../../../modules/local/selectTsvColumns"
 include { JOIN_TSVS } from "../../../modules/local/joinTsvs"
-include { REHEAD_TSV as REHEAD_QSEQID } from "../../../modules/local/reheadTsv"
+include { REHEAD_TSV } from "../../../modules/local/reheadTsv"
 include { COMPUTE_TAXID_DISTANCE } from "../../../modules/local/computeTaxidDistance"
 
 /***********
@@ -45,9 +45,9 @@ workflow VALIDATE_SAMPLED_READS {
         // 1. Prepare inputs for joining
         // Subset hits TSV to only seq_id and taxid columns
         def hits_taxid_column_str = "seq_id,${distance_params.taxid_field_1}"
-        select_ch = KEEP_TAXID_COLUMNS(hits_tsv, hits_taxid_column_str, "keep").output
+        select_ch = SELECT_TSV_COLUMNS(hits_tsv, hits_taxid_column_str, "keep").output
         // Rename qseqid to seq_id in LCA TSV
-        rehead_ch = REHEAD_QSEQID(lca_tsv, "qseqid", "seq_id").output
+        rehead_ch = REHEAD_TSV(lca_tsv, "qseqid", "seq_id").output
         // Combine channels for joining
         combine_ch = select_ch.combine(rehead_ch, by: 0)
         // 2. Inner-join hits and LCA tables by seq_id
