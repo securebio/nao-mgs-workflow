@@ -280,7 +280,7 @@ Only pipeline maintainers should author a new release. The process for going thr
 
 The INDEX workflow's reference data (NCBI taxonomy, Virus-Host-DB, Kraken2, SILVA, host/contaminant genomes) drifts over time, so a new dated index is built under `s3://nao-mgs-index/<DATE>` periodically (see [Run index/reference workflow](./installation.md#7-run-indexreference-workflow)). After building a new production index, it's important to benchmark it against the previous one to check for regressions; the easiest way to do this is to execute the `benchmark-index` skill (`.claude/skills/benchmark-index/`) within Claude Code or another coding agent, then read the `REVIEW.md` file produced.
 
-The `benchmark-index` skill calls the `benchmark_index.py` script to carry out deterministic comparisons between the indices specified. This script diffs whatever two index roots it is given, so it is not pinned to a fixed index schema; it does require the newer (`--new`) index to publish `virus-genome-metadata-raw.tsv.gz` and `input/host-infection-overrides.json`. New index outputs are not reflected in the report until comparison logic is added to the script.
+The `benchmark-index` skill calls the `benchmark_index.py` script to carry out deterministic comparisons between the indices specified. This script diffs whatever two index roots it is given, so it is not pinned to a fixed index schema; it does require **both** indexes to publish `virus-genomes-masked.fasta.gz`, and the newer (`--new`) index to publish `virus-genome-metadata-raw.tsv.gz` and `input/host-infection-overrides.json`. New index outputs are not reflected in the report until comparison logic is added to the script.
 
 ## Schemas
 
