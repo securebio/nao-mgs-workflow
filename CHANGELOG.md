@@ -7,7 +7,7 @@
     - Remove the VSEARCH clustering step from the validation path; the now-unused clustering components are deleted in a follow-up.
     - Delete the components the change leaves unused: the `clusterViralAssignments`, `propagateValidationInformation`, and `validateClusterRepresentatives` subworkflows; the `vsearch`, `processVsearchClusterOutput`, and `downsampleFastnById` modules; the `vsearch` container and `vsearch_resources` resource labels; the uncalled `ADD_SAMPLE_COLUMN_LIST` process; and the `fastq` output of `SPLIT_VIRAL_TSV_BY_SELECTED_TAXID`. The `rust-tools` `process_vsearch_cluster_output` crate is left in place, since removing it changes the `rust-tools` image.
 
-- Add an `annotated` output to `SPLIT_VIRAL_TSV_BY_SELECTED_TAXID`: the whole joined table before partitioning, with `selected_taxid` added and `taxid_species` dropped. Existing outputs are unchanged.
+- Add an `annotated` output to `SPLIT_VIRAL_TSV_BY_SELECTED_TAXID`: the whole joined table before partitioning, with `selected_taxid` added and `taxid_species` dropped. The `tsv` output is unchanged.
 - Add a `VALIDATE_SAMPLED_READS` subworkflow that computes the taxonomic distance between original and validated assignments, keyed on `seq_id`.
 - Add a `DOWNSAMPLE_VIRAL_ASSIGNMENTS` subworkflow that downsamples each per-species hit partition and renders the retained reads as FASTA.
 - Add an `ANNOTATE_VALIDATION_STATUS` module that joins validation results onto a full viral hits TSV and appends a `validation_status` column (`aligned` / `no_alignment` / `not_sampled`).
