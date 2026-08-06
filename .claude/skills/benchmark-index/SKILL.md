@@ -48,8 +48,8 @@ python bin/benchmark_index.py \
   --out <output-dir>
 ```
 
-Use **absolute** paths for `--out` (e.g. `/tmp/bench-...`). Takes about 60
-seconds. If `<outdir>` already contains benchmark outputs, reuse them only if
+Use **absolute** paths for `--out` (e.g. `/tmp/bench-...`). Takes about two
+minutes. If `<outdir>` already contains benchmark outputs, reuse them only if
 the user asked you to avoid rerunning; otherwise rerun so the reference
 freshness checks are current.
 
@@ -60,9 +60,12 @@ Read the compact script-produced summaries before interpreting detail rows:
 - `sizes_summary.json`: counts of top-level output entries that grew, shrank,
   or stayed unchanged.
 - `genomes_summary.json`: headline genome/taxonomy counts — lost/gained totals,
-  per-reason counts, all-lost / all-gained species, reassignments, net delta, and
-  taxa added/removed. If `lost_total` or `gained_total` is zero, §3.2 / §3.3
-  collapse to "No genome IDs lost/gained".
+  per-reason counts, all-lost / all-gained species, reassignments, net delta,
+  taxa added/removed, and the four metadata/FASTA agreement counts below. If
+  `lost_total` or `gained_total` is zero, §3.2 / §3.3 collapse to "No genome IDs
+  lost/gained".
+- `index_versions.json`: the pipeline version each index was built with
+  (`pipeline_version_old`, `pipeline_version_new`).
 - `infection_status_summary.json`: per-host species promotion/demotion counts,
   uncovered counts, and override scope-gap counts.
 - `params_changes.tsv`: compact top-level params changes (`key`, `kind`, `old`,
@@ -77,7 +80,8 @@ Then read the detailed TSVs needed by the template:
   `latest_date`, `status`). A `status` of `error` means the freshness check
   could not run; note the inability to verify in §1 and continue.
 - `sizes.tsv`, `sizes_summary.json`, `params_changes.tsv`, `params_diff.txt`,
-  `metadata_schema_summary.json`, and `metadata_schema_diff.tsv` for §2 and §5.
+  `index_versions.json`, `metadata_schema_summary.json`, and
+  `metadata_schema_diff.tsv` for §2 and §5.
   `sizes.tsv` is long-format (one row per `name`, `metric`): `metric == bytes`
   rows give per-entry byte sizes for the §2 size table; the content metrics
   (`records`, `total_bp`, `n_bp` for FASTAs; `rows` for TSVs) feed the §2 content
@@ -90,6 +94,21 @@ For appendix tables, paste Markdown tables generated from the TSV rows. For
 large category tables, include the top rows requested by the template and state
 the total row count in the appendix heading; do not rely on an external TSV path
 as the table.
+
+An index's published metadata and its published FASTA should describe the same
+set of genomes. Four counts in `genomes_summary.json` measure whether they do,
+per side. Read them against `index_versions.json`:
+
+- `metadata_rows_not_in_fasta_old` / `_new` — check the pipeline version first.
+  A non-zero count is expected for an index built with **3.2.2.0 or earlier**,
+  which published metadata that was never reconciled to the FASTA; treat it as
+  historical and benign where it is a few percentage points of that index's
+  total metadata rows in `sizes.tsv`. Treat a later version, or a larger share,
+  as a significant finding.
+- `fasta_ids_without_metadata_old` / `_new` — treat as a defect on either side
+  for any pipeline version, and the more serious direction: RUN resolves
+  `genome_id` to taxid through the metadata, so a sequence with no row is a
+  reference RUN cannot attribute.
 
 ### Step 3 - Build §4 groupings
 
@@ -159,7 +178,7 @@ reasons are checked before taxonomy/policy reasons, so the policy buckets mean
 - `hard_excluded`: build-time leaf taxid or an ancestor is in `viral_taxids_exclude_hard` in the new build.
 - `reassigned_to_excluded`: build-time leaf taxid differs from the old leaf taxid and the new leaf/species rollup is no longer surveilled.
 - `infection_status_demotion`: build-time leaf taxid equals the old leaf taxid and the leaf/species rollup is no longer surveilled.
-- `other`: present, current, surveilled, yet absent from the new gid set. Should be near zero; if not, investigate downstream sequence-level filtering.
+- `other`: present, current, surveilled, yet absent from the new gid set. Should be near zero; if not, investigate downstream sequence-level filtering in `MAKE_VIRUS_GENOME_DB`.
 
 **Gained gid categories** (priority order). Keyed on the genome's assigned leaf
 taxon, using the assembly's `release_date` and `source_database` from the raw

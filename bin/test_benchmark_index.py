@@ -10,8 +10,10 @@ staging.
 # IMPORTS #
 ###########
 
+import contextlib
 import gzip
 import json
+import logging
 from pathlib import Path
 
 import pandas as pd
@@ -30,14 +32,17 @@ from benchmark_index import (
     check_silva_staleness,
     compare_metrics,
     diff_params,
+    get_fasta_ids,
     infection_status_changes,
     infection_status_columns,
     infection_status_transitions,
     load_overrides,
     metadata_deltas,
+    restrict_to_fasta,
     summarise_params_changes,
     surveilled_taxids,
     write_genome_taxonomy_tables,
+    write_index_versions,
     write_metrics_table,
     write_staleness_table,
 )
@@ -146,6 +151,105 @@ class TestCompareMetrics:
         records = block[block["metric"] == "records"].iloc[0]
         assert records["delta"] == 2
         assert records["pct_change"] == 20.0
+
+
+class TestGetFastaIds:
+    @staticmethod
+    def _write_fasta(root: Path, text: str) -> None:
+        results = root / "output" / "results"
+        results.mkdir(parents=True)
+        with gzip.open(results / "virus-genomes-masked.fasta.gz", "wt") as f:
+            f.write(text)
+
+    def test_takes_the_first_header_token(self, tmp_path: Path) -> None:
+        self._write_fasta(
+            tmp_path / "index", ">G1 an organism, complete genome\nACGT\n>G2\nTT\n"
+        )
+        assert get_fasta_ids(str(tmp_path / "index"), tmp_path / "work") == {"G1", "G2"}
+
+    @pytest.mark.parametrize(
+        "text,match",
+        [
+            # None writes no FASTA at all; the rest are malformed ones.
+            (None, "Could not stage"),
+            ("", "no sequences"),
+            (">G1 fine\nACGT\n>\nTT\n", "no sequence ID at line 3"),
+        ],
+        ids=["absent", "empty", "header_without_id"],
+    )
+    def test_rejects_unusable_fasta(
+        self, tmp_path: Path, text: str | None, match: str
+    ) -> None:
+        if text is None:
+            (tmp_path / "index" / "output" / "results").mkdir(parents=True)
+        else:
+            self._write_fasta(tmp_path / "index", text)
+        with pytest.raises(ValueError, match=match):
+            get_fasta_ids(str(tmp_path / "index"), tmp_path / "work")
+
+    def test_counts_records_separately_from_ids(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        # Records sharing an ID collapse, because the metadata joins on ID.
+        self._write_fasta(tmp_path / "index", ">G1 one\nAC\n>G1 two\nGT\n>G2\nTT\n")
+        with caplog.at_level(logging.INFO):
+            ids = get_fasta_ids(str(tmp_path / "index"), tmp_path / "work")
+        assert ids == {"G1", "G2"}
+        assert "2 sequence ID(s) from 3 record(s)" in caplog.text
+
+    @pytest.mark.parametrize(
+        "text", [">G1 fine\nACGT\n", ">G1 fine\nACGT\n>\nTT\n"], ids=["ok", "malformed"]
+    )
+    def test_staged_fasta_copy_is_always_deleted(
+        self, tmp_path: Path, text: str
+    ) -> None:
+        self._write_fasta(tmp_path / "index", text)
+        work_dir = tmp_path / "work"
+        with contextlib.suppress(ValueError):
+            get_fasta_ids(str(tmp_path / "index"), work_dir)
+        assert list(work_dir.iterdir()) == []
+
+
+class TestRestrictToFasta:
+    @staticmethod
+    def _meta(*genome_ids: str) -> pd.DataFrame:
+        return pd.DataFrame({"genome_id": list(genome_ids), "taxid": "1"})
+
+    @pytest.mark.parametrize(
+        "meta_ids,fasta_ids,kept,extra_rows,orphan_ids",
+        [
+            (("G1", "G2", "G3"), {"G1", "G3"}, ["G1", "G3"], 1, 0),
+            # One genome_id reached by two assemblies is two rows, and both drop.
+            (("G1", "G2", "G2"), {"G1"}, ["G1"], 2, 0),
+            (("G1",), {"G1", "G2"}, ["G1"], 0, 1),
+            (("G1", "G2"), {"G1", "G2"}, ["G1", "G2"], 0, 0),
+            ((), {"G1"}, [], 0, 1),
+        ],
+        ids=[
+            "drops_rows",
+            "counts_rows_not_ids",
+            "orphan",
+            "reconciled",
+            "empty_metadata",
+        ],
+    )
+    def test_restriction_and_counts(
+        self,
+        meta_ids: tuple[str, ...],
+        fasta_ids: set[str],
+        kept: list[str],
+        extra_rows: int,
+        orphan_ids: int,
+    ) -> None:
+        meta, extra, orphans = restrict_to_fasta(
+            self._meta(*meta_ids), fasta_ids, "old"
+        )
+        assert meta["genome_id"].tolist() == kept
+        assert (extra, orphans) == (extra_rows, orphan_ids)
+
+    def test_rejects_metadata_without_a_genome_id_column(self) -> None:
+        with pytest.raises(ValueError, match="missing required columns"):
+            restrict_to_fasta(pd.DataFrame({"taxid": ["1"]}), {"G1"}, "old")
 
 
 class TestMetadataDeltas:
@@ -1029,6 +1133,43 @@ class TestRefStaleness:
         assert "status" in df.columns
 
 
+class TestWriteIndexVersions:
+    """Pins the JSON keys the benchmark-index skill tells reviewers to read."""
+
+    @staticmethod
+    def _write(root: Path, name: str | None, text: str = "") -> None:
+        logging_dir = root / "output" / "logging"
+        logging_dir.mkdir(parents=True, exist_ok=True)
+        if name is not None:
+            (logging_dir / name).write_text(text)
+
+    def test_reads_both_published_layouts(self, tmp_path: Path) -> None:
+        self._write(tmp_path / "old", "pipeline-version.txt", "3.0.1.0\n")
+        self._write(
+            tmp_path / "new",
+            "pyproject.toml",
+            '[project]\nname = "mgs-workflow"\nversion = "3.2.2.0"\n',
+        )
+        write_index_versions(
+            tmp_path, str(tmp_path / "old"), str(tmp_path / "new"), tmp_path / "work"
+        )
+        assert json.loads((tmp_path / "index_versions.json").read_text()) == {
+            "pipeline_version_old": "3.0.1.0",
+            "pipeline_version_new": "3.2.2.0",
+        }
+
+    def test_unrecorded_version_raises(self, tmp_path: Path) -> None:
+        self._write(tmp_path / "old", "pipeline-version.txt", "3.0.1.0\n")
+        self._write(tmp_path / "new", None)
+        with pytest.raises(ValueError, match="records no pipeline version"):
+            write_index_versions(
+                tmp_path,
+                str(tmp_path / "old"),
+                str(tmp_path / "new"),
+                tmp_path / "work",
+            )
+
+
 class TestSummariseParamsChanges:
     def test_added_removed_changed(self) -> None:
         out = summarise_params_changes(
@@ -1257,25 +1398,35 @@ class TestCategorizeGainedGenomesRaw:
 
 
 class TestWriteGenomeTaxonomyTables:
-    @staticmethod
-    def _frames() -> tuple[pd.DataFrame, ...]:
-        meta_cols = [
-            "assembly_accession",
-            "genome_id",
-            "taxid",
-            "species_taxid",
-            "organism_name",
-        ]
-        old_meta = pd.DataFrame(
-            [["GCA_1", "g1", "100", "100", "A"], ["GCA_2", "g2", "200", "200", "B"]],
-            columns=meta_cols,
+    _META_COLS = [
+        "assembly_accession",
+        "genome_id",
+        "taxid",
+        "species_taxid",
+        "organism_name",
+    ]
+    _META_ROWS = {
+        "g1": ["GCA_1", "g1", "100", "100", "A"],
+        "g2": ["GCA_2", "g2", "200", "200", "B"],
+        "g3": ["GCA_3", "g3", "300", "300", "C"],
+    }
+
+    @classmethod
+    def _meta(cls, genome_ids: list[str], index_only_col: str) -> pd.DataFrame:
+        meta = pd.DataFrame(
+            [cls._META_ROWS[g] for g in genome_ids], columns=cls._META_COLS
         )
-        old_meta["old_only"] = "x"
-        new_meta = pd.DataFrame(
-            [["GCA_1", "g1", "100", "100", "A"], ["GCA_3", "g3", "300", "300", "C"]],
-            columns=meta_cols,
-        )
-        new_meta["new_only"] = "x"
+        meta[index_only_col] = "x"
+        return meta
+
+    @classmethod
+    def _frames(
+        cls,
+        old_meta_ids: list[str] | None = None,
+        new_meta_ids: list[str] | None = None,
+    ) -> tuple[pd.DataFrame, ...]:
+        old_meta = cls._meta(old_meta_ids or ["g1", "g2"], "old_only")
+        new_meta = cls._meta(new_meta_ids or ["g1", "g3"], "new_only")
         raw = pd.DataFrame(
             [
                 [
@@ -1329,7 +1480,13 @@ class TestWriteGenomeTaxonomyTables:
         return old_meta, new_meta, raw, old_db, new_db
 
     @staticmethod
-    def _write_index(root: Path, gid: pd.DataFrame, raw: pd.DataFrame | None) -> None:
+    def _write_index(
+        root: Path,
+        gid: pd.DataFrame,
+        raw: pd.DataFrame | None,
+        db_ids: list[str] | None = None,
+    ) -> None:
+        """Write an index; `db_ids` defaults to the metadata being reconciled."""
         results = root / "output" / "results"
         results.mkdir(parents=True)
         gid.to_csv(
@@ -1345,15 +1502,20 @@ class TestWriteGenomeTaxonomyTables:
                 index=False,
                 compression="gzip",
             )
+        ids = gid["genome_id"].tolist() if db_ids is None else db_ids
+        with gzip.open(results / "virus-genomes-masked.fasta.gz", "wt") as f:
+            f.write("".join(f">{i} description\nACGT\n" for i in ids))
 
-    def test_writes_tables_and_summary(self, tmp_path: Path) -> None:
-        old_meta, new_meta, raw, old_db, new_db = self._frames()
-        old_root = tmp_path / "old-index"
-        new_root = tmp_path / "new-index"
+    @staticmethod
+    def _write_genome_tables(
+        tmp_path: Path,
+        old_root: Path,
+        new_root: Path,
+        old_db: pd.DataFrame,
+        new_db: pd.DataFrame,
+    ) -> Path:
         out_dir = tmp_path / "out"
-        out_dir.mkdir()
-        self._write_index(old_root, old_meta, None)
-        self._write_index(new_root, new_meta, raw)
+        out_dir.mkdir(exist_ok=True)
         write_genome_taxonomy_tables(
             out_dir,
             str(old_root),
@@ -1364,6 +1526,24 @@ class TestWriteGenomeTaxonomyTables:
             {"trace_timestamp": "2025-01-01T00:00:00Z"},
             {"host_taxa_screen": "vertebrate"},
             tmp_path / "work",
+        )
+        return out_dir
+
+    @staticmethod
+    def _categorized_ids(out_dir: Path, direction: str) -> list[str]:
+        table = pd.read_csv(
+            out_dir / f"genomes_{direction}_categorized.tsv", sep="\t", dtype=str
+        )
+        return table["genome_id"].tolist()
+
+    def test_writes_tables_and_summary(self, tmp_path: Path) -> None:
+        old_meta, new_meta, raw, old_db, new_db = self._frames()
+        old_root = tmp_path / "old-index"
+        new_root = tmp_path / "new-index"
+        self._write_index(old_root, old_meta, None)
+        self._write_index(new_root, new_meta, raw)
+        out_dir = self._write_genome_tables(
+            tmp_path, old_root, new_root, old_db, new_db
         )
         assert {p.name for p in out_dir.glob("*.tsv")} == {
             "genomes_reassigned.tsv",
@@ -1411,27 +1591,137 @@ class TestWriteGenomeTaxonomyTables:
             "pre_existing_reincluded": 0,
             "no_release_date": 0,
         }
+        assert summary["metadata_rows_not_in_fasta_old"] == 0
+        assert summary["metadata_rows_not_in_fasta_new"] == 0
+        assert summary["fasta_ids_without_metadata_old"] == 0
+        assert summary["fasta_ids_without_metadata_new"] == 0
+
+    @pytest.mark.parametrize(
+        "old_meta_ids,old_fasta_ids,new_meta_ids,new_fasta_ids,expected",
+        [
+            # Old index metadata has g1,g2 but FASTA has only g1.
+            # New index has g1,g3 in both.
+            # g2 was never in the old FASTA, so there is 0 lost and 1 (g3) gained.
+            (
+                None,
+                ["g1"],
+                None,
+                None,
+                {
+                    "lost_ids": [],
+                    "gained_ids": ["g3"],
+                    "kept_genomes": 1,
+                    "metadata_rows_not_in_fasta_old": 1,
+                    "metadata_rows_not_in_fasta_new": 0,
+                },
+            ),
+            # Old index has g1,g2 in both.
+            # New index metadata has g1,g3 but FASTA has only g3.
+            # 2 lost (g1,g2) and 0 kept.
+            (
+                None,
+                None,
+                None,
+                ["g3"],
+                {
+                    "lost_ids": ["g1", "g2"],
+                    "gained_ids": ["g3"],
+                    "kept_genomes": 0,
+                    "metadata_rows_not_in_fasta_new": 1,
+                },
+            ),
+            # New index has no metadata row for `orphan` in FASTA,
+            # which is reported in fasta_ids_without_metadata_new but
+            # not in 1 gained (g3 only).
+            (
+                None,
+                None,
+                None,
+                ["g1", "g3", "orphan"],
+                {
+                    "lost_ids": ["g2"],
+                    "gained_ids": ["g3"],
+                    "kept_genomes": 1,
+                    "fasta_ids_without_metadata_old": 0,
+                    "fasta_ids_without_metadata_new": 1,
+                    "metadata_rows_not_in_fasta_new": 0,
+                },
+            ),
+            # Old index has g1,g2,g3 in metadata and g1,g2 in FASTA.
+            # New index has g1,g3 in both.
+            # 1 gained (g3) and 1 lost (g2) since metadata is filtered with FASTA.
+            (
+                ["g1", "g2", "g3"],
+                ["g1", "g2"],
+                None,
+                None,
+                {
+                    "lost_ids": ["g2"],
+                    "gained_ids": ["g3"],
+                    "kept_genomes": 1,
+                    "metadata_rows_not_in_fasta_old": 1,
+                },
+            ),
+            # Old index has g1,g2 in metadata and only g1 in FASTA.
+            # New index has g1,g3 in FASTA but only g3 in metadata.
+            # 1 lost (g1) because it has no row in the new index's metadata, and
+            # the metadata <--> FASTA mismatch is reported in
+            # fasta_ids_without_metadata_new.
+            (
+                None,
+                ["g1"],
+                ["g3"],
+                ["g1", "g3"],
+                {
+                    "lost_ids": ["g1"],
+                    "gained_ids": ["g3"],
+                    "kept_genomes": 0,
+                    "fasta_ids_without_metadata_new": 1,
+                },
+            ),
+        ],
+        ids=[
+            "no_phantom_loss",
+            "hidden_loss_revealed",
+            "orphan_counted",
+            "hidden_gain_revealed",
+            "orphan_reads_as_lost",
+        ],
+    )
+    def test_deltas_follow_fasta_membership(
+        self,
+        tmp_path: Path,
+        old_meta_ids: list[str] | None,
+        old_fasta_ids: list[str] | None,
+        new_meta_ids: list[str] | None,
+        new_fasta_ids: list[str] | None,
+        expected: dict[str, object],
+    ) -> None:
+        old_meta, new_meta, raw, old_db, new_db = self._frames(
+            old_meta_ids, new_meta_ids
+        )
+        old_root = tmp_path / "old-index"
+        new_root = tmp_path / "new-index"
+        self._write_index(old_root, old_meta, None, db_ids=old_fasta_ids)
+        self._write_index(new_root, new_meta, raw, db_ids=new_fasta_ids)
+        out_dir = self._write_genome_tables(
+            tmp_path, old_root, new_root, old_db, new_db
+        )
+        actual = {
+            "lost_ids": self._categorized_ids(out_dir, "lost"),
+            "gained_ids": self._categorized_ids(out_dir, "gained"),
+            **json.loads((out_dir / "genomes_summary.json").read_text()),
+        }
+        assert {k: actual[k] for k in expected} == expected
 
     def test_missing_release_date_raises(self, tmp_path: Path) -> None:
         old_meta, new_meta, raw, old_db, new_db = self._frames()
         old_root = tmp_path / "old-index"
         new_root = tmp_path / "new-index"
-        out_dir = tmp_path / "out"
-        out_dir.mkdir()
         self._write_index(old_root, old_meta, None)
         self._write_index(new_root, new_meta, raw.drop(columns="release_date"))
         with pytest.raises(ValueError, match="release_date"):
-            write_genome_taxonomy_tables(
-                out_dir,
-                str(old_root),
-                str(new_root),
-                old_db,
-                new_db,
-                Coverage({}, set(), {}),
-                {"trace_timestamp": "2025-01-01T00:00:00Z"},
-                {"host_taxa_screen": "vertebrate"},
-                tmp_path / "work",
-            )
+            self._write_genome_tables(tmp_path, old_root, new_root, old_db, new_db)
 
 
 if __name__ == "__main__":
