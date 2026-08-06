@@ -314,7 +314,7 @@ To run the `DOWNSTREAM` workflow, you need:
     - The reference directory containing databases and indices (`params.ref_dir`);
     - The permitted deviation when identifying alignment duplicates (`params.aln_dup_deviation`); **Note: Only used for short-read platforms**
     - Parameter for downsampling during validation:
-        - `params.validation_n_sample`: Maximum reads per selected taxid to validate (default 20 for short-read, 1000000 for long-read[^max_sample]).
+        - `params.validation_n_sample`: Maximum reads per selected taxid to validate (default 20 for non-ONT platforms, 1000000 for ONT[^max_sample]).
     - Parameters for BLAST validation:
         - INDEX always publishes the BLAST database to `results/blast_db/`; the originally downloaded database is recorded via the index's `params.blast_db_name`
         - `params.blast_perc_id`: Percentage identity threshold for BLAST hits (default 60 for short-read, 0 for long-read)
