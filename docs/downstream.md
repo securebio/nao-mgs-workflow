@@ -186,13 +186,33 @@ This subworkflow uses BLAST to validate the taxonomic assignments given to putat
 - Calculates the taxonomic distance between each BLAST LCA assignment and the corresponding raw assignment from the RUN workflow
 - Annotates every hit with its own validation result and a `validation_status` column.
 
-Each read's `validation_*` columns describe that read's own BLAST alignments, or are NA. The `validation_status` column records which case applies:
+Downsampling per taxid group keeps rare taxa thoroughly validated (a group smaller than `validation_n_sample` is validated in its entirety) while capping the cost of abundant ones. Because the cap applies within each group rather than across the whole sample, a sample dominated by one abundant virus does not crowd out validation of everything else.
 
-| `validation_status` | Meaning |
-| --- | --- |
-| `aligned` | The read was selected for validation and BLAST returned at least one hit passing the score filters. |
-| `no_alignment` | The read was selected for validation, but no hit survived filtering. The `validation_*` columns are NA. |
-| `not_sampled` | The read was not selected for validation. The `validation_*` columns are NA. |
+> [!IMPORTANT]
+> **Validation results are never extrapolated between reads.** Each read's `validation_*` columns describe that read's own BLAST alignments, or are NA. The `validation_status` column records which case applies:
+>
+> | `validation_status` | Meaning |
+> | --- | --- |
+> | `aligned` | The read was selected for validation and BLAST returned at least one hit passing the score filters. The `validation_*` columns describe this read's own alignments. |
+> | `no_alignment` | The read was selected for validation, but no hit survived filtering. The `validation_*` columns are NA. |
+> | `not_sampled` | The read was not selected for validation. The `validation_*` columns are NA. |
+>
+> This replaces the earlier approach of clustering reads with VSEARCH, BLASTing one representative per cluster, and propagating that representative's verdict to the rest of its cluster. That propagation could assign a verdict to a read whose own sequence was never aligned, and clusters formed at 95% identity were not always homogeneous enough for the verdict to transfer safely. Reads that are not validated are now labelled as such rather than being given an inferred result.
+
+### Which reads get sampled
+
+Selection is a **bottom-N hash sample**: each read's `seq_id` is hashed, and the reads with the N smallest hashes in each taxid group are retained. This is a uniform random sample of the group, but because the hash is a pure function of `seq_id` it has three useful properties:
+
+- **Reproducible.** Re-running the workflow on the same input selects the same reads, so validation results are stable across runs and under `-resume`.
+- **Order-independent.** The sample does not depend on the order in which upstream processes emitted rows.
+- **Nested.** Raising `validation_n_sample` only adds reads to the sample; it never swaps out reads that were previously selected.
+
+> [!IMPORTANT]
+> **Most reads will have `validation_status = not_sampled`, and that is expected.** The short-read default of 20 reads per taxid group is deliberately set to match the number of reads the previous cluster-exemplar approach actually aligned, so validation costs the same as before. What changed is that the reads whose sequences were never aligned are now labelled `not_sampled` instead of inheriting a cluster representative's verdict.
+>
+> The practical consequence: in a large sample group, the fraction of reads carrying a populated `validation_*` value drops sharply, because only sampled reads carry one. This is a reporting change, not a loss of validation power — the same alignments underlay the propagated values too. The question the step is designed to answer, "is each assigned species really present in this group?", is answered by those alignments exactly as well as before.
+>
+> If you need per-read validation coverage rather than per-species evidence, raise `validation_n_sample`. Because sampling is nested, raising it only adds reads, and BLAST's cost against `core_nt` is dominated by traversing the database rather than by the number of queries — so a substantially larger sample is expected to cost little. That trade-off has not yet been benchmarked directly, which is why the default stays at parity.
 
 This is a complex analysis with a number of steps, which have been grouped into component subworkflows for comprehensibility. See the [appendix](./downstream.md#appendix-detailed-breakdown-of-post-hoc-validation-subworkflows) for more detailed information on each component.
 
@@ -365,6 +385,8 @@ style L fill:#000,color:#fff,stroke:#000
 #### Downsample hits within each taxid group (`DOWNSAMPLE_VIRAL_ASSIGNMENTS`)
 
 This subworkflow takes the partitioned hits TSVs from `SPLIT_VIRAL_TSV_BY_SELECTED_TAXID` and reduces each taxid group to at most `params.validation_n_sample` reads, then renders the retained reads as FASTA ready for BLAST. Reads are selected by hashing `seq_id` and keeping the smallest N hashes.
+
+Sampling happens before FASTQ extraction and pair merging, so those steps only ever process reads that are actually going to be validated. This is what removes the workflow's worst scaling behaviour: the previous VSEARCH clustering step had to compare all reads within a taxid group against each other, so a single sample dominated by one abundant virus could occupy a task for days.
 
 ```mermaid
 ---
