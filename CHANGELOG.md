@@ -6,11 +6,11 @@
     - Replace the `validation_cluster_identity` and `validation_n_clusters` parameters with `validation_n_sample` (default `20` for short reads, `1000000` for ONT), and drop the injected `cluster_min_len`. Most reads are now labelled `not_sampled` instead of inheriting a representative's verdict.
     - Remove the VSEARCH clustering step from the validation path; the now-unused clustering components are deleted in a follow-up.
 
-- Add an `annotated` output to `SPLIT_VIRAL_TSV_BY_SELECTED_TAXID` carrying the whole joined table before partitioning, annotated with each read's `selected_taxid` and with the intermediate `taxid_species` column dropped. Additive: the existing `tsv` and `fastq` outputs are unchanged. No workflow consumes the new output yet, but because process invocation is eager it is still produced, costing one extra column-drop task per sample group until the consumer lands.
-- Add a `VALIDATE_SAMPLED_READS` subworkflow that computes the taxonomic distance between the original and validated assignments for the reads selected for validation, emitting a table keyed on `seq_id` that can be joined onto the full hits table. Not yet called by any workflow.
-- Add a `DOWNSAMPLE_VIRAL_ASSIGNMENTS` subworkflow that downsamples per-species partitions of viral hits to a fixed number of reads each and renders the retained reads as FASTA for alignment. Not yet called by any workflow.
-- Add an `ANNOTATE_VALIDATION_STATUS` module that joins post-hoc validation results onto a full viral hits TSV and appends a `validation_status` column (`aligned` / `no_alignment` / `not_sampled`) recording, per read, whether that read was validated on its own evidence. Not yet called by any workflow.
-- Add a `DOWNSAMPLE_TSV_BY_HASH` module that deterministically downsamples a TSV to at most N rows, selecting rows by hash of a key column. The selection is reproducible across runs, independent of input row order, and nested in N. Not yet called by any workflow; it is the first of a stacked series replacing VSEARCH cluster-exemplar selection in DOWNSTREAM's viral validation with downsampling.
+- Add an `annotated` output to `SPLIT_VIRAL_TSV_BY_SELECTED_TAXID`: the whole joined table before partitioning, with `selected_taxid` added and `taxid_species` dropped. Existing outputs are unchanged. Nothing consumes it yet, so it costs one extra task per sample group until the consumer lands.
+- Add a `VALIDATE_SAMPLED_READS` subworkflow that computes the taxonomic distance between original and validated assignments, keyed on `seq_id`. Not yet called by any workflow.
+- Add a `DOWNSAMPLE_VIRAL_ASSIGNMENTS` subworkflow that downsamples each per-species hit partition and renders the retained reads as FASTA. Not yet called by any workflow.
+- Add an `ANNOTATE_VALIDATION_STATUS` module that joins validation results onto a full viral hits TSV and appends a `validation_status` column (`aligned` / `no_alignment` / `not_sampled`). Not yet called by any workflow.
+- Add a `DOWNSAMPLE_TSV_BY_HASH` module that downsamples a TSV to at most N rows, selecting by hash of a key column so the choice is reproducible, order-independent, and nested in N. Not yet called by any workflow.
 - Require Nextflow `>=26.04.6` (from `25.10.4`), the first of a stacked series upgrading the pipeline to Nextflow 26. Set `aws.client.socketTimeout` to `3600000` (NF 26.04 rejects the previous `0`), bump the `nft-fastq`/`nft-bam` nf-test plugins for compatibility with nf-test `0.9.5`, pin nf-test to `0.9.5` in CI, and drop the now-moot `26.04.x` `.nextflowignore` deferral entries. Replace the `as List<String>` cast in `WRITE_SENTINEL_RUN` with a raw `as List`, which the NF 26.04 compiler requires (parameterized-type casts now fail at runtime).
 - Compare indexes in `bin/benchmark_index.py` after restricting to genomes published in final FASTA and report each index's build-time pipeline version.
 - Sort accessions before chunking them in `FILTER_VIRAL_GENBANK_METADATA`.
@@ -130,7 +130,6 @@
 
 - Make `bin/run-nf-test.sh` and `bin/run_nf_test_parallel.py` symlink-safe for dependent repos
 - Add authenticated ECR Public login to Trivy scan workflow to avoid anonymous pull rate limits
-- Add several Trivy CVEs to `.trivyignore` (no fix currently available; expiry set in June 2026 to force review)
 - Extract shared Groovy code for sentinel file generation to `lib/SentinelUtils.groovy`
 - Remove `logging/time.txt` and `logging_downstream/time.txt`; superseded by new sentinel JSONs
 - Make RUN workflow clearer and more readable by moving derived variables and conditional statements into subworkflows, including new `PREPARE_INPUT_LOGGING` and `EXTRACT_VIRAL_READS` subworkflows
@@ -381,7 +380,6 @@ This version involved numerous changes intended to make new releases easier, fas
     - Updated our PR process.
     - Updated our release process.
     - Added preference for using pytest over nf-test for Python unit tests.
-- Added `pyproject.toml` to the top level directory to standardize our Python file formatting and type checking rules.
 
 # v3.0.1.0
 
