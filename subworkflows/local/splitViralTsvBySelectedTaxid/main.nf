@@ -16,7 +16,7 @@ reassembling the partitions.
 
 include { SORT_TSV as SORT_SEQ_ID } from "../../../modules/local/sortTsv"
 include { CHECK_TSV_DUPLICATES } from "../../../modules/local/checkTsvDuplicates"
-include { SELECT_TSV_COLUMNS as SELECT_DB_COLUMNS } from "../../../modules/local/selectTsvColumns"
+include { SELECT_TSV_COLUMNS } from "../../../modules/local/selectTsvColumns"
 include { SELECT_TSV_COLUMNS as DROP_SPECIES_TAXID } from "../../../modules/local/selectTsvColumns"
 include { REHEAD_TSV } from "../../../modules/local/reheadTsv"
 include { SORT_TSV as SORT_DB_TAXID } from "../../../modules/local/sortTsv"
@@ -40,7 +40,7 @@ workflow SPLIT_VIRAL_TSV_BY_SELECTED_TAXID {
         check_ch = CHECK_TSV_DUPLICATES(sort_seq_id_ch, "seq_id").output
         // 1. Prepare taxonomy DB for joining
         db_ch = channel.of("db").combine(db)
-        db_select_ch = SELECT_DB_COLUMNS(db_ch, "taxid,taxid_species", "keep").output
+        db_select_ch = SELECT_TSV_COLUMNS(db_ch, "taxid,taxid_species", "keep").output
         db_rehead_ch = REHEAD_TSV(db_select_ch, "taxid", "aligner_taxid_lca").output
         db_sorted_ch = SORT_DB_TAXID(db_rehead_ch, "aligner_taxid_lca").sorted
         db_raw_ch = db_sorted_ch.map{ _db_label, db_contents -> db_contents }
