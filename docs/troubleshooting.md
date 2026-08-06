@@ -45,7 +45,7 @@ If you still keep running into this issue, you may consider contacting Seqera fo
 
 ## `Unrecognized config option 'wave.tokens.cache.maxDuration'`
 
-Expected on every run. This is a valid but private `WaveConfig.groovy` option that is not defined as a `ConfigOption` ([source code](https://github.com/nextflow-io/nextflow/blob/master/plugins/nf-wave/src/main/io/seqera/wave/plugin/config/WaveConfig.groovy))
+Expected on every run. This is a valid but private `WaveConfig.groovy` option that is not defined as a `ConfigOption` ([source code](https://github.com/nextflow-io/nextflow/blob/v26.04.6/plugins/nf-wave/src/main/io/seqera/wave/plugin/config/WaveConfig.groovy#L114)).
 As of 26.04.6, Nextflow warns about it while still applying it.
 
 ## Automatic reference file caching
