@@ -55,9 +55,11 @@ workflow VALIDATE_SAMPLED_READS {
         join_ch = JOIN_TSVS(combine_ch, "seq_id", "inner", "sampled").output
         // 3. Compute taxonomic distance between original and validated taxids
         dist_ch = COMPUTE_TAXID_DISTANCE(join_ch, distance_params, nodes_db).output
-        // NB: As implemented, this will produce a negative distance if the original
-        // taxid is too high (ancestor of LCA taxid), and a positive distance if the
-        // original taxid is too low (descendant of LCA taxid).
+        // NB: this emits two separate distances, each the number of parent-child steps
+        // from one of the taxids to their lowest common ancestor, so both are
+        // non-negative. A read whose original assignment sits above the validated one
+        // shows distance_1 == 0 and distance_2 > 0, and vice versa; both non-zero means
+        // neither is an ancestor of the other.
         // 4. Drop the original taxid, which the hits TSV this joins onto already carries
         output_ch = DROP_ALIGNER_TAXID(dist_ch, distance_params.taxid_field_1, "drop").output
     emit:
