@@ -1,0 +1,6 @@
+qseqid	lca_taxid	exp_distance_1	exp_distance_2
+R1	9000	1	0
+R2	9000	2	0
+R3	9005	0	0
+R4	9009	0	1
+R5	9002	1	1

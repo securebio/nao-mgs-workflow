@@ -1,5 +1,6 @@
 # v3.2.3.0-dev
 
+- Add a `VALIDATE_SAMPLED_READS` subworkflow that computes the taxonomic distance between the original and validated assignments for the reads selected for validation, emitting a table keyed on `seq_id` that can be joined onto the full hits table. Not yet called by any workflow.
 - Add a `DOWNSAMPLE_VIRAL_ASSIGNMENTS` subworkflow that downsamples per-species partitions of viral hits to a fixed number of reads each and renders the retained reads as FASTA for alignment. Not yet called by any workflow.
 - Add an `ANNOTATE_VALIDATION_STATUS` module that joins post-hoc validation results onto a full viral hits TSV and appends a `validation_status` column (`aligned` / `no_alignment` / `not_sampled`) recording, per read, whether that read was validated on its own evidence. Not yet called by any workflow.
 - Add a `DOWNSAMPLE_TSV_BY_HASH` module that deterministically downsamples a TSV to at most N rows, selecting rows by hash of a key column. The selection is reproducible across runs, independent of input row order, and nested in N. Not yet called by any workflow; it is the first of a stacked series replacing VSEARCH cluster-exemplar selection in DOWNSTREAM's viral validation with downsampling.
