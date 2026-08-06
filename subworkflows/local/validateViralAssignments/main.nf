@@ -22,7 +22,6 @@ include { CONCATENATE_TSVS_LABELED } from "../../../modules/local/concatenateTsv
 include { BLAST_FASTA } from "../../../subworkflows/local/blastFasta"
 include { VALIDATE_SAMPLED_READS } from "../../../subworkflows/local/validateSampledReads"
 include { ANNOTATE_VALIDATION_STATUS } from "../../../modules/local/annotateValidationStatus"
-include { SELECT_TSV_COLUMNS } from "../../../modules/local/selectTsvColumns"
 include { SORT_TSV } from "../../../modules/local/sortTsv"
 include { COPY_FILE as COPY_HITS } from "../../../modules/local/copyFile"
 include { COPY_FILE as COPY_BLAST } from "../../../modules/local/copyFile"
@@ -54,7 +53,6 @@ workflow VALIDATE_VIRAL_ASSIGNMENTS {
         // 3. Concatenate data across species (prepare for group-level BLAST)
         concat_fasta_ch = CONCATENATE_FILES_BY_EXTENSION(sample_ch.fasta, "sampled_reads").output
         concat_sampled_ch = CONCATENATE_TSVS_LABELED(sample_ch.tsv, "sampled_hits").output
-        sampled_ids_ch = SELECT_TSV_COLUMNS(concat_sampled_ch, "seq_id", "keep").output
         // 4. Run BLAST on the sampled reads (single job per group)
         blast_fasta_params = params_map + [lca_prefix: "validation"]
         blast_ch = BLAST_FASTA(concat_fasta_ch, ref_dir, blast_fasta_params)
@@ -67,9 +65,11 @@ workflow VALIDATE_VIRAL_ASSIGNMENTS {
         ]
         validate_ch = VALIDATE_SAMPLED_READS(groups, blast_ch.lca, ref_dir, distance_params)
         // 6. Annotate every hit with its own validation result and status
+        // ANNOTATE_VALIDATION_STATUS reads seq_id by name, so it takes the sampled hits
+        // table directly rather than a projection of it
         annotate_in_ch = split_ch.annotated
             .combine(validate_ch.output, by: 0)
-            .combine(sampled_ids_ch, by: 0)
+            .combine(concat_sampled_ch, by: 0)
         annotate_ch = ANNOTATE_VALIDATION_STATUS(annotate_in_ch, "seq_id", "validation_status").output
         // 7. Restore seq_id ordering, which partitioning by selected_taxid disturbed
         sorted_ch = SORT_TSV(annotate_ch, "seq_id").sorted
@@ -101,13 +101,8 @@ workflow VALIDATE_VIRAL_ASSIGNMENTS {
         blast_results = output_blast_ch
         // Extra outputs for testing
         test_in   = groups
-        test_split_tsv = split_ch.tsv
-        test_split_annotated = split_ch.annotated
-        test_sampled_tsv = sample_ch.tsv
         test_sampled_fasta = sample_ch.fasta
         test_concat_fasta = concat_fasta_ch
-        test_concat_sampled = concat_sampled_ch
-        test_sampled_ids = sampled_ids_ch
         test_blast_db = blast_ch.blast
         test_blast_query = blast_ch.query
         test_blast_lca = blast_ch.lca

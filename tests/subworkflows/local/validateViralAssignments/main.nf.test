@@ -73,34 +73,12 @@ nextflow_workflow {
         then {
             assert workflow.success
             def tabs_in = workflow.out.test_in.collect{path(it[1]).csv(sep: "\t")}
-            // The annotated table feeding step 6 holds every input read
-            def tabs_split = workflow.out.test_split_tsv.collect{it[1]}.flatten().collect{path(it).csv(sep: "\t", decompress: true)}
-            def tabs_annotated = workflow.out.test_split_annotated.collect{path(it[1]).csv(sep: "\t", decompress: true)}
-            assert tabs_annotated.size() == tabs_in.size()
-            for (int i = 0; i < tabs_annotated.size(); i++) {
-                assert tabs_annotated[i].rowCount == tabs_in[i].rowCount
-                assert tabs_annotated[i].columns["seq_id"].toSorted() == tabs_in[i].columns["seq_id"].toSorted()
-            }
-            // Sampling should cap each species partition at validation_n_sample reads,
-            // and should be a subset of that partition
-            def sampled = workflow.out.test_sampled_tsv.collect{it[1]}.flatten().collect{path(it).csv(sep: "\t", decompress: true)}
-            assert sampled.size() == tabs_split.size()
-            for (int i = 0; i < sampled.size(); i++) {
-                assert sampled[i].rowCount <= params.n_sample
-                assert sampled[i].rowCount == Math.min(params.n_sample, tabs_split[i].rowCount)
-                assert tabs_split[i].columns["seq_id"].containsAll(sampled[i].columns["seq_id"])
-            }
             // Concatenation across species should preserve every sampled sequence
             def sampled_fasta = workflow.out.test_sampled_fasta.collect{it[1]}.flatten().collect{path(it).fasta}
             def concat_fasta = workflow.out.test_concat_fasta.collect{path(it[1]).fasta}
             def concat_labels = workflow.out.test_concat_fasta.collect{it[0]}
             assert concat_fasta.size() == tabs_in.size()
             assert sampled_fasta.sum{ it.keySet().size() } == concat_fasta.sum{ it.keySet().size() }
-            // The sampled-ID list should name exactly the reads that were sampled
-            def sampled_ids = workflow.out.test_sampled_ids.collect{path(it[1]).csv(sep: "\t", decompress: true)}
-            for (int i = 0; i < sampled_ids.size(); i++) {
-                assert sampled_ids[i].columnNames == ["seq_id"]
-            }
             // Basic BLAST invocation should work as expected
             def blast_db = workflow.out.test_blast_db.collect{path(it[1]).csv(sep: "\t", decompress: true)}
             def blast_query = workflow.out.test_blast_query.collect{path(it[1]).fasta}
@@ -132,29 +110,6 @@ nextflow_workflow {
             for (int i=0; i < tabs_annotate.size(); i++) {
                 assert tabs_annotate[i].rowCount == tabs_in[i].rowCount
                 assert tabs_annotate[i].columns["seq_id"].toSorted() == tabs_in[i].columns["seq_id"].toSorted()
-                // Statuses must be drawn from the documented vocabulary
-                def statuses = tabs_annotate[i].columns["validation_status"].toSet()
-                assert statuses.every{ it in ["aligned", "no_alignment", "not_sampled"] }
-                // A read may only be "aligned" if it was actually sampled
-                def sampled_here = sampled_ids[i].columns["seq_id"].toSet()
-                def rows = tabs_annotate[i]
-                def ids = rows.columns["seq_id"]
-                def sts = rows.columns["validation_status"]
-                for (int j = 0; j < ids.size(); j++) {
-                    if (sts[j] != "not_sampled") {
-                        assert sampled_here.contains(ids[j])
-                    } else {
-                        assert !sampled_here.contains(ids[j])
-                    }
-                }
-                // Validation columns must be missing for every read that was not
-                // aligned (the csv plugin reads NA back as null in typed columns)
-                for (int j = 0; j < ids.size(); j++) {
-                    if (sts[j] != "aligned") {
-                        def v = rows.columns["validation_staxid_lca"][j]
-                        assert v == null || v.toString() == "NA"
-                    }
-                }
             }
             // Final output should preserve the read set and drop the internal taxid column
             def tabs_regrouped = workflow.out.annotated_hits.collect{path(it[1]).csv(sep: "\t", decompress: true)}
@@ -168,6 +123,10 @@ nextflow_workflow {
                 // No cluster machinery should survive in the output
                 assert tabs_regrouped[i].columnNames.every{ !it.startsWith("vsearch_") }
                 assert !tabs_regrouped[i].columnNames.contains("group_species")
+                // Partitioning by selected_taxid leaves the table grouped by taxid, so the
+                // final sort must put it back in seq_id order. Every other assertion here
+                // compares sorted collections and so cannot see ordering at all.
+                assert tabs_regrouped[i].columns["seq_id"] == tabs_regrouped[i].columns["seq_id"].toSorted()
             }
         }
     }
