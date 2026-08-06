@@ -95,13 +95,21 @@ def read_header(input_file: IO[str], path: str) -> list[str]:
         List of column names.
 
     Raises:
-        ValueError: If the file is empty.
+        ValueError: If the file is empty, or if a column name is repeated. A repeated
+            name makes every lookup by that name ambiguous, and would pass through to a
+            duplicate column in the output, so it is rejected here for all three inputs
+            rather than at each use site.
     """
     line = input_file.readline()
     if not line:
         msg = f"Input file is empty (no header line): {path}"
         raise ValueError(msg)
-    return line.rstrip("\n").split("\t")
+    header = line.rstrip("\n").split("\t")
+    duplicates = sorted(name for name, n in Counter(header).items() if n > 1)
+    if duplicates:
+        msg = f"Duplicate column name(s) in header of {path}: {duplicates}"
+        raise ValueError(msg)
+    return header
 
 
 def read_key_set(path: str, key_column: str) -> set[str]:
@@ -115,7 +123,11 @@ def read_key_set(path: str, key_column: str) -> set[str]:
         Set of values found in that column.
 
     Raises:
-        ValueError: If the file is empty or lacks key_column.
+        ValueError: If the file is empty, lacks key_column, or contains a row whose field
+            count does not match the header. A short row was previously skipped, which
+            silently dropped that read from the set and so mislabelled it downstream as
+            never having been sampled; the other two readers reject ragged rows, and this
+            one now matches them.
     """
     with open_by_suffix(path) as inf:
         header = read_header(inf, path)
@@ -128,8 +140,10 @@ def read_key_set(path: str, key_column: str) -> set[str]:
             if not line.strip():
                 continue
             fields = line.rstrip("\n").split("\t")
-            if len(fields) > index:
-                keys.add(fields[index])
+            if len(fields) != len(header):
+                msg = f"Row in {path} has {len(fields)} fields, expected {len(header)}"
+                raise ValueError(msg)
+            keys.add(fields[index])
     return keys
 
 
@@ -194,9 +208,13 @@ def annotate_validation_status(
         Counter of how many hits fell into each status.
 
     Raises:
-        ValueError: If any input is empty or missing key_column, if the validation table
-            contains a duplicate key, or if a validated read is absent from the sampled
-            set (which would mean the sample and the alignment disagree).
+        ValueError: If any input is empty or missing key_column; if the validation table
+            contains a duplicate key; if status_column or a validation column would
+            collide with an existing column, which would emit a duplicate column name;
+            or if the three inputs disagree about which reads exist -- either a validated
+            read absent from the sampled set, or a sampled read absent from the hits
+            table. Each disagreement means the inputs describe different read sets, so
+            the status column could not be trusted.
     """
     value_columns, validation = read_validation_table(validation_path, key_column)
     sampled = read_key_set(sampled_path, key_column)
@@ -224,7 +242,17 @@ def annotate_validation_status(
         if overlap:
             msg = f"Validation columns collide with hits columns: {sorted(overlap)}"
             raise ValueError(msg)
+        if status_column in set(header) | set(value_columns):
+            msg = (
+                f"Status column {status_column!r} is already present in the input "
+                f"columns, which would emit two columns of that name"
+            )
+            raise ValueError(msg)
         outf.write("\t".join([*header, *value_columns, status_column]) + "\n")
+        # Track which sampled reads are actually seen. A sampled read missing from the
+        # hits table means the table being annotated is not the one that was sampled, and
+        # would otherwise be dropped silently -- no row, no status, no error.
+        unseen_sampled = set(sampled)
         for line in inf:
             if not line.strip():
                 continue
@@ -233,6 +261,7 @@ def annotate_validation_status(
                 msg = f"Row in {hits_path} has {len(fields)} fields, expected {len(header)}"
                 raise ValueError(msg)
             key = fields[key_index]
+            unseen_sampled.discard(key)
             values = validation.get(key)
             if values is not None:
                 status = STATUS_ALIGNED
@@ -241,6 +270,14 @@ def annotate_validation_status(
                 status = STATUS_NO_ALIGNMENT if key in sampled else STATUS_NOT_SAMPLED
             counts[status] += 1
             outf.write("\t".join([*fields, *values, status]) + "\n")
+    if unseen_sampled:
+        example = sorted(unseen_sampled)[:3]
+        msg = (
+            f"{len(unseen_sampled)} sampled read(s) are absent from the hits table, "
+            f"e.g. {example}. The hits table and the downsampled read set are "
+            f"inconsistent."
+        )
+        raise ValueError(msg)
     return counts
 
 

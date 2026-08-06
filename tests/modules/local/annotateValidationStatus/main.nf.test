@@ -77,10 +77,15 @@ nextflow_process {
         }
     }
 
-    test("Should fail when the join key is absent from the hits table") {
+    test("Should fail when the join key is absent from every input") {
         tag "expect_failed"
         when {
             process {
+                // A key absent everywhere is caught by whichever input is read first,
+                // which is the validation table. Asserting on that filename keeps the
+                // test honest about which check it exercises: all three readers emit the
+                // same "not found in header" wording, so the generic string alone would
+                // pass no matter which one raised.
                 '''
                 input[0] = ["test",
                     "${projectDir}/test-data/annotateValidationStatus/hits.tsv",
@@ -94,7 +99,34 @@ nextflow_process {
         }
         then {
             assert process.failed
-            assert process.errorReport.contains("not found in header")
+            assert process.errorReport.contains("not found in header of")
+            assert process.errorReport.contains("validation.tsv")
+        }
+    }
+
+    test("Should fail when the join key is absent from the hits table only") {
+        tag "expect_failed"
+        when {
+            process {
+                // hits_no_key.tsv names its key column other_id, while the validation and
+                // sampled tables still carry seq_id. Both of those readers therefore
+                // succeed and execution reaches the hits-header check, which nothing
+                // covered while the case above stopped at the validation table.
+                '''
+                input[0] = ["test",
+                    "${projectDir}/test-data/annotateValidationStatus/hits_no_key.tsv",
+                    "${projectDir}/test-data/annotateValidationStatus/validation.tsv",
+                    "${projectDir}/test-data/annotateValidationStatus/sampled.tsv"
+                ]
+                input[1] = "seq_id"
+                input[2] = "validation_status"
+                '''
+            }
+        }
+        then {
+            assert process.failed
+            assert process.errorReport.contains("not found in header of")
+            assert process.errorReport.contains("hits_no_key.tsv")
         }
     }
 
