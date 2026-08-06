@@ -75,4 +75,46 @@ nextflow_workflow {
             assert !tab_out.columnNames.contains("vsearch_cluster_rep_id")
         }
     }
+
+    test("Should emit a header-only table when no read produced an alignment") {
+        tag "expect_success"
+        tag "no_alignments"
+        when {
+            params {
+                hits_tsv = "${projectDir}/test-data/toy-data/validate-sampled-reads/test-hits.tsv"
+                lca_tsv = "${projectDir}/test-data/toy-data/validate-sampled-reads/test-lca-empty.tsv"
+                ref_dir = "${projectDir}/test-data/toy-data/validate-sampled-reads/"
+                distance_params = [
+                    taxid_field_1: "taxid",
+                    taxid_field_2: "lca_taxid",
+                    distance_field_1: "tax_dist_1",
+                    distance_field_2: "tax_dist_2"
+                ]
+            }
+            workflow {
+                // BLAST returning nothing for a whole group is a normal outcome, not an
+                // error: those reads become no_alignment downstream. LCA_TSV emits a
+                // header-only table in that case, so every step here has to carry the
+                // header through -- COMPUTE_TAXID_DISTANCE rejects a genuinely empty file.
+                '''
+                input[0] = Channel.of("test").combine(Channel.of(params.hits_tsv)) // hits_tsv
+                input[1] = Channel.of("test").combine(Channel.of(params.lca_tsv)) // lca_tsv
+                input[2] = params.ref_dir // ref_dir
+                input[3] = params.distance_params // distance_params
+                '''
+            }
+        }
+        then {
+            assert workflow.success
+            // Read the header directly: the csv plugin reports no columnNames at all for
+            // a zero-row table, so it cannot distinguish a header-only file from an empty one
+            def lines = path(workflow.out.output[0][1]).linesGzip
+            assert lines.size() == 1
+            def header = lines[0].split("\t") as List
+            assert header.contains("seq_id")
+            assert header.contains(params.distance_params.distance_field_1)
+            assert header.contains(params.distance_params.distance_field_2)
+            assert !header.contains(params.distance_params.taxid_field_1)
+        }
+    }
 }
