@@ -347,7 +347,7 @@
     {
       "name": "validation_staxid_lca_combined",
       "title": "Validation LCA Taxon ID (Combined)",
-      "description": "LCA taxon ID from BLAST validation of the cluster representative against core_nt, considering all reference sequences (both natural and artificial). NA when the cluster representative was not selected for BLAST validation, or when no hits were retained after filtering.",
+      "description": "LCA taxon ID from BLAST validation of the read against core_nt, considering all reference sequences (both natural and artificial). NA when the read was not selected for validation, or when no hits were retained after filtering.",
       "type": "integer",
       "constraints": {
         "minimum": 1
@@ -357,7 +357,7 @@
     {
       "name": "validation_n_assignments_combined",
       "title": "Validation Assignment Count (Combined)",
-      "description": "Number of BLAST assignments retained after filtering, considering all reference sequences (both natural and artificial). NA when the cluster representative was not selected for BLAST validation; 0 when it was BLASTed but no hits were retained.",
+      "description": "Number of BLAST assignments retained after filtering, considering all reference sequences (both natural and artificial). NA when the read was not selected for validation or produced no alignment.",
       "type": "integer",
       "constraints": {
         "minimum": 0
@@ -367,7 +367,7 @@
     {
       "name": "validation_n_assignments_classified_combined",
       "title": "Validation Classified Assignment Count (Combined)",
-      "description": "Number of classified BLAST assignments (with known taxonomic classification), considering all reference sequences (both natural and artificial). NA when the cluster representative was not selected for BLAST validation; 0 when it was BLASTed but no classified hits were retained.",
+      "description": "Number of classified BLAST assignments (with known taxonomic classification), considering all reference sequences (both natural and artificial). NA when the read was not selected for validation or produced no alignment; 0 when the read aligned but no classified hits were retained.",
       "type": "integer",
       "constraints": {
         "minimum": 0
@@ -377,7 +377,7 @@
     {
       "name": "validation_staxid_top_combined",
       "title": "Validation Top Taxon ID (Combined)",
-      "description": "Taxon ID of the top-scoring BLAST hit, considering all reference sequences (both natural and artificial). NA when the cluster representative was not selected for BLAST validation, or when no hits were retained after filtering.",
+      "description": "Taxon ID of the top-scoring BLAST hit, considering all reference sequences (both natural and artificial). NA when the read was not selected for validation, or when no hits were retained after filtering.",
       "type": "integer",
       "constraints": {
         "minimum": 1
@@ -387,14 +387,14 @@
     {
       "name": "validation_staxid_top_classified_combined",
       "title": "Validation Top Hit Classified (Combined)",
-      "description": "Whether the top-scoring BLAST hit has a known taxonomic classification, considering all reference sequences (both natural and artificial). NA when the cluster representative was not selected for BLAST validation, or when no hits were retained after filtering.",
+      "description": "Whether the top-scoring BLAST hit has a known taxonomic classification, considering all reference sequences (both natural and artificial). NA when the read was not selected for validation, or when no hits were retained after filtering.",
       "type": "boolean",
       "example": true
     },
     {
       "name": "validation_bitscore_min_combined",
       "title": "Validation Min Bitscore (Combined)",
-      "description": "Minimum bitscore among retained BLAST hits, considering all reference sequences (both natural and artificial). NA when the cluster representative was not selected for BLAST validation, or when no hits were retained after filtering.",
+      "description": "Minimum bitscore among retained BLAST hits, considering all reference sequences (both natural and artificial). NA when the read was not selected for validation, or when no hits were retained after filtering.",
       "type": "number",
       "constraints": {
         "minimum": 0
@@ -404,7 +404,7 @@
     {
       "name": "validation_bitscore_max_combined",
       "title": "Validation Max Bitscore (Combined)",
-      "description": "Maximum bitscore among retained BLAST hits, considering all reference sequences (both natural and artificial). NA when the cluster representative was not selected for BLAST validation, or when no hits were retained after filtering.",
+      "description": "Maximum bitscore among retained BLAST hits, considering all reference sequences (both natural and artificial). NA when the read was not selected for validation, or when no hits were retained after filtering.",
       "type": "number",
       "constraints": {
         "minimum": 0
@@ -414,7 +414,7 @@
     {
       "name": "validation_bitscore_mean_combined",
       "title": "Validation Mean Bitscore (Combined)",
-      "description": "Mean bitscore among retained BLAST hits, considering all reference sequences (both natural and artificial). NA when the cluster representative was not selected for BLAST validation, or when no hits were retained after filtering.",
+      "description": "Mean bitscore among retained BLAST hits, considering all reference sequences (both natural and artificial). NA when the read was not selected for validation, or when no hits were retained after filtering.",
       "type": "number",
       "constraints": {
         "minimum": 0
@@ -424,7 +424,7 @@
     {
       "name": "validation_staxid_lca",
       "title": "Validation LCA Taxon ID",
-      "description": "LCA taxon ID from BLAST validation, considering only natural (non-artificial) reference sequences. NA when the cluster representative was not selected for BLAST validation, or when no natural hits were retained after filtering.",
+      "description": "LCA taxon ID from BLAST validation, considering only natural (non-artificial) reference sequences. NA when the read was not selected for validation, or when no natural hits were retained after filtering.",
       "type": "integer",
       "constraints": {
         "minimum": 1
@@ -434,7 +434,7 @@
     {
       "name": "validation_n_assignments",
       "title": "Validation Assignment Count",
-      "description": "Number of BLAST assignments retained after filtering, considering only natural (non-artificial) reference sequences. NA when the cluster representative was not selected for BLAST validation; 0 when it was BLASTed but no natural hits were retained.",
+      "description": "Number of BLAST assignments retained after filtering, considering only natural (non-artificial) reference sequences. NA when the read was not selected for validation or produced no alignment; 0 when the read aligned but no natural hits were retained.",
       "type": "integer",
       "constraints": {
         "minimum": 0
@@ -444,7 +444,7 @@
     {
       "name": "validation_n_assignments_classified",
       "title": "Validation Classified Assignment Count",
-      "description": "Number of classified BLAST assignments (with known taxonomic classification), considering only natural (non-artificial) reference sequences. NA when the cluster representative was not selected for BLAST validation; 0 when it was BLASTed but no classified natural hits were retained.",
+      "description": "Number of classified BLAST assignments (with known taxonomic classification), considering only natural (non-artificial) reference sequences. NA when the read was not selected for validation or produced no alignment; 0 when the read aligned but no classified natural hits were retained.",
       "type": "integer",
       "constraints": {
         "minimum": 0
@@ -454,7 +454,7 @@
     {
       "name": "validation_staxid_top",
       "title": "Validation Top Taxon ID",
-      "description": "Taxon ID of the top-scoring BLAST hit, considering only natural (non-artificial) reference sequences. NA when the cluster representative was not selected for BLAST validation, or when no natural hits were retained after filtering.",
+      "description": "Taxon ID of the top-scoring BLAST hit, considering only natural (non-artificial) reference sequences. NA when the read was not selected for validation, or when no natural hits were retained after filtering.",
       "type": "integer",
       "constraints": {
         "minimum": 1
@@ -464,14 +464,14 @@
     {
       "name": "validation_staxid_top_classified",
       "title": "Validation Top Hit Classified",
-      "description": "Whether the top-scoring BLAST hit has a known taxonomic classification, considering only natural (non-artificial) reference sequences. NA when the cluster representative was not selected for BLAST validation, or when no natural hits were retained after filtering.",
+      "description": "Whether the top-scoring BLAST hit has a known taxonomic classification, considering only natural (non-artificial) reference sequences. NA when the read was not selected for validation, or when no natural hits were retained after filtering.",
       "type": "boolean",
       "example": true
     },
     {
       "name": "validation_bitscore_min",
       "title": "Validation Min Bitscore",
-      "description": "Minimum bitscore among retained BLAST hits, considering only natural (non-artificial) reference sequences. NA when the cluster representative was not selected for BLAST validation, or when no natural hits were retained after filtering.",
+      "description": "Minimum bitscore among retained BLAST hits, considering only natural (non-artificial) reference sequences. NA when the read was not selected for validation, or when no natural hits were retained after filtering.",
       "type": "number",
       "constraints": {
         "minimum": 0
@@ -481,7 +481,7 @@
     {
       "name": "validation_bitscore_max",
       "title": "Validation Max Bitscore",
-      "description": "Maximum bitscore among retained BLAST hits, considering only natural (non-artificial) reference sequences. NA when the cluster representative was not selected for BLAST validation, or when no natural hits were retained after filtering.",
+      "description": "Maximum bitscore among retained BLAST hits, considering only natural (non-artificial) reference sequences. NA when the read was not selected for validation, or when no natural hits were retained after filtering.",
       "type": "number",
       "constraints": {
         "minimum": 0
@@ -491,7 +491,7 @@
     {
       "name": "validation_bitscore_mean",
       "title": "Validation Mean Bitscore",
-      "description": "Mean bitscore among retained BLAST hits, considering only natural (non-artificial) reference sequences. NA when the cluster representative was not selected for BLAST validation, or when no natural hits were retained after filtering.",
+      "description": "Mean bitscore among retained BLAST hits, considering only natural (non-artificial) reference sequences. NA when the read was not selected for validation, or when no natural hits were retained after filtering.",
       "type": "number",
       "constraints": {
         "minimum": 0
@@ -501,7 +501,7 @@
     {
       "name": "validation_staxid_lca_artificial",
       "title": "Validation LCA Taxon ID (Artificial)",
-      "description": "LCA taxon ID from BLAST validation, considering only artificial reference sequences (descendants of NCBI taxid 81077). NA when the cluster representative was not selected for BLAST validation, or when no artificial hits were retained after filtering.",
+      "description": "LCA taxon ID from BLAST validation, considering only artificial reference sequences (descendants of NCBI taxid 81077). NA when the read was not selected for validation, or when no artificial hits were retained after filtering.",
       "type": "integer",
       "constraints": {
         "minimum": 1
@@ -511,7 +511,7 @@
     {
       "name": "validation_n_assignments_artificial",
       "title": "Validation Assignment Count (Artificial)",
-      "description": "Number of BLAST assignments retained after filtering, considering only artificial reference sequences (descendants of NCBI taxid 81077). NA when the cluster representative was not selected for BLAST validation; 0 when it was BLASTed but no artificial hits were retained.",
+      "description": "Number of BLAST assignments retained after filtering, considering only artificial reference sequences (descendants of NCBI taxid 81077). NA when the read was not selected for validation or produced no alignment; 0 when the read aligned but no artificial hits were retained.",
       "type": "integer",
       "constraints": {
         "minimum": 0
@@ -521,7 +521,7 @@
     {
       "name": "validation_n_assignments_classified_artificial",
       "title": "Validation Classified Assignment Count (Artificial)",
-      "description": "Number of classified BLAST assignments (with known taxonomic classification), considering only artificial reference sequences (descendants of NCBI taxid 81077). NA when the cluster representative was not selected for BLAST validation; 0 when it was BLASTed but no classified artificial hits were retained.",
+      "description": "Number of classified BLAST assignments (with known taxonomic classification), considering only artificial reference sequences (descendants of NCBI taxid 81077). NA when the read was not selected for validation or produced no alignment; 0 when the read aligned but no classified artificial hits were retained.",
       "type": "integer",
       "constraints": {
         "minimum": 0
@@ -531,7 +531,7 @@
     {
       "name": "validation_staxid_top_artificial",
       "title": "Validation Top Taxon ID (Artificial)",
-      "description": "Taxon ID of the top-scoring BLAST hit, considering only artificial reference sequences (descendants of NCBI taxid 81077). NA when the cluster representative was not selected for BLAST validation, or when no artificial hits were retained after filtering.",
+      "description": "Taxon ID of the top-scoring BLAST hit, considering only artificial reference sequences (descendants of NCBI taxid 81077). NA when the read was not selected for validation, or when no artificial hits were retained after filtering.",
       "type": "integer",
       "constraints": {
         "minimum": 1
@@ -541,14 +541,14 @@
     {
       "name": "validation_staxid_top_classified_artificial",
       "title": "Validation Top Hit Classified (Artificial)",
-      "description": "Whether the top-scoring BLAST hit has a known taxonomic classification, considering only artificial reference sequences (descendants of NCBI taxid 81077). NA when the cluster representative was not selected for BLAST validation, or when no artificial hits were retained after filtering.",
+      "description": "Whether the top-scoring BLAST hit has a known taxonomic classification, considering only artificial reference sequences (descendants of NCBI taxid 81077). NA when the read was not selected for validation, or when no artificial hits were retained after filtering.",
       "type": "boolean",
       "example": true
     },
     {
       "name": "validation_bitscore_min_artificial",
       "title": "Validation Min Bitscore (Artificial)",
-      "description": "Minimum bitscore among retained BLAST hits, considering only artificial reference sequences (descendants of NCBI taxid 81077). NA when the cluster representative was not selected for BLAST validation, or when no artificial hits were retained after filtering.",
+      "description": "Minimum bitscore among retained BLAST hits, considering only artificial reference sequences (descendants of NCBI taxid 81077). NA when the read was not selected for validation, or when no artificial hits were retained after filtering.",
       "type": "number",
       "constraints": {
         "minimum": 0
@@ -558,7 +558,7 @@
     {
       "name": "validation_bitscore_max_artificial",
       "title": "Validation Max Bitscore (Artificial)",
-      "description": "Maximum bitscore among retained BLAST hits, considering only artificial reference sequences (descendants of NCBI taxid 81077). NA when the cluster representative was not selected for BLAST validation, or when no artificial hits were retained after filtering.",
+      "description": "Maximum bitscore among retained BLAST hits, considering only artificial reference sequences (descendants of NCBI taxid 81077). NA when the read was not selected for validation, or when no artificial hits were retained after filtering.",
       "type": "number",
       "constraints": {
         "minimum": 0
@@ -568,7 +568,7 @@
     {
       "name": "validation_bitscore_mean_artificial",
       "title": "Validation Mean Bitscore (Artificial)",
-      "description": "Mean bitscore among retained BLAST hits, considering only artificial reference sequences (descendants of NCBI taxid 81077). NA when the cluster representative was not selected for BLAST validation, or when no artificial hits were retained after filtering.",
+      "description": "Mean bitscore among retained BLAST hits, considering only artificial reference sequences (descendants of NCBI taxid 81077). NA when the read was not selected for validation, or when no artificial hits were retained after filtering.",
       "type": "number",
       "constraints": {
         "minimum": 0
