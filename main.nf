@@ -5,37 +5,37 @@ include { DOWNSTREAM } from "./workflows/downstream"
 workflow {
     main:
         if (params.mode == "index") {
-          INDEX()
+          index_out = INDEX()
         } else if (params.mode == "run") {
-            RUN()
+            run_out = RUN()
         } else if (params.mode == "downstream") {
-            DOWNSTREAM()
+            downstream_out = DOWNSTREAM()
         }
     publish:
         // Conditional publish blocks are not allowed; hence the ternary operators
         // INDEX workflow publishing
-        input_index = params.mode == 'index' ? INDEX.out.input_index : channel.empty()
-        logging_index = params.mode == 'index' ? INDEX.out.logging_index : channel.empty()
-        ref_dbs = params.mode == 'index' ? INDEX.out.ref_dbs : channel.empty()
-        alignment_indexes = params.mode == 'index' ? INDEX.out.alignment_indexes : channel.empty()
-        experimental_index = params.mode == 'index' ? INDEX.out.experimental_index : channel.empty()
+        input_index = params.mode == 'index' ? index_out.input_index : channel.empty()
+        logging_index = params.mode == 'index' ? index_out.logging_index : channel.empty()
+        ref_dbs = params.mode == 'index' ? index_out.ref_dbs : channel.empty()
+        alignment_indexes = params.mode == 'index' ? index_out.alignment_indexes : channel.empty()
+        experimental_index = params.mode == 'index' ? index_out.experimental_index : channel.empty()
         // RUN workflow publishing
-        input_run = params.mode == 'run' ? RUN.out.input_run : channel.empty()
-        logging_run = params.mode == 'run' ? RUN.out.logging_run : channel.empty()
-        intermediates_run = params.mode == 'run' ? RUN.out.intermediates_run : channel.empty()
-        reads_raw_viral = params.mode == 'run' ? RUN.out.reads_raw_viral : channel.empty()
-        reads_trimmed_viral = params.mode == 'run' ? RUN.out.reads_trimmed_viral : channel.empty()
-        qc_results_run = params.mode == 'run' ? RUN.out.qc_results_run : channel.empty()
-        other_results_run = params.mode == 'run' ? RUN.out.other_results_run : channel.empty()
-        experimental_run = params.mode == 'run' ? RUN.out.experimental_run : channel.empty()
-        sentinel_run = params.mode == 'run' ? RUN.out.sentinel_run : channel.empty()
+        input_run = params.mode == 'run' ? run_out.input_run : channel.empty()
+        logging_run = params.mode == 'run' ? run_out.logging_run : channel.empty()
+        intermediates_run = params.mode == 'run' ? run_out.intermediates_run : channel.empty()
+        reads_raw_viral = params.mode == 'run' ? run_out.reads_raw_viral : channel.empty()
+        reads_trimmed_viral = params.mode == 'run' ? run_out.reads_trimmed_viral : channel.empty()
+        qc_results_run = params.mode == 'run' ? run_out.qc_results_run : channel.empty()
+        other_results_run = params.mode == 'run' ? run_out.other_results_run : channel.empty()
+        experimental_run = params.mode == 'run' ? run_out.experimental_run : channel.empty()
+        sentinel_run = params.mode == 'run' ? run_out.sentinel_run : channel.empty()
         // DOWNSTREAM workflow publishing
-        input_downstream = params.mode == 'downstream' ? DOWNSTREAM.out.input_downstream  : channel.empty()
-        logging_downstream = params.mode == 'downstream' ? DOWNSTREAM.out.logging_downstream  : channel.empty()
-        intermediates_downstream = params.mode == 'downstream' ? DOWNSTREAM.out.intermediates_downstream  : channel.empty()
-        results_downstream = params.mode == 'downstream' ? DOWNSTREAM.out.results_downstream  : channel.empty()
-        experimental_downstream = params.mode == 'downstream' ? DOWNSTREAM.out.experimental_downstream  : channel.empty()
-        sentinel_downstream = params.mode == 'downstream' ? DOWNSTREAM.out.sentinel_downstream  : channel.empty()
+        input_downstream = params.mode == 'downstream' ? downstream_out.input_downstream  : channel.empty()
+        logging_downstream = params.mode == 'downstream' ? downstream_out.logging_downstream  : channel.empty()
+        intermediates_downstream = params.mode == 'downstream' ? downstream_out.intermediates_downstream  : channel.empty()
+        results_downstream = params.mode == 'downstream' ? downstream_out.results_downstream  : channel.empty()
+        experimental_downstream = params.mode == 'downstream' ? downstream_out.experimental_downstream  : channel.empty()
+        sentinel_downstream = params.mode == 'downstream' ? downstream_out.sentinel_downstream  : channel.empty()
 }
         
 output {

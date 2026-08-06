@@ -1,0 +1,53 @@
+nextflow_process {
+
+    name "Test process MASK_GENOME_FASTA_WITH_HUMAN"
+    script "modules/local/maskGenomeFastaWithHuman/main.nf"
+    process "MASK_GENOME_FASTA_WITH_HUMAN"
+    config "tests/configs/index.config"
+    tag "module"
+    tag "maskGenomeFastaWithHuman"
+
+    test("Should N-mask genome k-mers shared with the human reference and leave clean sequence untouched") {
+        tag "expect_success"
+        setup {
+            run("GZIP_FILE_BARE") {
+                script "modules/local/gzipFile/main.nf"
+                process {
+                    '''
+                    input[0] = Channel.of("${projectDir}/test-data/toy-data/test-genome-human-contam.fasta")
+                    '''
+                }
+            }
+        }
+        when {
+            params {
+                params_map = [
+                    k: 24,
+                    hdist: 0,
+                    name_pattern: "test-genomes"
+                ]
+            }
+            process {
+                '''
+                input[0] = GZIP_FILE_BARE.out
+                input[1] = "${projectDir}/test-data/tiny-index/genomes/human.fasta"
+                input[2] = params.params_map
+                '''
+            }
+        }
+        then {
+            assert process.success
+            // Output files created with expected names
+            assert path(process.out.masked[0]).exists()
+            assert process.out.masked[0].toString().contains('test-genomes-human-masked.fasta.gz')
+            // The embedded 100 bp exact-human region should be fully N-masked
+            // (a few boundary bases may also be masked); the clean sequence,
+            // which shares no k-mer with the reference, should be untouched.
+            def fasta_map = path(process.out.masked[0]).fasta
+            assert fasta_map.size() == 2
+            def contam_n = fasta_map['viral_human_contam'].count('N')
+            assert contam_n >= 100 && contam_n <= 110
+            assert fasta_map['viral_clean'].count('N') == 0
+        }
+    }
+}

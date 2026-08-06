@@ -1,6 +1,6 @@
 // Cluster merged FASTQ sequences with VSEARCH
 process VSEARCH_CLUSTER_LIST {
-    label "large"
+    label "vsearch_resources"
     label "vsearch"
     tag "id=${sample}"
     input:

@@ -19,10 +19,10 @@ workflow EXTRACT_VIRAL_READS {
         params_map  // Map: full params object
     main:
         if (params_map.platform == "ont") {
-            EXTRACT_VIRAL_READS_ONT(reads_ch, params_map.ref_dir, params_map.taxid_artificial, params_map.db_download_timeout)
-            hits_final = EXTRACT_VIRAL_READS_ONT.out.hits_final
-            inter_lca = EXTRACT_VIRAL_READS_ONT.out.inter_lca
-            inter_aligner = EXTRACT_VIRAL_READS_ONT.out.inter_minimap2
+            ont_ch = EXTRACT_VIRAL_READS_ONT(reads_ch, params_map.ref_dir, params_map.taxid_artificial, params_map.db_download_timeout)
+            hits_final = ont_ch.hits_final
+            inter_lca = ont_ch.inter_lca
+            inter_aligner = ont_ch.inter_minimap2
             kmer_match = channel.empty()
             kmer_trimmed = channel.empty()
         } else {
@@ -31,12 +31,12 @@ workflow EXTRACT_VIRAL_READS {
                 minhits: "1",
                 kmer_suffix: "viral"
             ]
-            EXTRACT_VIRAL_READS_SHORT(reads_ch, params_map.ref_dir, short_params)
-            hits_final = EXTRACT_VIRAL_READS_SHORT.out.hits_final
-            inter_lca = EXTRACT_VIRAL_READS_SHORT.out.inter_lca
-            inter_aligner = EXTRACT_VIRAL_READS_SHORT.out.inter_bowtie
-            kmer_match = EXTRACT_VIRAL_READS_SHORT.out.kmer_match
-            kmer_trimmed = EXTRACT_VIRAL_READS_SHORT.out.kmer_trimmed
+            short_ch = EXTRACT_VIRAL_READS_SHORT(reads_ch, params_map.ref_dir, short_params)
+            hits_final = short_ch.hits_final
+            inter_lca = short_ch.inter_lca
+            inter_aligner = short_ch.inter_bowtie
+            kmer_match = short_ch.kmer_match
+            kmer_trimmed = short_ch.kmer_trimmed
         }
     emit:
         hits_final

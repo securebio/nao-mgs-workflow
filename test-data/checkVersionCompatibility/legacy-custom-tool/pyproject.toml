@@ -1,0 +1,6 @@
+[project]
+name = "custom-pipeline"
+version = "1.0.0.0"
+
+[tool.custom-tool]
+pipeline-min-index-version = "1.0.0.0"

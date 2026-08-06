@@ -51,7 +51,7 @@ These tests run on PRs to `main`, `dev`, `stable`, and `ci-test`. They must pass
 
 ### nf-test
 
-We have five nf-test workflows that test different parts of the pipeline:
+We have several nf-test workflows that test different parts of the pipeline:
 
 | Workflow | Tests |
 |----------|-------|
@@ -60,6 +60,10 @@ We have five nf-test workflows that test different parts of the pipeline:
 | `nf-test-workflows-index.yml` | `tests/workflows/index.nf.test` |
 | `nf-test-workflows-run.yml` | `tests/workflows/run.nf.test` |
 | `nf-test-workflows-downstream.yml` | `tests/workflows/downstream.nf.test` |
+| `nf-test-wave-config.yml` | `tests/workflows/wave.nf.test` |
+
+The `nf-test-wave-config.yml` CI workflow checks that the private
+`wave.tokens.cache.maxDuration` option in `configs/profiles.config` is applied at runtime.
 
 ### Python unit tests (`pytest.yml`)
 
@@ -80,6 +84,10 @@ Runs Rust unit tests and builds the `nao-rust-tools` container when Rust source 
 ### Trivy container scan (`trivy-scan.yml`)
 
 Scans all containers defined in `configs/containers.config` for security vulnerabilities using [Trivy](https://trivy.dev/).
+
+### Scheduled Trivy scan and triage (`scheduled-trivy-triage.yml`)
+
+Runs the same Trivy scan on a weekly schedule (Mondays 06:00 UTC) rather than per-PR, so HIGH/CRITICAL container CVEs are caught even in weeks with no container-touching PR. The job checks out and scans `dev`; when the scan reports HIGH/CRITICAL findings, it invokes the `triage-trivy` skill (in its PR-less scheduled mode) via `anthropics/claude-code-action` to open a draft triage PR against `dev`.
 
 ### Version and changelog checks
 

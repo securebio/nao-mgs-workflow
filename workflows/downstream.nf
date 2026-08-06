@@ -55,12 +55,12 @@ workflow DOWNSTREAM {
         }
         else {
             // Short-read: Mark duplicates based on alignment coordinates
-            MARK_VIRAL_DUPLICATES(concat_ch.hits, params.aln_dup_deviation)
-            viral_hits_ch = MARK_VIRAL_DUPLICATES.out.dup.map { label, tab, _stats -> [label, tab] }
-            dup_output_ch = MARK_VIRAL_DUPLICATES.out.dup.map { label, _reads, stats -> [label, stats] }
+            mark_dup_ch = MARK_VIRAL_DUPLICATES(concat_ch.hits, params.aln_dup_deviation)
+            viral_hits_ch = mark_dup_ch.dup.map { label, tab, _stats -> [label, tab] }
+            dup_output_ch = mark_dup_ch.dup.map { label, _reads, stats -> [label, stats] }
             // Generate clade counts
             clade_counts_ch = COUNT_READS_PER_CLADE(viral_hits_ch, viral_db).output
-            sim_dup_ch = MARK_VIRAL_DUPLICATES.out.sim_dup
+            sim_dup_ch = mark_dup_ch.sim_dup
         }
         // Validate taxonomic assignments
         def validation_params = params.collectEntries { k, v -> [k, v] }
@@ -86,7 +86,7 @@ workflow DOWNSTREAM {
             .map { _label, _sample, group -> group }
             .unique()
         sentinel_params = params + [output_dir: "${params.base_dir}/output", pyproject_path: "${projectDir}/pyproject.toml"]
-        WRITE_SENTINEL_DOWNSTREAM(
+        sentinel_ch = WRITE_SENTINEL_DOWNSTREAM(
             groups_only_ch,
             input_downstream_ch.mix(logging_downstream_ch, results_downstream_ch).collect(),
             start_time_str,
@@ -99,5 +99,5 @@ workflow DOWNSTREAM {
         intermediates_downstream = validate_ch.blast_results
         results_downstream = results_downstream_ch
         experimental_downstream = sim_dup_ch
-        sentinel_downstream = WRITE_SENTINEL_DOWNSTREAM.out.sentinel
+        sentinel_downstream = sentinel_ch.sentinel
 }

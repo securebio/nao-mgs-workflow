@@ -104,7 +104,7 @@ docker push public.ecr.aws/q0n1c7g8/nao-mgs-workflow/rust-tools:dev-$(whoami)
 nextflow run main.nf --rust_tools_version dev-$(whoami) -profile batch ...
 ```
 
-**Note:** The container is automatically rebuilt by GitHub Actions when Rust source files change on `dev` or `main`. Use `--rust_tools_version dev` to test against the dev branch build.
+**Note:** The container is automatically rebuilt by GitHub Actions when Rust source files change on `dev`, `main`, or `stable`, and is published to ECR under a tag matching the branch name (`rust-tools:dev`, `rust-tools:main`, `rust-tools:stable`). Use `--rust_tools_version dev` to test against the dev branch build.
 
 ## Containers
 
@@ -264,10 +264,10 @@ Only pipeline maintainers should author a new release. The process for going thr
 3. Open a PR to merge the release branch into `dev`, wait for CI tests to complete, and resolve any failing tests. Then:
 
     1. Squash-merge the PR into `dev`, then open a new PR from `dev` into `main` entitled "Merge dev to main -- release X.Y.Z.W".
-    2. Quickly review the PR changes to ensure the changed files are consistent with the changes noted in `CHANGELOG.md` (no need to review file contents deeply at this stage).
+    2. Quickly review the PR changes to ensure the changed files are consistent with the changes noted in `CHANGELOG.md` (no need to review file contents deeply at this stage). To catch output regressions before the release, optionally diff the candidate `dev` DOWNSTREAM output against `main`'s with the `benchmark-downstream` skill (`.claude/skills/benchmark-downstream/`; runs `bin/compare_downstream_runs.py`), which flags large changes in viral assignments, kraken abundances, and QC metrics for human review.
     3. Double check that documentation and tests have been updated to stay consistent with changes to the pipeline.
     4. Wait for additional long-running pre-release checks to complete in Github Actions.
-    5. If any issues or test failures arise in the preceding steps, fix them with new bugfix PRs into `dev`, then rebase the release branch onto `dev`.
+    5. If any issues or test failures arise in the preceding steps, fix them with new PRs into `dev`; the `dev`→`main` PR tracks `dev`, so merged fixes are automatically included in the release. Use a `release/...` branch for these fixes so `check-version` accepts the release's non-`-dev` version, and record them under the existing release heading in `CHANGELOG.md` rather than bumping the version.
 
 4. Once all checks pass, merge the PR into main **without squashing**[^approval]. A Github Actions workflow will automatically create and tag a new release and reset other branches (`dev` & `ci-test`, plus `stable` if only the fourth version number has changed) to match `main`.
 
@@ -275,6 +275,12 @@ Only pipeline maintainers should author a new release. The process for going thr
 
 [^refs]: For reference genomes, check for updated releases for human, cow, pig, and mouse; do not update carp; update *E. coli* if there is a new release for the same strain. Check [SILVA](https://www.arb-silva.de/download/archive/) for rRNA databases and [here](https://benlangmead.github.io/aws-indexes/k2) for Kraken2 databases.
 [^approval]: Note that, to streamline the release process, we no longer require an approving review for PRs into `main`. (We still require an approving review for `release` PRs into `dev`.)
+
+## Benchmarking a new production index
+
+The INDEX workflow's reference data (NCBI taxonomy, Virus-Host-DB, Kraken2, SILVA, host/contaminant genomes) drifts over time, so a new dated index is built under `s3://nao-mgs-index/<DATE>` periodically (see [Run index/reference workflow](./installation.md#7-run-indexreference-workflow)). After building a new production index, it's important to benchmark it against the previous one to check for regressions; the easiest way to do this is to execute the `benchmark-index` skill (`.claude/skills/benchmark-index/`) within Claude Code or another coding agent, then read the `REVIEW.md` file produced.
+
+The `benchmark-index` skill calls the `benchmark_index.py` script to carry out deterministic comparisons between the indices specified. This script diffs whatever two index roots it is given, so it is not pinned to a fixed index schema; it does require **both** indexes to publish `virus-genomes-masked.fasta.gz`, and the newer (`--new`) index to publish `virus-genome-metadata-raw.tsv.gz` and `input/host-infection-overrides.json`. New index outputs are not reflected in the report until comparison logic is added to the script.
 
 ## Schemas
 

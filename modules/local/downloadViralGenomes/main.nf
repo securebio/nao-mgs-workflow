@@ -1,5 +1,7 @@
 // Download viral genomes for a chunk of pre-filtered assembly accessions
-// using NCBI datasets CLI.
+// using NCBI datasets CLI. Emits a single combined FASTA plus an
+// assembly-accession -> genome_id map per chunk to avoid staging out
+// many small files via Fusion.
 process DOWNLOAD_VIRAL_GENOMES {
     label "ncbi_datasets"
     label "large"
@@ -11,9 +13,11 @@ process DOWNLOAD_VIRAL_GENOMES {
         val(extra_args)
         val(max_attempts)
     output:
-        path("genomes/*.fna.gz"), emit: genomes
+        path("*.fna.gz"), emit: genomes
+        path("*.map.tsv"), emit: accession_map
     script:
         """
+        set -euo pipefail
         CHUNK_ID=\$(basename ${accession_chunk} .txt)
 
         # Retry with exponential backoff: both the download and rehydrate hit
@@ -51,12 +55,30 @@ process DOWNLOAD_VIRAL_GENOMES {
         retry "Rehydration" datasets rehydrate --directory output/ \\
             --max-workers ${task.cpus} --no-progressbar --gzip || exit 1
 
-        # 3. Flatten rehydrate output into a single genomes/ directory.
-        mkdir -p genomes
-        find output/ncbi_dataset/data -name '*.fna.gz' -print0 \\
-            | xargs -0 -r mv -t genomes/
-
+        # 3. Collapse the rehydrate output into a single combined FASTA plus an
+        # assembly_accession -> genome_id map, using a recursive `find`
+        # to locate every downloaded genome file.
+        find output/ncbi_dataset/data -mindepth 2 -name '*.fna.gz' -printf '%P\\n' \\
+            | sort > all_files.txt
+        printf 'assembly_accession\\tgenome_id\\n' > "\${CHUNK_ID}.map.tsv"
+        : > combined.fna
+        while IFS= read -r rel; do
+            acc=\${rel%%/*}
+            # Decompress once: append sequences to the combined FASTA and
+            # extract genome_ids (header first token) for the map in one pass.
+            zcat "output/ncbi_dataset/data/\$rel" | tee -a combined.fna \\
+                | awk -v a="\$acc" '/^>/{ id=substr(\$1,2); print a"\\t"id }' \\
+                >> "\${CHUNK_ID}.map.tsv"
+        done < all_files.txt
+        # A successful rehydrate must yield sequences; an empty map means the
+        # layout assumption broke — fail loudly rather than emit an empty DB.
+        if [ "\$(wc -l < "\${CHUNK_ID}.map.tsv")" -le 1 ]; then
+            echo "No genome sequences found under output/ncbi_dataset/data (unexpected layout?)" >&2
+            exit 1
+        fi
+        gzip -c combined.fna > "\${CHUNK_ID}.fna.gz"
+        rm -f combined.fna all_files.txt
         rm -rf output/ output.zip
-        echo "Downloaded \$(find genomes -maxdepth 1 -name '*.fna.gz' | wc -l) genomes for chunk \$CHUNK_ID"
+        echo "Combined \$(( \$(wc -l < "\${CHUNK_ID}.map.tsv") - 1 )) sequences for chunk \$CHUNK_ID"
         """
 }

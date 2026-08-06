@@ -27,7 +27,7 @@ workflow LOAD_DOWNSTREAM_DATA {
                 Please ensure the input file has the correct columns in the specified order.""".stripIndent())
         }
         // Parse and validate input CSV rows
-        rows_ch = channel.fromPath(input_file).splitCsv(header: true)
+        rows_ch = channel.fromPath(input_file).flatMap { f -> f.splitCsv(header: true) }
             .map { row ->
                 if (!row.run_results_dir?.trim()) {
                     throw new Exception("Missing or empty 'run_results_dir' for label '${row.label}' in input file.")

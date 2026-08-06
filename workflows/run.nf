@@ -24,7 +24,7 @@ include { WRITE_SENTINEL_RUN } from "../modules/local/writeSentinelRun"
 workflow RUN {
     main:
         // Setup
-        compat_ch = CHECK_VERSION_COMPATIBILITY(params.ref_dir, projectDir)
+        compat_ch = CHECK_VERSION_COMPATIBILITY(params.ref_dir, projectDir, "mgs-workflow")
         samplesheet_ch = LOAD_SAMPLESHEET(params.sample_sheet, params.platform, false)
         // Results
         viral_ch = EXTRACT_VIRAL_READS(samplesheet_ch.samplesheet, params)

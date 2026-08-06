@@ -80,7 +80,7 @@ def filter_metadata(
 def write_accession_chunks(
     accessions: pd.Series, chunk_dir: Path, chunk_size: int
 ) -> int:
-    """Write accessions to fixed-size chunk files for parallel download fan-out.
+    """Write sorted accessions to fixed-size chunk files for parallel download fan-out.
 
     Args:
         accessions: Series of assembly accessions to chunk.
@@ -96,6 +96,7 @@ def write_accession_chunks(
     if chunk_size < 1:
         raise ValueError(f"chunk_size must be >= 1, got {chunk_size}")
     chunk_dir.mkdir(parents=True, exist_ok=True)
+    accessions = accessions.sort_values()
     n = len(accessions)
     if n == 0:
         raise ValueError("No accessions passed filter; cannot build virus genome DB.")

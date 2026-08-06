@@ -91,6 +91,9 @@ nextflow run <PATH/TO/PIPELINE/DIR> \
 
 where `<PATH/TO/PIPELINE/DIR>` specifies the path to the directory containing this repository's `main.nf` file. Any `params.*` value in the config file can be overridden with `--<param>` on the command line. If you copied the config file into the launch directory as `nextflow.config`, you can omit the `-c` flag.
 
+> [!NOTE]
+> The Rust-tools container version defaults to `main`. If you're running an unmerged `dev` checkout (or a branch not yet on `main`), add `--rust_tools_version dev` (or set `export RUST_TOOLS_VERSION=dev`) so the pipeline uses dev's Rust tools. This must match the version used to build the index you point `--ref_dir` at.
+
 > [!TIP]
 > To use a non-default profile, add `-profile <PROFILE_NAME>` to the command.
 

@@ -51,7 +51,7 @@ process MINIMAP2 {
         #   - Second branch (samtools view -u -F 4 -) filters SAM to aligned reads and saves FASTQ
         #   - Third branch (samtools view -h -F 4 -) also filters SAM to aligned reads and saves SAM
         ${extractCmd} ${reads} \
-            | minimap2 -a ${params_map.alignment_params} \${idx_local_path}/mm2_index.mmi /dev/fd/0 \
+            | minimap2 -a -t ${task.cpus} ${params_map.alignment_params} \${idx_local_path}/mm2_index.mmi /dev/fd/0 \
             | tee \
                 >(samtools view -u -f 4 - \
                     | samtools fastq - | gzip -c > ${un}) \
@@ -92,7 +92,7 @@ process MINIMAP2_NON_STREAMED {
         #   - First branch (samtools view -u -f 4 -) filters SAM to unaligned reads and saves FASTQ
         #   - Second branch (samtools view -u -F 4 -) filters SAM to aligned reads and saves FASTQ
         #   - Third branch (samtools view -h -F 4 -) also filters SAM to aligned reads and saves SAM
-        minimap2 -a ${params_map.alignment_params} ${idx} ${reads} --split-prefix "mm2_split_" > complete_sam.sam
+        minimap2 -a -t ${task.cpus} ${params_map.alignment_params} ${idx} ${reads} --split-prefix "mm2_split_" > complete_sam.sam
 
         # Filter SAM to unaligned reads and save FASTQ
         samtools view -u -f 4 complete_sam.sam \\
