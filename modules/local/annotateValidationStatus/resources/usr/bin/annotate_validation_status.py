@@ -13,14 +13,6 @@ read is in:
 - "no_alignment":  the read was selected for validation but no hit survived filtering.
                    Validation columns are NA.
 - "not_sampled":   the read was not selected for validation. Validation columns are NA.
-
-No result is ever extrapolated from one read to another. A read's validation columns
-describe that read's own alignment or nothing at all, which is what distinguishes this
-from the cluster-representative propagation it replaces: a populated validation column
-here is always first-hand evidence about the read in whose row it appears.
-
-Memory use is proportional to the number of validated reads (the downsampled subset),
-not to the number of hits, so the full hits table is streamed.
 """
 
 ###########
