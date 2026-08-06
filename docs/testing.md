@@ -40,7 +40,7 @@ In cases where a module is a thin wrapper around a script in another language, c
      - Validate that output files exist and have expected properties.
      - Include both positive tests (expected success) and edge case/error tests.
 
-`tests/modules/local/fastqc/main.nf.test` is an example of bare-minimum tests for a process, and `tests/modules/local/vsearch/main.nf.test` is an example of really good, comprehensive testing!
+`tests/modules/local/fastqc/main.nf.test` is an example of bare-minimum tests for a process, and `tests/modules/local/markAlignmentDuplicates/main.nf.test` is an example of really good, comprehensive testing!
 
 #### Stubbing containerized binaries
 

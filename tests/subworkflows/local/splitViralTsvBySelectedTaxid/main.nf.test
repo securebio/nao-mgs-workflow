@@ -49,8 +49,6 @@ nextflow_workflow {
             assert workflow.success
             // TSV output should be empty (partition_empty_* filtered out)
             assert workflow.out.tsv.collect{it[1]}.flatten().size() == 0
-            // FASTQ output should be empty
-            assert workflow.out.fastq.collect{it[1]}.flatten().size() == 0
         }
     }
 
@@ -106,12 +104,10 @@ nextflow_workflow {
                 n_parts_total += n_parts_obs
             }
             assert workflow.out.tsv.collect{it[1].size()}.sum() == n_parts_total
-            // FASTQ extraction and merging should work as expected
+            // Partitioning should preserve every input read exactly once. FASTQ
+            // extraction now happens after downsampling, in DOWNSAMPLE_VIRAL_ASSIGNMENTS.
             def tabs_part_2 = workflow.out.tsv.collectMany{it[1]}.collect{path(it).csv(sep: "\t",decompress: true)}
-            def fastqs_interleaved = workflow.out.fastq.collectMany{it[1]}.collect{path(it).fastq}
-            for (int i=0; i < tabs_part_2.size(); i++) {
-                assert tabs_part_2[i].rowCount == fastqs_interleaved[i].sequences.size() / 2
-            }
+            assert tabs_part_2.sum{ it.rowCount } == tabs_in.sum{ it.rowCount }
             // The annotated table must hold every input read exactly once, so a consumer
             // can use it in place of reassembling the partitions
             def tabs_annotated = workflow.out.annotated.collect{path(it[1]).csv(sep: "\t", decompress: true)}

@@ -1,6 +1,0 @@
-vsearch_cluster_rep_id	taxid	lca_taxid	tax_dist
-R1	9001	9000	1
-R2	9004	9000	2
-R3	9005	9005	0
-R4	9008	9009	-1
-R5	9001	9002	NA
