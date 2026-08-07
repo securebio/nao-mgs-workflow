@@ -358,7 +358,11 @@ def downsample_tsv_by_hash(
                     n_ineligible += 1
 
         selected, n_total = select_indices(eligible_keys(), n_sample)
-    if selected is None and n_ineligible == 0 and same_compression(input_path, output_path):
+    if (
+        selected is None
+        and n_ineligible == 0
+        and same_compression(input_path, output_path)
+    ):
         # Every row is retained, so the output would be a byte-for-byte reproduction of
         # the input. Copy it rather than paying to decompress and recompress it.
         shutil.copyfile(input_path, output_path)
