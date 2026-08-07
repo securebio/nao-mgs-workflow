@@ -158,7 +158,7 @@ def read_key(line: str, key_index: int) -> str:
     fields = line.split("\t", key_index + 1)
     if len(fields) <= key_index:
         msg = (
-            f"Row does not have enough fields to contain key column "
+            f"Row does not have enough fields to contain column "
             f"{key_index}: expected at least {key_index + 1}, got {len(fields)}"
         )
         raise ValueError(msg)
@@ -210,6 +210,70 @@ def select_indices(keys: Iterator[str], n_sample: int) -> tuple[set[int] | None,
     return {index for _neg_hash, index in heap}, n_total
 
 
+def read_column_index(header_fields: list[str], column: str, path: str) -> int:
+    """Locate a named column within already-parsed header fields.
+
+    Args:
+        header_fields: Header line split on tabs.
+        column: Name of the column to locate.
+        path: Path of the file, used for error messages.
+
+    Returns:
+        0-based index of the column.
+
+    Raises:
+        ValueError: If the column is absent.
+    """
+    if column not in header_fields:
+        msg = (
+            f"Column {column!r} not found in header of {path}. "
+            f"Available columns: {', '.join(header_fields)}"
+        )
+        raise ValueError(msg)
+    return header_fields.index(column)
+
+
+def resolve_match_columns(
+    header_line: str, match_columns: tuple[str, str] | None, path: str
+) -> tuple[int, int] | None:
+    """Resolve the pair of columns whose equality makes a row eligible.
+
+    Args:
+        header_line: The file's header line.
+        match_columns: Pair of column names, or None to consider every row eligible.
+        path: Path of the file, used for error messages.
+
+    Returns:
+        The pair of 0-based column indices, or None when no restriction applies.
+
+    Raises:
+        ValueError: If either column is absent.
+    """
+    if match_columns is None:
+        return None
+    header_fields = header_line.rstrip("\n").split("\t")
+    return (
+        read_column_index(header_fields, match_columns[0], path),
+        read_column_index(header_fields, match_columns[1], path),
+    )
+
+
+def is_eligible(line: str, match_indices: tuple[int, int] | None) -> bool:
+    """Report whether a row may be selected.
+
+    Args:
+        line: Full TSV line.
+        match_indices: Pair of column indices that must hold equal values, or None to
+            accept every row.
+
+    Returns:
+        True if the row is eligible for selection.
+    """
+    if match_indices is None:
+        return True
+    return read_key(line, match_indices[0]) == read_key(line, match_indices[1])
+
+
 def read_key_index(input_file: IO[str], key_column: str, path: str) -> tuple[str, int]:
     """Read a TSV header and locate the key column within it.
 
@@ -254,7 +318,11 @@ def same_compression(input_path: str, output_path: str) -> bool:
 
 
 def downsample_tsv_by_hash(
-    input_path: str, output_path: str, key_column: str, n_sample: int
+    input_path: str,
+    output_path: str,
+    key_column: str,
+    n_sample: int,
+    match_columns: tuple[str, str] | None = None,
 ) -> None:
     """Downsample a TSV to at most n_sample rows by hash of key_column.
 
@@ -267,16 +335,30 @@ def downsample_tsv_by_hash(
         output_path: Path to the output TSV (gzipped if the path ends in .gz).
         key_column: Name of the column to hash for selection.
         n_sample: Maximum number of data rows to retain.
+        match_columns: Optional pair of column names. When given, only rows whose values
+            in those two columns are equal are eligible for selection; every other row is
+            dropped. The cap therefore applies to the eligible rows, not to the input.
 
     Raises:
-        ValueError: If the input is empty or does not contain key_column.
+        ValueError: If the input is empty or does not contain one of the named columns.
     """
-    # Pass one: hash keys, keeping only the best N (hash, index) pairs
+    # Pass one: hash keys, keeping only the best N (hash, index) pairs. Indices count
+    # eligible rows only, and pass two applies the same predicate, so the two agree.
+    n_ineligible = 0
     with open_by_suffix(input_path) as inf:
         header_line, key_index = read_key_index(inf, key_column, input_path)
-        keys = (read_key(line, key_index) for line in read_data_lines(inf))
-        selected, n_total = select_indices(keys, n_sample)
-    if selected is None and same_compression(input_path, output_path):
+        match_indices = resolve_match_columns(header_line, match_columns, input_path)
+
+        def eligible_keys() -> Iterator[str]:
+            nonlocal n_ineligible
+            for line in read_data_lines(inf):
+                if is_eligible(line, match_indices):
+                    yield read_key(line, key_index)
+                else:
+                    n_ineligible += 1
+
+        selected, n_total = select_indices(eligible_keys(), n_sample)
+    if selected is None and n_ineligible == 0 and same_compression(input_path, output_path):
         # Every row is retained, so the output would be a byte-for-byte reproduction of
         # the input. Copy it rather than paying to decompress and recompress it.
         shutil.copyfile(input_path, output_path)
@@ -295,16 +377,21 @@ def downsample_tsv_by_hash(
         inf.readline()  # discard header, already captured above
         outf.write(header_line)
         n_written = 0
-        for index, line in enumerate(read_data_lines(inf)):
+        index = 0
+        for line in read_data_lines(inf):
+            if not is_eligible(line, match_indices):
+                continue
             if selected is None or index in selected:
                 outf.write(line if line.endswith("\n") else line + "\n")
                 n_written += 1
+            index += 1
     logger.info(
-        "Retained %d of %d rows (target %d) from %s",
+        "Retained %d of %d eligible rows (target %d) from %s; %d rows were ineligible",
         n_written,
         n_total,
         n_sample,
         input_path,
+        n_ineligible,
     )
 
 
@@ -322,6 +409,16 @@ def parse_arguments() -> argparse.Namespace:
         "-k",
         default="seq_id",
         help="Name of the column to hash when selecting rows.",
+    )
+    parser.add_argument(
+        "--match-columns",
+        "-m",
+        default=None,
+        help=(
+            "Optional pair of comma-separated column names. Only rows whose values in "
+            "these two columns are equal are eligible for selection; all other rows are "
+            "dropped. Used to restrict sampling to duplicate-group exemplars."
+        ),
     )
     parser.add_argument(
         "--n-sample",
@@ -346,8 +443,18 @@ def main() -> None:
     logger.info("Output file: %s", args.output)
     logger.info("Key column: %s", args.key_column)
     logger.info("Sample size: %d", args.n_sample)
+    match_columns = None
+    if args.match_columns:
+        parts = [c.strip() for c in args.match_columns.split(",")]
+        if len(parts) != 2:
+            msg = f"--match-columns needs exactly two column names, got {args.match_columns!r}"
+            raise ValueError(msg)
+        match_columns = (parts[0], parts[1])
+        logger.info("Restricting selection to rows where %s == %s", *match_columns)
     start_time = time.time()
-    downsample_tsv_by_hash(args.input, args.output, args.key_column, args.n_sample)
+    downsample_tsv_by_hash(
+        args.input, args.output, args.key_column, args.n_sample, match_columns
+    )
     logger.info("Total time elapsed: %.2f seconds", time.time() - start_time)
 
 
