@@ -11,6 +11,7 @@ from downsample_tsv_by_hash import (
     open_by_suffix,
     read_data_lines,
     read_key,
+    is_eligible,
     read_key_index,
     same_compression,
     select_indices,
@@ -429,3 +430,86 @@ def test_downsample_is_independent_per_file(tmp_path: Path) -> None:
     assert set(seq_ids(read_tsv(out_half)[1])) <= {f"read_{i}" for i in range(50)}
     # ...and is therefore generally not the same as the whole-file sample
     assert set(seq_ids(read_tsv(out_half)[1])) != set(seq_ids(read_tsv(out_all)[1]))
+
+
+##################
+# match_columns  #
+##################
+
+
+def make_exemplar_tsv(tmp_path: Path, name: str, rows: list[tuple[str, str]]) -> Path:
+    """Write a TSV of (seq_id, exemplar) rows plus a payload column."""
+    path = tmp_path / name
+    body = "".join(f"{a}\t{b}\tpayload\n" for a, b in rows)
+    path.write_text("seq_id\texemplar\tpayload\n" + body)
+    return path
+
+
+@pytest.mark.parametrize(
+    ("line", "indices", "expected"),
+    [
+        ("r1\tr1\tx\n", (0, 1), True),
+        ("r2\tr1\tx\n", (0, 1), False),
+        ("r2\tr1\tx\n", None, True),
+    ],
+)
+def test_is_eligible(line: Any, indices: Any, expected: Any) -> None:
+    """Eligibility is equality of the two named columns, or unconditional when unset."""
+    assert is_eligible(line, indices) is expected
+
+
+def test_match_columns_restricts_selection_to_matching_rows(tmp_path: Path) -> None:
+    """Only rows whose two columns agree survive, and non-matching rows are dropped."""
+    rows = [("r1", "r1"), ("r2", "r1"), ("r3", "r3"), ("r4", "r3")]
+    src = make_exemplar_tsv(tmp_path, "in.tsv", rows)
+    out = tmp_path / "out.tsv"
+    downsample_tsv_by_hash(str(src), str(out), "seq_id", 10, ("seq_id", "exemplar"))
+    kept = [ln.split("\t")[0] for ln in out.read_text().splitlines()[1:]]
+    assert kept == ["r1", "r3"]
+
+
+def test_match_columns_caps_the_eligible_rows_not_the_input(tmp_path: Path) -> None:
+    """The cap applies after the restriction, so it bounds eligible rows only."""
+    rows = [("r1", "r1"), ("r2", "r1"), ("r3", "r3"), ("r4", "r3"), ("r5", "r5")]
+    src = make_exemplar_tsv(tmp_path, "in.tsv", rows)
+    out = tmp_path / "out.tsv"
+    downsample_tsv_by_hash(str(src), str(out), "seq_id", 2, ("seq_id", "exemplar"))
+    kept = [ln.split("\t")[0] for ln in out.read_text().splitlines()[1:]]
+    assert len(kept) == 2
+    assert set(kept) <= {"r1", "r3", "r5"}
+
+
+def test_match_columns_writes_the_rows_it_selected(tmp_path: Path) -> None:
+    """The two passes agree on row indices, so the payload matches the selected seq_id.
+
+    Filtering shifts indices between the counting and writing passes; if they disagreed
+    the wrong rows would be emitted, which a seq_id-only check would not detect.
+    """
+    rows = [(f"r{i}", f"r{i}" if i % 2 else "other") for i in range(1, 9)]
+    path = tmp_path / "in.tsv"
+    path.write_text(
+        "seq_id\texemplar\tpayload\n"
+        + "".join(f"{a}\t{b}\tpay_{a}\n" for a, b in rows)
+    )
+    out = tmp_path / "out.tsv"
+    downsample_tsv_by_hash(str(path), str(out), "seq_id", 3, ("seq_id", "exemplar"))
+    for line in out.read_text().splitlines()[1:]:
+        seq_id, exemplar, payload = line.split("\t")
+        assert seq_id == exemplar
+        assert payload == f"pay_{seq_id}"
+
+
+def test_match_columns_with_no_eligible_rows_yields_header_only(tmp_path: Path) -> None:
+    """An empty eligible set is a valid outcome, not an error."""
+    src = make_exemplar_tsv(tmp_path, "in.tsv", [("r1", "x"), ("r2", "y")])
+    out = tmp_path / "out.tsv"
+    downsample_tsv_by_hash(str(src), str(out), "seq_id", 5, ("seq_id", "exemplar"))
+    assert out.read_text().splitlines() == ["seq_id\texemplar\tpayload"]
+
+
+def test_match_columns_rejects_a_missing_column(tmp_path: Path) -> None:
+    """A named column that is absent is a hard error rather than a silent no-op."""
+    src = make_exemplar_tsv(tmp_path, "in.tsv", [("r1", "r1")])
+    out = tmp_path / "out.tsv"
+    with pytest.raises(ValueError, match="not found in header"):
+        downsample_tsv_by_hash(str(src), str(out), "seq_id", 5, ("seq_id", "missing"))
