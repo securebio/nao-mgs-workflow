@@ -18,6 +18,7 @@ nextflow_process {
                 input[0] = ["test", "${projectDir}/test-data/downsampleTsvByHash/partition_10239_hits.tsv"]
                 input[1] = "seq_id"
                 input[2] = params.n_sample
+                input[3] = ""
                 '''
             }
         }
@@ -53,6 +54,7 @@ nextflow_process {
                 input[0] = ["test", "${projectDir}/test-data/downsampleTsvByHash/partition_186538_hits.tsv"]
                 input[1] = "seq_id"
                 input[2] = params.n_sample
+                input[3] = ""
                 '''
             }
         }
@@ -87,6 +89,7 @@ nextflow_process {
                 )
                 input[1] = "seq_id"
                 input[2] = params.n_sample
+                input[3] = ""
                 '''
             }
         }
@@ -112,12 +115,49 @@ nextflow_process {
                 input[0] = ["test", "${projectDir}/test-data/downsampleTsvByHash/partition_10239_hits.tsv"]
                 input[1] = "nonexistent_column"
                 input[2] = params.n_sample
+                input[3] = ""
                 '''
             }
         }
         then {
             assert process.failed
             assert process.errorReport.contains("not found in header")
+        }
+    }
+
+    test("Should sample only from rows whose match columns agree") {
+        tag "expect_success"
+        when {
+            params {
+                n_sample = 3
+            }
+            process {
+                """
+                input[0] = ["test", "${projectDir}/test-data/downsampleTsvByHash/partition_10239_hits_exemplars.tsv"]
+                input[1] = "seq_id"
+                input[2] = params.n_sample
+                input[3] = "seq_id,prim_align_dup_exemplar"
+                """
+            }
+        }
+        then {
+            assert process.success
+            def tab_in = path(process.out.input[0][1]).csv(sep: "\t")
+            def tab_out = path(process.out.output[0][1]).csv(sep: "\t")
+            // Ineligible rows are dropped outright, so the cap bounds the eligible rows
+            def eligible = [:]
+            def ids = tab_in.columns["seq_id"]
+            def exemplars = tab_in.columns["prim_align_dup_exemplar"]
+            for (int i = 0; i < ids.size(); i++) {
+                if (ids[i] == exemplars[i]) { eligible[ids[i]] = true }
+            }
+            assert eligible.size() > params.n_sample  // otherwise the cap proves nothing
+            assert tab_out.rowCount == params.n_sample
+            tab_out.columns["seq_id"].each { id -> assert eligible.containsKey(id) }
+            // and every emitted row is genuinely self-exemplar, not merely a retained id
+            def outIds = tab_out.columns["seq_id"]
+            def outEx = tab_out.columns["prim_align_dup_exemplar"]
+            for (int i = 0; i < outIds.size(); i++) { assert outIds[i] == outEx[i] }
         }
     }
 
