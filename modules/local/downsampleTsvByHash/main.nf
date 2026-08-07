@@ -16,12 +16,14 @@ process DOWNSAMPLE_TSV_BY_HASH {
         tuple val(sample), path(tsv)
         val(key_column) // Column to hash when selecting rows (e.g. "seq_id")
         val(n_sample) // Maximum rows to retain
+        val(match_columns) // Optional "colA,colB"; only rows where they are equal are eligible
     output:
         tuple val(sample), path("downsampled_${tsv}"), emit: output
         tuple val(sample), path("input_${tsv}"), emit: input
     script:
+        def match_arg = match_columns ? "-m ${match_columns}" : ""
         """
-        downsample_tsv_by_hash.py -i ${tsv} -o downsampled_${tsv} -k ${key_column} -n ${n_sample}
+        downsample_tsv_by_hash.py -i ${tsv} -o downsampled_${tsv} -k ${key_column} -n ${n_sample} ${match_arg}
         # Link input to output for testing
         ln -s ${tsv} input_${tsv}
         """

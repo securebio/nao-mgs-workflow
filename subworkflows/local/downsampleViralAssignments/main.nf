@@ -7,6 +7,8 @@ random draw over reads (implemented as a bottom-N hash sketch, so it is reproduc
 independent of row order), which means every retained read is validated on its own
 evidence and no verdict has to be extrapolated to its neighbours. Keeping the per-species
 split means rare species are still validated thoroughly while abundant ones are capped.
+Where the caller restricts sampling to duplicate-group exemplars, the cap bounds the
+exemplars rather than the raw read count.
 
 Because sampling happens before FASTQ extraction and pair merging, those steps only ever
 see the retained reads rather than the whole viral read pool.
@@ -35,6 +37,7 @@ workflow DOWNSAMPLE_VIRAL_ASSIGNMENTS {
         tsv_ch // Viral hit TSVs partitioned by selected taxid, as [label, [files]]
         n_sample // Maximum reads to validate per selected taxid
         single_end // Is the input read data single-ended (true) or interleaved (false)?
+        exemplar_columns // Optional "colA,colB"; restricts sampling to rows where they agree
     main:
         // Helper to wrap single-Path values in a list, so all emit channels have a
         // uniform [label, [files]] shape
@@ -47,7 +50,11 @@ workflow DOWNSAMPLE_VIRAL_ASSIGNMENTS {
         // let Nextflow run them concurrently, then regroup for the list-based steps below.
         // The cap applies per partition, which is what keeps rare species fully validated.
         partition_ch = tsv_ch.transpose()
-        downsampled_ch = DOWNSAMPLE_TSV_BY_HASH(partition_ch, "seq_id", n_sample).output
+        // Validation runs downstream of duplicate marking, so the caller restricts
+        // sampling to duplicate-group exemplars: aligning a read that duplicates
+        // another buys no information. Callers whose data was never duplicate-marked
+        // pass an empty value, leaving every read eligible.
+        downsampled_ch = DOWNSAMPLE_TSV_BY_HASH(partition_ch, "seq_id", n_sample, exemplar_columns).output
         // groupTuple emits in task-completion order, which is a race between the
         // per-partition tasks, so sort by name. This is not a correctness requirement --
         // the consumers below are order-insensitive, and MERGE_JOIN_READS_LIST sorts its
