@@ -22,6 +22,7 @@ nextflow_workflow {
                 ]])
                 input[1] = params.n_sample
                 input[2] = channel.of(false)
+                input[3] = ""
                 '''
             }
         }
@@ -103,6 +104,7 @@ nextflow_workflow {
                 ]])
                 input[1] = params.n_sample
                 input[2] = channel.of(false)
+                input[3] = ""
                 '''
             }
         }
@@ -127,6 +129,7 @@ nextflow_workflow {
                 ]])
                 input[1] = params.n_sample
                 input[2] = channel.of(true)
+                input[3] = ""
                 '''
             }
         }
@@ -142,6 +145,41 @@ nextflow_workflow {
             assert fastas[0].keySet().collect{ n -> seqIdOf(n) }.toSet() == sampled_ids
             // No BBMerge summary is produced on the single-end path
             assert workflow.out.test_bbmerge_summary.size() == 0
+        }
+    }
+
+    test("Should sample only duplicate-group exemplars when the caller asks for it") {
+        tag "expect_success"
+        when {
+            params {
+                n_sample = 3
+            }
+            workflow {
+                '''
+                input[0] = channel.of(["test", [
+                    "${projectDir}/test-data/downsampleViralAssignments/partition_10239_hits_exemplars.tsv"
+                ]])
+                input[1] = params.n_sample
+                input[2] = channel.of(false)
+                input[3] = "seq_id,prim_align_dup_exemplar"
+                '''
+            }
+        }
+        then {
+            assert workflow.success
+            def sampled = workflow.out.tsv.collectMany{it[1]}.collect{path(it).csv(sep: "\t")}[0]
+            // Half the fixture's reads are duplicates of the other half, so a cap of 3 is
+            // only meaningful if the ineligible rows were removed before sampling.
+            assert sampled.rowCount == params.n_sample
+            def ids = sampled.columns["seq_id"]
+            def exemplars = sampled.columns["prim_align_dup_exemplar"]
+            for (int i = 0; i < ids.size(); i++) {
+                assert ids[i] == exemplars[i]
+            }
+            // The FASTA must carry exactly those reads, not the duplicates they represent
+            def fasta = workflow.out.fasta.collectMany{it[1]}.collect{path(it).fasta}[0]
+            def seqIdOf = { name -> name.tokenize(" ")[0] }
+            assert fasta.keySet().collect{ n -> seqIdOf(n) }.toSet() == ids.toSet()
         }
     }
 
