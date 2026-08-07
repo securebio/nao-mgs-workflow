@@ -47,9 +47,14 @@ workflow VALIDATE_VIRAL_ASSIGNMENTS {
         // 1. Split viral hits TSV by species. The `annotated` output is every hit labelled
         // with the selected_taxid it was grouped by, which is what step 5 annotates.
         split_ch = SPLIT_VIRAL_TSV_BY_SELECTED_TAXID(groups, db)
-        // 2. Downsample each species to a fixed number of reads and render them as FASTA
+        // 2. Downsample each species to a fixed number of reads and render them as FASTA.
+        // Validation sits downstream of MARK_VIRAL_DUPLICATES, so sample only duplicate-group
+        // exemplars: a read that duplicates another adds no evidence about its species. ONT
+        // skips duplicate marking, which leaves prim_align_dup_exemplar as NA throughout, so
+        // no restriction is applied there and every read stays eligible.
+        def exemplar_columns = params_map.platform == "ont" ? "" : "seq_id,prim_align_dup_exemplar"
         sample_ch = DOWNSAMPLE_VIRAL_ASSIGNMENTS(split_ch.tsv, params_map.validation_n_sample,
-            channel.of(params_map.platform == "ont"))
+            channel.of(params_map.platform == "ont"), exemplar_columns)
         // 3. Concatenate data across species (prepare for group-level BLAST)
         concat_fasta_ch = CONCATENATE_FILES_BY_EXTENSION(sample_ch.fasta, "sampled_reads").output
         concat_sampled_ch = CONCATENATE_TSVS_LABELED(sample_ch.tsv, "sampled_hits").output

@@ -141,12 +141,22 @@ nextflow_workflow {
                 def hdr = raw[0].split("\t") as List
                 def vIdx = hdr.findIndexValues{ it.startsWith("validation_") && it != "validation_status" }
                 def sIdx = hdr.indexOf("validation_status")
+                def eIdx = hdr.indexOf("prim_align_dup_exemplar")
+                def idIdx = hdr.indexOf("seq_id")
+                def n_validated = 0
                 raw.drop(1).each { line ->
                     def f = line.split("\t", -1) as List
                     if (f[sIdx] != "aligned") {
                         vIdx.each { k -> assert f[k as int] == "NA" }
                     }
+                    // Only duplicate-group exemplars are worth an alignment, so a read that
+                    // duplicates another must never be validated on its own account.
+                    if (f[sIdx] != "not_sampled") {
+                        assert f[idIdx] == f[eIdx]
+                        n_validated++
+                    }
                 }
+                assert n_validated > 0
             }
         }
     }
