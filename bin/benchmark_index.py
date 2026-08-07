@@ -426,8 +426,8 @@ def restrict_to_fasta(
 ) -> tuple[pd.DataFrame, int, int]:
     """Restrict metadata to the rows describing a sequence in the FASTA file.
 
-    Indexes built with pipeline version 3.2.2.0 or earlier publish metadata that
-    was never reconciled to the FASTA.
+    Indexes built before `FILTER_METADATA_TO_FASTA` was added to INDEX publish
+    metadata that was never reconciled to the FASTA.
 
     Args:
         meta: Index metadata, with a `genome_id` column.

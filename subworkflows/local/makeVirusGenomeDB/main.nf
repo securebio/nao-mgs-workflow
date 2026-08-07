@@ -64,8 +64,8 @@ workflow MAKE_VIRUS_GENOME_DB {
         mask_params = other_params + [name_pattern: "virus-genomes"]
         mask_ch = MASK_GENOME_FASTA(filter_genome_ch, other_params.adapters, mask_params)
         published_fasta_ch = mask_ch.masked
-        // 8. Filter genome metadata down to the sequences present in the genome FASTA.
-        metadata_ch = FILTER_METADATA_TO_FASTA(published_fasta_ch, gid_ch, "virus-genome")
+        // 8. Filter genome metadata down to one row per sequence present in the genome FASTA.
+        metadata_ch = FILTER_METADATA_TO_FASTA(gid_ch, published_fasta_ch, "virus-genome")
     emit:
         fasta = published_fasta_ch
         metadata = metadata_ch

@@ -17,8 +17,8 @@ nextflow_process {
             params {}
             process {
                 """
-                input[0] = file("${helpers.gzipFixtureDir("${projectDir}/test-data/filterMetadataToFasta/genomes")}/virus-genomes-masked.fasta.gz")
-                input[1] = file("${helpers.gzipFixtureDir("${projectDir}/test-data/filterMetadataToFasta/metadata")}/virus-genome-metadata-gid-unfiltered.tsv.gz")
+                input[0] = file("${helpers.gzipFixtureDir("${projectDir}/test-data/filterMetadataToFasta/metadata")}/virus-genome-metadata-gid-unfiltered.tsv.gz")
+                input[1] = file("${helpers.gzipFixtureDir("${projectDir}/test-data/filterMetadataToFasta/genomes")}/virus-genomes-masked.fasta.gz")
                 input[2] = "virus-genome"
                 """
             }
@@ -27,6 +27,7 @@ nextflow_process {
             assert process.success
             assert process.out[0][0].toString().contains("virus-genome-metadata-gid.tsv.gz")
             def metadata = path(process.out[0][0]).csv(sep: "\t", decompress: true)
+            // UNIQUE_A appears twice in the input, packaged under two assemblies.
             assert metadata.columns["genome_id"] == ["NC_000001.1", "UNIQUE_A", "UNIQUE_B"]
             // Column set is untouched
             assert metadata.columnNames == [
@@ -48,8 +49,8 @@ nextflow_process {
             params {}
             process {
                 """
-                input[0] = file("${helpers.gzipFixtureDir("${projectDir}/test-data/filterMetadataToFasta/genomes")}/virus-genomes-masked.fasta.gz")
-                input[1] = file("${helpers.gzipFixtureDir("${projectDir}/test-data/filterMetadataToFasta/metadata-missing-row")}/virus-genome-metadata-gid-unfiltered.tsv.gz")
+                input[0] = file("${helpers.gzipFixtureDir("${projectDir}/test-data/filterMetadataToFasta/metadata-missing-row")}/virus-genome-metadata-gid-unfiltered.tsv.gz")
+                input[1] = file("${helpers.gzipFixtureDir("${projectDir}/test-data/filterMetadataToFasta/genomes")}/virus-genomes-masked.fasta.gz")
                 input[2] = "virus-genome"
                 """
             }
@@ -59,6 +60,27 @@ nextflow_process {
             assert process.errorReport.contains("have no metadata row") :
                 "Expected the unmatched-sequence guard to fire, got: ${process.errorReport}"
             assert process.errorReport.contains("UNIQUE_B") :
+                "Error should name the offending sequence, got: ${process.errorReport}"
+        }
+    }
+
+    test("Should fail loudly when duplicate rows disagree on taxonomy") {
+        tag "expect_failed"
+        when {
+            params {}
+            process {
+                """
+                input[0] = file("${helpers.gzipFixtureDir("${projectDir}/test-data/filterMetadataToFasta/metadata-conflicting-taxid")}/virus-genome-metadata-gid-unfiltered.tsv.gz")
+                input[1] = file("${helpers.gzipFixtureDir("${projectDir}/test-data/filterMetadataToFasta/genomes")}/virus-genomes-masked.fasta.gz")
+                input[2] = "virus-genome"
+                """
+            }
+        }
+        then {
+            assert process.failed
+            assert process.errorReport.contains("disagree on taxid") :
+                "Expected the taxonomy-conflict guard to fire, got: ${process.errorReport}"
+            assert process.errorReport.contains("UNIQUE_A") :
                 "Error should name the offending sequence, got: ${process.errorReport}"
         }
     }

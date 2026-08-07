@@ -78,18 +78,18 @@ class TestFilterMetadata:
     @pytest.mark.parametrize(
         "fasta_ids,metadata_ids,expected_counts,expected_kept",
         [
-            (["AB1.1"], ["AB1.1", "AB2.1", "AB3.1"], (1, 2), ["AB1.1"]),
-            (["AB1.1", "AB2.1"], ["AB1.1", "AB2.1"], (2, 0), ["AB1.1", "AB2.1"]),
-            (["AB1.1"], ["AB1.1", "AB1.1"], (2, 0), ["AB1.1", "AB1.1"]),
+            (["AB1.1"], ["AB1.1", "AB2.1", "AB3.1"], (1, 2, 0), ["AB1.1"]),
+            (["AB1.1", "AB2.1"], ["AB1.1", "AB2.1"], (2, 0, 0), ["AB1.1", "AB2.1"]),
+            (["AB1.1"], ["AB1.1", "AB1.1"], (1, 0, 1), ["AB1.1"]),
         ],
-        ids=["drops_absent", "keeps_all", "keeps_duplicate_rows"],
+        ids=["drops_absent", "keeps_all", "dedups_duplicate_rows"],
     )
     def test_row_filtering(
         self,
         tmp_path: Path,
         fasta_ids: list[str],
         metadata_ids: list[str],
-        expected_counts: tuple[int, int],
+        expected_counts: tuple[int, int, int],
         expected_kept: list[str],
     ) -> None:
         fasta = write_fasta(
@@ -99,6 +99,30 @@ class TestFilterMetadata:
         out = str(tmp_path / "out.tsv.gz")
         assert filter_metadata(metadata, fasta, out) == expected_counts
         assert [r["genome_id"] for r in read_output(out)] == expected_kept
+
+    def test_dedup_keeps_the_first_row(self, tmp_path: Path) -> None:
+        # Duplicate rows differ only in which assembly packaged the sequence;
+        # keeping the first makes the published provenance deterministic.
+        fasta = write_fasta(tmp_path / "genomes.fasta.gz", [("AB1.1", "ACGT")])
+        metadata = write_metadata(tmp_path / "meta.tsv.gz", ["AB1.1", "AB1.1"])
+        out = str(tmp_path / "out.tsv.gz")
+        filter_metadata(metadata, fasta, out)
+        assert [r["assembly_accession"] for r in read_output(out)] == [
+            "GCA_000000000.1"
+        ]
+
+    def test_raises_on_duplicate_rows_disagreeing_on_taxonomy(
+        self, tmp_path: Path
+    ) -> None:
+        fasta = write_fasta(tmp_path / "genomes.fasta.gz", [("AB1.1", "ACGT")])
+        metadata = tmp_path / "meta.tsv.gz"
+        with open_by_suffix(str(metadata), "w", newline="") as f:
+            writer = csv.writer(f, delimiter="\t", lineterminator="\n")
+            writer.writerow(METADATA_HEADER)
+            writer.writerow(["GCA_000000000.1", "11111", "AB1.1"])
+            writer.writerow(["GCA_000000001.1", "22222", "AB1.1"])
+        with pytest.raises(ValueError, match="AB1.1 disagree on taxid"):
+            filter_metadata(str(metadata), fasta, str(tmp_path / "out.tsv.gz"))
 
     def test_preserves_column_content_and_row_order(self, tmp_path: Path) -> None:
         fasta = write_fasta(

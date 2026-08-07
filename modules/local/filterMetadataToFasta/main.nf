@@ -4,8 +4,8 @@ process FILTER_METADATA_TO_FASTA {
     label "single"
     tag "id=index"
     input:
-        path(genome_fasta)
         path(genome_metadata)
+        path(genome_fasta)
         val(name_pattern)
     output:
         path("${name_pattern}-metadata-gid.tsv.gz")
