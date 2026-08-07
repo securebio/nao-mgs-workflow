@@ -1,4 +1,6 @@
-// Filter genome metadata down to the sequences present in the genome FASTA.
+// Filter genome metadata down to one row per sequence in the genome FASTA.
+// The input is PREPARE_VIRAL_METADATA's `-metadata-gid-unfiltered` file; the
+// output name must stay distinct from it or this process overwrites its input.
 process FILTER_METADATA_TO_FASTA {
     label "python"
     label "single"

@@ -130,6 +130,29 @@ class TestFilterMetadata:
             "GCA_000000002.1"
         ]
 
+    def test_superseding_a_row_does_not_reorder_the_table(self, tmp_path: Path) -> None:
+        # AB1.1's row is replaced by one that appears after AB2.1's, but AB1.1
+        # keeps the position of its first appearance.
+        fasta = write_fasta(
+            tmp_path / "genomes.fasta.gz", [("AB1.1", "ACGT"), ("AB2.1", "TTTT")]
+        )
+        metadata = write_rows(
+            tmp_path / "meta.tsv.gz",
+            [
+                ["GCA_000000009.1", "11111", "11111", "AB1.1"],
+                ["GCA_000000005.1", "22222", "22222", "AB2.1"],
+                ["GCA_000000002.1", "11111", "11111", "AB1.1"],
+            ],
+        )
+        out = str(tmp_path / "out.tsv.gz")
+        filter_metadata(metadata, fasta, out)
+        assert [
+            (r["genome_id"], r["assembly_accession"]) for r in read_output(out)
+        ] == [
+            ("AB1.1", "GCA_000000002.1"),
+            ("AB2.1", "GCA_000000005.1"),
+        ]
+
     @pytest.mark.parametrize("field", ["taxid", "species_taxid"])
     def test_raises_on_duplicate_rows_disagreeing_on_taxonomy(
         self, tmp_path: Path, field: str
