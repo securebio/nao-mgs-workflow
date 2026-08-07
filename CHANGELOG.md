@@ -1,6 +1,6 @@
 # v3.2.3.0-dev
 
-- Add a `DOWNSAMPLE_VIRAL_ASSIGNMENTS` subworkflow that downsamples each per-species hit partition and renders the retained reads as FASTA. Not yet called by any workflow.
+- Add a `DOWNSAMPLE_VIRAL_ASSIGNMENTS` subworkflow that downsamples each per-species hit partition and renders the retained reads as FASTA, optionally confining the sample to duplicate-group exemplars. Not yet called by any workflow.
 - Add an `ANNOTATE_VALIDATION_STATUS` module that joins validation results onto a full viral hits TSV and appends a `validation_status` column (`aligned` / `no_alignment` / `not_sampled`). Not yet called by any workflow.
 - Add a `DOWNSAMPLE_TSV_BY_HASH` module that downsamples a TSV to at most N rows, selecting by hash of a key column so the choice is reproducible, order-independent, and nested in N. Optionally restricts the candidate rows to those where two named columns agree, so sampling can be confined to duplicate-group exemplars. Not yet called by any workflow.
 - Replace per-profile `errorStrategy`/`maxRetries` settings with a single universal dynamic error strategy (retry up to `maxRetries`, then `ignore`) so a failed task no longer terminates the whole run after retries are exhausted; `workflow.failOnIgnore` keeps the run's exit status non-zero when a task was ignored. A new `nf_test` profile, stacked on `ec2_local` by `nf-test.config`, overrides the strategy back to `finish` so negative tests can still assert on task failure.
