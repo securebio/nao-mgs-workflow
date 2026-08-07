@@ -11,7 +11,7 @@ from filter_metadata_to_fasta import (
     read_fasta_genome_ids,
 )
 
-METADATA_HEADER = ["assembly_accession", "taxid", "genome_id"]
+METADATA_HEADER = ["assembly_accession", "taxid", "species_taxid", "genome_id"]
 
 
 def write_fasta(path: Path, records: list[tuple[str, str]]) -> str:
@@ -26,12 +26,24 @@ def write_fasta(path: Path, records: list[tuple[str, str]]) -> str:
 
 
 def write_metadata(path: Path, genome_ids: list[str]) -> str:
-    """Write a minimal metadata TSV with one row per genome_id."""
+    """Write a minimal metadata TSV with one row per genome_id.
+    Accessions ascend with row order, so the first row for a genome_id is also
+    the one the dedup rule keeps.
+    """
+    return write_rows(
+        path,
+        [[f"GCA_{i:09d}.1", "11111", "11111", gid] for i, gid in enumerate(genome_ids)],
+    )
+
+
+def write_rows(
+    path: Path, rows: list[list[str]], header: list[str] | None = None
+) -> str:
+    """Write a metadata TSV from explicit rows."""
     with open_by_suffix(str(path), "w", newline="") as f:
         writer = csv.writer(f, delimiter="\t", lineterminator="\n")
-        writer.writerow(METADATA_HEADER)
-        for i, gid in enumerate(genome_ids):
-            writer.writerow([f"GCA_{i:09d}.1", "11111", gid])
+        writer.writerow(header if header is not None else METADATA_HEADER)
+        writer.writerows(rows)
     return str(path)
 
 
@@ -100,29 +112,37 @@ class TestFilterMetadata:
         assert filter_metadata(metadata, fasta, out) == expected_counts
         assert [r["genome_id"] for r in read_output(out)] == expected_kept
 
-    def test_dedup_keeps_the_first_row(self, tmp_path: Path) -> None:
-        # Duplicate rows differ only in which assembly packaged the sequence;
-        # keeping the first makes the published provenance deterministic.
+    def test_dedup_keeps_the_smallest_assembly_accession(self, tmp_path: Path) -> None:
+        # `seqkit rmdup` keeps the first record in accession-sorted concatenation
+        # order, so the published row must name the smallest accession — not
+        # whichever row the unsorted metadata happened to list first.
         fasta = write_fasta(tmp_path / "genomes.fasta.gz", [("AB1.1", "ACGT")])
-        metadata = write_metadata(tmp_path / "meta.tsv.gz", ["AB1.1", "AB1.1"])
+        metadata = write_rows(
+            tmp_path / "meta.tsv.gz",
+            [
+                ["GCA_000000009.1", "11111", "11111", "AB1.1"],
+                ["GCA_000000002.1", "11111", "11111", "AB1.1"],
+            ],
+        )
         out = str(tmp_path / "out.tsv.gz")
         filter_metadata(metadata, fasta, out)
         assert [r["assembly_accession"] for r in read_output(out)] == [
-            "GCA_000000000.1"
+            "GCA_000000002.1"
         ]
 
+    @pytest.mark.parametrize("field", ["taxid", "species_taxid"])
     def test_raises_on_duplicate_rows_disagreeing_on_taxonomy(
-        self, tmp_path: Path
+        self, tmp_path: Path, field: str
     ) -> None:
         fasta = write_fasta(tmp_path / "genomes.fasta.gz", [("AB1.1", "ACGT")])
-        metadata = tmp_path / "meta.tsv.gz"
-        with open_by_suffix(str(metadata), "w", newline="") as f:
-            writer = csv.writer(f, delimiter="\t", lineterminator="\n")
-            writer.writerow(METADATA_HEADER)
-            writer.writerow(["GCA_000000000.1", "11111", "AB1.1"])
-            writer.writerow(["GCA_000000001.1", "22222", "AB1.1"])
-        with pytest.raises(ValueError, match="AB1.1 disagree on taxid"):
-            filter_metadata(str(metadata), fasta, str(tmp_path / "out.tsv.gz"))
+        conflicting = ["GCA_000000001.1", "11111", "11111", "AB1.1"]
+        conflicting[METADATA_HEADER.index(field)] = "22222"
+        metadata = write_rows(
+            tmp_path / "meta.tsv.gz",
+            [["GCA_000000000.1", "11111", "11111", "AB1.1"], conflicting],
+        )
+        with pytest.raises(ValueError, match=f"AB1.1 disagree on {field}"):
+            filter_metadata(metadata, fasta, str(tmp_path / "out.tsv.gz"))
 
     def test_preserves_column_content_and_row_order(self, tmp_path: Path) -> None:
         fasta = write_fasta(
@@ -138,11 +158,13 @@ class TestFilterMetadata:
             {
                 "assembly_accession": "GCA_000000000.1",
                 "taxid": "11111",
+                "species_taxid": "11111",
                 "genome_id": "AB1.1",
             },
             {
                 "assembly_accession": "GCA_000000002.1",
                 "taxid": "11111",
+                "species_taxid": "11111",
                 "genome_id": "AB3.1",
             },
         ]
@@ -172,31 +194,31 @@ class TestFilterMetadata:
     def test_round_trips_quoted_fields(
         self, tmp_path: Path, organism_name: str
     ) -> None:
-        metadata = tmp_path / "meta.tsv.gz"
-        with open_by_suffix(str(metadata), "w", newline="") as f:
-            writer = csv.DictWriter(
-                f,
-                fieldnames=["assembly_accession", "organism_name", "genome_id"],
-                delimiter="\t",
-                lineterminator="\n",
-            )
-            writer.writeheader()
-            writer.writerow(
-                {
-                    "assembly_accession": "GCA_000000001.1",
-                    "organism_name": organism_name,
-                    "genome_id": "AB1.1",
-                }
-            )
+        metadata = write_rows(
+            tmp_path / "meta.tsv.gz",
+            [["GCA_000000001.1", organism_name, "11111", "11111", "AB1.1"]],
+            header=[*METADATA_HEADER[:1], "organism_name", *METADATA_HEADER[1:]],
+        )
         fasta = write_fasta(tmp_path / "genomes.fasta.gz", [("AB1.1", "ACGT")])
         out = str(tmp_path / "out.tsv.gz")
-        filter_metadata(str(metadata), fasta, out)
+        filter_metadata(metadata, fasta, out)
         assert read_output(out)[0]["organism_name"] == organism_name
 
-    def test_raises_without_genome_id_column(self, tmp_path: Path) -> None:
+    @pytest.mark.parametrize("missing", METADATA_HEADER)
+    def test_raises_without_a_required_column(
+        self, tmp_path: Path, missing: str
+    ) -> None:
+        # A column dropped upstream must fail here rather than quietly weaken
+        # the dedup rule or the taxonomy-conflict guard.
+        values = dict(
+            zip(METADATA_HEADER, ["GCA_1.1", "11111", "11111", "AB1.1"], strict=True)
+        )
+        del values[missing]
+        metadata = write_rows(
+            tmp_path / "meta.tsv.gz", [list(values.values())], header=list(values)
+        )
         fasta = write_fasta(tmp_path / "genomes.fasta.gz", [("AB1.1", "ACGT")])
-        metadata = tmp_path / "meta.tsv.gz"
-        with open_by_suffix(str(metadata), "w", newline="") as f:
-            f.write("assembly_accession\ttaxid\nGCA_1.1\t11111\n")
-        with pytest.raises(ValueError, match="lacks a genome_id column"):
-            filter_metadata(str(metadata), fasta, str(tmp_path / "out.tsv.gz"))
+        with pytest.raises(
+            ValueError, match=f"lacks required column\\(s\\): {missing}"
+        ):
+            filter_metadata(metadata, fasta, str(tmp_path / "out.tsv.gz"))

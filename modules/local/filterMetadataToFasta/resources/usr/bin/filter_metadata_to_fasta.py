@@ -37,6 +37,9 @@ def open_by_suffix(path: str, mode: str = "r", newline: str | None = None) -> IO
 # Fields a duplicate genome_id must agree on: RUN resolves a sequence to a
 # taxid through this file, so rows that disagree here are not interchangeable.
 TAXONOMY_FIELDS = ("taxid", "species_taxid")
+# Columns the reconciliation reads. Absent any of them it cannot do its job, so
+# a schema change upstream should fail here rather than silently weaken a guard.
+REQUIRED_FIELDS = ("genome_id", "assembly_accession", *TAXONOMY_FIELDS)
 
 
 def read_fasta_genome_ids(fasta_path: str) -> set[str]:
@@ -73,61 +76,73 @@ def filter_metadata(
     """Write out one metadata row per sequence present in the FASTA.
     Rows whose genome_id is absent from the FASTA are dropped. Where several
     rows share a genome_id — the same sequence packaged in more than one
-    assembly — only the first is written, because `CONCATENATE_GENOME_FASTA`
-    leaves the FASTA with a single record per ID. The dropped rows must agree
-    with the kept one on TAXONOMY_FIELDS; the assembly-level columns they
-    differ on describe a packaging that the genome DB no longer distinguishes.
+    assembly — the row kept is the one naming the lexicographically smallest
+    assembly_accession, which is the copy the FASTA carries: accessions are
+    sorted before chunking and each chunk is concatenated in accession order,
+    so the first occurrence `seqkit rmdup` retains is the smallest. Duplicates
+    must agree on TAXONOMY_FIELDS, since otherwise the sequence's taxid would
+    depend on which packaging of it happened to survive deduplication.
     Args:
-        metadata_path: Path to the genome metadata TSV, with a `genome_id` column.
+        metadata_path: Path to the genome metadata TSV, with REQUIRED_FIELDS.
         fasta_path: Path to the genome FASTA the metadata should describe.
         output_path: Output path for the filtered metadata TSV (gzip).
     Returns:
         Tuple of (rows written, rows dropped as absent, rows dropped as duplicates).
     Raises:
-        ValueError: If the metadata lacks a `genome_id` column, if any sequence
-            in the FASTA has no metadata row, or if rows sharing a genome_id
-            disagree on TAXONOMY_FIELDS.
+        ValueError: If the metadata lacks any of REQUIRED_FIELDS, if any
+            sequence in the FASTA has no metadata row, or if rows sharing a
+            genome_id disagree on TAXONOMY_FIELDS.
     """
     fasta_ids = read_fasta_genome_ids(fasta_path)
-    n_out = n_absent = n_duplicate = 0
-    kept_taxonomy: dict[str, tuple[str, ...]] = {}
-    with (
-        open_by_suffix(metadata_path, newline="") as f_in,
-        open_by_suffix(output_path, "w", newline="") as f_out,
-    ):
+    n_absent = n_duplicate = 0
+    # Keyed by genome_id, in order of first appearance: metadata row order is
+    # preserved even when a later row supersedes an earlier one.
+    kept: dict[str, dict[str, str]] = {}
+    with open_by_suffix(metadata_path, newline="") as f_in:
         reader = csv.DictReader(f_in, delimiter="\t")
-        if reader.fieldnames is None or "genome_id" not in reader.fieldnames:
-            raise ValueError(f"Metadata {metadata_path} lacks a genome_id column")
-        taxonomy_fields = [f for f in TAXONOMY_FIELDS if f in reader.fieldnames]
-        writer = csv.DictWriter(
-            f_out, fieldnames=reader.fieldnames, delimiter="\t", lineterminator="\n"
-        )
-        writer.writeheader()
+        if reader.fieldnames is None:
+            raise ValueError(f"Metadata {metadata_path} has no header row")
+        fieldnames = reader.fieldnames
+        missing = [f for f in REQUIRED_FIELDS if f not in fieldnames]
+        if missing:
+            raise ValueError(
+                f"Metadata {metadata_path} lacks required column(s): "
+                f"{', '.join(missing)}"
+            )
         for row in reader:
             genome_id = row["genome_id"]
             if genome_id not in fasta_ids:
                 n_absent += 1
                 continue
-            taxonomy = tuple(row[f] for f in taxonomy_fields)
-            if genome_id in kept_taxonomy:
-                if kept_taxonomy[genome_id] != taxonomy:
-                    raise ValueError(
-                        f"Metadata rows for {genome_id} disagree on "
-                        f"{', '.join(taxonomy_fields)}: {kept_taxonomy[genome_id]} "
-                        f"vs {taxonomy}; the genome DB carries one sequence under "
-                        "this ID, so there is no basis for choosing a taxid"
-                    )
-                n_duplicate += 1
+            previous = kept.get(genome_id)
+            if previous is None:
+                kept[genome_id] = row
                 continue
-            kept_taxonomy[genome_id] = taxonomy
-            writer.writerow(row)
-            n_out += 1
-    unmatched = sorted(fasta_ids - set(kept_taxonomy))
+            conflicts = [f for f in TAXONOMY_FIELDS if previous[f] != row[f]]
+            if conflicts:
+                raise ValueError(
+                    f"Metadata rows for {genome_id} disagree on "
+                    f"{', '.join(conflicts)}: "
+                    f"{[previous[f] for f in conflicts]} vs "
+                    f"{[row[f] for f in conflicts]}; the genome DB carries one "
+                    "sequence under this ID, so there is no basis for choosing a taxid"
+                )
+            n_duplicate += 1
+            if row["assembly_accession"] < previous["assembly_accession"]:
+                kept[genome_id] = row
+    unmatched = sorted(fasta_ids - set(kept))
     if unmatched:
         raise ValueError(
             f"{len(unmatched)} sequence(s) in the genome DB have no metadata row "
             f"(e.g. {', '.join(unmatched[:5])}); RUN could not resolve them to a taxid"
         )
+    with open_by_suffix(output_path, "w", newline="") as f_out:
+        writer = csv.DictWriter(
+            f_out, fieldnames=fieldnames, delimiter="\t", lineterminator="\n"
+        )
+        writer.writeheader()
+        writer.writerows(kept.values())
+    n_out = len(kept)
     logger.info(
         "Wrote %d metadata row(s) for %d sequence(s), dropped %d row(s) describing "
         "sequences absent from the genome DB and %d duplicate row(s)",

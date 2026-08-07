@@ -27,8 +27,12 @@ nextflow_process {
             assert process.success
             assert process.out[0][0].toString().contains("virus-genome-metadata-gid.tsv.gz")
             def metadata = path(process.out[0][0]).csv(sep: "\t", decompress: true)
-            // UNIQUE_A appears twice in the input, packaged under two assemblies.
             assert metadata.columns["genome_id"] == ["NC_000001.1", "UNIQUE_A", "UNIQUE_B"]
+            // UNIQUE_A is listed under GCA_000000004.1 before GCA_000000001.1, so
+            // keeping the smaller accession -- the copy `seqkit rmdup` retains --
+            // is visibly not the same as keeping whichever row came first.
+            assert metadata.columns["assembly_accession"] ==
+                ["GCF_000000001.1", "GCA_000000001.1", "GCA_000000002.1"]
             // Column set is untouched
             assert metadata.columnNames == [
                 "assembly_accession",
