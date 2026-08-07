@@ -6,7 +6,7 @@ outputs:
     description: 'Rust tools ECR tag ("main" or "dev")'
     value: ${{ steps.check.outputs.rust-version }}
   nextflow-args:
-    description: '"--profile=rust_dev" when rust changed, empty otherwise'
+    description: '"--profile=rust_dev,nf_test" when rust changed, empty otherwise'
     value: ${{ steps.check.outputs.nextflow-args }}
 
 runs:
@@ -26,7 +26,9 @@ runs:
           RUST_CHANGED=false RUST_VERSION=dev NEXTFLOW_ARGS=""
         else
           echo "Rust code has changed, will build local container"
-          RUST_CHANGED=true RUST_VERSION="" NEXTFLOW_ARGS="--profile=rust_dev"
+          # Include nf_test so tests still surface task failures (the rust_dev
+          # profile alone would fall back to the universal 'ignore' strategy).
+          RUST_CHANGED=true RUST_VERSION="" NEXTFLOW_ARGS="--profile=rust_dev,nf_test"
         fi
 
         {
