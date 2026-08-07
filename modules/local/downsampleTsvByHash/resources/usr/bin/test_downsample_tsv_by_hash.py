@@ -8,10 +8,10 @@ import pytest
 from downsample_tsv_by_hash import (
     downsample_tsv_by_hash,
     hash_key,
+    is_eligible,
     open_by_suffix,
     read_data_lines,
     read_key,
-    is_eligible,
     read_key_index,
     same_compression,
     select_indices,
@@ -488,8 +488,7 @@ def test_match_columns_writes_the_rows_it_selected(tmp_path: Path) -> None:
     rows = [(f"r{i}", f"r{i}" if i % 2 else "other") for i in range(1, 9)]
     path = tmp_path / "in.tsv"
     path.write_text(
-        "seq_id\texemplar\tpayload\n"
-        + "".join(f"{a}\t{b}\tpay_{a}\n" for a, b in rows)
+        "seq_id\texemplar\tpayload\n" + "".join(f"{a}\t{b}\tpay_{a}\n" for a, b in rows)
     )
     out = tmp_path / "out.tsv"
     downsample_tsv_by_hash(str(path), str(out), "seq_id", 3, ("seq_id", "exemplar"))
