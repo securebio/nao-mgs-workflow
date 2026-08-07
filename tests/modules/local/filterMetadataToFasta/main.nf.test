@@ -47,6 +47,52 @@ nextflow_process {
         }
     }
 
+    test("Keeps the metadata row for the assembly whose sequence survived dedup") {
+        // The dedup tie-break assumes the row naming the smallest
+        // assembly_accession describes the record `seqkit rmdup` retained. That
+        // assumption spans two processes, so exercise them together against the
+        // same fixtures rather than asserting each half separately: GCA_002 and
+        // GCA_003 both carry the three SHARED_* IDs, and the metadata lists the
+        // GCA_003 rows first so "first row" and "smallest accession" disagree.
+        tag "expect_success"
+        setup {
+            run("CONCATENATE_GENOME_FASTA") {
+                script "modules/local/concatenateGenomeFasta/main.nf"
+                process {
+                    """
+                    input[0] = file("${helpers.gzipFixtureDir("${projectDir}/test-data/concatenateGenomeFasta/genomes")}/*.fna.gz")
+                    """
+                }
+            }
+        }
+        when {
+            params {}
+            process {
+                """
+                input[0] = file("${helpers.gzipFixtureDir("${projectDir}/test-data/filterMetadataToFasta/metadata-two-assemblies")}/virus-genome-metadata-gid-unfiltered.tsv.gz")
+                input[1] = CONCATENATE_GENOME_FASTA.out[0]
+                input[2] = "virus-genome"
+                """
+            }
+        }
+        then {
+            assert process.success
+            def metadata = path(process.out[0][0]).csv(sep: "\t", decompress: true)
+            def rows = [metadata.columns["genome_id"], metadata.columns["assembly_accession"]]
+                .transpose()
+                .collectEntries()
+            // Every shared ID resolves to GCA_002, the copy rmdup kept -- not
+            // GCA_003, whose rows come first in the metadata.
+            assert rows["SHARED_NAME_DIFF_SEQ"] == "GCA_002"
+            assert rows["SHARED_NAME_SAME_SEQ"] == "GCA_002"
+            assert rows["SHARED_ID_DIFF_DESC"] == "GCA_002"
+            // One row per surviving sequence, and the row describing the
+            // sequence that never reached the FASTA is gone.
+            assert metadata.rowCount == 8
+            assert !rows.containsKey("DROPPED_BY_FILTER")
+        }
+    }
+
     test("Should fail loudly when a sequence has no metadata row") {
         tag "expect_failed"
         when {
