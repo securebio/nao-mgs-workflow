@@ -49,11 +49,13 @@ nextflow_process {
 
     test("Keeps the metadata row for the assembly whose sequence survived dedup") {
         // The dedup tie-break assumes the row naming the smallest
-        // assembly_accession describes the record `seqkit rmdup` retained. That
-        // assumption spans two processes, so exercise them together against the
-        // same fixtures rather than asserting each half separately: GCA_002 and
-        // GCA_003 both carry the three SHARED_* IDs, and the metadata lists the
-        // GCA_003 rows first so "first row" and "smallest accession" disagree.
+        // assembly_accession describes the record `seqkit rmdup` retained, an
+        // assumption spanning two processes. It cannot be exercised from the
+        // MAKE_VIRUS_GENOME_DB test, whose FASTA comes from NCBI and carries no
+        // colliding sequence IDs, so chain the two processes over fixtures that
+        // do: GCA_002 and GCA_003 both carry the three SHARED_* IDs, and the
+        // metadata lists the GCA_003 rows first so "first row" and "smallest
+        // accession" disagree.
         tag "expect_success"
         setup {
             run("CONCATENATE_GENOME_FASTA") {
@@ -93,6 +95,9 @@ nextflow_process {
         }
     }
 
+    // The guards' logic and messages are covered by the pytest suite; this case
+    // is kept to check the raise actually fails the task rather than being
+    // swallowed, which pytest cannot see.
     test("Should fail loudly when a sequence has no metadata row") {
         tag "expect_failed"
         when {
@@ -110,27 +115,6 @@ nextflow_process {
             assert process.errorReport.contains("have no metadata row") :
                 "Expected the unmatched-sequence guard to fire, got: ${process.errorReport}"
             assert process.errorReport.contains("UNIQUE_B") :
-                "Error should name the offending sequence, got: ${process.errorReport}"
-        }
-    }
-
-    test("Should fail loudly when duplicate rows disagree on taxonomy") {
-        tag "expect_failed"
-        when {
-            params {}
-            process {
-                """
-                input[0] = file("${helpers.gzipFixtureDir("${projectDir}/test-data/filterMetadataToFasta/metadata-conflicting-taxid")}/virus-genome-metadata-gid-unfiltered.tsv.gz")
-                input[1] = file("${helpers.gzipFixtureDir("${projectDir}/test-data/filterMetadataToFasta/genomes")}/virus-genomes-masked.fasta.gz")
-                input[2] = "virus-genome"
-                """
-            }
-        }
-        then {
-            assert process.failed
-            assert process.errorReport.contains("disagree on taxid") :
-                "Expected the taxonomy-conflict guard to fire, got: ${process.errorReport}"
-            assert process.errorReport.contains("UNIQUE_A") :
                 "Error should name the offending sequence, got: ${process.errorReport}"
         }
     }

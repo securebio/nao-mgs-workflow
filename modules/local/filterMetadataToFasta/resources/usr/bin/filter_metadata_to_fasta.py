@@ -1,7 +1,5 @@
 #!/usr/bin/env python
-"""Filter genome metadata down to one row per sequence in a genome FASTA.
-Raises if the FASTA carries a genome ID with no metadata row.
-"""
+"""Filter genome metadata down to one row per sequence in a genome FASTA."""
 
 import argparse
 import csv
@@ -34,18 +32,18 @@ def open_by_suffix(path: str, mode: str = "r", newline: str | None = None) -> IO
     return cast(IO[str], open(path, mode, newline=newline))
 
 
-# Fields a duplicate genome_id must agree on: RUN resolves a sequence to a
-# taxid through this file, so rows that disagree here are not interchangeable.
-TAXONOMY_FIELDS = ("taxid", "species_taxid")
-# Columns the reconciliation reads. Absent any of them it cannot do its job, so
-# a schema change upstream should fail here rather than silently weaken a guard.
-REQUIRED_FIELDS = ("genome_id", "assembly_accession", *TAXONOMY_FIELDS)
+# Columns describing the assembly a sequence was packaged in rather than the
+# sequence itself; rows sharing a genome_id may legitimately disagree on these.
+# Every other column must agree. Naming the exceptions rather than the fields to
+# compare keeps the guard from narrowing when a column is added upstream.
+ASSEMBLY_FIELDS = frozenset(
+    {"assembly_accession", "source_database", "assembly_status", "release_date"}
+)
 
 
 def read_fasta_genome_ids(fasta_path: str) -> set[str]:
     """Collect sequence IDs from a FASTA file's headers.
-    The ID is the first whitespace-delimited token after '>', matching how
-    aligners name references and how genome_ids are derived at download time.
+    The ID is the first whitespace-delimited token after '>'.
     Args:
         fasta_path: Path to a (optionally gzipped) FASTA file.
     Returns:
@@ -80,18 +78,19 @@ def filter_metadata(
     assembly_accession, which is the copy the FASTA carries: accessions are
     sorted before chunking and each chunk is concatenated in accession order,
     so the first occurrence `seqkit rmdup` retains is the smallest. Duplicates
-    must agree on TAXONOMY_FIELDS, since otherwise the sequence's taxid would
-    depend on which packaging of it happened to survive deduplication.
+    must agree outside ASSEMBLY_FIELDS, since otherwise what the published table
+    says about a sequence would depend on which packaging of it survived
+    deduplication.
     Args:
-        metadata_path: Path to the genome metadata TSV, with REQUIRED_FIELDS.
+        metadata_path: Path to the genome metadata TSV, with a genome_id column.
         fasta_path: Path to the genome FASTA the metadata should describe.
         output_path: Output path for the filtered metadata TSV (gzip).
     Returns:
         Tuple of (rows written, rows dropped as absent, rows dropped as duplicates).
     Raises:
-        ValueError: If the metadata lacks any of REQUIRED_FIELDS, if any
-            sequence in the FASTA has no metadata row, or if rows sharing a
-            genome_id disagree on TAXONOMY_FIELDS.
+        ValueError: If the metadata has no header, if any sequence in the FASTA
+            has no metadata row, or if rows sharing a genome_id disagree outside
+            ASSEMBLY_FIELDS.
     """
     fasta_ids = read_fasta_genome_ids(fasta_path)
     n_absent = n_duplicate = 0
@@ -103,12 +102,7 @@ def filter_metadata(
         if reader.fieldnames is None:
             raise ValueError(f"Metadata {metadata_path} has no header row")
         fieldnames = reader.fieldnames
-        missing = [f for f in REQUIRED_FIELDS if f not in fieldnames]
-        if missing:
-            raise ValueError(
-                f"Metadata {metadata_path} lacks required column(s): "
-                f"{', '.join(missing)}"
-            )
+        compared = [f for f in fieldnames if f not in ASSEMBLY_FIELDS]
         for row in reader:
             genome_id = row["genome_id"]
             if genome_id not in fasta_ids:
@@ -118,16 +112,17 @@ def filter_metadata(
             if previous is None:
                 kept[genome_id] = row
                 continue
-            conflicts = [f for f in TAXONOMY_FIELDS if previous[f] != row[f]]
+            conflicts = [f for f in compared if previous[f] != row[f]]
             if conflicts:
                 raise ValueError(
                     f"Metadata rows for {genome_id} disagree on "
                     f"{', '.join(conflicts)}: "
                     f"{[previous[f] for f in conflicts]} vs "
                     f"{[row[f] for f in conflicts]}; the genome DB carries one "
-                    "sequence under this ID, so there is no basis for choosing a taxid"
+                    "sequence under this ID, so there is no basis for choosing a row"
                 )
             n_duplicate += 1
+            # Keep the copy CONCATENATE_GENOME_FASTA's `seqkit rmdup` kept.
             if row["assembly_accession"] < previous["assembly_accession"]:
                 kept[genome_id] = row
     unmatched = sorted(fasta_ids - set(kept))

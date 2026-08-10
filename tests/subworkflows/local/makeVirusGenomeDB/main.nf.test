@@ -1,0 +1,76 @@
+nextflow_workflow {
+
+    name "Test workflow MAKE_VIRUS_GENOME_DB"
+    script "subworkflows/local/makeVirusGenomeDB/main.nf"
+    workflow "MAKE_VIRUS_GENOME_DB"
+    config "tests/configs/index.config"
+    tag "subworkflow"
+    tag "make_virus_genome_db"
+
+    test("Emits one metadata row per sequence in the genome FASTA") {
+        // FILTER_METADATA_TO_FASTA reconciles against a FASTA that four earlier
+        // steps have downloaded, concatenated, filtered and masked, so assert the
+        // one-row-per-sequence guarantee over the whole chain rather than over
+        // fixtures that assume what those steps produced.
+        tag "expect_success"
+        setup {
+            run("MAKE_VIRUS_TAXONOMY_DB") {
+                script "subworkflows/local/makeVirusTaxonomyDB/main.nf"
+                workflow {
+                    '''
+                    input[0] = params.taxonomy_url
+                    input[1] = params.virus_host_db_url
+                    input[2] = params.host_taxon_db
+                    input[3] = params.virus_taxid
+                    input[4] = params.viral_taxids_exclude_hard
+                    input[5] = params.host_infection_overrides
+                    '''
+                }
+            }
+        }
+        when {
+            params {}
+            workflow {
+                '''
+                input[0] = params.download_virus_taxid
+                input[1] = params.assembly_source
+                input[2] = MAKE_VIRUS_TAXONOMY_DB.out.db
+                input[3] = params.collectEntries { key, value -> [key, value] } +
+                    [k: "20", hdist: "3", entropy: "0.5", polyx_len: "10"]
+                '''
+            }
+        }
+        then {
+            assert workflow.success
+            def metadata = path(workflow.out.metadata[0]).csv(sep: "\t", decompress: true)
+            def fastaIds = path(workflow.out.fasta[0]).linesGzip
+                .findAll { it.startsWith(">") }
+                .collect { it.substring(1).split(/\s/)[0] }
+                .toSet()
+            assert !fastaIds.isEmpty() : "Masked FASTA should contain at least one sequence"
+            def metadataIds = metadata.columns["genome_id"]
+            assert metadataIds.toSet() == fastaIds :
+                "Metadata and genome DB disagree; sequences with no row: " +
+                "${(fastaIds - metadataIds.toSet()).take(5)}, rows with no sequence: " +
+                "${(metadataIds.toSet() - fastaIds).take(5)}"
+            assert metadataIds.size() == fastaIds.size() :
+                "Metadata carries more than one row for some sequence " +
+                "(${metadataIds.size()} rows, ${fastaIds.size()} distinct IDs)"
+            // The published column set is what RUN's read_genbank_metadata and
+            // DOWNSTREAM read, so a change upstream should surface here.
+            assert metadata.columnNames == [
+                "assembly_accession",
+                "taxid",
+                "organism_name",
+                "source_database",
+                "assembly_status",
+                "release_date",
+                "species_taxid",
+                "genome_id",
+            ]
+            // The gid table published by INDEX is the reconciled one; the
+            // unfiltered table PREPARE_VIRAL_METADATA emits stays in the work dir.
+            assert workflow.out.metadata[0].toString().endsWith("virus-genome-metadata-gid.tsv.gz")
+        }
+    }
+}

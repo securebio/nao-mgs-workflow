@@ -13,6 +13,19 @@ from filter_metadata_to_fasta import (
 
 METADATA_HEADER = ["assembly_accession", "taxid", "species_taxid", "genome_id"]
 
+# One row carrying every column PREPARE_VIRAL_METADATA emits, for the cases that
+# turn on which columns are per-assembly and which are per-sequence.
+FULL_ROW = {
+    "assembly_accession": "GCA_000000000.1",
+    "taxid": "11111",
+    "organism_name": "Test virus A",
+    "source_database": "SOURCE_DATABASE_GENBANK",
+    "assembly_status": "current",
+    "release_date": "2020-01-01",
+    "species_taxid": "11111",
+    "genome_id": "AB1.1",
+}
+
 
 def write_fasta(path: Path, records: list[tuple[str, str]]) -> str:
     """Write a FASTA file, gzipped if the path ends in .gz."""
@@ -113,9 +126,9 @@ class TestFilterMetadata:
         assert [r["genome_id"] for r in read_output(out)] == expected_kept
 
     def test_dedup_keeps_the_smallest_assembly_accession(self, tmp_path: Path) -> None:
-        # `seqkit rmdup` keeps the first record in accession-sorted concatenation
-        # order, so the published row must name the smallest accession — not
-        # whichever row the unsorted metadata happened to list first.
+        # The FASTA reaches `seqkit rmdup` in accession order, so the record it
+        # keeps is the one from the smallest accession — not whichever row the
+        # metadata, which is not accession-sorted, happens to list first.
         fasta = write_fasta(tmp_path / "genomes.fasta.gz", [("AB1.1", "ACGT")])
         metadata = write_rows(
             tmp_path / "meta.tsv.gz",
@@ -153,19 +166,43 @@ class TestFilterMetadata:
             ("AB2.1", "GCA_000000005.1"),
         ]
 
-    @pytest.mark.parametrize("field", ["taxid", "species_taxid"])
-    def test_raises_on_duplicate_rows_disagreeing_on_taxonomy(
+    @pytest.mark.parametrize("field", ["taxid", "species_taxid", "organism_name"])
+    def test_raises_on_duplicate_rows_disagreeing_outside_assembly_fields(
         self, tmp_path: Path, field: str
     ) -> None:
         fasta = write_fasta(tmp_path / "genomes.fasta.gz", [("AB1.1", "ACGT")])
-        conflicting = ["GCA_000000001.1", "11111", "11111", "AB1.1"]
-        conflicting[METADATA_HEADER.index(field)] = "22222"
+        conflicting = dict(FULL_ROW, assembly_accession="GCA_000000001.1")
+        conflicting[field] = "something else"
         metadata = write_rows(
             tmp_path / "meta.tsv.gz",
-            [["GCA_000000000.1", "11111", "11111", "AB1.1"], conflicting],
+            [list(FULL_ROW.values()), list(conflicting.values())],
+            header=list(FULL_ROW),
         )
         with pytest.raises(ValueError, match=f"AB1.1 disagree on {field}"):
             filter_metadata(metadata, fasta, str(tmp_path / "out.tsv.gz"))
+
+    def test_allows_duplicate_rows_to_differ_on_assembly_fields(
+        self, tmp_path: Path
+    ) -> None:
+        # A sequence packaged in two assemblies carries two rows that differ on
+        # every per-assembly column. Only the per-sequence columns must agree,
+        # so this must reconcile rather than fail the index build.
+        fasta = write_fasta(tmp_path / "genomes.fasta.gz", [("AB1.1", "ACGT")])
+        other_assembly = dict(
+            FULL_ROW,
+            assembly_accession="GCA_000000009.1",
+            source_database="SOURCE_DATABASE_REFSEQ",
+            assembly_status="suppressed",
+            release_date="2024-06-30",
+        )
+        metadata = write_rows(
+            tmp_path / "meta.tsv.gz",
+            [list(other_assembly.values()), list(FULL_ROW.values())],
+            header=list(FULL_ROW),
+        )
+        out = str(tmp_path / "out.tsv.gz")
+        assert filter_metadata(metadata, fasta, out) == (1, 0, 1)
+        assert read_output(out) == [FULL_ROW]
 
     def test_preserves_column_content_and_row_order(self, tmp_path: Path) -> None:
         fasta = write_fasta(
@@ -226,22 +263,3 @@ class TestFilterMetadata:
         out = str(tmp_path / "out.tsv.gz")
         filter_metadata(metadata, fasta, out)
         assert read_output(out)[0]["organism_name"] == organism_name
-
-    @pytest.mark.parametrize("missing", METADATA_HEADER)
-    def test_raises_without_a_required_column(
-        self, tmp_path: Path, missing: str
-    ) -> None:
-        # A column dropped upstream must fail here rather than quietly weaken
-        # the dedup rule or the taxonomy-conflict guard.
-        values = dict(
-            zip(METADATA_HEADER, ["GCA_1.1", "11111", "11111", "AB1.1"], strict=True)
-        )
-        del values[missing]
-        metadata = write_rows(
-            tmp_path / "meta.tsv.gz", [list(values.values())], header=list(values)
-        )
-        fasta = write_fasta(tmp_path / "genomes.fasta.gz", [("AB1.1", "ACGT")])
-        with pytest.raises(
-            ValueError, match=f"lacks required column\\(s\\): {missing}"
-        ):
-            filter_metadata(metadata, fasta, str(tmp_path / "out.tsv.gz"))
