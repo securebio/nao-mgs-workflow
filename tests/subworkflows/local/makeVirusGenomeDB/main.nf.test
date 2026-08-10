@@ -7,36 +7,40 @@ nextflow_workflow {
     tag "subworkflow"
     tag "make_virus_genome_db"
 
-    test("Emits one metadata row per sequence in the genome FASTA") {
-        // FILTER_METADATA_TO_FASTA reconciles against a FASTA that four earlier
-        // steps have downloaded, concatenated, filtered and masked, so assert the
-        // one-row-per-sequence guarantee over the whole chain rather than over
-        // fixtures that assume what those steps produced.
+    // Murine adenovirus 1 (taxid 10530) is the one taxon in the production index
+    // whose assemblies package a shared sequence: GCA_000844265.1 holds only
+    // M22245.1, and GCA_023158175.1 holds M22245.1 plus nine others. That makes
+    // it the only way to exercise the dedup tie-break over real data, so the test
+    // config is bent in three places to let those two assemblies through:
+    //   - `datasets_summary_extra_args` drops `--assembly-level complete`; the two
+    //     assemblies are Chromosome and Contig.
+    //   - `genome_patterns_exclude` is emptied. Production lists M22245.1 in
+    //     ref/hv_patterns_exclude.txt, which is why the duplicate never reaches
+    //     the published FASTA and why the tie-break has no live effect today.
+    //   - `virus_db` is a fixture. Murine adenovirus is not human-infecting, and
+    //     the tiny taxonomy the other index tests build does not carry taxid
+    //     10530 at all, so screen on `vertebrate` against a two-row table.
+    // With `viral_accession_chunk_size = 1` the two accessions land in chunk_0001
+    // and chunk_0002, so this also covers the accession-sort and chunk-name-sort
+    // links the tie-break depends on, which no module-level test can reach.
+    test("Reconciles published metadata against the genome FASTA") {
         tag "expect_success"
-        setup {
-            run("MAKE_VIRUS_TAXONOMY_DB") {
-                script "subworkflows/local/makeVirusTaxonomyDB/main.nf"
-                workflow {
-                    '''
-                    input[0] = params.taxonomy_url
-                    input[1] = params.virus_host_db_url
-                    input[2] = params.host_taxon_db
-                    input[3] = params.virus_taxid
-                    input[4] = params.viral_taxids_exclude_hard
-                    input[5] = params.host_infection_overrides
-                    '''
-                }
-            }
-        }
         when {
             params {}
             workflow {
                 '''
-                input[0] = params.download_virus_taxid
+                input[0] = "10530"
                 input[1] = params.assembly_source
-                input[2] = MAKE_VIRUS_TAXONOMY_DB.out.db
-                input[3] = params.collectEntries { key, value -> [key, value] } +
-                    [k: "20", hdist: "3", entropy: "0.5", polyx_len: "10"]
+                input[2] = file("${projectDir}/test-data/makeVirusGenomeDB/virus-db-annotated.tsv")
+                input[3] = params.collectEntries { key, value -> [key, value] } + [
+                    k: "20",
+                    hdist: "3",
+                    entropy: "0.5",
+                    polyx_len: "10",
+                    datasets_summary_extra_args: "",
+                    genome_patterns_exclude: "${projectDir}/test-data/toy-data/empty_file.txt",
+                    host_taxa_screen: "vertebrate",
+                ]
                 '''
             }
         }
@@ -47,8 +51,10 @@ nextflow_workflow {
                 .findAll { it.startsWith(">") }
                 .collect { it.substring(1).split(/\s/)[0] }
                 .toSet()
-            assert !fastaIds.isEmpty() : "Masked FASTA should contain at least one sequence"
             def metadataIds = metadata.columns["genome_id"]
+
+            assert "M22245.1" in fastaIds :
+                "The shared sequence should reach the published FASTA, got: ${fastaIds}"
             assert metadataIds.toSet() == fastaIds :
                 "Metadata and genome DB disagree; sequences with no row: " +
                 "${(fastaIds - metadataIds.toSet()).take(5)}, rows with no sequence: " +
@@ -56,6 +62,18 @@ nextflow_workflow {
             assert metadataIds.size() == fastaIds.size() :
                 "Metadata carries more than one row for some sequence " +
                 "(${metadataIds.size()} rows, ${fastaIds.size()} distinct IDs)"
+
+            // `seqkit rmdup` kept M22245.1 from the smaller accession, which is
+            // also the earlier chunk, so the surviving row must name that
+            // assembly rather than the one contributing the other nine
+            // sequences. The two rows differ on release_date, so this also
+            // covers a per-assembly column being allowed to disagree.
+            def accessions = [metadataIds, metadata.columns["assembly_accession"]]
+                .transpose()
+                .collectEntries()
+            assert accessions["M22245.1"] == "GCA_000844265.1" :
+                "Expected the row for the copy rmdup kept, got ${accessions["M22245.1"]}"
+
             // The published column set is what RUN's read_genbank_metadata and
             // DOWNSTREAM read, so a change upstream should surface here.
             assert metadata.columnNames == [
@@ -68,8 +86,6 @@ nextflow_workflow {
                 "species_taxid",
                 "genome_id",
             ]
-            // The gid table published by INDEX is the reconciled one; the
-            // unfiltered table PREPARE_VIRAL_METADATA emits stays in the work dir.
             assert workflow.out.metadata[0].toString().endsWith("virus-genome-metadata-gid.tsv.gz")
         }
     }
