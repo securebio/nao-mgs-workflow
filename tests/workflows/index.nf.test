@@ -52,6 +52,13 @@ nextflow_pipeline {
                 "Genome DB carries sequences with no metadata row: ${(fastaIds - metadataIds).take(5)}"
             assert path("${launchDir}/output/results/virus-genomes-masked.nucleaze.bin").exists() :
                 "Nucleaze screen index should be published as virus-genomes-masked.nucleaze.bin"
+            def dustmaskedIds = path("${launchDir}/output/results/virus-genomes-dustmasked.fasta.gz").linesGzip
+                .findAll { it.startsWith(">") }
+                .collect { it.substring(1).split(/\s/)[0] }
+                .toSet()
+            assert dustmaskedIds == fastaIds :
+                "Dustmasked FASTA should carry the same sequences as the masked genome DB; " +
+                "missing: ${(fastaIds - dustmaskedIds).take(5)}, extra: ${(dustmaskedIds - fastaIds).take(5)}"
             // Pre-filter assembly metadata is published with the enumerate schema.
             def rawMeta = path("${launchDir}/output/results/virus-genome-metadata-raw.tsv.gz").csv(sep: "\t", decompress: true)
             assert rawMeta.columnNames == ["assembly_accession", "taxid", "organism_name", "source_database", "assembly_status", "release_date"]

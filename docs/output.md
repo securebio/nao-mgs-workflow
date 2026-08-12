@@ -125,5 +125,6 @@ Main heading represents the folder name, and subheadings describes the tool that
 #### K-mer screening references
 
 - `virus-genomes-masked.fasta.gz`: FASTA file containing host-infecting viral genomes downloaded from viral Genbank (filtered to remove transgenic, contaminated, or erroneous sequences).
+- `virus-genomes-dustmasked.fasta.gz`: `virus-genomes-masked.fasta.gz` with low-complexity regions additionally masked to `x` by Dustmasker. This is the FASTA the `bt2-virus-index` and `mm2-virus-index` alignment indexes are built from, published so downstream tools and analyses can work against the same sequences the aligners see.
 - `virus-genomes-masked.nucleaze.bin`: Pre-built [Nucleaze](https://github.com/jackdougle/nucleaze) k-mer index over the masked viral genomes, consumed by RUN's viral k-mer screen. Built from the masked viral genomes with human (CHM13) k-mers additionally N-masked out.
 - `ribo-ref-concat.fasta.gz`: Reference database of ribosomal LSU and SSU sequences from SILVA, used by RUN's BBDuk-based ribosomal screen.

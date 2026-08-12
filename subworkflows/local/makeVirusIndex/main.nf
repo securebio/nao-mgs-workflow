@@ -18,7 +18,7 @@ workflow MAKE_VIRUS_INDEX {
         human_genome_fasta
         nucleaze_k
     main:
-        mask_ch = DUSTMASKER_FASTA_GZIPPED(virus_genome_fasta)
+        mask_ch = DUSTMASKER_FASTA_GZIPPED(virus_genome_fasta, "virus-genomes")
         bowtie2_ch = BOWTIE2_INDEX(mask_ch, "bt2-virus-index")
         minimap2_ch = MINIMAP2_INDEX(mask_ch, "mm2-virus-index")
         // Further mask human (CHM13) k-mers from the viral genomes prior to
@@ -31,6 +31,7 @@ workflow MAKE_VIRUS_INDEX {
         // variant fed to bowtie2/minimap2 — matches what RUN's screen sees.
         nucleaze_ch = NUCLEAZE_INDEX(human_masked_ch.masked, nucleaze_k, "virus-genomes-masked")
     emit:
+        dustmasked = mask_ch
         bt2 = bowtie2_ch
         mm2 = minimap2_ch.output
         nucleaze = nucleaze_ch.index

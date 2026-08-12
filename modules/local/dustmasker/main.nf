@@ -5,12 +5,13 @@ process DUSTMASKER_FASTA_GZIPPED {
     tag "id=index"
     input:
         path(fasta_gzipped)
+        val(name_pattern)
     output:
-        path("masked.fasta.gz")
+        path("${name_pattern}-dustmasked.fasta.gz")
     script:
         """
-        zcat -f ${fasta_gzipped} | dustmasker -out "masked.fasta" -outfmt fasta
-        sed -i '/^>/!s/[a-z]/x/g' masked.fasta
-        gzip masked.fasta
+        zcat -f ${fasta_gzipped} | dustmasker -out "${name_pattern}-dustmasked.fasta" -outfmt fasta
+        sed -i '/^>/!s/[a-z]/x/g' ${name_pattern}-dustmasked.fasta
+        gzip ${name_pattern}-dustmasked.fasta
         """
 }
