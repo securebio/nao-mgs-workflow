@@ -9,17 +9,34 @@
 // floor no matter how much memory the task reserved. Every one of these
 // modules feeds sort from `pigz -dc |`, so they all hit that floor.
 //
-// The consequence is quadratic-ish, not marginal: with a 12 MB buffer a U-byte
-// input produces U/12MB sorted runs, which sort then merges 16 at a time, so it
-// rewrites the whole dataset once per merge level. A 400 GB input becomes
-// ~32,000 runs and 4 merge levels, i.e. ~1.6 TB spilled to local disk. In
-// production several such tasks share one host volume with Fusion's chunk
-// cache, and the volume ran out of space.
+// With a 12 MB buffer a U-byte input produces U/12MB sorted runs, which sort
+// then merges 16 at a time, rewriting the whole dataset once per merge level.
+// A 400 GB input becomes ~32,000 runs and 4 merge levels: ~1.6 TB written, and
+// hours rather than tens of minutes.
 //
-// Passing an explicit --buffer-size restores the intended single-pass
-// behaviour. The remaining spill (one pass over the data, unavoidable once the
-// input exceeds memory) is compressed, which costs almost nothing at level 1
-// and cuts the bytes on disk by ~9x.
+// Two distinct costs, which need two distinct fixes:
+//
+//   Duration and write volume. Fixed by --buffer-size: with a buffer sized from
+//   the reservation there are few enough runs to merge in one pass, so the
+//   dataset is written once instead of once per level.
+//
+//   Peak disk occupancy. NOT fixed by --buffer-size. Merging reclaims space as
+//   it goes (each merged group is written, then its inputs are unlinked), so
+//   the 1.6 TB above is throughput, not residency -- but all the runs of a
+//   level must coexist, so ~1x the uncompressed input sits on disk for the
+//   whole sort either way. Measured at a 10 GB input: 10.73 GB resident with
+//   the 12 MB floor, 10.00 GB with a 2.4 GB buffer. Only compressing the spill
+//   moves that number (to 0.93 GB), which is why --compress-program is here
+//   and not treated as an optional extra.
+//
+// That residency is what exhausts the volume in production: these tasks are
+// small enough that many pack onto one host, they all share the instance's
+// local disk with Fusion's chunk cache, and the tiny buffer held each one's
+// share for hours, so their occupancy windows overlapped.
+//
+// Compression is pinned to level 1, where it costs almost nothing (~250 MB/s
+// per core against ~20 MB/s at the default level, for ratio 8.8 vs 10.8) and
+// on a spill-bound task is a net speedup.
 
 class SortUtils {
 
