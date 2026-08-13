@@ -33,7 +33,7 @@ nextflow_process {
             assert process.success
             // Input and output records should match
             def fastq_in = path(process.out.input[0][1]).fastq
-            def fastq_out = path(process.out.input[0][1]).fastq
+            def fastq_out = path(process.out.output[0][1]).fastq
             assert fastq_in.records == fastq_out.records
             assert fastq_in.readNames == fastq_out.readNames
             assert fastq_in.sequences == fastq_out.sequences

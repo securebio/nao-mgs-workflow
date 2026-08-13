@@ -39,6 +39,41 @@ process PROBE_BBMASK_MEMORY {
         """
 }
 
+// The sort labels tier both cpus and memory, so these probes emit both. Note
+// the input variable names: the closures in configs/resources.config close over
+// `input_file` and `fastq` respectively, matching SORT_FILE and SORT_FASTQ.
+process PROBE_SORT_FILE_RESOURCES {
+    label "sort_file_resources"
+    label "coreutils"
+
+    input:
+        tuple val(size_bytes), path(input_file)
+
+    output:
+        path "row.csv"
+
+    script:
+        """
+        echo "${size_bytes},${task.cpus},${task.memory.toBytes()},${SortUtils.bufferSize(task.memory)}" > row.csv
+        """
+}
+
+process PROBE_SORT_FASTQ_RESOURCES {
+    label "sort_fastq_resources"
+    label "coreutils"
+
+    input:
+        tuple val(size_bytes), path(fastq)
+
+    output:
+        path "row.csv"
+
+    script:
+        """
+        echo "${size_bytes},${task.cpus},${task.memory.toBytes()},${SortUtils.bufferSize(task.memory)}" > row.csv
+        """
+}
+
 workflow PROBE_RESOURCE_TIER {
     take:
         sizes_ch  // val: logical file size in bytes
@@ -50,4 +85,20 @@ workflow PROBE_RESOURCE_TIER {
 
     emit:
         report = report_ch
+}
+
+workflow PROBE_SORT_RESOURCE_TIERS {
+    take:
+        sizes_ch  // val: logical file size in bytes
+
+    main:
+        sparse_ch = MAKE_SPARSE_FILE(sizes_ch)
+        file_rows_ch = PROBE_SORT_FILE_RESOURCES(sparse_ch)
+        fastq_rows_ch = PROBE_SORT_FASTQ_RESOURCES(sparse_ch)
+        file_report_ch = file_rows_ch.collectFile(name: 'sort_file.csv', sort: true)
+        fastq_report_ch = fastq_rows_ch.collectFile(name: 'sort_fastq.csv', sort: true)
+
+    emit:
+        sort_file = file_report_ch
+        sort_fastq = fastq_report_ch
 }

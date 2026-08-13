@@ -54,6 +54,12 @@ As of 26.04.6, Nextflow warns about it while still applying it.
      - The default `/scratch/` directory on AWS EC2 instances works fine in our experience, but if you are seeing `/scratch` directory permissions or space issues, you may have to customize the `/scratch/` directory with a UserData script in your EC2 launch template.
      - To turn off caching, you can always remove the `aws.batch.volumes = ['/scratch:/scratch']` line from the relevant profile.
 
+## `No space left on device` in a sort step
+
+- `SORT_FILE` and `SORT_FASTQ` stream a gzipped file through GNU `sort`, which spills to local disk whenever the input does not fit in its buffer. On a Fusion-backed profile that spill shares the instance's root volume with Fusion's chunk cache and with every other task on the host, so a few large sorts can exhaust it.
+- These processes size sort's buffer from their memory reservation and compress spill files, and their `sort_*_resources` labels tier cpus and memory on the input size (see `configs/resources.config`). If you still hit `sort: write failed: /tmp/sortXXXXXX: No space left on device`, the input is larger than the top tier anticipates: raise the top tier's memory, which both enlarges the buffer and reduces how many of these tasks share a host.
+- Do not fix this by pointing sort's `--temporary-directory` at the work directory on a Fusion profile: merge passes would then run against S3.
+
 ## Scratch directories
 - For each Fusion-enabled profile defined in `configs/profiles.config`, processes with the `use_scratch` label create a local [scratch](https://docs.seqera.io/nextflow/reference/process#scratch) directory for file operations and then stage out to Fusion at the end of the process
 - SecureBio's standard Batch launch templates are sized for this. If you run on a custom launch template with a small root volume and hit scratch space issues, you can remove the `process { withLabel: 'use_scratch' { scratch = true } }` selector from the relevant profile in `configs/profiles.config`.
