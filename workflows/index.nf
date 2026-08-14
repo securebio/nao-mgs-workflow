@@ -78,7 +78,7 @@ workflow INDEX {
             genome_ch.fasta,
             genome_ch.metadata,
             genome_ch.raw_metadata,
-            // Dustmasked viral genomes, as aligned against by bowtie2/minimap2
+            // Dustmasked viral genomes
             virus_index_ch.dustmasked,
             // Other reference files & directories
             ribo_ref_ch.ribo_ref,
