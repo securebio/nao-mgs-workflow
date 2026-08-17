@@ -1,11 +1,10 @@
 // Sort a gzipped file by a user-specified key string
 // TODO: Expand to handle plaintext files
 // Sort buffer, spill directory and spill compression are configured by
-// SortUtils; see lib/SortUtils.groovy for why an explicit buffer size is
-// required when sort reads from a pipe.
+// lib/SortUtils.groovy.
 process SORT_FILE {
     label "coreutils"
-    label "sort_file_resources"
+    label "sort_resources"
     tag "id=${sample}"
     input:
         tuple val(sample), path(input_file)
