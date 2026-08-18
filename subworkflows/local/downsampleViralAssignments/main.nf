@@ -2,21 +2,13 @@
 Downsample per-species partitions of viral hits to a fixed number of reads each, then
 render the retained reads as FASTA ready for alignment against a large reference DB.
 
-This replaces the earlier cluster-and-take-an-exemplar approach. Sampling is a uniform
-random draw over reads (implemented as a bottom-N hash sketch, so it is reproducible and
-independent of row order), which means every retained read is validated on its own
-evidence and no verdict has to be extrapolated to its neighbours. Keeping the per-species
-split means rare species are still validated thoroughly while abundant ones are capped.
-Where the caller restricts sampling to duplicate-group exemplars, the cap bounds the
-exemplars rather than the raw read count.
+Sampling is a uniform random draw per species (a bottom-N hash sketch, so reproducible
+and order-independent), so every retained read is validated on its own evidence and rare
+species stay thoroughly validated while abundant ones are capped. Where the caller
+restricts sampling to duplicate-group exemplars, the cap bounds the exemplars.
 
-Because sampling happens before FASTQ extraction and pair merging, those steps only ever
-see the retained reads rather than the whole viral read pool.
-
-Note that only the downsampling step runs one task per partition. The steps after it are
-still list-based processes that loop internally over the grouped files, so they do not
-parallelise across partitions. Converting them would be a separate change: they predate
-this work and MERGE_JOIN_READS_LIST is shared with other code paths.
+Only the downsampling step runs one task per partition; the steps after it are list-based
+processes that loop internally over the grouped files.
 */
 
 /***************************
@@ -45,22 +37,15 @@ workflow DOWNSAMPLE_VIRAL_ASSIGNMENTS {
             def file_list = files instanceof List ? files : [files]
             return [label, file_list]
         }
-        // 1. Downsample each species partition to at most n_sample reads.
-        // DOWNSAMPLE_TSV_BY_HASH takes one file, so flatten to one item per partition and
-        // let Nextflow run them concurrently, then regroup for the list-based steps below.
-        // The cap applies per partition, which is what keeps rare species fully validated.
+        // 1. Downsample each species partition to at most n_sample reads. Flatten to one
+        // item per partition so the per-file process runs concurrently, then regroup.
         partition_ch = tsv_ch.transpose()
-        // Validation runs downstream of duplicate marking, so the caller restricts
-        // sampling to duplicate-group exemplars: aligning a read that duplicates
-        // another buys no information. Callers whose data was never duplicate-marked
-        // pass an empty value, leaving every read eligible.
+        // exemplar_columns confines sampling to duplicate-group exemplars, since aligning
+        // a duplicate read buys no information; empty leaves every read eligible.
         downsampled_ch = DOWNSAMPLE_TSV_BY_HASH(partition_ch, "seq_id", n_sample, exemplar_columns).output
-        // groupTuple emits in task-completion order, which is a race between the
-        // per-partition tasks, so sort by name. This is not a correctness requirement --
-        // the consumers below are order-insensitive, and MERGE_JOIN_READS_LIST sorts its
-        // own inputs before pairing them -- but the grouped list reaches those processes
-        // as a command-line argument, so leaving it unordered would change their task
-        // hashes between otherwise identical runs and defeat -resume caching.
+        // groupTuple emits in task-completion order, so sort by name: the grouped list
+        // reaches the processes below as a command-line argument, and leaving it
+        // unordered would change their task hashes between runs and defeat -resume.
         sampled_ch = downsampled_ch.groupTuple()
             .map { label, files -> [label, files.sort { f -> f.name }] }
         // 2. Extract the retained reads into interleaved FASTQ
