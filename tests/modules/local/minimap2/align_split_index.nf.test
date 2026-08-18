@@ -1,7 +1,7 @@
 nextflow_process {
-    name "Test process MINIMAP2_NON_STREAMED"
+    name "Test process MINIMAP2_SPLIT_INDEX"
     script "modules/local/minimap2/main.nf"
-    process "MINIMAP2_NON_STREAMED"
+    process "MINIMAP2_SPLIT_INDEX"
     config "tests/configs/run_ont.config"
 
     tag "module"

@@ -4,7 +4,7 @@
 
 include { MINIMAP2 as MINIMAP2_VIRUS } from "../../../modules/local/minimap2"
 include { MINIMAP2 as MINIMAP2_HUMAN } from "../../../modules/local/minimap2"
-include { MINIMAP2_NON_STREAMED as MINIMAP2_CONTAM } from "../../../modules/local/minimap2"
+include { MINIMAP2_SPLIT_INDEX as MINIMAP2_CONTAM } from "../../../modules/local/minimap2"
 include { FILTLONG } from "../../../modules/local/filtlong"
 include { MASK_FASTQ_READS } from "../../../modules/local/maskRead"
 include { EXTRACT_SHARED_FASTQ_READS as EXTRACT_VIRAL_FILTERED_READS } from "../../../modules/local/extractSharedFastq"

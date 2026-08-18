@@ -33,13 +33,14 @@
 - Exclude two viral genome records (`AY037928.1` and `NC_022518.1`) that are pure human contamination.
 - Make the `[tool.<name>]` table read by `CHECK_VERSION_COMPATIBILITY` configurable.
 - Add `bin/compare_downstream_runs.py` / `bin/downstream_metrics.py` and the paired `benchmark-downstream` agent skill for comparing two DOWNSTREAM runs (e.g. across a pipeline change) from their existing output files. Developer/agent tooling only: reads existing DOWNSTREAM outputs and adds no new pipeline outputs, behavior, or schema changes.
-- Pass `-t ${task.cpus}` to minimap2 in the `MINIMAP2` and `MINIMAP2_NON_STREAMED` modules.
+- Pass `-t ${task.cpus}` to minimap2 in the `MINIMAP2` and `MINIMAP2_SPLIT_INDEX` modules.
 - Add a `.github/actions/trivy-scan` composite action and a PR-less invocation mode for the `triage-trivy` skill (developer/CI tooling; no pipeline change).
 - Publish a `rust-tools:stable` container image by adding `stable` to the `rust-tools.yml` push triggers and deriving the ECR image tag from the branch name (CI only; no pipeline change).
 - Gate the Trivy container vulnerability scan (`scan-containers`) behind a paths-filter so it only runs when `containers/**` or `configs/containers.config` change.
 - Add a weekly scheduled Trivy container scan (`.github/workflows/scheduled-trivy-triage.yml`) that invokes the `triage-trivy` skill via `claude-code-action` to open a draft triage PR against `dev` when HIGH/CRITICAL findings are present (CI tooling only; no pipeline change).
-- Speed up the `MINIMAP2` and `MINIMAP2_NON_STREAMED` modules by replacing single-threaded `gzip`/`zcat` with parallel `pigz` for SAM/FASTQ (de)compression, and add `pigz` to the `minimap2_samtools` container. Output file contents are unchanged, but the published `.gz` files are no longer byte-identical to previous versions, as compression drops to level 1.
+- Speed up the `MINIMAP2` and `MINIMAP2_SPLIT_INDEX` modules by replacing single-threaded `gzip`/`zcat` with parallel `pigz` for SAM/FASTQ (de)compression, and add `pigz` to the `minimap2_samtools` container. Output file contents are unchanged, but the published `.gz` files are no longer byte-identical to previous versions, as compression drops to level 1.
     - Fix a latent bug in `MINIMAP2` where the task could exit before a compressor had flushed its gzip trailer, silently truncating outputs, by fanning out through named FIFOs and waiting on the captured compressor PIDs instead of `tee >(...)`.
+- Stream the contaminant alignment in `MINIMAP2_SPLIT_INDEX` (renamed from `MINIMAP2_NON_STREAMED`) through the same named-FIFO fan-out as `MINIMAP2`, instead of writing a whole uncompressed SAM to disk and re-reading it three times. This removes a multi-gigabyte disk spill from the ONT contaminant-filtering step. The query stays a regular file and `--split-prefix` is retained, as multi-part indexes require both; output file contents are unchanged.
 
 # v3.2.2.0
 

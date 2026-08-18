@@ -83,8 +83,13 @@ process MINIMAP2 {
         """
 }
 
-// Run minimap2 in non-streamed mode on a single input FASTQ file and partition reads based on alignment status
-process MINIMAP2_NON_STREAMED {
+// Run minimap2 against a multi-part index and partition reads based on alignment status.
+// A reference too large for one index block (see `-I`) is split across blocks, and
+// minimap2 then re-reads the query once per block, so the query must be a regular file
+// rather than a pipe and `--split-prefix` is required to merge the per-block output.
+// Only the query is constrained: minimap2 still merges to stdout, so the partitioning
+// fan-out is identical to MINIMAP2.
+process MINIMAP2_SPLIT_INDEX {
     label "max"
     label "minimap2_samtools"
     tag "id=${sample}"
@@ -104,36 +109,38 @@ process MINIMAP2_NON_STREAMED {
         def al = "${sample}_${suffix}_minimap2_mapped.fastq.gz"
         def un = "${sample}_${suffix}_minimap2_unmapped.fastq.gz"
         def in2 = "${sample}_${suffix}_minimap2_in.fastq.gz"
+        // Four consumers run concurrently (minimap2 plus three compressors), so
+        // split the allocation rather than giving each pigz every core.
+        def pigz_threads = Math.max(1, (task.cpus as int).intdiv(4))
         """
         set -euo pipefail
-        # Run pipeline
-        # Outputs a SAM file for all reads, which is then partitioned based on alignment status
-        #   - First branch (samtools view -u -f 4 -) filters SAM to unaligned reads and saves FASTQ
-        #   - Second branch (samtools view -u -F 4 -) filters SAM to aligned reads and saves FASTQ
-        #   - Third branch (samtools view -h -F 4 -) also filters SAM to aligned reads and saves SAM
-        minimap2 -a -t ${task.cpus} ${params_map.alignment_params} ${idx} ${reads} --split-prefix "mm2_split_" > complete_sam.sam
-
-        # The three passes run sequentially, so each pigz gets the full
-        # allocation. `view -u` emits uncompressed BAM into `fastq`, so neither
-        # needs -@; all compression is done by pigz.
-
-        # Filter SAM to unaligned reads and save FASTQ
-        samtools view -u -f 4 complete_sam.sam \\
-            | samtools fastq - | pigz -p ${task.cpus} -1 -c > ${un}
-
-        # Filter SAM to aligned reads and save FASTQ
-        samtools view -u -F 4 complete_sam.sam \\
-            | samtools fastq - | pigz -p ${task.cpus} -1 -c > ${al}
-
-        # Filter SAM to aligned reads and save SAM
-        samtools view -h -F 4 complete_sam.sam \\
-            ${ params_map.remove_sq ? "| grep -v '^@SQ'" : "" } | pigz -p ${task.cpus} -1 -c > ${sam}
-
-        # Remove temporary files
-        rm complete_sam.sam
-
+        tmpdir=\$(mktemp -d)
+        trap 'rm -rf "\${tmpdir}"' EXIT
+        PIDS=()
+        # Named FIFOs, not `>(...)`: process substitution hides the subshell PID,
+        # so the script can exit before a compressor writes its gzip trailer and
+        # silently truncate the output. See modules/local/nucleaze/main.nf.
+        mkfifo "\${tmpdir}/un.fifo" "\${tmpdir}/al.fifo"
+        # Partition the SAM stream by alignment status:
+        #   - unmapped branch (samtools view -u -f 4 -) saves unaligned reads as FASTQ
+        #   - mapped branch (samtools view -u -F 4 -) saves aligned reads as FASTQ
+        #   - main pipeline (samtools view -h -F 4 -) saves aligned reads as SAM
+        # `view -u` emits uncompressed BAM into `fastq`, so neither needs -@; all
+        # compression is done by pigz.
+        ( samtools view -u -f 4 - < "\${tmpdir}/un.fifo" \\
+            | samtools fastq - | pigz -p ${pigz_threads} -1 -c > ${un} ) & PIDS+=(\$!)
+        ( samtools view -u -F 4 - < "\${tmpdir}/al.fifo" \\
+            | samtools fastq - | pigz -p ${pigz_threads} -1 -c > ${al} ) & PIDS+=(\$!)
+        # --split-prefix scratch files stay in the task work directory, which is
+        # sized for the run; \${tmpdir} only carries the FIFOs.
+        minimap2 -a -t ${task.cpus} ${params_map.alignment_params} ${idx} ${reads} --split-prefix "mm2_split_" \\
+            | tee "\${tmpdir}/un.fifo" "\${tmpdir}/al.fifo" \\
+            | samtools view -h -F 4 - \\
+            ${ params_map.remove_sq ? "| grep -v '^@SQ'" : "" } | pigz -p ${pigz_threads} -1 -c > ${sam}
+        # Let the branch compressors flush their gzip trailers before exiting,
+        # otherwise the .gz outputs truncate. A failing branch trips errexit.
+        for pid in "\${PIDS[@]}"; do wait "\${pid}"; done
         # Link input to output for testing
         ln -s ${reads} ${in2}
-
         """
 }
