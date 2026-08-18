@@ -30,7 +30,7 @@ These guidelines represent best practices to implement in new code, though some 
     - All processes should have a label specifying needed resources (e.g. `label "small"`). Resources are then specified in `configs/resources.config`.
         - Most labels declare static resources (`cpus = 8; memory = 16.GB`).
         - When a process's peak memory scales strongly with input size, the label's `memory` directive may be a closure over the process inputs that picks a memory tier based on total byte size. See `bbmask_resources` in `configs/resources.config` for an example, and `tests/configs/resources/` for its associated nf-test.
-        - The `cpus` directive may also be a closure over process inputs to more heavily parallelize large inputs, especially when `memory` tiers already allocate more of an instance to a given task.
+        - The `cpus` directive may also be a closure over process inputs to more heavily parallelize large inputs, especially when `memory` tiers already allocate more of an instance to a given task. However, the ratio between available CPUs and memory can vary and depends on the instance types defined by the compute environment.
         - Scaling `memory` or `cpus` also limits how many tasks pack onto one instance, which can help bound the cumulative local disk usage.
         - A closure over an input variable must use that process's own input name, so closures can only be reused across processes whose inputs are named the same. Avoid using `file` in these closures and process inputs, which shadows Nextflow's `file()` function.
     - All processes should have a label specifying the Docker container to use (e.g. `label "BBTools"`). Containers are then specified in `configs/containers.config`.

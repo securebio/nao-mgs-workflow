@@ -11,15 +11,14 @@
 class SortUtils {
 
     // Fraction of the task's memory reservation given to sort's buffer.
-    // Must be an absolute size, not `--buffer-size=<pct>%`: that percentage is
-    // of the instance's physical memory, tens of times the reservation here.
+    // `--buffer-size=<pct>%` alone would use the instance's total memory, not the per-task allocation.
     static final BigDecimal BUFFER_FRACTION = 0.6
 
     // Name of the generated helper that sort uses to compress spill files.
     static final String COMPRESS_PROGRAM = "sort_compress"
 
     // Default buffer size for when a task has no memory reservation; production
-    // processes always have one via their resource label. ~20x sort's 12MB floor.
+    // processes should always have one via their resource label. ~20x sort's 12MB floor.
     static final String DEFAULT_BUFFER = "256M"
 
     // How many sort runs to merge at a time, pinned to built-in default.
