@@ -16,6 +16,7 @@
 - Publish a `rust-tools:stable` container image by adding `stable` to the `rust-tools.yml` push triggers and deriving the ECR image tag from the branch name (CI only; no pipeline change).
 - Gate the Trivy container vulnerability scan (`scan-containers`) behind a paths-filter so it only runs when `containers/**` or `configs/containers.config` change.
 - Add a weekly scheduled Trivy container scan (`.github/workflows/scheduled-trivy-triage.yml`) that invokes the `triage-trivy` skill via `claude-code-action` to open a draft triage PR against `dev` when HIGH/CRITICAL findings are present (CI tooling only; no pipeline change).
+- Add `bin/compare_traces.py` for comparing two Nextflow trace files and emitting a markdown cohort table of runtime and cpu-hours, and point to it from `.claude/benchmarking.md`. Developer/agent tooling only: reads existing trace files and adds no pipeline processes, outputs, schemas, or behavior changes.
 
 # v3.2.2.0
 

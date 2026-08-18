@@ -41,6 +41,19 @@ The Δ between dev and PR usually shows up more cleanly in cpu-hours; runtime Δ
 
 ## Parsing the trace
 
+`bin/compare_traces.py` implements everything in this section — use it rather than
+re-deriving the aggregation per PR:
+
+```bash
+python bin/compare_traces.py --baseline trace_dev.tsv --candidate trace_pr.tsv \
+    --pattern MINIMAP2
+```
+
+It filters to `status == "COMPLETED"`, groups by the leaf component of `process`, and emits
+a markdown cohort table carrying both metrics plus a `TOTAL` row. The reference
+implementation below is kept for cases the script doesn't cover.
+
+
 The `realtime` column formats wall durations as strings like `"1m 37s"`, `"30ms"`, `"2h 5m"`. Don't try `float()` — scan for all `(value, unit)` pairs and sum.
 
 Units seen in this repo: `ms`, `s`, `m`, `h`. Conversion table: `{"ms": 1/1000, "s": 1, "m": 60, "h": 3600, "d": 86400}`.
