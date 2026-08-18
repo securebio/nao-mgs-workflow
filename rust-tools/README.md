@@ -7,7 +7,6 @@ Rust utilities that run as part of the Nextflow pipeline. These are compiled int
 
 - **mark_duplicates** — Marks duplicate alignments in SAM/BAM data
 - **mark_duplicates_similarity** — Marks similarity-based duplicates among alignment-unique reads using [nao-dedup](https://github.com/securebio/nao-dedup)
-- **process_vsearch_cluster_output** — Processes tabular output from VSEARCH clustering
 
 ## External Tools
 
