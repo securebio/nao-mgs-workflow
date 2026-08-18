@@ -223,14 +223,13 @@ def test_same_compression(a: Any, b: Any, expected: Any) -> None:
         (10, 10, 10),  # target equals input: everything retained
         (10, 11, 10),  # target one above input
         (10, 0, 0),  # zero target keeps nothing
-        (10, -5, 0),  # negative target keeps nothing
         (0, 10, 0),  # empty input
     ],
 )
 def test_select_indices_returns_expected_count(
     n_rows: Any, n_sample: Any, expected: Any
 ) -> None:
-    """Selection size is min(n_sample, n_rows), clamped at zero."""
+    """Selection size is min(n_sample, n_rows)."""
     keys = iter(f"read_{i}" for i in range(n_rows))
     selected, n_total = select_indices(keys, n_sample)
     # None signals "everything retained", which is n_rows rows
@@ -259,6 +258,12 @@ def test_select_indices_zero_sample_is_not_all_retained() -> None:
     selected, n_total = select_indices(iter(["a", "b"]), 0)
     assert selected == set()
     assert n_total == 2
+
+
+def test_select_indices_rejects_negative_sample() -> None:
+    """A negative cap is a caller bug, rejected up front rather than clamped."""
+    with pytest.raises(ValueError, match="non-negative"):
+        select_indices(iter(["a", "b"]), -1)
 
 
 def test_select_indices_is_order_independent() -> None:
@@ -475,8 +480,9 @@ def test_match_columns_caps_the_eligible_rows_not_the_input(tmp_path: Path) -> N
     out = tmp_path / "out.tsv"
     downsample_tsv_by_hash(str(src), str(out), "seq_id", 2, ("seq_id", "exemplar"))
     kept = [ln.split("\t")[0] for ln in out.read_text().splitlines()[1:]]
-    assert len(kept) == 2
-    assert set(kept) <= {"r1", "r3", "r5"}
+    eligible = ["r1", "r3", "r5"]
+    expected = set(sorted(eligible, key=hash_key)[:2])
+    assert kept == [k for k in eligible if k in expected]
 
 
 def test_match_columns_writes_the_rows_it_selected(tmp_path: Path) -> None:
