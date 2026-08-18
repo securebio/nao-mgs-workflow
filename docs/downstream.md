@@ -303,7 +303,7 @@ To run the `DOWNSTREAM` workflow, you need:
         - `params.blast_min_frac`: Minimum fraction of best bitscore to retain hits (default 0.9)
         - `params.taxid_artificial`: Parent taxid for artificial sequences (default 81077)
 
-[^max_sample]: For ONT data, we don't need to limit the number of reads to validate, as the total number of viral reads is typically much smaller than for short-read data.
+[^max_sample]: The ONT default is set far above any realistic per-taxid viral read count, so in practice every read is validated. ONT libraries yield far fewer viral reads than short-read ones, so there is no need to subsample them.
 
 > [!NOTE]
 > Currently, the input file and grouping TSV must be generated manually. We intend to implement programmatic generation of these files in the future.

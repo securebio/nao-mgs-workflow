@@ -4,9 +4,8 @@
     - Add a `validation_status` column: `aligned` / `no_alignment` / `not_sampled`.
     - Remove the eight `vsearch_*` columns and replace the string `group_species` (`<group>_<taxid>`) with the integer `selected_taxid`: 66 to 59 fields, and the md5 changes.
     - Replace the `validation_cluster_identity` and `validation_n_clusters` parameters with `validation_n_sample` (default `20` for non-ONT platforms, `1000000` for ONT), and drop the injected `cluster_min_len`. Most reads are now labelled `not_sampled` instead of inheriting a representative's verdict.
-    - Remove the VSEARCH clustering step from the validation path; the now-unused clustering components are deleted in a follow-up.
+    - Remove the VSEARCH clustering step from the validation path.
     - Delete the components the change leaves unused: the `clusterViralAssignments`, `propagateValidationInformation`, and `validateClusterRepresentatives` subworkflows; the `vsearch`, `processVsearchClusterOutput`, and `downsampleFastnById` modules; the `vsearch` container and `vsearch_resources` resource labels; the uncalled `ADD_SAMPLE_COLUMN_LIST` process; and the `fastq` output of `SPLIT_VIRAL_TSV_BY_SELECTED_TAXID`. The `rust-tools` `process_vsearch_cluster_output` crate is left in place, since removing it changes the `rust-tools` image.
-
     - Confine the sample to duplicate-group exemplars where duplicate marking ran, so alignments are not spent on reads that duplicate another. ONT skips duplicate marking and is unaffected.
 
 - Add an `annotated` output to `SPLIT_VIRAL_TSV_BY_SELECTED_TAXID`: the whole joined table before partitioning, with `selected_taxid` added and `taxid_species` dropped. Existing outputs are unchanged. Nothing consumes it yet, so it costs one extra task per sample group until the consumer lands.
@@ -135,6 +134,7 @@
 
 - Make `bin/run-nf-test.sh` and `bin/run_nf_test_parallel.py` symlink-safe for dependent repos
 - Add authenticated ECR Public login to Trivy scan workflow to avoid anonymous pull rate limits
+- Add several Trivy CVEs to `.trivyignore` (no fix currently available; expiry set in June 2026 to force review)
 - Extract shared Groovy code for sentinel file generation to `lib/SentinelUtils.groovy`
 - Remove `logging/time.txt` and `logging_downstream/time.txt`; superseded by new sentinel JSONs
 - Make RUN workflow clearer and more readable by moving derived variables and conditional statements into subworkflows, including new `PREPARE_INPUT_LOGGING` and `EXTRACT_VIRAL_READS` subworkflows
@@ -385,6 +385,7 @@ This version involved numerous changes intended to make new releases easier, fas
     - Updated our PR process.
     - Updated our release process.
     - Added preference for using pytest over nf-test for Python unit tests.
+- Added `pyproject.toml` to the top level directory to standardize our Python file formatting and type checking rules.
 
 # v3.0.1.0
 
