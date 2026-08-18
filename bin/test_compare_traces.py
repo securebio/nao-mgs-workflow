@@ -11,6 +11,7 @@ end-to-end aggregation against small on-disk trace files.
 ###########
 
 import gzip
+import logging
 from datetime import datetime
 from pathlib import Path
 
@@ -26,6 +27,7 @@ from compare_traces import (
     parse_timestamp,
     task_metrics,
     total_stats,
+    warn_on_task_count_mismatch,
 )
 
 ############
@@ -250,6 +252,29 @@ def test_format_delta(baseline: float, candidate: float, expected: str) -> None:
     assert format_delta(baseline, candidate) == expected
 
 
+def test_build_table_header_matches_benchmarking_convention(trace_file: Path) -> None:
+    """The header reproduces the table format in .claude/benchmarking.md.
+
+    The convention is what makes these tables comparable across PRs, so the
+    emitted header is pinned rather than left to drift.
+    """
+    stats = aggregate_trace(trace_file)
+    lines = build_table(stats, stats).splitlines()
+    assert lines[0] == (
+        "| Scope | dev runtime | PR runtime | Δ runtime "
+        "| dev cpu-h | PR cpu-h | Δ cpu-h |"
+    )
+    assert lines[1] == "|---|---:|---:|---:|---:|---:|---:|"
+
+
+def test_build_table_labels_are_overridable(trace_file: Path) -> None:
+    """Run labels are configurable for comparisons that are not dev-vs-PR."""
+    stats = aggregate_trace(trace_file)
+    header = build_table(stats, stats, "CPU", "GPU").splitlines()[0]
+    assert "| CPU runtime | GPU runtime |" in header
+    assert "| CPU cpu-h | GPU cpu-h |" in header
+
+
 def test_build_table_orders_by_cost_and_totals(trace_file: Path) -> None:
     """Rows are ordered by cpu-hours descending and end with a TOTAL row."""
     stats = aggregate_trace(trace_file)
@@ -271,5 +296,26 @@ def test_build_table_handles_process_absent_from_baseline(trace_file: Path) -> N
     candidate = aggregate_trace(trace_file)
     baseline = {k: v for k, v in candidate.items() if k != "MINIMAP2"}
     table = build_table(baseline, candidate)
-    assert "| MINIMAP2 | 0→1 " in table
+    assert "| MINIMAP2 | 0.0 min |" in table
     assert "new" in table
+
+
+def test_warn_on_task_count_mismatch(
+    trace_file: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Differing task counts warn, since the runs may not be comparable."""
+    candidate = aggregate_trace(trace_file)
+    baseline = {k: v for k, v in candidate.items() if k != "FASTQC"}
+    with caplog.at_level(logging.WARNING):
+        warn_on_task_count_mismatch(baseline, candidate)
+    assert "FASTQC: task count differs between runs (0 vs 1)" in caplog.text
+
+
+def test_warn_on_task_count_mismatch_silent_when_equal(
+    trace_file: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Identical cohorts produce no warning."""
+    stats = aggregate_trace(trace_file)
+    with caplog.at_level(logging.WARNING):
+        warn_on_task_count_mismatch(stats, stats)
+    assert caplog.text == ""

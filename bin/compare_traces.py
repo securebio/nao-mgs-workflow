@@ -15,6 +15,9 @@ Only tasks with status == COMPLETED are counted. Tasks are grouped by the leaf
 component of the `process` column, so `RUN:PROFILE:MINIMAP2` is reported as
 `MINIMAP2`; distinct full paths that share a leaf are aggregated together.
 
+Column headers follow the reporting convention in .claude/benchmarking.md, so
+the table can be pasted into a PR description unmodified.
+
 Usage:
     python bin/compare_traces.py \\
         --baseline trace_dev.tsv --candidate trace_pr.tsv \\
@@ -242,22 +245,55 @@ def format_delta(baseline: float, candidate: float) -> str:
     return f"{(candidate - baseline) / baseline * 100:+.1f}%"
 
 
-def build_table(
+def warn_on_task_count_mismatch(
     baseline: dict[str, ProcessStats],
     candidate: dict[str, ProcessStats],
-) -> str:
-    """Render the per-process comparison as a markdown table.
+) -> None:
+    """Log a warning where the two runs executed different numbers of tasks.
+
+    A differing task count usually means the two runs processed different
+    cohorts, which makes the totals incomparable. The reporting convention in
+    .claude/benchmarking.md has no column for task counts, so this surfaces as
+    a log warning rather than in the table.
 
     Args:
         baseline (dict[str, ProcessStats]): Baseline run timings
         candidate (dict[str, ProcessStats]): Candidate run timings
+    """
+    for name in sorted(set(baseline) | set(candidate)):
+        base = baseline.get(name, ProcessStats()).tasks
+        cand = candidate.get(name, ProcessStats()).tasks
+        if base != cand:
+            logger.warning(
+                f"{name}: task count differs between runs ({base} vs {cand}); "
+                "the two runs may not be comparable"
+            )
+
+
+def build_table(
+    baseline: dict[str, ProcessStats],
+    candidate: dict[str, ProcessStats],
+    baseline_label: str = "dev",
+    candidate_label: str = "PR",
+) -> str:
+    """Render the per-process comparison as a markdown table.
+
+    Column headers and alignment follow the reporting convention in
+    .claude/benchmarking.md, so the output can be pasted into a PR description
+    unmodified.
+
+    Args:
+        baseline (dict[str, ProcessStats]): Baseline run timings
+        candidate (dict[str, ProcessStats]): Candidate run timings
+        baseline_label (str): Column label for the baseline run
+        candidate_label (str): Column label for the candidate run
     Returns:
         str: Markdown table with a trailing TOTAL row
     """
     header = (
-        "| Process | Tasks | Runtime base (min) | Runtime cand (min) | Δ runtime "
-        "| cpu-h base | cpu-h cand | Δ cpu-h |\n"
-        "| --- | --- | --- | --- | --- | --- | --- | --- |"
+        f"| Scope | {baseline_label} runtime | {candidate_label} runtime | Δ runtime "
+        f"| {baseline_label} cpu-h | {candidate_label} cpu-h | Δ cpu-h |\n"
+        "|---|---:|---:|---:|---:|---:|---:|"
     )
     rows = []
     names = sorted(
@@ -277,8 +313,8 @@ def build_table(
             base = baseline.get(name, ProcessStats())
             cand = candidate.get(name, ProcessStats())
         rows.append(
-            f"| {name} | {base.tasks}→{cand.tasks} "
-            f"| {base.runtime_s / 60:.1f} | {cand.runtime_s / 60:.1f} "
+            f"| {name} "
+            f"| {base.runtime_s / 60:.1f} min | {cand.runtime_s / 60:.1f} min "
             f"| {format_delta(base.runtime_s, cand.runtime_s)} "
             f"| {base.cpu_hours:.2f} | {cand.cpu_hours:.2f} "
             f"| {format_delta(base.cpu_hours, cand.cpu_hours)} |"
@@ -313,6 +349,12 @@ def parse_arguments() -> argparse.Namespace:
         "(default: all processes)",
     )
     parser.add_argument(
+        "--baseline-label", default="dev", help="Column label for the baseline run"
+    )
+    parser.add_argument(
+        "--candidate-label", default="PR", help="Column label for the candidate run"
+    )
+    parser.add_argument(
         "--out", type=Path, default=None, help="Write the table here as well as stdout"
     )
     return parser.parse_args()
@@ -332,7 +374,8 @@ def main() -> None:
     if not baseline and not candidate:
         raise ValueError(f"No COMPLETED tasks matched pattern {args.pattern!r}")
 
-    table = build_table(baseline, candidate)
+    warn_on_task_count_mismatch(baseline, candidate)
+    table = build_table(baseline, candidate, args.baseline_label, args.candidate_label)
     print(table)
     if args.out:
         args.out.write_text(table + "\n")
