@@ -37,28 +37,44 @@ process MINIMAP2 {
         tuple val(sample), path("${sample}_${params_map.suffix}_minimap2_unmapped.fastq.gz"), emit: reads_unmapped
         tuple val(sample), path("input_${reads}"), emit: input
     script:
-        def extractCmd = reads.toString().endsWith(".gz") ? "zcat" : "cat"
         def sam = "${sample}_${params_map.suffix}_minimap2_mapped.sam.gz"
         def al = "${sample}_${params_map.suffix}_minimap2_mapped.fastq.gz"
         def un = "${sample}_${params_map.suffix}_minimap2_unmapped.fastq.gz"
+        // Four consumers run concurrently (minimap2 plus three compressors), so
+        // split the allocation rather than giving each pigz every core.
+        def pigz_threads = Math.max(1, (task.cpus as int).intdiv(4))
+        def isGz = reads.toString().endsWith(".gz")
         """
         set -eou pipefail
         # Download Minimap2 index if not already present
         idx_local_path=\$(download_db.py "${index_dir}" "${params_map.db_download_timeout}")
-        # Run pipeline
-        # Outputs a SAM file for all reads, which is then partitioned based on alignment status
-        #   - First branch (samtools view -u -f 4 -) filters SAM to unaligned reads and saves FASTQ
-        #   - Second branch (samtools view -u -F 4 -) filters SAM to aligned reads and saves FASTQ
-        #   - Third branch (samtools view -h -F 4 -) also filters SAM to aligned reads and saves SAM
-        ${extractCmd} ${reads} \
-            | minimap2 -a -t ${task.cpus} ${params_map.alignment_params} \${idx_local_path}/mm2_index.mmi /dev/fd/0 \
-            | tee \
-                >(samtools view -u -f 4 - \
-                    | samtools fastq - | gzip -c > ${un}) \
-                >(samtools view -u -F 4 - \
-                    | samtools fastq - | gzip -c > ${al}) \
-            | samtools view -h -F 4 - \
-            ${ params_map.remove_sq ? "| grep -v '^@SQ'" : "" } | gzip -c > ${sam}
+        tmpdir=\$(mktemp -d)
+        trap 'rm -rf "\${tmpdir}"' EXIT
+        PIDS=()
+        # Named FIFOs, not `>(...)`: process substitution hides the subshell PID,
+        # so the script can exit before a compressor writes its gzip trailer and
+        # silently truncate the output. See modules/local/nucleaze/main.nf.
+        mkfifo "\${tmpdir}/un.fifo" "\${tmpdir}/al.fifo"
+        # Partition the SAM stream by alignment status:
+        #   - unmapped branch (samtools view -u -f 4 -) saves unaligned reads as FASTQ
+        #   - mapped branch (samtools view -u -F 4 -) saves aligned reads as FASTQ
+        #   - main pipeline (samtools view -h -F 4 -) saves aligned reads as SAM
+        # `view -u` emits uncompressed BAM into `fastq`, so neither needs -@; all
+        # compression is done by pigz.
+        ( samtools view -u -f 4 - < "\${tmpdir}/un.fifo" \\
+            | samtools fastq - | pigz -p ${pigz_threads} -1 -c > ${un} ) & PIDS+=(\$!)
+        ( samtools view -u -F 4 - < "\${tmpdir}/al.fifo" \\
+            | samtools fastq - | pigz -p ${pigz_threads} -1 -c > ${al} ) & PIDS+=(\$!)
+        # Ordinary gzip can't be inflated in parallel; pigz only adds helper
+        # threads for read/write, so cap the decompressor at 2.
+        ${isGz ? "pigz -dc -p 2" : "cat"} ${reads} \\
+            | minimap2 -a -t ${task.cpus} ${params_map.alignment_params} \${idx_local_path}/mm2_index.mmi /dev/fd/0 \\
+            | tee "\${tmpdir}/un.fifo" "\${tmpdir}/al.fifo" \\
+            | samtools view -h -F 4 - \\
+            ${ params_map.remove_sq ? "| grep -v '^@SQ'" : "" } | pigz -p ${pigz_threads} -1 -c > ${sam}
+        # Let the branch compressors flush their gzip trailers before exiting,
+        # otherwise the .gz outputs truncate. A failing branch trips errexit.
+        for pid in "\${PIDS[@]}"; do wait "\${pid}"; done
         # Link input to output for testing
         ln -s ${reads} input_${reads}
         """
@@ -94,17 +110,21 @@ process MINIMAP2_NON_STREAMED {
         #   - Third branch (samtools view -h -F 4 -) also filters SAM to aligned reads and saves SAM
         minimap2 -a -t ${task.cpus} ${params_map.alignment_params} ${idx} ${reads} --split-prefix "mm2_split_" > complete_sam.sam
 
+        # The three passes run sequentially, so each pigz gets the full
+        # allocation. `view -u` emits uncompressed BAM into `fastq`, so neither
+        # needs -@; all compression is done by pigz.
+
         # Filter SAM to unaligned reads and save FASTQ
         samtools view -u -f 4 complete_sam.sam \\
-            | samtools fastq - | gzip -c > ${un}
+            | samtools fastq - | pigz -p ${task.cpus} -1 -c > ${un}
 
         # Filter SAM to aligned reads and save FASTQ
         samtools view -u -F 4 complete_sam.sam \\
-            | samtools fastq - | gzip -c > ${al}
+            | samtools fastq - | pigz -p ${task.cpus} -1 -c > ${al}
 
         # Filter SAM to aligned reads and save SAM
         samtools view -h -F 4 complete_sam.sam \\
-            ${ params_map.remove_sq ? "| grep -v '^@SQ'" : "" } | gzip -c > ${sam}
+            ${ params_map.remove_sq ? "| grep -v '^@SQ'" : "" } | pigz -p ${task.cpus} -1 -c > ${sam}
 
         # Remove temporary files
         rm complete_sam.sam

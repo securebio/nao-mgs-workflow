@@ -38,6 +38,8 @@
 - Publish a `rust-tools:stable` container image by adding `stable` to the `rust-tools.yml` push triggers and deriving the ECR image tag from the branch name (CI only; no pipeline change).
 - Gate the Trivy container vulnerability scan (`scan-containers`) behind a paths-filter so it only runs when `containers/**` or `configs/containers.config` change.
 - Add a weekly scheduled Trivy container scan (`.github/workflows/scheduled-trivy-triage.yml`) that invokes the `triage-trivy` skill via `claude-code-action` to open a draft triage PR against `dev` when HIGH/CRITICAL findings are present (CI tooling only; no pipeline change).
+- Speed up the `MINIMAP2` and `MINIMAP2_NON_STREAMED` modules by replacing single-threaded `gzip`/`zcat` with parallel `pigz` for SAM/FASTQ (de)compression, and add `pigz` to the `minimap2_samtools` container. Output file contents are unchanged, but the published `.gz` files are no longer byte-identical to previous versions, as compression drops to level 1.
+    - Fix a latent bug in `MINIMAP2` where the task could exit before a compressor had flushed its gzip trailer, silently truncating outputs, by fanning out through named FIFOs and waiting on the captured compressor PIDs instead of `tee >(...)`.
 
 # v3.2.2.0
 
