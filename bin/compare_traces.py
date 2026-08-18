@@ -296,13 +296,16 @@ def build_table(
         "|---|---:|---:|---:|---:|---:|---:|"
     )
     rows = []
+    # Name breaks ties: cpu-hours alone would leave equal-cost processes in
+    # set-iteration order, which varies between runs and adds noise to diffs.
     names = sorted(
         set(baseline) | set(candidate),
         key=lambda n: (
             -max(
                 baseline.get(n, ProcessStats()).cpu_hours,
                 candidate.get(n, ProcessStats()).cpu_hours,
-            )
+            ),
+            n,
         ),
     )
     for name in [*names, "TOTAL"]:

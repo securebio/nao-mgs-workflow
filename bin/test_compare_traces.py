@@ -291,6 +291,34 @@ def test_build_table_orders_by_cost_and_totals(trace_file: Path) -> None:
     assert table.count("+0.0%") == 2 * len(lines[2:])
 
 
+def test_build_table_breaks_cost_ties_by_name(tmp_path: Path) -> None:
+    """Equal-cost processes sort by name, so table order is reproducible.
+
+    Without a secondary key these would come out in set-iteration order, which
+    varies between interpreter runs.
+    """
+    path = tmp_path / "trace.tsv"
+    path.write_text(
+        "\n".join(
+            [
+                TRACE_HEADER,
+                trace_row("1", "RUN:X:ZEBRA", cpus="4"),
+                trace_row("2", "RUN:X:ALPHA", cpus="4"),
+                trace_row("3", "RUN:X:MIKE", cpus="4"),
+            ]
+        )
+        + "\n"
+    )
+    stats = aggregate_trace(path)
+    lines = build_table(stats, stats).splitlines()
+    assert [line.split("|")[1].strip() for line in lines[2:]] == [
+        "ALPHA",
+        "MIKE",
+        "ZEBRA",
+        "**TOTAL**",
+    ]
+
+
 def test_build_table_handles_process_absent_from_baseline(trace_file: Path) -> None:
     """A process only present in the candidate is reported as new, not dropped."""
     candidate = aggregate_trace(trace_file)
