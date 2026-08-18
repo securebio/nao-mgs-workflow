@@ -1,46 +1,13 @@
 #!/usr/bin/env python3
 DESC = """
-Deterministically downsample a TSV to at most N rows, selecting rows by hash of a key column.
+Deterministically downsample a TSV to at most N rows, keeping the rows whose key column
+hashes to the smallest values ("bottom-N sketch"). The sample is uniform in the key,
+exactly min(N, n_rows) rows, stable across re-runs and input orderings (assuming unique
+keys, which CHECK_TSV_DUPLICATES enforces upstream), and nested in N: raising N only
+ever adds rows. Both the guarantee and the cap are per file.
 
-Selection keeps the N rows whose key hashes to the smallest value ("bottom-N sketch").
-Because the hash is a pure function of the key, this yields:
-
-- A uniform random sample of the input rows, with respect to the key.
-- Exactly min(N, n_rows) output rows, without needing to know n_rows in advance.
-- Identical output for an identical set of input keys, regardless of the order in which
-  the rows appear and of how many times the pipeline is re-run.
-- A sample that is nested in N: raising N only ever adds rows to the selection.
-
-The order-independence is what makes this suitable for a Nextflow pipeline: the selection
-is stable under `-resume` and under re-running the workflow, and it does not depend on the
-order in which upstream processes happened to emit rows.
-
-Note that the guarantee is per file, and so is the cap: each file is sampled
-independently against its own N. The same keys divided differently across files therefore
-give a different overall selection, so a caller that wants a group sampled as a unit must
-present it as a single file. See test_downsample_is_independent_per_file for a worked
-example of the difference.
-
-Keys are assumed unique within a file; upstream, CHECK_TSV_DUPLICATES enforces this on
-seq_id. Given unique keys and a 128-bit digest, hash ties cannot occur in practice, which
-is what makes the selection strictly order-independent rather than merely deterministic.
-If duplicate keys are present, rows sharing a key are selected or rejected independently
-and the order-independence guarantee no longer holds.
-
-Performance notes, in rough order of how much they matter:
-
-- When every row is retained (n_sample >= n_rows, as on the long-read path where the cap
-  is set high enough to keep everything), the input is copied verbatim instead of being
-  decompressed and recompressed to reproduce itself. On a 300k-row, 66-column gzipped
-  table this is the difference between ~18 s and ~0.01 s.
-- Hashing is deferred until the row count provably exceeds the cap, so the
-  everything-retained case does no hashing at all.
-- Only the key field is split out of each line, rather than materialising every field of
-  a wide row in order to read one of them.
-- Otherwise the file is read twice: pass one hashes keys and retains only the (hash, row
-  index) of the current best N candidates, pass two copies out the selected rows. This
-  keeps peak memory proportional to N *keys* rather than N *rows*, which matters because
-  long-read rows each carry a full read sequence.
+The file is read twice so peak memory scales with N keys rather than N rows; an input
+retained in full is copied verbatim rather than decompressed and recompressed.
 """
 
 ###########
@@ -101,15 +68,9 @@ def open_by_suffix(filename: str, mode: str = "r") -> IO[str]:
 def hash_key(key: str) -> int:
     """Map a key string to a pseudorandom integer in [0, 2**128).
 
-    Uses BLAKE2s rather than the built-in hash(), which is randomly salted per
-    interpreter process and would therefore give a different sample on every run.
-    BLAKE2s is tuned for short inputs, which is what keys are; BLAKE2b at the same
-    digest size is measurably slower here.
-
-    The digest is deliberately wide enough that collisions between distinct keys are
-    unreachable at any plausible input size, so the selection never has to break a tie.
-    A 32-bit hash such as CRC32 would be several times faster but would collide with
-    ~50% probability by 77,000 keys, silently voiding the order-independence guarantee.
+    Uses BLAKE2s rather than the built-in hash(), which is salted per interpreter
+    process. The 128-bit digest keeps collisions between distinct keys unreachable
+    (a 32-bit hash would collide by ~77,000 keys), so ties never need breaking.
 
     Args:
         key: The key string to hash.
@@ -133,17 +94,12 @@ def read_data_lines(input_file: IO[str]) -> Iterator[str]:
         Full lines, including the trailing newline.
     """
     for line in input_file:
-        # isspace() short-circuits on the first non-space character, so this costs
-        # almost nothing on real rows and avoids allocating a stripped copy of each.
         if not line.isspace():
             yield line
 
 
 def read_key(line: str, key_index: int) -> str:
-    """Extract the key column from a TSV line.
-
-    Splits only as far as the key field rather than splitting the whole line, so reading
-    one column out of a wide row does not allocate a string per column.
+    """Extract the key column from a TSV line, splitting only as far as needed.
 
     Args:
         line: Full TSV line.
@@ -169,43 +125,35 @@ def read_key(line: str, key_index: int) -> str:
 def select_indices(keys: Iterator[str], n_sample: int) -> tuple[set[int] | None, int]:
     """Find the row indices of the n_sample keys with the smallest hash values.
 
-    Keys are buffered unhashed until the row count exceeds n_sample, at which point the
-    buffer is converted to a bounded max-heap keyed on the negated hash. Inputs that fit
-    entirely under the cap are therefore never hashed at all.
-
     Args:
         keys: Iterator of key values, in row order.
-        n_sample: Maximum number of rows to retain. Non-positive values retain nothing.
+        n_sample: Maximum number of rows to retain. Must be non-negative.
 
     Returns:
         A tuple of (selected 0-based row indices, total number of rows seen). The first
         element is None when every row was retained, which lets the caller skip
         rewriting the file altogether.
+
+    Raises:
+        ValueError: If n_sample is negative.
     """
-    if n_sample <= 0:
+    if n_sample < 0:
+        msg = f"n_sample must be non-negative, got {n_sample}"
+        raise ValueError(msg)
+    if n_sample == 0:
         return set(), sum(1 for _ in keys)
-    # Until the cap is exceeded, keys are held unhashed in `pending`. After that `heap`
-    # takes over, holding (-hash, index) so heapq's min-heap behaves as a max-heap:
-    # heap[0] is then the largest retained hash, i.e. the entry a better candidate should
-    # evict. With unique keys the index is never reached as a comparison tiebreak.
-    pending: list[tuple[str, int]] = []
-    heap: list[tuple[int, int]] | None = None
+    # The heap holds (-hash, index) so heapq's min-heap behaves as a max-heap: heap[0]
+    # is the largest retained hash, i.e. the entry a better candidate should evict.
+    heap: list[tuple[int, int]] = []
     n_total = 0
     for index, key in enumerate(keys):
         n_total += 1
-        if heap is None:
-            pending.append((key, index))
-            if len(pending) > n_sample:
-                # Now provably more rows than the cap, so the hashes are needed
-                heap = [(-hash_key(k), i) for k, i in pending]
-                heapq.heapify(heap)
-                heapq.heappop(heap)  # drop the worst candidate, back down to n_sample
-                pending = []
-        else:
-            entry = (-hash_key(key), index)
-            if entry[0] > heap[0][0]:
-                heapq.heapreplace(heap, entry)
-    if heap is None:
+        entry = (-hash_key(key), index)
+        if len(heap) < n_sample:
+            heapq.heappush(heap, entry)
+        elif entry[0] > heap[0][0]:
+            heapq.heapreplace(heap, entry)
+    if n_total <= n_sample:
         return None, n_total
     return {index for _neg_hash, index in heap}, n_total
 
