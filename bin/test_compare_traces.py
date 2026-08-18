@@ -344,6 +344,7 @@ def test_warn_on_task_count_mismatch_silent_when_equal(
 ) -> None:
     """Identical cohorts produce no warning."""
     stats = aggregate_trace(trace_file)
+    caplog.clear()
     with caplog.at_level(logging.WARNING):
         warn_on_task_count_mismatch(stats, stats)
-    assert caplog.text == ""
+    assert [r for r in caplog.records if r.levelno >= logging.WARNING] == []
