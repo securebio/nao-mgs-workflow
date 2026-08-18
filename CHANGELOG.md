@@ -41,6 +41,7 @@
 - Speed up the `MINIMAP2` and `MINIMAP2_SPLIT_INDEX` modules by replacing single-threaded `gzip`/`zcat` with parallel `pigz` for SAM/FASTQ (de)compression, and add `pigz` to the `minimap2_samtools` container. Output file contents are unchanged, but the published `.gz` files are no longer byte-identical to previous versions, as compression drops to level 1.
     - Fix a latent bug in `MINIMAP2` where the task could exit before a compressor had flushed its gzip trailer, silently truncating outputs, by fanning out through named FIFOs and waiting on the captured compressor PIDs instead of `tee >(...)`.
 - Stream the contaminant alignment in `MINIMAP2_SPLIT_INDEX` (renamed from `MINIMAP2_NON_STREAMED`) through the same named-FIFO fan-out as `MINIMAP2`, instead of writing a whole uncompressed SAM to disk and re-reading it three times. This removes a multi-gigabyte disk spill from the ONT contaminant-filtering step. The query stays a regular file and `--split-prefix` is retained, as multi-part indexes require both; output file contents are unchanged.
+- Fetch the contaminant index in `MINIMAP2_SPLIT_INDEX` through the shared `/scratch` download cache (`download_db.py`) instead of staging it into each task's work directory, matching the pipeline's other minimap2 call sites. The index is the largest in the pipeline (~18.5 GB) and Fusion was re-streaming it from S3 on every task, adding a fixed, largely single-threaded delay before mapping began; it is now downloaded once per instance. Output file contents are unchanged.
 
 # v3.2.2.0
 

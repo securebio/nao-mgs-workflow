@@ -95,8 +95,8 @@ process MINIMAP2_SPLIT_INDEX {
     tag "id=${sample}"
     input:
         tuple val(sample), path(reads)
-        path(index_dir)
-        val(params_map) // suffix, remove_sq, alignment_params
+        val(index_dir)
+        val(params_map) // suffix, remove_sq, alignment_params, db_download_timeout
     output:
         tuple val(sample), path("${sample}_${params_map.suffix}_minimap2_mapped.sam.gz"), emit: sam
         tuple val(sample), path("${sample}_${params_map.suffix}_minimap2_mapped.fastq.gz"), emit: reads_mapped
@@ -104,7 +104,6 @@ process MINIMAP2_SPLIT_INDEX {
         tuple val(sample), path("${sample}_${params_map.suffix}_minimap2_in.fastq.gz"), emit: input
     script:
         def suffix = params_map.suffix
-        def idx = "${index_dir}/mm2_index.mmi"
         def sam = "${sample}_${suffix}_minimap2_mapped.sam.gz"
         def al = "${sample}_${suffix}_minimap2_mapped.fastq.gz"
         def un = "${sample}_${suffix}_minimap2_unmapped.fastq.gz"
@@ -113,6 +112,11 @@ process MINIMAP2_SPLIT_INDEX {
         def pigz_threads = task.cpus as int
         """
         set -euo pipefail
+        # Fetch the index through the shared /scratch cache rather than letting
+        # Nextflow stage it. This is the largest index in the pipeline (~18.5 GB),
+        # and staging it makes Fusion re-stream it from S3 on every task; the
+        # cache is populated once per instance instead.
+        idx_local_path=\$(download_db.py "${index_dir}" "${params_map.db_download_timeout}")
         tmpdir=\$(mktemp -d)
         trap 'rm -rf "\${tmpdir}"' EXIT
         PIDS=()
@@ -132,7 +136,7 @@ process MINIMAP2_SPLIT_INDEX {
             | samtools fastq - | pigz -p ${pigz_threads} -1 -c > ${al} ) & PIDS+=(\$!)
         # --split-prefix scratch files stay in the task work directory, which is
         # sized for the run; \${tmpdir} only carries the FIFOs.
-        minimap2 -a -t ${task.cpus} ${params_map.alignment_params} ${idx} ${reads} --split-prefix "mm2_split_" \\
+        minimap2 -a -t ${task.cpus} ${params_map.alignment_params} \${idx_local_path}/mm2_index.mmi ${reads} --split-prefix "mm2_split_" \\
             | tee "\${tmpdir}/un.fifo" "\${tmpdir}/al.fifo" \\
             | samtools view -h -F 4 - \\
             ${ params_map.remove_sq ? "| grep -v '^@SQ'" : "" } | pigz -p ${pigz_threads} -1 -c > ${sam}
