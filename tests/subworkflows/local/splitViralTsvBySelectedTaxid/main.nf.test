@@ -51,6 +51,14 @@ nextflow_workflow {
             assert workflow.out.tsv.collect{it[1]}.flatten().size() == 0
             // FASTQ output should be empty
             assert workflow.out.fastq.collect{it[1]}.flatten().size() == 0
+            // annotated is not filtered, so unlike tsv it still emits one table per
+            // group -- header-only, and already shaped for consumers
+            assert workflow.out.annotated.size() == 1
+            def lines = path(workflow.out.annotated[0][1]).linesGzip
+            assert lines.size() == 1
+            def header = lines[0].split("\t") as List
+            assert header.contains("selected_taxid")
+            assert !header.contains("taxid_species")
         }
     }
 
@@ -111,6 +119,33 @@ nextflow_workflow {
             def fastqs_interleaved = workflow.out.fastq.collectMany{it[1]}.collect{path(it).fastq}
             for (int i=0; i < tabs_part_2.size(); i++) {
                 assert tabs_part_2[i].rowCount == fastqs_interleaved[i].sequences.size() / 2
+            }
+            // The annotated table must hold every input read exactly once, so a consumer
+            // can use it in place of reassembling the partitions
+            def tabs_annotated = workflow.out.annotated.collect{path(it[1]).csv(sep: "\t", decompress: true)}
+            assert tabs_annotated.size() == tabs_in.size()
+            for (int i=0; i < tabs_annotated.size(); i++) {
+                assert tabs_annotated[i].rowCount == tabs_in[i].rowCount
+                assert tabs_annotated[i].columns["seq_id"].toSorted() == tabs_in[i].columns["seq_id"].toSorted()
+                // It carries selected_taxid, which is what callers need it for...
+                assert tabs_annotated[i].columnNames.contains("selected_taxid")
+                // ...but not taxid_species, the scaffolding used to derive it
+                assert !tabs_annotated[i].columnNames.contains("taxid_species")
+                // Otherwise identical to the input columns
+                assert tabs_annotated[i].columnNames == tabs_in[i].columnNames + ["selected_taxid"]
+            }
+            // Every read's selected_taxid must match the partition it was placed in, since
+            // that is the guarantee a consumer joining the two together relies on
+            def part_taxids = [:]
+            workflow.out.tsv[0][1].each { f ->
+                def taxid = (f.toString() =~ /partition_(\d+)_/)[0][1]
+                path(f).csv(sep: "\t", decompress: true).columns["seq_id"].each { id -> part_taxids[id] = taxid }
+            }
+            def ann = tabs_annotated[0]
+            def ann_ids = ann.columns["seq_id"]
+            def ann_sel = ann.columns["selected_taxid"]
+            for (int i = 0; i < ann_ids.size(); i++) {
+                assert ann_sel[i].toString() == part_taxids[ann_ids[i]]
             }
         }
     }

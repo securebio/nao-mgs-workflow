@@ -1,5 +1,6 @@
 # v3.2.3.0-dev
 
+- Add an `annotated` output to `SPLIT_VIRAL_TSV_BY_SELECTED_TAXID`: the whole joined table before partitioning, with `selected_taxid` added and `taxid_species` dropped. Existing outputs are unchanged. Nothing consumes it yet, so it costs one extra task per sample group until the consumer lands.
 - Add a `VALIDATE_SAMPLED_READS` subworkflow that computes the taxonomic distance between original and validated assignments, keyed on `seq_id`. Not yet called by any workflow.
 - Add a `DOWNSAMPLE_VIRAL_ASSIGNMENTS` subworkflow that downsamples each per-species hit partition and renders the retained reads as FASTA, optionally confining the sample to duplicate-group exemplars. Not yet called by any workflow.
 - Add an `ANNOTATE_VALIDATION_STATUS` module that joins validation results onto a full viral hits TSV and appends a `validation_status` column (`aligned` / `no_alignment` / `not_sampled`). Not yet called by any workflow.
