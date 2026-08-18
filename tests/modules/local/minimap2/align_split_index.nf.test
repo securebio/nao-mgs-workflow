@@ -18,6 +18,21 @@ nextflow_process {
                 """
             }
         }
+        run("MINIMAP2_INDEX_MULTIPART") {
+            script "tests/helpers/minimap2_multipart_index.nf"
+            process {
+                """
+                input[0] = [
+                    file("${projectDir}/test-data/toy-data/test-random.fasta"),
+                    file("${projectDir}/test-data/toy-data/norovirus_GI.fasta"),
+                    file("${projectDir}/test-data/toy-data/test-genome-exclude.fasta"),
+                    file("${projectDir}/test-data/tiny-index/genomes/rrna.fasta"),
+                    file("${projectDir}/test-data/tiny-index/genomes/phage.fasta"),
+                ]
+                input[1] = "2k"
+                """
+            }
+        }
     }
 
     test("When run against contaminant index, should correctly partition reads based on alignment status") {
@@ -72,6 +87,51 @@ nextflow_process {
 
             // Verify input FASTQ contains all reads
             assert input_reads == fastq_read_ids_mapped + fastq_read_ids_unmapped
+        }
+    }
+
+    // The index above is single-part, so it does not cover the --split-prefix
+    // merge that is this process's whole reason for existing. This runs the same
+    // partitioning assertions against a deliberately multi-part index, where
+    // minimap2 re-reads the query per block and merges the per-block output.
+    test("Against a multi-part index, should partition reads without losing any") {
+        tag "expect_success"
+
+        when {
+            params {
+                params_map = [
+                    suffix: "multipart",
+                    remove_sq: false,
+                    alignment_params: ""
+                ]
+            }
+            process {
+                '''
+                input[0] = LOAD_SAMPLESHEET.out.samplesheet
+                input[1] = MINIMAP2_INDEX_MULTIPART.out
+                input[2] = params.params_map
+                '''
+            }
+        }
+        then {
+            assert process.success
+
+            def fastq_read_ids_mapped = path(process.out.reads_mapped[0][1]).fastq.readNames.toSet()
+            def fastq_read_ids_unmapped = path(process.out.reads_unmapped[0][1]).fastq.readNames.toSet()
+            def input_reads = path(process.out.input[0][1]).fastq.readNames.toSet()
+
+            // Every input read is accounted for exactly once. Streaming the
+            // merged output through the fan-out must not drop or duplicate
+            // reads across index blocks.
+            assert fastq_read_ids_mapped.intersect(fastq_read_ids_unmapped).size() == 0
+            assert input_reads == fastq_read_ids_mapped + fastq_read_ids_unmapped
+            assert !input_reads.isEmpty()
+
+            // The SAM branch must agree with the mapped-FASTQ branch.
+            def sam_read_ids = sam(process.out.sam[0][1]).getSamLines()
+                .collect { line -> line.split('\t')[0] }
+                .toSet()
+            assert sam_read_ids == fastq_read_ids_mapped
         }
     }
 

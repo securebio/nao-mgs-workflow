@@ -109,9 +109,8 @@ process MINIMAP2_SPLIT_INDEX {
         def al = "${sample}_${suffix}_minimap2_mapped.fastq.gz"
         def un = "${sample}_${suffix}_minimap2_unmapped.fastq.gz"
         def in2 = "${sample}_${suffix}_minimap2_in.fastq.gz"
-        // Four consumers run concurrently (minimap2 plus three compressors), so
-        // split the allocation rather than giving each pigz every core.
-        def pigz_threads = Math.max(1, (task.cpus as int).intdiv(4))
+        // Full allocation per compressor, as in MINIMAP2 above.
+        def pigz_threads = task.cpus as int
         """
         set -euo pipefail
         tmpdir=\$(mktemp -d)
