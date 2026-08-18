@@ -7,3 +7,5 @@ dependencies:
   - bioconda::multiqc=1.33
   # Forces urllib3 2.7.0 (came in transitively at 2.6.3) to address CVE-2026-44431, CVE-2026-44432.
   - conda-forge::urllib3=2.7.0
+  # Forces Pillow 12.3.0 (came in transitively at 12.2.0) to address CVE-2026-54058/54059/54060/55379/55380/59197/59199/59200/59204/59205.
+  - conda-forge::pillow=12.3.0
