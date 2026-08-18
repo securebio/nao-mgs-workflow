@@ -150,19 +150,6 @@ CVE-2026-4046 exp:2026-08-31
 # Our containers never invoke infocmp. Fix only in sid (6.6+).
 CVE-2025-69720 exp:2026-08-31
 
-# openssl (libssl3t64, openssl-provider-legacy): use-after-free in PKCS7_verify()
-# on crafted PKCS#7 / S/MIME messages with an empty digestAlgorithms field
-# (HIGH, DSA-6335-1). Fixed in Debian trixie 3.5.6-1~deb13u2, but the container
-# Dockerfile installs only `procps` (no apt upgrade) so openssl comes straight
-# from the base layer, and no published micromamba digest carries deb13u2 yet —
-# so the fix is not reachable via the permitted base-image bump. Applications
-# using CMS APIs are unaffected; the pipeline verifies no PKCS#7/S-MIME signatures
-# (openssl is linked only for TLS to known NCBI/AWS endpoints via curl/python).
-# Re-eval: a micromamba rebuild ships deb13u2 (bump the digest and drop this).
-# NB (2026-08-18): the current mambaorg/micromamba:latest now carries deb13u2, so a
-# base-image digest bump would clear this entry; deferred as it rebuilds all containers.
-CVE-2026-45447 exp:2026-08-31
-
 # openssl (libssl3t64, openssl-provider-legacy): unbounded memory growth in the QUIC
 # server path -- Initial packets for unknown connection IDs allocate channel objects
 # that queue unbounded until SSL_accept() drains them (HIGH). Debian marks it postponed
