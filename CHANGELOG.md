@@ -125,6 +125,7 @@
 
 - Make `bin/run-nf-test.sh` and `bin/run_nf_test_parallel.py` symlink-safe for dependent repos
 - Add authenticated ECR Public login to Trivy scan workflow to avoid anonymous pull rate limits
+- Add several Trivy CVEs to `.trivyignore` (no fix currently available; expiry set in June 2026 to force review)
 - Extract shared Groovy code for sentinel file generation to `lib/SentinelUtils.groovy`
 - Remove `logging/time.txt` and `logging_downstream/time.txt`; superseded by new sentinel JSONs
 - Make RUN workflow clearer and more readable by moving derived variables and conditional statements into subworkflows, including new `PREPARE_INPUT_LOGGING` and `EXTRACT_VIRAL_READS` subworkflows
@@ -375,6 +376,7 @@ This version involved numerous changes intended to make new releases easier, fas
     - Updated our PR process.
     - Updated our release process.
     - Added preference for using pytest over nf-test for Python unit tests.
+- Added `pyproject.toml` to the top level directory to standardize our Python file formatting and type checking rules.
 
 # v3.0.1.0
 
