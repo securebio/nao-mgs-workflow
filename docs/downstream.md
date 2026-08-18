@@ -350,17 +350,17 @@ B --> E[Left-join taxonomy DB into hits TSVs]
 D --> E
 E --> F[Partition joined TSV by taxid group]
 F --> G[Flatten channel]
-G --> H(Partitioned hits TSVs)
-G --> I[Extract read sequences from each hits TSV into interleaved FASTQ]
-I --> J(Partitioned FASTQ)
 E --> K[Drop species taxid column]
 K --> L(Unpartitioned annotated hits TSV)
+G --> H(Partitioned hits TSVs)
 style A fill:#fff,stroke:#000
 style C fill:#fff,stroke:#000
 style H fill:#000,color:#fff,stroke:#000
-style J fill:#000,color:#fff,stroke:#000
 style L fill:#000,color:#fff,stroke:#000
 ```
+
+> [!NOTE]
+> This subworkflow no longer extracts read sequences into FASTQ. Extraction happens in `DOWNSAMPLE_VIRAL_ASSIGNMENTS`, after downsampling, so only the reads actually being validated are ever converted.
 
 #### Downsample hits within each taxid group (`DOWNSAMPLE_VIRAL_ASSIGNMENTS`)
 
