@@ -1,21 +1,13 @@
 #!/usr/bin/env python3
 DESC = """
-Deterministically downsample a TSV to at most N rows, selecting the rows whose key
-column hashes to the smallest values ("bottom-N sketch"). Because the hash is a pure
-function of the key, the sample is uniform with respect to the key, has exactly
-min(N, n_rows) rows, is identical across re-runs and input orderings (so stable under
-Nextflow `-resume`), and is nested in N: raising N only ever adds rows.
+Deterministically downsample a TSV to at most N rows, keeping the rows whose key column
+hashes to the smallest values ("bottom-N sketch"). The sample is uniform in the key,
+exactly min(N, n_rows) rows, stable across re-runs and input orderings (assuming unique
+keys, which CHECK_TSV_DUPLICATES enforces upstream), and nested in N: raising N only
+ever adds rows. Both the guarantee and the cap are per file.
 
-Both the guarantee and the cap are per file: the same keys divided differently across
-files give a different overall selection, so a group that must be sampled as a unit has
-to arrive as a single file. Keys are assumed unique within a file (upstream,
-CHECK_TSV_DUPLICATES enforces this on seq_id); with duplicate keys the selection remains
-deterministic but not order-independent.
-
-The file is read twice -- pass one keeps only the (hash, row index) of the best N
-candidates, pass two copies out the selected rows -- so peak memory scales with N keys
-rather than N rows. When every row is retained (n_sample >= n_rows, as on the long-read
-path), the input is copied verbatim instead of being decompressed and recompressed.
+The file is read twice so peak memory scales with N keys rather than N rows; an input
+retained in full is copied verbatim rather than decompressed and recompressed.
 """
 
 ###########
