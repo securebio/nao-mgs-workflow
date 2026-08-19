@@ -73,9 +73,12 @@ nextflow_workflow {
             // `seqkit rmdup` kept M22245.1 from the smaller accession, which is
             // also the earlier chunk, so the surviving row must name that
             // assembly rather than the one contributing the other nine
-            // sequences. The two rows differ only on release_date, so pinning it
-            // too shows the whole row came from the assembly rmdup kept. csv()
-            // types the release_date column, hence the rendered comparison.
+            // sequences. Both assemblies carry byte-identical copies of the
+            // sequence, as an accession.version always must, so the metadata is
+            // the only place the choice is observable: the rows differ on
+            // release_date, hence pinning it alongside the accession. Which copy
+            // survives when the records themselves differ is concatenateGenomeFasta's
+            // test. csv() types release_date, hence the rendered comparison.
             def perAssembly = [
                 metadataIds,
                 metadata.columns["assembly_accession"],
