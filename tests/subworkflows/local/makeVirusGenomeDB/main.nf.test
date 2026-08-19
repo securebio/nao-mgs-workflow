@@ -7,19 +7,19 @@ nextflow_workflow {
     tag "subworkflow"
     tag "make_virus_genome_db"
 
-    // Murine adenovirus 1 (taxid 10530) is the one taxon in the production index
-    // whose assemblies package a shared sequence: GCA_000844265.1 holds only
-    // M22245.1, and GCA_023158175.1 holds M22245.1 plus nine others. That makes
-    // it the only way to exercise the dedup tie-break over real data, so the test
-    // config is bent in three places to let those two assemblies through:
-    //   - `datasets_summary_extra_args` drops `--assembly-level complete`; the two
+    // Murine adenovirus 1 (taxid 10530) has two assemblies with a shared sequence:
+    // GCA_000844265.1 with M22245.1 only, and GCA_023158175.1 with M22245.1
+    // and nine others.
+    //
+    // Production config has to be modified to let both assemblies through:
+    //   - `datasets_summary_extra_args` does not include `--assembly-level complete`. The two
     //     assemblies are Chromosome and Contig.
-    //   - `genome_patterns_exclude` is emptied. Production lists M22245.1 in
-    //     ref/hv_patterns_exclude.txt, which is why the duplicate never reaches
-    //     the published FASTA and why the tie-break has no live effect today.
-    //   - `virus_db` is a fixture. Murine adenovirus is not human-infecting, and
-    //     the tiny taxonomy the other index tests build does not carry taxid
-    //     10530 at all, so screen on `vertebrate` against a two-row table.
+    //   - `genome_patterns_exclude` is empty. Production lists M22245.1 in
+    //     ref/hv_patterns_exclude.txt.
+    //   - `virus_db` is a one-row fixture for 10530, which the tiny taxonomy the
+    //     other index tests build does not carry.
+    //   - `host_taxa_screen` is `vertebrate`. Murine adenovirus is not human-infecting.
+    //
     // With `viral_accession_chunk_size = 1` the two accessions land in chunk_0001
     // and chunk_0002, so this also covers the accession-sort and chunk-name-sort
     // links the tie-break depends on, which no module-level test can reach.
@@ -55,30 +55,19 @@ nextflow_workflow {
 
             assert "M22245.1" in fastaIds :
                 "The shared sequence should reach the published FASTA, got: ${fastaIds}"
-            assert metadataIds.toSet() == fastaIds :
+            // Sorted lists rather than sets, so a duplicate on either side is
+            // visible rather than collapsed before the comparison.
+            assert fastaIdList.toSorted() == metadataIds.toSorted() :
                 "Metadata and genome DB disagree; sequences with no row: " +
                 "${(fastaIds - metadataIds.toSet()).take(5)}, rows with no sequence: " +
                 "${(metadataIds.toSet() - fastaIds).take(5)}"
-            // M22245.1 is the sequence the FASTA and the metadata must agree on
-            // deduplicating: `seqkit rmdup` keeps one record and
-            // FILTER_METADATA_TO_FASTA keeps one row. Counting occurrences rather
-            // than comparing sets is what makes a duplicate on either side visible.
-            assert fastaIdList.count("M22245.1") == 1 :
-                "Expected one M22245.1 record in the genome DB, got " +
-                "${fastaIdList.count('M22245.1')}"
-            assert fastaIdList.countBy { it } == metadataIds.countBy { it } :
-                "Genome DB and metadata carry different numbers of copies per " +
-                "sequence: ${fastaIdList.countBy { it }} vs ${metadataIds.countBy { it }}"
+            assert fastaIdList.countBy { it }.every { id, n -> n == 1 } :
+                "Duplicated IDs: ${fastaIdList.countBy { it }.findAll { id, n -> n > 1 }}"
 
             // `seqkit rmdup` kept M22245.1 from the smaller accession, which is
-            // also the earlier chunk, so the surviving row must name that
+            // also the earlier chunk, so the surviving metadata row must name that
             // assembly rather than the one contributing the other nine
-            // sequences. Both assemblies carry byte-identical copies of the
-            // sequence, as an accession.version always must, so the metadata is
-            // the only place the choice is observable: the rows differ on
-            // release_date, hence pinning it alongside the accession. Which copy
-            // survives when the records themselves differ is concatenateGenomeFasta's
-            // test. csv() types release_date, hence the rendered comparison.
+            // sequences.
             def perAssembly = [
                 metadataIds,
                 metadata.columns["assembly_accession"],
