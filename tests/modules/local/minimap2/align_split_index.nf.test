@@ -137,4 +137,66 @@ nextflow_process {
         }
     }
 
+
+    test("Should skip sam and mapped outputs when their keep flags are false") {
+        tag "expect_success"
+        tag "keep_flags"
+        when {
+            params {
+            }
+            process {
+                '''
+                def minimap2_params = [
+                    suffix: "test",
+                    remove_sq: false,
+                    alignment_params: "",
+                    db_download_timeout: params.db_download_timeout,
+                    keep_sam: false,
+                    keep_mapped: false
+                ]
+                input[0] = LOAD_SAMPLESHEET.out.samplesheet
+                input[1] = "${params.ref_dir}/results/mm2-other-index"
+                input[2] = minimap2_params
+                '''
+            }
+        }
+        then {
+            assert process.success
+            assert process.out.sam.size() == 0
+            assert process.out.reads_mapped.size() == 0
+            assert process.out.reads_unmapped.size() == 1
+            def unmapped = path(process.out.reads_unmapped[0][1]).fastq.readNames.toSet()
+            def input_reads = path(process.out.input[0][1]).fastq.readNames.toSet()
+            assert !input_reads.isEmpty()
+            assert unmapped.every { it in input_reads }
+        }
+    }
+
+    test("Should fail when all three keep flags are false") {
+        tag "expect_failure"
+        tag "keep_flags"
+        when {
+            params {
+            }
+            process {
+                '''
+                def minimap2_params = [
+                    suffix: "test",
+                    remove_sq: false,
+                    alignment_params: "",
+                    db_download_timeout: params.db_download_timeout,
+                    keep_sam: false,
+                    keep_mapped: false,
+                    keep_unmapped: false
+                ]
+                input[0] = LOAD_SAMPLESHEET.out.samplesheet
+                input[1] = "${params.ref_dir}/results/mm2-other-index"
+                input[2] = minimap2_params
+                '''
+            }
+        }
+        then {
+            assert process.failed
+        }
+    }
 }
