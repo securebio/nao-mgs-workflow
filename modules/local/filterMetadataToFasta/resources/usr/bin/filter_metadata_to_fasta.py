@@ -4,10 +4,12 @@
 import argparse
 import csv
 import gzip
+import io
 import logging
 import time
+from collections.abc import Iterable, Iterator
 from datetime import UTC, datetime
-from typing import IO, cast
+from typing import IO, NamedTuple, cast
 
 
 class UTCFormatter(logging.Formatter):
@@ -40,6 +42,42 @@ ASSEMBLY_FIELDS = frozenset(
 )
 
 
+class MetadataSchema(NamedTuple):
+    """Positions of the metadata columns filtering depends on."""
+
+    fieldnames: list[str]
+    genome_id: int
+    assembly_accession: int
+    compared: list[int]
+
+
+def read_metadata_schema(fieldnames: list[str]) -> MetadataSchema:
+    """Locate the columns filtering depends on within a metadata header.
+    Args:
+        fieldnames: Column names from the metadata header row.
+    Returns:
+        Schema giving the index of each column filtering reads.
+    """
+    return MetadataSchema(
+        fieldnames=fieldnames,
+        genome_id=fieldnames.index("genome_id"),
+        assembly_accession=fieldnames.index("assembly_accession"),
+        compared=[i for i, f in enumerate(fieldnames) if f not in ASSEMBLY_FIELDS],
+    )
+
+
+def encode_row(row: list[str]) -> str:
+    """Render a row as a TSV line, quoting it as csv would."""
+    buffer = io.StringIO()
+    csv.writer(buffer, delimiter="\t", lineterminator="\n").writerow(row)
+    return buffer.getvalue()
+
+
+def decode_row(line: str) -> list[str]:
+    """Parse an encoded TSV line back into fields."""
+    return next(csv.reader(io.StringIO(line), delimiter="\t"))
+
+
 def read_fasta_genome_ids(fasta_path: str) -> set[str]:
     """Collect sequence IDs from a FASTA file's headers.
     The ID is the first whitespace-delimited token after '>'.
@@ -67,19 +105,105 @@ def read_fasta_genome_ids(fasta_path: str) -> set[str]:
     return ids
 
 
+def reconcile_duplicate(
+    genome_id: str, previous: list[str], row: list[str], schema: MetadataSchema
+) -> bool:
+    """Reconcile two metadata rows describing the same sequence.
+    Args:
+        genome_id: ID of the sequence both rows describe.
+        previous: Row kept for this sequence so far.
+        row: Newly encountered row for the same sequence.
+        schema: Positions of the metadata columns filtering depends on.
+    Returns:
+        Whether `row` supersedes `previous` as the row to keep.
+    Raises:
+        ValueError: If the rows disagree outside ASSEMBLY_FIELDS.
+    """
+    conflicts = [i for i in schema.compared if previous[i] != row[i]]
+    if conflicts:
+        raise ValueError(
+            f"Metadata rows for {genome_id} disagree on "
+            f"{', '.join(schema.fieldnames[i] for i in conflicts)}: "
+            f"{[previous[i] for i in conflicts]} vs "
+            f"{[row[i] for i in conflicts]}; the genome DB carries one "
+            "sequence under this ID, so there is no basis for choosing a row"
+        )
+    # Accessions are sorted before chunking and each chunk is concatenated in
+    # accession order, so the copy `seqkit rmdup` retains is the first
+    # occurrence: the one from the smallest assembly_accession.
+    accession = schema.assembly_accession
+    return row[accession] < previous[accession]
+
+
+def select_kept_rows(
+    reader: Iterator[list[str]], schema: MetadataSchema, fasta_ids: set[str]
+) -> tuple[dict[str, str], int, int]:
+    """Reduce metadata rows to one per sequence present in the FASTA.
+    Args:
+        reader: Metadata rows, positioned past the header.
+        schema: Positions of the metadata columns filtering depends on.
+        fasta_ids: Sequence IDs present in the genome FASTA.
+    Returns:
+        Tuple of (kept rows as encoded TSV lines keyed by genome_id, rows
+        dropped as absent, rows dropped as duplicates).
+    """
+    n_absent = n_duplicate = 0
+    # Rows are held encoded rather than parsed, costing one string per row
+    # instead of one per column. Peak memory tracks the number of sequences the
+    # FASTA retains, not the size of the metadata table, since rows for absent
+    # sequences are freed as they stream past; keep this step downstream of
+    # anything that shrinks the published FASTA.
+    kept: dict[str, str] = {}
+    for row in reader:
+        genome_id = row[schema.genome_id]
+        if genome_id not in fasta_ids:
+            n_absent += 1
+            continue
+        previous = kept.get(genome_id)
+        if previous is None:
+            kept[genome_id] = encode_row(row)
+            continue
+        # Duplicates are rare, so decoding the kept row here costs little.
+        if reconcile_duplicate(genome_id, decode_row(previous), row, schema):
+            kept[genome_id] = encode_row(row)
+        n_duplicate += 1
+    return kept, n_absent, n_duplicate
+
+
+def check_fasta_coverage(fasta_ids: set[str], kept: dict[str, str]) -> None:
+    """Check that every sequence in the genome FASTA has a metadata row.
+    Args:
+        fasta_ids: Sequence IDs present in the genome FASTA.
+        kept: Encoded metadata lines, keyed by genome_id.
+    Raises:
+        ValueError: If any sequence in the FASTA has no metadata row.
+    """
+    unmatched = sorted(fasta_ids - set(kept))
+    if unmatched:
+        raise ValueError(
+            f"{len(unmatched)} sequence(s) in the genome DB have no metadata row "
+            f"(e.g. {', '.join(unmatched[:5])}); RUN could not resolve them to a taxid"
+        )
+
+
+def write_metadata(
+    output_path: str, fieldnames: list[str], rows: Iterable[str]
+) -> None:
+    """Write a header and pre-encoded metadata lines to a gzipped TSV.
+    Args:
+        output_path: Output path for the filtered metadata TSV (gzip).
+        fieldnames: Column names to write as the header row.
+        rows: Metadata rows, already encoded as TSV lines.
+    """
+    with open_by_suffix(output_path, "w", newline="") as f_out:
+        f_out.write(encode_row(fieldnames))
+        f_out.writelines(rows)
+
+
 def filter_metadata(
     metadata_path: str, fasta_path: str, output_path: str
 ) -> tuple[int, int, int]:
     """Write out one metadata row per sequence present in the FASTA.
-    Rows whose genome_id is absent from the FASTA are dropped. Where several
-    rows share a genome_id — the same sequence packaged in more than one
-    assembly — the row kept is the one naming the lexicographically smallest
-    assembly_accession, which is the copy the FASTA carries: accessions are
-    sorted before chunking and each chunk is concatenated in accession order,
-    so the first occurrence `seqkit rmdup` retains is the smallest. Duplicates
-    must agree outside ASSEMBLY_FIELDS, since otherwise what the published table
-    says about a sequence would depend on which packaging of it survived
-    deduplication.
     Args:
         metadata_path: Path to the genome metadata TSV, with a genome_id column.
         fasta_path: Path to the genome FASTA the metadata should describe.
@@ -92,50 +216,16 @@ def filter_metadata(
             ASSEMBLY_FIELDS.
     """
     fasta_ids = read_fasta_genome_ids(fasta_path)
-    n_absent = n_duplicate = 0
-    # Keyed by genome_id, in order of first appearance: metadata row order is
-    # preserved even when a later row supersedes an earlier one.
-    kept: dict[str, dict[str, str]] = {}
     with open_by_suffix(metadata_path, newline="") as f_in:
-        reader = csv.DictReader(f_in, delimiter="\t")
-        if reader.fieldnames is None:
+        reader = csv.reader(f_in, delimiter="\t")
+        fieldnames = next(reader, None)
+        if fieldnames is None:
             raise ValueError(f"Metadata {metadata_path} has no header row")
-        fieldnames = reader.fieldnames
-        compared = [f for f in fieldnames if f not in ASSEMBLY_FIELDS]
-        for row in reader:
-            genome_id = row["genome_id"]
-            if genome_id not in fasta_ids:
-                n_absent += 1
-                continue
-            previous = kept.get(genome_id)
-            if previous is None:
-                kept[genome_id] = row
-                continue
-            conflicts = [f for f in compared if previous[f] != row[f]]
-            if conflicts:
-                raise ValueError(
-                    f"Metadata rows for {genome_id} disagree on "
-                    f"{', '.join(conflicts)}: "
-                    f"{[previous[f] for f in conflicts]} vs "
-                    f"{[row[f] for f in conflicts]}; the genome DB carries one "
-                    "sequence under this ID, so there is no basis for choosing a row"
-                )
-            n_duplicate += 1
-            # Keep the copy CONCATENATE_GENOME_FASTA's `seqkit rmdup` kept.
-            if row["assembly_accession"] < previous["assembly_accession"]:
-                kept[genome_id] = row
-    unmatched = sorted(fasta_ids - set(kept))
-    if unmatched:
-        raise ValueError(
-            f"{len(unmatched)} sequence(s) in the genome DB have no metadata row "
-            f"(e.g. {', '.join(unmatched[:5])}); RUN could not resolve them to a taxid"
+        kept, n_absent, n_duplicate = select_kept_rows(
+            reader, read_metadata_schema(fieldnames), fasta_ids
         )
-    with open_by_suffix(output_path, "w", newline="") as f_out:
-        writer = csv.DictWriter(
-            f_out, fieldnames=fieldnames, delimiter="\t", lineterminator="\n"
-        )
-        writer.writeheader()
-        writer.writerows(kept.values())
+    check_fasta_coverage(fasta_ids, kept)
+    write_metadata(output_path, fieldnames, kept.values())
     n_out = len(kept)
     logger.info(
         "Wrote %d metadata row(s) for %d sequence(s), dropped %d row(s) describing "
