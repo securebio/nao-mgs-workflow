@@ -212,7 +212,11 @@ nextflow_process {
             assert process.out.reads_unmapped.size() == 1
             def unmapped = path(process.out.reads_unmapped[0][1]).fastq.readNames.toSet()
             def input_reads = path(process.out.input[0][1]).fastq.readNames.toSet()
-            assert !input_reads.isEmpty()
+            // A non-empty *proper* subset: the fixture has both mapped and
+            // unmapped reads, so neither an empty nor an all-input output is
+            // correct here, and both would otherwise pass a subset check.
+            assert !unmapped.isEmpty()
+            assert unmapped.size() < input_reads.size()
             assert unmapped.every { it in input_reads }
         }
     }

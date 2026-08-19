@@ -167,7 +167,11 @@ nextflow_process {
             assert process.out.reads_unmapped.size() == 1
             def unmapped = path(process.out.reads_unmapped[0][1]).fastq.readNames.toSet()
             def input_reads = path(process.out.input[0][1]).fastq.readNames.toSet()
-            assert !input_reads.isEmpty()
+            // A non-empty *proper* subset: the fixture has both mapped and
+            // unmapped reads, so neither an empty nor an all-input output is
+            // correct here, and both would otherwise pass a subset check.
+            assert !unmapped.isEmpty()
+            assert unmapped.size() < input_reads.size()
             assert unmapped.every { it in input_reads }
         }
     }
@@ -197,6 +201,40 @@ nextflow_process {
         }
         then {
             assert process.failed
+        }
+    }
+
+    test("Should skip the unmapped output when keep_unmapped is false") {
+        tag "expect_success"
+        tag "keep_flags"
+        when {
+            params {
+            }
+            process {
+                '''
+                def minimap2_params = [
+                    suffix: "test",
+                    remove_sq: false,
+                    alignment_params: "",
+                    db_download_timeout: params.db_download_timeout,
+                    keep_unmapped: false
+                ]
+                input[0] = LOAD_SAMPLESHEET.out.samplesheet
+                input[1] = "${params.ref_dir}/results/mm2-other-index"
+                input[2] = minimap2_params
+                '''
+            }
+        }
+        then {
+            assert process.success
+            assert process.out.reads_unmapped.size() == 0
+            assert process.out.sam.size() == 1
+            assert process.out.reads_mapped.size() == 1
+            def mapped = path(process.out.reads_mapped[0][1]).fastq.readNames.toSet()
+            def sam_ids = sam(process.out.sam[0][1]).getSamLines()
+                .collect { line -> line.split('\t')[0] }.toSet()
+            assert !mapped.isEmpty()
+            assert sam_ids == mapped
         }
     }
 }
