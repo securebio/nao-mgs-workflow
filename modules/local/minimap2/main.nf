@@ -32,9 +32,9 @@ process MINIMAP2 {
         val(index_dir)
         val(params_map) // suffix, remove_sq, alignment_params, db_download_timeout
     output:
-        tuple val(sample), path("${sample}_${params_map.suffix}_minimap2_mapped.sam.gz"), emit: sam
-        tuple val(sample), path("${sample}_${params_map.suffix}_minimap2_mapped.fastq.gz"), emit: reads_mapped
-        tuple val(sample), path("${sample}_${params_map.suffix}_minimap2_unmapped.fastq.gz"), emit: reads_unmapped
+        tuple val(sample), path("${sample}_${params_map.suffix}_minimap2_mapped.sam.gz"), emit: sam, optional: true
+        tuple val(sample), path("${sample}_${params_map.suffix}_minimap2_mapped.fastq.gz"), emit: reads_mapped, optional: true
+        tuple val(sample), path("${sample}_${params_map.suffix}_minimap2_unmapped.fastq.gz"), emit: reads_unmapped, optional: true
         tuple val(sample), path("input_${reads}"), emit: input
     script:
         def sam = "${sample}_${params_map.suffix}_minimap2_mapped.sam.gz"
@@ -47,6 +47,16 @@ process MINIMAP2 {
         // -8.7% cpu-hours against task.cpus/4 over eight real samples.
         def pigz_threads = task.cpus as int
         def isGz = reads.toString().endsWith(".gz")
+        // Callers routinely need only one or two of the three outputs; producing
+        // an unwanted one costs a samtools pass plus a compressor. See NUCLEAZE.
+        def keep_sam = params_map.get("keep_sam", true)
+        def keep_mapped = params_map.get("keep_mapped", true)
+        def keep_unmapped = params_map.get("keep_unmapped", true)
+        if (!keep_sam && !keep_mapped && !keep_unmapped) {
+            throw new IllegalArgumentException(
+                "MINIMAP2: at least one of keep_sam / keep_mapped / keep_unmapped must be true"
+            )
+        }
         """
         set -eou pipefail
         # Download Minimap2 index if not already present
@@ -54,27 +64,33 @@ process MINIMAP2 {
         tmpdir=\$(mktemp -d)
         trap 'rm -rf "\${tmpdir}"' EXIT
         PIDS=()
-        # Named FIFOs, not `>(...)`: process substitution hides the subshell PID,
-        # so the script can exit before a compressor writes its gzip trailer and
-        # silently truncate the output. See modules/local/nucleaze/main.nf.
-        mkfifo "\${tmpdir}/un.fifo" "\${tmpdir}/al.fifo"
-        # Partition the SAM stream by alignment status:
+        # Partition the SAM stream by alignment status. Each wanted branch gets a
+        # named FIFO; unwanted ones are dropped, so no samtools pass or compressor
+        # runs for them. Named FIFOs rather than `>(...)`: process substitution
+        # hides the subshell PID, so the script can exit before a compressor
+        # writes its gzip trailer and silently truncate the output. See
+        # modules/local/nucleaze/main.nf.
         #   - unmapped branch (samtools view -u -f 4 -) saves unaligned reads as FASTQ
         #   - mapped branch (samtools view -u -F 4 -) saves aligned reads as FASTQ
         #   - main pipeline (samtools view -h -F 4 -) saves aligned reads as SAM
         # `view -u` emits uncompressed BAM into `fastq`, so neither needs -@; all
         # compression is done by pigz.
+        TEE_TARGETS=()
+        ${ keep_unmapped ? """mkfifo "\${tmpdir}/un.fifo"
+        TEE_TARGETS+=("\${tmpdir}/un.fifo")
         ( samtools view -u -f 4 - < "\${tmpdir}/un.fifo" \\
-            | samtools fastq - | pigz -p ${pigz_threads} -1 -c > ${un} ) & PIDS+=(\$!)
+            | samtools fastq - | pigz -p ${pigz_threads} -1 -c > ${un} ) & PIDS+=(\$!)""" : "" }
+        ${ keep_mapped ? """mkfifo "\${tmpdir}/al.fifo"
+        TEE_TARGETS+=("\${tmpdir}/al.fifo")
         ( samtools view -u -F 4 - < "\${tmpdir}/al.fifo" \\
-            | samtools fastq - | pigz -p ${pigz_threads} -1 -c > ${al} ) & PIDS+=(\$!)
+            | samtools fastq - | pigz -p ${pigz_threads} -1 -c > ${al} ) & PIDS+=(\$!)""" : "" }
         # Ordinary gzip can't be inflated in parallel; pigz only adds helper
         # threads for read/write, so cap the decompressor at 2.
         ${isGz ? "pigz -dc -p 2" : "cat"} ${reads} \\
             | minimap2 -a -t ${task.cpus} ${params_map.alignment_params} \${idx_local_path}/mm2_index.mmi /dev/fd/0 \\
-            | tee "\${tmpdir}/un.fifo" "\${tmpdir}/al.fifo" \\
-            | samtools view -h -F 4 - \\
-            ${ params_map.remove_sq ? "| grep -v '^@SQ'" : "" } | pigz -p ${pigz_threads} -1 -c > ${sam}
+            | tee "\${TEE_TARGETS[@]}" \\
+            ${ keep_sam ? """| samtools view -h -F 4 - \\
+            ${ params_map.remove_sq ? "| grep -v '^@SQ'" : "" } | pigz -p ${pigz_threads} -1 -c > ${sam}""" : "> /dev/null" }
         # Let the branch compressors flush their gzip trailers before exiting,
         # otherwise the .gz outputs truncate. A failing branch trips errexit.
         for pid in "\${PIDS[@]}"; do wait "\${pid}"; done
@@ -98,9 +114,9 @@ process MINIMAP2_SPLIT_INDEX {
         val(index_dir)
         val(params_map) // suffix, remove_sq, alignment_params, db_download_timeout
     output:
-        tuple val(sample), path("${sample}_${params_map.suffix}_minimap2_mapped.sam.gz"), emit: sam
-        tuple val(sample), path("${sample}_${params_map.suffix}_minimap2_mapped.fastq.gz"), emit: reads_mapped
-        tuple val(sample), path("${sample}_${params_map.suffix}_minimap2_unmapped.fastq.gz"), emit: reads_unmapped
+        tuple val(sample), path("${sample}_${params_map.suffix}_minimap2_mapped.sam.gz"), emit: sam, optional: true
+        tuple val(sample), path("${sample}_${params_map.suffix}_minimap2_mapped.fastq.gz"), emit: reads_mapped, optional: true
+        tuple val(sample), path("${sample}_${params_map.suffix}_minimap2_unmapped.fastq.gz"), emit: reads_unmapped, optional: true
         tuple val(sample), path("${sample}_${params_map.suffix}_minimap2_in.fastq.gz"), emit: input
     script:
         def suffix = params_map.suffix
@@ -110,6 +126,16 @@ process MINIMAP2_SPLIT_INDEX {
         def in2 = "${sample}_${suffix}_minimap2_in.fastq.gz"
         // Full allocation per compressor, as in MINIMAP2 above.
         def pigz_threads = task.cpus as int
+        // Callers routinely need only one or two of the three outputs; producing
+        // an unwanted one costs a samtools pass plus a compressor. See NUCLEAZE.
+        def keep_sam = params_map.get("keep_sam", true)
+        def keep_mapped = params_map.get("keep_mapped", true)
+        def keep_unmapped = params_map.get("keep_unmapped", true)
+        if (!keep_sam && !keep_mapped && !keep_unmapped) {
+            throw new IllegalArgumentException(
+                "MINIMAP2_SPLIT_INDEX: at least one of keep_sam / keep_mapped / keep_unmapped must be true"
+            )
+        }
         """
         set -euo pipefail
         # Fetch the index through the shared /scratch cache rather than letting
@@ -120,26 +146,32 @@ process MINIMAP2_SPLIT_INDEX {
         tmpdir=\$(mktemp -d)
         trap 'rm -rf "\${tmpdir}"' EXIT
         PIDS=()
-        # Named FIFOs, not `>(...)`: process substitution hides the subshell PID,
-        # so the script can exit before a compressor writes its gzip trailer and
-        # silently truncate the output. See modules/local/nucleaze/main.nf.
-        mkfifo "\${tmpdir}/un.fifo" "\${tmpdir}/al.fifo"
-        # Partition the SAM stream by alignment status:
+        # Partition the SAM stream by alignment status. Each wanted branch gets a
+        # named FIFO; unwanted ones are dropped, so no samtools pass or compressor
+        # runs for them. Named FIFOs rather than `>(...)`: process substitution
+        # hides the subshell PID, so the script can exit before a compressor
+        # writes its gzip trailer and silently truncate the output. See
+        # modules/local/nucleaze/main.nf.
         #   - unmapped branch (samtools view -u -f 4 -) saves unaligned reads as FASTQ
         #   - mapped branch (samtools view -u -F 4 -) saves aligned reads as FASTQ
         #   - main pipeline (samtools view -h -F 4 -) saves aligned reads as SAM
         # `view -u` emits uncompressed BAM into `fastq`, so neither needs -@; all
         # compression is done by pigz.
+        TEE_TARGETS=()
+        ${ keep_unmapped ? """mkfifo "\${tmpdir}/un.fifo"
+        TEE_TARGETS+=("\${tmpdir}/un.fifo")
         ( samtools view -u -f 4 - < "\${tmpdir}/un.fifo" \\
-            | samtools fastq - | pigz -p ${pigz_threads} -1 -c > ${un} ) & PIDS+=(\$!)
+            | samtools fastq - | pigz -p ${pigz_threads} -1 -c > ${un} ) & PIDS+=(\$!)""" : "" }
+        ${ keep_mapped ? """mkfifo "\${tmpdir}/al.fifo"
+        TEE_TARGETS+=("\${tmpdir}/al.fifo")
         ( samtools view -u -F 4 - < "\${tmpdir}/al.fifo" \\
-            | samtools fastq - | pigz -p ${pigz_threads} -1 -c > ${al} ) & PIDS+=(\$!)
+            | samtools fastq - | pigz -p ${pigz_threads} -1 -c > ${al} ) & PIDS+=(\$!)""" : "" }
         # --split-prefix scratch files stay in the task work directory, which is
         # sized for the run; \${tmpdir} only carries the FIFOs.
         minimap2 -a -t ${task.cpus} ${params_map.alignment_params} \${idx_local_path}/mm2_index.mmi ${reads} --split-prefix "mm2_split_" \\
-            | tee "\${tmpdir}/un.fifo" "\${tmpdir}/al.fifo" \\
-            | samtools view -h -F 4 - \\
-            ${ params_map.remove_sq ? "| grep -v '^@SQ'" : "" } | pigz -p ${pigz_threads} -1 -c > ${sam}
+            | tee "\${TEE_TARGETS[@]}" \\
+            ${ keep_sam ? """| samtools view -h -F 4 - \\
+            ${ params_map.remove_sq ? "| grep -v '^@SQ'" : "" } | pigz -p ${pigz_threads} -1 -c > ${sam}""" : "> /dev/null" }
         # Let the branch compressors flush their gzip trailers before exiting,
         # otherwise the .gz outputs truncate. A failing branch trips errexit.
         for pid in "\${PIDS[@]}"; do wait "\${pid}"; done

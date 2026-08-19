@@ -31,7 +31,7 @@ workflow PROFILE {
         // Separate ribosomal reads
         if (params_map.platform == "ont") {
             ribo_ref = "${params_map.ref_dir}/results/mm2-ribo-index"
-            ribo_minimap2_params = params_map + [remove_sq: false, alignment_params: ""]
+            ribo_minimap2_params = params_map + [remove_sq: false, alignment_params: "", keep_sam: false]
             ribo_ch = MINIMAP2(reads_ch, ribo_ref, ribo_minimap2_params)
             ribo_in = ribo_ch.reads_mapped
             noribo_in = ribo_ch.reads_unmapped
