@@ -92,6 +92,26 @@ PR-description bench tables use these column headers:
 
 **Terminology in prose:** write "cpu-hours" (full hyphenated word). The compact form `cpu-h` is fine for table headers and other tight spaces, but in any sentence body use `cpu-hours`.
 
+### Diagnostic: CPU utilization
+
+`runtime` and `cpu-hours` are the two metrics to *report*, but neither can tell you whether
+an allocation is actually being used: cpu-hours are billed (`realtime × cpus`), so a task
+that pins one core and a task that pins all sixteen look identical. When investigating why
+a process is slow, derive utilization from the trace's `%cpu` column:
+
+```
+utilization = %cpu / cpus        # 100% = every allocated vCPU saturated
+```
+
+Note that Nextflow's `%cpu` is **not** normalized: 100% means one vCPU saturated, 800%
+means eight. Dividing by `cpus` rescales it so 100% means the whole allocation is busy,
+which is what makes values comparable across processes with different labels. Values can
+exceed 100% slightly, since `%cpu` is sampled and the scheduler can briefly overshoot.
+
+This is a diagnostic, not a reporting metric — keep it out of the cohort table above, and
+state the definition wherever you quote it, since the un-normalized `%cpu` reading is the
+more common convention elsewhere.
+
 Per-process Δ note: cpu-hours is proportional to `realtime`. runtime is `realtime + container_overhead`. So Δ runtime can diverge from Δ cpu-hours even when `cpus` is unchanged — runtime is diluted by the constant overhead. For small fast tasks the divergence is wide; for long-running tasks the two metrics converge.
 
 ## Output equality verification
