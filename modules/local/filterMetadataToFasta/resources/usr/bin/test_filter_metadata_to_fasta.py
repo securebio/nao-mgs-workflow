@@ -145,7 +145,8 @@ class TestFilterMetadata:
 
     def test_superseding_a_row_does_not_reorder_the_table(self, tmp_path: Path) -> None:
         # AB1.1's row is replaced by one that appears after AB2.1's, but AB1.1
-        # keeps the position of its first appearance.
+        # keeps the position of its first appearance. The surviving accessions
+        # descend, so the expected order cannot also be read as accession order.
         fasta = write_fasta(
             tmp_path / "genomes.fasta.gz", [("AB1.1", "ACGT"), ("AB2.1", "TTTT")]
         )
@@ -153,8 +154,8 @@ class TestFilterMetadata:
             tmp_path / "meta.tsv.gz",
             [
                 ["GCA_000000009.1", "11111", "11111", "AB1.1"],
-                ["GCA_000000005.1", "22222", "22222", "AB2.1"],
-                ["GCA_000000002.1", "11111", "11111", "AB1.1"],
+                ["GCA_000000002.1", "22222", "22222", "AB2.1"],
+                ["GCA_000000007.1", "11111", "11111", "AB1.1"],
             ],
         )
         out = str(tmp_path / "out.tsv.gz")
@@ -162,8 +163,8 @@ class TestFilterMetadata:
         assert [
             (r["genome_id"], r["assembly_accession"]) for r in read_output(out)
         ] == [
-            ("AB1.1", "GCA_000000002.1"),
-            ("AB2.1", "GCA_000000005.1"),
+            ("AB1.1", "GCA_000000007.1"),
+            ("AB2.1", "GCA_000000002.1"),
         ]
 
     @pytest.mark.parametrize("field", ["taxid", "species_taxid", "organism_name"])

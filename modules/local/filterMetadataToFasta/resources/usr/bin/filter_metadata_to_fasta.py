@@ -34,8 +34,7 @@ def open_by_suffix(path: str, mode: str = "r", newline: str | None = None) -> IO
 
 # Columns describing the assembly a sequence was packaged in rather than the
 # sequence itself; rows sharing a genome_id may legitimately disagree on these.
-# Every other column must agree. Naming the exceptions rather than the fields to
-# compare keeps the guard from narrowing when a column is added upstream.
+# Every other column must agree.
 ASSEMBLY_FIELDS = frozenset(
     {"assembly_accession", "source_database", "assembly_status", "release_date"}
 )

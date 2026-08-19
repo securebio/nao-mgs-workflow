@@ -47,10 +47,10 @@ nextflow_workflow {
         then {
             assert workflow.success
             def metadata = path(workflow.out.metadata[0]).csv(sep: "\t", decompress: true)
-            def fastaIds = path(workflow.out.fasta[0]).linesGzip
+            def fastaIdList = path(workflow.out.fasta[0]).linesGzip
                 .findAll { it.startsWith(">") }
                 .collect { it.substring(1).split(/\s/)[0] }
-                .toSet()
+            def fastaIds = fastaIdList.toSet()
             def metadataIds = metadata.columns["genome_id"]
 
             assert "M22245.1" in fastaIds :
@@ -59,23 +59,37 @@ nextflow_workflow {
                 "Metadata and genome DB disagree; sequences with no row: " +
                 "${(fastaIds - metadataIds.toSet()).take(5)}, rows with no sequence: " +
                 "${(metadataIds.toSet() - fastaIds).take(5)}"
-            assert metadataIds.size() == fastaIds.size() :
-                "Metadata carries more than one row for some sequence " +
-                "(${metadataIds.size()} rows, ${fastaIds.size()} distinct IDs)"
+            // M22245.1 is the sequence the FASTA and the metadata must agree on
+            // deduplicating: `seqkit rmdup` keeps one record and
+            // FILTER_METADATA_TO_FASTA keeps one row. Counting occurrences rather
+            // than comparing sets is what makes a duplicate on either side visible.
+            assert fastaIdList.count("M22245.1") == 1 :
+                "Expected one M22245.1 record in the genome DB, got " +
+                "${fastaIdList.count('M22245.1')}"
+            assert fastaIdList.countBy { it } == metadataIds.countBy { it } :
+                "Genome DB and metadata carry different numbers of copies per " +
+                "sequence: ${fastaIdList.countBy { it }} vs ${metadataIds.countBy { it }}"
 
             // `seqkit rmdup` kept M22245.1 from the smaller accession, which is
             // also the earlier chunk, so the surviving row must name that
             // assembly rather than the one contributing the other nine
-            // sequences. The two rows differ on release_date, so this also
-            // covers a per-assembly column being allowed to disagree.
-            def accessions = [metadataIds, metadata.columns["assembly_accession"]]
-                .transpose()
-                .collectEntries()
-            assert accessions["M22245.1"] == "GCA_000844265.1" :
-                "Expected the row for the copy rmdup kept, got ${accessions["M22245.1"]}"
+            // sequences. The two rows differ only on release_date, so pinning it
+            // too shows the whole row came from the assembly rmdup kept. csv()
+            // types the release_date column, hence the rendered comparison.
+            def perAssembly = [
+                metadataIds,
+                metadata.columns["assembly_accession"],
+                metadata.columns["release_date"],
+            ].transpose().collectEntries { id, acc, date ->
+                [id, [acc.toString(), date.toString()]]
+            }
+            assert perAssembly["M22245.1"] == ["GCA_000844265.1", "1993-04-27"] :
+                "Expected the row for the copy rmdup kept, got ${perAssembly["M22245.1"]}"
 
             // The published column set is what RUN's read_genbank_metadata and
-            // DOWNSTREAM read, so a change upstream should surface here.
+            // DOWNSTREAM read, and it also sets which columns
+            // FILTER_METADATA_TO_FASTA requires duplicate rows to agree on, so a
+            // change upstream should surface here.
             assert metadata.columnNames == [
                 "assembly_accession",
                 "taxid",
