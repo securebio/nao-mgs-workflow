@@ -77,6 +77,21 @@ def filter_metadata(
 # =======================================================================
 
 
+def chunk_filename(index: int, n_chunks: int) -> str:
+    """Name a chunk file so that lexicographic order is accession order.
+    Downstream steps concatenate chunks by filename -- `CONCATENATE_GENOME_FASTA`
+    sorts them before `seqkit rmdup`, which keeps the first copy of a repeated
+    sequence -- so the padding has to be wide enough that `chunk_10000` cannot
+    sort before `chunk_9999`.
+    Args:
+        index: 1-based index of this chunk.
+        n_chunks: Total number of chunks being written.
+    Returns:
+        Filename for the chunk.
+    """
+    return f"chunk_{index:0{max(4, len(str(n_chunks)))}d}.txt"
+
+
 def write_accession_chunks(
     accessions: pd.Series, chunk_dir: Path, chunk_size: int
 ) -> int:
@@ -103,7 +118,9 @@ def write_accession_chunks(
     n_chunks = (n + chunk_size - 1) // chunk_size
     for i in range(n_chunks):
         chunk = accessions.iloc[i * chunk_size : (i + 1) * chunk_size]
-        chunk.to_csv(chunk_dir / f"chunk_{i + 1:04d}.txt", index=False, header=False)
+        chunk.to_csv(
+            chunk_dir / chunk_filename(i + 1, n_chunks), index=False, header=False
+        )
     logger.info(
         "Wrote %d accessions to %d chunk files (chunk_size=%d).",
         n,

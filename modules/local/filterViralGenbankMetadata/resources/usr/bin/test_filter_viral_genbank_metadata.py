@@ -5,7 +5,11 @@ from pathlib import Path
 
 import pandas as pd
 import pytest
-from filter_viral_genbank_metadata import filter_metadata, write_accession_chunks
+from filter_viral_genbank_metadata import (
+    chunk_filename,
+    filter_metadata,
+    write_accession_chunks,
+)
 
 # Two vertebrate-infecting virus taxids (1, 2) and one non-infecting (3).
 # `taxid_species` rolls strain-level taxids 11, 21, 31 up to species-level 1, 2, 3.
@@ -198,6 +202,29 @@ class TestWriteAccessionChunks:
             "chunk_0001.txt": "GCA_A\nGCA_B\n",
             "chunk_0002.txt": "GCA_C\nGCA_D\n",
         }
+
+    @pytest.mark.parametrize(
+        ("index", "n_chunks", "expected"),
+        [
+            (1, 3, "chunk_0001.txt"),
+            (9999, 9999, "chunk_9999.txt"),
+            (1, 10000, "chunk_00001.txt"),
+            (10000, 10000, "chunk_10000.txt"),
+        ],
+        ids=["small", "at_four_digits", "past_four_digits", "widest"],
+    )
+    def test_chunk_filename_pads_to_the_chunk_count(
+        self, index: int, n_chunks: int, expected: str
+    ) -> None:
+        # Four digits stay four digits, so existing chunk names do not move.
+        assert chunk_filename(index, n_chunks) == expected
+
+    @pytest.mark.parametrize("n_chunks", [9999, 10000, 100001])
+    def test_chunk_names_sort_into_chunk_order(self, n_chunks: int) -> None:
+        # Downstream concatenation orders chunks by filename, so lexicographic
+        # order has to match the order the accessions were chunked in.
+        names = [chunk_filename(i, n_chunks) for i in range(1, n_chunks + 1)]
+        assert sorted(names) == names
 
     def test_empty_input_raises(self, tmp_path: Path) -> None:
         with pytest.raises(ValueError, match="No accessions passed filter"):
