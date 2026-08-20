@@ -99,7 +99,7 @@ def write_accession_chunks(
 
     Args:
         accessions: Series of assembly accessions to chunk.
-        chunk_dir: Output directory for `chunk_NNNN.txt` files (created if absent).
+        chunk_dir: Output directory for `chunk_*.txt` files (created if absent).
         chunk_size: Maximum accessions per chunk (must be >= 1).
 
     Returns:
