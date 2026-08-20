@@ -52,6 +52,18 @@ nextflow_workflow {
                 .collect { it.substring(1).split(/\s/)[0] }
             def fastaIds = fastaIdList.toSet()
 
+            // Both assemblies have to survive enumeration, filtering and download,
+            // or the shared sequence is packaged only once and the deduplication
+            // this test exists to cover never runs.
+            assert metadata.columns["assembly_accession"].toSet() == [
+                "GCA_000844265.1",
+                "GCA_023158175.1",
+            ].toSet() :
+                "Expected both assemblies, got: " +
+                "${metadata.columns["assembly_accession"].toSet()}"
+            assert metadata.columns["genome_id"].count { it == "M22245.1" } == 2 :
+                "The shared sequence should carry one metadata row per assembly"
+
             assert "M22245.1" in fastaIds :
                 "The shared sequence should reach the published FASTA, got: ${fastaIds}"
             // A list rather than a set, so a duplicate is visible rather than
