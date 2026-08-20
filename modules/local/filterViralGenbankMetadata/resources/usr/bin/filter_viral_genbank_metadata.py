@@ -78,11 +78,7 @@ def filter_metadata(
 
 
 def chunk_filename(index: int, n_chunks: int) -> str:
-    """Name a chunk file so that lexicographic order is accession order.
-    Downstream steps concatenate chunks by filename -- `CONCATENATE_GENOME_FASTA`
-    sorts them before `seqkit rmdup`, which keeps the first copy of a repeated
-    sequence -- so the padding has to be wide enough that `chunk_10000` cannot
-    sort before `chunk_9999`.
+    """Name a chunk file, padding based on digits in `n_chunks` to preserve sort order.
     Args:
         index: 1-based index of this chunk.
         n_chunks: Total number of chunks being written.

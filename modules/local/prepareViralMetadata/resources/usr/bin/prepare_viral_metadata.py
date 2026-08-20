@@ -92,14 +92,9 @@ def prepare_metadata(
     """
     taxid_to_species = build_species_taxid_map(virus_db_path)
     acc_to_gids = read_accession_map(accession_map_path)
-    # Streamed rather than read into a list: the metadata is one row per
-    # assembly today, but grows with everything we download. Only the set of
-    # accessions still awaiting a row is carried across the file.
     awaiting_row = set(acc_to_gids)
     n_rows = n_dropped = n_out = 0
-    # Written beside the output and renamed on success, so a failed run cannot
-    # leave a half-expanded table where the real one belongs. Prefixed rather
-    # than suffixed to keep the compression-selecting extension intact.
+    # Stream metadata file, writing output to a temporary file and then renamed on completion.
     out_dir, out_name = os.path.split(output_metadata_path)
     partial_path = os.path.join(out_dir, f"partial-{out_name}")
     with (
