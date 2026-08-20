@@ -36,9 +36,6 @@ nextflow_pipeline {
 
             // === MAKE_VIRUS_GENOME_DB outputs ===
             def metadata = path("${launchDir}/output/results/virus-genome-metadata-gid.tsv.gz").csv(sep: "\t", decompress: true)
-            assert metadata.rowCount >= 2 :
-                "Expected ≥2 metadata rows to prove chunk fan-out (got ${metadata.rowCount}). " +
-                "If NCBI now publishes only one HDV assembly, broaden download_virus_taxid in the test config."
             def fastaLines = path("${launchDir}/output/results/virus-genomes-masked.fasta.gz").linesGzip
             assert fastaLines.any { it.startsWith(">") } :
                 "Masked FASTA should contain at least one sequence header"
@@ -59,6 +56,12 @@ nextflow_pipeline {
                 "Nucleaze screen index should be published as virus-genomes-masked.nucleaze.bin"
             // Pre-filter assembly metadata is published with the enumerate schema.
             def rawMeta = path("${launchDir}/output/results/virus-genome-metadata-raw.tsv.gz").csv(sep: "\t", decompress: true)
+            // Assemblies, not published sequences: the genome metadata is now
+            // filtered and deduplicated, so its row count no longer tracks how
+            // many accessions were enumerated and chunked.
+            assert rawMeta.rowCount >= 2 :
+                "Expected ≥2 enumerated assemblies to prove chunk fan-out (got ${rawMeta.rowCount}). " +
+                "If NCBI now publishes only one HDV assembly, broaden download_virus_taxid in the test config."
             assert rawMeta.columnNames == ["assembly_accession", "taxid", "organism_name", "source_database", "assembly_status", "release_date"]
             assert rawMeta.rowCount >= 1
 

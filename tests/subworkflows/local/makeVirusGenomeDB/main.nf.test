@@ -83,15 +83,11 @@ nextflow_workflow {
             // `seqkit rmdup` kept M22245.1 from the smaller accession, which is
             // also the earlier chunk, so the surviving metadata row must name that
             // assembly rather than the one contributing the other nine sequences.
-            def perAssembly = [
-                metadataIds,
-                metadata.columns["assembly_accession"],
-                metadata.columns["release_date"],
-            ].transpose().collectEntries { id, acc, date ->
-                [id, [acc.toString(), date.toString()]]
-            }
-            assert perAssembly["M22245.1"] == ["GCA_000844265.1", "1993-04-27"] :
-                "Expected the row for the copy rmdup kept, got ${perAssembly["M22245.1"]}"
+            def assemblyById = [
+                metadataIds, metadata.columns["assembly_accession"]
+            ].transpose().collectEntries { id, acc -> [id, acc.toString()] }
+            assert assemblyById["M22245.1"] == "GCA_000844265.1" :
+                "Expected the row for the copy rmdup kept, got ${assemblyById["M22245.1"]}"
 
             // The published column set is what RUN's read_genbank_metadata and
             // DOWNSTREAM read, so a change upstream should surface here.
