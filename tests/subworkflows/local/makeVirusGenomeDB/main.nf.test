@@ -20,8 +20,8 @@ nextflow_workflow {
     //     other index tests build does not carry.
     //   - `host_taxa_screen` is `vertebrate`. Murine adenovirus is not human-infecting.
     //
-    // With `viral_accession_chunk_size = 1` the two accessions land in chunk_0001
-    // and chunk_0002, so this also covers the accession-sort and chunk-name-sort
+    // With `viral_accession_chunk_size = 1` the two accessions land in separate
+    // chunks, so this also covers the accession-sort and chunk-name-sort
     // links the deduplication depends on, which no module-level test can reach.
     test("Deduplicates a sequence shared by two assemblies") {
         tag "expect_success"
