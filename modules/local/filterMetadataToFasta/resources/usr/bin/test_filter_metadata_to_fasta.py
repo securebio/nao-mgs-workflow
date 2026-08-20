@@ -127,9 +127,6 @@ class TestFilterMetadata:
         assert [r["genome_id"] for r in read_output(out)] == expected_kept
 
     def test_dedup_keeps_the_smallest_assembly_accession(self, tmp_path: Path) -> None:
-        # The FASTA reaches `seqkit rmdup` in accession order, so the record it
-        # keeps is the one from the smallest accession — not whichever row the
-        # metadata, which is not accession-sorted, happens to list first.
         fasta = write_fasta(tmp_path / "genomes.fasta.gz", [("AB1.1", "ACGT")])
         metadata = write_rows(
             tmp_path / "meta.tsv.gz",
@@ -145,9 +142,8 @@ class TestFilterMetadata:
         ]
 
     def test_superseding_a_row_does_not_reorder_the_table(self, tmp_path: Path) -> None:
-        # AB1.1's row is replaced by one that appears after AB2.1's, but AB1.1
-        # keeps the position of its first appearance. The surviving accessions
-        # descend, so the expected order cannot also be read as accession order.
+        # AB1.1's row is replaced by one that appears after AB2.1's, but the
+        # final AB1.1 metadata row keeps the position of the genome_id's first appearance.
         fasta = write_fasta(
             tmp_path / "genomes.fasta.gz", [("AB1.1", "ACGT"), ("AB2.1", "TTTT")]
         )
@@ -186,9 +182,6 @@ class TestFilterMetadata:
     def test_allows_duplicate_rows_to_differ_on_assembly_fields(
         self, tmp_path: Path
     ) -> None:
-        # A sequence packaged in two assemblies carries two rows that differ on
-        # every per-assembly column. Only the per-sequence columns must agree,
-        # so this must reconcile rather than fail the index build.
         fasta = write_fasta(tmp_path / "genomes.fasta.gz", [("AB1.1", "ACGT")])
         other_assembly = dict(
             FULL_ROW,
