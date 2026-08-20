@@ -87,8 +87,9 @@ class TestReadFastaGenomeIds:
         [
             ("", "No sequence headers"),
             (">AB1.1\nACGT\n>\nTTTT\n", "no sequence ID at line 3"),
+            (">AB1.1\nACGT\n>AB1.1 other\nTTTT\n", "Duplicate sequence ID AB1.1"),
         ],
-        ids=["headerless", "header_without_id"],
+        ids=["headerless", "header_without_id", "duplicate_id"],
     )
     def test_rejects_malformed_fasta(
         self, tmp_path: Path, text: str, match: str

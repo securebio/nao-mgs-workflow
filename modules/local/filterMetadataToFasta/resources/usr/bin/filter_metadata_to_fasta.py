@@ -86,8 +86,8 @@ def read_fasta_genome_ids(fasta_path: str) -> set[str]:
     Returns:
         Set of sequence IDs present in the file.
     Raises:
-        ValueError: If the file contains no sequence headers, or a header
-            carries no ID.
+        ValueError: If the file contains no sequence headers, a header carries
+            no ID, or an ID repeats.
     """
     ids = set()
     with open_by_suffix(fasta_path) as f:
@@ -97,6 +97,14 @@ def read_fasta_genome_ids(fasta_path: str) -> set[str]:
                 if not tokens:
                     raise ValueError(
                         f"Header with no sequence ID at line {line_no} of {fasta_path}"
+                    )
+                # The genome DB is deduplicated by sequence ID upstream, so a
+                # repeat means that failed. Collapsing it into the set would
+                # hide the break behind metadata that looks reconciled.
+                if tokens[0] in ids:
+                    raise ValueError(
+                        f"Duplicate sequence ID {tokens[0]} at line {line_no} of "
+                        f"{fasta_path}; one metadata row cannot describe two copies"
                     )
                 ids.add(tokens[0])
     if not ids:
