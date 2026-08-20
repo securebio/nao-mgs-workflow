@@ -9,6 +9,7 @@ include { PREPARE_VIRAL_METADATA } from "../../../modules/local/prepareViralMeta
 include { CONCATENATE_GENOME_FASTA } from "../../../modules/local/concatenateGenomeFasta"
 include { FILTER_GENOME_FASTA } from "../../../modules/local/filterGenomeFasta"
 include { MASK_GENOME_FASTA } from "../../../modules/local/maskGenomeFasta"
+include { FILTER_METADATA_TO_FASTA } from "../../../modules/local/filterMetadataToFasta"
 include { GZIP_FILE_BARE } from "../../../modules/local/gzipFile"
 
 /***********
@@ -62,8 +63,11 @@ workflow MAKE_VIRUS_GENOME_DB {
         // 7. Mask to remove adapters, low-entropy regions, and polyX.
         mask_params = other_params + [name_pattern: "virus-genomes"]
         mask_ch = MASK_GENOME_FASTA(filter_genome_ch, other_params.adapters, mask_params)
+        published_fasta_ch = mask_ch.masked
+        // 8. Filter genome metadata down to one row per sequence present in the genome FASTA.
+        metadata_ch = FILTER_METADATA_TO_FASTA(gid_ch, published_fasta_ch, "virus-genome")
     emit:
-        fasta = mask_ch.masked
-        metadata = gid_ch
+        fasta = published_fasta_ch
+        metadata = metadata_ch
         raw_metadata = raw_metadata_ch  // pre-filter assembly metadata, for benchmarking
 }

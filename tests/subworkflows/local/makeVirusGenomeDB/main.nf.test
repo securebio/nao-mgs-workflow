@@ -63,8 +63,8 @@ nextflow_workflow {
             ]) :
                 "Expected both assemblies, got: " +
                 "${metadata.columns["assembly_accession"].toSet()}"
-            assert metadata.columns["genome_id"].count { it == "M22245.1" } >= 2 :
-                "The shared sequence should carry one metadata row per assembly"
+            assert metadata.columns["genome_id"].count { it == "M22245.1" } == 1 :
+                "The shared sequence should be reconciled to a single metadata row"
 
             assert "M22245.1" in fastaIds :
                 "The shared sequence should reach the published FASTA, got: ${fastaIds}"
@@ -72,9 +72,26 @@ nextflow_workflow {
             // collapsed before the check.
             assert fastaIdList.countBy { it }.every { id, n -> n == 1 } :
                 "Duplicated IDs: ${fastaIdList.countBy { it }.findAll { id, n -> n > 1 }}"
-            assert metadata.columns["genome_id"].toSet().containsAll(fastaIds) :
-                "Genome DB carries sequences with no metadata row: " +
-                "${(fastaIds - metadata.columns["genome_id"].toSet()).take(5)}"
+            // Sorted lists rather than sets, so a duplicate on either side stays
+            // visible instead of collapsing before the comparison.
+            def metadataIds = metadata.columns["genome_id"]
+            assert fastaIdList.toSorted() == metadataIds.toSorted() :
+                "Metadata and genome DB disagree; sequences with no row: " +
+                "${(fastaIds - metadataIds.toSet()).take(5)}, rows with no sequence: " +
+                "${(metadataIds.toSet() - fastaIds).take(5)}"
+
+            // `seqkit rmdup` kept M22245.1 from the smaller accession, which is
+            // also the earlier chunk, so the surviving metadata row must name that
+            // assembly rather than the one contributing the other nine sequences.
+            def perAssembly = [
+                metadataIds,
+                metadata.columns["assembly_accession"],
+                metadata.columns["release_date"],
+            ].transpose().collectEntries { id, acc, date ->
+                [id, [acc.toString(), date.toString()]]
+            }
+            assert perAssembly["M22245.1"] == ["GCA_000844265.1", "1993-04-27"] :
+                "Expected the row for the copy rmdup kept, got ${perAssembly["M22245.1"]}"
 
             // The published column set is what RUN's read_genbank_metadata and
             // DOWNSTREAM read, so a change upstream should surface here.
