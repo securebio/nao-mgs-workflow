@@ -21,6 +21,7 @@
 - Compare indexes in `bin/benchmark_index.py` after restricting to genomes published in final FASTA and report each index's build-time pipeline version.
 - Sort accessions before chunking them in `FILTER_VIRAL_GENBANK_METADATA`.
 - Deduplicate the viral genome FASTA by sequence ID rather than by full header in `CONCATENATE_GENOME_FASTA`, so records sharing an ID but differing in their description no longer both survive.
+- Add a subworkflow-level test for `MAKE_VIRUS_GENOME_DB` covering Murine adenovirus 1, whose two assemblies share a sequence, so the accession sort and the per-sequence deduplication are exercised end to end on real downloads. Test-only; no pipeline change.
 - Refactor `DOWNLOAD_VIRAL_GENOMES` to emit one combined FASTA plus an assembly to sequence map per chunk. Consolidate `PREPARE_VIRAL_METADATA` and `ADD_GENBANK_GENOME_IDS` into one step joining filtered taxid metadata and expanding to one row per `genome_id`.
 - Mask human (CHM13) k-mers out of the viral genomes before building the Nucleaze k-mer index.
 - Exclude two viral genome records (`AY037928.1` and `NC_022518.1`) that are pure human contamination.
