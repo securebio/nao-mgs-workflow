@@ -265,3 +265,16 @@ CVE-2026-53615 exp:2026-10-31
 CVE-2026-53612 exp:2026-10-31
 CVE-2026-53613 exp:2026-10-31
 CVE-2026-53614 exp:2026-10-31
+
+# ── pip's vendored dependencies (pysam_biopython) ──
+# msgpack out-of-bounds read on Unpacker reuse after a caught error, and a setuptools
+# PackageIndex path traversal (both HIGH). Neither is our dependency: they are reported
+# from pip's own vendored bundle at site-packages/pip/_vendor (vendor.txt / bom.cdx.json),
+# not from the conda environment, which does not install either package. pip 26.2.1 is
+# already the newest release and still vendors msgpack 1.1.2, so no pin can reach it;
+# the setuptools entry is SBOM metadata only, with no setuptools code under _vendor at all.
+# pip's vendored msgpack is used by cachecontrol to serialise pip's HTTP cache, reached
+# only when pip downloads packages -- the pipeline never invokes pip at run time.
+# Re-eval: a pip release that re-vendors msgpack >= 1.2.1 (then drop these two).
+GHSA-6v7p-g79w-8964 exp:2026-11-30
+CVE-2025-47273 exp:2026-11-30
