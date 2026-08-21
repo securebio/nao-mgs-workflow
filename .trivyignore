@@ -252,3 +252,16 @@ CVE-2026-41992 exp:2026-08-31
 # dependencies of mount/login, which nothing in the workflow invokes.
 # Re-eval: a micromamba rebuild carrying 2.41.5-0+deb13u1 (bump the digest and drop this).
 CVE-2026-53615 exp:2026-10-31
+
+# Same util-linux 2.41-5, same unreachable fix (2.41.5-0+deb13u1): three mount(8) flaws.
+# Two TOCTOU races in mount applying post-mount ownership/mode changes and in resolving
+# the target path via an ancestor-directory swap, plus a nosuid/noexec bypass through
+# LIBMOUNT_FORCE_MOUNT2 (all HIGH). All three require executing mount(8); the pipeline
+# never does, and Nextflow/Fusion perform their mounts on the host outside the container.
+# mount is SUID root in the base image, so these remain a local privilege-escalation
+# surface for an attacker who already has code execution inside a container - defence in
+# depth rather than unreachable, which is why the expiry is short.
+# Re-eval: a micromamba rebuild carrying 2.41.5-0+deb13u1 (bump the digest and drop these).
+CVE-2026-53612 exp:2026-10-31
+CVE-2026-53613 exp:2026-10-31
+CVE-2026-53614 exp:2026-10-31
