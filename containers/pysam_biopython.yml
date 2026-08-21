@@ -6,4 +6,8 @@ channels:
 dependencies:
   - conda-forge::biopython=1.85
   - conda-forge::pandas=2.3.3
+  # GHSA-6v7p-g79w-8964: msgpack OOB read on Unpacker reuse; fixed in 1.2.1
+  - conda-forge::msgpack-python=1.2.1
+  # CVE-2025-47273: setuptools PackageIndex path traversal; fixed in 78.1.1
+  - conda-forge::setuptools=78.1.1
   - bioconda::pysam=0.23.3
