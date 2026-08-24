@@ -85,7 +85,7 @@ def chunk_filename(index: int, n_chunks: int) -> str:
     Returns:
         Filename for the chunk.
     """
-    return f"chunk_{index:0{max(4, len(str(n_chunks)))}d}.txt"
+    return f"chunk_{index:0{len(str(n_chunks))}d}.txt"
 
 
 def write_accession_chunks(
