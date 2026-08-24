@@ -77,6 +77,17 @@ def filter_metadata(
 # =======================================================================
 
 
+def chunk_filename(index: int, n_chunks: int) -> str:
+    """Name a chunk file, padding based on digits in `n_chunks` to preserve sort order.
+    Args:
+        index: 1-based index of this chunk.
+        n_chunks: Total number of chunks being written.
+    Returns:
+        Filename for the chunk.
+    """
+    return f"chunk_{index:0{len(str(n_chunks))}d}.txt"
+
+
 def write_accession_chunks(
     accessions: pd.Series, chunk_dir: Path, chunk_size: int
 ) -> int:
@@ -84,7 +95,7 @@ def write_accession_chunks(
 
     Args:
         accessions: Series of assembly accessions to chunk.
-        chunk_dir: Output directory for `chunk_NNNN.txt` files (created if absent).
+        chunk_dir: Output directory for `chunk_*.txt` files (created if absent).
         chunk_size: Maximum accessions per chunk (must be >= 1).
 
     Returns:
@@ -103,7 +114,9 @@ def write_accession_chunks(
     n_chunks = (n + chunk_size - 1) // chunk_size
     for i in range(n_chunks):
         chunk = accessions.iloc[i * chunk_size : (i + 1) * chunk_size]
-        chunk.to_csv(chunk_dir / f"chunk_{i + 1:04d}.txt", index=False, header=False)
+        chunk.to_csv(
+            chunk_dir / chunk_filename(i + 1, n_chunks), index=False, header=False
+        )
     logger.info(
         "Wrote %d accessions to %d chunk files (chunk_size=%d).",
         n,

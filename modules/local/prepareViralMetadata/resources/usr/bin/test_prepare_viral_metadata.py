@@ -187,6 +187,8 @@ class TestPrepareMetadata:
         out_meta = tmp_path / "out.tsv.gz"
         with pytest.raises(ValueError, match="GCA_EXTRA.1"):
             prepare_metadata(str(meta), str(db_path), str(amap), str(out_meta))
+        # A failed run does not publish an output metadata file.
+        assert not out_meta.exists()
 
     def test_output_uses_lf_line_endings(
         self, tmp_path: Path, standard_inputs: tuple[Path, Path, Path]

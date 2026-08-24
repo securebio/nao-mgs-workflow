@@ -12,6 +12,7 @@ import argparse
 import csv
 import gzip
 import logging
+import os
 import time
 from datetime import UTC, datetime
 from typing import IO, cast
@@ -91,41 +92,47 @@ def prepare_metadata(
     """
     taxid_to_species = build_species_taxid_map(virus_db_path)
     acc_to_gids = read_accession_map(accession_map_path)
-    with open_by_suffix(merged_metadata_path, newline="") as f:
-        reader = csv.DictReader(f, delimiter="\t")
+    awaiting_row = set(acc_to_gids)
+    n_rows = n_dropped = n_out = 0
+    # Stream metadata file, writing output to a temporary file and then renamed on completion.
+    out_dir, out_name = os.path.split(output_metadata_path)
+    partial_path = os.path.join(out_dir, f"partial-{out_name}")
+    with (
+        open_by_suffix(merged_metadata_path, newline="") as f_in,
+        open_by_suffix(partial_path, "w", newline="") as f_out,
+    ):
+        reader = csv.DictReader(f_in, delimiter="\t")
         in_fields = reader.fieldnames or []
-        rows = list(reader)
-    logger.info("Read %d metadata rows", len(rows))
-    # Ensure every downloaded accession has a metadata row.
-    unmapped = sorted(set(acc_to_gids) - {r["assembly_accession"] for r in rows})
-    if unmapped:
-        raise ValueError(
-            f"{len(unmapped)} mapped accession(s) have no metadata row "
-            f"(e.g. {', '.join(unmapped[:5])}); their sequences would be "
-            "untracked in the genome DB"
-        )
-    out_fields = list(in_fields) + ["species_taxid", "genome_id"]
-    n_dropped = n_out = 0
-    with open_by_suffix(output_metadata_path, "w", newline="") as f:
+        out_fields = list(in_fields) + ["species_taxid", "genome_id"]
         writer = csv.DictWriter(
-            f, fieldnames=out_fields, delimiter="\t", lineterminator="\n"
+            f_out, fieldnames=out_fields, delimiter="\t", lineterminator="\n"
         )
         writer.writeheader()
-        for row in rows:
+        for row in reader:
+            n_rows += 1
+            awaiting_row.discard(row["assembly_accession"])
             gids = acc_to_gids.get(row["assembly_accession"])
             if not gids:
                 n_dropped += 1
                 continue
             row["species_taxid"] = taxid_to_species.get(row["taxid"], "")
             for gid in gids:
-                out_row = dict(row)
-                out_row["genome_id"] = gid
-                writer.writerow(out_row)
+                writer.writerow({**row, "genome_id": gid})
                 n_out += 1
+    logger.info("Read %d metadata rows", n_rows)
+    # Every downloaded accession must have had a metadata row.
+    if awaiting_row:
+        unmapped = sorted(awaiting_row)
+        raise ValueError(
+            f"{len(unmapped)} mapped accession(s) have no metadata row "
+            f"(e.g. {', '.join(unmapped[:5])}); their sequences would be "
+            "untracked in the genome DB"
+        )
+    os.replace(partial_path, output_metadata_path)
     logger.info(
         "Wrote %d genome rows from %d assemblies (dropped %d undownloaded)",
         n_out,
-        len(rows),
+        n_rows,
         n_dropped,
     )
 
