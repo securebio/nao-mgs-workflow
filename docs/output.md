@@ -107,7 +107,7 @@ Main heading represents the folder name, and subheadings describes the tool that
 - `bt2-virus-index`: Directory containing Bowtie2 index for host-infecting viral genomes.
 - `bt2-human-index`: Directory containing Bowtie2 index for the human genome.
 - `bt2-other-index`: Directory containing Bowtie2 index for other contaminant sequences.
-- `virus-genome-metadata-gid.tsv.gz`: Genome metadata file generated during download of vertebrate viral genomes[^vertebrate] from viral Genbank, annotated additionally with Genome IDs used by Bowtie2 (allowing mapping between genome ID and taxid).
+- `virus-genome-metadata-gid.tsv.gz`: Genome metadata file generated during download of vertebrate viral genomes[^vertebrate] from viral Genbank, annotated additionally with Genome IDs used by Bowtie2 (allowing mapping between genome ID and taxid). Only includes sequences actually present in `virus-genomes-masked.fasta.gz` after filtering and deduplication.
 
 [^vertebrate]: We say "vertebrate-infecting viruses" here and throughout the documentation for convenience, as the pipeline currently looks for vertebrate-infecting viruses by default. However, which viruses the pipeline looks for is configurable based on how you set up the index workflow.
 
