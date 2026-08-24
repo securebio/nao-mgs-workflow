@@ -138,7 +138,7 @@ docker run --rm -it --entrypoint bash "$TAG"
 #   strings $(which <bin>) | grep '^go1\.'    # Go stdlib version in a gobinary
 ```
 
-**A null `PkgPath` means Trivy read the package from SBOM metadata, not from an installed file — locate it before pinning anything.** pip ships a manifest of its vendored bundle (`site-packages/pip/_vendor/vendor.txt`, `bom.cdx.json`) that Trivy parses as installed packages, so an image can report the same package twice: the real conda copy with a path, and a pathless phantom pinned by pip. Ask Trivy where each copy came from, then confirm on the filesystem:
+**A null `PkgPath` on a language-ecosystem finding (`.Type` of `python-pkg` and friends — OS packages legitimately carry no path) means Trivy read the package from SBOM metadata rather than from an installed file; locate it before pinning anything.** pip ships a manifest of its vendored bundle (`site-packages/pip/_vendor/vendor.txt`, `bom.cdx.json`) that Trivy parses as installed packages, so an image can report the same package twice: the real conda copy with a path, and a pathless phantom pinned by pip. Ask Trivy where each copy came from, then confirm on the filesystem:
 
 ```bash
 trivy image --format json --list-all-pkgs "$TAG" |
