@@ -1,0 +1,2 @@
+taxid	name	rank	parent_taxid	taxid_species	taxid_genus	taxid_family	taxid_order	taxid_class	taxid_phylum	infection_status_human	infection_status_primate	infection_status_mammal	infection_status_vertebrate	infection_status_bird
+10530	Murine adenovirus 1	no rank	3241422	3241422	10509	10508	NA	NA	NA	0	0	1	1	0
