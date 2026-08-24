@@ -26,9 +26,7 @@ process MINIMAP2_INDEX {
 //
 // Set split_index for a reference too large for one index block (`-I`, 8G by default).
 // minimap2 re-reads the query once per block, so it must be a regular file rather than a
-// pipe, and --split-prefix is needed to merge the per-block output. Both constraints fail
-// silently if broken: a piped query under --split-prefix emits nothing, and a multi-part
-// index without it emits one copy of each read per block.
+// pipe, and --split-prefix is needed to merge the per-block output.
 process MINIMAP2 {
     label "large"
     label "minimap2_samtools"
@@ -49,11 +47,11 @@ process MINIMAP2 {
         def un = "${sample}_${params_map.suffix}_minimap2_unmapped.fastq.gz"
         def split_index = params_map.get("split_index", false)
         def idx = "\${idx_local_path}/mm2_index.mmi"
-        def align = split_index
+        def alignCmd = split_index
             ? "minimap2 -a -t ${task.cpus} ${params_map.alignment_params} ${idx} ${reads} --split-prefix mm2_split_ 2> minimap2.log"
             : "${extractCmd} ${reads} | minimap2 -a -t ${task.cpus} ${params_map.alignment_params} ${idx} /dev/fd/0 2> minimap2.log"
         """
-        set -euo pipefail
+        set -eou pipefail
         # Download Minimap2 index if not already present
         idx_local_path=\$(download_db.py "${index_dir}" "${params_map.db_download_timeout}")
         # minimap2's own log, surfaced on every exit path so a failure is still debuggable.
@@ -62,7 +60,7 @@ process MINIMAP2 {
         #   - First branch (samtools view -u -f 4 -) filters SAM to unaligned reads and saves FASTQ
         #   - Second branch (samtools view -u -F 4 -) filters SAM to aligned reads and saves FASTQ
         #   - Third branch (samtools view -h -F 4 -) also filters SAM to aligned reads and saves SAM
-        ${align} \\
+        ${alignCmd} \\
             | tee \\
                 >(samtools view -u -f 4 - \\
                     | samtools fastq - | gzip -c > ${un}) \\
@@ -70,8 +68,7 @@ process MINIMAP2 {
                     | samtools fastq - | gzip -c > ${al}) \\
             | samtools view -h -F 4 - \\
             ${ params_map.remove_sq ? "| grep -v '^@SQ'" : "" } | gzip -c > ${sam}
-        # Without --split-prefix a multi-part index emits one copy of each read per
-        # block, and minimap2 only warns. Make it fatal.
+        # Fail rather than simply warn if --split-prefix is not set for a multi-part index.
         if grep -qF "For a multi-part index" minimap2.log; then
             echo "ERROR: ${index_dir} is a multi-part index; set split_index in params_map" >&2
             exit 1

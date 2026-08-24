@@ -38,7 +38,7 @@
 - Publish a `rust-tools:stable` container image by adding `stable` to the `rust-tools.yml` push triggers and deriving the ECR image tag from the branch name (CI only; no pipeline change).
 - Gate the Trivy container vulnerability scan (`scan-containers`) behind a paths-filter so it only runs when `containers/**` or `configs/containers.config` change.
 - Add a weekly scheduled Trivy container scan (`.github/workflows/scheduled-trivy-triage.yml`) that invokes the `triage-trivy` skill via `claude-code-action` to open a draft triage PR against `dev` when HIGH/CRITICAL findings are present (CI tooling only; no pipeline change).
-- Deprecate `MINIMAP2_NON_STREAMED`: `MINIMAP2` gains a `split_index` flag that adds `--split-prefix` and reads the query as a file, so one process now serves both the streamed and multi-part-index call sites. The contaminant alignment fetches its index through the shared `/scratch` cache and drops from the `max` to the `large` resource label. `MINIMAP2` now fails, rather than silently emitting one copy of each read per index block, if it is handed a multi-part index without `split_index`.
+- Replace `MINIMAP2_NON_STREAMED` with `MINIMAP2` with a `split_index` flag, fetching the contaminant index through the shared `/scratch` cache and reducing the label from `max` to `large`.
 
 # v3.2.2.0
 
