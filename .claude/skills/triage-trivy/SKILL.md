@@ -113,7 +113,7 @@ jq -r '.Results[]?.Vulnerabilities[]? | select(.Severity == "HIGH" or .Severity 
 
 ### Step 2 — For each CVE: gather facts before deciding
 
-**Do this per CVE. Do not batch.** Each finding gets its own structured assessment. Run the per-CVE blocks inline, or dispatch each one to a sub-agent (good when there are many findings, to keep each context focused) — either is fine, but don't collapse multiple CVEs into a single shared assessment.
+**Do this per CVE. Do not batch.** Each distinct CVE gets its own structured assessment. Run the per-CVE blocks inline, or dispatch each one to a sub-agent (good when there are many findings, to keep each context focused) — either is fine, but don't collapse multiple CVEs into a single shared assessment.
 
 **2a. Read the CVE.** Visit `PrimaryURL` (usually NVD or the distro tracker) and read enough to understand:
 - What kind of vulnerability is it? (RCE, DoS, information disclosure, privilege escalation, …)
@@ -146,7 +146,7 @@ trivy image --format json --list-all-pkgs "$TAG" |
 # In the container: micromamba list <pkg>; ls /opt/conda/lib/python*/site-packages | grep -i <pkg>
 ```
 
-If there is no conda-meta entry and no `dist-info`, the package isn't ours: no yml pin can clear it (the fix has to come from the vendoring package's own release), and pinning it installs something the image never carried. That's an Ignore — see anti-pattern #5.
+If there is no conda-meta entry and no `dist-info`, the package isn't ours, and pinning it installs something the image never carried. The fix path runs through the *vendoring* package instead: check whether it has a release that re-vendors a fixed version and whether that release is reachable from the yml (often it isn't — pip's newest release can still vendor the vulnerable version). Ignore only once that check comes back empty — see anti-pattern #5.
 
 **2c. Assess whether the pipeline reaches the vulnerable functionality.** The load-bearing step. Don't dismiss based on "the container is isolated"; name what the pipeline actually does with this package:
 
@@ -316,7 +316,7 @@ Omit the top callout entirely for Ignore-only or Escalate-only triages — it's 
 2. **Bulk-adding CVEs to `.trivyignore` with one-line generic comments.** Each entry needs the four-piece assessment.
 3. **"No Debian fix available" as the only stated reason.** That's a partial check, not a triage outcome. Confirm conda / base-image / upstream-tool paths are also dead ends before ignoring.
 4. **Vague expiry dates** ("six months from now") rather than tied to a specific re-evaluation trigger (upstream release cadence, distro security backport window, etc.).
-5. **Pinning a package Trivy found only in SBOM metadata** (null `PkgPath`; pip's vendored bundle is the usual source). The pin installs a package the image didn't have, can import that package's own vendored CVEs, and never clears the finding — the fix has to come from the vendoring package. Locate the package on the filesystem first (§2b).
+5. **Pinning a package Trivy found only in SBOM metadata** (null `PkgPath`; pip's vendored bundle is the usual source). The pin installs a package the image didn't have, can import that package's own vendored CVEs, and never clears the finding. Locate the package on the filesystem first, then look for a fix in the vendoring package's own releases before ignoring (§2b).
 6. **Hiding the assessment from the PR description.** The reviewer needs to see *why* each CVE was ignored, not just the `.trivyignore` diff. A reviewer who can't audit the assessment from the PR body alone has been given the easy path to rubber-stamp.
 
 ## Cross-references
