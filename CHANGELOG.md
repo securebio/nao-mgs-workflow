@@ -39,6 +39,7 @@
 - Gate the Trivy container vulnerability scan (`scan-containers`) behind a paths-filter so it only runs when `containers/**` or `configs/containers.config` change.
 - Add a weekly scheduled Trivy container scan (`.github/workflows/scheduled-trivy-triage.yml`) that invokes the `triage-trivy` skill via `claude-code-action` to open a draft triage PR against `dev` when HIGH/CRITICAL findings are present (CI tooling only; no pipeline change).
 - Replace `MINIMAP2_NON_STREAMED` with `MINIMAP2` with a `split_index` flag, fetching the contaminant index through the shared `/scratch` cache and reducing the label from `max` to `large`.
+- Fix a latent bug in `MINIMAP2` where the task could exit before a branch compressor had flushed its gzip trailer, silently truncating outputs, by fanning out through named FIFOs and waiting on the captured PIDs instead of `tee >(...)`.
 
 # v3.2.2.0
 

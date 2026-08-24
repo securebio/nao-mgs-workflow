@@ -54,20 +54,27 @@ process MINIMAP2 {
         set -eou pipefail
         # Download Minimap2 index if not already present
         idx_local_path=\$(download_db.py "${index_dir}" "${params_map.db_download_timeout}")
-        # minimap2's own log, surfaced on every exit path so a failure is still debuggable.
-        trap 'cat minimap2.log >&2 2>/dev/null || true' EXIT
+        tmpdir=\$(mktemp -d)
+        # Also surfaces minimap2's own log on every exit path, so a failure stays debuggable.
+        trap 'cat minimap2.log >&2 2>/dev/null || true; rm -rf "\${tmpdir}"' EXIT
+        PIDS=()
+        # Named FIFOs so errors surface, based on modules/local/nucleaze/main.nf.
+        mkfifo "\${tmpdir}/un.fifo" "\${tmpdir}/al.fifo"
         # Partition the SAM stream by alignment status:
         #   - First branch (samtools view -u -f 4 -) filters SAM to unaligned reads and saves FASTQ
         #   - Second branch (samtools view -u -F 4 -) filters SAM to aligned reads and saves FASTQ
         #   - Third branch (samtools view -h -F 4 -) also filters SAM to aligned reads and saves SAM
+        ( samtools view -u -f 4 - < "\${tmpdir}/un.fifo" \\
+            | samtools fastq - | gzip -c > ${un} ) & PIDS+=(\$!)
+        ( samtools view -u -F 4 - < "\${tmpdir}/al.fifo" \\
+            | samtools fastq - | gzip -c > ${al} ) & PIDS+=(\$!)
         ${alignCmd} \\
-            | tee \\
-                >(samtools view -u -f 4 - \\
-                    | samtools fastq - | gzip -c > ${un}) \\
-                >(samtools view -u -F 4 - \\
-                    | samtools fastq - | gzip -c > ${al}) \\
+            | tee "\${tmpdir}/un.fifo" "\${tmpdir}/al.fifo" \\
             | samtools view -h -F 4 - \\
             ${ params_map.remove_sq ? "| grep -v '^@SQ'" : "" } | gzip -c > ${sam}
+        # Wait for the branch compressors to flush their gzip trailers, or the .gz
+        # outputs truncate. A failing branch trips errexit.
+        for pid in "\${PIDS[@]}"; do wait "\${pid}"; done
         # Fail rather than simply warn if --split-prefix is not set for a multi-part index.
         if grep -qF "For a multi-part index" minimap2.log; then
             echo "ERROR: ${index_dir} is a multi-part index; set split_index in params_map" >&2
