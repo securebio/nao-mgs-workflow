@@ -129,4 +129,32 @@ nextflow_process {
             assert sam_read_ids == mapped
         }
     }
+
+    test("Should fail on a multi-part index when split_index is not set") {
+        tag "expect_failure"
+
+        when {
+            params {
+            }
+            process {
+                '''
+                input[0] = LOAD_SAMPLESHEET.out.samplesheet
+                input[1] = MINIMAP2_INDEX_MULTIPART.out
+                input[2] = [
+                    suffix: "unguarded",
+                    remove_sq: false,
+                    alignment_params: "",
+                    db_download_timeout: params.db_download_timeout
+                ]
+                '''
+            }
+        }
+        then {
+            // minimap2 only warns here and emits one copy of each read per block,
+            // so silently succeeding would mean triplicated output. Assert on the
+            // guard specifically, not just any failure.
+            assert process.failed
+            assert process.errorReport.contains("For a multi-part index")
+        }
+    }
 }

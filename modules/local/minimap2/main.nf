@@ -50,12 +50,14 @@ process MINIMAP2 {
         def split_index = params_map.get("split_index", false)
         def idx = "\${idx_local_path}/mm2_index.mmi"
         def align = split_index
-            ? "minimap2 -a -t ${task.cpus} ${params_map.alignment_params} ${idx} ${reads} --split-prefix mm2_split_"
-            : "${extractCmd} ${reads} | minimap2 -a -t ${task.cpus} ${params_map.alignment_params} ${idx} /dev/fd/0"
+            ? "minimap2 -a -t ${task.cpus} ${params_map.alignment_params} ${idx} ${reads} --split-prefix mm2_split_ 2> minimap2.log"
+            : "${extractCmd} ${reads} | minimap2 -a -t ${task.cpus} ${params_map.alignment_params} ${idx} /dev/fd/0 2> minimap2.log"
         """
         set -euo pipefail
         # Download Minimap2 index if not already present
         idx_local_path=\$(download_db.py "${index_dir}" "${params_map.db_download_timeout}")
+        # minimap2's own log, surfaced on every exit path so a failure is still debuggable.
+        trap 'cat minimap2.log >&2 2>/dev/null || true' EXIT
         # Partition the SAM stream by alignment status:
         #   - First branch (samtools view -u -f 4 -) filters SAM to unaligned reads and saves FASTQ
         #   - Second branch (samtools view -u -F 4 -) filters SAM to aligned reads and saves FASTQ
@@ -68,6 +70,12 @@ process MINIMAP2 {
                     | samtools fastq - | gzip -c > ${al}) \\
             | samtools view -h -F 4 - \\
             ${ params_map.remove_sq ? "| grep -v '^@SQ'" : "" } | gzip -c > ${sam}
+        # Without --split-prefix a multi-part index emits one copy of each read per
+        # block, and minimap2 only warns. Make it fatal.
+        if grep -qF "For a multi-part index" minimap2.log; then
+            echo "ERROR: ${index_dir} is a multi-part index; set split_index in params_map" >&2
+            exit 1
+        fi
         # Link input to output for testing
         ln -s ${reads} input_${reads}
         """
