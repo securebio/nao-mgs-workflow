@@ -41,7 +41,8 @@ process MINIMAP2 {
         tuple val(sample), path("${sample}_${params_map.suffix}_minimap2_unmapped.fastq.gz"), emit: reads_unmapped
         tuple val(sample), path("input_${reads}"), emit: input
     script:
-        def extractCmd = reads.toString().endsWith(".gz") ? "zcat" : "cat"
+        // Ordinary gzip can't be inflated in parallel; cap the decompressor at 2 threads.
+        def extractCmd = reads.toString().endsWith(".gz") ? "pigz -dc -p 2" : "cat"
         def sam = "${sample}_${params_map.suffix}_minimap2_mapped.sam.gz"
         def al = "${sample}_${params_map.suffix}_minimap2_mapped.fastq.gz"
         def un = "${sample}_${params_map.suffix}_minimap2_unmapped.fastq.gz"
@@ -64,14 +65,15 @@ process MINIMAP2 {
         #   - First branch (samtools view -u -f 4 -) filters SAM to unaligned reads and saves FASTQ
         #   - Second branch (samtools view -u -F 4 -) filters SAM to aligned reads and saves FASTQ
         #   - Third branch (samtools view -h -F 4 -) also filters SAM to aligned reads and saves SAM
+        # Each branch gets full threads, since they are usually unevenly loaded.
         ( samtools view -u -f 4 - < "\${tmpdir}/un.fifo" \\
-            | samtools fastq - | gzip -c > ${un} ) & PIDS+=(\$!)
+            | samtools fastq - | pigz -p ${task.cpus} -1 -c > ${un} ) & PIDS+=(\$!)
         ( samtools view -u -F 4 - < "\${tmpdir}/al.fifo" \\
-            | samtools fastq - | gzip -c > ${al} ) & PIDS+=(\$!)
+            | samtools fastq - | pigz -p ${task.cpus} -1 -c > ${al} ) & PIDS+=(\$!)
         ${alignCmd} \\
             | tee "\${tmpdir}/un.fifo" "\${tmpdir}/al.fifo" \\
             | samtools view -h -F 4 - \\
-            ${ params_map.remove_sq ? "| grep -v '^@SQ'" : "" } | gzip -c > ${sam}
+            ${ params_map.remove_sq ? "| grep -v '^@SQ'" : "" } | pigz -p ${task.cpus} -1 -c > ${sam}
         # Wait for the branch compressors to flush their gzip trailers, or the .gz
         # outputs truncate. A failing branch trips errexit.
         for pid in "\${PIDS[@]}"; do wait "\${pid}"; done
