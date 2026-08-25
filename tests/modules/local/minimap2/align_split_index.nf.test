@@ -1,0 +1,160 @@
+nextflow_process {
+    name "Test process MINIMAP2 with a split index"
+    script "modules/local/minimap2/main.nf"
+    process "MINIMAP2"
+    config "tests/configs/run_ont.config"
+
+    tag "module"
+    tag "minimap2"
+
+    setup {
+        run("LOAD_SAMPLESHEET") {
+            script "subworkflows/local/loadSampleSheet/main.nf"
+            process {
+                """
+                input[0] = "${projectDir}/test-data/ont-samplesheet.csv"
+                input[1] = "ont"
+                input[2] = false
+                """
+            }
+        }
+        run("MINIMAP2_INDEX_MULTIPART") {
+            script "tests/helpers/minimap2_multipart_index.nf"
+            process {
+                """
+                input[0] = [
+                    file("${projectDir}/test-data/toy-data/test-random.fasta"),
+                    file("${projectDir}/test-data/toy-data/norovirus_GI.fasta"),
+                    file("${projectDir}/test-data/toy-data/test-genome-exclude.fasta"),
+                    file("${projectDir}/test-data/tiny-index/genomes/rrna.fasta"),
+                    file("${projectDir}/test-data/tiny-index/genomes/phage.fasta"),
+                ]
+                input[1] = "2k"
+                """
+            }
+        }
+    }
+
+    test("When run against contaminant index, should correctly partition reads based on alignment status") {
+        tag "expect_success"
+
+        when {
+            params {
+            }
+            process {
+                '''
+                input[0] = LOAD_SAMPLESHEET.out.samplesheet
+                input[1] = "${params.ref_dir}/results/mm2-other-index"
+                input[2] = [
+                    suffix: "test",
+                    remove_sq: false,
+                    alignment_params: "",
+                    db_download_timeout: params.db_download_timeout,
+                    split_index: true
+                ]
+                '''
+            }
+        }
+        then {
+            // Should run without failures
+            assert process.success
+
+            // Check all expected output files exist
+            assert path(process.out.sam[0][1]).exists()
+            assert path(process.out.reads_mapped[0][1]).exists()
+            assert path(process.out.reads_unmapped[0][1]).exists()
+            assert path(process.out.input[0][1]).exists()
+
+            // Get read IDs from output FASTQ files
+            def fastq_read_ids_mapped = path(process.out.reads_mapped[0][1]).fastq.readNames.toSet()
+            def fastq_read_ids_unmapped = path(process.out.reads_unmapped[0][1]).fastq.readNames.toSet()
+
+            // Get read IDs from SAM file
+            def sam_read_ids_mapped = sam(process.out.sam[0][1]).getSamLines()
+                .collect { line -> line.split('\t')[0] }
+                .toSet()
+
+            // Get input read IDs
+            def input_reads = path(process.out.input[0][1]).fastq.readNames.toSet()
+
+            // Verify read partitioning is correct
+            assert sam_read_ids_mapped == fastq_read_ids_mapped
+
+            // Verify no overlapping reads between mapped and unmapped sets
+            assert fastq_read_ids_mapped.intersect(fastq_read_ids_unmapped).size() == 0
+
+            // Verify input FASTQ contains all reads
+            assert input_reads == fastq_read_ids_mapped + fastq_read_ids_unmapped
+        }
+    }
+
+    // The contaminant index above is single-part at test scale, so it never exercises
+    // the per-block merge this path exists for. This forces several blocks.
+    test("Against a multi-part index, should partition reads without losing any") {
+        tag "expect_success"
+
+        when {
+            params {
+            }
+            process {
+                '''
+                input[0] = LOAD_SAMPLESHEET.out.samplesheet
+                input[1] = MINIMAP2_INDEX_MULTIPART.out
+                input[2] = [
+                    suffix: "multipart",
+                    remove_sq: false,
+                    alignment_params: "",
+                    db_download_timeout: params.db_download_timeout,
+                    split_index: true
+                ]
+                '''
+            }
+        }
+        then {
+            assert process.success
+
+            def mapped = path(process.out.reads_mapped[0][1]).fastq.readNames.toSet()
+            def unmapped = path(process.out.reads_unmapped[0][1]).fastq.readNames.toSet()
+            def input_reads = path(process.out.input[0][1]).fastq.readNames.toSet()
+
+            // Every input read is accounted for exactly once: merging per-block output
+            // must not drop or duplicate reads.
+            assert mapped.intersect(unmapped).size() == 0
+            assert input_reads == mapped + unmapped
+            assert !input_reads.isEmpty()
+
+            def sam_read_ids = sam(process.out.sam[0][1]).getSamLines()
+                .collect { line -> line.split('\t')[0] }
+                .toSet()
+            assert sam_read_ids == mapped
+        }
+    }
+
+    test("Should fail on a multi-part index when split_index is not set") {
+        tag "expect_failure"
+
+        when {
+            params {
+            }
+            process {
+                '''
+                input[0] = LOAD_SAMPLESHEET.out.samplesheet
+                input[1] = MINIMAP2_INDEX_MULTIPART.out
+                input[2] = [
+                    suffix: "unguarded",
+                    remove_sq: false,
+                    alignment_params: "",
+                    db_download_timeout: params.db_download_timeout
+                ]
+                '''
+            }
+        }
+        then {
+            // minimap2 only warns here and emits one copy of each read per block,
+            // so silently succeeding would mean triplicated output. Assert on the
+            // guard specifically, not just any failure.
+            assert process.failed
+            assert process.errorReport.contains("For a multi-part index")
+        }
+    }
+}
