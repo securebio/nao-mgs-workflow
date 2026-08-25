@@ -92,7 +92,7 @@ target-version = "py312"
 
 [tool.mgs-workflow]
 # Base image digest (amd64) for container builds — update this to pick up OS-level security patches
-container-base-image = "mambaorg/micromamba@sha256:c9ee7065e7652c1d8c5029fbb453601a19de7d95afdcfe4ad5489023ffd3bc2b"
+container-base-image = "mambaorg/micromamba@sha256:b62ed0c54940e3c801642d72ba7d2462f06356c378eba92d603d39f2ce5e4a0d"
 # Minimum pipeline version required to use indexes built with this pipeline version
 index-min-pipeline-version = "2.8.1.2"
 # Minimum index version required by this pipeline version

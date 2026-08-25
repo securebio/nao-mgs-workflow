@@ -16,6 +16,11 @@ CVE-2026-0861 exp:2026-08-31
 # quinn-proto: QUIC protocol DoS
 # No fix available until Polars releases a build with quinn-proto >= 0.11.14
 CVE-2026-31812 exp:2026-09-30
+# quinn-proto: remote memory exhaustion via unbounded out-of-order stream reassembly
+# (HIGH); fixed in 0.11.15, and the shipped .so now carries 0.11.14 (i.e. the bump that
+# cleared the entry above). multiqc uses Polars only for local dataframe work over
+# pipeline QC files and opens no QUIC connections.
+GHSA-4w2j-m93h-cj5j exp:2026-11-15
 # rustls-webpki: DoS via panic on malformed CRL BIT STRING.
 # No fix available until Polars releases a build with rustls-webpki >= 0.103.13.
 GHSA-82j2-j2ch-gfr8 exp:2026-09-30
@@ -46,9 +51,9 @@ CVE-2025-68973 exp:2026-08-31
 # conda-forge built with Go ~= 1.25.11 or ~= 1.26.4. Check with:
 #   conda search -c conda-forge ncbi-datasets-cli
 #   strings $(conda run -n <env> which datasets) | grep '^go1\.'
-# As of 2026-06-04, 18.29.1 is the latest conda-forge build; its embedded Go
-# version is unverified — the feedstock repackages NCBI's prebuilt binaries, so
-# the Go toolchain is whatever NCBI shipped, not something conda-forge controls.
+# Verified 2026-08-18: the latest conda-forge build (18.35.0) still ships Go stdlib
+# go1.23.4 — identical to the pinned 18.21.0 — so bumping the pin fixes none of these.
+# Confirmed by unpacking the conda package and running `strings` on datasets/dataformat.
 #
 # crypto/tls: unexpected session resumption (CRITICAL)
 CVE-2025-68121 exp:2026-09-30
@@ -97,16 +102,38 @@ CVE-2026-39826 exp:2026-09-30
 # mime/net-mail: excessive CPU decoding crafted MIME headers with many invalid
 # encoded-words (HIGH); these CLIs fetch JSON from NCBI's API, never parse email/MIME.
 CVE-2026-42504 exp:2026-09-30
+# Eight further Go stdlib CVEs surfaced 2026-08-18; same binaries, same assessment, and
+# the upstream check above shows no newer build to move to.
+# encoding/asn1: DoS via excessive recursion in Unmarshal (HIGH); ASN.1 parsing here is
+# limited to NCBI/AWS server certificates.
+CVE-2026-33818 exp:2026-11-15
+# golang.org/x/net/idna: privilege escalation via incorrect Punycode label processing
+# (HIGH); hostnames are the hardcoded NCBI/AWS endpoints, not attacker-supplied.
+CVE-2026-39821 exp:2026-11-15
+# os.Root: symlink following allows directory traversal (HIGH); these binaries write to
+# the workflow's own task directory, with no untrusted symlink sources.
+CVE-2026-39822 exp:2026-11-15
+# net/http: unencrypted HTTP/2 connections vulnerable to DoS (HIGH); all traffic is
+# client-side HTTPS to NCBI/AWS.
+CVE-2026-56853 exp:2026-11-15
+# html/template: XSS via pathological input (HIGH); no server-side templating in these
+# client-only CLI tools.
+CVE-2026-56858 exp:2026-11-15
+# encoding/xml: DoS via XML decoding recursion depth (HIGH); these CLIs consume JSON
+# from NCBI's API, not XML.
+CVE-2026-56859 exp:2026-11-15
+# net/url: DoS from quadratic complexity in path resolution (HIGH); URLs are constructed
+# by the tools themselves against known endpoints.
+CVE-2026-56860 exp:2026-11-15
+# crypto/tls: DoS via indefinite KeyUpdate messages (HIGH); requires a hostile TLS peer,
+# and these binaries talk only to NCBI/AWS.
+CVE-2026-56862 exp:2026-11-15
 
-# ── Pillow in multiqc container (transitive dependency via matplotlib) ──
-# multiqc 1.33 (latest on bioconda) pulls Pillow 12.1.1; fix requires >= 12.2.0.
-# We cannot pin Pillow independently in the conda environment spec.
-# The vulnerability is a FITS GZIP decompression bomb — not a realistic attack
-# vector since multiqc only processes pipeline QC data, not untrusted FITS images.
-CVE-2026-40192 exp:2026-09-30
-# OOB write via integer overflow in PSD tile extents (HIGH): pipeline does not
-# generate or process PSD-format images.
-CVE-2026-42311 exp:2026-09-30
+# ── Pillow in multiqc container ──
+# (CVE-2026-40192 and CVE-2026-42311 were dropped 2026-08-18: both are fixed as of
+# Pillow 12.2.0, which the container already ships, so the entries were stale. The
+# claim they carried — that Pillow cannot be pinned independently — is also wrong;
+# containers/multiqc.yml now pins it explicitly, the same way it pins urllib3.)
 
 # ── Debian trixie base image (mambaorg/micromamba): no fixes reachable ──
 # The base-image knob (container-base-image in pyproject.toml) is the only
@@ -123,16 +150,14 @@ CVE-2026-4046 exp:2026-08-31
 # Our containers never invoke infocmp. Fix only in sid (6.6+).
 CVE-2025-69720 exp:2026-08-31
 
-# openssl (libssl3t64, openssl-provider-legacy): use-after-free in PKCS7_verify()
-# on crafted PKCS#7 / S/MIME messages with an empty digestAlgorithms field
-# (HIGH, DSA-6335-1). Fixed in Debian trixie 3.5.6-1~deb13u2, but the container
-# Dockerfile installs only `procps` (no apt upgrade) so openssl comes straight
-# from the base layer, and no published micromamba digest carries deb13u2 yet —
-# so the fix is not reachable via the permitted base-image bump. Applications
-# using CMS APIs are unaffected; the pipeline verifies no PKCS#7/S-MIME signatures
-# (openssl is linked only for TLS to known NCBI/AWS endpoints via curl/python).
-# Re-eval: a micromamba rebuild ships deb13u2 (bump the digest and drop this).
-CVE-2026-45447 exp:2026-08-31
+# openssl (libssl3t64, openssl-provider-legacy): unbounded memory growth in the QUIC
+# server path -- Initial packets for unknown connection IDs allocate channel objects
+# that queue unbounded until SSL_accept() drains them (HIGH). Debian marks it postponed
+# ("minor issue, fix along with future update") and deb13u2 is still vulnerable, so no
+# fix is reachable. Our containers run no QUIC or TLS server of any kind; openssl is
+# linked only for outbound TLS to known NCBI/AWS endpoints via curl/python.
+# Re-eval: Debian ships a fixed openssl for trixie.
+CVE-2026-14456 exp:2026-10-31
 
 # acl (libacl1) / attr (libattr1): symlink-traversal local privilege escalation
 # in the acl_*_file() functions and getfattr/setfattr utilities (HIGH). Fixed only
@@ -194,6 +219,19 @@ CVE-2026-42497 exp:2026-08-31
 CVE-2026-48962 exp:2026-08-31
 # Archive::Tar unbounded allocation -> memory-exhaustion DoS (HIGH); trusted tarballs, worst case ephemeral OOM.
 CVE-2026-9538 exp:2026-08-31
+# Three further perl CVEs surfaced 2026-08-18. trixie is still on 5.40.1-6 and the
+# latest published micromamba digest ships that same version, so no fix is reachable
+# via the permitted base-image bump. Same exposure as above: the only perl invocation
+# is update_blastdb.pl against official NCBI/AWS BLAST databases.
+# Perl_study_chunk 16-bit overflow silently miscompiles regexes with >65535 fixed-string
+# alternation branches (CRITICAL); no pipeline regex is attacker-supplied or that large.
+CVE-2026-13221 exp:2026-10-31
+# pack/unpack S_measure_struct integer overflow -> OOB heap read (HIGH); the pipeline
+# builds no pack templates from untrusted input.
+CVE-2026-57432 exp:2026-10-31
+# Storable retrieve_hook_common signed overflow aborts thaw()/retrieve() on a crafted
+# SX_HOOK blob (CRITICAL); the pipeline deserializes no Storable data at all.
+CVE-2026-57433 exp:2026-10-31
 
 # ── gzip (Debian trixie 1.13-1): no fixed version available as of 2026-07-02 ──
 # gzip: global buffer overflow in the LZH (.lzh) decompressor on a crafted archive
@@ -203,3 +241,40 @@ CVE-2026-9538 exp:2026-08-31
 # controlled .lzh archives. Re-eval when Debian trixie ships a fixed gzip (a base-
 # image rebuild then clears it).
 CVE-2026-41992 exp:2026-08-31
+
+# ── util-linux (Debian trixie 2.41-5): fix exists but is not reachable ──
+# libblkid integer overflow in the DOS partition-table parser (libblkid/src/partitions/
+# dos.c) reached by probing a crafted disk image or partition table (HIGH). Debian fixed
+# it in 2.41.5-0+deb13u1, but the latest published micromamba digest still ships 2.41-5
+# and the container Dockerfiles install only `procps` (no `apt upgrade`), so the fix is
+# not reachable via the permitted base-image bump. The pipeline never probes block
+# devices or parses disk images: util-linux/libblkid are present only as base-layer
+# dependencies of mount/login, which nothing in the workflow invokes.
+# Re-eval: a micromamba rebuild carrying 2.41.5-0+deb13u1 (bump the digest and drop this).
+CVE-2026-53615 exp:2026-10-31
+
+# Same util-linux 2.41-5, same unreachable fix (2.41.5-0+deb13u1): three mount(8) flaws.
+# Two TOCTOU races in mount applying post-mount ownership/mode changes and in resolving
+# the target path via an ancestor-directory swap, plus a nosuid/noexec bypass through
+# LIBMOUNT_FORCE_MOUNT2 (all HIGH). All three require executing mount(8); the pipeline
+# never does, and Nextflow/Fusion perform their mounts on the host outside the container.
+# mount is SUID root in the base image, so these remain a local privilege-escalation
+# surface for an attacker who already has code execution inside a container - defence in
+# depth rather than unreachable, which is why the expiry is short.
+# Re-eval: a micromamba rebuild carrying 2.41.5-0+deb13u1 (bump the digest and drop these).
+CVE-2026-53612 exp:2026-10-31
+CVE-2026-53613 exp:2026-10-31
+CVE-2026-53614 exp:2026-10-31
+
+# ── pip's vendored dependencies (pysam_biopython) ──
+# msgpack out-of-bounds read on Unpacker reuse after a caught error, and a setuptools
+# PackageIndex path traversal (both HIGH). Neither is our dependency: they are reported
+# from pip's own vendored bundle at site-packages/pip/_vendor (vendor.txt / bom.cdx.json),
+# not from the conda environment, which does not install either package. pip 26.2.1 is
+# already the newest release and still vendors msgpack 1.1.2, so no pin can reach it;
+# the setuptools entry is SBOM metadata only, with no setuptools code under _vendor at all.
+# pip's vendored msgpack is used by cachecontrol to serialise pip's HTTP cache, reached
+# only when pip downloads packages -- the pipeline never invokes pip at run time.
+# Re-eval: a pip release that re-vendors msgpack >= 1.2.1 (then drop these two).
+GHSA-6v7p-g79w-8964 exp:2026-11-30
+CVE-2025-47273 exp:2026-11-30
