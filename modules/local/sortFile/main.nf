@@ -21,7 +21,7 @@ process SORT_FILE {
         set -euo pipefail
         ${SortUtils.prelude('"${TMPDIR:-/tmp}"')}
         # Run command
-        pigz -dc -p ${task.cpus} ${input_file} | sort ${sort_string} ${sort_opts} | pigz -p ${task.cpus} > ${out}
+        pigz -dc -p ${task.cpus} ${input_file} | sort ${sort_string} ${sort_opts} | pigz -p ${task.cpus} -1 > ${out}
         # Link input to output for testing
         ln -s ${input_file} ${in_file}
         """
