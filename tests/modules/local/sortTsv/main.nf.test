@@ -50,6 +50,26 @@ nextflow_process {
         }
     }
 
+    test("Header-only input with no trailing newline keeps its header"){
+        tag "expect_success"
+        when {
+            params {}
+            process {
+                '''
+                input[0] = Channel.of("test")
+                    | combine(Channel.of("${projectDir}/test-data/toy-data/test_tab_no_trailing_newline.tsv"))
+                input[1] = "x"
+                '''
+            }
+        }
+        then {
+            assert process.success
+            // read returns non-zero at EOF on an unterminated final line; the header
+            // must survive rather than being treated as an empty input
+            assert path(process.out.sorted[0][1]).readLines() == ["x\ty\tz"]
+        }
+    }
+
     test("Missing sort field fails the process"){
         tag "expect_failed"
         when {

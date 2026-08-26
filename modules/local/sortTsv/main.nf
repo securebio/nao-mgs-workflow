@@ -24,7 +24,9 @@ process SORT_TSV {
         # Peel the header off the stream and hand the remaining rows straight to sort,
         # so the table is never materialised in the (Fusion-backed) work directory.
         ${read_cmd} ${input_file} | {
-            IFS= read -r header || header=""
+            # A final line with no trailing newline still populates header, but read
+            # returns non-zero at EOF; keep what it read rather than clearing it.
+            IFS= read -r header || true
             if [ -z "\$header" ]; then
                 # No header means an empty input; emit an empty output to match
                 : | ${write_cmd} > ${out}
