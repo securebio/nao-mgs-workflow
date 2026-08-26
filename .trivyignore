@@ -278,3 +278,19 @@ CVE-2026-53614 exp:2026-10-31
 # Re-eval: a pip release that re-vendors msgpack >= 1.2.1 (then drop these two).
 GHSA-6v7p-g79w-8964 exp:2026-11-30
 CVE-2025-47273 exp:2026-11-30
+
+# ── SQLite FTS5 memory corruption (all containers) ──
+# Two HIGH flaws in SQLite's FTS5 full-text extension: an out-of-bounds read in
+# fts5LeafSeek() and a heap buffer overflow in fts5ChunkIterate() via an integer
+# underflow on a crafted continuation page. Both require executing an FTS5 MATCH
+# query against an attacker-supplied database. Nothing in the pipeline opens a
+# SQLite database at all -- no Nextflow process, bin/ script or container entrypoint
+# uses sqlite3, and the only "db" inputs (taxonomy, viral genomes) are TSV and FASTA.
+# libsqlite3-0 is not a dependency of any containers/*.yml; it is base-layer state
+# from the micromamba image, which is why all 25 images report it.
+# Fixed upstream in SQLite 3.53.2 and in sid (3.53.4-2), but trixie ships
+# 3.46.1-7+deb13u1 and marks both <no-dsa> (minor issue), so no yml pin or
+# base-digest bump within trixie can reach the fix.
+# Re-eval: a micromamba rebuild carrying sqlite3 >= 3.53.2 (then drop these two).
+CVE-2026-11822 exp:2026-11-15
+CVE-2026-11824 exp:2026-11-15
