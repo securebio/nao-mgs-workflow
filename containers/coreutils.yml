@@ -4,4 +4,5 @@ channels:
   - conda-forge
 dependencies:
   - conda-forge::coreutils=9.5
+  - conda-forge::gawk=5.3.1
   - conda-forge::pigz=2.8

@@ -1,5 +1,7 @@
 # v3.3.0.0-dev
 
+- Compress `SORT_FILE` and `SORT_FASTQ` output with `pigz -1` rather than the default level 6. (#949)
+- Rewrite `SORT_TSV` as a single streaming pipeline on `lib/SortUtils.groovy` (#949)
 - Ignore two SQLite FTS5 CVEs (`CVE-2026-11822`, `CVE-2026-11824`) reported against `libsqlite3-0` in every container: both require executing an FTS5 `MATCH` query against an attacker-supplied database, the pipeline never opens a SQLite database, and Debian trixie marks both `<no-dsa>`, so neither a `containers/*.yml` pin nor a base-image digest bump can reach the upstream fix.
 - Widen the `scan-containers` paths filter to `.trivyignore`, `bin/scan_containers.py`, and the workflow file itself, so changes to the ignore list or the scan harness are verified against a real Trivy scan instead of skipping the job and passing trivially.
 - Replace clustering with downsampling in DOWNSTREAM's post-hoc viral validation: each per-species partition is downsampled to at most `params.validation_n_sample` reads, those reads are BLASTed, and every hit carries its own validation result instead of one inherited from a cluster representative. Changes the schema and contents of `validation_hits.tsv.gz`.

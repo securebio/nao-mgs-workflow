@@ -12,7 +12,7 @@ process SORT_FASTQ {
         tuple val(sample), path("input_${input_file}"), emit: input
     script:
         def extractCmd = input_file.toString().endsWith(".gz") ? "pigz -dc -p ${task.cpus}" : "cat"
-        def compressCmd = input_file.toString().endsWith(".gz") ? "pigz -p ${task.cpus}" : "cat"
+        def compressCmd = input_file.toString().endsWith(".gz") ? "pigz -p ${task.cpus} -1" : "cat"
         def sort_opts = SortUtils.options(task.cpus, task.memory)
         """
         set -euo pipefail
