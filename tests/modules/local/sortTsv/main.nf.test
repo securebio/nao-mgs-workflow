@@ -70,6 +70,45 @@ nextflow_process {
         }
     }
 
+    test("Gzipped input is sorted and re-compressed"){
+        tag "expect_success"
+        when {
+            params {}
+            process {
+                '''
+                input[0] = Channel.of("test")
+                    | combine(Channel.of("${projectDir}/test-data/toy-data/test_tab_unsorted.tsv.gz"))
+                input[1] = "x"
+                '''
+            }
+        }
+        then {
+            assert process.success
+            // Output keeps the .gz suffix and the header stays first after sorting
+            assert process.out.sorted[0][1].toString().endsWith(".gz")
+            assert path(process.out.sorted[0][1]).linesGzip == ["x\tv\tw", "0\t1\t2", "3\t4\t5", "6\t7\t8"]
+        }
+    }
+
+    test("Zero-byte input produces empty output"){
+        tag "expect_success"
+        when {
+            params {}
+            process {
+                '''
+                input[0] = Channel.of("test")
+                    | combine(Channel.of("${projectDir}/test-data/toy-data/test_tab_zero_byte.tsv"))
+                input[1] = "x"
+                '''
+            }
+        }
+        then {
+            assert process.success
+            // No header at all: emit an empty file rather than failing on the missing column
+            assert path(process.out.sorted[0][1]).text == ""
+        }
+    }
+
     test("Missing sort field fails the process"){
         tag "expect_failed"
         when {
