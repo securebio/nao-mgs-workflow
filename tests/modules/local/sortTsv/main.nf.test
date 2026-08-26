@@ -31,4 +31,40 @@ nextflow_process {
         }
     }
 
+    test("Header-only input is passed through unchanged"){
+        tag "expect_success"
+        when {
+            params {}
+            process {
+                '''
+                input[0] = Channel.of("test")
+                    | combine(Channel.of("${projectDir}/test-data/toy-data/test_tab_empty.tsv"))
+                input[1] = "x"
+                '''
+            }
+        }
+        then {
+            assert process.success
+            // Header survives, and no data rows are invented
+            assert path(process.out.sorted[0][1]).readLines() == ["x\ty\tz"]
+        }
+    }
+
+    test("Missing sort field fails the process"){
+        tag "expect_failed"
+        when {
+            params {}
+            process {
+                '''
+                input[0] = Channel.of("test")
+                    | combine(Channel.of("${projectDir}/test-data/toy-data/test_tab_unsorted.tsv"))
+                input[1] = "not_a_column"
+                '''
+            }
+        }
+        then {
+            assert process.failed
+        }
+    }
+
 }
