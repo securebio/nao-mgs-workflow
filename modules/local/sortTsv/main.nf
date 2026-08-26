@@ -13,16 +13,22 @@ process SORT_TSV {
         tuple val(sample), path("input_${input_file}"), emit: input
     script:
         def gzipped = input_file.toString().endsWith(".gz")
-        def read_cmd = gzipped ? "pigz -dc -p ${task.cpus}" : "cat"
-        def write_cmd = gzipped ? "pigz -p ${task.cpus}" : "cat"
+        // Inflate is essentially serial, so decompression gains nothing from more
+        // threads; cap it at 2 as MINIMAP2 does rather than reserving task.cpus.
+        def read_cmd = gzipped ? "pigz -dc -p 2" : "cat"
+        // These tables are pipeline intermediates, so compress at level 1 (#944).
+        def write_cmd = gzipped ? "pigz -p ${task.cpus} -1" : "cat"
         def out = "sorted_${sort_field}_${input_file}"
         def sort_opts = SortUtils.options(task.cpus, task.memory)
         """
         set -euo pipefail
         ${SortUtils.prelude('"${TMPDIR:-/tmp}"')}
         tab=\$(printf '\\t')
-        # Peel the header off the stream and hand the remaining rows straight to sort,
-        # so the table is never materialised in the (Fusion-backed) work directory.
+        # The task working directory is the Fusion mount, i.e. an S3 prefix; only
+        # \$TMPDIR (/tmp) is instance-local disk, on the container overlayfs. Peel the
+        # header off the stream and hand the remaining rows straight to sort so the
+        # table is never materialised in the work directory, and let SortUtils put
+        # sort's spill under \$TMPDIR rather than alongside it.
         ${read_cmd} ${input_file} | {
             # A final line with no trailing newline still populates header, but read
             # returns non-zero at EOF; keep what it read rather than clearing it.

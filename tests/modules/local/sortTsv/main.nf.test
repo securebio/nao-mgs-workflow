@@ -72,12 +72,24 @@ nextflow_process {
 
     test("Gzipped input is sorted and re-compressed"){
         tag "expect_success"
+        // Compress the plaintext fixture at test time rather than committing a .gz,
+        // so the test data stays readable in the repo.
+        setup {
+            run("GZIP_FILE") {
+                script "modules/local/gzipFile/main.nf"
+                process {
+                    '''
+                    input[0] = Channel.of("test")
+                        | combine(Channel.of("${projectDir}/test-data/toy-data/test_tab_unsorted.tsv"))
+                    '''
+                }
+            }
+        }
         when {
             params {}
             process {
                 '''
-                input[0] = Channel.of("test")
-                    | combine(Channel.of("${projectDir}/test-data/toy-data/test_tab_unsorted.tsv.gz"))
+                input[0] = GZIP_FILE.out
                 input[1] = "x"
                 '''
             }
