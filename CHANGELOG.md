@@ -1,50 +1,47 @@
-# v3.3.0.0-dev
+# v3.3.0.0
 
-- Compress `SORT_FILE` and `SORT_FASTQ` output with `pigz -1` rather than the default level 6. (#949)
-- Rewrite `SORT_TSV` as a single streaming pipeline on `lib/SortUtils.groovy` (#949)
-- Ignore two SQLite FTS5 CVEs (`CVE-2026-11822`, `CVE-2026-11824`) reported against `libsqlite3-0` in every container: both require executing an FTS5 `MATCH` query against an attacker-supplied database, the pipeline never opens a SQLite database, and Debian trixie marks both `<no-dsa>`, so neither a `containers/*.yml` pin nor a base-image digest bump can reach the upstream fix.
-- Widen the `scan-containers` paths filter to `.trivyignore`, `bin/scan_containers.py`, and the workflow file itself, so changes to the ignore list or the scan harness are verified against a real Trivy scan instead of skipping the job and passing trivially.
-- Replace clustering with downsampling in DOWNSTREAM's post-hoc viral validation: each per-species partition is downsampled to at most `params.validation_n_sample` reads, those reads are BLASTed, and every hit carries its own validation result instead of one inherited from a cluster representative. Changes the schema and contents of `validation_hits.tsv.gz`.
-    - Add a `validation_status` column: `aligned` / `no_alignment` / `not_sampled`.
-    - Remove the eight `vsearch_*` columns and replace the string `group_species` (`<group>_<taxid>`) with the integer `selected_taxid`: 66 to 59 fields, and the md5 changes.
-    - Replace the `validation_cluster_identity` and `validation_n_clusters` parameters with `validation_n_sample` (default `20` for non-ONT platforms, `1000000` for ONT), and drop the injected `cluster_min_len`. Most reads are now labelled `not_sampled` instead of inheriting a representative's verdict.
-    - Remove the VSEARCH clustering step from the validation path.
-    - Delete the components the change leaves unused: the `clusterViralAssignments`, `propagateValidationInformation`, and `validateClusterRepresentatives` subworkflows; the `vsearch`, `processVsearchClusterOutput`, and `downsampleFastnById` modules; the `vsearch` container and `vsearch_resources` resource labels; the uncalled `ADD_SAMPLE_COLUMN_LIST` process; and the `fastq` output of `SPLIT_VIRAL_TSV_BY_SELECTED_TAXID`.
-    - Confine the sample to duplicate-group exemplars where duplicate marking ran, so alignments are not spent on reads that duplicate another. ONT skips duplicate marking and is unaffected.
-    - Delete the now-unused `process_vsearch_cluster_output` crate from the `rust-tools` workspace, and drop its binary from the `rust-tools` container image.
+## Deprecating DOWNSTREAM's VSEARCH clustering with hash-based downsampling
 
-- Add an `annotated` output to `SPLIT_VIRAL_TSV_BY_SELECTED_TAXID`: the whole joined table before partitioning, with `selected_taxid` added and `taxid_species` dropped. Existing outputs are unchanged. Nothing consumes it yet, so it costs one extra task per sample group until the consumer lands.
-- Add a `VALIDATE_SAMPLED_READS` subworkflow that computes the taxonomic distance between original and validated assignments, keyed on `seq_id`. Not yet called by any workflow.
-- Add a `DOWNSAMPLE_VIRAL_ASSIGNMENTS` subworkflow that downsamples each per-species hit partition and renders the retained reads as FASTA, optionally confining the sample to duplicate-group exemplars. Not yet called by any workflow.
-- Add an `ANNOTATE_VALIDATION_STATUS` module that joins validation results onto a full viral hits TSV and appends a `validation_status` column (`aligned` / `no_alignment` / `not_sampled`). Not yet called by any workflow.
-- Add a `DOWNSAMPLE_TSV_BY_HASH` module that downsamples a TSV to at most N rows, selecting by hash of a key column so the choice is reproducible, order-independent, and nested in N. Optionally restricts the candidate rows to those where two named columns agree, so sampling can be confined to duplicate-group exemplars. Not yet called by any workflow.
-- Size GNU `sort`'s buffer explicitly in `SORT_FILE` and `SORT_FASTQ` and tier task CPU and memory allocations based on input size. (#924)
-- Bump the container base image to the current `mambaorg/micromamba` digest, which carries openssl `3.5.6-1~deb13u2` (clearing CVE-2026-45447) and liblzma5 `5.8.1-1+deb13u1`, and moves micromamba from 2.6.2 to 2.9.0.
-- Ignore three util-linux `mount(8)` CVEs and two CVEs in pip's vendored bundle, all surfaced by the container rebuild: none is reachable from the pipeline and no fix is available in the newest base image or pip release.
-- Pin Pillow to 12.3.0 in the MultiQC container to clear ten HIGH CVEs, and triage the remaining HIGH/CRITICAL Trivy findings (perl-base, openssl QUIC, util-linux libblkid, Go stdlib in ncbi-datasets-cli, quinn-proto in Polars) into `.trivyignore` as unreachable with no reachable fix.
-- Replace per-profile `errorStrategy`/`maxRetries` settings with a single universal dynamic error strategy (retry up to `maxRetries`, then `ignore`) so a failed task no longer terminates the whole run after retries are exhausted; `workflow.failOnIgnore` keeps the run's exit status non-zero when a task was ignored. A new `nf_test` profile, stacked on `ec2_local` by `nf-test.config`, overrides the strategy back to `finish` so negative tests can still assert on task failure.
-- Set `wave.tokens.cache.maxDuration = '24h'` and `wave.retryPolicy.maxAttempts = 20` to reduce transient Wave infrastructure failures. Adds new test and CI workflow to check the private `wave.tokens.cache.maxDuration` still reaches the Wave client.
-- Require Nextflow `>=26.04.6` (from `25.10.4`), the first of a stacked series upgrading the pipeline to Nextflow 26. Set `aws.client.socketTimeout` to `3600000` (NF 26.04 rejects the previous `0`), bump the `nft-fastq`/`nft-bam` nf-test plugins for compatibility with nf-test `0.9.5`, pin nf-test to `0.9.5` in CI, and drop the now-moot `26.04.x` `.nextflowignore` deferral entries. Replace the `as List<String>` cast in `WRITE_SENTINEL_RUN` with a raw `as List`, which the NF 26.04 compiler requires (parameterized-type casts now fail at runtime).
-- Compare indexes in `bin/benchmark_index.py` after restricting to genomes published in final FASTA and report each index's build-time pipeline version.
-- Sort accessions before chunking them in `FILTER_VIRAL_GENBANK_METADATA`.
-- Deduplicate the viral genome FASTA by sequence ID rather than by full header in `CONCATENATE_GENOME_FASTA`, so records sharing an ID but differing in their description no longer both survive.
-- Add a subworkflow-level test for `MAKE_VIRUS_GENOME_DB` covering Murine adenovirus 1, whose two assemblies share a sequence, so the accession sort and the per-sequence deduplication are exercised end to end on real downloads. Test-only; no pipeline change.
-- Add a `FILTER_METADATA_TO_FASTA` step to `MAKE_VIRUS_GENOME_DB` so the published `virus-genome-metadata-gid.tsv.gz` has one row per sequence in the FASTA. Error if FASTA sequences are missing metadata, or if metadata rows with duplicate `genome_id` values disagree on sequence-derived metadata.
-- Pad accession chunk filenames in `FILTER_VIRAL_GENBANK_METADATA` based on the chunk count.
-- Stream the metadata in `PREPARE_VIRAL_METADATA`.
-- Refactor `DOWNLOAD_VIRAL_GENOMES` to emit one combined FASTA plus an assembly to sequence map per chunk. Consolidate `PREPARE_VIRAL_METADATA` and `ADD_GENBANK_GENOME_IDS` into one step joining filtered taxid metadata and expanding to one row per `genome_id`.
-- Mask human (CHM13) k-mers out of the viral genomes before building the Nucleaze k-mer index.
-- Exclude two viral genome records (`AY037928.1` and `NC_022518.1`) that are pure human contamination.
-- Make the `[tool.<name>]` table read by `CHECK_VERSION_COMPATIBILITY` configurable.
-- Add `bin/compare_downstream_runs.py` / `bin/downstream_metrics.py` and the paired `benchmark-downstream` agent skill for comparing two DOWNSTREAM runs (e.g. across a pipeline change) from their existing output files. Developer/agent tooling only: reads existing DOWNSTREAM outputs and adds no new pipeline outputs, behavior, or schema changes.
-- Pass `-t ${task.cpus}` to minimap2 in the `MINIMAP2` and `MINIMAP2_NON_STREAMED` modules.
-- Add a `.github/actions/trivy-scan` composite action and a PR-less invocation mode for the `triage-trivy` skill (developer/CI tooling; no pipeline change).
-- Publish a `rust-tools:stable` container image by adding `stable` to the `rust-tools.yml` push triggers and deriving the ECR image tag from the branch name (CI only; no pipeline change).
-- Gate the Trivy container vulnerability scan (`scan-containers`) behind a paths-filter so it only runs when `containers/**` or `configs/containers.config` change.
-- Add a weekly scheduled Trivy container scan (`.github/workflows/scheduled-trivy-triage.yml`) that invokes the `triage-trivy` skill via `claude-code-action` to open a draft triage PR against `dev` when HIGH/CRITICAL findings are present (CI tooling only; no pipeline change).
-- Replace `MINIMAP2_NON_STREAMED` with `MINIMAP2` with a `split_index` flag, fetching the contaminant index through the shared `/scratch` cache and reducing the label from `max` to `large`.
-- Fix a latent bug in `MINIMAP2` where the task could exit before a branch compressor had flushed its gzip trailer, silently truncating outputs, by fanning out through named FIFOs and waiting on the captured PIDs instead of `tee >(...)`.
-- Speed up `MINIMAP2` by replacing single-threaded `gzip`/`zcat` with `pigz`, and add `pigz` to the `minimap2_samtools` container. Output contents are unchanged, but the `.gz` bytes differ because compression drops to level 1.
+- Replace VSEARCH clustering with deterministic hash-based downsampling: (#908, #911, #912, #930)
+    - Each per-species partition is downsampled to at most `params.validation_n_sample` reads, those reads are BLASTed, and every hit carries its own `validation_status` (`aligned` / `no_alignment` / `not_sampled`) rather than one inherited from a cluster representative.
+    - The downsample is confined to duplicate-group exemplars where duplicate marking ran. ONT skips duplicate marking and is unaffected.
+    - Illumina validates 20 reads per species, ONT validates 1000000. Replaces the `validation_cluster_identity` and `validation_n_clusters` parameters with `validation_n_sample`, and drops the injected `cluster_min_len`.
+    - **This changes the schema and contents of `validation_hits.tsv.gz`**: the eight `vsearch_*` columns are dropped and the string `group_species` becomes the integer `selected_taxid`, taking the table from 66 to 59 fields. Most reads are now labelled `not_sampled` instead of inheriting a representative's verdict.
+    - Removes everything the clustering step left unused: the `clusterViralAssignments`, `propagateValidationInformation` and `validateClusterRepresentatives` subworkflows; the `vsearch`, `processVsearchClusterOutput` and `downsampleFastnById` modules; the `vsearch` container and `vsearch_resources` label; the uncalled `ADD_SAMPLE_COLUMN_LIST` process; the `fastq` output of `SPLIT_VIRAL_TSV_BY_SELECTED_TAXID`; and the `process_vsearch_cluster_output` crate from the `rust-tools` workspace and container.
+- Add the components the new validation path is assembled from. None is called by a workflow yet: `ANNOTATE_VALIDATION_STATUS` (#909); `DOWNSAMPLE_VIRAL_ASSIGNMENTS` (#910); and `VALIDATE_SAMPLED_READS`, which computes the taxonomic distance between original and validated assignments (#916).
+- Add an `annotated` output to `SPLIT_VIRAL_TSV_BY_SELECTED_TAXID`: the whole joined table before partitioning, with `selected_taxid` added and `taxid_species` dropped. Existing outputs are unchanged and nothing consumes it yet. (#917)
+
+## Reference and index data
+
+- Deduplicate the viral genome FASTA by sequence ID rather than by full header. (#904, #933)
+- Mask human (CHM13) k-mers out of the viral genomes before building the Nucleaze k-mer index, and exclude two records that are pure human contamination (`AY037928.1` and `NC_022518.1`). (#886)
+- Add a `FILTER_METADATA_TO_FASTA` step to `MAKE_VIRUS_GENOME_DB` so the published `virus-genome-metadata-gid.tsv.gz` has exactly one row per sequence in the published FASTA, erroring if a FASTA sequence has no metadata or if duplicate `genome_id` rows disagree on sequence-derived fields. (#934, #935)
+- Streamline `MAKE_VIRUS_GENOME_DB` to reduce inter-process file staging and remove two latent scale limits in the genome DB build by padding chunk filenames and streaming metadata files. (#897, #939)
+
+## Performance
+
+- Replace `MINIMAP2_NON_STREAMED` with a `split_index` flag on `MINIMAP2`, and optimize the process with `pigz`, `-t ${task.cpus}`, and named FIFOs. The named FIFOs also fix a latent bug where the task could exit before a branch compressor had flushed its gzip trailer, silently truncating outputs. (#871, #942, #943, #944)
+- Size GNU `sort`'s buffer explicitly in `SORT_FILE` and `SORT_FASTQ`, and tier task CPU and memory by input size. (#924)
+- Rewrite `SORT_TSV` as a streaming pipeline on the same `SortUtils` helper: the table is no longer staged uncompressed in the work directory twice, `sort`'s spill moves to local disk, and CPU and memory are tiered by input size. Sorted contents are unchanged for well-formed input; the `.gz` bytes differ because output compression moves from `gzip -9` to `pigz -1`, and rows now pass through byte for byte where the previous implementation stripped whitespace from the first data row. (#949)
+- Compress `SORT_FILE` and `SORT_FASTQ` output with `pigz -1` rather than the default level 6, matching `NUCLEAZE` and the pipeline's other intermediate-producing processes. Contents are unchanged; the `.gz` bytes differ. (#949)
+
+## Cleanup and best practice
+
+- Require Nextflow `>=26.04.6` (from `25.10.4`), the first of a stacked series upgrading the pipeline to Nextflow 26. Sets `aws.client.socketTimeout` to `3600000` (NF 26.04 rejects the previous `0`), bumps the `nft-fastq` / `nft-bam` nf-test plugins and pins nf-test to `0.9.5` in CI, and drops the now-moot `26.04.x` `.nextflowignore` deferrals. (#855)
+- Replace per-profile `errorStrategy` / `maxRetries` settings with a single universal dynamic strategy (retry up to `maxRetries`, then `ignore`), so a failed task no longer terminates the whole run once retries are exhausted; `workflow.failOnIgnore` keeps the run's exit status non-zero when a task was ignored. A new `nf_test` profile overrides the strategy back to `finish` so negative tests can still assert on task failure. (#845)
+- Set `wave.tokens.cache.maxDuration = '24h'` and `wave.retryPolicy.maxAttempts = 20` to reduce transient Wave infrastructure failures, with a test and CI workflow checking the private cache setting still reaches the Wave client. (#915)
+- Bump the container base image to the current `mambaorg/micromamba` digest (openssl `3.5.6-1~deb13u2`, liblzma5 `5.8.1-1+deb13u1`, micromamba 2.6.2 to 2.9.0), pin Pillow to 12.3.0 in the MultiQC container to clear ten HIGH CVEs, and triage the remaining HIGH/CRITICAL Trivy findings (perl-base, openssl QUIC, util-linux, Go stdlib in ncbi-datasets-cli, quinn-proto in Polars, pip's vendored bundle) as unreachable with no reachable fix. (#931)
+- Ignore two HIGH SQLite FTS5 CVEs (`CVE-2026-11822`, `CVE-2026-11824`) reported against `libsqlite3-0` in every container: exploiting either needs an FTS5 `MATCH` query against an attacker-supplied database, and the pipeline never opens a SQLite database. Debian trixie marks both `<no-dsa>` with the fix only in sid, so no `containers/*.yml` pin or base-image digest bump can reach it. (#950)
+- Gate the Trivy container scan behind a paths-filter so it only runs when `containers/**` or `configs/containers.config` change (#882), factor the scan into a `.github/actions/trivy-scan` composite action with a PR-less mode for the `triage-trivy` skill (#883), and add a weekly scheduled scan that opens a draft triage PR against `dev` when HIGH/CRITICAL findings are present (#895).
+- Widen that paths-filter to `.trivyignore`, `bin/scan_containers.py` and the workflow file itself, so a change to the ignore list or the scan harness is verified against a real scan instead of skipping the job and passing trivially. (#950)
+- Publish a `rust-tools:stable` container image by adding `stable` to the push triggers and deriving the ECR tag from the branch name. (#884)
+- Make the `[tool.<name>]` table read by `CHECK_VERSION_COMPATIBILITY` configurable. (#885)
+- Document that `rust_tools_version` defaults to `:main` for dev builds and runs. (#881)
+
+## Coding agents
+
+- Add `bin/compare_downstream_runs.py` / `bin/downstream_metrics.py` and the paired `benchmark-downstream` skill for comparing two DOWNSTREAM runs from their existing output files. Reads existing outputs only; no pipeline, output or schema changes. (#860)
+- Compare indexes in `bin/benchmark_index.py` after restricting to genomes published in the final FASTA, and report each index's build-time pipeline version. (#905)
 
 # v3.2.2.0
 
