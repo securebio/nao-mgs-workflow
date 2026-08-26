@@ -121,6 +121,48 @@ nextflow_process {
         }
     }
 
+    test("Already-sorted input is returned unchanged"){
+        tag "expect_success"
+        when {
+            params {}
+            process {
+                '''
+                input[0] = Channel.of("test")
+                    | combine(Channel.of("${projectDir}/test-data/toy-data/test_tab_single.tsv"))
+                input[1] = "x"
+                '''
+            }
+        }
+        then {
+            assert process.success
+            // Exact content, not just sortedness: pins that no row is dropped,
+            // duplicated or reordered when the input is already in key order.
+            assert path(process.out.sorted[0][1]).readLines() ==
+                path("${projectDir}/test-data/toy-data/test_tab_single.tsv").readLines()
+        }
+    }
+
+    test("Leading and trailing whitespace in values is preserved"){
+        tag "expect_success"
+        when {
+            params {}
+            process {
+                '''
+                input[0] = Channel.of("test")
+                    | combine(Channel.of("${projectDir}/test-data/toy-data/test_tab_padded_values.tsv"))
+                input[1] = "x"
+                '''
+            }
+        }
+        then {
+            assert process.success
+            // The Python implementation this replaced stripped the first data row only,
+            // which both mutated that row and moved it in the sort order. Rows must be
+            // passed through byte for byte, so " a" still sorts before "c ".
+            assert path(process.out.sorted[0][1]).readLines() == ["x\ty", " a\t1", " b\t2", "c \t3"]
+        }
+    }
+
     test("Missing sort field fails the process"){
         tag "expect_failed"
         when {
