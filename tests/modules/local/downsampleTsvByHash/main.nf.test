@@ -1,0 +1,164 @@
+nextflow_process {
+
+    name "Test process DOWNSAMPLE_TSV_BY_HASH"
+    script "modules/local/downsampleTsvByHash/main.nf"
+    process "DOWNSAMPLE_TSV_BY_HASH"
+    config "tests/configs/downstream.config"
+    tag "module"
+    tag "downsample_tsv_by_hash"
+
+    test("Should cap the input at n_sample rows and preserve the partition name") {
+        tag "expect_success"
+        when {
+            params {
+                n_sample = 5
+            }
+            process {
+                '''
+                input[0] = ["test", "${projectDir}/test-data/downsampleTsvByHash/partition_10239_hits.tsv"]
+                input[1] = "seq_id"
+                input[2] = params.n_sample
+                input[3] = ""
+                '''
+            }
+        }
+        then {
+            assert process.success
+            assert process.out.output[0][0] == "test"
+            def tab_out = path(process.out.output[0][1]).csv(sep: "\t")
+            def tab_in = path(process.out.input[0][1]).csv(sep: "\t")
+            // 12-row input capped at 5
+            assert tab_in.rowCount == 12
+            assert tab_out.rowCount == params.n_sample
+            // The output name must keep the partition_<taxid>_ segment, since consumers
+            // parse the taxid out of the filename
+            def name = process.out.output[0][1].toString().tokenize("/")[-1]
+            assert name.startsWith("downsampled_")
+            assert name.contains("partition_10239_")
+            // Header preserved, and retained rows are a subset of the input in input order
+            assert tab_out.columnNames == tab_in.columnNames
+            assert tab_in.columns["seq_id"].containsAll(tab_out.columns["seq_id"])
+            def positions = tab_out.columns["seq_id"].collect { id -> tab_in.columns["seq_id"].indexOf(id) }
+            assert positions == positions.toSorted()
+        }
+    }
+
+    test("Should keep every row when n_sample exceeds the input size") {
+        tag "expect_success"
+        when {
+            params {
+                n_sample = 1000
+            }
+            process {
+                '''
+                input[0] = ["test", "${projectDir}/test-data/downsampleTsvByHash/partition_186538_hits.tsv"]
+                input[1] = "seq_id"
+                input[2] = params.n_sample
+                input[3] = ""
+                '''
+            }
+        }
+        then {
+            assert process.success
+            // Exercises the verbatim-copy path: content must still be complete and correct
+            def tab_out = path(process.out.output[0][1]).csv(sep: "\t")
+            def tab_in = path(process.out.input[0][1]).csv(sep: "\t")
+            assert tab_out.rowCount == tab_in.rowCount
+            assert tab_out.columnNames == tab_in.columnNames
+            assert tab_out.columns["seq_id"] == tab_in.columns["seq_id"]
+        }
+    }
+
+    test("Should select the same rows when run twice on the same input") {
+        tag "expect_success"
+        tag "reproducibility"
+        when {
+            params {
+                n_sample = 5
+            }
+            process {
+                // Two independent tasks over the same table, distinguished only by their
+                // sample label so Nextflow does not collapse them into one execution.
+                // Selection is a pure function of seq_id, so both must pick the same rows;
+                // an implementation that drifted with row order or a per-process RNG seed
+                // would diverge here.
+                '''
+                input[0] = channel.of(
+                    ["first",  "${projectDir}/test-data/downsampleTsvByHash/partition_10239_hits.tsv"],
+                    ["second", "${projectDir}/test-data/downsampleTsvByHash/partition_10239_hits.tsv"]
+                )
+                input[1] = "seq_id"
+                input[2] = params.n_sample
+                input[3] = ""
+                '''
+            }
+        }
+        then {
+            assert process.success
+            assert process.out.output.size() == 2
+            def selections = process.out.output.collectEntries { label, f ->
+                [label, path(f).csv(sep: "\t").columns["seq_id"].toSorted()]
+            }
+            assert selections["first"].size() == params.n_sample
+            assert selections["first"] == selections["second"]
+        }
+    }
+
+    test("Should fail when the key column is absent") {
+        tag "expect_failed"
+        when {
+            params {
+                n_sample = 5
+            }
+            process {
+                '''
+                input[0] = ["test", "${projectDir}/test-data/downsampleTsvByHash/partition_10239_hits.tsv"]
+                input[1] = "nonexistent_column"
+                input[2] = params.n_sample
+                input[3] = ""
+                '''
+            }
+        }
+        then {
+            assert process.failed
+            assert process.errorReport.contains("not found in header")
+        }
+    }
+
+    test("Should sample only from rows whose match columns agree") {
+        tag "expect_success"
+        when {
+            params {
+                n_sample = 3
+            }
+            process {
+                """
+                input[0] = ["test", "${projectDir}/test-data/downsampleTsvByHash/partition_10239_hits_exemplars.tsv"]
+                input[1] = "seq_id"
+                input[2] = params.n_sample
+                input[3] = "seq_id,prim_align_dup_exemplar"
+                """
+            }
+        }
+        then {
+            assert process.success
+            def tab_in = path(process.out.input[0][1]).csv(sep: "\t")
+            def tab_out = path(process.out.output[0][1]).csv(sep: "\t")
+            // Ineligible rows are dropped outright, so the cap bounds the eligible rows
+            def eligible = [:]
+            def ids = tab_in.columns["seq_id"]
+            def exemplars = tab_in.columns["prim_align_dup_exemplar"]
+            for (int i = 0; i < ids.size(); i++) {
+                if (ids[i] == exemplars[i]) { eligible[ids[i]] = true }
+            }
+            assert eligible.size() > params.n_sample  // otherwise the cap proves nothing
+            assert tab_out.rowCount == params.n_sample
+            tab_out.columns["seq_id"].each { id -> assert eligible.containsKey(id) }
+            // and every emitted row is genuinely self-exemplar, not merely a retained id
+            def outIds = tab_out.columns["seq_id"]
+            def outEx = tab_out.columns["prim_align_dup_exemplar"]
+            for (int i = 0; i < outIds.size(); i++) { assert outIds[i] == outEx[i] }
+        }
+    }
+
+}

@@ -107,7 +107,7 @@ Main heading represents the folder name, and subheadings describes the tool that
 - `bt2-virus-index`: Directory containing Bowtie2 index for host-infecting viral genomes.
 - `bt2-human-index`: Directory containing Bowtie2 index for the human genome.
 - `bt2-other-index`: Directory containing Bowtie2 index for other contaminant sequences.
-- `virus-genome-metadata-gid.tsv.gz`: Genome metadata file generated during download of vertebrate viral genomes[^vertebrate] from viral Genbank, annotated additionally with Genome IDs used by Bowtie2 (allowing mapping between genome ID and taxid).
+- `virus-genome-metadata-gid.tsv.gz`: Genome metadata file generated during download of vertebrate viral genomes[^vertebrate] from viral Genbank, annotated additionally with Genome IDs used by Bowtie2 (allowing mapping between genome ID and taxid). Only includes sequences actually present in `virus-genomes-masked.fasta.gz` after filtering and deduplication.
 
 [^vertebrate]: We say "vertebrate-infecting viruses" here and throughout the documentation for convenience, as the pipeline currently looks for vertebrate-infecting viruses by default. However, which viruses the pipeline looks for is configurable based on how you set up the index workflow.
 
@@ -125,5 +125,5 @@ Main heading represents the folder name, and subheadings describes the tool that
 #### K-mer screening references
 
 - `virus-genomes-masked.fasta.gz`: FASTA file containing host-infecting viral genomes downloaded from viral Genbank (filtered to remove transgenic, contaminated, or erroneous sequences).
-- `virus-genomes-masked.nucleaze.bin`: Pre-built [Nucleaze](https://github.com/jackdougle/nucleaze) k-mer index over the masked viral genomes, consumed by RUN's viral k-mer screen.
+- `virus-genomes-masked.nucleaze.bin`: Pre-built [Nucleaze](https://github.com/jackdougle/nucleaze) k-mer index over the masked viral genomes, consumed by RUN's viral k-mer screen. Built from the masked viral genomes with human (CHM13) k-mers additionally N-masked out.
 - `ribo-ref-concat.fasta.gz`: Reference database of ribosomal LSU and SSU sequences from SILVA, used by RUN's BBDuk-based ribosomal screen.

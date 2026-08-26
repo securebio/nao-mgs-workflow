@@ -64,7 +64,6 @@ workflow DOWNSTREAM {
         }
         // Validate taxonomic assignments
         def validation_params = params.collectEntries { k, v -> [k, v] }
-        validation_params["cluster_min_len"] = 15
         validate_ch = VALIDATE_VIRAL_ASSIGNMENTS(viral_hits_ch, viral_db, params.ref_dir, validation_params)
         // Prepare publishing channels
         params_str = groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(params))

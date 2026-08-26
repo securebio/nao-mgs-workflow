@@ -1,0 +1,120 @@
+nextflow_workflow {
+
+    name "Test workflow VALIDATE_SAMPLED_READS"
+    script "subworkflows/local/validateSampledReads/main.nf"
+    workflow "VALIDATE_SAMPLED_READS"
+    config "tests/configs/downstream.config"
+    tag "subworkflow"
+    tag "downstream"
+    tag "validate_sampled_reads"
+
+    test("Should run without failures on valid input data") {
+        tag "expect_success"
+        when {
+            params {
+                hits_tsv = "${projectDir}/test-data/toy-data/validate-sampled-reads/test-hits.tsv"
+                lca_tsv = "${projectDir}/test-data/toy-data/validate-sampled-reads/test-lca.tsv"
+                ref_dir = "${projectDir}/test-data/toy-data/validate-sampled-reads/"
+                distance_params = [
+                    taxid_field_1: "taxid",
+                    taxid_field_2: "lca_taxid",
+                    distance_field_1: "tax_dist_1",
+                    distance_field_2: "tax_dist_2"
+                ]
+            }
+            workflow {
+                '''
+                input[0] = Channel.of("test").combine(Channel.of(params.hits_tsv)) // hits_tsv
+                input[1] = Channel.of("test").combine(Channel.of(params.lca_tsv)) // lca_tsv
+                input[2] = params.ref_dir // ref_dir
+                input[3] = params.distance_params // distance_params
+                '''
+            }
+        }
+        then {
+            // Should run without failures
+            assert workflow.success
+            // Column selection should work as expected
+            def tab_hits_in = path(params.hits_tsv).csv(sep: "\t")
+            def tab_select = path(workflow.out.test_select[0][1]).csv(sep: "\t")
+            def exp_cols_select = ["seq_id", "taxid"]
+            assert tab_select.rowCount == tab_hits_in.rowCount
+            assert tab_select.columnNames == exp_cols_select
+            for (col in exp_cols_select) {
+                assert tab_hits_in.columns[col] == tab_select.columns[col]
+            }
+            // Column renaming should work as expected
+            def tab_lca_in = path(params.lca_tsv).csv(sep: "\t")
+            def tab_rehead = path(workflow.out.test_rehead[0][1]).csv(sep: "\t")
+            assert tab_rehead.rowCount == tab_lca_in.rowCount
+            assert tab_rehead.columns["seq_id"] == tab_lca_in.columns["qseqid"]
+            for (col in tab_rehead.columnNames) {
+                if (col != "seq_id") {
+                    assert tab_rehead.columns[col] == tab_lca_in.columns[col]
+                }
+            }
+            // Inner-join should work as expected
+            def tab_join = path(workflow.out.test_join[0][1]).csv(sep: "\t", decompress: true)
+            assert tab_join.rowCount == tab_rehead.rowCount
+            assert tab_join.columnCount == tab_select.columnCount + tab_rehead.columnCount - 1
+            // Distance computation should work as expected
+            def tab_dist = path(workflow.out.test_dist[0][1]).csv(sep: "\t", decompress: true)
+            assert tab_dist.rowCount == tab_join.rowCount
+            assert tab_dist.columnCount == tab_join.columnCount + 2
+            assert tab_dist.columns[params.distance_params.distance_field_1] == tab_dist.columns["exp_distance_1"]
+            assert tab_dist.columns[params.distance_params.distance_field_2] == tab_dist.columns["exp_distance_2"]
+            // The emitted table drops the original taxid, since the hits TSV it will be
+            // joined onto already carries it, and would otherwise collide
+            def tab_out = path(workflow.out.output[0][1]).csv(sep: "\t", decompress: true)
+            assert tab_out.rowCount == tab_dist.rowCount
+            assert tab_out.columnNames == tab_dist.columnNames - [params.distance_params.taxid_field_1]
+            assert !tab_out.columnNames.contains(params.distance_params.taxid_field_1)
+            // It is keyed on seq_id, not on a cluster representative ID, so it can be
+            // joined straight onto the hits table by ANNOTATE_VALIDATION_STATUS
+            assert tab_out.columns["seq_id"] == tab_join.columns["seq_id"]
+            assert !tab_out.columnNames.contains("vsearch_cluster_rep_id")
+        }
+    }
+
+    test("Should emit a header-only table when no read produced an alignment") {
+        tag "expect_success"
+        tag "no_alignments"
+        when {
+            params {
+                hits_tsv = "${projectDir}/test-data/toy-data/validate-sampled-reads/test-hits.tsv"
+                lca_tsv = "${projectDir}/test-data/toy-data/validate-sampled-reads/test-lca-empty.tsv"
+                ref_dir = "${projectDir}/test-data/toy-data/validate-sampled-reads/"
+                distance_params = [
+                    taxid_field_1: "taxid",
+                    taxid_field_2: "lca_taxid",
+                    distance_field_1: "tax_dist_1",
+                    distance_field_2: "tax_dist_2"
+                ]
+            }
+            workflow {
+                // BLAST returning nothing for a whole group is a normal outcome, not an
+                // error: those reads become no_alignment downstream. LCA_TSV emits a
+                // header-only table in that case, so every step here has to carry the
+                // header through -- COMPUTE_TAXID_DISTANCE rejects a genuinely empty file.
+                '''
+                input[0] = Channel.of("test").combine(Channel.of(params.hits_tsv)) // hits_tsv
+                input[1] = Channel.of("test").combine(Channel.of(params.lca_tsv)) // lca_tsv
+                input[2] = params.ref_dir // ref_dir
+                input[3] = params.distance_params // distance_params
+                '''
+            }
+        }
+        then {
+            assert workflow.success
+            // Read the header directly: the csv plugin reports no columnNames at all for
+            // a zero-row table, so it cannot distinguish a header-only file from an empty one
+            def lines = path(workflow.out.output[0][1]).linesGzip
+            assert lines.size() == 1
+            def header = lines[0].split("\t") as List
+            assert header.contains("seq_id")
+            assert header.contains(params.distance_params.distance_field_1)
+            assert header.contains(params.distance_params.distance_field_2)
+            assert !header.contains(params.distance_params.taxid_field_1)
+        }
+    }
+}

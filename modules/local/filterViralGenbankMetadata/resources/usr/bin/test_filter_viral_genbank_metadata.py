@@ -5,7 +5,11 @@ from pathlib import Path
 
 import pandas as pd
 import pytest
-from filter_viral_genbank_metadata import filter_metadata, write_accession_chunks
+from filter_viral_genbank_metadata import (
+    chunk_filename,
+    filter_metadata,
+    write_accession_chunks,
+)
 
 # Two vertebrate-infecting virus taxids (1, 2) and one non-infecting (3).
 # `taxid_species` rolls strain-level taxids 11, 21, 31 up to species-level 1, 2, 3.
@@ -136,14 +140,14 @@ class TestWriteAccessionChunks:
     @pytest.mark.parametrize(
         ("accessions", "chunk_size", "expected_chunks"),
         [
-            # Exactly divides — every chunk full, zero-padded indices.
+            # Exactly divides — every chunk full.
             (
                 [f"GCA_{i:03d}" for i in range(6)],
                 2,
                 {
-                    "chunk_0001.txt": "GCA_000\nGCA_001\n",
-                    "chunk_0002.txt": "GCA_002\nGCA_003\n",
-                    "chunk_0003.txt": "GCA_004\nGCA_005\n",
+                    "chunk_1.txt": "GCA_000\nGCA_001\n",
+                    "chunk_2.txt": "GCA_002\nGCA_003\n",
+                    "chunk_3.txt": "GCA_004\nGCA_005\n",
                 },
             ),
             # Doesn't divide evenly — final chunk holds the remainder.
@@ -151,9 +155,9 @@ class TestWriteAccessionChunks:
                 [f"GCA_{i:03d}" for i in range(5)],
                 2,
                 {
-                    "chunk_0001.txt": "GCA_000\nGCA_001\n",
-                    "chunk_0002.txt": "GCA_002\nGCA_003\n",
-                    "chunk_0003.txt": "GCA_004\n",
+                    "chunk_1.txt": "GCA_000\nGCA_001\n",
+                    "chunk_2.txt": "GCA_002\nGCA_003\n",
+                    "chunk_3.txt": "GCA_004\n",
                 },
             ),
             # chunk_size=1 — one file per accession (used by run-test config).
@@ -161,8 +165,8 @@ class TestWriteAccessionChunks:
                 ["GCA_A", "GCA_B"],
                 1,
                 {
-                    "chunk_0001.txt": "GCA_A\n",
-                    "chunk_0002.txt": "GCA_B\n",
+                    "chunk_1.txt": "GCA_A\n",
+                    "chunk_2.txt": "GCA_B\n",
                 },
             ),
         ],
@@ -181,6 +185,46 @@ class TestWriteAccessionChunks:
         assert n == len(expected_chunks)
         actual = {p.name: p.read_text() for p in tmp_path.iterdir()}
         assert actual == expected_chunks
+
+    @pytest.mark.parametrize(
+        "accessions",
+        [
+            ["GCA_C", "GCA_A", "GCA_D", "GCA_B"],
+            ["GCA_A", "GCA_B", "GCA_C", "GCA_D"],
+        ],
+        ids=["shuffled", "already_sorted"],
+    )
+    def test_chunking_is_independent_of_input_order(
+        self, tmp_path: Path, accessions: list[str]
+    ) -> None:
+        write_accession_chunks(pd.Series(accessions, dtype=str), tmp_path, 2)
+        assert {p.name: p.read_text() for p in tmp_path.iterdir()} == {
+            "chunk_1.txt": "GCA_A\nGCA_B\n",
+            "chunk_2.txt": "GCA_C\nGCA_D\n",
+        }
+
+    @pytest.mark.parametrize(
+        ("index", "n_chunks", "expected"),
+        [
+            (1, 3, "chunk_1.txt"),
+            (1, 10, "chunk_01.txt"),
+            (9999, 9999, "chunk_9999.txt"),
+            (1, 10000, "chunk_00001.txt"),
+            (10000, 10000, "chunk_10000.txt"),
+        ],
+        ids=["single_digit", "two_digits", "four_digits", "past_four_digits", "widest"],
+    )
+    def test_chunk_filename_pads_to_the_chunk_count(
+        self, index: int, n_chunks: int, expected: str
+    ) -> None:
+        assert chunk_filename(index, n_chunks) == expected
+
+    @pytest.mark.parametrize("n_chunks", [9, 10, 9999, 10000, 100001])
+    def test_chunk_names_sort_into_chunk_order(self, n_chunks: int) -> None:
+        # Downstream concatenation orders chunks by filename, so lexicographic
+        # order has to match the order the accessions were chunked in.
+        names = [chunk_filename(i, n_chunks) for i in range(1, n_chunks + 1)]
+        assert sorted(names) == names
 
     def test_empty_input_raises(self, tmp_path: Path) -> None:
         with pytest.raises(ValueError, match="No accessions passed filter"):

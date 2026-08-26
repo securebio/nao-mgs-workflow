@@ -31,4 +31,153 @@ nextflow_process {
         }
     }
 
+    test("Header-only input is passed through unchanged"){
+        tag "expect_success"
+        when {
+            params {}
+            process {
+                '''
+                input[0] = Channel.of("test")
+                    | combine(Channel.of("${projectDir}/test-data/toy-data/test_tab_empty.tsv"))
+                input[1] = "x"
+                '''
+            }
+        }
+        then {
+            assert process.success
+            // Header survives, and no data rows are invented
+            assert path(process.out.sorted[0][1]).readLines() == ["x\ty\tz"]
+        }
+    }
+
+    test("Header-only input with no trailing newline keeps its header"){
+        tag "expect_success"
+        when {
+            params {}
+            process {
+                '''
+                input[0] = Channel.of("test")
+                    | combine(Channel.of("${projectDir}/test-data/toy-data/test_tab_no_trailing_newline.tsv"))
+                input[1] = "x"
+                '''
+            }
+        }
+        then {
+            assert process.success
+            // read returns non-zero at EOF on an unterminated final line; the header
+            // must survive rather than being treated as an empty input
+            assert path(process.out.sorted[0][1]).readLines() == ["x\ty\tz"]
+        }
+    }
+
+    test("Gzipped input is sorted and re-compressed"){
+        tag "expect_success"
+        // Compress the plaintext fixture at test time rather than committing a .gz,
+        // so the test data stays readable in the repo.
+        setup {
+            run("GZIP_FILE") {
+                script "modules/local/gzipFile/main.nf"
+                process {
+                    '''
+                    input[0] = Channel.of("test")
+                        | combine(Channel.of("${projectDir}/test-data/toy-data/test_tab_unsorted.tsv"))
+                    '''
+                }
+            }
+        }
+        when {
+            params {}
+            process {
+                '''
+                input[0] = GZIP_FILE.out
+                input[1] = "x"
+                '''
+            }
+        }
+        then {
+            assert process.success
+            // Output keeps the .gz suffix and the header stays first after sorting
+            assert process.out.sorted[0][1].toString().endsWith(".gz")
+            assert path(process.out.sorted[0][1]).linesGzip == ["x\tv\tw", "0\t1\t2", "3\t4\t5", "6\t7\t8"]
+        }
+    }
+
+    test("Zero-byte input produces empty output"){
+        tag "expect_success"
+        when {
+            params {}
+            process {
+                '''
+                input[0] = Channel.of("test")
+                    | combine(Channel.of("${projectDir}/test-data/toy-data/test_tab_zero_byte.tsv"))
+                input[1] = "x"
+                '''
+            }
+        }
+        then {
+            assert process.success
+            // No header at all: emit an empty file rather than failing on the missing column
+            assert path(process.out.sorted[0][1]).text == ""
+        }
+    }
+
+    test("Already-sorted input is returned unchanged"){
+        tag "expect_success"
+        when {
+            params {}
+            process {
+                '''
+                input[0] = Channel.of("test")
+                    | combine(Channel.of("${projectDir}/test-data/toy-data/test_tab_single.tsv"))
+                input[1] = "x"
+                '''
+            }
+        }
+        then {
+            assert process.success
+            // Exact content, not just sortedness: pins that no row is dropped,
+            // duplicated or reordered when the input is already in key order.
+            assert path(process.out.sorted[0][1]).readLines() ==
+                path("${projectDir}/test-data/toy-data/test_tab_single.tsv").readLines()
+        }
+    }
+
+    test("Leading and trailing whitespace in values is preserved"){
+        tag "expect_success"
+        when {
+            params {}
+            process {
+                '''
+                input[0] = Channel.of("test")
+                    | combine(Channel.of("${projectDir}/test-data/toy-data/test_tab_padded_values.tsv"))
+                input[1] = "x"
+                '''
+            }
+        }
+        then {
+            assert process.success
+            // The Python implementation this replaced stripped the first data row only,
+            // which both mutated that row and moved it in the sort order. Rows must be
+            // passed through byte for byte, so " a" still sorts before "c ".
+            assert path(process.out.sorted[0][1]).readLines() == ["x\ty", " a\t1", " b\t2", "c \t3"]
+        }
+    }
+
+    test("Missing sort field fails the process"){
+        tag "expect_failed"
+        when {
+            params {}
+            process {
+                '''
+                input[0] = Channel.of("test")
+                    | combine(Channel.of("${projectDir}/test-data/toy-data/test_tab_unsorted.tsv"))
+                input[1] = "not_a_column"
+                '''
+            }
+        }
+        then {
+            assert process.failed
+        }
+    }
+
 }

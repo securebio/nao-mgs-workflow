@@ -4,7 +4,7 @@
 
 include { MINIMAP2 as MINIMAP2_VIRUS } from "../../../modules/local/minimap2"
 include { MINIMAP2 as MINIMAP2_HUMAN } from "../../../modules/local/minimap2"
-include { MINIMAP2_NON_STREAMED as MINIMAP2_CONTAM } from "../../../modules/local/minimap2"
+include { MINIMAP2 as MINIMAP2_CONTAM } from "../../../modules/local/minimap2"
 include { FILTLONG } from "../../../modules/local/filtlong"
 include { MASK_FASTQ_READS } from "../../../modules/local/maskRead"
 include { EXTRACT_SHARED_FASTQ_READS as EXTRACT_VIRAL_FILTERED_READS } from "../../../modules/local/extractSharedFastq"
@@ -55,7 +55,8 @@ workflow EXTRACT_VIRAL_READS_ONT {
         human_minimap2_ch = MINIMAP2_HUMAN(masked_ch.masked, minimap2_human_index, human_minimap2_params)
         no_human_ch = human_minimap2_ch.reads_unmapped
         // Identify other contaminants
-        contam_minimap2_params = minimap2_base_params + [suffix: "other", alignment_params: ""]
+        contam_minimap2_params = minimap2_base_params + [suffix: "other", alignment_params: "",
+                                                         split_index: true]
         contam_minimap2_ch = MINIMAP2_CONTAM(no_human_ch, minimap2_contam_index, contam_minimap2_params)
         no_contam_ch = contam_minimap2_ch.reads_unmapped
         // Identify virus reads with multiple alignments for LCA analysis

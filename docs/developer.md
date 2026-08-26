@@ -26,10 +26,13 @@ These guidelines represent best practices to implement in new code, though some 
     - Extensive comments are encouraged. 
     - Each workflow, subworkflow, or process should begin with a descriptive comment explaining what it does.
     - Each workflow should have a `<workflow_name>.md` document in `docs/`.
-- Process conventions (see `modules/local/vsearch/main.nf` for an example of a well-written process that follows these conventions):
+- Process conventions (see `modules/local/lcaTsv/main.nf` for an example of a well-written process that follows these conventions):
     - All processes should have a label specifying needed resources (e.g. `label "small"`). Resources are then specified in `configs/resources.config`.
         - Most labels declare static resources (`cpus = 8; memory = 16.GB`).
         - When a process's peak memory scales strongly with input size, the label's `memory` directive may be a closure over the process inputs that picks a memory tier based on total byte size. See `bbmask_resources` in `configs/resources.config` for an example, and `tests/configs/resources/` for its associated nf-test.
+        - The `cpus` directive may also be a closure over process inputs to more heavily parallelize large inputs, especially when `memory` tiers already allocate more of an instance to a given task. However, the ratio between available CPUs and memory can vary and depends on the instance types defined by the compute environment.
+        - Scaling `memory` or `cpus` also limits how many tasks pack onto one instance, which can help bound the cumulative local disk usage.
+        - A closure over an input variable must use that process's own input name, so closures can only be reused across processes whose inputs are named the same. Avoid using `file` in these closures and process inputs, which shadows Nextflow's `file()` function.
     - All processes should have a label specifying the Docker container to use (e.g. `label "BBTools"`). Containers are then specified in `configs/containers.config`.
     - Any processes that are used only for testing should have `label "testing"`.
     - All processes should have a `tag` directive that identifies the task in the Nextflow trace. Tags use a `key=value` format with `,` as the separator between components, and `id` is always the first key. Tag-component values must not contain commas (`,`) or equals signs (`=`), since these are used as delimiters; substituted variables (e.g. `${sample}`) are expected to satisfy this constraint.
@@ -104,7 +107,7 @@ docker push public.ecr.aws/q0n1c7g8/nao-mgs-workflow/rust-tools:dev-$(whoami)
 nextflow run main.nf --rust_tools_version dev-$(whoami) -profile batch ...
 ```
 
-**Note:** The container is automatically rebuilt by GitHub Actions when Rust source files change on `dev` or `main`. Use `--rust_tools_version dev` to test against the dev branch build.
+**Note:** The container is automatically rebuilt by GitHub Actions when Rust source files change on `dev`, `main`, or `stable`, and is published to ECR under a tag matching the branch name (`rust-tools:dev`, `rust-tools:main`, `rust-tools:stable`). Use `--rust_tools_version dev` to test against the dev branch build.
 
 ## Containers
 
@@ -264,7 +267,7 @@ Only pipeline maintainers should author a new release. The process for going thr
 3. Open a PR to merge the release branch into `dev`, wait for CI tests to complete, and resolve any failing tests. Then:
 
     1. Squash-merge the PR into `dev`, then open a new PR from `dev` into `main` entitled "Merge dev to main -- release X.Y.Z.W".
-    2. Quickly review the PR changes to ensure the changed files are consistent with the changes noted in `CHANGELOG.md` (no need to review file contents deeply at this stage).
+    2. Quickly review the PR changes to ensure the changed files are consistent with the changes noted in `CHANGELOG.md` (no need to review file contents deeply at this stage). To catch output regressions before the release, optionally diff the candidate `dev` DOWNSTREAM output against `main`'s with the `benchmark-downstream` skill (`.claude/skills/benchmark-downstream/`; runs `bin/compare_downstream_runs.py`), which flags large changes in viral assignments, kraken abundances, and QC metrics for human review.
     3. Double check that documentation and tests have been updated to stay consistent with changes to the pipeline.
     4. Wait for additional long-running pre-release checks to complete in Github Actions.
     5. If any issues or test failures arise in the preceding steps, fix them with new PRs into `dev`; the `dev`→`main` PR tracks `dev`, so merged fixes are automatically included in the release. Use a `release/...` branch for these fixes so `check-version` accepts the release's non-`-dev` version, and record them under the existing release heading in `CHANGELOG.md` rather than bumping the version.
@@ -280,7 +283,7 @@ Only pipeline maintainers should author a new release. The process for going thr
 
 The INDEX workflow's reference data (NCBI taxonomy, Virus-Host-DB, Kraken2, SILVA, host/contaminant genomes) drifts over time, so a new dated index is built under `s3://nao-mgs-index/<DATE>` periodically (see [Run index/reference workflow](./installation.md#7-run-indexreference-workflow)). After building a new production index, it's important to benchmark it against the previous one to check for regressions; the easiest way to do this is to execute the `benchmark-index` skill (`.claude/skills/benchmark-index/`) within Claude Code or another coding agent, then read the `REVIEW.md` file produced.
 
-The `benchmark-index` skill calls the `benchmark_index.py` script to carry out deterministic comparisons between the indices specified. This script diffs whatever two index roots it is given, so it is not pinned to a fixed index schema; it does require the newer (`--new`) index to publish `virus-genome-metadata-raw.tsv.gz` and `input/host-infection-overrides.json`. New index outputs are not reflected in the report until comparison logic is added to the script.
+The `benchmark-index` skill calls the `benchmark_index.py` script to carry out deterministic comparisons between the indices specified. This script diffs whatever two index roots it is given, so it is not pinned to a fixed index schema; it does require **both** indexes to publish `virus-genomes-masked.fasta.gz`, and the newer (`--new`) index to publish `virus-genome-metadata-raw.tsv.gz` and `input/host-infection-overrides.json`. New index outputs are not reflected in the report until comparison logic is added to the script.
 
 ## Schemas
 

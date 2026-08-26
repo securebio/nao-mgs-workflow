@@ -1,2 +1,3 @@
 assembly_accession	taxid	organism_name	source_database	assembly_status
 GCA_000000000.0	12475	Test virus	RefSeq	current
+GCA_000000001.0	2847173	Test segmented virus	GenBank	current

@@ -36,6 +36,7 @@ from pathlib import Path
 from typing import Any
 
 import pandas as pd
+from compare_downstream_runs import read_pipeline_version
 
 ###########
 # LOGGING #
@@ -374,6 +375,88 @@ def surveilled_taxids(db: pd.DataFrame, hosts: list[str]) -> set[str]:
     return positive
 
 
+def get_fasta_ids(prefix: str, work_dir: Path) -> set[str]:
+    """Return the sequence IDs in an index's published FASTA file.
+
+    Args:
+        prefix: Index root (s3:// URI or local path), the parent of `output/`.
+        work_dir: Directory to stage the FASTA into.
+    Returns:
+        Set of sequence IDs, each the first whitespace-delimited token of a
+        header, matching how genome_ids are derived at download time.
+    Raises:
+        ValueError: If the index publishes no FASTA, publishes one with no
+            sequence headers, or carries a header with no ID.
+    """
+    subpath = "output/results/virus-genomes-masked.fasta.gz"
+    try:
+        path = fetch(prefix, subpath, work_dir)
+    except (subprocess.CalledProcessError, FileNotFoundError) as exc:
+        # Absent or in Glacier Deep Archive.
+        raise ValueError(
+            f"Could not stage {subpath} from index {prefix}, which is required"
+            " to compare indexes on FASTA membership."
+        ) from exc
+    ids, records = set(), 0
+    try:
+        with gzip.open(path, "rt") as f:
+            for line_no, line in enumerate(f, start=1):
+                if not line.startswith(">"):
+                    continue
+                tokens = line[1:].split(maxsplit=1)
+                if not tokens:
+                    raise ValueError(
+                        f"Header with no sequence ID at line {line_no} of"
+                        f" {prefix}'s FASTA."
+                    )
+                ids.add(tokens[0])
+                records += 1
+    finally:
+        path.unlink(missing_ok=True)
+    if not ids:
+        raise ValueError(f"Index {prefix} publishes a FASTA with no sequences.")
+    logger.info(
+        f"Read {len(ids)} sequence ID(s) from {records} record(s) in {prefix}'s FASTA."
+    )
+    return ids
+
+
+def restrict_to_fasta(
+    meta: pd.DataFrame, fasta_ids: set[str], label: str
+) -> tuple[pd.DataFrame, int, int]:
+    """Restrict metadata to the rows describing a sequence in the FASTA file.
+
+    Indexes built with pipeline version 3.2.2.0 or earlier publish metadata that
+    was never reconciled to the FASTA.
+
+    Args:
+        meta: Index metadata, with a `genome_id` column.
+        fasta_ids: Sequence IDs in the same index's FASTA.
+        label: Which side of the comparison this is, for logging.
+    Returns:
+        Tuple of (restricted metadata, metadata rows describing no sequence in
+        the FASTA file, FASTA sequences with no metadata row).
+    Raises:
+        ValueError: If the metadata has no `genome_id` column.
+    """
+    if "genome_id" not in meta.columns:
+        raise ValueError(f"{label} metadata missing required columns: {{'genome_id'}}")
+    in_fasta = meta["genome_id"].isin(fasta_ids)
+    extra_rows = int((~in_fasta).sum())
+    orphan_ids = len(fasta_ids - set(meta["genome_id"]))
+    if extra_rows:
+        logger.warning(
+            f"{label} index: {extra_rows} metadata row(s) describe no sequence"
+            " in its FASTA; excluding them from the comparison."
+        )
+    if orphan_ids:
+        logger.warning(
+            f"{label} index: {orphan_ids} FASTA sequence(s) have no metadata"
+            " row, so RUN cannot resolve them to a taxid."
+        )
+    return meta[in_fasta], extra_rows, orphan_ids
+
+
 def metadata_deltas(
     old_meta: pd.DataFrame, new_meta: pd.DataFrame
 ) -> tuple[
@@ -542,6 +625,19 @@ def write_genome_taxonomy_tables(
             " metadata."
         ) from exc
     new_raw_meta = pd.read_csv(raw_path, sep="\t", dtype=str)
+    if "release_date" not in new_raw_meta.columns:
+        raise ValueError(
+            "Target index raw metadata lacks release_date, required for gained-genome categorization."
+        )
+    # Restrict index metadata to genome_ids in final FASTA.
+    old_fasta_ids = get_fasta_ids(old, work_dir / "old")
+    new_fasta_ids = get_fasta_ids(new, work_dir / "new")
+    old_meta, old_extra_rows, old_orphan_ids = restrict_to_fasta(
+        old_meta, old_fasta_ids, "old"
+    )
+    new_meta, new_extra_rows, new_orphan_ids = restrict_to_fasta(
+        new_meta, new_fasta_ids, "new"
+    )
     old_cols = set(old_meta.columns)
     new_cols = set(new_meta.columns)
     schema_rows = [
@@ -555,10 +651,6 @@ def write_genome_taxonomy_tables(
         out_dir / "metadata_schema_summary.json",
         {"added": schema_counts["added"], "removed": schema_counts["removed"]},
     )
-    if "release_date" not in new_raw_meta.columns:
-        raise ValueError(
-            "Target index raw metadata lacks release_date, required for gained-genome categorization."
-        )
     (
         lost_g,
         gained_g,
@@ -607,6 +699,10 @@ def write_genome_taxonomy_tables(
             ),
             "taxa_added": len(new_taxids - old_taxids),
             "taxa_removed": len(old_taxids - new_taxids),
+            "metadata_rows_not_in_fasta_old": old_extra_rows,
+            "metadata_rows_not_in_fasta_new": new_extra_rows,
+            "fasta_ids_without_metadata_old": old_orphan_ids,
+            "fasta_ids_without_metadata_new": new_orphan_ids,
         },
     )
 
@@ -808,9 +904,39 @@ def write_infection_status_tables(
     )
 
 
-##################
-# 5. PARAMS DIFF #
-##################
+#############################
+# 5. PARAMS AND PROVENANCE  #
+#############################
+
+
+def write_index_versions(
+    out_dir: Path, old_prefix: str, new_prefix: str, work_dir: Path
+) -> None:
+    """Write each index's build-time pipeline version to index_versions.json.
+
+    Args:
+        out_dir: Directory to write index_versions.json into.
+        old_prefix: Old index root (s3:// URI or local path).
+        new_prefix: New index root, same form.
+        work_dir: Directory to stage the probed files into.
+    Raises:
+        ValueError: If either index records no pipeline version, which leaves
+            its metadata/FASTA agreement counts uninterpretable.
+    """
+    logger.info("Reading each index's build-time pipeline version.")
+    versions = {}
+    for label, prefix in (("old", old_prefix), ("new", new_prefix)):
+        version = read_pipeline_version(
+            f"{prefix.rstrip('/')}/output", work_dir / label
+        )
+        if version is None:
+            raise ValueError(
+                f"Index {prefix} records no pipeline version under"
+                " output/logging/; expected pyproject.toml or"
+                " pipeline-version.txt."
+            )
+        versions[f"pipeline_version_{label}"] = version
+    _write_json(out_dir / "index_versions.json", versions)
 
 
 def summarise_params_changes(old_params: dict, new_params: dict) -> pd.DataFrame:
@@ -908,6 +1034,7 @@ def main() -> None:
         old_params, new_params = write_params_tables(
             args.out, args.old, args.new, work_dir
         )
+        write_index_versions(args.out, args.old, args.new, work_dir)
         old_db, new_db, coverage = load_taxonomy_context(
             args.old, args.new, new_params, work_dir
         )

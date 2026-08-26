@@ -14,6 +14,7 @@ nextflow_process {
                 '''
                 input[0] = "${projectDir}/test-data/tiny-index/output/results/virus-genomes-masked.fasta.gz"
                 input[1] = 24
+                input[2] = "virus-genomes-masked" // explicit index basename
                 '''
             }
         }
