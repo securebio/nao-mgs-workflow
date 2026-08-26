@@ -1,5 +1,6 @@
 # v3.3.0.0-dev
 
+- Ignore two SQLite FTS5 CVEs (`CVE-2026-11822`, `CVE-2026-11824`) reported against `libsqlite3-0` in every container: both require executing an FTS5 `MATCH` query against an attacker-supplied database, the pipeline never opens a SQLite database, and Debian trixie marks both `<no-dsa>`, so neither a `containers/*.yml` pin nor a base-image digest bump can reach the upstream fix.
 - Replace clustering with downsampling in DOWNSTREAM's post-hoc viral validation: each per-species partition is downsampled to at most `params.validation_n_sample` reads, those reads are BLASTed, and every hit carries its own validation result instead of one inherited from a cluster representative. Changes the schema and contents of `validation_hits.tsv.gz`.
     - Add a `validation_status` column: `aligned` / `no_alignment` / `not_sampled`.
     - Remove the eight `vsearch_*` columns and replace the string `group_species` (`<group>_<taxid>`) with the integer `selected_taxid`: 66 to 59 fields, and the md5 changes.
