@@ -6,7 +6,7 @@
 
 ## Coding agents
 
-- Fold PR #931's triage lessons into the `triage-trivy` skill: count distinct CVEs rather than per-package findings, don't pin a package Trivy found only in SBOM metadata, and expect a second triage round after the user's rebuild. (#941)
+- Improve `triage-trivy` skill: count distinct CVEs rather than per-package findings, don't pin a package Trivy found only in SBOM metadata, and expect a second triage round after the user's rebuild. (#941)
 
 # v3.3.0.0
 
