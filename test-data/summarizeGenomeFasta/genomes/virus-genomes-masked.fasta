@@ -1,0 +1,20 @@
+>PAIR_A.1 identical to PAIR_B, different assembly
+AAAACCCGGTTTTACCCGGGTAAAACCCGGT
+>PAIR_B.1 identical to PAIR_A
+AAAACCCGGTTTTACCCGGGTAAAACCCGGT
+>REVCOMP.1 reverse complement of PAIR_A, must share its hash
+ACCGGGTTTTACCCGGGTAAAACCGGGTTTT
+>WRAPPED.1 same sequence as PAIR_A but line-wrapped
+AAAACCCGGTTT
+TACCCGGGTAAA
+ACCCGGT
+>LOWER.1 same sequence as PAIR_A in lower case
+aaaacccggttttacccgggtaaaacccggt
+>RNA.1 U instead of T, otherwise UNIQUE_RNA_DNA.1
+ACGUACGUACGUAAACCCGGGUUU
+>DNA.1 T instead of U, same sequence as RNA.1
+ACGTACGTACGTAAACCCGGGTTT
+>AMBIGUOUS.1 carries IUPAC ambiguity codes and N-masking
+ACGTNNNNRYSWKMBDHVACGTACGT
+>UNIQUE.1 shares no sequence with any other record
+GGGGTTTTAAAACCCCGGGGTTTTAAAACCCC
