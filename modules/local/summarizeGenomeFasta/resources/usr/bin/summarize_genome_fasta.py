@@ -174,8 +174,8 @@ def iter_genome_records(path: str) -> Iterator[GenomeRecord]:
     Yields:
         One GenomeRecord per FASTA record.
     Raises:
-        ValueError: If a header carries no ID, or a sequence has a symbol
-            outside the IUPAC set.
+        ValueError: If a header carries no ID, a sequence has a symbol outside
+            the IUPAC set, or the file has content before its first header.
     """
     with open_by_suffix(path) as f:
         genome_id: str | None = None
@@ -187,7 +187,20 @@ def iter_genome_records(path: str) -> Iterator[GenomeRecord]:
                 genome_id = parse_genome_id(line, line_no, path)
                 chunks = []
             else:
-                chunks.append(line.strip())
+                # Strip line endings only. Stripping all whitespace would let a
+                # stray space or tab inside a sequence line pass the alphabet
+                # check silently, which is exactly what that check exists to catch.
+                sequence_line = line.rstrip(b"\r\n")
+                # Content before the first header is not part of any record, so
+                # accepting it would silently drop sequence from the summary.
+                if genome_id is None:
+                    if sequence_line:
+                        raise ValueError(
+                            f"Content before the first header at line {line_no} of "
+                            f"{path}: {sequence_line[:40]!r}"
+                        )
+                    continue
+                chunks.append(sequence_line)
         if genome_id is not None:
             yield summarise_record(genome_id, chunks)
 

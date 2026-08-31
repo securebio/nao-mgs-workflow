@@ -162,6 +162,52 @@ def test_iter_genome_records_groups_reverse_complements(tmp_path: Path) -> None:
     assert hashes["FWD"] == hashes["REV"]
 
 
+@pytest.mark.parametrize(
+    ("sequence_line", "match"),
+    [
+        (b"ACGT ", "non-IUPAC symbol"),  # trailing space
+        (b"AC GT", "non-IUPAC symbol"),  # internal space
+        (b"ACGT\t", "non-IUPAC symbol"),  # trailing tab
+    ],
+)
+def test_iter_genome_records_rejects_whitespace_in_sequence(
+    tmp_path: Path, sequence_line: bytes, match: str
+) -> None:
+    # Stripping all whitespace rather than just line endings would let these
+    # through, defeating the alphabet check.
+    path = tmp_path / "ws.fasta"
+    path.write_bytes(b">S1\n" + sequence_line + b"\n")
+    with pytest.raises(ValueError, match=match):
+        list(iter_genome_records(str(path)))
+
+
+def test_iter_genome_records_tolerates_crlf(tmp_path: Path) -> None:
+    crlf = tmp_path / "crlf.fasta"
+    crlf.write_bytes(b">S1 desc\r\nACGTACGTAA\r\n")
+    lf = tmp_path / "lf.fasta"
+    lf.write_bytes(b">S1 desc\nACGTACGTAA\n")
+    assert list(iter_genome_records(str(crlf))) == list(iter_genome_records(str(lf)))
+
+
+def test_iter_genome_records_rejects_content_before_first_header(
+    tmp_path: Path,
+) -> None:
+    # Silently dropping it would omit sequence from the summary while the task
+    # still succeeded.
+    path = tmp_path / "pre.fasta"
+    path.write_text("ACGTACGTAA\n>S1\nTTTTGGGGCC\n")
+    with pytest.raises(ValueError, match="Content before the first header"):
+        list(iter_genome_records(str(path)))
+
+
+def test_iter_genome_records_allows_blank_lines_before_first_header(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "blank.fasta"
+    path.write_text("\n\n>S1\nACGTACGTAA\n")
+    assert [r.genome_id for r in iter_genome_records(str(path))] == ["S1"]
+
+
 def test_iter_genome_records_rejects_headerless_id(tmp_path: Path) -> None:
     path = tmp_path / "bad.fasta"
     path.write_text(">\nACGT\n")
