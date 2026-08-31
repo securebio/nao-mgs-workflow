@@ -1,8 +1,16 @@
 # v3.3.0.1-dev
 
+## Performance
+
+- Compress `FILTER_GENOME_FASTA` output with `pigz -1` rather than the default `gzip` level 6, and decompress with `pigz -dc`. Compression dominated the stage: on the production index, compressing the 2.45 Gbase FASTA takes 387.6 s with `gzip` and 27.3 s with `pigz -1` on the same single core (`pigz -6` takes 418.9 s, so the level is the whole story, not the tool). That is ~6 minutes off a 6 m 54 s stage, the second-slowest in the genome DB build. Contents are unchanged; the `.gz` bytes differ and the intermediate grows ~20% (705 MB to 847 MB), which is the same trade the pipeline's other intermediate-producing processes already make. (#956)
+
 ## Reference and index data
 
 - Add a `SUMMARIZE_GENOME_FASTA` module that reduces a genome FASTA to one row per record (`genome_id`, `seq_length`, `seq_hash`), where `seq_hash` digests the canonicalised sequence. Lets later steps group records by sequence identity without carrying sequence bytes through a sort or a join. Nothing calls it yet, so the pipeline's behaviour and outputs are unchanged. (#955)
+
+## Cleanup and best practice
+
+- Pin `LC_ALL=C` in `SortUtils.prelude`, so `SORT_TSV`, `SORT_FILE` and `SORT_FASTQ` sort byte-wise rather than by locale collation. The containers already run `C.UTF-8`, which collates by byte, so this pins existing behaviour rather than changing it — grouping a sorted table by a key column is only correct if ordering is the same wherever the table is produced. (#956)
 
 # v3.3.0.0
 

@@ -31,7 +31,8 @@ class SortUtils {
         return "${(long) (memory.toMega() * BUFFER_FRACTION)}M"
     }
 
-    // Shell prelude: create the spill directory and the compression helper.
+    // Shell prelude: pin the collation locale, then create the spill directory
+    // and the compression helper.
     //
     // sort invokes the compress program with no arguments to compress and with
     // -d to decompress, so the compression level and thread count can only be
@@ -46,6 +47,12 @@ class SortUtils {
 
     static String prelude(String dir) {
         return [
+            // Sort byte-wise, not by locale collation. Containers currently run
+            // C.UTF-8, which already collates by byte, so this pins behaviour
+            // that callers depend on rather than changing it: grouping a sorted
+            // table by a key column is only correct if equal keys are adjacent
+            // and ordering is the same everywhere the table is produced.
+            "export LC_ALL=C",
             "export SORT_TMPDIR=\$(mktemp -d -p ${dir} sort.XXXXXXXX)",
             "trap 'rm -rf \"\$SORT_TMPDIR\"' EXIT",
             "printf '#!/bin/sh\\nexec pigz -1 -p 1 \"\$@\"\\n' > \"\$SORT_TMPDIR/${COMPRESS_PROGRAM}\"",
