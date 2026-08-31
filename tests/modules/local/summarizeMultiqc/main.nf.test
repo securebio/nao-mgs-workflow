@@ -521,7 +521,7 @@ nextflow_process {
         }
         then {
             assert process.success
-            // test-overrepresented-cap.fastq holds 250 reads of 20bp, of which
+            // test-overrepresented-cap.fastq holds 250 reads of 10bp, of which
             // 100 sequences appear 2x (0.8%) and 50 appear 1x (0.4%). All 150
             // clear FASTQC's 0.1% reporting threshold, so this exercises the
             // published cap of 100 that MULTIQC_LABELED configures.
@@ -535,7 +535,7 @@ nextflow_process {
                 assert columns["n_occurrences"].every { it != 1 }
                 assert columns["sequence"].unique().size() == 100
                 // Reads at or below 50bp are reported whole, without truncation
-                assert columns["sequence"].every { it.length() == 20 }
+                assert columns["sequence"].every { it.length() == 10 }
             }
         }
     }
