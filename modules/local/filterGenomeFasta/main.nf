@@ -11,7 +11,10 @@ process FILTER_GENOME_FASTA {
         path("${name_pattern}.fasta.gz")
     script:
         """
-        zcat ${collated_genomes} | grep "^>" | grep -vif ${patterns_exclude} | sed 's/>//' > names.txt
-        seqtk subseq ${collated_genomes} names.txt | gzip -c > ${name_pattern}.fasta.gz
+        set -euo pipefail
+        pigz -dc -p ${task.cpus} ${collated_genomes} | grep "^>" | grep -vif ${patterns_exclude} | sed 's/>//' > names.txt
+        # `pigz -1`, not `gzip`: this is an intermediate consumed by
+        # MASK_GENOME_FASTA, so compression time dominates and ratio does not.
+        seqtk subseq ${collated_genomes} names.txt | pigz -1 -p ${task.cpus} > ${name_pattern}.fasta.gz
         """
 }
