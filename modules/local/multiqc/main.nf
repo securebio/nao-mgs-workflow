@@ -9,11 +9,10 @@ process MULTIQC_LABELED {
         path("multiqc_report.html"), emit: report
         tuple val(stage_label), val(sample), path("multiqc_data"), emit: data
     script:
-        // FastQC's "Top overrepresented sequences" table defaults to the 20 most
-        // frequent sequences; raise it to 100, which is what QC consumers of
-        // {sample}_qc_overrepresented_{stage}.tsv.gz ask for. Sequences below
-        // FastQC's own 0.1%-of-reads threshold are never reported regardless.
+        // Publish the 100 most frequent overrepresented sequences rather than
+        // MultiQC's default 20. Rank by total occurrences: the default ranks by
+        // number of reports containing the sequence, which is always 1 here.
         """
-        multiqc --cl-config 'fastqc_config: { top_overrepresented_sequences: 100 }' .
+        multiqc --cl-config 'fastqc_config: { top_overrepresented_sequences: 100, top_overrepresented_sequences_by: total }' .
         """
 }

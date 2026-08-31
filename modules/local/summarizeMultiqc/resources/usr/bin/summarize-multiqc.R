@@ -202,23 +202,16 @@ extract_length_data <- function(multiqc_json){
 
 extract_overrepresented_data <- function(tsv_path){
   # Extract overrepresented sequences from the MultiQC "Top overrepresented
-  # sequences" table, which MultiQC writes as a flat TSV alongside
-  # multiqc_data.json. We read the TSV rather than the JSON because the JSON
-  # only carries this table inside its violin-plot rendering state, which is
-  # much more version-fragile than the four named columns of the TSV.
+  # sequences" table, which MultiQC writes as a flat TSV.
   empty <- tibble(sequence = character(), n_occurrences = integer(),
                   pc_reads = numeric())
   # MultiQC omits the table entirely when FASTQC reported no overrepresented
-  # sequences (e.g. an empty or unusually clean input), so a missing file is a
-  # normal empty result rather than an error.
+  # sequences.
   if (!file.exists(tsv_path)) return(empty)
-  # Read everything as character and convert explicitly, so column-type
-  # guessing can't reinterpret a sequence or a count.
+  # Read everything as character and then convert explicitly.
   tab <- readr::read_tsv(tsv_path, col_types = cols(.default = col_character()))
   # MultiQC names the sequence column "Sample" because this table reuses its
   # generic per-sample table renderer with sequences in the sample position.
-  # "Reports" (the number of FASTQC reports containing the sequence) is dropped:
-  # MULTIQC runs on one FASTQC report per sample/stage, so it is always 1.
   required_columns <- c("Sample", "Occurrences", "% of all reads")
   missing_cols <- setdiff(required_columns, colnames(tab))
   if (length(missing_cols) > 0){
@@ -229,9 +222,6 @@ extract_overrepresented_data <- function(tsv_path){
     transmute(sequence = Sample,
               n_occurrences = as.integer(Occurrences),
               pc_reads = as.numeric(`% of all reads`)) %>%
-    # MultiQC emits the table in alphabetical sequence order; sort by frequency
-    # so the most overrepresented sequences come first, breaking ties on
-    # sequence to keep the output deterministic.
     arrange(desc(n_occurrences), sequence)
 }
 

@@ -1,7 +1,7 @@
 {
   "$schema": "https://datapackage.org/profiles/2.0/tableschema.json",
   "title": "QC Overrepresented Sequences",
-  "description": "Overrepresented sequences identified by FASTQC for subset samples, concatenated across samples within a group by the DOWNSTREAM workflow. Each row represents one sequence that FASTQC found in more than 0.1% of that sample-stage's reads, with its occurrence count and read percentage. Sequences are counted as whole reads truncated to their first 50 bases, so reads longer than 50bp are grouped by their leading 50bp. Paired-end reads reach FASTQC as a single interleaved file, so counts and percentages are over mates rather than read pairs. At most 100 sequences are reported per sample and stage.",
+  "description": "Overrepresented sequences identified by FASTQC for subset samples, concatenated across samples within a group by the DOWNSTREAM workflow. Each row represents one sequence that FASTQC found in more than 0.1% of that sample-stage's reads, with its occurrence count and read percentage. Sequences are counted as whole reads truncated to their first 50 bases. Counts and percentages are over mates rather than read pairs. At most 100 sequences are reported per sample and stage.",
   "missingValues": ["NA"],
   "primaryKey": ["group", "sample", "stage", "sequence"],
   "fields": [
