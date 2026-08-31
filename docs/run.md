@@ -172,13 +172,14 @@ flowchart LR
 A(Interleaved reads) --> B[FASTQ]
 B --> C[MULTIQC]
 C --> D[SUMMARIZE_MULTIQC]
-D --> F(QC basic stats) & G(QC adapter stats) & H(QC quality base stats) & I(QC quality sequence stats) & J(QC length stats)
+D --> F(QC basic stats) & G(QC adapter stats) & H(QC quality base stats) & I(QC quality sequence stats) & J(QC length stats) & K(QC overrepresented sequences)
 style A fill:#fff,stroke:#000
 style F fill:#000,color:#fff,stroke:#000
 style G fill:#000,color:#fff,stroke:#000
 style H fill:#000,color:#fff,stroke:#000
 style I fill:#000,color:#fff,stroke:#000
 style J fill:#000,color:#fff,stroke:#000
+style K fill:#000,color:#fff,stroke:#000
 ```
 
 1. Input reads are run through [FASTQC](https://www.bioinformatics.babraham.ac.uk/projects/fastqc/) to generate quality-control metrics.
@@ -336,6 +337,7 @@ E --> G(Combined QC adapter stats)
 E --> H(Combined QC quality base stats)
 E --> I(Combined QC quality sequence stats)
 E --> J(Combined QC length stats)
+E --> K(Combined QC overrepresented sequences)
 style A fill:#fff,stroke:#000
 style C fill:#fff,stroke:#000
 style F fill:#000,color:#fff,stroke:#000
@@ -343,4 +345,5 @@ style G fill:#000,color:#fff,stroke:#000
 style H fill:#000,color:#fff,stroke:#000
 style I fill:#000,color:#fff,stroke:#000
 style J fill:#000,color:#fff,stroke:#000
+style K fill:#000,color:#fff,stroke:#000
 ```

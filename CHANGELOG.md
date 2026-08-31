@@ -1,11 +1,11 @@
 # v3.3.0.1-dev
 
-- Publish the overrepresented sequences FASTQC already computes for every short-read and ONT sample, as new `{sample}_qc_overrepresented_{raw,cleaned}.tsv.gz` RUN outputs and matching `{group}_qc_overrepresented_{raw,cleaned}.tsv.gz` DOWNSTREAM outputs. Previously only FASTQC's `pass`/`warn`/`fail` verdict survived into published output, and the sequences themselves were discarded with the work directory.
+- Publish the overrepresented sequences FASTQC already computes for every short-read and ONT sample, as new `{sample}_qc_overrepresented_{raw,cleaned}.tsv.gz` RUN outputs and matching `{group}_qc_overrepresented_{raw,cleaned}.tsv.gz` DOWNSTREAM outputs. Previously only FASTQC's `pass`/`warn`/`fail` verdict survived into published output, and the sequences themselves were discarded with the work directory. (#954)
     - Each row gives a sequence, the number of reads matching it (`n_occurrences`), and that count as a percentage of the sample-stage's reads (`pc_reads`), read in mates rather than pairs. Rows are ordered by descending frequency.
     - `SUMMARIZE_MULTIQC` reads MultiQC's `fastqc_top_overrepresented_sequences_table.txt`; `MULTIQC_LABELED` raises MultiQC's cap on that table from its default of 20 sequences to 100. No new compute: FASTQC already produced these numbers.
     - See [output.md](docs/output.md) for how to read the numbers. In brief: FASTQC counts whole reads truncated to their first 50 bases, lists only sequences above 0.1% of reads, and only tracks sequences seen among the first 100,000 unique sequences. A header-only file means no overrepresented sequences were reported.
     - Because DOWNSTREAM treats every entry in `expected-outputs-run` as mandatory, DOWNSTREAM at this version requires RUN output produced at this version or later; it will error on RUN directories that predate these files.
-- Correct the `overrepresented_sequences` description in `fastp.schema.json` and `output.md`: those keys are always empty, because the pipeline never passes fastp's `-p` and fastp's two-pass analysis needs seekable file input rather than the module's pipe. They mean "not measured", not "none found".
+- Correct the `overrepresented_sequences` description in `fastp.schema.json` and `output.md`: those keys are always empty, because the pipeline never passes fastp's `-p` and fastp's two-pass analysis needs seekable file input rather than the module's pipe. They mean "not measured", not "none found". (#954)
 
 # v3.3.0.0
 
