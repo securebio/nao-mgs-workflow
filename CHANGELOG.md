@@ -5,7 +5,7 @@
     - DOWNSTREAM at this version requires RUN output produced at this version or later, since it treats every entry in `expected-outputs-run` as mandatory.
 
 # v3.3.0.0
-
+- Publish FASTQC's overrepresented sequences as `{sample}_qc_overrepresented_{raw,cleaned}.tsv.gz` RUN outputs and matching `{group}_qc_overrepresented_{raw,cleaned}.tsv.gz` DOWNSTREAM outputs, with a new schema. Also correct the `overrepresented_sequences` description in `fastp.schema.json` and `output.md`. (#954)
 ## Deprecating DOWNSTREAM's VSEARCH clustering with hash-based downsampling
 
 - Replace VSEARCH clustering with deterministic hash-based downsampling: (#908, #911, #912, #930)
