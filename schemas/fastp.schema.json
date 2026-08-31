@@ -417,7 +417,7 @@
         },
         "overrepresented_sequences": {
           "type": "object",
-          "description": "Overrepresented sequences and their counts. May be empty if no sequences exceed the reporting threshold.",
+          "description": "Overrepresented sequences and their counts. Always empty in this pipeline: fastp only performs overrepresentation analysis when passed `-p`, which the FASTP module does not, and fastp's two-pass analysis additionally requires seekable file input rather than the pipe the module uses. An empty object here means 'not measured', not 'none found' -- see the {sample}_qc_overrepresented_{stage}.tsv.gz outputs for overrepresented sequences as measured by FASTQC.",
           "additionalProperties": {
             "type": "integer",
             "minimum": 0
