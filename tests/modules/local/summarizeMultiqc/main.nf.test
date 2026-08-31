@@ -487,4 +487,58 @@ nextflow_process {
         }
     }
 
+    test("Should publish at most the 100 most frequent overrepresented sequences") {
+        tag "expect_success"
+        tag "overrepresented"
+        config "tests/configs/run.config"
+        setup {
+            run("FASTQC_LABELED") {
+                script "modules/local/fastqc/main.nf"
+                process {
+                    '''
+                    input[0] = Channel.of("test")
+                        | combine(Channel.of("${projectDir}/test-data/toy-data/test-overrepresented-cap.fastq"))
+                    '''
+                }
+            }
+            run("MULTIQC_LABELED") {
+                script "modules/local/multiqc/main.nf"
+                process {
+                    '''
+                    input[0] = "test"
+                    input[1] = FASTQC_LABELED.out.zip
+                    '''
+                }
+            }
+        }
+        when {
+            params {}
+            process {
+                """
+                input[0] = MULTIQC_LABELED.out.data
+                input[1] = false
+                """
+            }
+        }
+        then {
+            assert process.success
+            // test-overrepresented-cap.fastq holds 1000 reads of 25bp, of which
+            // 100 sequences appear 5x (0.5%) and 20 appear 2x (0.2%). All 120
+            // clear FASTQC's 0.1% reporting threshold, so this exercises the
+            // published cap of 100 that MULTIQC_LABELED configures.
+            def tsv_overrep = path(process.out[0][0][6]).csv(sep: "\t", decompress: true)
+            with (tsv_overrep) {
+                // Exactly the 100 most frequent are kept...
+                assert rowCount == 100
+                assert columns["n_occurrences"].every { it == 5 }
+                assert columns["pc_reads"].every { it == 0.5 }
+                // ...so none of the 20 lower-ranked 2x sequences survive the cap
+                assert columns["n_occurrences"].every { it != 2 }
+                assert columns["sequence"].unique().size() == 100
+                // Reads at or below 50bp are reported whole, without truncation
+                assert columns["sequence"].every { it.length() == 25 }
+            }
+        }
+    }
+
 }
