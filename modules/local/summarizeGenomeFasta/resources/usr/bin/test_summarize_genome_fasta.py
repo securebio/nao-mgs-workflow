@@ -126,6 +126,33 @@ def test_hash_sequence_ignores_case_and_u_via_normalisation() -> None:
     assert hash_sequence(normalise_sequence(b"acgu", "a")) == hash_sequence(b"ACGT")
 
 
+###################
+# GenomeRecord    #
+###################
+
+
+def test_genome_record_is_a_named_tuple() -> None:
+    record = GenomeRecord("S1", 4, "abc")
+    assert (record.genome_id, record.seq_length, record.seq_hash) == ("S1", 4, "abc")
+
+
+#####################
+# parse_genome_id   #
+#####################
+
+
+@pytest.mark.parametrize(
+    ("header", "expected"),
+    [
+        (b">S1", "S1"),
+        (b">S1 description here", "S1"),
+        (b">S1\tdescription", "S1"),
+    ],
+)
+def test_parse_genome_id(header: bytes, expected: str) -> None:
+    assert parse_genome_id(header, 1, "f.fasta") == expected
+
+
 ########################
 # iter_genome_records  #
 ########################
@@ -215,23 +242,6 @@ def test_iter_genome_records_rejects_headerless_id(tmp_path: Path) -> None:
         list(iter_genome_records(str(path)))
 
 
-#####################
-# parse_genome_id   #
-#####################
-
-
-@pytest.mark.parametrize(
-    ("header", "expected"),
-    [
-        (b">S1", "S1"),
-        (b">S1 description here", "S1"),
-        (b">S1\tdescription", "S1"),
-    ],
-)
-def test_parse_genome_id(header: bytes, expected: str) -> None:
-    assert parse_genome_id(header, 1, "f.fasta") == expected
-
-
 ###########################
 # summarise_genome_fasta  #
 ###########################
@@ -287,8 +297,3 @@ def test_summarise_genome_fasta_propagates_bad_alphabet(tmp_path: Path) -> None:
     fasta = write_fasta(tmp_path / "g.fasta", [("S1", "ACGTX")])
     with pytest.raises(ValueError, match="non-IUPAC symbol"):
         summarise_genome_fasta(fasta, str(tmp_path / "out.tsv"))
-
-
-def test_genome_record_is_a_named_tuple() -> None:
-    record = GenomeRecord("S1", 4, "abc")
-    assert (record.genome_id, record.seq_length, record.seq_hash) == ("S1", 4, "abc")
