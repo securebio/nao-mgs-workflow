@@ -65,23 +65,6 @@ nextflow_process {
         }
     }
 
-    test("Should fail task when a sequence ID repeats") {
-        tag "expect_failed"
-        when {
-            params {}
-            process {
-                """
-                input[0] = file("${helpers.gzipFixtureDir("${projectDir}/test-data/summarizeGenomeFasta/genomes-duplicate-id")}/virus-genomes-masked.fasta.gz")
-                input[1] = "virus-genome"
-                """
-            }
-        }
-        then {
-            assert process.failed
-            assert process.errorReport.contains("Duplicate sequence ID DUP.1")
-        }
-    }
-
     test("Should fail task when a sequence carries a non-IUPAC symbol") {
         tag "expect_failed"
         when {

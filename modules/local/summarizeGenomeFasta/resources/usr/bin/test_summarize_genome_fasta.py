@@ -106,10 +106,17 @@ def test_reverse_complement_is_an_involution() -> None:
 ##################
 
 
-def test_hash_sequence_is_stable_and_fixed_width() -> None:
-    first = hash_sequence(b"ACGTACGTAA")
-    assert first == hash_sequence(b"ACGTACGTAA")
-    assert len(first) == 64  # 32-byte digest, hex encoded
+# Pins the published seq_hash format. Downstream tables key on this value, so a
+# change to the digest, the digest size or the canonical form is a contract
+# change and must be a deliberate edit to this literal, not a silent drift.
+EXPECTED_DIGEST_ACGTACGTAA = (
+    "8b3d25ee6eb4a46a57340fb7db31c86cf27bc1571809cd4cd3851d7dfa158ca5"
+)
+
+
+def test_hash_sequence_matches_pinned_digest() -> None:
+    assert hash_sequence(b"ACGTACGTAA") == EXPECTED_DIGEST_ACGTACGTAA
+    assert len(EXPECTED_DIGEST_ACGTACGTAA) == 64  # 32-byte digest, hex encoded
 
 
 def test_hash_sequence_matches_reverse_complement() -> None:
