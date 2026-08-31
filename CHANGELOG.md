@@ -10,12 +10,14 @@
 - Build Minimap2 indexes on instance-local scratch and give `minimap2` the task's full thread allocation. Index contents are unchanged. (#965)
 - Stream `GET_TARBALL`'s archive straight into `tar` instead of staging it in the work directory first, which on Fusion-backed profiles removes a full-archive round trip to S3 and lets extraction overlap the download. Extracted contents are unchanged. (#968)
 - Size `DOWNLOAD_BLAST_DB` for the network bandwidth it needs rather than the compute it does not: under a BEST_FIT compute environment the reservation selects the instance, and the instance bounds a 260 GB transfer. Download concurrency is capped at 8 rather than scaling with the reservation. (#970)
+- Compress `FILTER_GENOME_FASTA` output with `pigz -1` rather than the default `gzip` level 6, and decompress with `pigz -dc`. Compression dominated the stage: on the production index, compressing the 2.45 Gbase FASTA takes 387.6 s with `gzip` and 27.3 s with `pigz -1` on the same single core (`pigz -6` takes 418.9 s, so the level is the whole story, not the tool). That is ~6 minutes off a 6 m 54 s stage, the second-slowest in the genome DB build. Contents are unchanged; the `.gz` bytes differ and the intermediate grows ~20% (705 MB to 847 MB), which is the same trade the pipeline's other intermediate-producing processes already make. (#956)
 
 ## Cleanup and best practice
 
 - Drop `MINIMAP2_INDEX`'s unused `input` output, a symlink back to the reference that no workflow or test consumed. (#965)
 - Add module tests for `GET_TARBALL`, which previously had none: extraction of a flat archive into a directory the process creates, extraction of an archive that already wraps its own directory, and the failure path for an unresolvable URL. (#966)
 - Let `DOWNLOAD_BLAST_DB` retry a failed download before giving up. It was the only process in the repo overriding the universal `errorStrategy` with `terminate`, so any transient download failure killed the whole INDEX run on the first attempt. (#970)
+- Pin `LC_ALL=C` in `SortUtils.prelude`, so `SORT_TSV`, `SORT_FILE` and `SORT_FASTQ` sort byte-wise rather than by locale collation. The containers already run `C.UTF-8`, which collates by byte, so this pins existing behaviour rather than changing it — grouping a sorted table by a key column is only correct if ordering is the same wherever the table is produced. (#956)
 
 # v3.3.0.0
 
