@@ -9,6 +9,7 @@
 - Add unit tests for the `mark_duplicates` Rust tool. (#967)
 - Model the `mark_duplicates` coordinate key as an explicit `DupKey` enum. No change in behaviour, except that a split-genome read missing a start coordinate is now reported rather than keyed on the coordinate it does have; the producer cannot emit such a read.
 - Fix duplicate marking bug that merged distinct molecules that shared a start coordinate and had fragments shorter than the read. (#969)
+- Fix duplicate marking so that reads with one or zero known coordinates (one mate aligned or neither mate aligned) never match other reads. (#971)
 
 # v3.3.0.1-dev
 

@@ -17,11 +17,11 @@ grp_5_0	test_gid_5	250	300	56	CP	JJJJJJ	JJJJJJ	grp_5_0	grp_5_0	grp_5_0	Group 5 e
 grp_5_1	test_gid_5	250	300	56	CP	JJJJJJ	JJJJJJ	grp_5_0	grp_5_0	grp_5_0	Exact duplicate with grp_5_0
 grp_5_2	test_gid_5	150	500	356	CP	JJJJJJ	JJJJJJ	grp_5_2	grp_5_2	grp_5_2	Non-duplicate on same reference
 grp_6_0	test_gid_6	200	300	106	CP	JJJJJJ	JJJJJJ	grp_6_0	grp_6_0	grp_6_0	Group 6 singleton exemplar
-grp_7_0	test_gid_1	1	NA	NA	UP	JJJJJJ	JJJJJJ	grp_7_0	grp_7_0	grp_7_0	Group 7 singleton with NA and gid match to 1
-grp_8_0	test_gid_8	100	NA	NA	UP	JJJJJJ	JJJJJJ	grp_8_0	grp_8_0	grp_8_0	Group 8 exemplar
-grp_8_1	test_gid_8	100	NA	NA	UP	JJJJJJ	JJJJJJ	grp_8_0	grp_8_0	grp_8_0	Exact duplicate with grp_8_0 with NA
-grp_8_2	test_gid_8	NA	100	NA	UP	JJJJJJ	JJJJJJ	grp_8_0	grp_8_0	grp_8_0	RC duplicate with grp_8_0 with NA
-grp_8_3	test_gid_8	101	NA	NA	UP	JJJJJJ	JJJJJJ	grp_8_3	grp_8_0	grp_8_0	1-off duplicate with grp_8_0 with NA
+grp_7_0	test_gid_1	1	NA	NA	UP	JJJJJJ	JJJJJJ	grp_7_0	grp_7_0	grp_7_0	Group 7 singleton: one mate unaligned, so never grouped
+grp_8_0	test_gid_8	100	NA	NA	UP	JJJJJJ	JJJJJJ	grp_8_0	grp_8_0	grp_8_0	One mate unaligned: stands alone despite sharing a start with grp_8_1
+grp_8_1	test_gid_8	100	NA	NA	UP	JJJJJJ	JJJJJJ	grp_8_1	grp_8_1	grp_8_1	One mate unaligned: same start as grp_8_0, still not a duplicate of it
+grp_8_2	test_gid_8	NA	100	NA	UP	JJJJJJ	JJJJJJ	grp_8_2	grp_8_2	grp_8_2	Opposite mate unaligned: same coordinate as grp_8_0, still not a duplicate
+grp_8_3	test_gid_8	101	NA	NA	UP	JJJJJJ	JJJJJJ	grp_8_3	grp_8_3	grp_8_3	One mate unaligned, 1-off from grp_8_0: not a duplicate at any tolerance
 grp_9_0	test_gid_9	400	400	40	CP	JJJJJJ	JJJJJJ	grp_9_0	grp_9_0	grp_9_0	Group 9 exemplar: short fragment, shares a start with grp_9_1
 grp_9_1	test_gid_9	400	400	80	CP	IIIIII	IIIIII	grp_9_1	grp_9_1	grp_9_1	Longer fragment from the same start; not a duplicate of grp_9_0
 grp_10_0	test_gid_10	450	450	0	UP	JJJJJJ	JJJJJJ	grp_10_0	grp_10_0	grp_10_0	Group 10 exemplar with zero fragment length

@@ -109,10 +109,10 @@ impl DupKey {
                 within_deviation(*start_a, *start_b, deviation)
                     && within_deviation(*end_a, *end_b, deviation)
             }
-            (DupKey::Incomplete { start: start_a }, DupKey::Incomplete { start: start_b }) => {
-                within_deviation(*start_a, *start_b, deviation)
-            }
-            (DupKey::Unaligned, DupKey::Unaligned) => true,
+            // Incomplete and Unaligned never match, including each other and themselves.
+            // A missing coordinate is unknown, not agreed. Reads left ungrouped here are
+            // still available to the similarity stage, which can find duplication among them
+            // from their sequences.
             _ => false,
         }
     }
@@ -867,20 +867,6 @@ mod tests {
     }
 
     #[test]
-    fn a_forward_only_read_does_not_match_a_reverse_only_read() {
-        // The unaligned-mate arms record whichever coordinate exists, so a read whose
-        // forward mate aligned and one whose reverse mate aligned can land on the same
-        // number while describing opposite ends of different fragments
-        let (fields, indices) = row(&["r1", "genome_a", "500", "NA", "IIII", "IIII", "NA"]);
-        let forward_only = make_read_entry(&fields, &indices);
-        let (fields, indices) = row(&["r2", "genome_a", "NA", "500", "IIII", "IIII", "NA"]);
-        let reverse_only = make_read_entry(&fields, &indices);
-        assert_eq!(forward_only.key, DupKey::Incomplete { start: 500 });
-        assert_eq!(reverse_only.key, DupKey::Incomplete { start: 500 });
-        assert!(!match_reads(&forward_only, &reverse_only, 2));
-    }
-
-    #[test]
     fn build_groups_from_sorted_reads_leaves_half_mapped_reads_alone() {
         let reads = vec![
             keyed_entry("a", "g", DupKey::Incomplete { start: 100 }, 30.0),
@@ -1091,17 +1077,31 @@ mod tests {
     }
 
     #[test]
-    fn match_reads_treats_absent_coordinates_as_agreement() {
-        // Two reads with one mate unaligned match on their single shared coordinate: the
-        // absent second element compares equal to the other absent second element. Likewise
-        // two reads with no coordinates at all match on nothing. Both are #948; pinned here
-        // so the change shows up as a flipped assertion.
+    fn match_reads_never_agrees_on_absent_coordinates() {
+        // #967 pinned the opposite: two reads with one mate unaligned matched on their
+        // single shared coordinate, and two reads with none matched on nothing at all,
+        // because an absent element compared equal to another absent one.
+        //
+        // No Incomplete or Unaligned key now matches any other, whichever mate aligned and
+        // even when the coordinates are identical, so each such read is left in its own
+        // group. Not matching itself is what produces that: grouping only ever compares a
+        // read to other reads.
         let a = keyed_entry("a", "g", DupKey::Incomplete { start: 100 }, 30.0);
         let b = keyed_entry("b", "g", DupKey::Incomplete { start: 100 }, 30.0);
-        assert!(match_reads(&a, &b, 0));
+        assert!(!match_reads(&a, &b, 0));
+        assert!(!match_reads(&a, &a, 0));
         let c = keyed_entry("c", "g", DupKey::Unaligned, 30.0);
         let d = keyed_entry("d", "g", DupKey::Unaligned, 30.0);
-        assert!(match_reads(&c, &d, 0));
+        assert!(!match_reads(&c, &d, 0));
+        assert!(!match_reads(&c, &c, 0));
+        // A read whose forward mate aligned and one whose reverse mate aligned can land on
+        // the same coordinate while describing opposite ends of different fragments. Same
+        // rule, no special case.
+        let fwd = parsed(&["r1", "genome_a", "500", "NA", "IIII", "IIII", "NA", "UP"]);
+        let rev = parsed(&["r2", "genome_a", "NA", "500", "IIII", "IIII", "NA", "UP"]);
+        assert_eq!(fwd.key, DupKey::Incomplete { start: 500 });
+        assert_eq!(rev.key, DupKey::Incomplete { start: 500 });
+        assert!(!match_reads(&fwd, &rev, 2));
     }
 
     #[test]
