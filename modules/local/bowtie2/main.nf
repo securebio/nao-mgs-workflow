@@ -63,7 +63,9 @@ process BOWTIE2 {
         """
 }
 
-// Generate a Bowtie2 index from an input file
+// Generate a Bowtie2 index from a gzipped input FASTA.
+// bowtie2-build rewinds and rereads the reference once per driver pass, so inflating it
+// up front avoids paying for decompression on each pass.
 process BOWTIE2_INDEX {
     label "bowtie2_samtools"
     label "max"
@@ -76,8 +78,10 @@ process BOWTIE2_INDEX {
     script:
         def odir = outdir
         """
+        set -euo pipefail
         mkdir ${odir}
-        bowtie2-build -f --threads ${task.cpus} ${reference_fasta} ${odir}/bt2_index
-        #tar -czf bt2-human-index.tar.gz bt2_human_index
+        pigz -dc -p 2 ${reference_fasta} > bowtie2_index_input.fasta
+        bowtie2-build -f --threads ${task.cpus} bowtie2_index_input.fasta ${odir}/bt2_index
+        rm bowtie2_index_input.fasta
         """
 }

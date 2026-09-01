@@ -4,6 +4,10 @@
     - See [output.md](docs/output.md) for how to read the numbers. A header-only file means no overrepresented sequences were reported.
     - DOWNSTREAM at this version requires RUN output produced at this version or later, since it treats every entry in `expected-outputs-run` as mandatory.
 
+## Performance
+
+- Inflate the reference FASTA once up front in `BOWTIE2_INDEX` rather than letting `bowtie2-build` re-inflate it on each pass over the reference. Index contents are unchanged. (#964)
+
 # v3.3.0.0
 
 ## Deprecating DOWNSTREAM's VSEARCH clustering with hash-based downsampling
