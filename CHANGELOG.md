@@ -12,6 +12,7 @@
 ## Cleanup and best practice
 
 - Drop `MINIMAP2_INDEX`'s unused `input` output, a symlink back to the reference that no workflow or test consumed. (#965)
+- Add module tests for `GET_TARBALL`, which previously had none: extraction of a flat archive into a directory the process creates, extraction of an archive that already wraps its own directory, and the failure path for an unresolvable URL. (#966)
 
 # v3.3.0.0
 

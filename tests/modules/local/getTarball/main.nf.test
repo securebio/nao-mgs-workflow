@@ -1,0 +1,72 @@
+nextflow_process {
+
+    name "Test process GET_TARBALL"
+    script "modules/local/getTarball/main.nf"
+    process "GET_TARBALL"
+    config "tests/configs/index.config"
+    tag "module"
+    tag "get_tarball"
+
+    test("Should extract a flat tarball into a directory it creates") {
+        tag "expect_success"
+        when {
+            params {
+            }
+            process {
+                '''
+                input[0] = params.kraken_db
+                input[1] = "kraken_db"
+                input[2] = true
+                '''
+            }
+        }
+        then {
+            assert process.success
+            def dir = new File(process.out[0][0].toString())
+            assert dir.isDirectory()
+            def names = dir.list() as List
+            assert names.contains("hash.k2d")
+            assert names.contains("taxo.k2d")
+            assert names.contains("opts.k2d")
+        }
+    }
+
+    test("Should extract a tarball that already wraps its own directory") {
+        tag "expect_success"
+        when {
+            params {
+            }
+            process {
+                '''
+                input[0] = params.blast_db_name
+                input[1] = "tiny_blast_db"
+                input[2] = false
+                '''
+            }
+        }
+        then {
+            assert process.success
+            def dir = new File(process.out[0][0].toString())
+            assert dir.isDirectory()
+            assert (dir.list() as List).contains("tiny_blast_db.njs")
+        }
+    }
+
+    test("Should fail on a URL that does not resolve") {
+        tag "expect_failure"
+        when {
+            params {
+            }
+            process {
+                '''
+                input[0] = "https://nao-testing.s3.amazonaws.com/test-databases/does-not-exist.tar.gz"
+                input[1] = "kraken_db"
+                input[2] = true
+                '''
+            }
+        }
+        then {
+            assert process.failed
+        }
+    }
+}
