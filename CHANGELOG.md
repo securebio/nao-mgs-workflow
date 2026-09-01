@@ -3,6 +3,7 @@
 - Publish FASTQC's overrepresented sequences as `{sample}_qc_overrepresented_{raw,cleaned}.tsv.gz` RUN outputs and matching `{group}_qc_overrepresented_{raw,cleaned}.tsv.gz` DOWNSTREAM outputs, with a new schema. Also correct the `overrepresented_sequences` description in `fastp.schema.json` and `output.md`. (#954)
     - See [output.md](docs/output.md) for how to read the numbers. A header-only file means no overrepresented sequences were reported.
     - DOWNSTREAM at this version requires RUN output produced at this version or later, since it treats every entry in `expected-outputs-run` as mandatory.
+- Refresh eight expired `.trivyignore` entries for base-image Debian CVEs (CVE-2025-69720, CVE-2026-8376, CVE-2026-9538, CVE-2026-41992, CVE-2026-42496, CVE-2026-42497, CVE-2026-48962, CVE-2026-54369); no fix is reachable, as `mambaorg/micromamba:latest` is the digest we already pin. Drops CVE-2026-4046 and CVE-2026-29111, which are no longer reported. (#961)
 
 # v3.3.0.0
 
