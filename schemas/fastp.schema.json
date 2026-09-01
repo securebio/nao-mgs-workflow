@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "FASTP Quality Control Metrics Per Group",
-  "description": "Per-group quality control metrics from FASTP, as produced by the DOWNSTREAM workflow. The top-level object is keyed by sample name; each entry contains the raw FASTP JSON output with injected 'sample' and 'group' fields. Produced for Illumina/short-read platforms only (ONT uses FILTLONG instead). Schema fields verified against fastp v0.23.4 source (https://github.com/OpenGene/fastp).",
+  "description": "Per-group quality control metrics from FASTP, as produced by the DOWNSTREAM workflow. The top-level object is keyed by sample name; each entry contains the FASTP JSON output with injected 'sample' and 'group' fields, and with fastp's always-empty 'overrepresented_sequences' objects removed (fastp only measures those when passed -p, which the pipeline does not). Produced for Illumina/short-read platforms only (ONT uses FILTLONG instead). Schema fields verified against fastp v0.23.4 source (https://github.com/OpenGene/fastp).",
   "type": "object",
   "additionalProperties": {
     "$ref": "#/$defs/sample_entry"
