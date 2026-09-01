@@ -137,18 +137,21 @@ CVE-2026-56862 exp:2026-11-15
 
 # ── Debian trixie base image (mambaorg/micromamba): no fixes reachable ──
 # The base-image knob (container-base-image in pyproject.toml) is the only
-# permitted lever for these system packages, and the current latest micromamba
-# digest still ships the vulnerable versions — the fixes are not yet installed
-# in any published base layer. Re-eval when micromamba rebuilds against a trixie
-# apt state carrying the fix (then bump the digest and drop the entry).
+# permitted lever for these system packages, and as of 2026-09-01 there is no
+# newer base layer to move to: mambaorg/micromamba:latest resolves to the digest
+# we already pin, and apt reports Candidate == Installed for every package below,
+# so neither a digest bump nor an apt upgrade would change anything. Re-eval when
+# micromamba publishes a digest built against a trixie apt state carrying the
+# fixes (then bump the digest and drop the entry).
 #
-# glibc: DoS via iconv() with specific character set conversions (fix_deferred)
-# Our containers don't perform attacker-controlled iconv conversions.
-CVE-2026-4046 exp:2026-08-31
+# (CVE-2026-4046 (glibc) and CVE-2026-29111 (systemd) were dropped 2026-09-01:
+# neither is reported any more. libc6 has moved to 2.41-12+deb13u3, and systemd
+# is not installed in the base image at all, so that entry never applied.)
 
 # ncurses: stack-based buffer overflow in infocmp CLI tool (no-dsa, low urgency)
-# Our containers never invoke infocmp. Fix only in sid (6.6+).
-CVE-2025-69720 exp:2026-08-31
+# Our containers never invoke infocmp. Fix only in sid (6.6+); trixie has no
+# backport. Re-eval: trixie ships ncurses 6.6+, or a container invokes infocmp.
+CVE-2025-69720 exp:2026-10-31
 
 # openssl (libssl3t64, openssl-provider-legacy): unbounded memory growth in the QUIC
 # server path -- Initial packets for unknown connection IDs allocate channel objects
@@ -166,12 +169,8 @@ CVE-2026-14456 exp:2026-10-31
 # setfattr or the pathname-based libacl APIs, and containers run as root — outside
 # the non-root local-attacker threat model. Re-eval: trixie point release / a
 # micromamba rebuild that carries it.
-CVE-2026-54369 exp:2026-08-31
-CVE-2026-54371 exp:2026-08-31
-
-# systemd: IPC API mishandling from unprivileged callers causing service freeze
-# Our containers don't run systemd services. Fix only in sid (260.1+).
-CVE-2026-29111 exp:2026-08-31
+CVE-2026-54369 exp:2026-10-31
+CVE-2026-54371 exp:2026-10-31
 
 # libgcrypt20: heap overflow / DoS via crafted ECDH ciphertext to gcry_pk_decrypt
 # (no Debian fix available as of 2026-04-29; fixed in upstream libgcrypt >= 1.12.2)
@@ -201,7 +200,7 @@ CVE-2026-44431 exp:2026-09-30
 # CVE-2026-44432 (HIGH): decompression-bomb safeguard bypass in streaming reads.
 CVE-2026-44432 exp:2026-09-30
 
-# ── perl-base (Debian trixie 5.40.1-6): no fixed version available as of 2026-06-04 ──
+# ── perl-base (Debian trixie 5.40.1-6): no fixed version available as of 2026-09-01 ──
 # The pipeline's only perl invocation is `update_blastdb.pl` in the maintainer-run
 # INDEX step (modules/local/downloadBlastDB), which fetches official NCBI/AWS BLAST
 # databases via `--source aws`. perl-base is otherwise present only as a Debian
@@ -210,15 +209,15 @@ CVE-2026-44432 exp:2026-09-30
 # a fix to trixie perl-base (a rebuild then clears them), or the pipeline gains a
 # perl path that processes untrusted tar/regex/glob input.
 # Archive::Tar symlink path traversal on extraction (CRITICAL); BLAST DB tarballs are trusted.
-CVE-2026-42496 exp:2026-08-31
+CVE-2026-42496 exp:2026-10-31
 # perl regex compiler (Perl_study_chunk) heap overflow (CRITICAL); no attacker-controlled regex is compiled.
-CVE-2026-8376 exp:2026-08-31
+CVE-2026-8376 exp:2026-10-31
 # Archive::Tar hardlink path traversal on extraction (HIGH); same trusted-tarball-only exposure as CVE-2026-42496.
-CVE-2026-42497 exp:2026-08-31
+CVE-2026-42497 exp:2026-10-31
 # IO::Compress/File::GlobMapper eval-string injection via output glob (HIGH); no attacker-controlled glob.
-CVE-2026-48962 exp:2026-08-31
+CVE-2026-48962 exp:2026-10-31
 # Archive::Tar unbounded allocation -> memory-exhaustion DoS (HIGH); trusted tarballs, worst case ephemeral OOM.
-CVE-2026-9538 exp:2026-08-31
+CVE-2026-9538 exp:2026-10-31
 # Three further perl CVEs surfaced 2026-08-18. trixie is still on 5.40.1-6 and the
 # latest published micromamba digest ships that same version, so no fix is reachable
 # via the permitted base-image bump. Same exposure as above: the only perl invocation
@@ -240,7 +239,7 @@ CVE-2026-57433 exp:2026-10-31
 # via the permitted base-image bump; the pipeline also never decompresses attacker-
 # controlled .lzh archives. Re-eval when Debian trixie ships a fixed gzip (a base-
 # image rebuild then clears it).
-CVE-2026-41992 exp:2026-08-31
+CVE-2026-41992 exp:2026-10-31
 
 # ── util-linux (Debian trixie 2.41-5): fix exists but is not reachable ──
 # libblkid integer overflow in the DOS partition-table parser (libblkid/src/partitions/
