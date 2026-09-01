@@ -855,6 +855,46 @@ mod tests {
     }
 
     #[test]
+    fn half_mapped_reads_never_match_each_other() {
+        // One mate aligned tells us where the fragment starts and nothing about where it
+        // ends, so two such reads sharing a start are not evidence of duplication
+        let a = DupKey::Incomplete { start: 100 };
+        let b = DupKey::Incomplete { start: 100 };
+        assert!(!a.matches(&b, 0));
+        assert!(!a.matches(&b, 2));
+        // Nor are two reads with no coordinates at all
+        assert!(!DupKey::Unaligned.matches(&DupKey::Unaligned, 2));
+    }
+
+    #[test]
+    fn a_forward_only_read_does_not_match_a_reverse_only_read() {
+        // The unaligned-mate arms record whichever coordinate exists, so a read whose
+        // forward mate aligned and one whose reverse mate aligned can land on the same
+        // number while describing opposite ends of different fragments
+        let (fields, indices) = row(&["r1", "genome_a", "500", "NA", "IIII", "IIII", "NA"]);
+        let forward_only = make_read_entry(&fields, &indices);
+        let (fields, indices) = row(&["r2", "genome_a", "NA", "500", "IIII", "IIII", "NA"]);
+        let reverse_only = make_read_entry(&fields, &indices);
+        assert_eq!(forward_only.key, DupKey::Incomplete { start: 500 });
+        assert_eq!(reverse_only.key, DupKey::Incomplete { start: 500 });
+        assert!(!match_reads(&forward_only, &reverse_only, 2));
+    }
+
+    #[test]
+    fn build_groups_from_sorted_reads_leaves_half_mapped_reads_alone() {
+        let reads = vec![
+            keyed_entry("a", "g", DupKey::Incomplete { start: 100 }, 30.0),
+            keyed_entry("b", "g", DupKey::Incomplete { start: 100 }, 30.0),
+            keyed_entry("c", "g", DupKey::Unaligned, 30.0),
+            keyed_entry("d", "g", DupKey::Unaligned, 30.0),
+        ];
+        assert_eq!(
+            group_names(build_groups_from_sorted_reads(reads, 2)),
+            vec![vec!["a"], vec!["b"], vec!["c"], vec!["d"]]
+        );
+    }
+
+    #[test]
     fn dup_keys_of_different_kinds_never_match() {
         // A fragment span and a lone start are not measuring the same thing, however close
         // their coordinates are
