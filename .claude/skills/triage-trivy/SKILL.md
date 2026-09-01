@@ -83,8 +83,10 @@ Everything below calls the resolved directory **the scan results directory** (`/
 For each per-container JSON in the scan results directory, extract HIGH + CRITICAL vulnerabilities that aren't already in `.trivyignore`. A one-liner:
 
 ```bash
-jq -r '.Results[]? | .Vulnerabilities[]? | select(.Severity == "HIGH" or .Severity == "CRITICAL") |
-       [.VulnerabilityID, .Severity, .PkgName, .InstalledVersion, .FixedVersion // "n/a", (.Type // ""), .Title // ""] | @tsv' \
+jq -r '.Results[]? | .Type as $type | .Vulnerabilities[]? |
+       select(.Severity == "HIGH" or .Severity == "CRITICAL") |
+       [.VulnerabilityID, .Severity, .PkgName, .InstalledVersion, .FixedVersion // "n/a",
+        $type, .PkgPath // "", .Title // ""] | @tsv' \
    /tmp/trivy/<container>.json
 ```
 
@@ -94,7 +96,7 @@ jq -r '.Results[]? | .Vulnerabilities[]? | select(.Severity == "HIGH" or .Severi
 - `debian` → system apt: a fix usually requires a base-image bump rather than a yml edit (Debian stable rarely backports CVE fixes into the running release; status `<no-dsa>` is the common dead end).
 - `gobinary` → a statically-linked Go binary shipped by an upstream conda package: the fix has to come from that upstream rebuilding against a newer Go toolchain. The yml can only switch to a fixed upstream release if one exists (often it doesn't — Escalate).
 
-Fall back to `PkgPath` (e.g. `opt/conda/.../site-packages/...` or `usr/bin/<name>`) if `.Type` is null.
+`Type` is a property of the enclosing `Results[]` entry, not of the vulnerability — read it off the result, as above, or every row comes back null. `PkgPath` (e.g. `opt/conda/.../site-packages/...` or `usr/bin/<name>`) says where the vulnerable code sits; an empty one on a language-ecosystem row is a signal in its own right, see §2b.
 
 Cross-reference each ID against `.trivyignore` and drop any that are already listed. Note `.trivyignore` carries both `CVE-*` and `GHSA-*` IDs (e.g. `GHSA-82j2-j2ch-gfr8` for Rust crates without a NVD entry), so match both:
 
@@ -104,7 +106,7 @@ grep -oE "CVE-[0-9]+-[0-9]+|GHSA-[a-z0-9-]+" .trivyignore | sort -u > /tmp/alrea
 
 If the scan still reports an ID that's in `.trivyignore`, the existing ignore is stale (expired or otherwise non-matching) — flag it and treat as fresh.
 
-**Count distinct CVEs, not findings.** Trivy reports one finding per binary package per image, so a handful of CVEs can present as hundreds of findings. Deduplicate across the whole results directory before sizing the triage, and quote distinct-CVE counts in the PR body:
+**Count distinct vulnerability IDs, not findings.** Trivy emits one finding per affected package per image, so a handful of IDs can present as hundreds of findings. Deduplicate across the results directory before sizing the triage, and quote distinct-ID counts in the PR body — but keep the per-package, per-container occurrences, because one ID can need a different action in each container (see the mixed-outcomes worked example in step 4):
 
 ```bash
 jq -r '.Results[]?.Vulnerabilities[]? | select(.Severity == "HIGH" or .Severity == "CRITICAL") | .VulnerabilityID' \
@@ -138,21 +140,23 @@ docker run --rm -it --entrypoint bash "$TAG"
 #   strings $(which <bin>) | grep '^go1\.'    # Go stdlib version in a gobinary
 ```
 
-**A language-ecosystem finding with no `PkgPath` is a package Trivy read out of a metadata manifest, not off the filesystem. Find the package before you pin anything.**
+**A language-ecosystem finding with no `PkgPath` means the package wasn't installed in its own right — not that it's absent from the image. Find where the code actually lives before you pin anything.**
 
-This rule applies only to language ecosystems — findings whose `.Type` is `python-pkg`, `node-pkg`, `jar`, and so on. OS-package findings (`.Type` of `debian`, `ubuntu`, `alpine`) never carry a `PkgPath`, and that's normal; don't read anything into it.
+This applies only to language ecosystems — results whose `Type` is `python-pkg`, `node-pkg`, `jar`, and so on. OS-package results (`Type` of `debian`, `ubuntu`, `alpine`) never carry a `PkgPath`, and that's normal; don't read anything into it.
 
-The usual source of a pathless language package is pip's vendored bundle. pip ships a manifest of the libraries it vendors (`site-packages/pip/_vendor/vendor.txt`, `bom.cdx.json`), and Trivy parses that manifest as though those libraries were installed packages in their own right. One image can therefore report the same package twice: the real conda copy, which has a `PkgPath`, and a pathless phantom that exists only inside pip's manifest. Pinning the phantom in the yml installs a package the image never carried, and the finding doesn't clear.
+The usual source is a bundled dependency. pip ships the libraries it vendors under `site-packages/pip/_vendor/`, along with a manifest (`vendor.txt`, `bom.cdx.json`) that Trivy reads as packages in their own right. One image can therefore report the same package twice: the conda copy, with a `PkgPath`, and the bundled copy, without one. **The bundled code is genuinely in the image** — so pinning the top-level package in the yml installs a second, separate copy next to it, leaves the bundled one untouched, and doesn't clear the finding.
 
 Ask Trivy where each copy came from, then confirm on the filesystem:
 
 ```bash
 trivy image --format json --list-all-pkgs "$TAG" |
-  jq -r '.Results[].Packages[]? | select(.Name == "<pkg>") | [.Version, .FilePath // "none"] | @tsv'
+  jq -r '.Results[].Packages[]? | select(.Name == "<pkg>") |
+         [.Version, .AnalyzedBy, .FilePath // "none"] | @tsv'
 # In the container: micromamba list <pkg>; ls /opt/conda/lib/python*/site-packages | grep -i <pkg>
+# And for a bundled copy:  ls /opt/conda/lib/python*/site-packages/pip/_vendor/
 ```
 
-If there's no `conda-meta` entry and no `dist-info` directory, the package isn't ours. The fix path runs through the *vendoring* package instead: check whether it has a release that re-vendors a fixed version and whether that release is reachable from the yml (often it isn't — pip's newest release can still vendor the vulnerable version). Ignore only once that check comes back empty — see anti-pattern #5.
+No `conda-meta` entry and no `dist-info` directory means nothing installed it directly, so the fix has to come through whatever bundles it: check whether that package has a release which re-vendors a fixed version, and whether the release is reachable from the yml (often it isn't — pip's newest release can still vendor the vulnerable version). If no reachable fix exists, this is the ordinary no-fix case; take it through the reachability assessment in 2c and the Ignore/Escalate criteria in 2e like any other. See anti-pattern #5.
 
 **2c. Assess whether the pipeline reaches the vulnerable functionality.** The load-bearing step. Don't dismiss based on "the container is isolated"; name what the pipeline actually does with this package:
 
@@ -196,7 +200,7 @@ Patterns that **do not** justify ignoring on their own:
 - If the fix is in a direct dep, change the pin in the yml.
 - **If the fix is in a transitive dep, add an explicit pin for the fix package itself in the yml.** This encodes the security intent *and* changes the spec hash that `bin/build_ecr_container.py` keys off (`compute_spec_hash`). Without a spec-hash change, the build script will skip the container even when the upstream conda package has shipped a fixed version — so a transitive bump that doesn't touch the yml will silently fail to rebuild.
 - **Use exact pins, not ranges.**
-- **Check what the version you're bumping to vendors.** A bump can clear its target and import fresh CVEs through the new version's own `_vendor/` bundle — setuptools 78.1.1 traded one HIGH for two (`wheel`, `jaraco.context`). The Step 5 full-image scan is what catches this; don't judge a patch by its target CVE alone.
+- **Check what the version you're bumping to vendors.** A package that bundles its dependencies can clear the target CVE and bring in new ones through the candidate release's own `_vendor/` bundle. Inspect the candidate's vendored versions as you pick it — Step 5's full-image scan is the backstop, not the first line of defence.
 - **Keep any inline yml comment to one line** naming the CVE IDs and the fix version. Detailed rationale belongs in the PR body, not the yml.
 
 **Permitted edits:** add explicit pins (direct or transitive), tighten an existing range to a fixed version, bump the base-image config knob in `pyproject.toml`.
@@ -270,8 +274,6 @@ The PR body has two parts: a temporary rebuild-handoff callout at the top (only 
 ...
 ```
 
-**If branches stacked on top of this PR also rebuild containers, tell the user to rebuild from the top of the stack.** A base-image bump invalidates every published tag, so any tag those branches pinned from a build on the old base is now stale, and rebuilding this branch alone fixes only this branch's pins. Point step 1 of the callout at the top branch, so a single `bin/build_ecr_containers.py` run leaves every pin consistent. If nothing above this PR touches container specs, rebuilding this branch is enough.
-
 Omit the top callout entirely for Ignore-only or Escalate-only triages — it's only needed when at least one Patch outcome blocks merge on a rebuild. The callout is meant to be deleted from the PR body once the rebuild lands and CI is green; the assessment block stays as the audit trail.
 
 **Keep it tight.** Reviewers need the outcome and why it's safe; NVD details are one click away. Don't paraphrase the vuln's internals, paste container filesystem paths, or list HTTP headers — that pads without informing.
@@ -302,7 +304,7 @@ Omit the top callout entirely for Ignore-only or Escalate-only triages — it's 
   trivy image --severity HIGH,CRITICAL --ignorefile .trivyignore triage-local:<name>
   ```
 
-  Read the *whole* scan, not just the target CVE: a patch that clears one finding while importing others is a net loss, and every extra rebuild is a manual round-trip for the user. If the target CVE doesn't drop out of the local scan, the patch didn't land. Common causes: (a) a feedstock cap keeps the fix unreachable through conda (the urllib3-in-awscli pattern, §2d) — reclassify as Ignore; (b) wrong package pinned — re-read the Trivy `PkgPath`; (c) base image hasn't been bumped though the CVE is system-level.
+  Read the *whole* scan, not just the target CVE. Any new HIGH/CRITICAL the patch brings in is part of the patch decision and needs its own triage before you ask for a rebuild — every extra rebuild is a manual round-trip for the user. **For a base-image bump, scan every container, not just the one that reported the CVE**: the `pyproject.toml` knob feeds every generated Dockerfile, so the whole package set moves. If a local build isn't available, say so in the rebuild handoff rather than presenting the bump as verified, and expect a second triage round once the published images are scanned. If the target CVE doesn't drop out of the local scan, the patch didn't land. Common causes: (a) a feedstock cap keeps the fix unreachable through conda (the urllib3-in-awscli pattern, §2d) — reclassify as Ignore; (b) wrong package pinned — re-read the Trivy `PkgPath`; (c) base image hasn't been bumped though the CVE is system-level.
 
 - **`bin/scan_containers.py` and the CI `scan-containers` job both scan the *published* tag pinned in `configs/containers.config`**, so neither reflects a Patch-side yml change until after the user-side rebuild. They cover Ignore-side outcomes only on a triage branch. Patch-side CVEs stay red on the PR until rebuild — by design.
 - Re-run `bin/scan_containers.py` locally to confirm Ignore-side findings cleared. To wait for CI instead, push the branch and re-run the failed jobs against the latest run for the head SHA — don't push an empty commit (it fires every workflow):
@@ -311,8 +313,7 @@ Omit the top callout entirely for Ignore-only or Escalate-only triages — it's 
   RUN_ID=$(gh run list --workflow=trivy-scan.yml --branch <branch> --status completed --limit 1 --json databaseId -q '.[0].databaseId')
   gh api -X POST repos/securebio/nao-mgs-workflow/actions/runs/$RUN_ID/rerun-failed-jobs
   ```
-- **If a post-rebuild scan disagrees with an image you verified, pull the pinned tag before re-patching.** Scans can race a fresh ECR push or hit registry-cache lag. `docker pull` the tag in `configs/containers.config` and check the package versions in it; if the registry is right, re-run the job rather than patching a phantom.
-- **Build and scan a base-image bump locally before you settle on it** (first bullet above). Changing the base changes the whole package set, so the new image can carry CVEs the old one never reported. Finding them locally lets you pick a different base, or fold them into this triage pass, instead of spending a user rebuild to discover them. If a local build isn't available, expect a second triage round after the user's rebuild, when the post-rebuild scan surfaces them. Either way they aren't a regression from the bump — triage them on the same PR.
+- **If a post-rebuild scan disagrees with an image you verified locally, inspect the pinned artifact before re-patching.** `docker pull` the tag from `configs/containers.config` and check its digest and package versions. If the published image really does carry the old versions, triage that artifact. If it matches what you built, the disagreement is in the scan rather than the image: CI pins its own scanner (`TRIVY_VERSION` in `.github/workflows/trivy-scan.yml`) and its own DB snapshot, which can differ from the local `trivy` you verified with, and a scan can also race a fresh ECR push. Re-run the job only where there's reason to think the failure was transient — a rerun won't resolve a genuine version mismatch.
 - Sanity-read the `.trivyignore` diff: every new line has a comment block with the four required pieces (vulnerability description, affected functionality + our usage, fix-blocker, expiry trigger).
 - Check the PR-description block surfaces every finding, not just the ones you ignored.
 
@@ -322,7 +323,7 @@ Omit the top callout entirely for Ignore-only or Escalate-only triages — it's 
 2. **Bulk-adding CVEs to `.trivyignore` with one-line generic comments.** Each entry needs the four-piece assessment.
 3. **"No Debian fix available" as the only stated reason.** That's a partial check, not a triage outcome. Confirm conda / base-image / upstream-tool paths are also dead ends before ignoring.
 4. **Vague expiry dates** ("six months from now") rather than tied to a specific re-evaluation trigger (upstream release cadence, distro security backport window, etc.).
-5. **Pinning a package Trivy found only in SBOM metadata** (null `PkgPath`; pip's vendored bundle is the usual source). The pin installs a package the image didn't have, can import that package's own vendored CVEs, and never clears the finding. Locate the package on the filesystem first, then look for a fix in the vendoring package's own releases before ignoring (§2b).
+5. **Pinning the top-level package for a finding that came from a bundled copy** (null `PkgPath`; pip's `_vendor/` bundle is the usual source). The pin installs a separate copy alongside the bundled one, can import the pinned release's own vendored CVEs, and never clears the finding. Locate the code first, then look for a fix in the bundling package's releases (§2b).
 6. **Hiding the assessment from the PR description.** The reviewer needs to see *why* each CVE was ignored, not just the `.trivyignore` diff. A reviewer who can't audit the assessment from the PR body alone has been given the easy path to rubber-stamp.
 
 ## Cross-references
