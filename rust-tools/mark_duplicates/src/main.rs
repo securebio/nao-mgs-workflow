@@ -21,9 +21,81 @@ use clap::Parser;
 struct ReadEntry {
     query_name: String,
     genome_id: String,
-    aln_start: Option<i32>,
-    aln_end: Option<i32>,
+    key: DupKey,
     avg_quality: f64,
+}
+
+// The coordinate key a read is matched on.
+//
+// Which variant a read gets follows from how Bowtie2 placed its mates, which it reports in
+// prim_align_pair_status: CP and DP always have both mates aligned, UP may have one or both,
+// and UU is single-end input.
+//
+// The cases are kept distinct rather than collapsed into a pair of Options, because "we know
+// both edges" and "we only know where one mate starts" are different states: a pair of
+// Options would compare two unknown ends as equal and let a read match on one coordinate
+// plus a free pass.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum DupKey {
+    // Both mates aligned to the same genome: the fragment's span on the reference.
+    // Reached by CP, and by DP or UP whose mates happened to land on one genome.
+    FragmentSpan { start: i32, end: i32 },
+    // Mates aligned to two different genomes: one start per genome, ordered to follow the
+    // sorted genome ID so that the same pair of genomes always yields the same key.
+    // Reached by DP and UP.
+    SplitGenome { first_start: i32, second_start: i32 },
+    // Only one mate aligned: we know where it starts and nothing else. The producer
+    // reports UP for these, or UU for single-end input.
+    Incomplete { start: i32 },
+    // Neither mate has a start coordinate
+    Unaligned,
+}
+
+impl DupKey {
+    // Leading coordinate, used to sort reads and to bound the sliding window
+    fn sort_start(&self) -> Option<i32> {
+        match *self {
+            DupKey::FragmentSpan { start, .. } => Some(start),
+            DupKey::SplitGenome { first_start, .. } => Some(first_start),
+            DupKey::Incomplete { start } => Some(start),
+            DupKey::Unaligned => None,
+        }
+    }
+
+    // Trailing coordinate, used only to break ties in the sort
+    fn sort_end(&self) -> Option<i32> {
+        match *self {
+            DupKey::FragmentSpan { end, .. } => Some(end),
+            DupKey::SplitGenome { second_start, .. } => Some(second_start),
+            DupKey::Incomplete { .. } | DupKey::Unaligned => None,
+        }
+    }
+
+    // Whether two keys place their reads at the same position, within the tolerance. Keys of
+    // different kinds never match: they are not measuring the same thing.
+    fn matches(&self, other: &DupKey, deviation: u8) -> bool {
+        match (self, other) {
+            (
+                DupKey::FragmentSpan { start: start_a, end: end_a },
+                DupKey::FragmentSpan { start: start_b, end: end_b },
+            ) => {
+                within_deviation(*start_a, *start_b, deviation)
+                    && within_deviation(*end_a, *end_b, deviation)
+            }
+            (
+                DupKey::SplitGenome { first_start: start_a, second_start: end_a },
+                DupKey::SplitGenome { first_start: start_b, second_start: end_b },
+            ) => {
+                within_deviation(*start_a, *start_b, deviation)
+                    && within_deviation(*end_a, *end_b, deviation)
+            }
+            (DupKey::Incomplete { start: start_a }, DupKey::Incomplete { start: start_b }) => {
+                within_deviation(*start_a, *start_b, deviation)
+            }
+            (DupKey::Unaligned, DupKey::Unaligned) => true,
+            _ => false,
+        }
+    }
 }
 
 // Structure to store duplicate group information without storing full read data
@@ -84,8 +156,8 @@ fn order_positions(a: Option<i32>, b: Option<i32>) -> Ordering {
 // Sort ReadEntries by coordinates: first by aln_start, then by aln_end
 // None values are treated as larger than any Some value (sorted to the end)
 fn compare_read_coordinates(a: &ReadEntry, b: &ReadEntry) -> Ordering {
-    match order_positions(a.aln_start, b.aln_start) {
-        Ordering::Equal => order_positions(a.aln_end, b.aln_end),
+    match order_positions(a.key.sort_start(), b.key.sort_start()) {
+        Ordering::Equal => order_positions(a.key.sort_end(), b.key.sort_end()),
         other => other,
     }
 }
@@ -123,18 +195,12 @@ fn open_writer(filename: &str) -> std::io::Result<Box<dyn Write>> {
 // Implement a custom match function for comparing ReadEntries
 // (Not a valid equality relation as not transitive)
 fn match_reads(a: &ReadEntry, b: &ReadEntry, deviation: u8) -> bool {
-    a.genome_id == b.genome_id &&
-    compare_positions(a.aln_start, b.aln_start, deviation) &&
-    compare_positions(a.aln_end, b.aln_end, deviation)
+    a.genome_id == b.genome_id && a.key.matches(&b.key, deviation)
 }
 
-// Compare the positions with a deviation
-fn compare_positions(a: Option<i32>, b: Option<i32>, deviation: u8) -> bool {
-    match (a, b) {
-        (Some(x), Some(y)) => (x - y).abs() <= deviation as i32,
-        (None, None) => true,
-        _ => false,
-    }
+// Whether two known positions are the same to within the deviation tolerance
+fn within_deviation(a: i32, b: i32, deviation: u8) -> bool {
+    (a - b).abs() <= deviation as i32
 }
 
 // Implement ordered comparison for ReadEntry
@@ -210,13 +276,14 @@ fn build_groups_from_sorted_reads(
         for j in (0..i).rev() {
             let prev_read = &reads[j];
             // If both reads have Some coordinates, break if the difference is greater than `deviation`
-            if let (Some(curr_start), Some(prev_start)) = (current_read.aln_start, prev_read.aln_start) {
+            if let (Some(curr_start), Some(prev_start)) =
+                (current_read.key.sort_start(), prev_read.key.sort_start()) {
                 if curr_start - prev_start > deviation as i32 {
                     break;
                 }
             }
             // If current_read coordinate is None, break if previous read has Some coordinate
-            if current_read.aln_start.is_none() && prev_read.aln_start.is_some() {
+            if current_read.key.sort_start().is_none() && prev_read.key.sort_start().is_some() {
                 break;
             }
             // Otherwise, compare fully and add to matching_groups if they match
@@ -316,8 +383,7 @@ fn make_read_entry(fields: &[String], indices: &HashMap<&str, usize>) -> ReadEnt
     let quality_rev = &fields[indices["query_qual_rev"]];
     // Handle split assignments
     let genome_id_sorted: String;
-    let aln_start: Option<i32>;
-    let aln_end: Option<i32>;
+    let key: DupKey;
     if genome_id.contains('/') {
         // Split genome_id by "/", sort the parts, and join them
         let parts: Vec<&str> = genome_id.split('/').collect();
@@ -327,33 +393,42 @@ fn make_read_entry(fields: &[String], indices: &HashMap<&str, usize>) -> ReadEnt
         // Get the index of the first genome ID in the sorted list
         let genome_id_index = sorted_parts.iter().position(|&s| s == parts[0]).unwrap();
         // Arrange start coordinates to correspond to sorted genome IDs
-        // Note: this doesn't need to handle the case where one value is None
-        // because then you could never get multiple genome_ids
-        (aln_start, aln_end) = if genome_id_index == 0 {
+        let (first, second) = if genome_id_index == 0 {
             (ref_start_fwd, ref_start_rev)
         } else {
             (ref_start_rev, ref_start_fwd)
         };
+        // Note: this doesn't need to handle the case where one value is None
+        // because then you could never get multiple genome_ids
+        key = match (first, second) {
+            (Some(first_start), Some(second_start)) => {
+                DupKey::SplitGenome { first_start, second_start }
+            }
+            (Some(start), None) | (None, Some(start)) => DupKey::Incomplete { start },
+            (None, None) => DupKey::Unaligned,
+        };
     } else {
         // If only one genome ID, use it directly
         genome_id_sorted = genome_id.to_string();
-        // Normalize coordinates: if values are present, use the minimum and maximum
-        // Handle cases where one value is None
-        (aln_start, aln_end) = match (ref_start_fwd, ref_start_rev) {
-            (Some(fwd), Some(rev)) => (Some(fwd.min(rev)), Some(fwd.max(rev))),
-            (Some(fwd), None) => (Some(fwd), None),
-            (None, Some(rev)) => (Some(rev), None),
-            (None, None) => (None, None),
+        key = match (ref_start_fwd, ref_start_rev) {
+            // Both mates aligned: the fragment runs from the leftmost coordinate to the
+            // rightmost one
+            (Some(fwd), Some(rev)) => DupKey::FragmentSpan {
+                start: fwd.min(rev),
+                end: fwd.max(rev),
+            },
+            // Only one mate aligned: its start is all we know
+            (Some(start), None) | (None, Some(start)) => DupKey::Incomplete { start },
+            (None, None) => DupKey::Unaligned,
         };
     };
     let avg_quality = average_quality_score(quality_fwd, quality_rev);
     // Return the ReadEntry with minimal memory footprint
-    ReadEntry { 
-        query_name, 
-        genome_id: genome_id_sorted, 
-        aln_start, 
-        aln_end, 
-        avg_quality 
+    ReadEntry {
+        query_name,
+        genome_id: genome_id_sorted,
+        key,
+        avg_quality,
     }
 }
 
@@ -644,18 +719,16 @@ mod tests {
 
     // Construct a ReadEntry directly, bypassing parsing. Grouping and matching tests use this
     // so they exercise the algorithm rather than the column layout.
-    fn entry(
-        name: &str,
-        genome: &str,
-        start: Option<i32>,
-        end: Option<i32>,
-        quality: f64,
-    ) -> ReadEntry {
+    fn entry(name: &str, genome: &str, start: i32, end: i32, quality: f64) -> ReadEntry {
+        keyed_entry(name, genome, DupKey::FragmentSpan { start, end }, quality)
+    }
+
+    // As above, for the keys that are not a complete fragment span
+    fn keyed_entry(name: &str, genome: &str, key: DupKey, quality: f64) -> ReadEntry {
         ReadEntry {
             query_name: name.to_string(),
             genome_id: genome.to_string(),
-            aln_start: start,
-            aln_end: end,
+            key,
             avg_quality: quality,
         }
     }
@@ -707,23 +780,29 @@ mod tests {
     // --- Position comparison ---
 
     #[test]
-    fn compare_positions_respects_the_deviation_tolerance() {
+    fn within_deviation_respects_the_tolerance() {
         // Exact match at zero tolerance
-        assert!(compare_positions(Some(100), Some(100), 0));
-        assert!(!compare_positions(Some(100), Some(101), 0));
+        assert!(within_deviation(100, 100, 0));
+        assert!(!within_deviation(100, 101, 0));
         // The boundary itself matches; one past it does not
-        assert!(compare_positions(Some(100), Some(101), 1));
-        assert!(!compare_positions(Some(100), Some(102), 1));
-        assert!(compare_positions(Some(100), Some(102), 2));
-        assert!(!compare_positions(Some(100), Some(103), 2));
+        assert!(within_deviation(100, 101, 1));
+        assert!(!within_deviation(100, 102, 1));
+        assert!(within_deviation(100, 102, 2));
+        assert!(!within_deviation(100, 103, 2));
         // Tolerance is symmetric
-        assert!(compare_positions(Some(102), Some(100), 2));
+        assert!(within_deviation(102, 100, 2));
     }
 
     #[test]
-    fn compare_positions_never_matches_a_known_against_an_unknown() {
-        assert!(!compare_positions(Some(100), None, 2));
-        assert!(!compare_positions(None, Some(100), 2));
+    fn dup_keys_of_different_kinds_never_match() {
+        // A fragment span and a lone start are not measuring the same thing, however close
+        // their coordinates are
+        let span = DupKey::FragmentSpan { start: 100, end: 300 };
+        let incomplete = DupKey::Incomplete { start: 100 };
+        let split = DupKey::SplitGenome { first_start: 100, second_start: 300 };
+        assert!(!span.matches(&incomplete, 2));
+        assert!(!span.matches(&split, 2));
+        assert!(!incomplete.matches(&DupKey::Unaligned, 2));
     }
 
     #[test]
@@ -738,14 +817,17 @@ mod tests {
 
     #[test]
     fn compare_read_coordinates_orders_by_start_then_end() {
-        let a = entry("a", "g", Some(10), Some(200), 30.0);
-        let b = entry("b", "g", Some(20), Some(100), 30.0);
-        let c = entry("c", "g", Some(10), Some(300), 30.0);
+        let a = entry("a", "g", 10, 200, 30.0);
+        let b = entry("b", "g", 20, 100, 30.0);
+        let c = entry("c", "g", 10, 300, 30.0);
         // Start dominates, even when the end runs the other way
         assert_eq!(compare_read_coordinates(&a, &b), Ordering::Less);
         // Equal starts fall through to the end coordinate
         assert_eq!(compare_read_coordinates(&a, &c), Ordering::Less);
         assert_eq!(compare_read_coordinates(&a, &a), Ordering::Equal);
+        // A read with no coordinates at all sorts after everything
+        let unaligned = keyed_entry("d", "g", DupKey::Unaligned, 30.0);
+        assert_eq!(compare_read_coordinates(&a, &unaligned), Ordering::Less);
     }
 
     // --- Read entry construction ---
@@ -753,12 +835,12 @@ mod tests {
     #[test]
     fn make_read_entry_keys_a_pair_on_its_two_mate_starts() {
         // Both mates aligned to one genome: the key is the two mate start coordinates,
-        // ordered. Note the second element is the reverse mate's start, not the fragment's
-        // right edge -- see #948; this pins current behaviour so the fix is visible.
+        // ordered. Note the span end is the reverse mate's start, not the fragment's right
+        // edge -- see #948; this pins current behaviour so the fix is visible.
         for (fwd, rev) in [("500", "800"), ("800", "500")] {
             let (fields, indices) = row(&["r1", "genome_a", fwd, rev, "IIII", "IIII", "300"]);
             let e = make_read_entry(&fields, &indices);
-            assert_eq!((e.aln_start, e.aln_end), (Some(500), Some(800)));
+            assert_eq!(e.key, DupKey::FragmentSpan { start: 500, end: 800 });
         }
     }
 
@@ -770,7 +852,7 @@ mod tests {
         for (fwd, rev) in [("500", "NA"), ("NA", "500")] {
             let (fields, indices) = row(&["r1", "genome_a", fwd, rev, "IIII", "IIII", "NA"]);
             let e = make_read_entry(&fields, &indices);
-            assert_eq!((e.aln_start, e.aln_end), (Some(500), None));
+            assert_eq!(e.key, DupKey::Incomplete { start: 500 });
         }
     }
 
@@ -778,7 +860,7 @@ mod tests {
     fn make_read_entry_keys_an_unaligned_pair_on_nothing() {
         let (fields, indices) = row(&["r1", "genome_a", "NA", "NA", "IIII", "IIII", "NA"]);
         let e = make_read_entry(&fields, &indices);
-        assert_eq!((e.aln_start, e.aln_end), (None, None));
+        assert_eq!(e.key, DupKey::Unaligned);
     }
 
     #[test]
@@ -792,8 +874,8 @@ mod tests {
         let short = make_read_entry(&fields, &indices);
         let (fields, indices) = row(&["r2", "genome_a", "400", "400", "IIII", "IIII", "80"]);
         let long = make_read_entry(&fields, &indices);
-        assert_eq!((short.aln_start, short.aln_end), (Some(400), Some(400)));
-        assert_eq!((long.aln_start, long.aln_end), (Some(400), Some(400)));
+        assert_eq!(short.key, DupKey::FragmentSpan { start: 400, end: 400 });
+        assert_eq!(long.key, DupKey::FragmentSpan { start: 400, end: 400 });
         assert!(match_reads(&short, &long, 2));
     }
 
@@ -806,7 +888,7 @@ mod tests {
         // NA here means the input is not what the tool requires.
         let (fields, indices) = row(&["r1", "genome_a", "500", "800", "IIII", "IIII", "NA"]);
         let e = make_read_entry(&fields, &indices);
-        assert_eq!((e.aln_start, e.aln_end), (Some(500), Some(800)));
+        assert_eq!(e.key, DupKey::FragmentSpan { start: 500, end: 800 });
     }
 
     #[test]
@@ -827,15 +909,13 @@ mod tests {
         let e = make_read_entry(&fields, &indices);
         assert_eq!(e.genome_id, "genome_a/genome_b");
         // genome_a is the reverse mate's genome here, so its coordinate leads
-        assert_eq!(e.aln_start, Some(800));
-        assert_eq!(e.aln_end, Some(500));
+        assert_eq!(e.key, DupKey::SplitGenome { first_start: 800, second_start: 500 });
 
         // The same pair the other way round yields an identical key
         let (fields, indices) = row(&["r2", "genome_a/genome_b", "800", "500", "IIII", "IIII", "NA"]);
         let e = make_read_entry(&fields, &indices);
         assert_eq!(e.genome_id, "genome_a/genome_b");
-        assert_eq!(e.aln_start, Some(800));
-        assert_eq!(e.aln_end, Some(500));
+        assert_eq!(e.key, DupKey::SplitGenome { first_start: 800, second_start: 500 });
     }
 
     // --- Header handling ---
@@ -881,8 +961,8 @@ mod tests {
 
     #[test]
     fn match_reads_requires_the_same_genome() {
-        let a = entry("a", "genome_a", Some(100), Some(300), 30.0);
-        let b = entry("b", "genome_b", Some(100), Some(300), 30.0);
+        let a = entry("a", "genome_a", 100, 300, 30.0);
+        let b = entry("b", "genome_b", 100, 300, 30.0);
         assert!(!match_reads(&a, &b, 2));
     }
 
@@ -892,33 +972,33 @@ mod tests {
         // absent second element compares equal to the other absent second element. Likewise
         // two reads with no coordinates at all match on nothing. Both are #948; pinned here
         // so the change shows up as a flipped assertion.
-        let a = entry("a", "g", Some(100), None, 30.0);
-        let b = entry("b", "g", Some(100), None, 30.0);
+        let a = keyed_entry("a", "g", DupKey::Incomplete { start: 100 }, 30.0);
+        let b = keyed_entry("b", "g", DupKey::Incomplete { start: 100 }, 30.0);
         assert!(match_reads(&a, &b, 0));
-        let c = entry("c", "g", None, None, 30.0);
-        let d = entry("d", "g", None, None, 30.0);
+        let c = keyed_entry("c", "g", DupKey::Unaligned, 30.0);
+        let d = keyed_entry("d", "g", DupKey::Unaligned, 30.0);
         assert!(match_reads(&c, &d, 0));
     }
 
     #[test]
     fn match_reads_requires_both_coordinates_to_agree() {
-        let a = entry("a", "g", Some(100), Some(300), 30.0);
+        let a = entry("a", "g", 100, 300, 30.0);
         // Both within tolerance
         assert!(match_reads(
             &a,
-            &entry("b", "g", Some(101), Some(301), 30.0),
+            &entry("b", "g", 101, 301, 30.0),
             1
         ));
         // Start agrees, end does not
         assert!(!match_reads(
             &a,
-            &entry("c", "g", Some(101), Some(310), 30.0),
+            &entry("c", "g", 101, 310, 30.0),
             1
         ));
         // End agrees, start does not
         assert!(!match_reads(
             &a,
-            &entry("d", "g", Some(110), Some(301), 30.0),
+            &entry("d", "g", 110, 301, 30.0),
             1
         ));
     }
@@ -927,13 +1007,13 @@ mod tests {
 
     #[test]
     fn compare_reads_ranks_by_quality_then_breaks_ties_on_name() {
-        let high = entry("zzz", "g", Some(1), Some(2), 36.0);
-        let low = entry("aaa", "g", Some(1), Some(2), 30.0);
+        let high = entry("zzz", "g", 1, 2, 36.0);
+        let low = entry("aaa", "g", 1, 2, 30.0);
         // Quality dominates, regardless of name
         assert_eq!(compare_reads(&high, &low), Ordering::Greater);
         // Equal quality falls back to the lexicographically smaller name winning
-        let a = entry("aaa", "g", Some(1), Some(2), 30.0);
-        let b = entry("bbb", "g", Some(1), Some(2), 30.0);
+        let a = entry("aaa", "g", 1, 2, 30.0);
+        let b = entry("bbb", "g", 1, 2, 30.0);
         assert_eq!(compare_reads(&a, &b), Ordering::Greater);
         // max_by therefore selects the smallest name among equals
         let group = vec![b.clone(), a.clone()];
@@ -951,9 +1031,9 @@ mod tests {
     #[test]
     fn build_groups_from_sorted_reads_separates_reads_beyond_the_tolerance() {
         let reads = vec![
-            entry("a", "g", Some(100), Some(300), 30.0),
-            entry("b", "g", Some(101), Some(301), 30.0),
-            entry("c", "g", Some(200), Some(400), 30.0),
+            entry("a", "g", 100, 300, 30.0),
+            entry("b", "g", 101, 301, 30.0),
+            entry("c", "g", 200, 400, 30.0),
         ];
         // At tolerance 1, a and b group and c stands alone
         assert_eq!(
@@ -970,9 +1050,9 @@ mod tests {
     #[test]
     fn build_groups_from_sorted_reads_is_independent_of_input_order() {
         let reads = vec![
-            entry("c", "g", Some(200), Some(400), 30.0),
-            entry("a", "g", Some(100), Some(300), 30.0),
-            entry("b", "g", Some(101), Some(301), 30.0),
+            entry("c", "g", 200, 400, 30.0),
+            entry("a", "g", 100, 300, 30.0),
+            entry("b", "g", 101, 301, 30.0),
         ];
         assert_eq!(
             group_names(build_groups_from_sorted_reads(reads, 1)),
@@ -985,9 +1065,9 @@ mod tests {
         // a-b and b-c each match at tolerance 1, but a-c differ by 2. Matching is
         // intransitive, and the algorithm resolves that by merging the whole chain.
         let reads = vec![
-            entry("a", "g", Some(100), Some(300), 30.0),
-            entry("b", "g", Some(101), Some(301), 30.0),
-            entry("c", "g", Some(102), Some(302), 30.0),
+            entry("a", "g", 100, 300, 30.0),
+            entry("b", "g", 101, 301, 30.0),
+            entry("c", "g", 102, 302, 30.0),
         ];
         assert!(!match_reads(&reads[0], &reads[2], 1));
         assert_eq!(
@@ -1001,8 +1081,8 @@ mod tests {
         // Identical coordinates on different genomes are never duplicates, even though the
         // sliding window will compare them
         let reads = vec![
-            entry("a", "genome_a", Some(100), Some(300), 30.0),
-            entry("b", "genome_b", Some(100), Some(300), 30.0),
+            entry("a", "genome_a", 100, 300, 30.0),
+            entry("b", "genome_b", 100, 300, 30.0),
         ];
         assert_eq!(
             group_names(build_groups_from_sorted_reads(reads, 2)),
@@ -1014,8 +1094,8 @@ mod tests {
     fn build_groups_from_sorted_reads_splits_on_the_end_coordinate_alone() {
         // Sharing a start is not enough: the sliding window still compares both coordinates
         let reads = vec![
-            entry("a", "g", Some(100), Some(300), 30.0),
-            entry("b", "g", Some(100), Some(900), 30.0),
+            entry("a", "g", 100, 300, 30.0),
+            entry("b", "g", 100, 900, 30.0),
         ];
         assert_eq!(
             group_names(build_groups_from_sorted_reads(reads, 1)),

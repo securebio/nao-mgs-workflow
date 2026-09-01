@@ -7,13 +7,13 @@
     - `{GROUP}_clade_counts.tsv.gz` now deduplicates on `sim_dup_exemplar` rather than `prim_align_dup_exemplar`.
 - Pass the `mark_duplicates` deviation tolerance explicitly instead of through a mutable global, with no change in behaviour.
 - Add unit tests for the `mark_duplicates` Rust tool. (#967)
+- Model the `mark_duplicates` coordinate key as an explicit `DupKey` enum, with no change in behaviour.
 
 # v3.3.0.1-dev
 
 - Publish FASTQC's overrepresented sequences as `{sample}_qc_overrepresented_{raw,cleaned}.tsv.gz` RUN outputs and matching `{group}_qc_overrepresented_{raw,cleaned}.tsv.gz` DOWNSTREAM outputs, with a new schema. Also correct the `overrepresented_sequences` description in `fastp.schema.json` and `output.md`. (#954)
     - See [output.md](docs/output.md) for how to read the numbers. A header-only file means no overrepresented sequences were reported.
     - DOWNSTREAM at this version requires RUN output produced at this version or later, since it treats every entry in `expected-outputs-run` as mandatory.
-- Pass the `mark_duplicates` deviation tolerance explicitly instead of through a mutable global, with no change in behaviour.
 
 # v3.3.0.0
 
