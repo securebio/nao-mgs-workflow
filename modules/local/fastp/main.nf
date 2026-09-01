@@ -37,13 +37,9 @@ process FASTP {
         # output pipe; default level -6 is markedly slower than fastp can
         # produce. Same pattern as the streamed MINIMAP2 module and NUCLEAZE.
         ${extractCmd} ${reads} | fastp ${io} ${par} | pigz -p ${task.cpus} -1 -c > ${op}
-        # fastp always writes an empty overrepresented_sequences object, since its
-        # analysis needs -p (which we don't pass) and seekable input rather than
-        # our pipe. Strip it rather than publish a field that is never measured;
-        # FASTQC's equivalent is published as {sample}_qc_overrepresented_*.tsv.gz.
-        # The key is always the last in its object, so drop the preceding comma too.
+        # Strip empty overrepresented_sequences object and preceding comma
+        # from output.
         sed -zi 's/},\\n\\t\\t"overrepresented_sequences": {\\n\\t\\t}\\n/}\\n/g' ${oj}
-        # Fail loudly if fastp's layout changes, rather than silently republishing it
         if grep -q overrepresented_sequences ${oj}; then
             echo "ERROR: overrepresented_sequences survived stripping; fastp JSON layout changed" >&2
             exit 1
