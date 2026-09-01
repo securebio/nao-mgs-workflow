@@ -1,0 +1,84 @@
+nextflow_process {
+
+    name "Test process SUMMARIZE_GENOME_FASTA"
+    script "modules/local/summarizeGenomeFasta/main.nf"
+    process "SUMMARIZE_GENOME_FASTA"
+    config "tests/configs/index.config"
+    tag "module"
+    tag "summarize_genome_fasta"
+
+    // Load shared helper functions
+    def shell = new GroovyShell()
+    def helpers = shell.parse(new File("tests/helpers/FileHelpers.groovy"))
+
+    test("Gives sequence-identical records one hash and distinct records different hashes") {
+        tag "expect_success"
+        when {
+            params {}
+            process {
+                """
+                input[0] = file("${helpers.gzipFixtureDir("${projectDir}/test-data/summarizeGenomeFasta/genomes")}/virus-genomes-masked.fasta.gz")
+                input[1] = "virus-genome"
+                """
+            }
+        }
+        then {
+            assert process.success
+            assert process.out.summary[0].toString().contains("virus-genome-sequence-summary.tsv.gz")
+            def summary = path(process.out.summary[0]).csv(sep: "\t", decompress: true)
+            assert summary.columnNames == ["genome_id", "seq_length", "seq_hash"]
+
+            // One row per record, in input order.
+            assert summary.columns["genome_id"] == [
+                "PAIR_A.1", "PAIR_B.1", "REVCOMP.1", "WRAPPED.1", "LOWER.1",
+                "RNA.1", "DNA.1", "AMBIGUOUS.1", "UNIQUE.1",
+            ]
+
+            def hash = [summary.columns["genome_id"], summary.columns["seq_hash"]]
+                .transpose().collectEntries()
+
+            // The grouping this module exists to provide. A byte-identical
+            // record, a reverse complement, a line-wrapped copy and a
+            // lower-case copy are all the same sequence.
+            assert hash["PAIR_B.1"] == hash["PAIR_A.1"]
+            assert hash["REVCOMP.1"] == hash["PAIR_A.1"]
+            assert hash["WRAPPED.1"] == hash["PAIR_A.1"]
+            assert hash["LOWER.1"] == hash["PAIR_A.1"]
+            // U and T spellings of one sequence agree...
+            assert hash["RNA.1"] == hash["DNA.1"]
+            // ...but they are not the same sequence as PAIR_A.
+            assert hash["RNA.1"] != hash["PAIR_A.1"]
+            // Distinct sequences must not collide.
+            assert hash["UNIQUE.1"] != hash["PAIR_A.1"]
+            assert hash["AMBIGUOUS.1"] != hash["PAIR_A.1"]
+            assert hash["AMBIGUOUS.1"] != hash["UNIQUE.1"]
+
+            // Length is of the normalised sequence, so line wrapping does not
+            // change it, and ambiguity codes count as bases.
+            def len = [summary.columns["genome_id"], summary.columns["seq_length"]]
+                .transpose().collectEntries()
+            assert len["WRAPPED.1"] == len["PAIR_A.1"]
+            assert len["AMBIGUOUS.1"] == 26
+
+            // Fixed-width key, so it can be sorted and grouped as a plain column.
+            assert summary.columns["seq_hash"].every { it.length() == 64 }
+        }
+    }
+
+    test("Should fail task when a sequence carries a non-IUPAC symbol") {
+        tag "expect_failed"
+        when {
+            params {}
+            process {
+                """
+                input[0] = file("${helpers.gzipFixtureDir("${projectDir}/test-data/summarizeGenomeFasta/genomes-bad-alphabet")}/virus-genomes-masked.fasta.gz")
+                input[1] = "virus-genome"
+                """
+            }
+        }
+        then {
+            assert process.failed
+            assert process.errorReport.contains("non-IUPAC symbol")
+        }
+    }
+}

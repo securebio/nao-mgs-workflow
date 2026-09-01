@@ -1,3 +1,9 @@
+# v3.3.0.1-dev
+
+## Reference and index data
+
+- Add a `SUMMARIZE_GENOME_FASTA` module that reduces a genome FASTA to one row per record (`genome_id`, `seq_length`, `seq_hash`), where `seq_hash` digests the canonicalised sequence. Lets later steps group records by sequence identity without carrying sequence bytes through a sort or a join. Nothing calls it yet, so the pipeline's behaviour and outputs are unchanged. (#955)
+
 # v3.3.0.0
 
 ## Deprecating DOWNSTREAM's VSEARCH clustering with hash-based downsampling
