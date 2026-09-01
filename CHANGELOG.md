@@ -9,11 +9,13 @@
 - Inflate the reference FASTA once up front in `BOWTIE2_INDEX` rather than letting `bowtie2-build` re-inflate it on each pass over the reference. Index contents are unchanged. (#964)
 - Build Minimap2 indexes on instance-local scratch and give `minimap2` the task's full thread allocation. Index contents are unchanged. (#965)
 - Stream `GET_TARBALL`'s archive straight into `tar` instead of staging it in the work directory first, which on Fusion-backed profiles removes a full-archive round trip to S3 and lets extraction overlap the download. Extracted contents are unchanged. (#968)
+- Size `DOWNLOAD_BLAST_DB` for the network bandwidth it needs rather than the compute it does not: under a BEST_FIT compute environment the reservation selects the instance, and the instance bounds a 260 GB transfer. Download concurrency is capped at 8 rather than scaling with the reservation. (#970)
 
 ## Cleanup and best practice
 
 - Drop `MINIMAP2_INDEX`'s unused `input` output, a symlink back to the reference that no workflow or test consumed. (#965)
 - Add module tests for `GET_TARBALL`, which previously had none: extraction of a flat archive into a directory the process creates, extraction of an archive that already wraps its own directory, and the failure path for an unresolvable URL. (#966)
+- Let `DOWNLOAD_BLAST_DB` retry a failed download before giving up. It was the only process in the repo overriding the universal `errorStrategy` with `terminate`, so any transient download failure killed the whole INDEX run on the first attempt. (#970)
 
 # v3.3.0.0
 
