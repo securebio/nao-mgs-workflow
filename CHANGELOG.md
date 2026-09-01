@@ -1,6 +1,6 @@
 # v3.4.0.0-dev
 
-- Stop publishing fastp's `overrepresented_sequences` keys, which were always empty. (#958)
+- Stop publishing fastp's `overrepresented_sequences` keys, which were always empty. Add `jq` to existing `fastp` container. (#958)
 - Publish FASTQC's overrepresented sequences as `{sample}_qc_overrepresented_{raw,cleaned}.tsv.gz` RUN outputs and matching `{group}_qc_overrepresented_{raw,cleaned}.tsv.gz` DOWNSTREAM outputs, with a new schema. Also correct the `overrepresented_sequences` description in `fastp.schema.json` and `output.md`. (#954)
     - See [output.md](docs/output.md) for how to read the numbers. A header-only file means no overrepresented sequences were reported.
     - DOWNSTREAM at this version requires RUN output produced at this version or later, since it treats every entry in `expected-outputs-run` as mandatory.
