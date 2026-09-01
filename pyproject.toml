@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "mgs-workflow"
-version = "3.3.0.0"
+version = "3.3.0.1-dev"
 requires-python = ">=3.12"
 dependencies = [
     "biopython>=1.85",
@@ -117,6 +117,8 @@ expected-outputs-run = [
     "results/{SAMPLE}_qc_basic_stats_raw.tsv.gz",
     "results/{SAMPLE}_qc_length_stats_cleaned.tsv.gz",
     "results/{SAMPLE}_qc_length_stats_raw.tsv.gz",
+    "results/{SAMPLE}_qc_overrepresented_cleaned.tsv.gz",
+    "results/{SAMPLE}_qc_overrepresented_raw.tsv.gz",
     "results/{SAMPLE}_qc_quality_base_stats_cleaned.tsv.gz",
     "results/{SAMPLE}_qc_quality_base_stats_raw.tsv.gz",
     "results/{SAMPLE}_qc_quality_sequence_stats_cleaned.tsv.gz",
@@ -145,6 +147,8 @@ expected-outputs-downstream = [
     "results_downstream/{GROUP}_qc_basic_stats_raw.tsv.gz",
     "results_downstream/{GROUP}_qc_length_stats_cleaned.tsv.gz",
     "results_downstream/{GROUP}_qc_length_stats_raw.tsv.gz",
+    "results_downstream/{GROUP}_qc_overrepresented_cleaned.tsv.gz",
+    "results_downstream/{GROUP}_qc_overrepresented_raw.tsv.gz",
     "results_downstream/{GROUP}_qc_quality_base_stats_cleaned.tsv.gz",
     "results_downstream/{GROUP}_qc_quality_base_stats_raw.tsv.gz",
     "results_downstream/{GROUP}_qc_quality_sequence_stats_cleaned.tsv.gz",
@@ -165,6 +169,8 @@ expected-outputs-downstream-ont = [
     "results_downstream/{GROUP}_qc_basic_stats_raw.tsv.gz",
     "results_downstream/{GROUP}_qc_length_stats_cleaned.tsv.gz",
     "results_downstream/{GROUP}_qc_length_stats_raw.tsv.gz",
+    "results_downstream/{GROUP}_qc_overrepresented_cleaned.tsv.gz",
+    "results_downstream/{GROUP}_qc_overrepresented_raw.tsv.gz",
     "results_downstream/{GROUP}_qc_quality_base_stats_cleaned.tsv.gz",
     "results_downstream/{GROUP}_qc_quality_base_stats_raw.tsv.gz",
     "results_downstream/{GROUP}_qc_quality_sequence_stats_cleaned.tsv.gz",

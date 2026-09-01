@@ -417,7 +417,7 @@
         },
         "overrepresented_sequences": {
           "type": "object",
-          "description": "Overrepresented sequences and their counts. May be empty if no sequences exceed the reporting threshold.",
+          "description": "Overrepresented sequences and their counts. Always empty in this pipeline, since we do not pass `-p`.",
           "additionalProperties": {
             "type": "integer",
             "minimum": 0

@@ -34,9 +34,10 @@ if (opt$single_end == "true") {
 # Set input paths
 multiqc_json_path <- file.path(opt$input_dir, "multiqc_data.json")
 fastqc_tsv_path <- file.path(opt$input_dir, "multiqc_fastqc.txt")
+overrepresented_tsv_path <- file.path(opt$input_dir, "fastqc_top_overrepresented_sequences_table.txt")
 
 # Set output paths
-# Format: {prefix}_qc_{type}_stats_{stage}.tsv.gz (e.g. sample1_qc_basic_stats_raw.tsv.gz)
+# Format: {prefix}_qc_{type}_{stage}.tsv.gz (e.g. sample1_qc_basic_stats_raw.tsv.gz)
 if (is.null(opt$prefix)) {
   prefix <- opt$sample
 } else {
@@ -47,6 +48,7 @@ out_path_adapters <- file.path(opt$output_dir, paste0(prefix, "_qc_adapter_stats
 out_path_quality_base <- file.path(opt$output_dir, paste0(prefix, "_qc_quality_base_stats_", opt$stage, ".tsv.gz"))
 out_path_quality_sequence <- file.path(opt$output_dir, paste0(prefix, "_qc_quality_sequence_stats_", opt$stage, ".tsv.gz"))
 out_path_lengths <- file.path(opt$output_dir, paste0(prefix, "_qc_length_stats_", opt$stage, ".tsv.gz"))
+out_path_overrepresented <- file.path(opt$output_dir, paste0(prefix, "_qc_overrepresented_", opt$stage, ".tsv.gz"))
 
 #=====================#
 # AUXILIARY FUNCTIONS #
@@ -198,6 +200,31 @@ extract_length_data <- function(multiqc_json){
   }) %>% bind_rows()
 }
 
+extract_overrepresented_data <- function(tsv_path){
+  # Extract overrepresented sequences from the MultiQC "Top overrepresented
+  # sequences" table, which MultiQC writes as a flat TSV.
+  empty <- tibble(sequence = character(), n_occurrences = integer(),
+                  pc_reads = numeric())
+  # MultiQC omits the table entirely when FASTQC reported no overrepresented
+  # sequences.
+  if (!file.exists(tsv_path)) return(empty)
+  # Read everything as character and then convert explicitly.
+  tab <- readr::read_tsv(tsv_path, col_types = cols(.default = col_character()))
+  # MultiQC names the sequence column "Sample" because this table reuses its
+  # generic per-sample table renderer with sequences in the sample position.
+  required_columns <- c("Sample", "Occurrences", "% of all reads")
+  missing_cols <- setdiff(required_columns, colnames(tab))
+  if (length(missing_cols) > 0){
+    stop("Missing expected column(s) in ", basename(tsv_path), ": ",
+         paste(missing_cols, collapse = ", "))
+  }
+  tab %>%
+    transmute(sequence = Sample,
+              n_occurrences = as.integer(Occurrences),
+              pc_reads = as.numeric(`% of all reads`)) %>%
+    arrange(desc(n_occurrences), sequence)
+}
+
 #============#
 # RUN SCRIPT #
 #============#
@@ -217,6 +244,7 @@ per_base_quality <- extract_plot_or_empty(multiqc_json,
 lengths <- extract_length_data(multiqc_json) %>% add_info
 per_sequence_quality <- extract_plot_or_empty(multiqc_json,
   "fastqc_per_sequence_quality_scores_plot", c("mean_phred_score", "n_sequences")) %>% add_info
+overrepresented <- extract_overrepresented_data(overrepresented_tsv_path) %>% add_info
 
 # Write tables
 write_tsv(basic_info, out_path_basic)
@@ -224,3 +252,4 @@ write_tsv(adapters, out_path_adapters)
 write_tsv(per_base_quality, out_path_quality_base)
 write_tsv(per_sequence_quality, out_path_quality_sequence)
 write_tsv(lengths, out_path_lengths)
+write_tsv(overrepresented, out_path_overrepresented)

@@ -15,7 +15,7 @@ def validateTsvStructure = { tsv_file, expected_col_count, expected_stage, expec
     }
 }
 
-// Helper function: Validate a QC tuple (sample, basic, adapt, qbase, qseqs, lengths)
+// Helper function: Validate a QC tuple (sample, basic, adapt, qbase, qseqs, lengths, overrep)
 def validateQcTuple = { qc_tuple, expected_stage ->
     def tsv_basic = path(qc_tuple[1]).csv(sep: "\t", decompress: true)
     assert tsv_basic.rowCount == 1
@@ -27,6 +27,7 @@ def validateQcTuple = { qc_tuple, expected_stage ->
     validateTsvStructure(qc_tuple[3], 5, stage, sample)
     validateTsvStructure(qc_tuple[4], 5, stage, sample)
     validateTsvStructure(qc_tuple[5], 5, stage, sample)
+    validateTsvStructure(qc_tuple[6], 5, stage, sample)
 }
 
 nextflow_workflow {

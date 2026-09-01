@@ -16,10 +16,10 @@ workflow RUN_QC {
       single_end
     main:
       // Run FASTQC before and after adapter trimming
-      // QC outputs tuple(sample, basic, adapt, qbase, qseqs, lengths)
+      // QC outputs tuple(sample, basic, adapt, qbase, qseqs, lengths, overrep)
       pre_qc_ch = PRE_ADAPTER_TRIM_QC(subset_reads, "raw", single_end)
       post_qc_ch = POST_ADAPTER_TRIM_QC(trimmed_subset_reads, "cleaned", single_end)
     emit:
-      pre_qc = pre_qc_ch.qc   // tuple(sample, basic, adapt, qbase, qseqs, lengths) per sample
-      post_qc = post_qc_ch.qc // tuple(sample, basic, adapt, qbase, qseqs, lengths) per sample
+      pre_qc = pre_qc_ch.qc   // tuple(sample, basic, adapt, qbase, qseqs, lengths, overrep) per sample
+      post_qc = post_qc_ch.qc // tuple(sample, basic, adapt, qbase, qseqs, lengths, overrep) per sample
 }

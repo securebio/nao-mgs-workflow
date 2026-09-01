@@ -48,7 +48,7 @@ nextflow_workflow {
         then {
             // Should run without failures
             assert workflow.success
-            // Output is tuple(sample, basic, adapt, qbase, qseqs, lengths)
+            // Output is tuple(sample, basic, adapt, qbase, qseqs, lengths, overrep)
             def qc_tuple = workflow.out.qc[0]
             def tsv_basic = path(qc_tuple[1]).csv(sep: "\t", decompress: true)
             def fastq_in = path(workflow.out.test_input[0][1]).fastq
@@ -71,6 +71,7 @@ nextflow_workflow {
             validateTsvStructure(qc_tuple[3], 5, stage, sample)
             validateTsvStructure(qc_tuple[4], 5, stage, sample)
             validateTsvStructure(qc_tuple[5], 5, stage, sample)
+            validateTsvStructure(qc_tuple[6], 5, stage, sample)
         }
     }
 
@@ -92,7 +93,7 @@ nextflow_workflow {
         then {
             // Should run without failures
             assert workflow.success
-            // Output is tuple(sample, basic, adapt, qbase, qseqs, lengths)
+            // Output is tuple(sample, basic, adapt, qbase, qseqs, lengths, overrep)
             def qc_tuple = workflow.out.qc[0]
             def tsv_basic = path(qc_tuple[1]).csv(sep: "\t", decompress: true)
             def fastq_in = path(workflow.out.test_input[0][1]).fastq
@@ -115,6 +116,7 @@ nextflow_workflow {
             validateTsvStructure(qc_tuple[3], 5, stage, sample)
             validateTsvStructure(qc_tuple[4], 5, stage, sample)
             validateTsvStructure(qc_tuple[5], 5, stage, sample)
+            validateTsvStructure(qc_tuple[6], 5, stage, sample)
         }
     }
 

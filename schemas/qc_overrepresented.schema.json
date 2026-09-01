@@ -1,0 +1,57 @@
+{
+  "$schema": "https://datapackage.org/profiles/2.0/tableschema.json",
+  "title": "QC Overrepresented Sequences",
+  "description": "Overrepresented sequences identified by FASTQC for subset samples, concatenated across samples within a group by the DOWNSTREAM workflow. Each row represents one sequence that FASTQC found in more than 0.1% of that sample-stage's reads, with its occurrence count and read percentage. Sequences are counted as whole reads truncated to their first 50 bases. Counts and percentages are over mates rather than read pairs. At most 100 sequences are reported per sample and stage.",
+  "missingValues": ["NA"],
+  "primaryKey": ["group", "sample", "stage", "sequence"],
+  "fields": [
+    {
+      "name": "sequence",
+      "title": "Sequence",
+      "description": "The overrepresented sequence, as reported by FASTQC: the read sequence truncated to its first 50 bases.",
+      "type": "string",
+      "constraints": { "required": true, "minLength": 1, "maxLength": 50 },
+      "example": "GCGGTGTGTACAAGGCCCGGGAACGTATTCACCGCGGCATGCTGATCCGC"
+    },
+    {
+      "name": "n_occurrences",
+      "title": "Number of Occurrences",
+      "description": "Number of reads in this sample and stage matching this sequence.",
+      "type": "integer",
+      "constraints": { "required": true, "minimum": 1 },
+      "example": 2
+    },
+    {
+      "name": "pc_reads",
+      "title": "Percentage of Reads",
+      "description": "Occurrences as a percentage of all reads in this sample and stage.",
+      "type": "number",
+      "constraints": { "required": true, "minimum": 0, "maximum": 100 },
+      "example": 4.0
+    },
+    {
+      "name": "stage",
+      "title": "Stage",
+      "description": "Processing stage: 'raw' (before trimming) or 'cleaned' (after trimming).",
+      "type": "string",
+      "constraints": { "required": true, "enum": ["raw", "cleaned"] },
+      "example": "cleaned"
+    },
+    {
+      "name": "sample",
+      "title": "Sample",
+      "description": "Sample identifier from the RUN workflow.",
+      "type": "string",
+      "constraints": { "required": true, "minLength": 1 },
+      "example": "sample_1"
+    },
+    {
+      "name": "group",
+      "title": "Group",
+      "description": "Group identifier assigned to this sample in the grouping TSV.",
+      "type": "string",
+      "constraints": { "required": true, "minLength": 1 },
+      "example": "group_1"
+    }
+  ]
+}
