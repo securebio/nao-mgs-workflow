@@ -529,10 +529,9 @@ nextflow_process {
             with (tsv_overrep) {
                 // Exactly the 100 most frequent are kept...
                 assert rowCount == 100
+                // ...so none of the 50 lower-ranked 1x sequences survive the cap
                 assert columns["n_occurrences"].every { it == 2 }
                 assert columns["pc_reads"].every { it == 0.8 }
-                // ...so none of the 50 lower-ranked 1x sequences survive the cap
-                assert columns["n_occurrences"].every { it != 1 }
                 assert columns["sequence"].unique().size() == 100
                 // Reads at or below 50bp are reported whole, without truncation
                 assert columns["sequence"].every { it.length() == 10 }
