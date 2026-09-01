@@ -1,0 +1,33 @@
+nextflow_process {
+    name "Test process MINIMAP2_INDEX with scratch enabled"
+    script "modules/local/minimap2/main.nf"
+    process "MINIMAP2_INDEX"
+    config "tests/configs/scratch_download.config"
+    tag "module"
+    tag "minimap2_index"
+    tag "scratch"
+
+    test("Should stage the index out of the scratch directory") {
+        tag "expect_success"
+        when {
+            params {
+            }
+            process {
+                '''
+                input[0] = "${projectDir}/test-data/toy-data/norovirus_GI.fasta"
+                input[1] = "mm2-norovirus-index"
+                '''
+            }
+        }
+        then {
+            assert process.success
+            // The index is built in the scratch directory, so this only passes if
+            // Nextflow copied it back into the work directory on stage-out.
+            def dir = new File(process.out.output[0].toString())
+            assert dir.isDirectory()
+            def index = new File(dir, "mm2_index.mmi")
+            assert index.exists()
+            assert index.length() > 0
+        }
+    }
+}
