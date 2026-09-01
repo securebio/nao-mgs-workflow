@@ -38,8 +38,10 @@ process FASTP {
         # produce. Same pattern as the streamed MINIMAP2 module and NUCLEAZE.
         ${extractCmd} ${reads} | fastp ${io} ${par} | pigz -p ${task.cpus} -1 -c > ${op}
         # Strip the always-empty overrepresented_sequences objects from the JSON;
-        # fastp only measures them when passed -p, which we don't.
-        jq 'del(.. | .overrepresented_sequences?)' ${oj} > ${oj}.tmp
+        # fastp only measures them when passed -p, which we don't. -c keeps the
+        # file compact: jq reserializes, and pretty-printing fastp's packed
+        # kmer_count sections would more than double the published file.
+        jq -c 'del(.. | .overrepresented_sequences?)' ${oj} > ${oj}.tmp
         mv ${oj}.tmp ${oj}
         # Handle empty output (fastp doesn't handle gzipping empty output properly)
         if [[ ! -s ${of} ]]; then
