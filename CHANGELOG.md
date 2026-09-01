@@ -2,6 +2,7 @@
 
 ## Reference and index data
 
+- Replace `FILTER_METADATA_TO_FASTA` with `RECONCILE_GENOME_METADATA` in `MAKE_VIRUS_GENOME_DB`. `SUMMARIZE_GENOME_FASTA` now summarises the published FASTA, that summary is sorted and joined onto the metadata on `genome_id` with the existing `SORT_TSV` and `JOIN_TSVS`, and the new module reduces the join to one published row per sequence. This removes the old module's re-derivation of the FASTA-side deduplication rule: where a sequence is packaged in more than one assembly, the published row now credits the lowest `assembly_accession` as a stated policy rather than as an inference about which copy `seqkit rmdup` happened to keep. The published `virus-genome-metadata-gid.tsv.gz` gains `seq_length` and `seq_hash` columns describing the published sequence; existing columns and their values are unchanged. (#960)
 - Add a `SUMMARIZE_GENOME_FASTA` module that reduces a genome FASTA to one row per record (`genome_id`, `seq_length`, `seq_hash`), where `seq_hash` digests the canonicalised sequence. Lets later steps group records by sequence identity without carrying sequence bytes through a sort or a join. Nothing calls it yet, so the pipeline's behaviour and outputs are unchanged. (#955)
 
 # v3.3.0.0

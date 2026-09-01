@@ -1,4 +1,0 @@
-assembly_accession	taxid	organism_name	source_database	assembly_status	release_date	species_taxid	genome_id
-GCF_000000001.1	11111	Test virus A	SOURCE_DATABASE_REFSEQ	current	2020-01-01	11111	NC_000001.1
-GCA_000000001.1	11111	Test virus A	SOURCE_DATABASE_GENBANK	current	2020-01-01	11111	AB000001.1
-GCA_000000001.1	11111	Test virus A	SOURCE_DATABASE_GENBANK	current	2020-01-01	11111	UNIQUE_A

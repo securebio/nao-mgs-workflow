@@ -80,14 +80,16 @@ nextflow_workflow {
                 "${(fastaIds - metadataIds.toSet()).take(5)}, rows with no sequence: " +
                 "${(metadataIds.toSet() - fastaIds).take(5)}"
 
-            // `seqkit rmdup` kept M22245.1 from the smaller accession, which is
-            // also the earlier chunk, so the surviving metadata row must name that
-            // assembly rather than the one contributing the other nine sequences.
+            // M22245.1 is packaged in two assemblies. NCBI accession.version is
+            // immutable, so both copies carry the same sequence and the choice
+            // only decides which assembly the metadata credits. RECONCILE_GENOME_
+            // METADATA states that policy -- lowest assembly_accession -- rather
+            // than inheriting whichever copy happened to survive deduplication.
             def assemblyById = [
                 metadataIds, metadata.columns["assembly_accession"]
             ].transpose().collectEntries { id, acc -> [id, acc.toString()] }
             assert assemblyById["M22245.1"] == "GCA_000844265.1" :
-                "Expected the row for the copy rmdup kept, got ${assemblyById["M22245.1"]}"
+                "Expected the lowest accession, got ${assemblyById["M22245.1"]}"
 
             // The published column set is what RUN's read_genbank_metadata and
             // DOWNSTREAM read, so a change upstream should surface here.
@@ -100,8 +102,31 @@ nextflow_workflow {
                 "release_date",
                 "species_taxid",
                 "genome_id",
+                "seq_length",
+                "seq_hash",
             ]
             assert workflow.out.metadata[0].toString().endsWith("virus-genome-metadata-gid.tsv.gz")
+
+            // The sequence summary reaches the published table, and describes the
+            // sequence actually published: every row carries a fixed-width digest
+            // and a length matching the FASTA record it names.
+            assert metadata.columns["seq_hash"].every { it.length() == 64 }
+            def lengthById = [
+                metadataIds, metadata.columns["seq_length"]
+            ].transpose().collectEntries { id, len -> [id, len as int] }
+            def fastaLengths = [:]
+            def currentId = null
+            path(workflow.out.fasta[0]).linesGzip.each { line ->
+                if (line.startsWith(">")) {
+                    currentId = line.substring(1).split(/\s/)[0]
+                    fastaLengths[currentId] = 0
+                } else {
+                    fastaLengths[currentId] += line.trim().length()
+                }
+            }
+            assert lengthById == fastaLengths :
+                "seq_length disagrees with the published FASTA for: " +
+                "${lengthById.findAll { id, len -> fastaLengths[id] != len }.take(5)}"
         }
     }
 }
