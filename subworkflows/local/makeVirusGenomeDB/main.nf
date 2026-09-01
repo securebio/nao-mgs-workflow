@@ -9,7 +9,11 @@ include { PREPARE_VIRAL_METADATA } from "../../../modules/local/prepareViralMeta
 include { CONCATENATE_GENOME_FASTA } from "../../../modules/local/concatenateGenomeFasta"
 include { FILTER_GENOME_FASTA } from "../../../modules/local/filterGenomeFasta"
 include { MASK_GENOME_FASTA } from "../../../modules/local/maskGenomeFasta"
-include { FILTER_METADATA_TO_FASTA } from "../../../modules/local/filterMetadataToFasta"
+include { SUMMARIZE_GENOME_FASTA } from "../../../modules/local/summarizeGenomeFasta"
+include { SORT_TSV as SORT_METADATA } from "../../../modules/local/sortTsv"
+include { SORT_TSV as SORT_SEQUENCE_SUMMARY } from "../../../modules/local/sortTsv"
+include { JOIN_TSVS } from "../../../modules/local/joinTsvs"
+include { RECONCILE_GENOME_METADATA } from "../../../modules/local/reconcileGenomeMetadata"
 include { GZIP_FILE_BARE } from "../../../modules/local/gzipFile"
 
 /***********
@@ -64,8 +68,28 @@ workflow MAKE_VIRUS_GENOME_DB {
         mask_params = other_params + [name_pattern: "virus-genomes"]
         mask_ch = MASK_GENOME_FASTA(filter_genome_ch, other_params.adapters, mask_params)
         published_fasta_ch = mask_ch.masked
-        // 8. Filter genome metadata down to one row per sequence present in the genome FASTA.
-        metadata_ch = FILTER_METADATA_TO_FASTA(gid_ch, published_fasta_ch, "virus-genome")
+        // 8. Summarise the published FASTA as one row per sequence. This is the
+        //    only step that reads sequence bytes for reconciliation, so every
+        //    later decision is a TSV operation on a fixed-width key.
+        summary_ch = SUMMARIZE_GENOME_FASTA(published_fasta_ch, "virus-genome").summary
+        // 9. Join the summary onto the metadata on genome_id. Both sides are
+        //    sorted first so JOIN_TSVS can stream the merge. A right join keeps
+        //    every published sequence, including any with no metadata row, so
+        //    that RECONCILE_GENOME_METADATA can fail on it rather than the join
+        //    dropping it silently.
+        sorted_metadata_ch = SORT_METADATA(
+            gid_ch.map { f -> ["virus-genome-metadata", f] }, "genome_id"
+        ).sorted.map { _name, f -> f }
+        sorted_summary_ch = SORT_SEQUENCE_SUMMARY(
+            summary_ch.map { f -> ["virus-genome-summary", f] }, "genome_id"
+        ).sorted.map { _name, f -> f }
+        joined_ch = JOIN_TSVS(
+            sorted_metadata_ch.combine(sorted_summary_ch).map { m, s -> ["virus-genome", m, s] },
+            "genome_id", "right", "metadata-summary"
+        ).output.map { _name, f -> f }
+        // 10. Reduce to one published row per sequence, crediting the lowest
+        //     assembly_accession where a sequence is packaged more than once.
+        metadata_ch = RECONCILE_GENOME_METADATA(joined_ch, "virus-genome").metadata
     emit:
         fasta = published_fasta_ch
         metadata = metadata_ch
