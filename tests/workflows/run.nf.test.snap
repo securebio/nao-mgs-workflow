@@ -2,7 +2,7 @@
     "run_output_shortread": {
         "content": [
             "tiny_test_bracken.tsv.gz:md5,7fbf9af7ae2074266d5f0be4f1b2a184",
-            "tiny_test_fastp.json:md5,75a3980b12d51defa22f85d078c3bbad",
+            "tiny_test_fastp.json:md5,92934ac3aeddf4ea6bfcb337564d5210",
             "tiny_test_kraken.tsv.gz:md5,b92e96228ff584c883f74b6f6e855a60",
             "tiny_test_qc_adapter_stats_cleaned.tsv.gz:md5,d15e65d588573c8ccb2687414e37f905",
             "tiny_test_qc_adapter_stats_raw.tsv.gz:md5,d15e65d588573c8ccb2687414e37f905",
@@ -19,7 +19,7 @@
             "tiny_test_read_counts.tsv:md5,c00f00d8a47a87731a969636e6043b15",
             "tiny_test_virus_hits.tsv.gz:md5,c4c8be0c7c3296fe6613b1c52813bd87"
         ],
-        "timestamp": "2026-08-31T14:02:54.387412399",
+        "timestamp": "2026-09-01T14:04:25.519955551",
         "meta": {
             "nf-test": "0.9.5",
             "nextflow": "26.04.6"

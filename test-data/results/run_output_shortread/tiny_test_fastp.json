@@ -140,8 +140,6 @@
 			"GGTAA":7,			"GGTAT":1,			"GGTAC":3,			"GGTAG":2,			"GGTTA":0,			"GGTTT":5,			"GGTTC":1,			"GGTTG":2,			"GGTCA":0,			"GGTCT":4,			"GGTCC":6,			"GGTCG":5,			"GGTGA":4,			"GGTGT":1,			"GGTGC":2,			"GGTGG":10,
 			"GGCAA":4,			"GGCAT":0,			"GGCAC":1,			"GGCAG":1,			"GGCTA":6,			"GGCTT":1,			"GGCTC":4,			"GGCTG":3,			"GGCCA":1,			"GGCCT":3,			"GGCCC":4,			"GGCCG":4,			"GGCGA":6,			"GGCGT":0,			"GGCGC":4,			"GGCGG":2,
 			"GGGAA":9,			"GGGAT":3,			"GGGAC":13,			"GGGAG":8,			"GGGTA":0,			"GGGTT":3,			"GGGTC":4,			"GGGTG":5,			"GGGCA":2,			"GGGCT":2,			"GGGCC":6,			"GGGCG":0,			"GGGGA":14,			"GGGGT":8,			"GGGGC":5,			"GGGGG":13
-		},
-		"overrepresented_sequences": {
 		}
 	},
 	"read2_before_filtering": {
@@ -230,8 +228,6 @@
 			"GGTAA":4,			"GGTAT":0,			"GGTAC":0,			"GGTAG":3,			"GGTTA":0,			"GGTTT":5,			"GGTTC":3,			"GGTTG":0,			"GGTCA":2,			"GGTCT":2,			"GGTCC":6,			"GGTCG":2,			"GGTGA":3,			"GGTGT":3,			"GGTGC":0,			"GGTGG":2,
 			"GGCAA":1,			"GGCAT":10,			"GGCAC":0,			"GGCAG":1,			"GGCTA":3,			"GGCTT":7,			"GGCTC":2,			"GGCTG":8,			"GGCCA":1,			"GGCCT":0,			"GGCCC":3,			"GGCCG":0,			"GGCGA":3,			"GGCGT":0,			"GGCGC":4,			"GGCGG":4,
 			"GGGAA":12,			"GGGAT":8,			"GGGAC":10,			"GGGAG":11,			"GGGTA":0,			"GGGTT":2,			"GGGTC":5,			"GGGTG":2,			"GGGCA":4,			"GGGCT":9,			"GGGCC":2,			"GGGCG":7,			"GGGGA":14,			"GGGGT":4,			"GGGGC":10,			"GGGGG":10
-		},
-		"overrepresented_sequences": {
 		}
 	},
 	"read1_after_filtering": {
@@ -320,8 +316,6 @@
 			"GGTAA":7,			"GGTAT":1,			"GGTAC":3,			"GGTAG":2,			"GGTTA":0,			"GGTTT":4,			"GGTTC":1,			"GGTTG":1,			"GGTCA":0,			"GGTCT":4,			"GGTCC":6,			"GGTCG":5,			"GGTGA":4,			"GGTGT":1,			"GGTGC":2,			"GGTGG":10,
 			"GGCAA":4,			"GGCAT":0,			"GGCAC":1,			"GGCAG":1,			"GGCTA":6,			"GGCTT":1,			"GGCTC":4,			"GGCTG":3,			"GGCCA":1,			"GGCCT":3,			"GGCCC":4,			"GGCCG":4,			"GGCGA":6,			"GGCGT":0,			"GGCGC":4,			"GGCGG":2,
 			"GGGAA":9,			"GGGAT":3,			"GGGAC":13,			"GGGAG":8,			"GGGTA":0,			"GGGTT":2,			"GGGTC":4,			"GGGTG":5,			"GGGCA":2,			"GGGCT":2,			"GGGCC":6,			"GGGCG":0,			"GGGGA":14,			"GGGGT":8,			"GGGGC":5,			"GGGGG":13
-		},
-		"overrepresented_sequences": {
 		}
 	},
 	"read2_after_filtering": {
@@ -410,8 +404,6 @@
 			"GGTAA":3,			"GGTAT":0,			"GGTAC":0,			"GGTAG":3,			"GGTTA":0,			"GGTTT":5,			"GGTTC":3,			"GGTTG":0,			"GGTCA":1,			"GGTCT":2,			"GGTCC":6,			"GGTCG":1,			"GGTGA":3,			"GGTGT":3,			"GGTGC":0,			"GGTGG":2,
 			"GGCAA":1,			"GGCAT":10,			"GGCAC":0,			"GGCAG":1,			"GGCTA":3,			"GGCTT":7,			"GGCTC":2,			"GGCTG":8,			"GGCCA":1,			"GGCCT":0,			"GGCCC":3,			"GGCCG":0,			"GGCGA":4,			"GGCGT":0,			"GGCGC":4,			"GGCGG":4,
 			"GGGAA":12,			"GGGAT":8,			"GGGAC":10,			"GGGAG":11,			"GGGTA":0,			"GGGTT":2,			"GGGTC":5,			"GGGTG":2,			"GGGCA":4,			"GGGCT":9,			"GGGCC":2,			"GGGCG":8,			"GGGGA":14,			"GGGGT":4,			"GGGGC":10,			"GGGGG":10
-		},
-		"overrepresented_sequences": {
 		}
 	},
 	"command": "fastp --failed_out tiny_test_fastp_failed.fastq.gz --html tiny_test_fastp.html --json tiny_test_fastp.json --adapter_fasta adapters.fasta --stdin --stdout --interleaved_in --cut_front --cut_tail --correction --detect_adapter_for_pe --trim_poly_x --cut_mean_quality 20 --average_qual 20 --qualified_quality_phred 20 --verbose --dont_eval_duplication --thread 4 --low_complexity_filter --length_required 35 "

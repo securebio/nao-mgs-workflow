@@ -414,14 +414,6 @@
             "type": "integer",
             "minimum": 0
           }
-        },
-        "overrepresented_sequences": {
-          "type": "object",
-          "description": "Overrepresented sequences and their counts. Always empty in this pipeline, since we do not pass `-p`.",
-          "additionalProperties": {
-            "type": "integer",
-            "minimum": 0
-          }
         }
       },
       "additionalProperties": true

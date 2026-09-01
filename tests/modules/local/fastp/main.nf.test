@@ -7,6 +7,12 @@ def checkFastpJson = { json, reads_in, reads_pass, is_pe ->
     assert json.containsKey("read1_before_filtering")
     assert json.containsKey("read1_after_filtering")
     assert json.containsKey("command")
+    // fastp's always-empty overrepresented_sequences is stripped before publishing
+    json.each { key, value ->
+        if (value instanceof Map) {
+            assert !value.containsKey("overrepresented_sequences") : "${key} still carries overrepresented_sequences"
+        }
+    }
     // Cross-validate read counts between JSON and FASTQ outputs
     assert json.filtering_result.passed_filter_reads == reads_pass
     assert json.summary.before_filtering.total_reads == reads_in

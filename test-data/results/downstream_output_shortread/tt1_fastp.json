@@ -3302,8 +3302,7 @@
         "GGGGT": 8,
         "GGGGC": 5,
         "GGGGG": 13
-      },
-      "overrepresented_sequences": {}
+      }
     },
     "read2_before_filtering": {
       "total_reads": 25,
@@ -6023,8 +6022,7 @@
         "GGGGT": 4,
         "GGGGC": 10,
         "GGGGG": 10
-      },
-      "overrepresented_sequences": {}
+      }
     },
     "read1_after_filtering": {
       "total_reads": 25,
@@ -8744,8 +8742,7 @@
         "GGGGT": 8,
         "GGGGC": 5,
         "GGGGG": 13
-      },
-      "overrepresented_sequences": {}
+      }
     },
     "read2_after_filtering": {
       "total_reads": 25,
@@ -11465,8 +11462,7 @@
         "GGGGT": 4,
         "GGGGC": 10,
         "GGGGG": 10
-      },
-      "overrepresented_sequences": {}
+      }
     },
     "command": "fastp --failed_out tiny_test_fastp_failed.fastq.gz --html tiny_test_fastp.html --json tiny_test_fastp.json --adapter_fasta adapters.fasta --stdin --stdout --interleaved_in --cut_front --cut_tail --correction --detect_adapter_for_pe --trim_poly_x --cut_mean_quality 20 --average_qual 20 --qualified_quality_phred 20 --verbose --dont_eval_duplication --thread 4 --low_complexity_filter --length_required 35 ",
     "sample": "tiny_test",

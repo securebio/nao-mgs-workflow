@@ -62,8 +62,7 @@
     "total_cycles": 0,
     "quality_curves": {},
     "content_curves": {},
-    "kmer_count": {},
-    "overrepresented_sequences": {}
+    "kmer_count": {}
   },
   "read2_before_filtering": {
     "total_reads": 0,
@@ -73,8 +72,7 @@
     "total_cycles": 0,
     "quality_curves": {},
     "content_curves": {},
-    "kmer_count": {},
-    "overrepresented_sequences": {}
+    "kmer_count": {}
   },
   "read1_after_filtering": {
     "total_reads": 0,
@@ -84,8 +82,7 @@
     "total_cycles": 0,
     "quality_curves": {},
     "content_curves": {},
-    "kmer_count": {},
-    "overrepresented_sequences": {}
+    "kmer_count": {}
   },
   "read2_after_filtering": {
     "total_reads": 0,
@@ -95,8 +92,7 @@
     "total_cycles": 0,
     "quality_curves": {},
     "content_curves": {},
-    "kmer_count": {},
-    "overrepresented_sequences": {}
+    "kmer_count": {}
   },
   "command": "fastp --in1 /dev/null --in2 /dev/null --json out.json --correction --detect_adapter_for_pe --trim_poly_x --dont_eval_duplication --low_complexity_filter"
 }
