@@ -4,6 +4,10 @@
     - See [output.md](docs/output.md) for how to read the numbers. A header-only file means no overrepresented sequences were reported.
     - DOWNSTREAM at this version requires RUN output produced at this version or later, since it treats every entry in `expected-outputs-run` as mandatory.
 
+## Coding agents
+
+- Improve `triage-trivy` skill: count distinct CVEs rather than per-package findings, don't pin a package Trivy found only in SBOM metadata, and expect a second triage round after the user's rebuild. (#941)
+
 # v3.3.0.0
 
 ## Deprecating DOWNSTREAM's VSEARCH clustering with hash-based downsampling
