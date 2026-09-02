@@ -6,7 +6,6 @@ include { MARK_ALIGNMENT_DUPLICATES } from "../../../modules/local/markAlignment
 include { SORT_TSV as SORT_STATS } from "../../../modules/local/sortTsv"
 include { SORT_TSV as SORT_READS } from "../../../modules/local/sortTsv"
 include { COPY_FILE as COPY_STATS } from "../../../modules/local/copyFile"
-include { COPY_FILE as COPY_READS } from "../../../modules/local/copyFile"
 include { MARK_SIMILARITY_DUPLICATES } from "../../../modules/local/markSimilarityDuplicates"
 
 /***********
@@ -25,13 +24,11 @@ workflow MARK_VIRAL_DUPLICATES {
         stats_ch = dup_ch.map{ id, _reads, stats -> tuple(id, stats) }
         reads_sorted_ch = SORT_READS(reads_ch, "seq_id").sorted
         stats_sorted_ch = SORT_STATS(stats_ch, "prim_align_genome_id_all").sorted
-        // 3. Rename and prepare files for output
-        reads_out_ch = COPY_READS(reads_sorted_ch, "duplicate_reads.tsv.gz")
+        // 3. Rename the summary for output. The reads table is no longer published, so it
+        // no longer needs renaming.
         stats_out_ch = COPY_STATS(stats_sorted_ch, "duplicate_stats.tsv.gz")
         // 4. Mark similarity duplicates among the reads that survived alignment marking.
-        // This runs second by design: it only considers alignment-unique reads, so the
-        // alignment pass has to have assigned exemplars first.
-        sim_dup_ch = MARK_SIMILARITY_DUPLICATES(reads_out_ch).output
+        sim_dup_ch = MARK_SIMILARITY_DUPLICATES(reads_sorted_ch).output
     emit:
         // Hits annotated by both duplicate-marking passes
         hits = sim_dup_ch
@@ -39,5 +36,5 @@ workflow MARK_VIRAL_DUPLICATES {
         stats = stats_out_ch
         // Extra outputs for testing
         test_in = groups
-        test_align_marked = reads_out_ch
+        test_align_marked = reads_sorted_ch
 }

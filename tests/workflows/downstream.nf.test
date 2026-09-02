@@ -88,11 +88,6 @@ nextflow_pipeline {
             // Verify result file contents match snapshot
             def resultPaths = getResultPaths("${launchDir}/output", expected)
             assert snapshot(*resultPaths).match("downstream_output_shortread")
-            // Similarity duplicate marking now feeds validation_hits, so it no longer
-            // publishes anything of its own
-            // Uses new File() instead of path() because path() fails if the directory doesn't exist
-            def experimentalDir = new File("${launchDir}/output/experimental_downstream")
-            assert !experimentalDir.exists() || experimentalDir.list().length == 0
             assertSentinelValid("${launchDir}/output", "tt1")
             assertTraceTagsValid("${launchDir}")
         }
@@ -135,18 +130,10 @@ nextflow_pipeline {
             def expected = getExpectedOutputs(path("${projectDir}/pyproject.toml"), "downstream", "empty_group")
             def observed = getObservedOutputs(path("${launchDir}/output"))
             assert observed == expected : "Expected ${expected} but got ${observed}"
-            // The empty-group validation_hits file is built straight from the schema, so it
-            // is where the duplicate-marking columns have to show up for a group with no reads
+            // The empty-group file is built straight from the schema, so it should be a
+            // header and nothing else
             def lines = path("${launchDir}/output/results_downstream/empty_group_validation_hits.tsv.gz").linesGzip
-            assert lines.size() == 1 // header only, no data rows
-            def header = lines[0].split("\t") as List
-            assert "prim_align_dup_exemplar" in header
-            assert "sim_dup_exemplar" in header
-            assert "sim_dup_group_size" in header
-            // Similarity marking no longer publishes an experimental output of its own
-            // Uses new File() instead of path() because path() fails if the directory doesn't exist
-            def experimentalDir = new File("${launchDir}/output/experimental_downstream")
-            assert !experimentalDir.exists() || experimentalDir.list().length == 0
+            assert lines.size() == 1
             assertSentinelValid("${launchDir}/output", "empty_group")
             assertTraceTagsValid("${launchDir}")
         }
