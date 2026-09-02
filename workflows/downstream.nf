@@ -59,8 +59,8 @@ workflow DOWNSTREAM {
             mark_dup_ch = MARK_VIRAL_DUPLICATES(concat_ch.hits, params.aln_dup_deviation)
             viral_hits_ch = mark_dup_ch.hits
             dup_output_ch = mark_dup_ch.stats
-            // Generate clade counts. These deduplicate on prim_align_dup_exemplar only:
-            // the similarity columns are carried through the table but not counted.
+            // Generate clade counts. These deduplicate on sim_dup_exemplar, which covers
+            // both marking passes.
             clade_counts_ch = COUNT_READS_PER_CLADE(viral_hits_ch, viral_db).output
         }
         // Validate taxonomic assignments

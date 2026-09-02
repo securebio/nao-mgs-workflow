@@ -50,23 +50,25 @@ def read_tsv(file_path: str) -> Iterator[dict[str, str]]:
 
 
 def is_duplicate(read: dict[str, str]) -> bool:
-    """Check if a read is a duplicate.
+    """Check if a read is a duplicate under either duplicate-marking pass.
 
-    A duplicate read is one where sequence ID != primary alignment exemplar.
+    Similarity marking writes NA into sim_dup_exemplar for reads that are already
+    alignment duplicates, and the other read's ID for similarity duplicates, so
+    seq_id == sim_dup_exemplar holds only for reads unique under both passes.
 
     Args:
         read: Dictionary representing a read record
-              Must contain 'seq_id' and 'prim_align_dup_exemplar' fields
+              Must contain 'seq_id' and 'sim_dup_exemplar' fields
 
     Returns:
-        True if the read is a duplicate (seq_id differs from prim_align_dup_exemplar)
+        True if the read is a duplicate (seq_id differs from sim_dup_exemplar)
         False otherwise
 
     Raises:
-        KeyError: if 'seq_id' or 'prim_align_dup_exemplar' fields are missing
+        KeyError: if 'seq_id' or 'sim_dup_exemplar' fields are missing
 
     """
-    return read["seq_id"] != read["prim_align_dup_exemplar"]
+    return read["seq_id"] != read["sim_dup_exemplar"]
 
 
 def count_direct_reads_per_taxid(
