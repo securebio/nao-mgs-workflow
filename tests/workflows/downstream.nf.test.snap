@@ -19,9 +19,9 @@
             "tt1_qc_quality_sequence_stats_cleaned.tsv.gz:md5,3c72d4b3fde2506db5bd7b373e309b1d",
             "tt1_qc_quality_sequence_stats_raw.tsv.gz:md5,e97cdb22fecd620d22689c0acb9a96a8",
             "tt1_read_counts.tsv.gz:md5,c9ee6bf4ad94ce7fbc24bd4a2d8bee00",
-            "tt1_validation_hits.tsv.gz:md5,88fbb5bd46ae11b1eb60e9864f15c91e"
+            "tt1_validation_hits.tsv.gz:md5,7bd0fc177d4e58a5c810ee51a0f9d39d"
         ],
-        "timestamp": "2026-08-31T14:11:40.200490109",
+        "timestamp": "2026-09-01T18:42:36.003241762",
         "meta": {
             "nf-test": "0.9.5",
             "nextflow": "26.04.6"
@@ -44,9 +44,9 @@
             "tt1_qc_quality_sequence_stats_cleaned.tsv.gz:md5,7eb64b88f3fa5984c2c16ccb58b16183",
             "tt1_qc_quality_sequence_stats_raw.tsv.gz:md5,65972ae057612526b5911d3080d9136a",
             "tt1_read_counts.tsv.gz:md5,25cc87260d146c93c9ee15a319d98c4a",
-            "tt1_validation_hits.tsv.gz:md5,e8cce57edb838f0ff21e839850003ec0"
+            "tt1_validation_hits.tsv.gz:md5,1849a641b73f507549a8a41b48aff5de"
         ],
-        "timestamp": "2026-08-31T14:12:52.333633567",
+        "timestamp": "2026-09-01T18:43:48.399417026",
         "meta": {
             "nf-test": "0.9.5",
             "nextflow": "26.04.6"
