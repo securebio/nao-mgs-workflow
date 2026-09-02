@@ -7,7 +7,6 @@ include { SORT_TSV as SORT_STATS } from "../../../modules/local/sortTsv"
 include { SORT_TSV as SORT_READS } from "../../../modules/local/sortTsv"
 include { COPY_FILE as COPY_STATS } from "../../../modules/local/copyFile"
 include { COPY_FILE as COPY_READS } from "../../../modules/local/copyFile"
-include { COPY_FILE as COPY_SIM_DUP } from "../../../modules/local/copyFile"
 include { MARK_SIMILARITY_DUPLICATES } from "../../../modules/local/markSimilarityDuplicates"
 
 /***********
@@ -19,7 +18,7 @@ workflow MARK_VIRAL_DUPLICATES {
         groups // Labeled viral hit TSVs partitioned by group
         deviation // Maximum alignment deviation that qualifies as a duplicate
     main:
-        // 1. Mark duplicates
+        // 1. Mark duplicates by alignment coordinates
         dup_ch = MARK_ALIGNMENT_DUPLICATES(groups, deviation).output
         // 2. Sort output
         reads_ch = dup_ch.map{ id, reads, _stats -> tuple(id, reads) }
@@ -29,12 +28,16 @@ workflow MARK_VIRAL_DUPLICATES {
         // 3. Rename and prepare files for output
         reads_out_ch = COPY_READS(reads_sorted_ch, "duplicate_reads.tsv.gz")
         stats_out_ch = COPY_STATS(stats_sorted_ch, "duplicate_stats.tsv.gz")
-        out_ch = reads_out_ch.combine(stats_out_ch, by: 0)
-        // 4. Run similarity-based duplicate marking on alignment-deduplicated reads
-        sim_dup_raw_ch = MARK_SIMILARITY_DUPLICATES(reads_out_ch).output
-        sim_dup_ch = COPY_SIM_DUP(sim_dup_raw_ch, "duplicate_reads_similarity.tsv.gz")
+        // 4. Mark similarity duplicates among the reads that survived alignment marking.
+        // This runs second by design: it only considers alignment-unique reads, so the
+        // alignment pass has to have assigned exemplars first.
+        sim_dup_ch = MARK_SIMILARITY_DUPLICATES(reads_out_ch).output
     emit:
-        dup = out_ch
-        sim_dup = sim_dup_ch
+        // Hits annotated by both duplicate-marking passes
+        hits = sim_dup_ch
+        // Per-alignment-group summary statistics
+        stats = stats_out_ch
+        // Extra outputs for testing
         test_in = groups
+        test_align_marked = reads_out_ch
 }

@@ -48,10 +48,13 @@ workflow VALIDATE_VIRAL_ASSIGNMENTS {
         // with the selected_taxid it was grouped by, which is what step 5 annotates.
         split_ch = SPLIT_VIRAL_TSV_BY_SELECTED_TAXID(groups, db)
         // 2. Downsample each species to a fixed number of reads and render them as FASTA.
-        // Validation sits downstream of MARK_VIRAL_DUPLICATES, so sample only duplicate-group
-        // exemplars: a read that duplicates another adds no evidence about its species. ONT
-        // skips duplicate marking, which leaves prim_align_dup_exemplar as NA throughout, so
-        // no restriction is applied there and every read stays eligible.
+        // Validation sits downstream of MARK_VIRAL_DUPLICATES, so sample only exemplars of
+        // the *alignment* duplicate groups: a read that duplicates another adds no evidence
+        // about its species. There are now two exemplar columns, and this is deliberately
+        // keyed on the alignment one -- a read that is alignment-unique but a similarity
+        // duplicate is still eligible here. ONT skips duplicate marking, which leaves
+        // prim_align_dup_exemplar as NA throughout, so no restriction is applied there and
+        // every read stays eligible.
         def exemplar_columns = params_map.platform == "ont" ? "" : "seq_id,prim_align_dup_exemplar"
         sample_ch = DOWNSAMPLE_VIRAL_ASSIGNMENTS(split_ch.tsv, params_map.validation_n_sample,
             channel.of(params_map.platform == "ont"), exemplar_columns)

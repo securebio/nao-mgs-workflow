@@ -2,7 +2,7 @@
 
 This page describes the structure and function of the `DOWNSTREAM` workflow. This workflow is responsible for downstream analysis of the outputs of the [`RUN` workflow](./run.md), particularly in cases that require comparisons across reads and/or samples[^comp].
 
-For short-read data, this workflow performs three main analyses: (1) identification and marking of duplicate reads based on their Bowtie2 alignment results, (2) validation of viral taxonomic assignments using BLAST against the NCBI core_nt database, and (3) counting the number of reads assigned to viral clades by LCA.
+For short-read data, this workflow performs three main analyses: (1) identification and marking of duplicate reads, first from their Bowtie2 alignment coordinates and then by sequence similarity among the reads that survive, (2) validation of viral taxonomic assignments using BLAST against the NCBI core_nt database, and (3) counting the number of reads assigned to viral clades by LCA.
 
 For ONT data, the workflow only performs (1) validation of viral taxonomic assignments using BLAST against the NCBI core_nt database.
 
@@ -137,22 +137,28 @@ style A fill:#fff,stroke:#000
 style E fill:#000,color:#fff,stroke:#000
 ```
 
-### Annotate alignment duplicates (`MARK_VIRAL_DUPLICATES`)
+### Annotate duplicates (`MARK_VIRAL_DUPLICATES`)
 
 > [!NOTE]
 > This subworkflow is only executed for short-read platforms. ONT processing skips this step.
 
-This subworkflow takes in partitioned hits tables from `CONCAT_BY_GROUP`, then identifies duplicate reads on the basis of their assigned genome ID and alignment coordinates, as determined by Bowtie2 in the `RUN` workflow. In order to be considered duplicates, two read pairs must be mapped to the same genome ID by Bowtie2, with terminal alignment coordinates that are within a user-specified distance of each other (default 1 nt) at both ends. This fuzzy matching allows for the identification of duplicate reads in the presence of small read errors, alignment errors or overzealous adapter trimming.
+This subworkflow takes in partitioned hits tables from `CONCAT_BY_GROUP` and marks duplicates in two passes: first by alignment coordinates, then by sequence similarity among the reads that survive the first pass.
 
-For each group of reads identified as duplicates, the algorithm selects the read pair with the highest average quality score to act as the "exemplar" of the group. Each read in the group is annotated with this examplar to identify its duplicate group[^exemplar], enabling downstream deduplication or other duplicate analyses if needed. In addition to an annotated hits TSV containing an additional column for exemplar IDs, the subworkflow also returns a summary TSV giving the number of reads mapped to a given exemplar ID, as well as the fraction of read pairs in the group that are pairwise duplicates[^pairwise].
+**Alignment-based marking** identifies duplicate reads on the basis of their assigned genome ID and alignment coordinates, as determined by Bowtie2 in the `RUN` workflow. In order to be considered duplicates, two read pairs must be mapped to the same genome ID by Bowtie2, with fragment coordinates that are within a user-specified distance of each other (default 1 nt) at both ends. This fuzzy matching allows for the identification of duplicate reads in the presence of small read errors, alignment errors or overzealous adapter trimming. A read pair's fragment runs from the leftmost mate start to that coordinate plus `prim_align_fragment_length`; a read with one mate unaligned has no second coordinate and so is never grouped with anything.
+
+For each group of reads identified as duplicates, the algorithm selects the read pair with the highest average quality score to act as the "exemplar" of the group. Each read in the group is annotated with this examplar in `prim_align_dup_exemplar` to identify its duplicate group[^exemplar], enabling downstream deduplication or other duplicate analyses if needed. The subworkflow also returns a summary TSV giving the number of reads mapped to a given exemplar ID, as well as the fraction of read pairs in the group that are pairwise duplicates[^pairwise].
+
+**Similarity-based marking** then runs on the alignment-marked table using the `mark_duplicates_similarity` tool, which groups alignment-unique reads by sequence similarity using minimizer-based clustering (via the [nao-dedup](https://github.com/securebio/nao-dedup) library). It adds two columns:
+
+- `sim_dup_exemplar`: the read chosen to represent this read's similarity group. It is `NA` for reads that are already alignment duplicates, which this pass never examines, so `seq_id == sim_dup_exemplar` identifies exactly the reads that survived both passes.
+- `sim_dup_group_size`: the number of reads the exemplar stands for before either pass, counting each similarity-group member's alignment duplicates as well. Populated only on the surviving exemplar; `NA` everywhere else.
+
+The order matters: similarity marking only considers reads that are alignment-unique, so alignment marking has to have assigned exemplars first.
+
+Both sets of columns are carried through validation into `{group}_validation_hits.tsv.gz`. Note that clade counting (`COUNT_READS_PER_CLADE`) deduplicates on `prim_align_dup_exemplar` only — its `reads_*_dedup` figures are alignment-deduplicated, not similarity-deduplicated.
 
 [^exemplar]: A read with no duplicates will be annotated with itself as the exemplar.
 [^pairwise]: Because of the fuzzy matching used to identify duplicates, it is possible for duplicate annotation to be intransitive: i.e. read A is a duplicate of read B, and read B is a duplicate of read C, but read A is not a duplicate of read C. As currently implemented, the algorithm will group a read into a duplicate group if it matches any single read already in that duplicate group, potentially leading to the grouping of reads that would not be considered duplicates of each other in isolation. The reporting of the pairwise duplicate statistic in the summary file allows for quantification of this phenomenon, and potential adjustment of parameters if too high a fraction of non-matching reads are being grouped together in this way.
-
-> [!CAUTION] 
-> **Experimental feature, not guaranteed stable** 
->
-> After alignment-based duplicate marking, the subworkflow also runs **similarity-based duplicate marking** using the `mark_duplicates_similarity` tool. This step takes the alignment-deduplicated reads and groups alignment-unique reads by sequence similarity using minimizer-based clustering (via the [nao-dedup](https://github.com/securebio/nao-dedup) library). The output (`duplicate_reads_similarity.tsv.gz`) adds `sim_dup_exemplar` and `sim_dup_group_size` columns.
 
 ```mermaid
 ---
@@ -164,14 +170,12 @@ flowchart LR
 A("Partitioned sample group TSVs <br> (CONCAT_BY_GROUP)") --> B[MARK_ALIGNMENT_DUPLICATES]
 B --> C[SORT_TSV]
 B --> D[SORT_TSV]
-C --> E(Annotated hits TSVs)
+C --> E[MARK_SIMILARITY_DUPLICATES]
 D --> F(Summary TSVs)
-D --> G[MARK_SIMILARITY_DUPLICATES]
-G --> H(EXPERIMENTAL: Similarity-annotated hits TSVs)
+E --> G(Duplicate-annotated hits TSVs)
 style A fill:#fff,stroke:#000
-style E fill:#000,color:#fff,stroke:#000
 style F fill:#000,color:#fff,stroke:#000
-style H fill:#000,color:#fff,stroke:#000
+style G fill:#000,color:#fff,stroke:#000
 ```
 
 ### Validate viral taxonomic assignments (`VALIDATE_VIRAL_ASSIGNMENTS`)
