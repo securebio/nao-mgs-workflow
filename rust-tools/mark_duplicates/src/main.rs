@@ -855,18 +855,6 @@ mod tests {
     }
 
     #[test]
-    fn half_mapped_reads_never_match_each_other() {
-        // One mate aligned tells us where the fragment starts and nothing about where it
-        // ends, so two such reads sharing a start are not evidence of duplication
-        let a = DupKey::Incomplete { start: 100 };
-        let b = DupKey::Incomplete { start: 100 };
-        assert!(!a.matches(&b, 0));
-        assert!(!a.matches(&b, 2));
-        // Nor are two reads with no coordinates at all
-        assert!(!DupKey::Unaligned.matches(&DupKey::Unaligned, 2));
-    }
-
-    #[test]
     fn build_groups_from_sorted_reads_leaves_half_mapped_reads_alone() {
         let reads = vec![
             keyed_entry("a", "g", DupKey::Incomplete { start: 100 }, 30.0),
@@ -1078,14 +1066,8 @@ mod tests {
 
     #[test]
     fn match_reads_never_agrees_on_absent_coordinates() {
-        // #967 pinned the opposite: two reads with one mate unaligned matched on their
-        // single shared coordinate, and two reads with none matched on nothing at all,
-        // because an absent element compared equal to another absent one.
-        //
-        // No Incomplete or Unaligned key now matches any other, whichever mate aligned and
-        // even when the coordinates are identical, so each such read is left in its own
-        // group. Not matching itself is what produces that: grouping only ever compares a
-        // read to other reads.
+        // Including against itself, which is what leaves each such read its own group:
+        // grouping only ever compares a read to other reads.
         let a = keyed_entry("a", "g", DupKey::Incomplete { start: 100 }, 30.0);
         let b = keyed_entry("b", "g", DupKey::Incomplete { start: 100 }, 30.0);
         assert!(!match_reads(&a, &b, 0));
@@ -1094,9 +1076,7 @@ mod tests {
         let d = keyed_entry("d", "g", DupKey::Unaligned, 30.0);
         assert!(!match_reads(&c, &d, 0));
         assert!(!match_reads(&c, &c, 0));
-        // A read whose forward mate aligned and one whose reverse mate aligned can land on
-        // the same coordinate while describing opposite ends of different fragments. Same
-        // rule, no special case.
+        // Whichever mate aligned, and even on the same coordinate.
         let fwd = parsed(&["r1", "genome_a", "500", "NA", "IIII", "IIII", "NA", "UP"]);
         let rev = parsed(&["r2", "genome_a", "NA", "500", "IIII", "IIII", "NA", "UP"]);
         assert_eq!(fwd.key, DupKey::Incomplete { start: 500 });
