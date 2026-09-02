@@ -4,7 +4,9 @@
 process DOWNLOAD_BLAST_DB {
     label "BLAST"
     label "xsmall"
-    errorStrategy "terminate"
+    // Retry a transient download failure rather than terminating on the first one, but
+    // still fail the run rather than publishing an index with no BLAST database.
+    errorStrategy { task.attempt <= task.maxRetries ? "retry" : "terminate" }
     tag "id=index"
     input:
         val(blast_db_name)

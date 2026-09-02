@@ -1,0 +1,54 @@
+nextflow_process {
+
+    name "Test process DOWNLOAD_BLAST_DB"
+    script "modules/local/downloadBlastDB/main.nf"
+    process "DOWNLOAD_BLAST_DB"
+    config "tests/configs/index.config"
+    tag "module"
+    tag "download_blast_db"
+
+    test("Should fetch a named database and alias it to blast_db") {
+        tag "expect_success"
+        when {
+            params {
+            }
+            process {
+                // ref_viroids_rep_genomes is the smallest named nucleotide database NCBI
+                // publishes (<1 MB), so this exercises the update_blastdb.pl branch --
+                // and its thread cap -- without pulling a production-sized database.
+                '''
+                input[0] = "ref_viroids_rep_genomes"
+                '''
+            }
+        }
+        then {
+            assert process.success
+            def dir = new File(process.out.db[0].toString())
+            assert dir.isDirectory()
+            def names = dir.list() as List
+            // blastdb_aliastool writes the fixed alias consumers depend on
+            assert names.contains("blast_db.nal")
+            // and the database it points at was actually downloaded
+            assert names.any { n -> n.startsWith("ref_viroids_rep_genomes.") }
+        }
+    }
+
+    test("Should extract a tarball URL and alias it to blast_db") {
+        tag "expect_success"
+        when {
+            params {
+            }
+            process {
+                '''
+                input[0] = params.blast_db_name
+                '''
+            }
+        }
+        then {
+            assert process.success
+            def dir = new File(process.out.db[0].toString())
+            assert dir.isDirectory()
+            assert (dir.list() as List).contains("blast_db.nal")
+        }
+    }
+}
