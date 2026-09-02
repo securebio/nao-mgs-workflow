@@ -1,5 +1,8 @@
 # v3.4.0.0-dev
 
+- Add exemplar-attributed total columns to clade counts: `reads_direct_exemplar_total` and `reads_clade_exemplar_total` count every read under the taxon of the exemplar representing it, rather than under its own. (#NNN)
+    - **This changes the schema of `clade_counts.tsv.gz`**: two required fields are added, taking the table from 7 to 9 fields. The existing columns are unchanged.
+    - They differ from `reads_*_total` only where a duplicate group's members carry different LCA assignments. `reads_*_dedup / reads_*_exemplar_total` is a per-taxon duplicate rate over one coherent set of reads, which `reads_*_dedup / reads_*_total` is not.
 - Restrict Illumina BLAST validation downsampling to reads that are unique under both duplicate-marking passes. (#973)
 - Promote similarity-based duplicate marking out of experimental, publishing columns into `results_downstream/{GROUP}_validation_hits.tsv.gz`. (#972)
     - Stop publishing `experimental_downstream/{GROUP}_duplicate_reads_similarity.tsv.gz`.

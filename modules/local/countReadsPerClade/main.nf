@@ -6,7 +6,7 @@ process COUNT_READS_PER_CLADE {
     tag "id=${sample}"
     input:
     // (sample name, read table tsv)
-    // read table must include columns: seq_id, sim_dup_exemplar, aligner_taxid_lca, group
+    // read table must include columns: seq_id, sim_dup_exemplar, sim_dup_group_size, aligner_taxid_lca, group
     // may include other columns
     // `group` column of read table must equal `sample` at every row
     tuple val(sample), path(reads_tsv)
@@ -16,7 +16,7 @@ process COUNT_READS_PER_CLADE {
 
     output:
     // output gzipped tsv with columns:
-    // group, taxid, parent_taxid, reads_direct_total, reads_direct_dedup, reads_clade_total, reads_clade_dedup
+    // group, taxid, parent_taxid, and reads_{direct,clade}_{total,dedup,exemplar_total}
     tuple val(sample), path("${sample}_clade_counts.tsv.gz"), emit: output
     tuple val(sample), path("input_${reads_tsv}"), emit: input
 

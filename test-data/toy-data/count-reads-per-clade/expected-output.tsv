@@ -1,5 +1,5 @@
-group	taxid	parent_taxid	reads_direct_total	reads_direct_dedup	reads_clade_total	reads_clade_dedup
-test	1	1	3	2	7	4
-test	2	1	0	0	1	1
-test	3	1	3	1	3	1
-test	4	2	1	1	1	1
+group	taxid	parent_taxid	reads_direct_total	reads_direct_dedup	reads_direct_exemplar_total	reads_clade_total	reads_clade_dedup	reads_clade_exemplar_total
+test	1	1	3	2	3	7	4	7
+test	2	1	0	0	0	2	1	1
+test	3	1	2	1	3	2	1	3
+test	4	2	2	1	1	2	1	1
