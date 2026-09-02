@@ -1,24 +1,25 @@
-// Create a minimap2 index
+// Generate a Minimap2 index from an input FASTA.
+// minimap2 emits the index incrementally, which is slow against the Fusion-backed work
+// directory, so the build runs on local scratch and the finished index is staged out in
+// one pass.
 process MINIMAP2_INDEX {
     label "max"
     label "minimap2_samtools"
+    label "use_scratch"
     tag "id=index,name=${outdir}"
     input:
         path(reference_fasta)
         val(outdir)
     output:
         path("${outdir}"), emit: output
-        path("input_${reference_fasta}"), emit: input
 
     script:
         def odir = outdir
         def preset = "lr:hq"
         """
+        set -euo pipefail
         mkdir ${odir}
-        minimap2 -x ${preset} -d ${odir}/mm2_index.mmi ${reference_fasta}
-
-        # Link input to output for testing
-        ln -s ${reference_fasta} input_${reference_fasta}
+        minimap2 -x ${preset} -t ${task.cpus} -d ${odir}/mm2_index.mmi ${reference_fasta}
         """
 }
 
