@@ -81,6 +81,14 @@ def read_container_spec(spec_file: Path) -> dict[str, Any]:
         msg = f"Container spec missing required fields: {', '.join(missing)}"
         logger.error(msg)
         raise ValueError(msg)
+    build_steps = spec.get("build_steps")
+    if build_steps is not None and (
+        not isinstance(build_steps, list)
+        or not all(isinstance(step, str) for step in build_steps)
+    ):
+        msg = "Container spec field 'build_steps' must be a list of strings"
+        logger.error(msg)
+        raise ValueError(msg)
     return spec  # type: ignore[no-any-return]
 
 
@@ -200,16 +208,26 @@ def get_base_image(pyproject_path: Path) -> str:
     return str(data["tool"]["mgs-workflow"]["container-base-image"])
 
 
-def generate_dockerfile(spec_filename: str, pyproject_path: Path) -> str:
+def generate_dockerfile(
+    spec_filename: str,
+    pyproject_path: Path,
+    build_steps: list[str] | None = None,
+) -> str:
     """Generate a Dockerfile that uses micromamba with a YAML environment file.
+
+    Each entry in `build_steps` becomes its own `RUN` line, emitted after the conda
+    install so the steps can use the installed environment. Steps run in separate
+    layers and do not share a working directory, so each must be self-contained.
+
     Args:
         spec_filename (str): Name of the spec file
         pyproject_path (Path): Path to pyproject.toml for base image config
+        build_steps (list[str] | None): Extra shell commands to run after the install
     Returns:
         str: Dockerfile text
     """
     base_image = get_base_image(pyproject_path)
-    return f"""
+    dockerfile = f"""
 FROM {base_image}
 USER root
 RUN apt-get update && apt-get install -y procps && rm -rf /var/lib/apt/lists/*
@@ -219,6 +237,9 @@ RUN micromamba install -y -n base -f /tmp/environment.yml && \\
     micromamba clean --all --yes
 ENV PATH=/opt/conda/bin:$PATH
 """
+    for step in build_steps or []:
+        dockerfile += f"RUN {step}\n"
+    return dockerfile
 
 
 def build_docker_image_from_spec(
@@ -226,6 +247,7 @@ def build_docker_image_from_spec(
     image_tag: str,
     build_dir: Path,
     pyproject_path: Path = Path("pyproject.toml"),
+    build_steps: list[str] | None = None,
 ) -> None:
     """Build a Docker image from the spec file in a given directory.
     Args:
@@ -233,11 +255,14 @@ def build_docker_image_from_spec(
         image_tag (str): Image tag
         build_dir (Path): Path to build directory
         pyproject_path (Path): Path to pyproject.toml for base image config
+        build_steps (list[str] | None): Extra shell commands to run after the install
     """
     spec_filename = spec_file.name
     shutil.copy(spec_file, build_dir / spec_filename)
     dockerfile_path = build_dir / "Dockerfile"
-    dockerfile_path.write_text(generate_dockerfile(spec_filename, pyproject_path))
+    dockerfile_path.write_text(
+        generate_dockerfile(spec_filename, pyproject_path, build_steps)
+    )
     logger.info(f"Building Docker image: {image_tag}")
     try:
         subprocess.run(
@@ -283,6 +308,7 @@ def build_container(
     image_tag: str,
     image_tag_latest: str,
     pyproject_path: Path = Path("pyproject.toml"),
+    build_steps: list[str] | None = None,
 ) -> None:
     """
     Build a Docker container from a spec file.
@@ -291,13 +317,14 @@ def build_container(
         image_tag: Primary image tag (with hash)
         image_tag_latest: Latest tag for the image
         pyproject_path: Path to pyproject.toml for base image config
+        build_steps: Extra shell commands to run after the install
     """
     logger.info("Building container locally")
     with tempfile.TemporaryDirectory() as tmpdir:
         build_dir = Path(tmpdir)
         try:
             build_docker_image_from_spec(
-                spec_file, image_tag, build_dir, pyproject_path
+                spec_file, image_tag, build_dir, pyproject_path, build_steps
             )
             tag_docker_image(image_tag, image_tag_latest)
         except Exception as e:
@@ -452,7 +479,10 @@ def build_and_push_container(
     try:
         spec = read_container_spec(spec_file)
         label = spec["label"]
-        dockerfile_content = generate_dockerfile(spec_file.name, pyproject_path)
+        build_steps = spec.get("build_steps")
+        dockerfile_content = generate_dockerfile(
+            spec_file.name, pyproject_path, build_steps
+        )
         spec_hash = compute_spec_hash(spec, dockerfile_content)
         logger.info(f"Container: {label}, Hash: {spec_hash}")
         image_tag, image_tag_latest, registry_url, image_exists = setup_ecr_repository(
@@ -466,7 +496,9 @@ def build_and_push_container(
             if not config_updated:
                 logger.info("Nothing to do - image exists and config is up to date")
         else:
-            build_container(spec_file, image_tag, image_tag_latest, pyproject_path)
+            build_container(
+                spec_file, image_tag, image_tag_latest, pyproject_path, build_steps
+            )
             push_to_ecr(image_tag, image_tag_latest, registry_url)
             update_containers_config(config_file, label, image_tag)
             logger.info(f"Successfully built and pushed: {label}")

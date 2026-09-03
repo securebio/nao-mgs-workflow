@@ -12,6 +12,7 @@ import pytest
 import yaml
 from botocore.exceptions import ClientError
 from build_ecr_container import (
+    build_container,
     build_docker_image_from_spec,
     check_image_exists,
     compute_spec_hash,
@@ -310,3 +311,121 @@ def test_update_containers_config_raises_on_unknown_label(tmp_path: Path) -> Non
     config = write_config(tmp_path, "widget", "old:1")
     with pytest.raises(ValueError, match="not found"):
         update_containers_config(config, "absent", "new:2")
+
+
+###############
+# build_steps #
+###############
+
+
+def test_read_container_spec_accepts_valid_build_steps(tmp_path: Path) -> None:
+    """A list of strings is accepted and returned verbatim."""
+    steps = ["echo one", "echo two"]
+    spec = read_container_spec(write_spec(tmp_path, build_steps=steps))
+    assert spec["build_steps"] == steps
+
+
+@pytest.mark.parametrize(
+    "bad_value",
+    ["echo not-a-list", ["echo ok", 42], {"step": "echo ok"}, [None]],
+    ids=["string", "list-with-int", "dict", "list-with-none"],
+)
+def test_read_container_spec_rejects_malformed_build_steps(
+    tmp_path: Path, bad_value: object
+) -> None:
+    """build_steps must be a list of strings; anything else is a spec error.
+
+    Caught at parse time rather than surfacing as a confusing Dockerfile syntax
+    error partway through a build.
+    """
+    with pytest.raises(ValueError, match="must be a list of strings"):
+        read_container_spec(write_spec(tmp_path, build_steps=bad_value))
+
+
+@patch("build_ecr_container.get_base_image", return_value=BASE_IMAGE)
+class TestGenerateDockerfileBuildSteps:
+    """Emitting build steps into the Dockerfile."""
+
+    @pytest.mark.parametrize("build_steps", [None, []], ids=["none", "empty"])
+    def test_none_and_empty_are_equivalent(
+        self, _mock_base: object, build_steps: list[str] | None
+    ) -> None:
+        """An empty list must produce the same Dockerfile as no list at all, so
+        adding an empty key to a spec does not change its hash."""
+        baseline = generate_dockerfile("widget.yml", Path("pyproject.toml"))
+        assert (
+            generate_dockerfile("widget.yml", Path("pyproject.toml"), build_steps)
+            == baseline
+        )
+
+    def test_emits_one_run_line_per_step_in_order(self, _mock_base: object) -> None:
+        """Each step becomes its own RUN line, in the order given."""
+        steps = ["apt-get install -y gcc", "make install", "apt-get purge -y gcc"]
+        dockerfile = generate_dockerfile("widget.yml", Path("pyproject.toml"), steps)
+        run_lines = [ln for ln in dockerfile.splitlines() if ln.startswith("RUN ")]
+        assert run_lines[-3:] == [f"RUN {step}" for step in steps]
+
+    def test_build_steps_follow_the_conda_install(self, _mock_base: object) -> None:
+        """Steps must run after the install so they can use the environment."""
+        dockerfile = generate_dockerfile(
+            "widget.yml", Path("pyproject.toml"), ["bowtie2-build --version"]
+        )
+        assert dockerfile.index("micromamba install") < dockerfile.index(
+            "RUN bowtie2-build --version"
+        )
+
+
+@patch("build_ecr_container.get_base_image", return_value=BASE_IMAGE)
+def test_changing_build_steps_changes_the_spec_hash(_mock_base: object) -> None:
+    """Editing build steps must invalidate the image tag.
+
+    The tag is what decides whether a rebuild happens at all, so a build-step
+    change that hashed the same would silently reuse a stale image.
+    """
+    steps_a: list[str] = ["make"]
+    steps_b: list[str] = ["make -j8"]
+    hash_a = compute_spec_hash(
+        {**MINIMAL_SPEC, "build_steps": steps_a},
+        generate_dockerfile("widget.yml", Path("p.toml"), steps_a),
+    )
+    hash_b = compute_spec_hash(
+        {**MINIMAL_SPEC, "build_steps": steps_b},
+        generate_dockerfile("widget.yml", Path("p.toml"), steps_b),
+    )
+    assert hash_a != hash_b
+
+
+@patch("build_ecr_container.get_base_image", return_value=BASE_IMAGE)
+@patch("build_ecr_container.subprocess.run")
+def test_build_docker_image_writes_build_steps_into_dockerfile(
+    _mock_run: object, _mock_base: object, tmp_path: Path
+) -> None:
+    """The Dockerfile handed to `docker build` carries the steps."""
+    build_dir = tmp_path / "build"
+    build_dir.mkdir()
+    build_docker_image_from_spec(
+        write_spec(tmp_path),
+        "img:tag",
+        build_dir,
+        Path("pyproject.toml"),
+        ["make install"],
+    )
+    assert "RUN make install" in (build_dir / "Dockerfile").read_text()
+
+
+@patch("build_ecr_container.tag_docker_image")
+@patch("build_ecr_container.build_docker_image_from_spec")
+def test_build_container_forwards_build_steps(
+    mock_build: object, _mock_tag: object, tmp_path: Path
+) -> None:
+    """build_container passes steps down rather than dropping them.
+
+    generate_dockerfile is called twice per build: once to compute the hash that
+    becomes the image tag, once to write the Dockerfile that is built. If steps
+    reached only one, the pushed image would not match its tag.
+    """
+    steps = ["make install"]
+    build_container(
+        write_spec(tmp_path), "img:tag", "img:latest", Path("p.toml"), steps
+    )
+    assert mock_build.call_args[0][4] == steps  # type: ignore[attr-defined]
