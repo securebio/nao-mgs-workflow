@@ -5,13 +5,13 @@ Take a table of reads with LCA assignments and a table of (child, parent) taxid 
 and output a table of taxids with counts of reads that are directly assigned to
 the taxid and all reads that are assigned to the clade descended from the taxid.
 
-Reads are counted three ways. `total` counts every read under its own LCA taxid.
-`dedup` counts only reads that survived both duplicate-marking passes, again under
-their own taxid. `exemplar_total` counts every read under the taxid of the exemplar
-representing it, which is what makes `dedup / exemplar_total` a per-taxid duplicate
-rate over one coherent set of reads; the members of a duplicate group can carry
-different LCA assignments, so `dedup / total` is not.
-Output both deduplicated and total (non-deduplicated) counts.
+Reads are counted three ways:
+
+- `total` counts every read under its own LCA taxid.
+- `dedup` counts only reads that survive both duplicate-marking passes, under their own LCA taxid.
+- `exemplar_total` counts every read under the LCA taxid of the exemplar representing it.
+
+Therefore, `dedup / exemplar_total` is the per-taxid duplication rate over one coherent set of reads.
 """
 
 import argparse
@@ -82,16 +82,9 @@ def count_direct_reads_per_taxid(
     taxid_field: str = "aligner_taxid_lca",
     group_field: str = "group",
 ) -> tuple[Counter[TaxId], Counter[TaxId], Counter[TaxId]]:
-    """Count reads per taxonomic ID three ways, validating group.
+    """Count total and deduplicated reads per taxonomic ID, validating group.
 
     These are reads assigned directly to the tax ID, not including descendent counts.
-
-    The exemplar-attributed count needs no lookup of another read's taxid: an
-    exemplar's sim_dup_group_size already counts the reads it represents, including
-    each similarity-group member's alignment duplicates, so charging that whole
-    weight to the exemplar's own taxid and skipping every other read is equivalent
-    to attributing each read to its exemplar's taxid. Totals are therefore conserved
-    between total and exemplar_total; only the distribution across taxids differs.
 
     Args:
         data: Iterator of read records as dictionaries
@@ -113,6 +106,7 @@ def count_direct_reads_per_taxid(
         total[taxid] += 1
         if not is_duplicate(read):
             dedup[taxid] += 1
+            # sim_dup_group_size is number of reads represented by the exemplar.
             exemplar_total[taxid] += int(read["sim_dup_group_size"])
     return total, dedup, exemplar_total
 
