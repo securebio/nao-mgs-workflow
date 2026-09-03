@@ -148,9 +148,9 @@ This subworkflow takes in partitioned hits tables from `CONCAT_BY_GROUP`, then m
 
 For each group of reads identified as duplicates, the algorithm selects the read pair with the highest average quality score to act as the "exemplar" of the group. Each read in the group is annotated with this examplar in `prim_align_dup_exemplar` to identify its duplicate group[^exemplar], enabling downstream deduplication or other duplicate analyses if needed. In addition to an annotated hits TSV containing an additional column for exemplar IDs, the subworkflow also returns a summary TSV giving the number of reads mapped to a given exemplar ID, as well as the fraction of read pairs in the group that are pairwise duplicates[^pairwise].
 
-**Similarity-based marking** then groups the alignment-unique reads by sequence similarity, using minimizer-based clustering via the [nao-dedup](https://github.com/securebio/nao-dedup) library. It can only consider reads that are alignment-unique, so it has to run second. It adds `sim_dup_exemplar` (`NA` for reads that are already alignment duplicates, so `seq_id == sim_dup_exemplar` marks the reads that survived both passes) and `sim_dup_group_size` (the reads that exemplar stands for, including its group members' alignment duplicates; `NA` on every other read).
+**Similarity-based marking** then groups the alignment-unique reads by sequence similarity, using minimizer-based clustering via the [nao-dedup](https://github.com/securebio/nao-dedup) library. It adds `sim_dup_exemplar` and `sim_dup_group_size` (the number of reads that exemplar stands for, including its group members' alignment duplicates).
 
-Both sets of columns are carried through validation into `{group}_validation_hits.tsv.gz`, and clade counting deduplicates on `sim_dup_exemplar`, so its `reads_*_dedup` figures exclude duplicates found by either pass.
+Both sets of columns are carried through validation into `{group}_validation_hits.tsv.gz`.
 
 [^exemplar]: A read with no duplicates will be annotated with itself as the exemplar.
 [^pairwise]: Because of the fuzzy matching used to identify duplicates, it is possible for duplicate annotation to be intransitive: i.e. read A is a duplicate of read B, and read B is a duplicate of read C, but read A is not a duplicate of read C. As currently implemented, the algorithm will group a read into a duplicate group if it matches any single read already in that duplicate group, potentially leading to the grouping of reads that would not be considered duplicates of each other in isolation. The reporting of the pairwise duplicate statistic in the summary file allows for quantification of this phenomenon, and potential adjustment of parameters if too high a fraction of non-matching reads are being grouped together in this way.
@@ -258,7 +258,7 @@ It outputs a TSV for each sample group (`<group>_clade_counts.tsv.gz`) with six 
 1. `taxid`: the taxid for the row
 2. `parent_taxid`: the taxid of the row taxid's phylogenetic parent
 3. `reads_direct_total`: the number of reads directly assigned to the taxid without deduplication
-4. `reads_direct_dedup`: the number of reads directly assigned with deduplication
+4. `reads_direct_dedup`: the number of reads directly assigned with deduplication, which excludes duplicates found by either marking pass (`seq_id == sim_dup_exemplar`)
 5. `reads_clade_total`: the number of reads assigned to the clade descended from the taxid (including the directly assigned reads) without deduplication
 6. `reads_clade_dedup`: the number of reads assigned to the clade with deduplication.
 

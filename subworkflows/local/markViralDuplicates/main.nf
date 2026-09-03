@@ -24,8 +24,7 @@ workflow MARK_VIRAL_DUPLICATES {
         stats_ch = dup_ch.map{ id, _reads, stats -> tuple(id, stats) }
         reads_sorted_ch = SORT_READS(reads_ch, "seq_id").sorted
         stats_sorted_ch = SORT_STATS(stats_ch, "prim_align_genome_id_all").sorted
-        // 3. Rename the summary for output. The reads table is no longer published, so it
-        // no longer needs renaming.
+        // 3. Rename the summary for output.
         stats_out_ch = COPY_STATS(stats_sorted_ch, "duplicate_stats.tsv.gz")
         // 4. Mark similarity duplicates among the reads that survived alignment marking.
         sim_dup_ch = MARK_SIMILARITY_DUPLICATES(reads_sorted_ch).output
