@@ -267,8 +267,14 @@ def build_docker_image_from_spec(
         image_tag (str): Image tag
         build_dir (Path): Path to build directory
         pyproject_path (Path): Path to pyproject.toml for base image config
-        build_steps (list[str] | None): Extra shell commands to run after the install
+        build_steps (list[str] | None): Extra shell commands to run after the install.
+            Defaults to the spec's own `build_steps`.
     """
+    # Derived from the spec when not given, so that callers which build straight from a
+    # spec file (e.g. the local-scan recipe in the triage-trivy skill) cannot silently
+    # produce an image missing the steps the spec declares.
+    if build_steps is None:
+        build_steps = read_container_spec(spec_file).get("build_steps")
     spec_filename = spec_file.name
     shutil.copy(spec_file, build_dir / spec_filename)
     dockerfile_path = build_dir / "Dockerfile"
@@ -329,7 +335,8 @@ def build_container(
         image_tag: Primary image tag (with hash)
         image_tag_latest: Latest tag for the image
         pyproject_path: Path to pyproject.toml for base image config
-        build_steps: Extra shell commands to run after the install
+        build_steps: Extra shell commands to run after the install. Defaults to the
+            spec's own `build_steps`.
     """
     logger.info("Building container locally")
     with tempfile.TemporaryDirectory() as tmpdir:

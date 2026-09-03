@@ -494,3 +494,40 @@ def test_build_and_push_container_uses_steps_for_both_hash_and_build(
         Path("pyproject.toml"),
     )
     assert mock_setup.call_args[0][2] != hash_with_steps  # type: ignore[attr-defined]
+
+
+@patch("build_ecr_container.get_base_image", return_value=BASE_IMAGE)
+@patch("build_ecr_container.subprocess.run")
+def test_build_docker_image_derives_steps_from_spec_when_not_given(
+    _mock_run: object, _mock_base: object, tmp_path: Path
+) -> None:
+    """Building straight from a spec file honours the steps that spec declares.
+
+    The local-scan recipe in the triage-trivy skill calls build_container() with
+    only the spec and tags. If steps had to be passed explicitly, that path would
+    build and scan an image missing them — a different image from the published one.
+    """
+    build_dir = tmp_path / "build"
+    build_dir.mkdir()
+    build_docker_image_from_spec(
+        write_spec(tmp_path, build_steps=["make install"]), "img:tag", build_dir
+    )
+    assert "RUN make install" in (build_dir / "Dockerfile").read_text()
+
+
+@patch("build_ecr_container.get_base_image", return_value=BASE_IMAGE)
+@patch("build_ecr_container.subprocess.run")
+def test_explicit_empty_steps_override_the_spec(
+    _mock_run: object, _mock_base: object, tmp_path: Path
+) -> None:
+    """An explicit empty list means 'no steps', and is not treated as 'derive'."""
+    build_dir = tmp_path / "build"
+    build_dir.mkdir()
+    build_docker_image_from_spec(
+        write_spec(tmp_path, build_steps=["make install"]),
+        "img:tag",
+        build_dir,
+        Path("pyproject.toml"),
+        [],
+    )
+    assert "RUN make install" not in (build_dir / "Dockerfile").read_text()
