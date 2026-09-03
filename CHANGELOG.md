@@ -1,8 +1,6 @@
 # v3.4.0.0-dev
 
 - Restrict Illumina BLAST validation downsampling to reads that are unique under both duplicate-marking passes. (#973)
-    - **This changes results**: fewer reads are drawn per taxon, so more reads carry `validation_status = not_sampled` and the set of reads with `validation_*` results shrinks. No output file gains or loses a column and no schemas change.
-    - Caveat: similarity clustering runs across the whole sample group, but validation partitions by `selected_taxid` afterwards, so deduplication is global rather than per-taxon. A similarity cluster spanning two taxa keeps a representative only in its exemplar's partition, and a taxon whose eligible reads were all absorbed that way is validated by nothing. See [downstream.md](docs/downstream.md).
 - Promote similarity-based duplicate marking out of experimental, publishing columns into `results_downstream/{GROUP}_validation_hits.tsv.gz`. (#972)
     - Stop publishing `experimental_downstream/{GROUP}_duplicate_reads_similarity.tsv.gz`.
     - `{GROUP}_clade_counts.tsv.gz` now deduplicates on `sim_dup_exemplar` rather than `prim_align_dup_exemplar`.
