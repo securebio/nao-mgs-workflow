@@ -1,0 +1,48 @@
+nextflow_workflow {
+
+    name "Test bowtie2_index_resources memory-tier closure"
+    script "tests/configs/resources/main.nf"
+    workflow "PROBE_BOWTIE2_INDEX_RESOURCE_TIER"
+    config "tests/configs/resources/nextflow.config"
+    tag "config"
+    tag "bowtie2_index_resources"
+
+    test("Should map gzipped reference size to the expected memory tier") {
+        tag "expect_success"
+        when {
+            workflow {
+                """
+                input[0] = channel.of(
+                    644245094L,   // 0.6 GB  virus-sized       -> tier 0 (<= 1 GB) -> 64 GB
+                    1073741824L,  // 1 GB    boundary          -> tier 0           -> 64 GB
+                    1610612736L,  // 1.5 GB                    -> tier 1 (<= 4 GB) -> 128 GB
+                    3221225472L,  // 3 GB    contaminant-sized -> tier 1           -> 128 GB
+                    4294967296L,  // 4 GB    boundary          -> tier 1           -> 128 GB
+                    8589934592L,  // 8 GB                      -> tier 2 fallback  -> 256 GB
+                )
+                """
+            }
+        }
+        then {
+            assert workflow.success
+
+            def gb = 1073741824L
+            def expected = [
+                644245094L:   64 * gb,
+                1073741824L:  64 * gb,
+                1610612736L:  128 * gb,
+                3221225472L:  128 * gb,
+                4294967296L:  128 * gb,
+                8589934592L:  256 * gb,
+            ]
+
+            def report = path(workflow.out.report[0]).text.trim().split('\n')
+            def actual = report.collectEntries { line ->
+                def (size_bytes, allocated) = line.split(',')
+                [size_bytes as Long, allocated as Long]
+            }
+
+            assert actual == expected
+        }
+    }
+}

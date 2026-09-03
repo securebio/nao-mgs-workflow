@@ -66,7 +66,7 @@ process BOWTIE2 {
 // Generate a Bowtie2 index from an input file
 process BOWTIE2_INDEX {
     label "bowtie2_samtools"
-    label "max"
+    label "bowtie2_index_resources"
     tag "id=index,name=${outdir}"
     input:
         path(reference_fasta)

@@ -51,3 +51,35 @@ workflow PROBE_RESOURCE_TIER {
     emit:
         report = report_ch
 }
+
+// Probes the input-size-aware memory closure attached to the
+// `bowtie2_index_resources` label. The input name must match BOWTIE2_INDEX's own
+// (`reference_fasta`), since the closure reads that variable.
+process PROBE_BOWTIE2_INDEX_MEMORY {
+    label "bowtie2_index_resources"
+    label "coreutils"
+
+    input:
+        tuple val(size_bytes), path(reference_fasta)
+
+    output:
+        path "row.csv"
+
+    script:
+        """
+        echo "${size_bytes},${task.memory.toBytes()}" > row.csv
+        """
+}
+
+workflow PROBE_BOWTIE2_INDEX_RESOURCE_TIER {
+    take:
+        sizes_ch  // val: logical file size in bytes
+
+    main:
+        sparse_ch = MAKE_SPARSE_FILE(sizes_ch)
+        rows_ch = PROBE_BOWTIE2_INDEX_MEMORY(sparse_ch)
+        report_ch = rows_ch.collectFile(name: 'report.csv', sort: true)
+
+    emit:
+        report = report_ch
+}
