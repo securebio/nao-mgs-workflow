@@ -37,8 +37,13 @@ struct ReadEntry {
 // plus a free pass.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum DupKey {
-    // Both mates aligned to the same genome: the fragment's span on the reference.
-    // Reached by CP, and by DP or UP whose mates happened to land on one genome.
+    // Both mates aligned to the same genome. Reached by CP, and by DP or UP whose mates
+    // happened to land on one genome.
+    //
+    // Named for what it becomes, not what it holds here: this PR preserves the existing
+    // key, which is the two mate starts in order, and the second element is therefore the
+    // reverse mate's start rather than the fragment's right edge. That is #948, and #969
+    // makes the name accurate by keying on the fragment length.
     FragmentSpan { start: i32, end: i32 },
     // Mates aligned to two different genomes: one start per genome, ordered to follow the
     // sorted genome ID so that the same pair of genomes always yields the same key.
@@ -62,7 +67,8 @@ impl DupKey {
         }
     }
 
-    // Trailing coordinate, used only to break ties in the sort
+    // Trailing coordinate. This accessor is only used to break ties in the sort; the
+    // value itself is also matched on, but through `matches` reading the field directly.
     fn sort_end(&self) -> Option<i32> {
         match *self {
             DupKey::FragmentSpan { end, .. } => Some(end),
@@ -373,7 +379,8 @@ fn process_header_line(line: &str) -> Result<(Vec<&str>, HashMap<&str, usize>, u
 }
 
 // Efficient function that creates ReadEntry with minimal memory allocation
-fn make_read_entry(fields: &[String], indices: &HashMap<&str, usize>) -> ReadEntry {
+fn make_read_entry(fields: &[String], indices: &HashMap<&str, usize>)
+    -> Result<ReadEntry, String> {
     // Extract required fields using references to avoid cloning unnecessarily
     let query_name = fields[indices["seq_id"]].clone();
     let genome_id = &fields[indices["prim_align_genome_id_all"]];
@@ -398,21 +405,28 @@ fn make_read_entry(fields: &[String], indices: &HashMap<&str, usize>) -> ReadEnt
         } else {
             (ref_start_rev, ref_start_fwd)
         };
-        // Note: this doesn't need to handle the case where one value is None
-        // because then you could never get multiple genome_ids
+        // Two genome IDs means both mates aligned, one to each, so a missing coordinate
+        // cannot arise. The old key kept the surviving coordinate in its own slot, which
+        // made a read missing its first slot fail to match one missing its second; there is
+        // no way to express that here without a slot discriminator for a case that cannot
+        // occur, so report it instead.
         key = match (first, second) {
             (Some(first_start), Some(second_start)) => {
                 DupKey::SplitGenome { first_start, second_start }
             }
-            (Some(start), None) | (None, Some(start)) => DupKey::Incomplete { start },
-            (None, None) => DupKey::Unaligned,
+            _ => {
+                return Err(format!(
+                    "Read {query_name} has mates on two genomes ({genome_id}) but is \
+                     missing a start coordinate"
+                ))
+            }
         };
     } else {
         // If only one genome ID, use it directly
         genome_id_sorted = genome_id.to_string();
         key = match (ref_start_fwd, ref_start_rev) {
-            // Both mates aligned: the fragment runs from the leftmost coordinate to the
-            // rightmost one
+            // Both mates aligned: the two mate starts in order. Not yet the fragment's
+            // span -- see the note on FragmentSpan and #948.
             (Some(fwd), Some(rev)) => DupKey::FragmentSpan {
                 start: fwd.min(rev),
                 end: fwd.max(rev),
@@ -424,12 +438,12 @@ fn make_read_entry(fields: &[String], indices: &HashMap<&str, usize>) -> ReadEnt
     };
     let avg_quality = average_quality_score(quality_fwd, quality_rev);
     // Return the ReadEntry with minimal memory footprint
-    ReadEntry {
+    Ok(ReadEntry {
         query_name,
         genome_id: genome_id_sorted,
         key,
         avg_quality,
-    }
+    })
 }
 
 // Process a chunk of lines in parallel to create ReadEntry objects
@@ -449,7 +463,7 @@ fn process_chunk_parallel(
                 return Err(format!("Invalid field count: {} (expected {})", fields.len(), header_count));
             }
             // Create ReadEntry from fields
-            Ok(make_read_entry(&fields, indices))
+            make_read_entry(&fields, indices)
         })
         .collect();
     // Convert String errors to Box<dyn Error>
@@ -709,6 +723,12 @@ mod tests {
         "prim_align_fragment_length",
     ];
 
+    // Parse one fixture row, asserting that it is accepted
+    fn parsed(values: &[&str]) -> ReadEntry {
+        let (fields, indices) = row(values);
+        make_read_entry(&fields, &indices).expect("row should parse")
+    }
+
     // Build the (fields, indices) pair that make_read_entry expects from a single row
     fn row(values: &[&str]) -> (Vec<String>, HashMap<&'static str, usize>) {
         assert_eq!(values.len(), HEADERS.len());
@@ -838,8 +858,7 @@ mod tests {
         // ordered. Note the span end is the reverse mate's start, not the fragment's right
         // edge -- see #948; this pins current behaviour so the fix is visible.
         for (fwd, rev) in [("500", "800"), ("800", "500")] {
-            let (fields, indices) = row(&["r1", "genome_a", fwd, rev, "IIII", "IIII", "300"]);
-            let e = make_read_entry(&fields, &indices);
+            let e = parsed(&["r1", "genome_a", fwd, rev, "IIII", "IIII", "300"]);
             assert_eq!(e.key, DupKey::FragmentSpan { start: 500, end: 800 });
         }
     }
@@ -850,16 +869,14 @@ mod tests {
         // second element at all. Two such reads therefore compare equal on the second
         // element whatever their fragments were -- also #948.
         for (fwd, rev) in [("500", "NA"), ("NA", "500")] {
-            let (fields, indices) = row(&["r1", "genome_a", fwd, rev, "IIII", "IIII", "NA"]);
-            let e = make_read_entry(&fields, &indices);
+            let e = parsed(&["r1", "genome_a", fwd, rev, "IIII", "IIII", "NA"]);
             assert_eq!(e.key, DupKey::Incomplete { start: 500 });
         }
     }
 
     #[test]
     fn make_read_entry_keys_an_unaligned_pair_on_nothing() {
-        let (fields, indices) = row(&["r1", "genome_a", "NA", "NA", "IIII", "IIII", "NA"]);
-        let e = make_read_entry(&fields, &indices);
+        let e = parsed(&["r1", "genome_a", "NA", "NA", "IIII", "IIII", "NA"]);
         assert_eq!(e.key, DupKey::Unaligned);
     }
 
@@ -870,10 +887,8 @@ mod tests {
         // The fragment length is the only thing left that could tell two distinct
         // molecules apart, and this version does not read it, so they merge. #948; #969
         // keys on the fragment span and separates them.
-        let (fields, indices) = row(&["r1", "genome_a", "400", "400", "IIII", "IIII", "40"]);
-        let short = make_read_entry(&fields, &indices);
-        let (fields, indices) = row(&["r2", "genome_a", "400", "400", "IIII", "IIII", "80"]);
-        let long = make_read_entry(&fields, &indices);
+        let short = parsed(&["r1", "genome_a", "400", "400", "IIII", "IIII", "40"]);
+        let long = parsed(&["r2", "genome_a", "400", "400", "IIII", "IIII", "80"]);
         assert_eq!(short.key, DupKey::FragmentSpan { start: 400, end: 400 });
         assert_eq!(long.key, DupKey::FragmentSpan { start: 400, end: 400 });
         assert!(match_reads(&short, &long, 2));
@@ -886,15 +901,13 @@ mod tests {
         // #969 reads it and rejects the row instead: the producer writes NA only when one
         // mate is unaligned or the mates hit two genomes, and both take other paths, so an
         // NA here means the input is not what the tool requires.
-        let (fields, indices) = row(&["r1", "genome_a", "500", "800", "IIII", "IIII", "NA"]);
-        let e = make_read_entry(&fields, &indices);
+        let e = parsed(&["r1", "genome_a", "500", "800", "IIII", "IIII", "NA"]);
         assert_eq!(e.key, DupKey::FragmentSpan { start: 500, end: 800 });
     }
 
     #[test]
     fn make_read_entry_carries_name_genome_and_quality() {
-        let (fields, indices) = row(&["r1", "genome_a", "500", "800", "III", "!!!", "300"]);
-        let e = make_read_entry(&fields, &indices);
+        let e = parsed(&["r1", "genome_a", "500", "800", "III", "!!!", "300"]);
         assert_eq!(e.query_name, "r1");
         assert_eq!(e.genome_id, "genome_a");
         assert_eq!(e.avg_quality, 20.0);
@@ -905,20 +918,33 @@ mod tests {
         // Mates on two genomes: the ID is sorted, and the coordinates are permuted to match,
         // so that the same pair of genomes always produces the same key regardless of which
         // mate landed on which
-        let (fields, indices) = row(&["r1", "genome_b/genome_a", "500", "800", "IIII", "IIII", "NA"]);
-        let e = make_read_entry(&fields, &indices);
+        let e = parsed(&["r1", "genome_b/genome_a", "500", "800", "IIII", "IIII", "NA"]);
         assert_eq!(e.genome_id, "genome_a/genome_b");
         // genome_a is the reverse mate's genome here, so its coordinate leads
         assert_eq!(e.key, DupKey::SplitGenome { first_start: 800, second_start: 500 });
 
         // The same pair the other way round yields an identical key
-        let (fields, indices) = row(&["r2", "genome_a/genome_b", "800", "500", "IIII", "IIII", "NA"]);
-        let e = make_read_entry(&fields, &indices);
+        let e = parsed(&["r2", "genome_a/genome_b", "800", "500", "IIII", "IIII", "NA"]);
         assert_eq!(e.genome_id, "genome_a/genome_b");
         assert_eq!(e.key, DupKey::SplitGenome { first_start: 800, second_start: 500 });
     }
 
     // --- Header handling ---
+
+    #[test]
+    fn make_read_entry_rejects_a_split_genome_read_missing_a_coordinate() {
+        // Both orientations, since the old key distinguished them: a read missing its
+        // first slot did not match one missing its second. Neither can occur -- two genome
+        // IDs means both mates aligned -- so both are reported rather than keyed on the
+        // single surviving coordinate.
+        for (fwd, rev) in [("500", "NA"), ("NA", "500")] {
+            let (fields, indices) =
+                row(&["r1", "genome_a/genome_b", fwd, rev, "IIII", "IIII", "NA"]);
+            let err = make_read_entry(&fields, &indices).expect_err("should be rejected");
+            assert!(err.contains("r1"), "unexpected error: {err}");
+            assert!(err.contains("two genomes"), "unexpected error: {err}");
+        }
+    }
 
     #[test]
     fn process_header_line_indexes_every_required_column() {

@@ -7,7 +7,7 @@
     - `{GROUP}_clade_counts.tsv.gz` now deduplicates on `sim_dup_exemplar` rather than `prim_align_dup_exemplar`.
 - Pass the `mark_duplicates` deviation tolerance explicitly instead of through a mutable global, with no change in behaviour.
 - Add unit tests for the `mark_duplicates` Rust tool. (#967)
-- Model the `mark_duplicates` coordinate key as an explicit `DupKey` enum, with no change in behaviour.
+- Model the `mark_duplicates` coordinate key as an explicit `DupKey` enum. No change in behaviour, except that a split-genome read missing a start coordinate is now reported rather than keyed on the coordinate it does have; the producer cannot emit such a read.
 
 # v3.3.0.1-dev
 
