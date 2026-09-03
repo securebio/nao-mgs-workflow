@@ -118,6 +118,21 @@ Where possible, we use [Seqera Wave containers](https://docs.seqera.io/wave), ma
 3. Run `bin/build_wave_container.py PATH_TO_YAML_FILE` to initiate the container build on Wave. The script will automatically update `configs.containers.config` with the appropriate container path.
 4. Wait a few minutes for the container to build before calling processes that depend on it.
 
+### Build steps
+
+A container spec may include an optional `build_steps` field: a list of shell commands run inside the image after the Conda environment is installed. Use it when a package must be compiled with non-default options that no Conda build provides.
+
+```yaml
+dependencies:
+  - bioconda::sometool=1.2.3
+build_steps:
+  - apt-get update && apt-get install -y --no-install-recommends gcc make && ... && apt-get purge -y gcc make
+```
+
+Each entry becomes its own `RUN` line, so steps do not share a working directory and each must be self-contained. Build toolchains should be installed and removed within a single step, so no layer retains a compiler that the vulnerability scan would then flag.
+
+`build_steps` is part of the spec hash, so editing it changes the image tag and forces a rebuild.
+
 If you need a container with functionality beyond what's possible with Conda and Wave, you can build a custom Docker container and host it on [Docker Hub](https://hub.docker.com/). To do this, create a new Dockerfile in the `docker` directory. The name should have the prefix `nao-` followed by a descriptive name containing lowercase letters and hyphens, e.g. `docker/nao-blast-awscli.Dockerfile`. Once the Dockerfile is created, a repo maintainer can build and push it to Docker Hub using the script `bin/build-push-docker.sh`. (This should be done by a repo maintainer as it requires being logged in to DockerHub with the securebio username.)
 
 ### Base image pinning

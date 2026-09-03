@@ -1,5 +1,6 @@
 # v3.3.0.1-dev
 
+- Add an optional `build_steps` field to container specs: a list of shell commands run inside the image after the Conda environment is installed, for packages that must be compiled with options no Conda build provides. The field is part of the spec hash, so editing it forces a rebuild. No container uses it yet, so no image changes. (#TBD1)
 - Publish FASTQC's overrepresented sequences as `{sample}_qc_overrepresented_{raw,cleaned}.tsv.gz` RUN outputs and matching `{group}_qc_overrepresented_{raw,cleaned}.tsv.gz` DOWNSTREAM outputs, with a new schema. Also correct the `overrepresented_sequences` description in `fastp.schema.json` and `output.md`. (#954)
     - See [output.md](docs/output.md) for how to read the numbers. A header-only file means no overrepresented sequences were reported.
     - DOWNSTREAM at this version requires RUN output produced at this version or later, since it treats every entry in `expected-outputs-run` as mandatory.
