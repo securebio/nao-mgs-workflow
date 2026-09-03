@@ -10,5 +10,36 @@ dependencies:
   - conda-forge::unzip=6.0
   - conda-forge::awscli=2.34.9
   - conda-forge::pigz=2.8
-  - bioconda::bowtie2=2.5.4
+  - bioconda::bowtie2=2.5.5
   - bioconda::samtools=1.22.1
+# Replace the Conda `bowtie2-build` binaries with ones compiled against libsais.
+# Bioconda builds bowtie2 without USE_SAIS_OPENMP, leaving index construction on
+# bowtie2's own blockwise suffix sort. libsais is substantially faster and produces
+# byte-identical indexes. Only the two `bowtie2-build-{s,l}` binaries are replaced;
+# the aligner stays exactly as Conda shipped it, so alignment behaviour is untouched.
+#
+# Built from the same version pinned above, so index format and aligner stay in
+# lockstep. The toolchain is installed and purged within this single step so no
+# layer retains a compiler.
+build_steps:
+  - >-
+    set -eux
+    && BT2_VERSION=2.5.5
+    && apt-get update
+    && apt-get install -y --no-install-recommends
+    build-essential ca-certificates curl git libz-dev libgomp1
+    && apt-mark manual libgomp1
+    && git clone --depth 1 --branch "v${BT2_VERSION}"
+    --recurse-submodules --shallow-submodules
+    https://github.com/BenLangmead/bowtie2.git "/tmp/bowtie2-${BT2_VERSION}"
+    && cd "/tmp/bowtie2-${BT2_VERSION}"
+    && make libsais USE_SAIS_OPENMP=1
+    && make -j"$(nproc)" USE_SAIS_OPENMP=1 bowtie2-build-s bowtie2-build-l
+    && bowtie2_dir="$(dirname "$(readlink -f "$(command -v bowtie2-build-s)")")"
+    && install -m 0755 bowtie2-build-s bowtie2-build-l "${bowtie2_dir}/"
+    && cd / && rm -rf "/tmp/bowtie2-${BT2_VERSION}"
+    && apt-get purge -y build-essential git libz-dev
+    && apt-get autoremove -y
+    && rm -rf /var/lib/apt/lists/*
+    && bowtie2-build-s --version | grep -q -- -DUSE_SAIS
+    && bowtie2-build-l --version | grep -q -- -DUSE_SAIS
