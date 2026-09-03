@@ -21,18 +21,24 @@ dependencies:
 # Built from the same version pinned above, so index format and aligner stay in
 # lockstep. The toolchain is installed and purged within this single step so no
 # layer retains a compiler.
+#
+# The build is pinned to the commit that v2.5.5 points at, not the tag. The ECR image
+# tag is a hash of this file, so a moved upstream tag would otherwise let the same
+# image tag be rebuilt from different source. The commit is part of that hash.
 build_steps:
   - >-
     set -eux
     && BT2_VERSION=2.5.5
+    && BT2_COMMIT=0c6a1c75e047ad8bf70c178fa3cb1528fba6adc2
     && apt-get update
     && apt-get install -y --no-install-recommends
     build-essential ca-certificates curl git libz-dev libgomp1
     && apt-mark manual libgomp1
-    && git clone --depth 1 --branch "v${BT2_VERSION}"
-    --recurse-submodules --shallow-submodules
+    && git clone --filter=blob:none
     https://github.com/BenLangmead/bowtie2.git "/tmp/bowtie2-${BT2_VERSION}"
     && cd "/tmp/bowtie2-${BT2_VERSION}"
+    && git checkout --quiet "${BT2_COMMIT}"
+    && git submodule update --init --recursive --depth 1
     && make libsais USE_SAIS_OPENMP=1
     && make -j"$(nproc)" USE_SAIS_OPENMP=1 bowtie2-build-s bowtie2-build-l
     && bowtie2_dir="$(dirname "$(readlink -f "$(command -v bowtie2-build-s)")")"

@@ -89,6 +89,18 @@ def read_container_spec(spec_file: Path) -> dict[str, Any]:
         msg = "Container spec field 'build_steps' must be a list of strings"
         logger.error(msg)
         raise ValueError(msg)
+    # Each step is interpolated straight after `RUN`, so a blank step would emit a bare
+    # `RUN` and a step containing a newline would inject arbitrary extra Dockerfile
+    # instructions. Both are rejected here rather than failing mid-build. Multi-command
+    # steps should use a YAML folded scalar (`>-`), which joins lines into one.
+    for step in build_steps or []:
+        if not step.strip() or "\n" in step:
+            msg = (
+                "Container spec field 'build_steps' entries must be non-empty and "
+                "single-line; use a YAML folded scalar (>-) for multi-command steps"
+            )
+            logger.error(msg)
+            raise ValueError(msg)
     return spec  # type: ignore[no-any-return]
 
 

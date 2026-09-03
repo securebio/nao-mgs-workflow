@@ -12,6 +12,7 @@ import pytest
 import yaml
 from botocore.exceptions import ClientError
 from build_ecr_container import (
+    build_and_push_container,
     build_container,
     build_docker_image_from_spec,
     check_image_exists,
@@ -347,11 +348,15 @@ class TestGenerateDockerfileBuildSteps:
     """Emitting build steps into the Dockerfile."""
 
     @pytest.mark.parametrize("build_steps", [None, []], ids=["none", "empty"])
-    def test_none_and_empty_are_equivalent(
+    def test_none_and_empty_produce_the_same_dockerfile(
         self, _mock_base: object, build_steps: list[str] | None
     ) -> None:
-        """An empty list must produce the same Dockerfile as no list at all, so
-        adding an empty key to a spec does not change its hash."""
+        """An empty list emits no RUN lines, exactly as no list at all.
+
+        This is about the Dockerfile only. `compute_spec_hash` hashes the raw spec,
+        so a spec carrying `build_steps: []` still hashes differently from one that
+        omits the key.
+        """
         baseline = generate_dockerfile("widget.yml", Path("pyproject.toml"))
         assert (
             generate_dockerfile("widget.yml", Path("pyproject.toml"), build_steps)
@@ -429,3 +434,63 @@ def test_build_container_forwards_build_steps(
         write_spec(tmp_path), "img:tag", "img:latest", Path("p.toml"), steps
     )
     assert mock_build.call_args[0][4] == steps  # type: ignore[attr-defined]
+
+
+@pytest.mark.parametrize(
+    "bad_value",
+    [[""], ["   "], ["make\nmake install"], ["ok", ""]],
+    ids=["empty", "whitespace", "newline", "one-empty-among-valid"],
+)
+def test_read_container_spec_rejects_blank_or_multiline_steps(
+    tmp_path: Path, bad_value: list[str]
+) -> None:
+    """Blank and newline-bearing steps are rejected at parse time.
+
+    Each step is interpolated straight after `RUN`. A blank step emits a bare `RUN`,
+    and a newline-bearing step injects extra Dockerfile instructions — both would
+    otherwise pass validation and fail, or misbehave, during the build.
+    """
+    with pytest.raises(ValueError, match="non-empty and single-line"):
+        read_container_spec(write_spec(tmp_path, build_steps=bad_value))
+
+
+@patch("build_ecr_container.get_base_image", return_value=BASE_IMAGE)
+@patch("build_ecr_container.update_containers_config")
+@patch("build_ecr_container.push_to_ecr")
+@patch("build_ecr_container.build_container")
+@patch("build_ecr_container.setup_ecr_repository")
+def test_build_and_push_container_uses_steps_for_both_hash_and_build(
+    mock_setup: object,
+    mock_build: object,
+    _mock_push: object,
+    _mock_config: object,
+    _mock_base: object,
+    tmp_path: Path,
+) -> None:
+    """The orchestrator must feed build steps to both the hash and the build.
+
+    `build_and_push_container` extracts `build_steps` once and uses it in two
+    places: computing the spec hash that becomes the image tag, and building the
+    image. If it reached only one, the pushed image would not match its tag. This
+    asserts the tag actually differs between two specs that differ only in their
+    build steps, and that the steps reach `build_container`.
+    """
+    mock_setup.return_value = ("img:tag", "img:latest", "registry", False)  # type: ignore[attr-defined]
+    steps = ["make install"]
+    build_and_push_container(
+        write_spec(tmp_path, build_steps=steps),
+        "prefix",
+        tmp_path / "containers.config",
+        Path("pyproject.toml"),
+    )
+    assert mock_build.call_args[0][4] == steps  # type: ignore[attr-defined]
+    hash_with_steps = mock_setup.call_args[0][2]  # type: ignore[attr-defined]
+
+    mock_setup.reset_mock()  # type: ignore[attr-defined]
+    build_and_push_container(
+        write_spec(tmp_path, build_steps=["make -j8"]),
+        "prefix",
+        tmp_path / "containers.config",
+        Path("pyproject.toml"),
+    )
+    assert mock_setup.call_args[0][2] != hash_with_steps  # type: ignore[attr-defined]
