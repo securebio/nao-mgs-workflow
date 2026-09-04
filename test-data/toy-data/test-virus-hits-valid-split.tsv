@@ -1,9 +1,9 @@
-seq_id	prim_align_genome_id_all	prim_align_ref_start	prim_align_ref_start_rev	query_qual	query_qual_rev	exemplar_exp_0	exemplar_exp_1	exemplar_exp_2
-grp_a_0	g0/g1	50	150	JJJJJJ	JJJJJJ	grp_a_0	grp_a_0	grp_a_0
-grp_a_1	g0/g1	50	150	JJJJJJ	JJJJJJ	grp_a_0	grp_a_0	grp_a_0
-grp_a_2	g1/g0	150	50	JJJJJJ	JJJJJJ	grp_a_0	grp_a_0	grp_a_0
-grp_a_3	g1/g0	50	150	JJJJJJ	JJJJJJ	grp_a_3	grp_a_3	grp_a_3
-grp_b_0	g2/g3	200	300	JJJJJJ	JJJJJJ	grp_b_0	grp_b_0	grp_b_0
-grp_b_1	g3/g2	301	201	JJJJJJ	JJJJJJ	grp_b_1	grp_b_0	grp_b_0
-grp_b_2	g3/g2	303	203	JJJJJJ	JJJJJJ	grp_b_2	grp_b_2	grp_b_0
-grp_b_3	g3/g2	200	300	JJJJJJ	JJJJJJ	grp_b_3	grp_b_3	grp_b_3
+seq_id	prim_align_genome_id_all	prim_align_ref_start	prim_align_ref_start_rev	prim_align_fragment_length	query_qual	query_qual_rev	exemplar_exp_0	exemplar_exp_1	exemplar_exp_2
+grp_a_0	g0/g1	50	150	NA	JJJJJJ	JJJJJJ	grp_a_0	grp_a_0	grp_a_0
+grp_a_1	g0/g1	50	150	NA	JJJJJJ	JJJJJJ	grp_a_0	grp_a_0	grp_a_0
+grp_a_2	g1/g0	150	50	NA	JJJJJJ	JJJJJJ	grp_a_0	grp_a_0	grp_a_0
+grp_a_3	g1/g0	50	150	NA	JJJJJJ	JJJJJJ	grp_a_3	grp_a_3	grp_a_3
+grp_b_0	g2/g3	200	300	NA	JJJJJJ	JJJJJJ	grp_b_0	grp_b_0	grp_b_0
+grp_b_1	g3/g2	301	201	NA	JJJJJJ	JJJJJJ	grp_b_1	grp_b_0	grp_b_0
+grp_b_2	g3/g2	303	203	NA	JJJJJJ	JJJJJJ	grp_b_2	grp_b_2	grp_b_0
+grp_b_3	g3/g2	200	300	NA	JJJJJJ	JJJJJJ	grp_b_3	grp_b_3	grp_b_3

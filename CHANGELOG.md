@@ -10,6 +10,7 @@
     - DOWNSTREAM at this version requires RUN output produced at this version or later, since it treats every entry in `expected-outputs-run` as mandatory.
 - Pass the `mark_duplicates` deviation tolerance explicitly instead of through a mutable global, with no change in behaviour. (#989)
 - Add unit tests for the `mark_duplicates` Rust tool. (#967)
+- Fix duplicate marking bug that merged distinct molecules that shared a start coordinate and had fragments shorter than the read.
 
 # v3.3.0.0
 
