@@ -1,8 +1,8 @@
-seq_id	sim_dup_exemplar	aligner_taxid_lca	group
-read1	read1	1	test
-read2	NA	1	test
-read3	read3	4	test
-read4	read4	1	test
-read5	read5	3	test
-read6	NA	3	test
-read7	read5	3	test
+seq_id	sim_dup_exemplar	sim_dup_group_size	aligner_taxid_lca	group
+read1	read1	2	1	test
+read2	NA	NA	1	test
+read3	read3	1	4	test
+read4	read4	1	1	test
+read5	read5	3	3	test
+read6	NA	NA	3	test
+read7	read5	NA	4	test

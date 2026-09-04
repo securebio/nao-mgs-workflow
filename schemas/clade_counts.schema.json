@@ -61,6 +61,17 @@
       "example": 5
     },
     {
+      "name": "reads_direct_total_by_exemplar",
+      "title": "Direct Reads (Total, Exemplar-Attributed)",
+      "description": "Number of reads directly assigned to this taxon by LCA (not descendants), without deduplication, attributing every read to the taxon of the exemplar representing it rather than to its own. Differs from reads_direct_total only where a duplicate group's members carry different LCA assignments. Provided so that reads_direct_dedup / reads_direct_total_by_exemplar is a duplicate rate over one coherent set of reads.",
+      "type": "integer",
+      "constraints": {
+        "required": true,
+        "minimum": 0
+      },
+      "example": 10
+    },
+    {
       "name": "reads_clade_total",
       "title": "Clade Reads (Total)",
       "description": "Number of reads assigned to this taxon's clade (this taxon plus all its descendants in the taxonomy tree), without deduplication. Rows are only included when this value is greater than 0.",
@@ -75,6 +86,17 @@
       "name": "reads_clade_dedup",
       "title": "Clade Reads (Deduplicated)",
       "description": "Number of reads assigned to this taxon's clade (this taxon plus all its descendants), after deduplication. Only counts reads that are their own exemplar under both duplicate-marking passes (seq_id == sim_dup_exemplar).",
+      "type": "integer",
+      "constraints": {
+        "required": true,
+        "minimum": 0
+      },
+      "example": 25
+    },
+    {
+      "name": "reads_clade_total_by_exemplar",
+      "title": "Clade Reads (Total, Exemplar-Attributed)",
+      "description": "Number of reads assigned to this taxon's clade (this taxon plus all its descendants), without deduplication, attributing every read to the taxon of the exemplar representing it rather than to its own. Differs from reads_clade_total only where a duplicate group's members carry different LCA assignments.",
       "type": "integer",
       "constraints": {
         "required": true,
