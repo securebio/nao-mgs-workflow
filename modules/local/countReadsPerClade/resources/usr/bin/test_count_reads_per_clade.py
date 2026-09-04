@@ -28,19 +28,20 @@ def test_read_tsv_leading_quote_field(tsv_factory: Any) -> None:
 
 
 def test_is_duplicate() -> None:
-    # Test case where read is not a duplicate (seq_id matches exemplar)
-    read_not_duplicate = {"seq_id": "read123", "prim_align_dup_exemplar": "read123"}
-    assert not is_duplicate(read_not_duplicate)
+    # Unique under both passes: seq_id matches exemplar
+    assert not is_duplicate({"seq_id": "read123", "sim_dup_exemplar": "read123"})
 
-    # Test case where read is a duplicate (seq_id differs from exemplar)
-    read_is_duplicate = {"seq_id": "read456", "prim_align_dup_exemplar": "read123"}
-    assert is_duplicate(read_is_duplicate)
+    # Similarity duplicate: exemplar is another read
+    assert is_duplicate({"seq_id": "read456", "sim_dup_exemplar": "read123"})
+
+    # Alignment duplicate: similarity marking never examines it, so it carries NA
+    assert is_duplicate({"seq_id": "read789", "sim_dup_exemplar": "NA"})
 
     # Test KeyError when seq_id is missing
     with pytest.raises(KeyError):
-        is_duplicate({"prim_align_dup_exemplar": "read123"})
+        is_duplicate({"sim_dup_exemplar": "read123"})
 
-    # Test KeyError when prim_align_dup_exemplar is missing
+    # Test KeyError when sim_dup_exemplar is missing
     with pytest.raises(KeyError):
         is_duplicate({"seq_id": "read123"})
 
@@ -285,25 +286,25 @@ def test_count_direct_reads_per_taxid() -> None:
         {
             "aligner_taxid_lca": "100",
             "seq_id": "read1",
-            "prim_align_dup_exemplar": "read1",
+            "sim_dup_exemplar": "read1",
             "group": "sample1",
         },  # not duplicate
         {
             "aligner_taxid_lca": "100",
             "seq_id": "read2",
-            "prim_align_dup_exemplar": "read1",
+            "sim_dup_exemplar": "read1",
             "group": "sample1",
         },  # duplicate
         {
             "aligner_taxid_lca": "200",
             "seq_id": "read3",
-            "prim_align_dup_exemplar": "read3",
+            "sim_dup_exemplar": "read3",
             "group": "sample1",
         },  # not duplicate
         {
             "aligner_taxid_lca": "100",
             "seq_id": "read4",
-            "prim_align_dup_exemplar": "read4",
+            "sim_dup_exemplar": "read4",
             "group": "sample1",
         },  # not duplicate
     ]
@@ -323,7 +324,7 @@ def test_count_direct_reads_per_taxid() -> None:
         {
             "custom_taxid": "50",
             "seq_id": "read1",
-            "prim_align_dup_exemplar": "read1",
+            "sim_dup_exemplar": "read1",
             "group": "test_group",
         }
     ]
@@ -351,7 +352,7 @@ def test_count_direct_reads_per_taxid_group_validation() -> None:
         {
             "aligner_taxid_lca": "100",
             "seq_id": "read1",
-            "prim_align_dup_exemplar": "read1",
+            "sim_dup_exemplar": "read1",
             "group": "wrong_group",
         }
     ]
@@ -366,13 +367,13 @@ def test_count_direct_reads_per_taxid_group_validation() -> None:
         {
             "aligner_taxid_lca": "100",
             "seq_id": "read1",
-            "prim_align_dup_exemplar": "read1",
+            "sim_dup_exemplar": "read1",
             "group": "correct_group",
         },
         {
             "aligner_taxid_lca": "200",
             "seq_id": "read2",
-            "prim_align_dup_exemplar": "read2",
+            "sim_dup_exemplar": "read2",
             "group": "wrong_group",
         },
     ]
@@ -455,12 +456,12 @@ def test_get_clade_counts() -> None:
 
 @pytest.mark.parametrize(
     "missing_column",
-    ["seq_id", "prim_align_dup_exemplar", "aligner_taxid_lca", "group"],
+    ["seq_id", "sim_dup_exemplar", "aligner_taxid_lca", "group"],
 )
 def test_missing_reads_columns(tsv_factory: Any, missing_column: str) -> None:
     """Test that missing required columns in reads file raise KeyError."""
     # Start with all required columns and appropriate test values
-    all_columns = ["seq_id", "prim_align_dup_exemplar", "aligner_taxid_lca", "group"]
+    all_columns = ["seq_id", "sim_dup_exemplar", "aligner_taxid_lca", "group"]
     test_values = ["read1", "read1", "100", "test"]
 
     # Remove the missing column and its corresponding value
@@ -503,7 +504,9 @@ def test_missing_taxonomy_columns(tsv_factory: Any, missing_column: str) -> None
 def test_group_mismatch_error(tsv_factory: Any) -> None:
     """Test that group mismatch raises AssertionError."""
     # Create reads file with group "test"
-    reads_content = "seq_id\tprim_align_dup_exemplar\taligner_taxid_lca\tgroup\nread1\tread1\t100\ttest\n"
+    reads_content = (
+        "seq_id\tsim_dup_exemplar\taligner_taxid_lca\tgroup\nread1\tread1\t100\ttest\n"
+    )
     reads_file = tsv_factory.create_plain("reads.tsv", reads_content)
 
     # Try to process with wrong group
@@ -516,7 +519,7 @@ def test_group_mismatch_error(tsv_factory: Any) -> None:
 def test_header_only_reads_file(tsv_factory: Any) -> None:
     """Test that header-only reads file produces header-only output."""
     # Create header-only reads file
-    reads_content = "seq_id\tprim_align_dup_exemplar\taligner_taxid_lca\tgroup\n"
+    reads_content = "seq_id\tsim_dup_exemplar\taligner_taxid_lca\tgroup\n"
     reads_file = tsv_factory.create_plain("reads.tsv", reads_content)
 
     # Create valid taxonomy file

@@ -1,5 +1,9 @@
 # Post-Processing
 
+> [!IMPORTANT]
+> DOWNSTREAM now includes similarity-based duplicate marking in
+> `_validation_hits.tsv.gz` as of v3.4.0.0.
+
 ## Philosophy
 
 We have not yet figured out how we want to handle situations where there's

@@ -46,21 +46,21 @@ workflow DOWNSTREAM {
                 "prim_align_best_alignment_score_rev",
                 "prim_align_edit_distance_rev",
                 "prim_align_ref_start_rev", "prim_align_query_rc_rev",
-                "prim_align_pair_status", "prim_align_dup_exemplar"
+                "prim_align_pair_status", "prim_align_dup_exemplar",
+                "sim_dup_exemplar", "sim_dup_group_size"
             ].join(",")
             viral_hits_ch = PAD_ONT_COLUMNS(viral_hits_ch, pad_cols, "NA", "padded").output
             dup_output_ch = channel.empty()
             clade_counts_ch = channel.empty()
-            sim_dup_ch = channel.empty()
         }
         else {
-            // Short-read: Mark duplicates based on alignment coordinates
+            // Short-read: mark duplicates by alignment coordinates, then by sequence
+            // similarity among the reads that survive
             mark_dup_ch = MARK_VIRAL_DUPLICATES(concat_ch.hits, params.aln_dup_deviation)
-            viral_hits_ch = mark_dup_ch.dup.map { label, tab, _stats -> [label, tab] }
-            dup_output_ch = mark_dup_ch.dup.map { label, _reads, stats -> [label, stats] }
+            viral_hits_ch = mark_dup_ch.hits
+            dup_output_ch = mark_dup_ch.stats
             // Generate clade counts
             clade_counts_ch = COUNT_READS_PER_CLADE(viral_hits_ch, viral_db).output
-            sim_dup_ch = mark_dup_ch.sim_dup
         }
         // Validate taxonomic assignments
         def validation_params = params.collectEntries { k, v -> [k, v] }
@@ -97,6 +97,6 @@ workflow DOWNSTREAM {
         logging_downstream = logging_downstream_ch
         intermediates_downstream = validate_ch.blast_results
         results_downstream = results_downstream_ch
-        experimental_downstream = sim_dup_ch
+        experimental_downstream = channel.empty()
         sentinel_downstream = sentinel_ch.sentinel
 }

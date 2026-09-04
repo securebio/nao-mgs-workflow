@@ -6,7 +6,7 @@ process COUNT_READS_PER_CLADE {
     tag "id=${sample}"
     input:
     // (sample name, read table tsv)
-    // read table must include columns: seq_id, prim_align_dup_exemplar, aligner_taxid_lca, group
+    // read table must include columns: seq_id, sim_dup_exemplar, aligner_taxid_lca, group
     // may include other columns
     // `group` column of read table must equal `sample` at every row
     tuple val(sample), path(reads_tsv)
