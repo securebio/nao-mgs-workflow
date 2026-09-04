@@ -1,5 +1,9 @@
 # Post-Processing
 
+> [!IMPORTANT]
+> DOWNSTREAM now includes similarity-based duplicate marking in
+> `_validation_hits.tsv.gz` as of v3.4.0.0.
+
 ## Philosophy
 
 We have not yet figured out how we want to handle situations where there's
@@ -14,13 +18,6 @@ out how to fully include them.
 
 A high-performance Rust tool that runs similarity-based duplicate marking as a
 supplement to existing alignment-based duplicate marking.
-
-> [!IMPORTANT]
-> **DOWNSTREAM does this itself from v3.4.0.0 onward.** `_validation_hits.tsv.gz`
-> produced at that version or later already carries `sim_dup_exemplar` and
-> `sim_dup_group_size`; running this tool over one would append a second pair of
-> columns with the same names. Use it only on output from earlier versions, or on
-> other tables with the same structure that have not been marked.
 
 #### Overview
 
@@ -86,9 +83,8 @@ The input must be a gzipped TSV file with at least these columns:
   read's own `seq_id` if not a duplicate).
 
 Additional columns are preserved in the output.  This means the tool is
-agnostic to whether it is run on a `_validation_hits.tsv.gz` from before
-v3.4.0.0 or anything else with the same structure that is not already
-similarity-marked.
+agnostic to whether it is run on a `_validation_hits.tsv.gz`
+or anything else with the same structure.
 
 #### Output Format
 

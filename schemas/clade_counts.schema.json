@@ -52,7 +52,7 @@
     {
       "name": "reads_direct_dedup",
       "title": "Direct Reads (Deduplicated)",
-      "description": "Number of reads directly assigned to this taxon by LCA (not descendants), after deduplication. Only counts reads that are their own exemplar under both duplicate-marking passes (seq_id == sim_dup_exemplar), so both alignment and similarity duplicates are excluded.",
+      "description": "Number of reads directly assigned to this taxon by LCA (not descendants), after deduplication. Only counts reads that are their own exemplar under both duplicate-marking passes (seq_id == sim_dup_exemplar).",
       "type": "integer",
       "constraints": {
         "required": true,
@@ -74,7 +74,7 @@
     {
       "name": "reads_clade_dedup",
       "title": "Clade Reads (Deduplicated)",
-      "description": "Number of reads assigned to this taxon's clade (this taxon plus all its descendants), after deduplication. Only counts reads that are their own exemplar under both duplicate-marking passes (seq_id == sim_dup_exemplar), so both alignment and similarity duplicates are excluded.",
+      "description": "Number of reads assigned to this taxon's clade (this taxon plus all its descendants), after deduplication. Only counts reads that are their own exemplar under both duplicate-marking passes (seq_id == sim_dup_exemplar).",
       "type": "integer",
       "constraints": {
         "required": true,
