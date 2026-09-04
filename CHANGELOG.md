@@ -22,6 +22,8 @@
 
 - Drop `MINIMAP2_INDEX`'s unused `input` output, a symlink back to the reference that no workflow or test consumed. (#965)
 - Add module tests for `GET_TARBALL`, which previously had none: extraction of a flat archive into a directory the process creates, extraction of an archive that already wraps its own directory, and the failure path for an unresolvable URL. (#966)
+- Let `DOWNLOAD_BLAST_DB` retry a failed download before giving up. It was the only process in the repo overriding the universal `errorStrategy` with `terminate`, so any transient download failure killed the whole INDEX run on the first attempt. (#970)
+- Add module tests for `DOWNLOAD_BLAST_DB`, which previously had none, covering both the named-database and tarball-URL branches. (#970)
 
 # v3.3.0.0
 
