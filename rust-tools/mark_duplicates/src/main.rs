@@ -28,8 +28,11 @@ struct ReadEntry {
 // The coordinate key a read is matched on.
 //
 // Which variant a read gets follows from how Bowtie2 placed its mates, which it reports in
-// prim_align_pair_status: CP and DP always have both mates aligned, UP may have one or both,
-// and UU is single-end input.
+// prim_align_pair_status: CP and DP always have both mates aligned, and UP may have one or
+// both. UU, which the producer writes for single-end input, never reaches this tool at all:
+// its unpaired output omits prim_align_ref_start_rev, prim_align_query_qual_rev and
+// prim_align_genome_id_all, so the header check rejects such a table before any key is
+// built.
 //
 // The cases are kept distinct rather than collapsed into a pair of Options, because "we know
 // both edges" and "we only know where one mate starts" are different states: a pair of
@@ -49,10 +52,11 @@ enum DupKey {
     // sorted genome ID so that the same pair of genomes always yields the same key.
     // Reached by DP and UP.
     SplitGenome { first_start: i32, second_start: i32 },
-    // Only one mate aligned: we know where it starts and nothing else. The producer
-    // reports UP for these, or UU for single-end input.
+    // Only one mate aligned: we know where it starts and nothing else. Always UP.
     Incomplete { start: i32 },
-    // Neither mate has a start coordinate
+    // Neither mate has a start coordinate. Not reachable from the pipeline: the RUN
+    // workflow routes pairs with both mates unmapped away from the hits table, so every
+    // read reaching this tool has at least one alignment. Kept so the match is total.
     Unaligned,
 }
 
