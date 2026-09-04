@@ -9,9 +9,9 @@ Reads are counted three ways:
 
 - `total` counts every read under its own LCA taxid.
 - `dedup` counts only reads that survive both duplicate-marking passes, under their own LCA taxid.
-- `exemplar_total` counts every read under the LCA taxid of the exemplar representing it.
+- `total_by_exemplar` counts every read under the LCA taxid of the exemplar representing it.
 
-Therefore, `dedup / exemplar_total` is the per-taxid duplication rate over one coherent set of reads.
+Therefore, `dedup / total_by_exemplar` is the per-taxid duplication rate over one coherent set of reads.
 """
 
 import argparse
@@ -93,12 +93,12 @@ def count_direct_reads_per_taxid(
         group_field: Field name containing the group
 
     Returns:
-        Tuple of (total_counts, deduplicated_counts, exemplar_total_counts)
+        Tuple of (total_counts, deduplicated_counts, total_by_exemplar_counts)
 
     """
     total: Counter[TaxId] = Counter()
     dedup: Counter[TaxId] = Counter()
-    exemplar_total: Counter[TaxId] = Counter()
+    total_by_exemplar: Counter[TaxId] = Counter()
     for read in data:
         read_group = read[group_field]
         assert read_group == group, f"Expected group '{group}', found '{read_group}'"
@@ -107,8 +107,8 @@ def count_direct_reads_per_taxid(
         if not is_duplicate(read):
             dedup[taxid] += 1
             # sim_dup_group_size is number of reads represented by the exemplar.
-            exemplar_total[taxid] += int(read["sim_dup_group_size"])
-    return total, dedup, exemplar_total
+            total_by_exemplar[taxid] += int(read["sim_dup_group_size"])
+    return total, dedup, total_by_exemplar
 
 
 def build_tree(
@@ -225,10 +225,10 @@ def write_output_tsv(
     tree: Tree,
     direct_counts_total: Counter[TaxId],
     direct_counts_dedup: Counter[TaxId],
-    direct_counts_exemplar_total: Counter[TaxId],
+    direct_counts_total_by_exemplar: Counter[TaxId],
     clade_counts_total: Counter[TaxId],
     clade_counts_dedup: Counter[TaxId],
-    clade_counts_exemplar_total: Counter[TaxId],
+    clade_counts_total_by_exemplar: Counter[TaxId],
 ) -> None:
     """Write taxonomic read counts to a TSV file.
 
@@ -238,10 +238,10 @@ def write_output_tsv(
         tree: Taxonomic tree structure
         direct_counts_total: Total directly assigned read counts per taxonomic ID
         direct_counts_dedup: Deduplicated directly assigned read counts per taxonomic ID
-        direct_counts_exemplar_total: Exemplar-attributed directly assigned read counts
+        direct_counts_total_by_exemplar: Exemplar-attributed directly assigned read counts
         clade_counts_total: Total clade counts per taxonomic ID
         clade_counts_dedup: Deduplicated clade counts per taxonomic ID
-        clade_counts_exemplar_total: Exemplar-attributed clade counts per taxonomic ID
+        clade_counts_total_by_exemplar: Exemplar-attributed clade counts per taxonomic ID
 
     """
     with open_by_suffix(output_path, "w") as outfile:
@@ -251,10 +251,10 @@ def write_output_tsv(
             "parent_taxid",
             "reads_direct_total",
             "reads_direct_dedup",
-            "reads_direct_exemplar_total",
+            "reads_direct_total_by_exemplar",
             "reads_clade_total",
             "reads_clade_dedup",
-            "reads_clade_exemplar_total",
+            "reads_clade_total_by_exemplar",
         ]
         writer = csv.DictWriter(outfile, fieldnames=fieldnames, delimiter="\t")
         writer.writeheader()
@@ -270,10 +270,10 @@ def write_output_tsv(
                 "parent_taxid": parent,
                 "reads_direct_total": direct_counts_total[node],
                 "reads_direct_dedup": direct_counts_dedup[node],
-                "reads_direct_exemplar_total": direct_counts_exemplar_total[node],
+                "reads_direct_total_by_exemplar": direct_counts_total_by_exemplar[node],
                 "reads_clade_total": clade_total,
                 "reads_clade_dedup": clade_counts_dedup[node],
-                "reads_clade_exemplar_total": clade_counts_exemplar_total[node],
+                "reads_clade_total_by_exemplar": clade_counts_total_by_exemplar[node],
             }
             # Only print clades that have some reads
             if clade_total > 0:
@@ -307,7 +307,7 @@ def main() -> None:
     args = parse_args()
 
     try:
-        direct_counts_total, direct_counts_dedup, direct_counts_exemplar_total = (
+        direct_counts_total, direct_counts_dedup, direct_counts_total_by_exemplar = (
             count_direct_reads_per_taxid(read_tsv(args.reads), args.group)
         )
     except KeyError as e:
@@ -340,17 +340,19 @@ def main() -> None:
 
     clade_counts_total = get_clade_counts(direct_counts_total, tree)
     clade_counts_dedup = get_clade_counts(direct_counts_dedup, tree)
-    clade_counts_exemplar_total = get_clade_counts(direct_counts_exemplar_total, tree)
+    clade_counts_total_by_exemplar = get_clade_counts(
+        direct_counts_total_by_exemplar, tree
+    )
     write_output_tsv(
         args.output,
         args.group,
         tree,
         direct_counts_total,
         direct_counts_dedup,
-        direct_counts_exemplar_total,
+        direct_counts_total_by_exemplar,
         clade_counts_total,
         clade_counts_dedup,
-        clade_counts_exemplar_total,
+        clade_counts_total_by_exemplar,
     )
 
 

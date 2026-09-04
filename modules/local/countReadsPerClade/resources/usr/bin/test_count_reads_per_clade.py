@@ -313,7 +313,7 @@ def test_count_direct_reads_per_taxid() -> None:
         },  # not duplicate
     ]
 
-    total, dedup, exemplar_total = count_direct_reads_per_taxid(
+    total, dedup, total_by_exemplar = count_direct_reads_per_taxid(
         iter(read_data), "sample1"
     )
 
@@ -327,8 +327,8 @@ def test_count_direct_reads_per_taxid() -> None:
 
     # Exemplar-attributed counts weight each exemplar by its group size. read1 stands
     # for itself and read2, so taxid 100 gets 2 from read1 plus 1 from read4.
-    assert exemplar_total[100] == 3
-    assert exemplar_total[200] == 1
+    assert total_by_exemplar[100] == 3
+    assert total_by_exemplar[200] == 1
 
     # Test with custom taxid field
     read_data = [
@@ -340,27 +340,31 @@ def test_count_direct_reads_per_taxid() -> None:
             "group": "test_group",
         }
     ]
-    total, dedup, exemplar_total = count_direct_reads_per_taxid(
+    total, dedup, total_by_exemplar = count_direct_reads_per_taxid(
         iter(read_data), "test_group", taxid_field="custom_taxid"
     )
     assert total[50] == 1
     assert dedup[50] == 1
-    assert exemplar_total[50] == 1
+    assert total_by_exemplar[50] == 1
 
     # Test with empty data
-    total, dedup, exemplar_total = count_direct_reads_per_taxid(iter([]), "empty_group")
+    total, dedup, total_by_exemplar = count_direct_reads_per_taxid(
+        iter([]), "empty_group"
+    )
     assert len(total) == 0
     assert len(dedup) == 0
-    assert len(exemplar_total) == 0
+    assert len(total_by_exemplar) == 0
 
     # Test return types are Counters
-    total, dedup, exemplar_total = count_direct_reads_per_taxid(iter([]), "empty_group")
+    total, dedup, total_by_exemplar = count_direct_reads_per_taxid(
+        iter([]), "empty_group"
+    )
     assert isinstance(total, Counter)
     assert isinstance(dedup, Counter)
-    assert isinstance(exemplar_total, Counter)
+    assert isinstance(total_by_exemplar, Counter)
 
 
-def test_exemplar_total_redistributes_across_taxids() -> None:
+def test_total_by_exemplar_redistributes_across_taxids() -> None:
     """A duplicate group spanning two taxids moves weight to the exemplar's taxid."""
     read_data = [
         {
@@ -385,18 +389,18 @@ def test_exemplar_total_redistributes_across_taxids() -> None:
             "group": "g",
         },
     ]
-    total, dedup, exemplar_total = count_direct_reads_per_taxid(iter(read_data), "g")
+    total, dedup, total_by_exemplar = count_direct_reads_per_taxid(iter(read_data), "g")
 
     # Per read, under its own taxid
     assert total[100] == 1
     assert total[200] == 2
 
     # Under the exemplar's taxid: all three reads belong to read1's group
-    assert exemplar_total[100] == 3
-    assert exemplar_total[200] == 0
+    assert total_by_exemplar[100] == 3
+    assert total_by_exemplar[200] == 0
 
     # Total reads are conserved, only their distribution changes
-    assert sum(total.values()) == sum(exemplar_total.values()) == 3
+    assert sum(total.values()) == sum(total_by_exemplar.values()) == 3
 
     # And the dedup count is the same under either attribution, since an exemplar is
     # its own exemplar
@@ -589,13 +593,13 @@ def test_header_only_reads_file(tsv_factory: Any) -> None:
     tax_file = tsv_factory.create_plain("taxonomy.tsv", tax_content)
 
     # Process the files
-    direct_total, direct_dedup, direct_exemplar_total = count_direct_reads_per_taxid(
+    direct_total, direct_dedup, direct_total_by_exemplar = count_direct_reads_per_taxid(
         read_tsv(reads_file), "test"
     )
     tree = build_tree(read_tsv(tax_file))
     clade_total = get_clade_counts(direct_total, tree)
     clade_dedup = get_clade_counts(direct_dedup, tree)
-    clade_exemplar_total = get_clade_counts(direct_exemplar_total, tree)
+    clade_total_by_exemplar = get_clade_counts(direct_total_by_exemplar, tree)
 
     # Write output
     output_file = tsv_factory.get_path("output.tsv.gz")
@@ -605,10 +609,10 @@ def test_header_only_reads_file(tsv_factory: Any) -> None:
         tree,
         direct_total,
         direct_dedup,
-        direct_exemplar_total,
+        direct_total_by_exemplar,
         clade_total,
         clade_dedup,
-        clade_exemplar_total,
+        clade_total_by_exemplar,
     )
 
     # Read and verify output is header-only
@@ -621,7 +625,7 @@ def test_header_only_reads_file(tsv_factory: Any) -> None:
     # Verify header
     expected_header = (
         "group\ttaxid\tparent_taxid"
-        "\treads_direct_total\treads_direct_dedup\treads_direct_exemplar_total"
-        "\treads_clade_total\treads_clade_dedup\treads_clade_exemplar_total"
+        "\treads_direct_total\treads_direct_dedup\treads_direct_total_by_exemplar"
+        "\treads_clade_total\treads_clade_dedup\treads_clade_total_by_exemplar"
     )
     assert lines[0] == expected_header

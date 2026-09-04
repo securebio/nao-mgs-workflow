@@ -16,7 +16,7 @@ process COUNT_READS_PER_CLADE {
 
     output:
     // output gzipped tsv with columns:
-    // group, taxid, parent_taxid, and reads_{direct,clade}_{total,dedup,exemplar_total}
+    // group, taxid, parent_taxid, and reads_{direct,clade}_{total,dedup,total_by_exemplar}
     tuple val(sample), path("${sample}_clade_counts.tsv.gz"), emit: output
     tuple val(sample), path("input_${reads_tsv}"), emit: input
 
