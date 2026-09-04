@@ -173,19 +173,26 @@ style F fill:#000,color:#fff,stroke:#000
 style G fill:#000,color:#fff,stroke:#000
 ```
 
+#### Read assignments after duplicate marking
+
+Once duplicates are marked, each read can be thought of as having two assignments:
+
+- The read's own aligner LCA, in `aligner_taxid_lca`, or
+- The aligner LCA of the exemplar representing it.
+
+Generally these two taxids agree. However, alignment-based marking keys on the aligner's primary genome ID and similarity-based marking on the read sequence itself, neither of which is directly tied to `aligner_taxid_lca`, which is derived from all of a read's alignments. A duplicate group can therefore span multiple `aligner_taxid_lca` values, or even multiple `selected_taxid` values, which means a read can be partitioned separately from its exemplar during validation. In the extreme, a `selected_taxid` partition can contain nothing but duplicate reads whose exemplars all fall in other partitions. That partition is then not validated at all: its reads' exemplars are eligible for validation where they landed, but nothing guarantees they are sampled.
+
 ### Validate viral taxonomic assignments (`VALIDATE_VIRAL_ASSIGNMENTS`)
 
 This subworkflow uses BLAST to validate the taxonomic assignments given to putative viral reads by the RUN workflow. Specifically, it:
 
 - Takes in annotated hits TSVs from `MARK_VIRAL_DUPLICATES`
 - Splits the data by the assigned taxid at the species level if the LCA assignment is at or below that level; otherwise, splits by the raw LCA taxid. This result is the taxid group, recorded in the output as `selected_taxid`.
-- Downsamples each taxid group to at most `params.validation_n_sample` reads, drawing only from reads that survived both duplicate-marking passes (`seq_id == sim_dup_exemplar`), since a read that duplicates another adds no evidence about its species[^crosstaxon]. ONT skips duplicate marking, so every read stays eligible there.
+- Downsamples each taxid group to at most `params.validation_n_sample` reads, drawing only from reads that survived both duplicate-marking passes (`seq_id == sim_dup_exemplar`), since a read that duplicates another adds no evidence about its species. ONT skips duplicate marking, so every read stays eligible there. This has a consequence for taxa whose duplicate groups span more than one assignment, described in [Read assignments after duplicate marking](#read-assignments-after-duplicate-marking).
 - Aligns the retained reads against the NCBI core_nt database with BLAST
 - Filters BLAST hits by bitscore and calculates the [lowest common ancestor (LCA)](https://en.wikipedia.org/wiki/Lowest_common_ancestor) of remaining hits
 - Calculates the taxonomic distance between each BLAST LCA assignment and the corresponding raw assignment from the RUN workflow
 - Annotates every hit with its own validation result and a `validation_status` column.
-
-[^crosstaxon]: Similarity clustering runs across the whole sample group *before* validation partitions by `selected_taxid`, so deduplication is global rather than per-taxon. A similarity cluster whose members were assigned to two different taxa keeps a representative only in its exemplar's partition; the other taxon loses those reads from its eligible set, and if the cluster was all it had, that taxon is validated by nothing. The same is true of alignment-based duplicate groups, which can contain mixed taxid assignments since the taxid of the genome selected by the aligner and the LCA taxid can differ.
 
 Each read's `validation_*` columns describe that read's own BLAST alignments, or are NA. The `validation_status` column records which case applies:
 
