@@ -9,6 +9,7 @@
     - See [output.md](docs/output.md) for how to read the numbers. A header-only file means no overrepresented sequences were reported.
     - DOWNSTREAM at this version requires RUN output produced at this version or later, since it treats every entry in `expected-outputs-run` as mandatory.
 - Pass the `mark_duplicates` deviation tolerance explicitly instead of through a mutable global, with no change in behaviour. (#989)
+- Add unit tests for the `mark_duplicates` Rust tool. (#967)
 
 # v3.3.0.0
 
