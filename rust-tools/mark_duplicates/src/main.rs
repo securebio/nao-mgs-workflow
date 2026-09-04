@@ -715,8 +715,6 @@ mod tests {
         "prim_align_ref_start_rev",
         "query_qual",
         "query_qual_rev",
-        // Present in the pipeline's hits table but not read by this version, so the
-        // fixtures here stay valid once #969 starts keying on it.
         "prim_align_fragment_length",
     ];
 
