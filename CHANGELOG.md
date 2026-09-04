@@ -16,6 +16,7 @@
 
 - Inflate the reference FASTA once up front in `BOWTIE2_INDEX` rather than letting `bowtie2-build` re-inflate it on each pass over the reference. Index contents are unchanged. (#964)
 - Build Minimap2 indexes on instance-local scratch and give `minimap2` the task's full thread allocation. Index contents are unchanged. (#965)
+- Stream `GET_TARBALL`'s archive straight into `tar` instead of staging it in the work directory first, which on Fusion-backed profiles removes a full-archive round trip to S3 and lets extraction overlap the download. Extracted contents are unchanged. (#968)
 
 ## Cleanup and best practice
 
