@@ -21,9 +21,62 @@ use clap::Parser;
 struct ReadEntry {
     query_name: String,
     genome_id: String,
-    aln_start: Option<i32>,
-    aln_end: Option<i32>,
+    key: DupKey,
     avg_quality: f64,
+}
+
+// The coordinate key a read is matched on.
+//
+// The two kinds hold different quantities and so are never compared with each other: a
+// fragment's right edge and a second mate's start coordinate can be the same number while
+// meaning different things.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum DupKey {
+    // Both mates aligned to one genome as a pair: the fragment's span on the reference.
+    FragmentSpan { start: i32, end: i32 },
+    // Everything else, keyed on alignment start coordinates as before: mates on two
+    // genomes, one mate unaligned, neither mate aligned, or a pair Bowtie2 aligned
+    // independently and so asserted no template length for.
+    AlignmentStarts { first: Option<i32>, second: Option<i32> },
+}
+
+impl DupKey {
+    // Leading coordinate, used to sort reads and to bound the sliding window.
+    fn sort_start(&self) -> Option<i32> {
+        match *self {
+            DupKey::FragmentSpan { start, .. } => Some(start),
+            DupKey::AlignmentStarts { first, .. } => first,
+        }
+    }
+
+    // Trailing coordinate, used to break ties in the sort.
+    fn sort_end(&self) -> Option<i32> {
+        match *self {
+            DupKey::FragmentSpan { end, .. } => Some(end),
+            DupKey::AlignmentStarts { second, .. } => second,
+        }
+    }
+
+    // Whether two keys place their reads at the same position, within the tolerance.
+    fn matches(&self, other: &DupKey, deviation: u8) -> bool {
+        match (self, other) {
+            (
+                DupKey::FragmentSpan { start: start_a, end: end_a },
+                DupKey::FragmentSpan { start: start_b, end: end_b },
+            ) => {
+                compare_positions(Some(*start_a), Some(*start_b), deviation)
+                    && compare_positions(Some(*end_a), Some(*end_b), deviation)
+            }
+            (
+                DupKey::AlignmentStarts { first: first_a, second: second_a },
+                DupKey::AlignmentStarts { first: first_b, second: second_b },
+            ) => {
+                compare_positions(*first_a, *first_b, deviation)
+                    && compare_positions(*second_a, *second_b, deviation)
+            }
+            _ => false,
+        }
+    }
 }
 
 // Structure to store duplicate group information without storing full read data
@@ -81,11 +134,11 @@ fn order_positions(a: Option<i32>, b: Option<i32>) -> Ordering {
     }
 }
 
-// Sort ReadEntries by coordinates: first by aln_start, then by aln_end
+// Sort ReadEntries by their key coordinates: leading first, then trailing
 // None values are treated as larger than any Some value (sorted to the end)
 fn compare_read_coordinates(a: &ReadEntry, b: &ReadEntry) -> Ordering {
-    match order_positions(a.aln_start, b.aln_start) {
-        Ordering::Equal => order_positions(a.aln_end, b.aln_end),
+    match order_positions(a.key.sort_start(), b.key.sort_start()) {
+        Ordering::Equal => order_positions(a.key.sort_end(), b.key.sort_end()),
         other => other,
     }
 }
@@ -123,9 +176,7 @@ fn open_writer(filename: &str) -> std::io::Result<Box<dyn Write>> {
 // Implement a custom match function for comparing ReadEntries
 // (Not a valid equality relation as not transitive)
 fn match_reads(a: &ReadEntry, b: &ReadEntry, deviation: u8) -> bool {
-    a.genome_id == b.genome_id &&
-    compare_positions(a.aln_start, b.aln_start, deviation) &&
-    compare_positions(a.aln_end, b.aln_end, deviation)
+    a.genome_id == b.genome_id && a.key.matches(&b.key, deviation)
 }
 
 // Compare the positions with a deviation
@@ -210,13 +261,15 @@ fn build_groups_from_sorted_reads(
         for j in (0..i).rev() {
             let prev_read = &reads[j];
             // If both reads have Some coordinates, break if the difference is greater than `deviation`
-            if let (Some(curr_start), Some(prev_start)) = (current_read.aln_start, prev_read.aln_start) {
+            if let (Some(curr_start), Some(prev_start)) =
+                (current_read.key.sort_start(), prev_read.key.sort_start()) {
                 if curr_start - prev_start > deviation as i32 {
                     break;
                 }
             }
             // If current_read coordinate is None, break if previous read has Some coordinate
-            if current_read.aln_start.is_none() && prev_read.aln_start.is_some() {
+            if current_read.key.sort_start().is_none()
+                && prev_read.key.sort_start().is_some() {
                 break;
             }
             // Otherwise, compare fully and add to matching_groups if they match
@@ -292,7 +345,7 @@ fn process_header_line(line: &str) -> Result<(Vec<&str>, HashMap<&str, usize>, u
     // Define required header fields
     let required_headers = vec![
         "seq_id", "prim_align_genome_id_all", "prim_align_ref_start", "prim_align_ref_start_rev",
-        "query_qual", "query_qual_rev"
+        "query_qual", "query_qual_rev", "prim_align_fragment_length"
     ];
     // Build a lookup for required headers
     let mut indices = HashMap::new();
@@ -306,18 +359,19 @@ fn process_header_line(line: &str) -> Result<(Vec<&str>, HashMap<&str, usize>, u
 }
 
 // Efficient function that creates ReadEntry with minimal memory allocation
-fn make_read_entry(fields: &[String], indices: &HashMap<&str, usize>) -> ReadEntry {
+fn make_read_entry(fields: &[String], indices: &HashMap<&str, usize>)
+    -> Result<ReadEntry, String> {
     // Extract required fields using references to avoid cloning unnecessarily
     let query_name = fields[indices["seq_id"]].clone();
     let genome_id = &fields[indices["prim_align_genome_id_all"]];
+    let fragment_length = parse_int_or_na(&fields[indices["prim_align_fragment_length"]]);
     let ref_start_fwd = parse_int_or_na(&fields[indices["prim_align_ref_start"]]);
     let ref_start_rev = parse_int_or_na(&fields[indices["prim_align_ref_start_rev"]]);
     let quality_fwd = &fields[indices["query_qual"]];
     let quality_rev = &fields[indices["query_qual_rev"]];
     // Handle split assignments
     let genome_id_sorted: String;
-    let aln_start: Option<i32>;
-    let aln_end: Option<i32>;
+    let key: DupKey;
     if genome_id.contains('/') {
         // Split genome_id by "/", sort the parts, and join them
         let parts: Vec<&str> = genome_id.split('/').collect();
@@ -329,32 +383,64 @@ fn make_read_entry(fields: &[String], indices: &HashMap<&str, usize>) -> ReadEnt
         // Arrange start coordinates to correspond to sorted genome IDs
         // Note: this doesn't need to handle the case where one value is None
         // because then you could never get multiple genome_ids
-        (aln_start, aln_end) = if genome_id_index == 0 {
+        let (first, second) = if genome_id_index == 0 {
             (ref_start_fwd, ref_start_rev)
         } else {
             (ref_start_rev, ref_start_fwd)
         };
+        key = DupKey::AlignmentStarts { first, second };
     } else {
         // If only one genome ID, use it directly
         genome_id_sorted = genome_id.to_string();
-        // Normalize coordinates: if values are present, use the minimum and maximum
-        // Handle cases where one value is None
-        (aln_start, aln_end) = match (ref_start_fwd, ref_start_rev) {
-            (Some(fwd), Some(rev)) => (Some(fwd.min(rev)), Some(fwd.max(rev))),
-            (Some(fwd), None) => (Some(fwd), None),
-            (None, Some(rev)) => (Some(rev), None),
-            (None, None) => (None, None),
+        key = match (ref_start_fwd, ref_start_rev) {
+            // Aligned as a pair: the fragment runs from the leftmost mate coordinate to
+            // that coordinate plus the fragment length, which is abs(SAM TLEN).
+            (Some(fwd), Some(rev)) => {
+                let start = fwd.min(rev);
+                match fragment_length {
+                    Some(length) if length > 0 => {
+                        let end = start.checked_add(length).ok_or_else(|| {
+                            format!(
+                                "Overflow adding start {start} to length {length} for \
+                                 {query_name}"
+                            )
+                        })?;
+                        DupKey::FragmentSpan { start, end }
+                    }
+                    // Bowtie2 aligned the mates independently and so asserted no template
+                    // length. Key on the two mate starts, as before.
+                    Some(0) => DupKey::AlignmentStarts {
+                        first: Some(start),
+                        second: Some(fwd.max(rev)),
+                    },
+                    // A pair aligned as a pair always has a positive length; the producer
+                    // writes NA only when one mate is unaligned or the mates hit two
+                    // genomes, both of which take other arms.
+                    _ => {
+                        return Err(format!(
+                            "Read {query_name} has both mates aligned to {genome_id} but no \
+                             positive prim_align_fragment_length"
+                        ))
+                    }
+                }
+            }
+            (Some(fwd), None) => {
+                DupKey::AlignmentStarts { first: Some(fwd), second: None }
+            }
+            (None, Some(rev)) => {
+                DupKey::AlignmentStarts { first: Some(rev), second: None }
+            }
+            (None, None) => DupKey::AlignmentStarts { first: None, second: None },
         };
     };
     let avg_quality = average_quality_score(quality_fwd, quality_rev);
     // Return the ReadEntry with minimal memory footprint
-    ReadEntry { 
-        query_name, 
-        genome_id: genome_id_sorted, 
-        aln_start, 
-        aln_end, 
-        avg_quality 
-    }
+    Ok(ReadEntry {
+        query_name,
+        genome_id: genome_id_sorted,
+        key,
+        avg_quality,
+    })
 }
 
 // Process a chunk of lines in parallel to create ReadEntry objects
@@ -374,7 +460,7 @@ fn process_chunk_parallel(
                 return Err(format!("Invalid field count: {} (expected {})", fields.len(), header_count));
             }
             // Create ReadEntry from fields
-            Ok(make_read_entry(&fields, indices))
+            make_read_entry(&fields, indices)
         })
         .collect();
     // Convert String errors to Box<dyn Error>
@@ -629,10 +715,14 @@ mod tests {
         "prim_align_ref_start_rev",
         "query_qual",
         "query_qual_rev",
-        // Present in the pipeline's hits table but not read by this version, so the
-        // fixtures here stay valid once #969 starts keying on it.
         "prim_align_fragment_length",
     ];
+
+    // Parse one fixture row, asserting that it is accepted
+    fn parsed(values: &[&str]) -> ReadEntry {
+        let (fields, indices) = row(values);
+        make_read_entry(&fields, &indices).expect("row should parse")
+    }
 
     // Build the (fields, indices) pair that make_read_entry expects from a single row
     fn row(values: &[&str]) -> (Vec<String>, HashMap<&'static str, usize>) {
@@ -654,8 +744,7 @@ mod tests {
         ReadEntry {
             query_name: name.to_string(),
             genome_id: genome.to_string(),
-            aln_start: start,
-            aln_end: end,
+            key: DupKey::AlignmentStarts { first: start, second: end },
             avg_quality: quality,
         }
     }
@@ -751,14 +840,12 @@ mod tests {
     // --- Read entry construction ---
 
     #[test]
-    fn make_read_entry_keys_a_pair_on_its_two_mate_starts() {
-        // A pair uses the two mate start coordinates, not the fragment's right edge, which
-        // for these 100 bp mates is 900.
-        // TODO: fix this bug, reported in #948.
+    fn make_read_entry_keys_a_pair_on_its_fragment_span() {
+        // A pair now runs to the fragment's right edge. #967 pinned the old key, which
+        // ended at the reverse mate's start of 800.
         for (fwd, rev) in [("500", "800"), ("800", "500")] {
-            let (fields, indices) = row(&["r1", "genome_a", fwd, rev, "IIII", "IIII", "400"]);
-            let e = make_read_entry(&fields, &indices);
-            assert_eq!((e.aln_start, e.aln_end), (Some(500), Some(800)));
+            let e = parsed(&["r1", "genome_a", fwd, rev, "IIII", "IIII", "400"]);
+            assert_eq!(e.key, DupKey::FragmentSpan { start: 500, end: 900 });
         }
     }
 
@@ -766,46 +853,71 @@ mod tests {
     fn make_read_entry_keys_an_incomplete_pair_on_one_coordinate() {
         // With one mate unaligned, reads are compared using only the start.
         for (fwd, rev) in [("500", "NA"), ("NA", "500")] {
-            let (fields, indices) = row(&["r1", "genome_a", fwd, rev, "IIII", "IIII", "NA"]);
-            let e = make_read_entry(&fields, &indices);
-            assert_eq!((e.aln_start, e.aln_end), (Some(500), None));
+            let e = parsed(&["r1", "genome_a", fwd, rev, "IIII", "IIII", "NA"]);
+            assert_eq!(e.key, DupKey::AlignmentStarts { first: Some(500), second: None });
         }
     }
 
     #[test]
     fn make_read_entry_keys_an_unaligned_pair_on_nothing() {
-        let (fields, indices) = row(&["r1", "genome_a", "NA", "NA", "IIII", "IIII", "NA"]);
-        let e = make_read_entry(&fields, &indices);
-        assert_eq!((e.aln_start, e.aln_end), (None, None));
+        let e = parsed(&["r1", "genome_a", "NA", "NA", "IIII", "IIII", "NA"]);
+        assert_eq!(e.key, DupKey::AlignmentStarts { first: None, second: None });
     }
 
     #[test]
-    fn make_read_entry_merges_short_fragments_that_share_a_start() {
-        // A fragment shorter than the read is covered end to end by both mates, so both
-        // report the same leftmost coordinate and the key collapses to (start, start).
-        // TODO: fix this bug, reported in #948.
-        let (fields, indices) = row(&["r1", "genome_a", "400", "400", "IIII", "IIII", "40"]);
-        let short = make_read_entry(&fields, &indices);
-        let (fields, indices) = row(&["r2", "genome_a", "400", "400", "IIII", "IIII", "80"]);
-        let long = make_read_entry(&fields, &indices);
-        assert_eq!((short.aln_start, short.aln_end), (Some(400), Some(400)));
-        assert_eq!((long.aln_start, long.aln_end), (Some(400), Some(400)));
-        assert!(match_reads(&short, &long, 2));
+    fn make_read_entry_separates_short_fragments_that_share_a_start() {
+        // The fix: both mates cover a fragment shorter than the read and so report the same
+        // start, and only the fragment length tells the two molecules apart. #967 pinned
+        // these as one group.
+        let short = parsed(&["r1", "genome_a", "400", "400", "IIII", "IIII", "40"]);
+        let long = parsed(&["r2", "genome_a", "400", "400", "IIII", "IIII", "80"]);
+        assert_eq!(short.key, DupKey::FragmentSpan { start: 400, end: 440 });
+        assert_eq!(long.key, DupKey::FragmentSpan { start: 400, end: 480 });
+        assert!(!match_reads(&short, &long, 2));
     }
 
     #[test]
-    fn make_read_entry_accepts_a_complete_pair_with_no_fragment_length() {
-        // Both mates aligned to one genome but no fragment length, which is not valid.
-        // TODO: guard against this.
+    fn make_read_entry_rejects_a_pair_with_no_fragment_length() {
+        // #967 pinned this as accepted. A pair aligned as a pair always has a positive
+        // length, so NA here means the input is not what this tool requires.
         let (fields, indices) = row(&["r1", "genome_a", "500", "800", "IIII", "IIII", "NA"]);
-        let e = make_read_entry(&fields, &indices);
-        assert_eq!((e.aln_start, e.aln_end), (Some(500), Some(800)));
+        let err = make_read_entry(&fields, &indices).expect_err("NA should be rejected");
+        assert!(err.contains("r1"), "unexpected error: {err}");
+        assert!(
+            err.contains("prim_align_fragment_length"),
+            "unexpected error: {err}"
+        );
+    }
+
+    #[test]
+    fn make_read_entry_keys_a_zero_length_pair_on_its_mate_starts() {
+        // Bowtie2 asserts no template length when it aligned the mates independently, so
+        // there is no span to key on and these keep the old key.
+        let e = parsed(&["r1", "genome_a", "500", "800", "IIII", "IIII", "0"]);
+        assert_eq!(
+            e.key,
+            DupKey::AlignmentStarts { first: Some(500), second: Some(800) }
+        );
+    }
+
+    #[test]
+    fn match_reads_never_compares_a_span_against_mate_starts() {
+        // The fix makes the two key kinds numerically confusable: this pair spans 500..800,
+        // and a read Bowtie2 could not pair has mate starts 500 and 800. The old key could
+        // not mix them up because a pair's second element was also a mate start.
+        let span = parsed(&["r1", "genome_a", "500", "700", "IIII", "IIII", "300"]);
+        let starts = parsed(&["r2", "genome_a", "500", "800", "IIII", "IIII", "0"]);
+        assert_eq!(span.key, DupKey::FragmentSpan { start: 500, end: 800 });
+        assert_eq!(
+            starts.key,
+            DupKey::AlignmentStarts { first: Some(500), second: Some(800) }
+        );
+        assert!(!match_reads(&span, &starts, 2));
     }
 
     #[test]
     fn make_read_entry_carries_name_genome_and_quality() {
-        let (fields, indices) = row(&["r1", "genome_a", "500", "800", "III", "!!!", "300"]);
-        let e = make_read_entry(&fields, &indices);
+        let e = parsed(&["r1", "genome_a", "500", "800", "III", "!!!", "300"]);
         assert_eq!(e.query_name, "r1");
         assert_eq!(e.genome_id, "genome_a");
         assert_eq!(e.avg_quality, 20.0);
@@ -816,19 +928,15 @@ mod tests {
         // Mates on two genomes: the ID is sorted, and the coordinates are permuted to match,
         // so that the same pair of genomes always produces the same key regardless of which
         // mate landed on which
-        let (fields, indices) = row(&["r1", "genome_b/genome_a", "500", "800", "IIII", "IIII", "NA"]);
-        let e = make_read_entry(&fields, &indices);
+        let e = parsed(&["r1", "genome_b/genome_a", "500", "800", "IIII", "IIII", "NA"]);
         assert_eq!(e.genome_id, "genome_a/genome_b");
         // genome_a is the reverse mate's genome here, so its coordinate leads
-        assert_eq!(e.aln_start, Some(800));
-        assert_eq!(e.aln_end, Some(500));
+        assert_eq!(e.key, DupKey::AlignmentStarts { first: Some(800), second: Some(500) });
 
         // The same pair the other way round yields an identical key
-        let (fields, indices) = row(&["r2", "genome_a/genome_b", "800", "500", "IIII", "IIII", "NA"]);
-        let e = make_read_entry(&fields, &indices);
+        let e = parsed(&["r2", "genome_a/genome_b", "800", "500", "IIII", "IIII", "NA"]);
         assert_eq!(e.genome_id, "genome_a/genome_b");
-        assert_eq!(e.aln_start, Some(800));
-        assert_eq!(e.aln_end, Some(500));
+        assert_eq!(e.key, DupKey::AlignmentStarts { first: Some(800), second: Some(500) });
     }
 
     // --- Header handling ---
@@ -839,10 +947,23 @@ mod tests {
         let (headers, indices, count) = process_header_line(&header).unwrap();
         assert_eq!(count, HEADERS.len());
         assert_eq!(headers, HEADERS.to_vec());
-        // prim_align_fragment_length is in the fixture but not required by this version.
-        for required in HEADERS.iter().filter(|&&h| h != "prim_align_fragment_length") {
+        for required in HEADERS {
             assert!(indices.contains_key(required));
         }
+    }
+
+    #[test]
+    fn process_header_line_rejects_a_missing_fragment_length() {
+        // Newly required by this PR, so a table produced without it is not usable.
+        let header = HEADERS
+            .iter()
+            .filter(|&&h| h != "prim_align_fragment_length")
+            .copied()
+            .collect::<Vec<_>>()
+            .join("\t");
+        let err = process_header_line(&header).unwrap_err().to_string();
+        assert!(err.contains("Missing required header"), "unexpected error: {err}");
+        assert!(err.contains("prim_align_fragment_length"), "unexpected error: {err}");
     }
 
     #[test]

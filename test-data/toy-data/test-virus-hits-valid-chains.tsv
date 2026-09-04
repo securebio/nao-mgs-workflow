@@ -1,21 +1,21 @@
-seq_id	prim_align_genome_id_all	prim_align_ref_start	prim_align_ref_start_rev	query_qual	query_qual_rev	exemplar_exp_0	exemplar_exp_1	exemplar_exp_2	pairwise_exp_0	pairwise_exp_1	pairwise_exp_2	dup_comment
-grp_1_0	test_gid_1	50	150	JJJJJJ	JJJJJJ	grp_1_0	grp_1_0	grp_1_0	0	4	6	Group 1 exemplar
-grp_1_1	test_gid_1	51	151	JJJJJJ	JJJJJJ	grp_1_1	grp_1_0	grp_1_0	1	3	6	1-off from grp_1_0
-grp_1_2	test_gid_1	151	51	JJJJJJ	JJJJJJ	grp_1_1	grp_1_0	grp_1_0	0	2	5	RC 1-off from grp_1_0
-grp_1_3	test_gid_1	52	152	JJJJJJ	JJJJJJ	grp_1_3	grp_1_0	grp_1_0	1	2	3	1-off from grp_1_1
-grp_1_4	test_gid_1	152	52	JJJJJJ	JJJJJJ	grp_1_3	grp_1_0	grp_1_0	0	1	2	1-off from grp_1_2
-grp_1_5	test_gid_1	53	153	JJJJJJ	JJJJJJ	grp_1_5	grp_1_0	grp_1_0	0	0	2	1-off from grp_1_3
-grp_1_6	test_gid_1	49	149	JJJJJJ	JJJJJJ	grp_1_6	grp_1_0	grp_1_0	0	0	1	1-off from grp_1_0
-grp_1_7	test_gid_1	49	151	JJJJJJ	JJJJJJ	grp_1_7	grp_1_0	grp_1_0	0	0	0	1-off from grp_1_0 (mixed direction)
-grp_1_8	test_gid_1	51	154	JJJJJJ	JJJJJJ	grp_1_8	grp_1_8	grp_1_0	0	0	0	1-off mismatch test (matches whole group, but no single entry)
-grp_1_9	test_gid_1	55	155	JJJJJJ	JJJJJJ	grp_1_9	grp_1_9	grp_1_0	0	0	0	2-off negative control
-grp_2_0	test_gid_2	50	150	JJJJJJ	JJJJJJ	grp_2_0	grp_2_0	grp_2_0	0	2	4	Group 2 exemplar
-grp_2_1	test_gid_2	51	151	JJJJJJ	JJJJJJ	grp_2_1	grp_2_0	grp_2_0	1	1	3	1-off from grp_2_0
-grp_2_2	test_gid_2	151	51	JJJJJJ	JJJJJJ	grp_2_1	grp_2_0	grp_2_0	0	0	2	RC 1-off from grp_2_0
-grp_2_3	test_gid_2	53	153	JJJJJJ	JJJJJJ	grp_2_3	grp_2_3	grp_2_0	1	1	2	2-off from grp_2_1
-grp_2_4	test_gid_2	153	53	JJJJJJ	JJJJJJ	grp_2_3	grp_2_3	grp_2_0	0	0	1	2-off from grp_2_2
-grp_2_5	test_gid_2	55	155	JJJJJJ	JJJJJJ	grp_2_5	grp_2_5	grp_2_0	0	0	0	2-off from grp_2_3
-grp_2_6	test_gid_2	48	148	JJJJJJ	JJJJJJ	grp_2_6	grp_2_6	grp_2_0	0	0	0	2-off from grp_2_0
-grp_2_7	test_gid_2	48	152	JJJJJJ	JJJJJJ	grp_2_7	grp_2_7	grp_2_0	0	0	0	2-off from grp_2_0 (mixed direction)
-grp_2_8	test_gid_2	46	157	JJJJJJ	JJJJJJ	grp_2_8	grp_2_8	grp_2_8	0	0	0	2-off mismatch test (matches whole group, but no single entry)
-grp_2_9	test_gid_2	58	158	JJJJJJ	JJJJJJ	grp_2_9	grp_2_9	grp_2_9	0	0	0	3-off negative control
+seq_id	prim_align_genome_id_all	prim_align_ref_start	prim_align_ref_start_rev	prim_align_fragment_length	query_qual	query_qual_rev	exemplar_exp_0	exemplar_exp_1	exemplar_exp_2	pairwise_exp_0	pairwise_exp_1	pairwise_exp_2	dup_comment
+grp_1_0	test_gid_1	50	150	106	JJJJJJ	JJJJJJ	grp_1_0	grp_1_0	grp_1_0	0	4	6	Group 1 exemplar
+grp_1_1	test_gid_1	51	151	106	JJJJJJ	JJJJJJ	grp_1_1	grp_1_0	grp_1_0	1	3	6	1-off from grp_1_0
+grp_1_2	test_gid_1	151	51	106	JJJJJJ	JJJJJJ	grp_1_1	grp_1_0	grp_1_0	0	2	5	RC 1-off from grp_1_0
+grp_1_3	test_gid_1	52	152	106	JJJJJJ	JJJJJJ	grp_1_3	grp_1_0	grp_1_0	1	2	3	1-off from grp_1_1
+grp_1_4	test_gid_1	152	52	106	JJJJJJ	JJJJJJ	grp_1_3	grp_1_0	grp_1_0	0	1	2	1-off from grp_1_2
+grp_1_5	test_gid_1	53	153	106	JJJJJJ	JJJJJJ	grp_1_5	grp_1_0	grp_1_0	0	0	2	1-off from grp_1_3
+grp_1_6	test_gid_1	49	149	106	JJJJJJ	JJJJJJ	grp_1_6	grp_1_0	grp_1_0	0	0	1	1-off from grp_1_0
+grp_1_7	test_gid_1	49	151	108	JJJJJJ	JJJJJJ	grp_1_7	grp_1_0	grp_1_0	0	0	0	1-off from grp_1_0 (mixed direction)
+grp_1_8	test_gid_1	51	154	109	JJJJJJ	JJJJJJ	grp_1_8	grp_1_8	grp_1_0	0	0	0	1-off mismatch test (matches whole group, but no single entry)
+grp_1_9	test_gid_1	55	155	106	JJJJJJ	JJJJJJ	grp_1_9	grp_1_9	grp_1_0	0	0	0	2-off negative control
+grp_2_0	test_gid_2	50	150	106	JJJJJJ	JJJJJJ	grp_2_0	grp_2_0	grp_2_0	0	2	4	Group 2 exemplar
+grp_2_1	test_gid_2	51	151	106	JJJJJJ	JJJJJJ	grp_2_1	grp_2_0	grp_2_0	1	1	3	1-off from grp_2_0
+grp_2_2	test_gid_2	151	51	106	JJJJJJ	JJJJJJ	grp_2_1	grp_2_0	grp_2_0	0	0	2	RC 1-off from grp_2_0
+grp_2_3	test_gid_2	53	153	106	JJJJJJ	JJJJJJ	grp_2_3	grp_2_3	grp_2_0	1	1	2	2-off from grp_2_1
+grp_2_4	test_gid_2	153	53	106	JJJJJJ	JJJJJJ	grp_2_3	grp_2_3	grp_2_0	0	0	1	2-off from grp_2_2
+grp_2_5	test_gid_2	55	155	106	JJJJJJ	JJJJJJ	grp_2_5	grp_2_5	grp_2_0	0	0	0	2-off from grp_2_3
+grp_2_6	test_gid_2	48	148	106	JJJJJJ	JJJJJJ	grp_2_6	grp_2_6	grp_2_0	0	0	0	2-off from grp_2_0
+grp_2_7	test_gid_2	48	152	110	JJJJJJ	JJJJJJ	grp_2_7	grp_2_7	grp_2_0	0	0	0	2-off from grp_2_0 (mixed direction)
+grp_2_8	test_gid_2	46	157	117	JJJJJJ	JJJJJJ	grp_2_8	grp_2_8	grp_2_8	0	0	0	2-off mismatch test (matches whole group, but no single entry)
+grp_2_9	test_gid_2	58	158	106	JJJJJJ	JJJJJJ	grp_2_9	grp_2_9	grp_2_9	0	0	0	3-off negative control
