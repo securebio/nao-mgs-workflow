@@ -135,8 +135,9 @@ nextflow_workflow {
                 def hdr = raw[0].split("\t") as List
                 def vIdx = hdr.findIndexValues{ it.startsWith("validation_") && it != "validation_status" }
                 def sIdx = hdr.indexOf("validation_status")
-                def eIdx = hdr.indexOf("prim_align_dup_exemplar")
+                def eIdx = hdr.indexOf("sim_dup_exemplar")
                 def idIdx = hdr.indexOf("seq_id")
+                def tIdx = hdr.indexOf("selected_taxid")
                 def n_validated = 0
                 raw.drop(1).each { line ->
                     def f = line.split("\t", -1) as List
@@ -151,6 +152,12 @@ nextflow_workflow {
                     }
                 }
                 assert n_validated > 0
+                // In the fixture both alignment-unique reads of taxon 10665 are similarity
+                // duplicates of an exemplar in taxon 12475, so they are not sampled.
+                def rows_10665 = raw.drop(1).collect{ it.split("\t", -1) as List }
+                    .findAll{ it[tIdx] == "10665" }
+                assert rows_10665.size() > 0
+                assert rows_10665.every{ it[sIdx] == "not_sampled" }
             }
         }
     }

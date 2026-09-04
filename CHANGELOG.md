@@ -1,5 +1,6 @@
 # v3.4.0.0-dev
 
+- Restrict Illumina BLAST validation downsampling to reads that are unique under both duplicate-marking passes. (#973)
 - Promote similarity-based duplicate marking out of experimental, publishing columns into `results_downstream/{GROUP}_validation_hits.tsv.gz`. (#972)
     - Stop publishing `experimental_downstream/{GROUP}_duplicate_reads_similarity.tsv.gz`.
     - `{GROUP}_clade_counts.tsv.gz` now deduplicates on `sim_dup_exemplar` rather than `prim_align_dup_exemplar`.
