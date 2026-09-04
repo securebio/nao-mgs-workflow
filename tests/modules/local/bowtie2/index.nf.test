@@ -1,0 +1,74 @@
+nextflow_process {
+    name "Test process BOWTIE2_INDEX"
+    script "modules/local/bowtie2/main.nf"
+    process "BOWTIE2" // we run BOWTIE2_INDEX in setup, then BOWTIE2 to verify it worked
+    config "tests/configs/index.config"
+    tag "module"
+    tag "bowtie2_index"
+
+    test("Should build a usable index from a gzipped reference") {
+        tag "expect_success"
+        setup {
+            // BOWTIE2_INDEX takes a gzipped FASTA, so compress the toy reference first
+            run("GZIP_FILE_BARE") {
+                script "modules/local/gzipFile/main.nf"
+                process {
+                    '''
+                    input[0] = "${projectDir}/test-data/toy-data/norovirus_GI.fasta"
+                    '''
+                }
+            }
+            run("BOWTIE2_INDEX") {
+                script "modules/local/bowtie2/main.nf"
+                process {
+                    '''
+                    input[0] = GZIP_FILE_BARE.out
+                    input[1] = "bt2-norovirus-index"
+                    '''
+                }
+            }
+            run("GZIP_FILE") {
+                script "modules/local/gzipFile/main.nf"
+                process {
+                    '''
+                    input[0] = tuple("norovirus_GI", "${projectDir}/test-data/toy-data/norovirus_GI.fasta")
+                    '''
+                }
+            }
+        }
+        when {
+            params {
+            }
+            process {
+                '''
+                def bowtie2_params = [
+                    par_string: "-f --local --very-sensitive-local",
+                    suffix: "index_test",
+                    remove_sq: false,
+                    debug: false,
+                    interleaved: false,
+                    db_download_timeout: params.db_download_timeout
+                ]
+                input[0] = GZIP_FILE.out
+                input[1] = BOWTIE2_INDEX.out
+                input[2] = bowtie2_params
+                '''
+            }
+        }
+        then {
+            assert process.success
+            // The reference aligned against an index built from its own gzipped copy
+            // should map, and map to itself. Neither holds unless the index was built
+            // from correctly inflated input.
+            def mapped = path(process.out.reads_mapped[0][1]).fastq
+            def unmapped = path(process.out.reads_unmapped[0][1]).fastq
+            assert mapped.sequences.size() == 1
+            assert unmapped.sequences.size() == 0
+            // The alignment target is the reference record the index was built from.
+            // Compared on name rather than sequence because --local soft-clips.
+            def rnames = { f -> ["bash", "-c", "zcat " + f + " | grep -v '^@' | cut -f3"]
+                                    .execute().text.trim() }
+            assert rnames(process.out.sam[0][1]) == "NC_044853.1"
+        }
+    }
+}
