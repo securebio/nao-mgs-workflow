@@ -612,3 +612,587 @@ fn main() -> Result<(), Box<dyn Error>> {
     // Run the main processing function
     return process_tsv(&args.input, &args.output_db, &args.output_meta, args.chunk_size, args.deviation);
 }
+
+// ------------------------------------------------------------------------------------------------
+// TESTS
+// ------------------------------------------------------------------------------------------------
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // The hits-table columns the fixtures carry. This version reads six of them; the
+    // rest are present so that rows stay identical as later versions read more.
+    const HEADERS: [&str; 13] = [
+        "seq_id",
+        "prim_align_genome_id_all",
+        "prim_align_ref_start",
+        "prim_align_ref_start_rev",
+        "prim_align_ref_start_unclipped",
+        "prim_align_ref_start_unclipped_rev",
+        "prim_align_ref_end_unclipped",
+        "prim_align_ref_end_unclipped_rev",
+        "prim_align_query_rc",
+        "prim_align_query_rc_rev",
+        "query_qual",
+        "query_qual_rev",
+        "prim_align_fragment_length",
+    ];
+
+    // One mate's fixture columns: unclipped start, unclipped end, and strand
+    type Mate = (&'static str, &'static str, &'static str);
+    // A mate that did not align carries no coordinates and no strand
+    const UNALIGNED: Mate = ("NA", "NA", "NA");
+
+    // A fixture row. Only the genome and the two mates decide the key, so the rest has
+    // a default.
+    struct Row {
+        name: &'static str,
+        genome: &'static str,
+        mate_1: Mate,
+        mate_2: Mate,
+        qual: (&'static str, &'static str),
+        // Each mate's clipped start, which is what this version keys on. None fills
+        // them from the unclipped starts, i.e. models an alignment with nothing clipped.
+        clipped_starts: Option<(&'static str, &'static str)>,
+    }
+
+    impl Default for Row {
+        fn default() -> Self {
+            Row {
+                name: "r1",
+                genome: "genome_a",
+                mate_1: UNALIGNED,
+                mate_2: UNALIGNED,
+                qual: ("IIII", "IIII"),
+                clipped_starts: None,
+            }
+        }
+    }
+
+    // Parse one fixture row
+    fn parsed(row: Row) -> ReadEntry {
+        let clipped = row.clipped_starts.unwrap_or((row.mate_1.0, row.mate_2.0));
+        let values = [
+            row.name,
+            row.genome,
+            clipped.0,
+            clipped.1,
+            row.mate_1.0,
+            row.mate_2.0,
+            row.mate_1.1,
+            row.mate_2.1,
+            row.mate_1.2,
+            row.mate_2.2,
+            row.qual.0,
+            row.qual.1,
+            "NA",
+        ];
+        assert_eq!(values.len(), HEADERS.len());
+        let fields: Vec<String> = values.iter().map(|v| v.to_string()).collect();
+        let indices: HashMap<&'static str, usize> =
+            HEADERS.iter().enumerate().map(|(i, &h)| (h, i)).collect();
+        make_read_entry(&fields, &indices)
+    }
+
+    // The coordinates an ordinary pair is keyed on
+    fn pair(start: i32, end: i32) -> (Option<i32>, Option<i32>) {
+        (Some(start), Some(end))
+    }
+
+    // Construct a ReadEntry directly, bypassing parsing. Grouping and matching tests use
+    // this so they exercise the algorithm rather than the column layout.
+    fn entry(
+        name: &str,
+        genome: &str,
+        coords: (Option<i32>, Option<i32>),
+        quality: f64,
+    ) -> ReadEntry {
+        ReadEntry {
+            query_name: name.to_string(),
+            genome_id: genome.to_string(),
+            aln_start: coords.0,
+            aln_end: coords.1,
+            avg_quality: quality,
+        }
+    }
+
+    // Groups come back in HashMap order, and reads within a group in sort order, so normalise
+    // both before comparing
+    fn group_names(groups: Vec<Vec<ReadEntry>>) -> Vec<Vec<String>> {
+        let mut out: Vec<Vec<String>> = groups
+            .into_iter()
+            .map(|g| {
+                let mut names: Vec<String> = g.into_iter().map(|r| r.query_name).collect();
+                names.sort();
+                names
+            })
+            .collect();
+        out.sort();
+        out
+    }
+
+    // --- Field parsing ---
+
+    #[test]
+    fn parse_int_or_na_reads_integers_and_na() {
+        assert_eq!(parse_int_or_na("0"), Some(0));
+        assert_eq!(parse_int_or_na("1234"), Some(1234));
+        assert_eq!(parse_int_or_na("-5"), Some(-5));
+        assert_eq!(parse_int_or_na("NA"), None);
+    }
+
+    #[test]
+    fn ascii_to_quality_score_averages_phred_offsets() {
+        // '!' is Phred 0, '+' is Phred 10, 'I' is Phred 40
+        assert_eq!(ascii_to_quality_score("!"), 0.0);
+        assert_eq!(ascii_to_quality_score("+"), 10.0);
+        assert_eq!(ascii_to_quality_score("III"), 40.0);
+        // An absent mate scores zero rather than erroring
+        assert_eq!(ascii_to_quality_score("NA"), 0.0);
+    }
+
+    #[test]
+    fn average_quality_score_means_the_two_mates() {
+        assert_eq!(average_quality_score("III", "!!!"), 20.0);
+        assert_eq!(average_quality_score("III", "NA"), 20.0);
+    }
+
+    // --- Position comparison ---
+
+    #[test]
+    fn the_deviation_tolerance_is_inclusive_and_symmetric() {
+        assert!(compare_positions(Some(100), Some(100), 0));
+        assert!(!compare_positions(Some(100), Some(101), 0));
+        // The boundary itself matches; one past it does not
+        assert!(compare_positions(Some(100), Some(101), 1));
+        assert!(!compare_positions(Some(100), Some(102), 1));
+        assert!(compare_positions(Some(100), Some(102), 2));
+        assert!(!compare_positions(Some(100), Some(103), 2));
+        // Tolerance is symmetric
+        assert!(compare_positions(Some(102), Some(100), 2));
+    }
+
+    #[test]
+    fn compare_positions_never_matches_a_known_against_an_unknown() {
+        assert!(!compare_positions(Some(100), None, 2));
+        assert!(!compare_positions(None, Some(100), 2));
+    }
+
+    #[test]
+    fn order_positions_sorts_unknowns_last() {
+        assert_eq!(order_positions(Some(1), Some(2)), Ordering::Less);
+        assert_eq!(order_positions(Some(2), Some(1)), Ordering::Greater);
+        assert_eq!(order_positions(Some(1), Some(1)), Ordering::Equal);
+        assert_eq!(order_positions(Some(1), None), Ordering::Less);
+        assert_eq!(order_positions(None, Some(1)), Ordering::Greater);
+        assert_eq!(order_positions(None, None), Ordering::Equal);
+    }
+
+    #[test]
+    fn compare_read_coordinates_orders_by_start_then_end() {
+        let a = entry("a", "g", pair(10, 200), 30.0);
+        let b = entry("b", "g", pair(20, 100), 30.0);
+        let c = entry("c", "g", pair(10, 300), 30.0);
+        // Start dominates, even when the end runs the other way
+        assert_eq!(compare_read_coordinates(&a, &b), Ordering::Less);
+        // Equal starts fall through to the end coordinate
+        assert_eq!(compare_read_coordinates(&a, &c), Ordering::Less);
+        assert_eq!(compare_read_coordinates(&a, &a), Ordering::Equal);
+    }
+
+    // --- Read entry construction ---
+
+    #[test]
+    fn make_read_entry_keys_a_complete_pair() {
+        // A 150 bp FR pair spanning 500-949. The key runs between the two mates' start
+        // coordinates, so it stops at 800 and says nothing about where the pair ends.
+        let e = parsed(Row {
+            mate_1: ("500", "649", "False"),
+            mate_2: ("800", "949", "True"),
+            ..Row::default()
+        });
+        assert_eq!((e.aln_start, e.aln_end), pair(500, 800));
+    }
+
+    #[test]
+    fn make_read_entry_keys_a_complete_pair_the_same_way_round_either_slot() {
+        // Which mate is mate 1 is arbitrary, so the same fragment gives the same key
+        let mate_1_leftmost = parsed(Row {
+            mate_1: ("500", "649", "False"),
+            mate_2: ("800", "949", "True"),
+            ..Row::default()
+        });
+        let mate_2_leftmost = parsed(Row {
+            mate_1: ("800", "949", "True"),
+            mate_2: ("500", "649", "False"),
+            ..Row::default()
+        });
+        assert_eq!(
+            (mate_1_leftmost.aln_start, mate_1_leftmost.aln_end),
+            (mate_2_leftmost.aln_start, mate_2_leftmost.aln_end)
+        );
+    }
+
+    #[test]
+    fn clipping_decides_whether_two_copies_of_a_fragment_match() {
+        // Two copies of one fragment, the second with seven bases clipped off mate 1's
+        // leading end. The key is built from the clipped starts, so it moves with the
+        // clip and the copies come apart.
+        let pristine = parsed(Row {
+            mate_1: ("500", "649", "False"),
+            mate_2: ("800", "949", "True"),
+            clipped_starts: Some(("500", "800")),
+            ..Row::default()
+        });
+        let clipped = parsed(Row {
+            name: "r2",
+            mate_1: ("500", "649", "False"),
+            mate_2: ("800", "949", "True"),
+            clipped_starts: Some(("507", "800")),
+            ..Row::default()
+        });
+        assert_eq!((clipped.aln_start, clipped.aln_end), pair(507, 800));
+        assert!(!match_reads(&pristine, &clipped, 2));
+    }
+
+    #[test]
+    fn make_read_entry_on_a_fragment_shorter_than_the_read() {
+        // A fragment shorter than the read is covered end to end by both mates, so both
+        // report the same start and the key collapses to (start, start). Two such
+        // fragments of different lengths are then indistinguishable.
+        let short = parsed(Row {
+            mate_1: ("400", "439", "False"),
+            mate_2: ("400", "439", "True"),
+            ..Row::default()
+        });
+        let shorter = parsed(Row {
+            name: "r2",
+            mate_1: ("400", "429", "False"),
+            mate_2: ("400", "429", "True"),
+            ..Row::default()
+        });
+        assert_eq!((short.aln_start, short.aln_end), pair(400, 400));
+        assert_eq!((shorter.aln_start, shorter.aln_end), pair(400, 400));
+        assert!(match_reads(&short, &shorter, 0));
+    }
+
+    #[test]
+    fn pair_orientation_decides_whether_two_pairs_match() {
+        // Two pairs over one span, one FR and one with both mates on the forward strand.
+        // Different molecules, but the key carries no strand.
+        let fr = parsed(Row {
+            mate_1: ("500", "649", "False"),
+            mate_2: ("800", "949", "True"),
+            ..Row::default()
+        });
+        let ff = parsed(Row {
+            name: "r2",
+            mate_1: ("500", "649", "False"),
+            mate_2: ("800", "949", "False"),
+            ..Row::default()
+        });
+        assert_eq!(
+            (fr.aln_start, fr.aln_end),
+            (ff.aln_start, ff.aln_end)
+        );
+        assert!(match_reads(&fr, &ff, 0));
+    }
+
+    #[test]
+    fn make_read_entry_keys_a_lone_aligned_mate() {
+        // With one mate unaligned there is one coordinate, whichever slot it arrives in
+        let mate_1_aligned = parsed(Row {
+            mate_1: ("500", "649", "False"),
+            ..Row::default()
+        });
+        let mate_2_aligned = parsed(Row {
+            name: "r2",
+            mate_2: ("500", "649", "True"),
+            ..Row::default()
+        });
+        assert_eq!((mate_1_aligned.aln_start, mate_1_aligned.aln_end), (Some(500), None));
+        assert_eq!((mate_2_aligned.aln_start, mate_2_aligned.aln_end), (Some(500), None));
+    }
+
+    #[test]
+    fn lone_mate_strand_decides_whether_two_reads_match() {
+        // One read's mate 1 aligned forward at 500, the other's mate 2 aligned reverse
+        // there. Different molecules, but the key keeps only the coordinate.
+        let forward = parsed(Row {
+            mate_1: ("500", "649", "False"),
+            ..Row::default()
+        });
+        let reverse = parsed(Row {
+            name: "r2",
+            mate_2: ("500", "649", "True"),
+            ..Row::default()
+        });
+        assert!(match_reads(&forward, &reverse, 0));
+    }
+
+    #[test]
+    fn make_read_entry_keys_an_unaligned_pair() {
+        // With no coordinates at all, two such reads match on nothing
+        let a = parsed(Row::default());
+        let b = parsed(Row { name: "r2", ..Row::default() });
+        assert_eq!((a.aln_start, a.aln_end), (None, None));
+        assert!(match_reads(&a, &b, 0));
+    }
+
+    #[test]
+    fn make_read_entry_accepts_a_complete_pair_with_no_fragment_length() {
+        // Both mates aligned to one genome but no fragment length, which is not valid
+        let e = parsed(Row {
+            mate_1: ("500", "649", "False"),
+            mate_2: ("800", "949", "True"),
+            ..Row::default()
+        });
+        assert_eq!((e.aln_start, e.aln_end), pair(500, 800));
+    }
+
+    #[test]
+    fn make_read_entry_carries_name_genome_and_quality() {
+        let e = parsed(Row {
+            mate_1: ("500", "649", "False"),
+            mate_2: ("800", "949", "True"),
+            qual: ("III", "!!!"),
+            ..Row::default()
+        });
+        assert_eq!(e.query_name, "r1");
+        assert_eq!(e.genome_id, "genome_a");
+        assert_eq!(e.avg_quality, 20.0);
+    }
+
+    #[test]
+    fn make_read_entry_sorts_split_genome_ids_and_their_mates_together() {
+        // Mates on two genomes: the ID is sorted, and the mates are permuted to match,
+        // so that the same pair of genomes always produces the same key regardless of
+        // which mate landed on which
+        let e = parsed(Row {
+            genome: "genome_b/genome_a",
+            mate_1: ("500", "649", "False"),
+            mate_2: ("800", "949", "True"),
+            ..Row::default()
+        });
+        assert_eq!(e.genome_id, "genome_a/genome_b");
+        // genome_a is mate 2's genome here, so its coordinate leads
+        assert_eq!((e.aln_start, e.aln_end), pair(800, 500));
+
+        // The same pair the other way round yields an identical key
+        let f = parsed(Row {
+            name: "r2",
+            genome: "genome_a/genome_b",
+            mate_1: ("800", "949", "True"),
+            mate_2: ("500", "649", "False"),
+            ..Row::default()
+        });
+        assert_eq!(f.genome_id, "genome_a/genome_b");
+        assert_eq!((e.aln_start, e.aln_end), (f.aln_start, f.aln_end));
+        assert!(match_reads(&e, &f, 0));
+    }
+
+    // --- Header handling ---
+
+    #[test]
+    fn process_header_line_indexes_every_required_column() {
+        let header = HEADERS.join("\t");
+        let (headers, indices, count) = process_header_line(&header).unwrap();
+        assert_eq!(count, HEADERS.len());
+        assert_eq!(headers, HEADERS.to_vec());
+        let unread = [
+            "prim_align_ref_start_unclipped",
+            "prim_align_ref_start_unclipped_rev",
+            "prim_align_ref_end_unclipped",
+            "prim_align_ref_end_unclipped_rev",
+            "prim_align_query_rc",
+            "prim_align_query_rc_rev",
+            "prim_align_fragment_length",
+        ];
+        for required in HEADERS.iter().filter(|h| !unread.contains(h)) {
+            assert!(indices.contains_key(required), "missing {required}");
+        }
+    }
+
+    #[test]
+    fn process_header_line_tolerates_extra_columns() {
+        let header = format!("{}\textra_column", HEADERS.join("\t"));
+        let (_headers, indices, count) = process_header_line(&header).unwrap();
+        assert_eq!(count, HEADERS.len() + 1);
+        assert_eq!(indices["seq_id"], 0);
+    }
+
+    #[test]
+    fn process_header_line_rejects_a_missing_required_column() {
+        for missing in ["query_qual_rev", "prim_align_ref_start", "prim_align_ref_start_rev"] {
+            let header = HEADERS
+                .iter()
+                .filter(|&&h| h != missing)
+                .copied()
+                .collect::<Vec<_>>()
+                .join("\t");
+            let err = process_header_line(&header).unwrap_err().to_string();
+            assert!(
+                err.contains("Missing required header"),
+                "unexpected error: {err}"
+            );
+            assert!(err.contains(missing), "unexpected error: {err}");
+        }
+    }
+
+    // --- Matching ---
+
+    #[test]
+    fn match_reads_requires_the_same_genome() {
+        let a = entry("a", "genome_a", pair(100, 300), 30.0);
+        let b = entry("b", "genome_b", pair(100, 300), 30.0);
+        assert!(!match_reads(&a, &b, 2));
+    }
+
+    #[test]
+    fn match_reads_treats_absent_coordinates_as_agreement() {
+        // Two reads with one mate match on their single shared coordinate. Two reads with
+        // no coordinates at all match on nothing.
+        let a = entry("a", "g", (Some(100), None), 30.0);
+        let b = entry("b", "g", (Some(100), None), 30.0);
+        assert!(match_reads(&a, &b, 0));
+        let c = entry("c", "g", (None, None), 30.0);
+        let d = entry("d", "g", (None, None), 30.0);
+        assert!(match_reads(&c, &d, 0));
+    }
+
+    #[test]
+    fn match_reads_requires_both_coordinates_to_agree() {
+        let a = entry("a", "g", pair(100, 300), 30.0);
+        // Both within tolerance
+        assert!(match_reads(&a, &entry("b", "g", pair(101, 301), 30.0), 1));
+        // Start agrees, end does not
+        assert!(!match_reads(&a, &entry("c", "g", pair(101, 310), 30.0), 1));
+        // End agrees, start does not
+        assert!(!match_reads(&a, &entry("d", "g", pair(110, 301), 30.0), 1));
+    }
+
+    // --- Exemplar selection ---
+
+    #[test]
+    fn compare_reads_ranks_by_quality_then_breaks_ties_on_name() {
+        let high = entry("zzz", "g", pair(1, 2), 36.0);
+        let low = entry("aaa", "g", pair(1, 2), 30.0);
+        // Quality dominates, regardless of name
+        assert_eq!(compare_reads(&high, &low), Ordering::Greater);
+        // Equal quality falls back to the lexicographically smaller name winning
+        let a = entry("aaa", "g", pair(1, 2), 30.0);
+        let b = entry("bbb", "g", pair(1, 2), 30.0);
+        assert_eq!(compare_reads(&a, &b), Ordering::Greater);
+        // max_by therefore selects the smallest name among equals
+        let group = vec![b.clone(), a.clone()];
+        let exemplar = group.iter().max_by(|x, y| compare_reads(x, y)).unwrap();
+        assert_eq!(exemplar.query_name, "aaa");
+    }
+
+    // --- Grouping ---
+
+    #[test]
+    fn build_groups_from_sorted_reads_handles_an_empty_input() {
+        assert!(build_groups_from_sorted_reads(Vec::new(), 1).is_empty());
+    }
+
+    #[test]
+    fn build_groups_from_sorted_reads_separates_reads_beyond_the_tolerance() {
+        let reads = vec![
+            entry("a", "g", pair(100, 300), 30.0),
+            entry("b", "g", pair(101, 301), 30.0),
+            entry("c", "g", pair(200, 400), 30.0),
+        ];
+        // At tolerance 1, a and b group and c stands alone
+        assert_eq!(
+            group_names(build_groups_from_sorted_reads(reads.clone(), 1)),
+            vec![vec!["a", "b"], vec!["c"]]
+        );
+        // At tolerance 0, all three are distinct
+        assert_eq!(
+            group_names(build_groups_from_sorted_reads(reads, 0)),
+            vec![vec!["a"], vec!["b"], vec!["c"]]
+        );
+    }
+
+    #[test]
+    fn build_groups_from_sorted_reads_is_independent_of_input_order() {
+        let reads = vec![
+            entry("c", "g", pair(200, 400), 30.0),
+            entry("a", "g", pair(100, 300), 30.0),
+            entry("b", "g", pair(101, 301), 30.0),
+        ];
+        assert_eq!(
+            group_names(build_groups_from_sorted_reads(reads, 1)),
+            vec![vec!["a", "b"], vec!["c"]]
+        );
+    }
+
+    #[test]
+    fn build_groups_from_sorted_reads_merges_chains_transitively() {
+        // a-b and b-c each match at tolerance 1, but a-c differ by 2. Matching is
+        // intransitive, and the algorithm resolves that by merging the whole chain.
+        let reads = vec![
+            entry("a", "g", pair(100, 300), 30.0),
+            entry("b", "g", pair(101, 301), 30.0),
+            entry("c", "g", pair(102, 302), 30.0),
+        ];
+        assert!(!match_reads(&reads[0], &reads[2], 1));
+        assert_eq!(
+            group_names(build_groups_from_sorted_reads(reads, 1)),
+            vec![vec!["a", "b", "c"]]
+        );
+    }
+
+    #[test]
+    fn build_groups_from_sorted_reads_keeps_different_genomes_apart() {
+        // Identical coordinates on different genomes are never duplicates, even though the
+        // sliding window will compare them
+        let reads = vec![
+            entry("a", "genome_a", pair(100, 300), 30.0),
+            entry("b", "genome_b", pair(100, 300), 30.0),
+        ];
+        assert_eq!(
+            group_names(build_groups_from_sorted_reads(reads, 2)),
+            vec![vec!["a"], vec!["b"]]
+        );
+    }
+
+    #[test]
+    fn build_groups_from_sorted_reads_splits_on_the_end_coordinate_alone() {
+        // Sharing a start is not enough: the sliding window still compares both coordinates
+        let reads = vec![
+            entry("a", "g", pair(100, 300), 30.0),
+            entry("b", "g", pair(100, 900), 30.0),
+        ];
+        assert_eq!(
+            group_names(build_groups_from_sorted_reads(reads, 1)),
+            vec![vec!["a"], vec!["b"]]
+        );
+    }
+
+    // --- Merge resolution ---
+
+    #[test]
+    fn resolve_group_merges_maps_every_member_to_the_largest_id() {
+        let mut merges = HashMap::new();
+        merges.insert(5, HashSet::from([1, 3, 5]));
+        let mapping = resolve_group_merges(merges);
+        assert_eq!(mapping[&1], 5);
+        assert_eq!(mapping[&3], 5);
+        assert_eq!(mapping[&5], 5);
+    }
+
+    #[test]
+    fn resolve_group_merges_follows_chained_merges_to_one_representative() {
+        // Group 7 absorbs 4, and 4 had already absorbed 2: all three land on 7
+        let mut merges = HashMap::new();
+        merges.insert(4, HashSet::from([2, 4]));
+        merges.insert(7, HashSet::from([4, 7]));
+        let mapping = resolve_group_merges(merges);
+        assert_eq!(mapping[&7], 7);
+        assert_eq!(mapping[&4], 7);
+        assert_eq!(mapping[&2], 7);
+    }
+}
