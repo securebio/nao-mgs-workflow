@@ -67,7 +67,7 @@ The `nf-test-wave-config.yml` CI workflow checks that the private
 
 ### Python unit tests (`pytest.yml`)
 
-Runs our entire pytest suite across `bin`, `modules`, and `post-processing/tests/`.
+Runs our entire pytest suite across `bin` and `modules`.
 
 ### Mypy type checking (`mypy.yml`)
 

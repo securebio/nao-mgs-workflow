@@ -161,10 +161,6 @@ ruff format .
 mypy .
 ```
 
-## Post Processing
-
-The `post-processing/` directory contains standalone Python scripts for additional analyses that can be run on workflow outputs. These scripts are not yet integrated into the main pipeline but provide useful functionality for tasks like similarity-based duplicate marking. See [post-processing/README.md](../post-processing/README.md) for details on available scripts and usage.
-
 ## GitHub issues
 We use [GitHub issues](https://github.com/naobservatory/mgs-workflow/issues) to track any issues with the pipeline: bugs, cleanup tasks, and desired new features. 
 Opening issues:
