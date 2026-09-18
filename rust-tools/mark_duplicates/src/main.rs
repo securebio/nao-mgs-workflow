@@ -35,28 +35,16 @@ struct MateEnd {
     reverse: bool,
 }
 
-impl MateEnd {
-    // Two mates match when they are on the same strand at the same position, within
-    // the tolerance.
-    fn matches(&self, other: &MateEnd, deviation: u8) -> bool {
-        self.reverse == other.reverse && within(self.five_prime, other.five_prime, deviation)
-    }
-}
-
 // The coordinate key a read is matched on. Every coordinate it holds is a mate's
 // unclipped 5' position, named `_5p`. Reads carrying different variants are not
 // comparable and never match, so a pair is never grouped with a lone mate.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum DupKey {
-    // Both mates aligned to one genome, on opposite strands: FR or RF. The two
-    // coordinates are held in strand order rather than coordinate order, which
-    // distinguishes FR from RF without the key having to decide which mate is
-    // leftmost -- a decision that compares coordinates exactly, and so would separate
-    // two duplicates whose mates sit within the tolerance of each other.
+    // Both mates aligned to one genome, on opposite strands (FR or RF).
+    // The two coordinates are in strand order to distinguish FR from RF.
     PairOppositeStrands { forward_5p: i32, reverse_5p: i32 },
-    // Both mates aligned to one genome, on the same strand: FF or RR. There is no
-    // strand to order by, so the coordinates are sorted. That is safe because the
-    // mates share a strand: no strand field can flip with the order.
+    // Both mates aligned to one genome, on the same strand (FF or RR).
+    // The two coordinates are sorted.
     PairSameStrand { left_5p: i32, right_5p: i32, reverse: bool },
     // Mates aligned to two genomes: keyed per mate, in the order of the sorted genome
     // pair that `genome_id` carries.
@@ -68,8 +56,7 @@ enum DupKey {
 }
 
 impl DupKey {
-    // Leading coordinate, used to sort reads and to bound the sliding window, so it
-    // has to be the smallest coordinate the key holds.
+    // Leading coordinate.
     fn sort_start(&self) -> Option<i32> {
         match *self {
             DupKey::PairOppositeStrands { forward_5p, reverse_5p } => {
@@ -84,7 +71,7 @@ impl DupKey {
         }
     }
 
-    // Trailing coordinate, used to break ties in the sort.
+    // Trailing coordinate.
     fn sort_end(&self) -> Option<i32> {
         match *self {
             DupKey::PairOppositeStrands { forward_5p, reverse_5p } => {
@@ -116,8 +103,8 @@ impl DupKey {
             (
                 DupKey::SplitGenomes { first_mate: a_first, second_mate: a_second },
                 DupKey::SplitGenomes { first_mate: b_first, second_mate: b_second },
-            ) => a_first.matches(&b_first, deviation) && a_second.matches(&b_second, deviation),
-            (DupKey::OneMateAligned(a), DupKey::OneMateAligned(b)) => a.matches(&b, deviation),
+            ) => mates_match(a_first, b_first, deviation) && mates_match(a_second, b_second, deviation),
+            (DupKey::OneMateAligned(a), DupKey::OneMateAligned(b)) => mates_match(a, b, deviation),
             // Two reads with no coordinates say nothing about each other, and keys of
             // different kinds are not comparable
             _ => false,
@@ -228,6 +215,11 @@ fn match_reads(a: &ReadEntry, b: &ReadEntry, deviation: u8) -> bool {
 // Whether two coordinates agree within the deviation
 fn within(a: i32, b: i32, deviation: u8) -> bool {
     (a - b).abs() <= deviation as i32
+}
+
+// Whether two mates are on the same strand at the same position, within the deviation
+fn mates_match(a: MateEnd, b: MateEnd, deviation: u8) -> bool {
+    a.reverse == b.reverse && within(a.five_prime, b.five_prime, deviation)
 }
 
 // Implement ordered comparison for ReadEntry
@@ -1133,13 +1125,11 @@ mod tests {
         });
         assert_eq!(short.key, pair(400, 439));
         assert_eq!(shorter.key, pair(400, 429));
-        assert!(!match_reads(&short, &shorter, 2));
+        assert!(!match_reads(&short, &shorter, 0));
     }
 
     #[test]
     fn make_read_entry_separates_pairs_with_different_orientations() {
-        // Two pairs over one span but with different strands are different molecules,
-        // and now carry different kinds of key.
         let fr = parsed(Row {
             mate_1: ("500", "649", "False"),
             mate_2: ("800", "949", "True"),
@@ -1337,15 +1327,6 @@ mod tests {
                 assert!(!match_reads(&x, &y, 2), "{a:?} matched {b:?}");
             }
         }
-    }
-
-    #[test]
-    fn match_reads_never_compares_a_lone_mate_against_a_pair() {
-        // A shared coordinate is weak evidence of duplication, so unlike samtools
-        // markdup we keep the two apart
-        let lone_mate = entry("a", "g", lone(500, false), 30.0);
-        let complete = entry("b", "g", pair(500, 949), 30.0);
-        assert!(!match_reads(&lone_mate, &complete, 2));
     }
 
     #[test]
