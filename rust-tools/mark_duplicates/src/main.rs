@@ -621,8 +621,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 mod tests {
     use super::*;
 
-    // The hits-table columns the fixtures carry. This version reads six of them; the
-    // rest are present so that rows stay identical as later versions read more.
+    // The hits-table columns the fixtures carry.
     const HEADERS: [&str; 13] = [
         "seq_id",
         "prim_align_genome_id_all",
@@ -717,7 +716,7 @@ mod tests {
         }
     }
 
-    // Groups come back in HashMap order, and reads within a group in sort order, so normalise
+    // Groups come back in HashMap order, and reads within a group in sort order, so normalize
     // both before comparing
     fn group_names(groups: Vec<Vec<ReadEntry>>) -> Vec<Vec<String>> {
         let mut out: Vec<Vec<String>> = groups
@@ -804,9 +803,21 @@ mod tests {
     // --- Read entry construction ---
 
     #[test]
-    fn make_read_entry_keys_a_complete_pair() {
-        // A 150 bp FR pair spanning 500-949. The key runs between the two mates' start
-        // coordinates, so it stops at 800 and says nothing about where the pair ends.
+    fn make_read_entry_carries_name_genome_and_quality() {
+        let e = parsed(Row {
+            mate_1: ("500", "649", "False"),
+            mate_2: ("800", "949", "True"),
+            qual: ("III", "!!!"),
+            ..Row::default()
+        });
+        assert_eq!(e.query_name, "r1");
+        assert_eq!(e.genome_id, "genome_a");
+        assert_eq!(e.avg_quality, 20.0);
+    }
+
+    #[test]
+    fn make_read_entry_keys_a_complete_pair_on_mate_starts() {
+        // A 150 bp FR pair spanning 500-949, keyed on the two mates' starts.
         let e = parsed(Row {
             mate_1: ("500", "649", "False"),
             mate_2: ("800", "949", "True"),
@@ -816,7 +827,7 @@ mod tests {
     }
 
     #[test]
-    fn make_read_entry_keys_a_complete_pair_the_same_way_round_either_slot() {
+    fn make_read_entry_keys_a_complete_pair_the_same_regardless_of_order() {
         // Which mate is mate 1 is arbitrary, so the same fragment gives the same key
         let mate_1_leftmost = parsed(Row {
             mate_1: ("500", "649", "False"),
@@ -835,10 +846,72 @@ mod tests {
     }
 
     #[test]
-    fn clipping_decides_whether_two_copies_of_a_fragment_match() {
+    fn make_read_entry_keys_a_lone_aligned_mate_on_its_start_alone() {
+        let mate_1_aligned = parsed(Row {
+            mate_1: ("500", "649", "False"),
+            ..Row::default()
+        });
+        let mate_2_aligned = parsed(Row {
+            name: "r2",
+            mate_2: ("500", "649", "True"),
+            ..Row::default()
+        });
+        assert_eq!((mate_1_aligned.aln_start, mate_1_aligned.aln_end), (Some(500), None));
+        assert_eq!((mate_2_aligned.aln_start, mate_2_aligned.aln_end), (Some(500), None));
+        // The two mates aligned to opposite strands, which the key does not record, so
+        // reads from different molecules match
+        assert!(match_reads(&mate_1_aligned, &mate_2_aligned, 0));
+    }
+
+    #[test]
+    fn make_read_entry_keys_an_unaligned_pair_on_nothing() {
+        let e = parsed(Row::default());
+        assert_eq!((e.aln_start, e.aln_end), (None, None));
+    }
+
+    #[test]
+    fn make_read_entry_accepts_a_complete_pair_with_no_fragment_length() {
+        // Both mates aligned to one genome but no fragment length, which is not valid
+        let e = parsed(Row {
+            mate_1: ("500", "649", "False"),
+            mate_2: ("800", "949", "True"),
+            ..Row::default()
+        });
+        assert_eq!((e.aln_start, e.aln_end), pair(500, 800));
+    }
+
+    #[test]
+    fn make_read_entry_sorts_split_genome_ids_and_their_mates_together() {
+        // Mates on two genomes: the same pair of genomes always produces the same key
+        // regardless of order.
+        let e = parsed(Row {
+            genome: "genome_b/genome_a",
+            mate_1: ("500", "649", "False"),
+            mate_2: ("800", "949", "True"),
+            ..Row::default()
+        });
+        assert_eq!(e.genome_id, "genome_a/genome_b");
+        // genome_a is mate 2's genome here, so its coordinate leads
+        assert_eq!((e.aln_start, e.aln_end), pair(800, 500));
+
+        let f = parsed(Row {
+            name: "r2",
+            genome: "genome_a/genome_b",
+            mate_1: ("800", "949", "True"),
+            mate_2: ("500", "649", "False"),
+            ..Row::default()
+        });
+        assert_eq!(f.genome_id, "genome_a/genome_b");
+        assert_eq!((e.aln_start, e.aln_end), (f.aln_start, f.aln_end));
+        assert!(match_reads(&e, &f, 0));
+    }
+
+    // --- Matching behavior later work changes ---
+
+    #[test]
+    fn make_read_entry_separates_copies_clipped_differently() {
         // Two copies of one fragment, the second with seven bases clipped off mate 1's
-        // leading end. The key is built from the clipped starts, so it moves with the
-        // clip and the copies come apart.
+        // leading end. The key is built from the clipped starts, so the copies do not match.
         let pristine = parsed(Row {
             mate_1: ("500", "649", "False"),
             mate_2: ("800", "949", "True"),
@@ -857,10 +930,9 @@ mod tests {
     }
 
     #[test]
-    fn make_read_entry_on_a_fragment_shorter_than_the_read() {
-        // A fragment shorter than the read is covered end to end by both mates, so both
-        // report the same start and the key collapses to (start, start). Two such
-        // fragments of different lengths are then indistinguishable.
+    fn make_read_entry_matches_fragments_shorter_than_read_on_degenerate_start() {
+        // A fragment shorter than the read collapses to the same (start, start).
+        // Two such fragments of different lengths match.
         let short = parsed(Row {
             mate_1: ("400", "439", "False"),
             mate_2: ("400", "439", "True"),
@@ -878,9 +950,8 @@ mod tests {
     }
 
     #[test]
-    fn pair_orientation_decides_whether_two_pairs_match() {
-        // Two pairs over one span, one FR and one with both mates on the forward strand.
-        // Different molecules, but the key carries no strand.
+    fn make_read_entry_matches_pairs_with_different_orientations() {
+        // Two pairs over one span but with different strands erroneously match.
         let fr = parsed(Row {
             mate_1: ("500", "649", "False"),
             mate_2: ("800", "949", "True"),
@@ -900,96 +971,10 @@ mod tests {
     }
 
     #[test]
-    fn make_read_entry_keys_a_lone_aligned_mate() {
-        // With one mate unaligned there is one coordinate, whichever slot it arrives in
-        let mate_1_aligned = parsed(Row {
-            mate_1: ("500", "649", "False"),
-            ..Row::default()
-        });
-        let mate_2_aligned = parsed(Row {
-            name: "r2",
-            mate_2: ("500", "649", "True"),
-            ..Row::default()
-        });
-        assert_eq!((mate_1_aligned.aln_start, mate_1_aligned.aln_end), (Some(500), None));
-        assert_eq!((mate_2_aligned.aln_start, mate_2_aligned.aln_end), (Some(500), None));
-    }
-
-    #[test]
-    fn lone_mate_strand_decides_whether_two_reads_match() {
-        // One read's mate 1 aligned forward at 500, the other's mate 2 aligned reverse
-        // there. Different molecules, but the key keeps only the coordinate.
-        let forward = parsed(Row {
-            mate_1: ("500", "649", "False"),
-            ..Row::default()
-        });
-        let reverse = parsed(Row {
-            name: "r2",
-            mate_2: ("500", "649", "True"),
-            ..Row::default()
-        });
-        assert!(match_reads(&forward, &reverse, 0));
-    }
-
-    #[test]
-    fn make_read_entry_keys_an_unaligned_pair() {
-        // With no coordinates at all, two such reads match on nothing
+    fn make_read_entry_matches_unaligned_pairs_with_each_other() {
         let a = parsed(Row::default());
         let b = parsed(Row { name: "r2", ..Row::default() });
-        assert_eq!((a.aln_start, a.aln_end), (None, None));
         assert!(match_reads(&a, &b, 0));
-    }
-
-    #[test]
-    fn make_read_entry_accepts_a_complete_pair_with_no_fragment_length() {
-        // Both mates aligned to one genome but no fragment length, which is not valid
-        let e = parsed(Row {
-            mate_1: ("500", "649", "False"),
-            mate_2: ("800", "949", "True"),
-            ..Row::default()
-        });
-        assert_eq!((e.aln_start, e.aln_end), pair(500, 800));
-    }
-
-    #[test]
-    fn make_read_entry_carries_name_genome_and_quality() {
-        let e = parsed(Row {
-            mate_1: ("500", "649", "False"),
-            mate_2: ("800", "949", "True"),
-            qual: ("III", "!!!"),
-            ..Row::default()
-        });
-        assert_eq!(e.query_name, "r1");
-        assert_eq!(e.genome_id, "genome_a");
-        assert_eq!(e.avg_quality, 20.0);
-    }
-
-    #[test]
-    fn make_read_entry_sorts_split_genome_ids_and_their_mates_together() {
-        // Mates on two genomes: the ID is sorted, and the mates are permuted to match,
-        // so that the same pair of genomes always produces the same key regardless of
-        // which mate landed on which
-        let e = parsed(Row {
-            genome: "genome_b/genome_a",
-            mate_1: ("500", "649", "False"),
-            mate_2: ("800", "949", "True"),
-            ..Row::default()
-        });
-        assert_eq!(e.genome_id, "genome_a/genome_b");
-        // genome_a is mate 2's genome here, so its coordinate leads
-        assert_eq!((e.aln_start, e.aln_end), pair(800, 500));
-
-        // The same pair the other way round yields an identical key
-        let f = parsed(Row {
-            name: "r2",
-            genome: "genome_a/genome_b",
-            mate_1: ("800", "949", "True"),
-            mate_2: ("500", "649", "False"),
-            ..Row::default()
-        });
-        assert_eq!(f.genome_id, "genome_a/genome_b");
-        assert_eq!((e.aln_start, e.aln_end), (f.aln_start, f.aln_end));
-        assert!(match_reads(&e, &f, 0));
     }
 
     // --- Header handling ---
