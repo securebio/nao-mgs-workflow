@@ -57,7 +57,9 @@ workflow EXTRACT_VIRAL_READS_SHORT {
         col_keep_add_prefix = ["genome_id_all", "taxid_all", "fragment_length", 
                                "best_alignment_score", "best_alignment_score_rev",
                                "edit_distance", "edit_distance_rev", "ref_start", 
-                               "ref_start_rev", "query_rc", "query_rc_rev", "pair_status"]
+                               "ref_start_rev", "ref_start_unclipped", "ref_start_unclipped_rev",
+                               "ref_end_unclipped", "ref_end_unclipped_rev", "query_rc",
+                               "query_rc_rev", "pair_status"]
          // 1. Run initial k-mer screen against viral genomes with nucleaze.
          // keep_nomatch: false — the subworkflow only consumes the match
          // fraction; skipping nomatch compression is a noticeable win.

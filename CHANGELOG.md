@@ -1,6 +1,7 @@
 # v3.4.0.0-dev
 
 - Switch the Kraken2 DB for taxonomic profiling from Standard to PlusPF (`k2_pluspf_20260626`, the current upstream build), which adds protozoan and fungal genomes. (#1000)
+- Emit unclipped alignment coordinates from RUN: `prim_align_ref_start_unclipped`, `prim_align_ref_end_unclipped` and their `_rev` counterparts give each mate's reference span with soft- and hard-clipped bases counted as if they had aligned. (#1005)
 - Correct documentation of the paired-end mates, `prim_align_ref_start`, and `prim_align_fragment_length`. (#1004)
 - Delete `post-processing/` and `docs/rfc-trunk-based-development.md`. (#1009)
 - Add exemplar-attributed total columns to clade counts: `reads_direct_total_by_exemplar` and `reads_clade_total_by_exemplar` count every read under the taxon of the exemplar representing it, rather than under its own. (#980)
