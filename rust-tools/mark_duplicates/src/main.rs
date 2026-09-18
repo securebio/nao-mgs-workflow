@@ -772,10 +772,7 @@ mod tests {
         assert!(!compare_positions(Some(100), Some(103), 2));
         // Tolerance is symmetric
         assert!(compare_positions(Some(102), Some(100), 2));
-    }
-
-    #[test]
-    fn compare_positions_never_matches_a_known_against_an_unknown() {
+        // A known coordinate never matches an unknown one
         assert!(!compare_positions(Some(100), None, 2));
         assert!(!compare_positions(None, Some(100), 2));
     }
@@ -908,8 +905,6 @@ mod tests {
         assert!(match_reads(&e, &f, 0));
     }
 
-    // --- Matching behavior later work changes ---
-
     #[test]
     fn make_read_entry_separates_copies_clipped_differently() {
         // Two copies of one fragment, the second with seven bases clipped off mate 1's
@@ -920,15 +915,24 @@ mod tests {
             clipped_starts: Some(("500", "800")),
             ..Row::default()
         });
-        let clipped = parsed(Row {
+        let clipped_leading = parsed(Row {
             name: "r2",
             mate_1: ("500", "649", "False"),
             mate_2: ("800", "949", "True"),
             clipped_starts: Some(("507", "800")),
             ..Row::default()
         });
-        assert_eq!((clipped.aln_start, clipped.aln_end), pair(507, 800));
-        assert!(!match_reads(&pristine, &clipped, 2));
+        let clipped_trailing = parsed(Row {
+            name: "r3",
+            mate_1: ("500", "649", "False"),
+            mate_2: ("800", "949", "True"),
+            clipped_starts: Some(("500", "800")),
+            ..Row::default()
+        });
+        assert_eq!((clipped_leading.aln_start, clipped_leading.aln_end), pair(507, 800));
+        assert!(!match_reads(&pristine, &clipped_leading, 2));
+        // A trailing clip moves no coordinate the key reads, so that copy still matches
+        assert!(match_reads(&pristine, &clipped_trailing, 0));
     }
 
     #[test]
@@ -970,6 +974,22 @@ mod tests {
             (ff.aln_start, ff.aln_end)
         );
         assert!(match_reads(&fr, &ff, 0));
+    }
+
+    #[test]
+    fn match_reads_tolerates_mates_within_the_deviation_of_each_other() {
+        let a = parsed(Row {
+            mate_1: ("400", "549", "False"),
+            mate_2: ("400", "549", "True"),
+            ..Row::default()
+        });
+        let b = parsed(Row {
+            name: "r2",
+            mate_1: ("401", "550", "False"),
+            mate_2: ("400", "549", "True"),
+            ..Row::default()
+        });
+        assert!(match_reads(&a, &b, 1));
     }
 
     #[test]
