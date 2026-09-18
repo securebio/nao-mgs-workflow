@@ -122,10 +122,10 @@ fn open_writer(filename: &str) -> std::io::Result<Box<dyn Write>> {
 
 // Implement a custom match function for comparing ReadEntries
 // (Not a valid equality relation as not transitive)
-fn match_reads(a: &ReadEntry, b: &ReadEntry) -> bool {
+fn match_reads(a: &ReadEntry, b: &ReadEntry, deviation: u8) -> bool {
     a.genome_id == b.genome_id &&
-    unsafe { compare_positions(a.aln_start, b.aln_start, DEVIATION) } &&
-    unsafe { compare_positions(a.aln_end, b.aln_end, DEVIATION) }
+    compare_positions(a.aln_start, b.aln_start, deviation) &&
+    compare_positions(a.aln_end, b.aln_end, deviation)
 }
 
 // Compare the positions with a deviation
@@ -183,13 +183,14 @@ fn average_quality_score(quality_fwd: &str, quality_rev: &str) -> f64 {
 /// Takes in a vector of ReadEntry objects sharing a genome_id assignment,
 /// sorted by start coordinate, then iterates over the vector in order,
 /// checking for position matches with previous reads whose start coordinate
-/// is within DEVIATION of the current read's start coordinate.
+/// is within `deviation` of the current read's start coordinate.
 /// If a match is found, the current read is assigned to the same group as the previous read.
 /// If no match is found, a new group is created.
 /// Finally, all overlapping groups (those for which a single read is assigned to both groups)
 /// are merged.
 fn build_groups_from_sorted_reads(
-    mut reads: Vec<ReadEntry>
+    mut reads: Vec<ReadEntry>,
+    deviation: u8
 ) -> Vec<Vec<ReadEntry>> {
     if reads.is_empty() {
         return Vec::new();
@@ -208,9 +209,9 @@ fn build_groups_from_sorted_reads(
         // Sliding window: look backwards until more matches are impossible
         for j in (0..i).rev() {
             let prev_read = &reads[j];
-            // If both reads have Some coordinates, break if the difference is greater than DEVIATION
+            // If both reads have Some coordinates, break if the difference is greater than `deviation`
             if let (Some(curr_start), Some(prev_start)) = (current_read.aln_start, prev_read.aln_start) {
-                if curr_start - prev_start > unsafe { DEVIATION } as i32 {
+                if curr_start - prev_start > deviation as i32 {
                     break;
                 }
             }
@@ -219,7 +220,7 @@ fn build_groups_from_sorted_reads(
                 break;
             }
             // Otherwise, compare fully and add to matching_groups if they match
-            if match_reads(current_read, prev_read) {
+            if match_reads(current_read, prev_read, deviation) {
                 matching_groups.insert(group_assignments[j]);
             }
         }
@@ -383,7 +384,8 @@ fn process_chunk_parallel(
 }
 
 fn extract_read_groups(input_path: &str,
-    chunk_size: u32
+    chunk_size: u32,
+    deviation: u8
 ) -> Result<(String, HashMap<String, Vec<Vec<ReadEntry>>>, usize), Box<dyn Error>> {
     // Open the input file
     let reader = open_reader(input_path)?;
@@ -432,7 +434,7 @@ fn extract_read_groups(input_path: &str,
         .into_par_iter()
         .map(|(genome_id, reads)| {
             // Use optimized sorted sliding window approach
-            let groups = build_groups_from_sorted_reads(reads);
+            let groups = build_groups_from_sorted_reads(reads, deviation);
             (genome_id, groups)
         })
         .collect();
@@ -450,7 +452,8 @@ fn extract_read_groups(input_path: &str,
 
 // Process duplicate groups to create exemplar mapping and metadata (focused on group processing)
 fn process_read_groups(
-    groups: HashMap<String, Vec<Vec<ReadEntry>>>
+    groups: HashMap<String, Vec<Vec<ReadEntry>>>,
+    deviation: u8
 ) -> Result<(ExemplarMap, Vec<DuplicateGroup>), Box<dyn Error>> {
     // Flatten all duplicate groups with their genome_id for parallel processing
     let all_groups: Vec<(String, Vec<ReadEntry>)> = groups
@@ -484,7 +487,7 @@ fn process_read_groups(
                     .map(|(i, j)| {
                         let read_i = &dup_group[i];
                         let read_j = &dup_group[j];
-                        if match_reads(read_i, read_j) { 1.0 } else { 0.0 }
+                        if match_reads(read_i, read_j, deviation) { 1.0 } else { 0.0 }
                     })
                     .sum();  // Rayon's parallel sum reduction
                 pairwise_match_frac = pairwise_match_count / n_pairs;
@@ -580,18 +583,16 @@ fn write_database_file(
 // TOP-LEVEL FUNCTIONS
 // ------------------------------------------------------------------------------------------------
 
-// Define the deviation value
-static mut DEVIATION: u8 = 0;
-
 // Two-pass processing for improved memory efficiency
 fn process_tsv(input_path: &str,
     output_path_db: &str,
     output_path_meta: &str,
-    chunk_size: u32) -> Result<(), Box<dyn Error>> {
+    chunk_size: u32,
+    deviation: u8) -> Result<(), Box<dyn Error>> {
     // Extract read groups from the input file
-    let (header_out, groups, seq_id_index) = extract_read_groups(input_path, chunk_size)?;
+    let (header_out, groups, seq_id_index) = extract_read_groups(input_path, chunk_size, deviation)?;
     // Process duplicate groups to create exemplar mapping and metadata
-    let (exemplar_map, duplicate_groups) = process_read_groups(groups)?;
+    let (exemplar_map, duplicate_groups) = process_read_groups(groups, deviation)?;
     // Write metadata file
     write_metadata_file(&duplicate_groups, output_path_meta)?;
     // Write database file
@@ -608,10 +609,6 @@ fn main() -> Result<(), Box<dyn Error>> {
         .build_global()
         .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, 
             format!("Failed to configure thread pool: {}", e)))?;
-    // Set the deviation value
-    unsafe {
-        DEVIATION = args.deviation;
-    }
     // Run the main processing function
-    return process_tsv(&args.input, &args.output_db, &args.output_meta, args.chunk_size);
+    return process_tsv(&args.input, &args.output_db, &args.output_meta, args.chunk_size, args.deviation);
 }
