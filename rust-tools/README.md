@@ -19,9 +19,3 @@ container via `cargo install` in the Dockerfile:
 
 See [docs/developer.md](../docs/developer.md#rust) for build instructions, local
 development workflow, and how to add new tools.
-
-## Note on mark_duplicates_similarity
-
-Similarity-based duplicate marking used to live in `post-processing/rust_dedup/`, to be
-run by hand on workflow outputs. DOWNSTREAM runs it itself as of v3.4.0.0, so this
-workspace holds the only copy.

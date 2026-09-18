@@ -1,6 +1,6 @@
 # v3.4.0.0-dev
 
-- Delete `post-processing/`, whose only content was the similarity-based duplicate marking tool DOWNSTREAM now runs itself, along with its `nao_dedup` submodule, its `networkx` dependency and its pytest path. `rust-tools/mark_duplicates_similarity` is now the only copy. Also delete `docs/rfc-trunk-based-development.md`. (#1009)
+- Delete `post-processing/` and `docs/rfc-trunk-based-development.md`. (#1009)
 - Add exemplar-attributed total columns to clade counts: `reads_direct_total_by_exemplar` and `reads_clade_total_by_exemplar` count every read under the taxon of the exemplar representing it, rather than under its own. (#980)
 - Restrict Illumina BLAST validation downsampling to reads that are unique under both duplicate-marking passes. (#973)
 - Promote similarity-based duplicate marking out of experimental, publishing columns into `results_downstream/{GROUP}_validation_hits.tsv.gz`. (#972)
