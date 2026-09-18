@@ -21,9 +21,108 @@ use clap::Parser;
 struct ReadEntry {
     query_name: String,
     genome_id: String,
-    aln_start: Option<i32>,
-    aln_end: Option<i32>,
+    key: DupKey,
     avg_quality: f64,
+}
+
+// One mate's unclipped 5' reference position, and the strand it aligned to.
+//
+// The 5' end is the unclipped start for a forward mate and the unclipped end for a
+// reverse one.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct MateEnd {
+    five_prime: i32,
+    reverse: bool,
+}
+
+impl MateEnd {
+    // Two mates match when they are on the same strand at the same position, within
+    // the tolerance.
+    fn matches(&self, other: &MateEnd, deviation: u8) -> bool {
+        self.reverse == other.reverse && within(self.five_prime, other.five_prime, deviation)
+    }
+}
+
+// The coordinate key a read is matched on. Every coordinate it holds is a mate's
+// unclipped 5' position, named `_5p`. Reads carrying different variants are not
+// comparable and never match, so a pair is never grouped with a lone mate.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum DupKey {
+    // Both mates aligned to one genome, on opposite strands: FR or RF. The two
+    // coordinates are held in strand order rather than coordinate order, which
+    // distinguishes FR from RF without the key having to decide which mate is
+    // leftmost -- a decision that compares coordinates exactly, and so would separate
+    // two duplicates whose mates sit within the tolerance of each other.
+    PairOppositeStrands { forward_5p: i32, reverse_5p: i32 },
+    // Both mates aligned to one genome, on the same strand: FF or RR. There is no
+    // strand to order by, so the coordinates are sorted. That is safe because the
+    // mates share a strand: no strand field can flip with the order.
+    PairSameStrand { left_5p: i32, right_5p: i32, reverse: bool },
+    // Mates aligned to two genomes: keyed per mate, in the order of the sorted genome
+    // pair that `genome_id` carries.
+    SplitGenomes { first_mate: MateEnd, second_mate: MateEnd },
+    // One mate aligned.
+    OneMateAligned(MateEnd),
+    // Neither mate aligned, so there is no coordinate to compare and nothing matches.
+    NeitherAligned,
+}
+
+impl DupKey {
+    // Leading coordinate, used to sort reads and to bound the sliding window, so it
+    // has to be the smallest coordinate the key holds.
+    fn sort_start(&self) -> Option<i32> {
+        match *self {
+            DupKey::PairOppositeStrands { forward_5p, reverse_5p } => {
+                Some(forward_5p.min(reverse_5p))
+            }
+            DupKey::PairSameStrand { left_5p, .. } => Some(left_5p),
+            DupKey::SplitGenomes { first_mate, second_mate } => {
+                Some(first_mate.five_prime.min(second_mate.five_prime))
+            }
+            DupKey::OneMateAligned(mate) => Some(mate.five_prime),
+            DupKey::NeitherAligned => None,
+        }
+    }
+
+    // Trailing coordinate, used to break ties in the sort.
+    fn sort_end(&self) -> Option<i32> {
+        match *self {
+            DupKey::PairOppositeStrands { forward_5p, reverse_5p } => {
+                Some(forward_5p.max(reverse_5p))
+            }
+            DupKey::PairSameStrand { right_5p, .. } => Some(right_5p),
+            DupKey::SplitGenomes { first_mate, second_mate } => {
+                Some(first_mate.five_prime.max(second_mate.five_prime))
+            }
+            DupKey::OneMateAligned(_) | DupKey::NeitherAligned => None,
+        }
+    }
+
+    // Whether two keys place their reads at the same position, within the tolerance.
+    fn matches(&self, other: &DupKey, deviation: u8) -> bool {
+        match (*self, *other) {
+            (
+                DupKey::PairOppositeStrands { forward_5p: a_fwd, reverse_5p: a_rev },
+                DupKey::PairOppositeStrands { forward_5p: b_fwd, reverse_5p: b_rev },
+            ) => within(a_fwd, b_fwd, deviation) && within(a_rev, b_rev, deviation),
+            (
+                DupKey::PairSameStrand { left_5p: a_left, right_5p: a_right, reverse: a_rev },
+                DupKey::PairSameStrand { left_5p: b_left, right_5p: b_right, reverse: b_rev },
+            ) => {
+                a_rev == b_rev
+                    && within(a_left, b_left, deviation)
+                    && within(a_right, b_right, deviation)
+            }
+            (
+                DupKey::SplitGenomes { first_mate: a_first, second_mate: a_second },
+                DupKey::SplitGenomes { first_mate: b_first, second_mate: b_second },
+            ) => a_first.matches(&b_first, deviation) && a_second.matches(&b_second, deviation),
+            (DupKey::OneMateAligned(a), DupKey::OneMateAligned(b)) => a.matches(&b, deviation),
+            // Two reads with no coordinates say nothing about each other, and keys of
+            // different kinds are not comparable
+            _ => false,
+        }
+    }
 }
 
 // Structure to store duplicate group information without storing full read data
@@ -81,11 +180,11 @@ fn order_positions(a: Option<i32>, b: Option<i32>) -> Ordering {
     }
 }
 
-// Sort ReadEntries by coordinates: first by aln_start, then by aln_end
+// Sort ReadEntries by their key's leading coordinate, then its trailing one
 // None values are treated as larger than any Some value (sorted to the end)
 fn compare_read_coordinates(a: &ReadEntry, b: &ReadEntry) -> Ordering {
-    match order_positions(a.aln_start, b.aln_start) {
-        Ordering::Equal => order_positions(a.aln_end, b.aln_end),
+    match order_positions(a.key.sort_start(), b.key.sort_start()) {
+        Ordering::Equal => order_positions(a.key.sort_end(), b.key.sort_end()),
         other => other,
     }
 }
@@ -123,18 +222,12 @@ fn open_writer(filename: &str) -> std::io::Result<Box<dyn Write>> {
 // Implement a custom match function for comparing ReadEntries
 // (Not a valid equality relation as not transitive)
 fn match_reads(a: &ReadEntry, b: &ReadEntry, deviation: u8) -> bool {
-    a.genome_id == b.genome_id &&
-    compare_positions(a.aln_start, b.aln_start, deviation) &&
-    compare_positions(a.aln_end, b.aln_end, deviation)
+    a.genome_id == b.genome_id && a.key.matches(&b.key, deviation)
 }
 
-// Compare the positions with a deviation
-fn compare_positions(a: Option<i32>, b: Option<i32>, deviation: u8) -> bool {
-    match (a, b) {
-        (Some(x), Some(y)) => (x - y).abs() <= deviation as i32,
-        (None, None) => true,
-        _ => false,
-    }
+// Whether two coordinates agree within the deviation
+fn within(a: i32, b: i32, deviation: u8) -> bool {
+    (a - b).abs() <= deviation as i32
 }
 
 // Implement ordered comparison for ReadEntry
@@ -158,6 +251,18 @@ fn parse_int_or_na(s: &str) -> Option<i32> {
     }
 }
 
+// Parse a coordinate: an integer, or None for "NA". Anything else is bad input, and
+// silently reading it as an absent coordinate would change how the read is keyed.
+fn parse_coordinate(s: &str, query_name: &str, field: &str) -> Result<Option<i32>, String> {
+    match parse_int_or_na(s) {
+        Some(value) => Ok(Some(value)),
+        None if s == "NA" => Ok(None),
+        None => Err(format!(
+            "Read {query_name} has an unreadable {field}: {s}"
+        )),
+    }
+}
+
 // Convert the ASCII quality score to a quality score (optimized for speed)
 fn ascii_to_quality_score(ascii_score: &str) -> f64 {
     if ascii_score == "NA" {
@@ -168,7 +273,7 @@ fn ascii_to_quality_score(ascii_score: &str) -> f64 {
     sum as f64 / bytes.len() as f64
 }
 
-// Calculate the average quality score of the forward and reverse reads
+// Calculate the average quality score across both mates
 fn average_quality_score(quality_fwd: &str, quality_rev: &str) -> f64 {
     let fwd_score = ascii_to_quality_score(quality_fwd);
     let rev_score = ascii_to_quality_score(quality_rev);
@@ -210,13 +315,15 @@ fn build_groups_from_sorted_reads(
         for j in (0..i).rev() {
             let prev_read = &reads[j];
             // If both reads have Some coordinates, break if the difference is greater than `deviation`
-            if let (Some(curr_start), Some(prev_start)) = (current_read.aln_start, prev_read.aln_start) {
+            if let (Some(curr_start), Some(prev_start)) =
+                (current_read.key.sort_start(), prev_read.key.sort_start())
+            {
                 if curr_start - prev_start > deviation as i32 {
                     break;
                 }
             }
             // If current_read coordinate is None, break if previous read has Some coordinate
-            if current_read.aln_start.is_none() && prev_read.aln_start.is_some() {
+            if current_read.key.sort_start().is_none() && prev_read.key.sort_start().is_some() {
                 break;
             }
             // Otherwise, compare fully and add to matching_groups if they match
@@ -291,7 +398,10 @@ fn process_header_line(line: &str) -> Result<(Vec<&str>, HashMap<&str, usize>, u
     let header_indices: HashMap<_, _> = headers.iter().enumerate().map(|(i, &s)| (s, i)).collect();
     // Define required header fields
     let required_headers = vec![
-        "seq_id", "prim_align_genome_id_all", "prim_align_ref_start", "prim_align_ref_start_rev",
+        "seq_id", "prim_align_genome_id_all",
+        "prim_align_ref_start_unclipped", "prim_align_ref_start_unclipped_rev",
+        "prim_align_ref_end_unclipped", "prim_align_ref_end_unclipped_rev",
+        "prim_align_query_rc", "prim_align_query_rc_rev",
         "query_qual", "query_qual_rev"
     ];
     // Build a lookup for required headers
@@ -305,56 +415,118 @@ fn process_header_line(line: &str) -> Result<(Vec<&str>, HashMap<&str, usize>, u
     Ok((headers, indices, header_count))
 }
 
+// Parse one mate's unclipped bounds and strand, or None if that mate did not align
+fn make_mate_end(
+    start: &str,
+    end: &str,
+    reverse: &str,
+    query_name: &str,
+    mate: &str,
+) -> Result<Option<MateEnd>, String> {
+    let start = parse_coordinate(start, query_name, &format!("{mate} unclipped start"))?;
+    let end = parse_coordinate(end, query_name, &format!("{mate} unclipped end"))?;
+    match (start, end) {
+        // An unaligned mate has no CIGAR, and so no unclipped bounds
+        (None, None) => Ok(None),
+        (Some(start), Some(end)) => {
+            // The strand decides which bound is the 5' end, so a missing one is an
+            // error rather than a default
+            let reverse = match reverse {
+                "True" => true,
+                "False" => false,
+                other => {
+                    return Err(format!(
+                        "Read {query_name} has an aligned {mate} with strand {other}"
+                    ))
+                }
+            };
+            let five_prime = if reverse { end } else { start };
+            Ok(Some(MateEnd { five_prime, reverse }))
+        }
+        _ => Err(format!(
+            "Read {query_name} has only one unclipped coordinate for {mate}"
+        )),
+    }
+}
+
 // Efficient function that creates ReadEntry with minimal memory allocation
-fn make_read_entry(fields: &[String], indices: &HashMap<&str, usize>) -> ReadEntry {
+fn make_read_entry(
+    fields: &[String],
+    indices: &HashMap<&str, usize>,
+) -> Result<ReadEntry, String> {
     // Extract required fields using references to avoid cloning unnecessarily
     let query_name = fields[indices["seq_id"]].clone();
     let genome_id = &fields[indices["prim_align_genome_id_all"]];
-    let ref_start_fwd = parse_int_or_na(&fields[indices["prim_align_ref_start"]]);
-    let ref_start_rev = parse_int_or_na(&fields[indices["prim_align_ref_start_rev"]]);
+    let mate_1 = make_mate_end(
+        &fields[indices["prim_align_ref_start_unclipped"]],
+        &fields[indices["prim_align_ref_end_unclipped"]],
+        &fields[indices["prim_align_query_rc"]],
+        &query_name,
+        "mate 1",
+    )?;
+    let mate_2 = make_mate_end(
+        &fields[indices["prim_align_ref_start_unclipped_rev"]],
+        &fields[indices["prim_align_ref_end_unclipped_rev"]],
+        &fields[indices["prim_align_query_rc_rev"]],
+        &query_name,
+        "mate 2",
+    )?;
     let quality_fwd = &fields[indices["query_qual"]];
     let quality_rev = &fields[indices["query_qual_rev"]];
-    // Handle split assignments
+    // Handle split assignments: sort the genome IDs so the same pair of genomes always
+    // gives the same ID, and record whether that reordered the mates
     let genome_id_sorted: String;
-    let aln_start: Option<i32>;
-    let aln_end: Option<i32>;
-    if genome_id.contains('/') {
-        // Split genome_id by "/", sort the parts, and join them
+    let mut mates_swapped = false;
+    let split_genomes = genome_id.contains('/');
+    if split_genomes {
         let parts: Vec<&str> = genome_id.split('/').collect();
         let mut sorted_parts = parts.clone();
         sorted_parts.sort();
         genome_id_sorted = sorted_parts.join("/");
-        // Get the index of the first genome ID in the sorted list
-        let genome_id_index = sorted_parts.iter().position(|&s| s == parts[0]).unwrap();
-        // Arrange start coordinates to correspond to sorted genome IDs
-        // Note: this doesn't need to handle the case where one value is None
-        // because then you could never get multiple genome_ids
-        (aln_start, aln_end) = if genome_id_index == 0 {
-            (ref_start_fwd, ref_start_rev)
-        } else {
-            (ref_start_rev, ref_start_fwd)
-        };
+        mates_swapped = sorted_parts.iter().position(|&s| s == parts[0]).unwrap() != 0;
     } else {
         // If only one genome ID, use it directly
         genome_id_sorted = genome_id.to_string();
-        // Normalize coordinates: if values are present, use the minimum and maximum
-        // Handle cases where one value is None
-        (aln_start, aln_end) = match (ref_start_fwd, ref_start_rev) {
-            (Some(fwd), Some(rev)) => (Some(fwd.min(rev)), Some(fwd.max(rev))),
-            (Some(fwd), None) => (Some(fwd), None),
-            (None, Some(rev)) => (Some(rev), None),
-            (None, None) => (None, None),
-        };
+    }
+    let key = match (mate_1, mate_2) {
+        // Mates on two genomes are keyed per mate, in sorted-genome order
+        (Some(mate_1), Some(mate_2)) if split_genomes => {
+            let (first_mate, second_mate) = if mates_swapped {
+                (mate_2, mate_1)
+            } else {
+                (mate_1, mate_2)
+            };
+            DupKey::SplitGenomes { first_mate, second_mate }
+        }
+        // On one genome, opposite strands identify the mates without a coordinate sort
+        (Some(mate_1), Some(mate_2)) if mate_1.reverse != mate_2.reverse => {
+            let (forward, reverse) = if mate_1.reverse {
+                (mate_2, mate_1)
+            } else {
+                (mate_1, mate_2)
+            };
+            DupKey::PairOppositeStrands {
+                forward_5p: forward.five_prime,
+                reverse_5p: reverse.five_prime,
+            }
+        }
+        // On one strand there is nothing to order by but the coordinates
+        (Some(mate_1), Some(mate_2)) => DupKey::PairSameStrand {
+            left_5p: mate_1.five_prime.min(mate_2.five_prime),
+            right_5p: mate_1.five_prime.max(mate_2.five_prime),
+            reverse: mate_1.reverse,
+        },
+        (Some(mate), None) | (None, Some(mate)) => DupKey::OneMateAligned(mate),
+        (None, None) => DupKey::NeitherAligned,
     };
     let avg_quality = average_quality_score(quality_fwd, quality_rev);
     // Return the ReadEntry with minimal memory footprint
-    ReadEntry { 
-        query_name, 
-        genome_id: genome_id_sorted, 
-        aln_start, 
-        aln_end, 
-        avg_quality 
-    }
+    Ok(ReadEntry {
+        query_name,
+        genome_id: genome_id_sorted,
+        key,
+        avg_quality,
+    })
 }
 
 // Process a chunk of lines in parallel to create ReadEntry objects
@@ -374,7 +546,7 @@ fn process_chunk_parallel(
                 return Err(format!("Invalid field count: {} (expected {})", fields.len(), header_count));
             }
             // Create ReadEntry from fields
-            Ok(make_read_entry(&fields, indices))
+            make_read_entry(&fields, indices)
         })
         .collect();
     // Convert String errors to Box<dyn Error>
@@ -651,8 +823,8 @@ mod tests {
         mate_1: Mate,
         mate_2: Mate,
         qual: (&'static str, &'static str),
-        // Each mate's clipped start, which is what this version keys on. None fills
-        // them from the unclipped starts, i.e. models an alignment with nothing clipped.
+        // Each mate's clipped start, which this version does not read. None fills them
+        // from the unclipped starts, i.e. models an alignment with nothing clipped.
         clipped_starts: Option<(&'static str, &'static str)>,
     }
 
@@ -669,8 +841,13 @@ mod tests {
         }
     }
 
-    // Parse one fixture row
+    // Parse one fixture row, asserting that it is accepted
     fn parsed(row: Row) -> ReadEntry {
+        parse(row).expect("row should parse")
+    }
+
+    // Parse one fixture row
+    fn parse(row: Row) -> Result<ReadEntry, String> {
         let clipped = row.clipped_starts.unwrap_or((row.mate_1.0, row.mate_2.0));
         let values = [
             row.name,
@@ -694,24 +871,24 @@ mod tests {
         make_read_entry(&fields, &indices)
     }
 
-    // The coordinates an ordinary pair is keyed on
-    fn pair(start: i32, end: i32) -> (Option<i32>, Option<i32>) {
-        (Some(start), Some(end))
+    // The key an ordinary FR pair gets: its forward mate's 5' end, then its reverse
+    // mate's
+    fn pair(forward_5p: i32, reverse_5p: i32) -> DupKey {
+        DupKey::PairOppositeStrands { forward_5p, reverse_5p }
+    }
+
+    // The key a lone aligned mate gets
+    fn lone(five_prime: i32, reverse: bool) -> DupKey {
+        DupKey::OneMateAligned(MateEnd { five_prime, reverse })
     }
 
     // Construct a ReadEntry directly, bypassing parsing. Grouping and matching tests use
     // this so they exercise the algorithm rather than the column layout.
-    fn entry(
-        name: &str,
-        genome: &str,
-        coords: (Option<i32>, Option<i32>),
-        quality: f64,
-    ) -> ReadEntry {
+    fn entry(name: &str, genome: &str, key: DupKey, quality: f64) -> ReadEntry {
         ReadEntry {
             query_name: name.to_string(),
             genome_id: genome.to_string(),
-            aln_start: coords.0,
-            aln_end: coords.1,
+            key,
             avg_quality: quality,
         }
     }
@@ -763,18 +940,15 @@ mod tests {
 
     #[test]
     fn the_deviation_tolerance_is_inclusive_and_symmetric() {
-        assert!(compare_positions(Some(100), Some(100), 0));
-        assert!(!compare_positions(Some(100), Some(101), 0));
+        assert!(within(100, 100, 0));
+        assert!(!within(100, 101, 0));
         // The boundary itself matches; one past it does not
-        assert!(compare_positions(Some(100), Some(101), 1));
-        assert!(!compare_positions(Some(100), Some(102), 1));
-        assert!(compare_positions(Some(100), Some(102), 2));
-        assert!(!compare_positions(Some(100), Some(103), 2));
+        assert!(within(100, 101, 1));
+        assert!(!within(100, 102, 1));
+        assert!(within(100, 102, 2));
+        assert!(!within(100, 103, 2));
         // Tolerance is symmetric
-        assert!(compare_positions(Some(102), Some(100), 2));
-        // A known coordinate never matches an unknown one
-        assert!(!compare_positions(Some(100), None, 2));
-        assert!(!compare_positions(None, Some(100), 2));
+        assert!(within(102, 100, 2));
     }
 
     #[test]
@@ -815,14 +989,15 @@ mod tests {
     }
 
     #[test]
-    fn make_read_entry_keys_a_complete_pair_on_mate_starts() {
-        // A 150 bp FR pair spanning 500-949, keyed on the two mates' starts.
+    fn make_read_entry_keys_a_complete_pair_on_mate_five_prime_ends() {
+        // A 150 bp FR pair spanning 500-949, keyed on the mates' 5' ends: mate 1's
+        // unclipped start and mate 2's unclipped end.
         let e = parsed(Row {
             mate_1: ("500", "649", "False"),
             mate_2: ("800", "949", "True"),
             ..Row::default()
         });
-        assert_eq!((e.aln_start, e.aln_end), pair(500, 800));
+        assert_eq!(e.key, pair(500, 949));
     }
 
     #[test]
@@ -838,14 +1013,11 @@ mod tests {
             mate_2: ("500", "649", "False"),
             ..Row::default()
         });
-        assert_eq!(
-            (mate_1_leftmost.aln_start, mate_1_leftmost.aln_end),
-            (mate_2_leftmost.aln_start, mate_2_leftmost.aln_end)
-        );
+        assert_eq!(mate_1_leftmost.key, mate_2_leftmost.key);
     }
 
     #[test]
-    fn make_read_entry_keys_a_lone_aligned_mate_on_its_start_alone() {
+    fn make_read_entry_keys_a_lone_aligned_mate_on_its_five_prime_end_and_strand() {
         let mate_1_aligned = parsed(Row {
             mate_1: ("500", "649", "False"),
             ..Row::default()
@@ -855,28 +1027,28 @@ mod tests {
             mate_2: ("500", "649", "True"),
             ..Row::default()
         });
-        assert_eq!((mate_1_aligned.aln_start, mate_1_aligned.aln_end), (Some(500), None));
-        assert_eq!((mate_2_aligned.aln_start, mate_2_aligned.aln_end), (Some(500), None));
-        // The two mates aligned to opposite strands, which the key does not record, so
-        // reads from different molecules match
-        assert!(match_reads(&mate_1_aligned, &mate_2_aligned, 0));
+        // A forward mate's 5' end is its unclipped start, a reverse mate's its unclipped end
+        assert_eq!(mate_1_aligned.key, lone(500, false));
+        assert_eq!(mate_2_aligned.key, lone(649, true));
+        // The two aligned to opposite strands, so they are no longer duplicates
+        assert!(!match_reads(&mate_1_aligned, &mate_2_aligned, 0));
     }
 
     #[test]
     fn make_read_entry_keys_an_unaligned_pair_on_nothing() {
         let e = parsed(Row::default());
-        assert_eq!((e.aln_start, e.aln_end), (None, None));
+        assert_eq!(e.key, DupKey::NeitherAligned);
     }
 
     #[test]
     fn make_read_entry_accepts_a_complete_pair_with_no_fragment_length() {
-        // Both mates aligned to one genome but no fragment length, which is not valid
+        // The key no longer reads the fragment length, so its absence is immaterial
         let e = parsed(Row {
             mate_1: ("500", "649", "False"),
             mate_2: ("800", "949", "True"),
             ..Row::default()
         });
-        assert_eq!((e.aln_start, e.aln_end), pair(500, 800));
+        assert_eq!(e.key, pair(500, 949));
     }
 
     #[test]
@@ -890,8 +1062,14 @@ mod tests {
             ..Row::default()
         });
         assert_eq!(e.genome_id, "genome_a/genome_b");
-        // genome_a is mate 2's genome here, so its coordinate leads
-        assert_eq!((e.aln_start, e.aln_end), pair(800, 500));
+        // genome_a is mate 2's genome here, so its mate leads
+        assert_eq!(
+            e.key,
+            DupKey::SplitGenomes {
+                first_mate: MateEnd { five_prime: 949, reverse: true },
+                second_mate: MateEnd { five_prime: 500, reverse: false },
+            }
+        );
 
         let f = parsed(Row {
             name: "r2",
@@ -901,14 +1079,17 @@ mod tests {
             ..Row::default()
         });
         assert_eq!(f.genome_id, "genome_a/genome_b");
-        assert_eq!((e.aln_start, e.aln_end), (f.aln_start, f.aln_end));
+        assert_eq!(e.key, f.key);
         assert!(match_reads(&e, &f, 0));
     }
 
+
     #[test]
-    fn make_read_entry_separates_copies_clipped_differently() {
-        // Two copies of one fragment, the second with seven bases clipped off mate 1's
-        // leading end. The key is built from the clipped starts, so the copies do not match.
+    fn make_read_entry_matches_copies_clipped_differently() {
+        // Three copies of one fragment: the second has 7 bases clipped off mate 1's
+        // leading end, so its POS is 7 higher, and the third 7 off mate 2's trailing
+        // end, which POS does not see at all. The unclipped bounds are the same, so
+        // the keys are equal at deviation 0.
         let pristine = parsed(Row {
             mate_1: ("500", "649", "False"),
             mate_2: ("800", "949", "True"),
@@ -929,16 +1110,16 @@ mod tests {
             clipped_starts: Some(("500", "800")),
             ..Row::default()
         });
-        assert_eq!((clipped_leading.aln_start, clipped_leading.aln_end), pair(507, 800));
-        assert!(!match_reads(&pristine, &clipped_leading, 2));
-        // A trailing clip moves no coordinate the key reads, so that copy still matches
+        assert_eq!(clipped_leading.key, pair(500, 949));
+        assert_eq!(clipped_trailing.key, pair(500, 949));
+        assert!(match_reads(&pristine, &clipped_leading, 0));
         assert!(match_reads(&pristine, &clipped_trailing, 0));
     }
 
     #[test]
-    fn make_read_entry_matches_fragments_shorter_than_read_on_degenerate_start() {
-        // A fragment shorter than the read collapses to the same (start, start).
-        // Two such fragments of different lengths match.
+    fn make_read_entry_separates_fragments_shorter_than_read() {
+        // Both mates of a fragment shorter than the read report the same start, but
+        // their 5' ends still differ by the fragment's length.
         let short = parsed(Row {
             mate_1: ("400", "439", "False"),
             mate_2: ("400", "439", "True"),
@@ -950,14 +1131,15 @@ mod tests {
             mate_2: ("400", "429", "True"),
             ..Row::default()
         });
-        assert_eq!((short.aln_start, short.aln_end), pair(400, 400));
-        assert_eq!((shorter.aln_start, shorter.aln_end), pair(400, 400));
-        assert!(match_reads(&short, &shorter, 0));
+        assert_eq!(short.key, pair(400, 439));
+        assert_eq!(shorter.key, pair(400, 429));
+        assert!(!match_reads(&short, &shorter, 2));
     }
 
     #[test]
-    fn make_read_entry_matches_pairs_with_different_orientations() {
-        // Two pairs over one span but with different strands erroneously match.
+    fn make_read_entry_separates_pairs_with_different_orientations() {
+        // Two pairs over one span but with different strands are different molecules,
+        // and now carry different kinds of key.
         let fr = parsed(Row {
             mate_1: ("500", "649", "False"),
             mate_2: ("800", "949", "True"),
@@ -969,11 +1151,54 @@ mod tests {
             mate_2: ("800", "949", "False"),
             ..Row::default()
         });
+        assert_eq!(fr.key, pair(500, 949));
         assert_eq!(
-            (fr.aln_start, fr.aln_end),
-            (ff.aln_start, ff.aln_end)
+            ff.key,
+            DupKey::PairSameStrand { left_5p: 500, right_5p: 800, reverse: false }
         );
-        assert!(match_reads(&fr, &ff, 0));
+        assert!(!match_reads(&fr, &ff, 0));
+    }
+
+    #[test]
+    fn make_read_entry_separates_fr_from_rf() {
+        let fr = parsed(Row {
+            mate_1: ("500", "649", "False"),
+            mate_2: ("800", "949", "True"),
+            ..Row::default()
+        });
+        let rf = parsed(Row {
+            name: "r2",
+            mate_1: ("500", "649", "True"),
+            mate_2: ("800", "949", "False"),
+            ..Row::default()
+        });
+        assert_eq!(fr.key, pair(500, 949));
+        assert_eq!(rf.key, pair(800, 649));
+        assert!(!match_reads(&fr, &rf, 0));
+    }
+
+    #[test]
+    fn make_read_entry_separates_ff_from_rr() {
+        let ff = parsed(Row {
+            mate_1: ("500", "649", "False"),
+            mate_2: ("800", "949", "False"),
+            ..Row::default()
+        });
+        let rr = parsed(Row {
+            name: "r2",
+            mate_1: ("500", "649", "True"),
+            mate_2: ("800", "949", "True"),
+            ..Row::default()
+        });
+        assert_eq!(
+            ff.key,
+            DupKey::PairSameStrand { left_5p: 500, right_5p: 800, reverse: false }
+        );
+        assert_eq!(
+            rr.key,
+            DupKey::PairSameStrand { left_5p: 649, right_5p: 949, reverse: true }
+        );
+        assert!(!match_reads(&ff, &rr, 0));
     }
 
     #[test]
@@ -993,10 +1218,46 @@ mod tests {
     }
 
     #[test]
-    fn make_read_entry_matches_unaligned_pairs_with_each_other() {
+    fn make_read_entry_separates_unaligned_pairs_from_each_other() {
         let a = parsed(Row::default());
         let b = parsed(Row { name: "r2", ..Row::default() });
-        assert!(match_reads(&a, &b, 0));
+        assert!(!match_reads(&a, &b, 0));
+    }
+
+    #[test]
+    fn make_read_entry_rejects_an_aligned_mate_with_no_strand() {
+        // The strand decides which bound is the 5' end, so it cannot be defaulted
+        let err = parse(Row {
+            mate_1: ("500", "649", "NA"),
+            ..Row::default()
+        })
+        .unwrap_err();
+        assert!(err.contains("strand"), "unexpected error: {err}");
+        assert!(err.contains("mate 1"), "unexpected error: {err}");
+    }
+
+    #[test]
+    fn make_read_entry_rejects_half_an_unclipped_span() {
+        let err = parse(Row {
+            mate_2: ("500", "NA", "True"),
+            ..Row::default()
+        })
+        .unwrap_err();
+        assert!(
+            err.contains("only one unclipped coordinate"),
+            "unexpected error: {err}"
+        );
+        assert!(err.contains("mate 2"), "unexpected error: {err}");
+    }
+
+    #[test]
+    fn make_read_entry_rejects_an_unreadable_coordinate() {
+        // Not an integer and not NA, so keying the read as unaligned would be wrong
+        for mate in [("x", "649", "False"), ("500", "x", "False")] {
+            let err = parse(Row { mate_1: mate, ..Row::default() }).unwrap_err();
+            assert!(err.contains("unreadable"), "unexpected error: {err}");
+            assert!(err.contains("mate 1"), "unexpected error: {err}");
+        }
     }
 
     // --- Header handling ---
@@ -1008,12 +1269,8 @@ mod tests {
         assert_eq!(count, HEADERS.len());
         assert_eq!(headers, HEADERS.to_vec());
         let unread = [
-            "prim_align_ref_start_unclipped",
-            "prim_align_ref_start_unclipped_rev",
-            "prim_align_ref_end_unclipped",
-            "prim_align_ref_end_unclipped_rev",
-            "prim_align_query_rc",
-            "prim_align_query_rc_rev",
+            "prim_align_ref_start",
+            "prim_align_ref_start_rev",
             "prim_align_fragment_length",
         ];
         for required in HEADERS.iter().filter(|h| !unread.contains(h)) {
@@ -1031,7 +1288,12 @@ mod tests {
 
     #[test]
     fn process_header_line_rejects_a_missing_required_column() {
-        for missing in ["query_qual_rev", "prim_align_ref_start", "prim_align_ref_start_rev"] {
+        for missing in [
+            "query_qual_rev",
+            "prim_align_ref_start_unclipped",
+            "prim_align_ref_end_unclipped_rev",
+            "prim_align_query_rc",
+        ] {
             let header = HEADERS
                 .iter()
                 .filter(|&&h| h != missing)
@@ -1057,15 +1319,33 @@ mod tests {
     }
 
     #[test]
-    fn match_reads_treats_absent_coordinates_as_agreement() {
-        // Two reads with one mate match on their single shared coordinate. Two reads with
-        // no coordinates at all match on nothing.
-        let a = entry("a", "g", (Some(100), None), 30.0);
-        let b = entry("b", "g", (Some(100), None), 30.0);
-        assert!(match_reads(&a, &b, 0));
-        let c = entry("c", "g", (None, None), 30.0);
-        let d = entry("d", "g", (None, None), 30.0);
-        assert!(match_reads(&c, &d, 0));
+    fn match_reads_never_compares_keys_of_different_kinds() {
+        let keys = [
+            pair(500, 800),
+            DupKey::PairSameStrand { left_5p: 500, right_5p: 800, reverse: false },
+            DupKey::SplitGenomes {
+                first_mate: MateEnd { five_prime: 500, reverse: false },
+                second_mate: MateEnd { five_prime: 800, reverse: true },
+            },
+            lone(500, false),
+            DupKey::NeitherAligned,
+        ];
+        for (i, a) in keys.iter().enumerate() {
+            for b in keys.iter().skip(i + 1) {
+                let x = entry("x", "g", *a, 30.0);
+                let y = entry("y", "g", *b, 30.0);
+                assert!(!match_reads(&x, &y, 2), "{a:?} matched {b:?}");
+            }
+        }
+    }
+
+    #[test]
+    fn match_reads_never_compares_a_lone_mate_against_a_pair() {
+        // A shared coordinate is weak evidence of duplication, so unlike samtools
+        // markdup we keep the two apart
+        let lone_mate = entry("a", "g", lone(500, false), 30.0);
+        let complete = entry("b", "g", pair(500, 949), 30.0);
+        assert!(!match_reads(&lone_mate, &complete, 2));
     }
 
     #[test]
@@ -1176,6 +1456,34 @@ mod tests {
         assert_eq!(
             group_names(build_groups_from_sorted_reads(reads, 1)),
             vec![vec!["a"], vec!["b"]]
+        );
+    }
+
+    #[test]
+    fn build_groups_from_sorted_reads_keeps_lone_mates_apart_by_strand() {
+        let reads = vec![
+            entry("a", "g", lone(100, false), 30.0),
+            entry("b", "g", lone(100, true), 30.0),
+            entry("c", "g", lone(100, false), 30.0),
+            entry("d", "g", DupKey::NeitherAligned, 30.0),
+            entry("e", "g", DupKey::NeitherAligned, 30.0),
+        ];
+        assert_eq!(
+            group_names(build_groups_from_sorted_reads(reads, 1)),
+            vec![vec!["a", "c"], vec!["b"], vec!["d"], vec!["e"]]
+        );
+    }
+
+    #[test]
+    fn sort_start_and_sort_end_bound_every_key() {
+        // The sliding window is bounded by the smallest coordinate a key holds
+        assert_eq!((pair(800, 500).sort_start(), pair(800, 500).sort_end()), (Some(500), Some(800)));
+        let same = DupKey::PairSameStrand { left_5p: 500, right_5p: 800, reverse: false };
+        assert_eq!((same.sort_start(), same.sort_end()), (Some(500), Some(800)));
+        assert_eq!((lone(500, true).sort_start(), lone(500, true).sort_end()), (Some(500), None));
+        assert_eq!(
+            (DupKey::NeitherAligned.sort_start(), DupKey::NeitherAligned.sort_end()),
+            (None, None)
         );
     }
 
