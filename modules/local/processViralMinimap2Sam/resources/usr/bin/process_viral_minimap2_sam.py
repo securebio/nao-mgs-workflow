@@ -35,6 +35,10 @@ logger.handlers.clear()
 logger.addHandler(handler)
 
 
+# CIGAR operation codes that clip the read rather than aligning it.
+# pysam's reference_end already counts the reference-consuming operations.
+CIGAR_CLIP_OPS = frozenset({4, 5})  # S, H
+
 HEADER_FIELDS = [
     "seq_id",
     "genome_id",
@@ -43,6 +47,8 @@ HEADER_FIELDS = [
     "taxid_all",
     "map_qual",
     "ref_start",
+    "ref_start_unclipped",
+    "ref_end_unclipped",
     "cigar",
     "edit_distance",
     "best_alignment_score",
@@ -54,6 +60,34 @@ HEADER_FIELDS = [
     "query_len",
     "classification",
 ]
+
+
+def unclipped_bounds(read: pysam.AlignedSegment) -> tuple[Any, Any]:
+    """Reference bounds of an alignment with clipped bases counted as if aligned.
+
+    The CIGAR is in reference orientation, so its leading operations are the
+    reference-leftmost ones whichever strand the read aligned to.
+
+    Args:
+        read: A mapped pysam alignment.
+
+    Returns:
+        The 0-based inclusive first and last reference position covered, or
+        ("NA", "NA") if the read carries no CIGAR.
+    """
+    ops = read.cigartuples
+    if not ops or read.reference_start is None or read.reference_end is None:
+        return "NA", "NA"
+    lead, trail = 0, 0
+    for op, length in ops:
+        if op not in CIGAR_CLIP_OPS:
+            break
+        lead += length
+    for op, length in reversed(ops):
+        if op not in CIGAR_CLIP_OPS:
+            break
+        trail += length
+    return read.reference_start - lead, read.reference_end - 1 + trail
 
 
 def read_fastq_record(fh: Any) -> tuple[str, str, str] | None:
@@ -100,6 +134,7 @@ def parse_sam_alignment(
     taxid = extract_viral_taxid(read.reference_name, genbank_metadata, viral_taxids)
     query_len = len(clean_seq)
     as_score = read.get_tag("AS")
+    unclipped_start, unclipped_end = unclipped_bounds(read)
 
     # Reverse-complement seq/qual when minimap2 mapped to the RC strand
     if read.is_reverse:
@@ -114,6 +149,8 @@ def parse_sam_alignment(
         "taxid_all": taxid,  # always == taxid for single-end reads
         "map_qual": read.mapping_quality,
         "ref_start": read.reference_start,
+        "ref_start_unclipped": unclipped_start,
+        "ref_end_unclipped": unclipped_end,
         "cigar": read.cigarstring,
         "edit_distance": read.get_tag("NM"),
         "best_alignment_score": as_score,

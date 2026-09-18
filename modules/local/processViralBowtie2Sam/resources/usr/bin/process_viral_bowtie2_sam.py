@@ -27,6 +27,12 @@ from Bio import Seq
 type FieldValue = str | int | bool | float | None
 type FieldDict = dict[str, FieldValue]
 
+# CIGAR operations that consume reference bases, and those that clip the read
+CIGAR_REF_OPS = frozenset("MDN=X")
+CIGAR_CLIP_OPS = frozenset("SH")
+# A CIGAR string is a run of length-operation pairs, or "*" where there is none
+CIGAR_OP_PATTERN = re.compile(r"(\d+)([MIDNSHP=X])")
+
 # =======================================================================
 # Configure constants
 # =======================================================================
@@ -50,6 +56,10 @@ SAM_HEADERS_PAIRED = [
     "edit_distance_rev",
     "ref_start",
     "ref_start_rev",
+    "ref_start_unclipped",
+    "ref_start_unclipped_rev",
+    "ref_end_unclipped",
+    "ref_end_unclipped_rev",
     "map_qual",
     "map_qual_rev",
     "cigar",
@@ -77,6 +87,8 @@ SAM_HEADERS_UNPAIRED = [
     "next_alignment_score",
     "edit_distance",
     "ref_start",
+    "ref_start_unclipped",
+    "ref_end_unclipped",
     "map_qual",
     "cigar",
     "query_len",
@@ -244,6 +256,54 @@ def get_next_alignment(sam_file: IO[str]) -> str | None:
 # =======================================================================
 
 
+def parse_cigar(cigar: str) -> list[tuple[int, str]]:
+    """
+    Split a CIGAR string into (length, operation) pairs.
+    Args:
+        cigar (str): CIGAR string, or "*" where the aligner reported none.
+    Returns:
+        list[tuple[int, str]]: Operations in order; empty for "*".
+    """
+    if cigar == "*":
+        return []
+    ops = [(int(n), op) for n, op in CIGAR_OP_PATTERN.findall(cigar)]
+    # findall skips anything it cannot read, so check the operations account for the
+    # whole string rather than silently dropping part of it
+    if not ops or "".join(f"{n}{op}" for n, op in ops) != cigar:
+        msg = f"Malformed CIGAR string: {cigar}"
+        logger.error(msg)
+        raise ValueError(msg)
+    return ops
+
+
+def unclipped_bounds(ref_start: int, cigar: str) -> tuple[FieldValue, FieldValue]:
+    """
+    Reference bounds of an alignment with clipped bases counted as if aligned.
+    The CIGAR is in reference orientation, so its leading operations are the
+    reference-leftmost ones regardless of which strand the read aligned to.
+    Args:
+        ref_start (int): 0-based leftmost aligned reference position (SAM POS - 1).
+        cigar (str): CIGAR string for the alignment.
+    Returns:
+        tuple[FieldValue, FieldValue]: 0-based inclusive first and last reference
+            position covered, or ("NA", "NA") for an unmapped record.
+    """
+    ops = parse_cigar(cigar)
+    if not ops:
+        return "NA", "NA"
+    ref_bases = sum(n for n, op in ops if op in CIGAR_REF_OPS)
+    lead, trail = 0, 0
+    for n, op in ops:
+        if op not in CIGAR_CLIP_OPS:
+            break
+        lead += n
+    for n, op in reversed(ops):
+        if op not in CIGAR_CLIP_OPS:
+            break
+        trail += n
+    return ref_start - lead, ref_start + ref_bases - 1 + trail
+
+
 def check_flag(
     flag_sum: int | str, flag_dict: dict[str, bool], flag_name: str, flag_value: int
 ) -> tuple[int, dict[str, bool]]:
@@ -381,6 +441,9 @@ def process_sam_alignment(
     out["ref_start"] = int(fields_in[3]) - 1  # Convert from 1-indexing to 0-indexing
     out["map_qual"] = int(fields_in[4])
     out["cigar"] = fields_in[5]
+    out["ref_start_unclipped"], out["ref_end_unclipped"] = unclipped_bounds(
+        int(str(out["ref_start"])), str(out["cigar"])
+    )
     if paired:
         out["mate_genome_id"] = fields_in[6]
         out["mate_ref_start"] = int(fields_in[7]) - 1  # Convert as above
@@ -481,6 +544,14 @@ def get_line_from_single(read_dict: FieldDict, paired: bool) -> str:
                 read_dict["ref_start"],
                 "NA",
             )
+            (
+                out_dict["ref_start_unclipped"],
+                out_dict["ref_start_unclipped_rev"],
+            ) = read_dict["ref_start_unclipped"], "NA"
+            out_dict["ref_end_unclipped"], out_dict["ref_end_unclipped_rev"] = (
+                read_dict["ref_end_unclipped"],
+                "NA",
+            )
             out_dict["map_qual"], out_dict["map_qual_rev"] = read_dict["map_qual"], "NA"
             out_dict["cigar"], out_dict["cigar_rev"] = read_dict["cigar"], "NA"
             out_dict["query_len"], out_dict["query_len_rev"] = (
@@ -522,6 +593,14 @@ def get_line_from_single(read_dict: FieldDict, paired: bool) -> str:
                 "NA",
                 read_dict["ref_start"],
             )
+            (
+                out_dict["ref_start_unclipped"],
+                out_dict["ref_start_unclipped_rev"],
+            ) = "NA", read_dict["ref_start_unclipped"]
+            out_dict["ref_end_unclipped"], out_dict["ref_end_unclipped_rev"] = (
+                "NA",
+                read_dict["ref_end_unclipped"],
+            )
             out_dict["map_qual"], out_dict["map_qual_rev"] = "NA", read_dict["map_qual"]
             out_dict["cigar"], out_dict["cigar_rev"] = "NA", read_dict["cigar"]
             out_dict["query_len"], out_dict["query_len_rev"] = (
@@ -546,6 +625,8 @@ def get_line_from_single(read_dict: FieldDict, paired: bool) -> str:
         out_dict["next_alignment_score"] = read_dict["next_best_alignment"]
         out_dict["edit_distance"] = read_dict["edit_distance"]
         out_dict["ref_start"] = read_dict["ref_start"]
+        out_dict["ref_start_unclipped"] = read_dict["ref_start_unclipped"]
+        out_dict["ref_end_unclipped"] = read_dict["ref_end_unclipped"]
         out_dict["map_qual"] = read_dict["map_qual"]
         out_dict["cigar"] = read_dict["cigar"]
         out_dict["query_len"] = read_dict["query_len"]
@@ -631,6 +712,10 @@ def get_line_from_pair(dict_1: FieldDict, dict_2: FieldDict) -> str:
         "edit_distance_rev": rev_dict["edit_distance"],
         "ref_start": fwd_dict["ref_start"],
         "ref_start_rev": rev_dict["ref_start"],
+        "ref_start_unclipped": fwd_dict["ref_start_unclipped"],
+        "ref_start_unclipped_rev": rev_dict["ref_start_unclipped"],
+        "ref_end_unclipped": fwd_dict["ref_end_unclipped"],
+        "ref_end_unclipped_rev": rev_dict["ref_end_unclipped"],
         "map_qual": fwd_dict["map_qual"],
         "map_qual_rev": rev_dict["map_qual"],
         "cigar": fwd_dict["cigar"],
