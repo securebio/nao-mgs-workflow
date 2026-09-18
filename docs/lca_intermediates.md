@@ -36,12 +36,14 @@ There are eight core statistical columns, which are repeated for each of the thr
 
 *NB: For long read results, some of these columns are NA and some columns may not exist. These columns have been noted below.*
 
+The `_rev` suffix names the mate, not the strand: unsuffixed columns describe mate 1 and `_rev` columns mate 2, and either mate can align to either strand.
+
 - `seq_id`: Name of read
 - `genome_id`: GenBank ID for best viral genome match to read, as identified by our aligner (bowtie2 or minimap2). "Best" means having the highest length normalized alignment score. For paired-end data, this is the highest-scoring match across forward and reverse reads. 
 - `genome_id_all`: GenBank IDs for viral genomes matching forward and reverse reads, joined by "/". For single-read data, this is the same as `genome_id`
 - `taxid`: NCBI taxon ID for taxon best matching read, as identified by our aligner (bowtie2 or minimap2). For paired-end data, this is the highest-scoring match across forward and reverse reads. 
 - `taxid_all`: NCBI taxon ID for taxons matching forward and reverse reads, joined by "/". For single-read data, this is the same as `taxid`.
-- `fragment_length`: Inferred fragment length, as calculated by the aligner (NA if forward and reverse reads align to different genome IDs/align discordantly). For single-read data, this column doesn't exist.
+- `fragment_length`: Inferred fragment length, as calculated by the aligner: Bowtie2's TLEN, which counts soft-clipped bases (NA if the two mates align to different genome IDs). For single-read data, this column doesn't exist.
 - `best_alignment_score`: Alignment score (directly from aligner) of best-scoring alignment (for paired-end data, score for forward read's best alignment). 
 - `best_alignment_score_rev`: Alignment score of best-scoring alignment of reverse read. For single-read data, this column doesn't exist.
 - `next_alignment_score`: Alignment score of second-best alignment (for paired-end data, score for forward read's second-best alignment; NA for minimap2)
@@ -52,8 +54,8 @@ There are eight core statistical columns, which are repeated for each of the thr
 - `taxid_rev`: NCBI taxon ID for taxon matching reverse read. For single-read data, this column doesn't exist.
 - `edit_distance`: Edit distance between read and aligned genome (for paired-end data, edit distance for forward read)
 - `edit_distance_rev`: Edit distance between reverse read and aligned genome. For single-read data, this column doesn't exist.
-- `ref_start`: Location of start of alignment on reference (for paired-end data, location of forward read alignment on reference)
-- `ref_start_rev`: Location of start of alignment of reverse read on reference. For single-read data, this column doesn't exist.
+- `ref_start`: Location of start of alignment on reference, excluding soft-clipped bases (for paired-end data, mate 1's alignment)
+- `ref_start_rev`: Location of start of alignment of mate 2 on reference, excluding soft-clipped bases. For single-read data, this column doesn't exist.
 - `map_qual`: Mapping quality (MAPQ) as returned by bowtie2/minimap2 (for paired-end data, mapping quality of forward read)
 - `map_qual_rev`: Mapping quality (MAPQ) of reverse read. For single-read data, this column doesn't exist.
 - `cigar`: CIGAR string representing alignment of read to aligned genome (for paired-end data, CIGAR string for forward read). Note that this is the CIGAR string as returned by the aligner. If `query_rc` is true, you should reverse-complement the query sequence before comparing it against the CIGAR string. 
