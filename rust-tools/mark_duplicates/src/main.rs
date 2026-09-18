@@ -747,12 +747,14 @@ mod tests {
         assert_eq!(ascii_to_quality_score("!"), 0.0);
         assert_eq!(ascii_to_quality_score("+"), 10.0);
         assert_eq!(ascii_to_quality_score("III"), 40.0);
-        // An absent mate scores zero rather than erroring
+        assert_eq!(ascii_to_quality_score("!I"), 20.0);
+        // A missing quality string scores zero rather than erroring
         assert_eq!(ascii_to_quality_score("NA"), 0.0);
     }
 
     #[test]
     fn average_quality_score_means_the_two_mates() {
+        // 40 and 0 average to 20
         assert_eq!(average_quality_score("III", "!!!"), 20.0);
         assert_eq!(average_quality_score("III", "NA"), 20.0);
     }
