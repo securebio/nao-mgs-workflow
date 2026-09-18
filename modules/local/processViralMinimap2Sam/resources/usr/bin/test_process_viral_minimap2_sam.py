@@ -350,3 +350,48 @@ class TestProcessSam:
         # Verify clean seq/qual came from FASTQ, not SAM
         assert rows[0]["query_seq"] == "AAAAA"
         assert rows[1]["query_seq"] == "CCCCC"
+
+
+class TestUnclippedBounds:
+    """Test unclipped reference bounds, the coordinates samtools markdup keys on."""
+
+    def _make_read(self, tmp_path: Path, cigar: str, pos: int, length: int) -> "Any":
+        import pysam
+
+        seq, qual = "A" * length, "I" * length
+        sam_path = tmp_path / "test.sam"
+        sam_path.write_text(
+            "@HD\tVN:1.6\n@SQ\tSN:genome1\tLN:10000\n"
+            f"readA\t0\tgenome1\t{pos}\t42\t{cigar}\t*\t0\t0\t{seq}\t{qual}\tAS:i:30\n"
+        )
+        with pysam.AlignmentFile(str(sam_path), "r") as f:
+            return next(iter(f))
+
+    @pytest.mark.parametrize(
+        "cigar,pos,length,expected",
+        [
+            # A 100 bp read covering 500-599 with nothing clipped
+            ("100M", 501, 100, (500, 599)),
+            # The same read end, clipped by the aligner: POS moves, the unclipped
+            # bounds do not
+            ("7S93M", 508, 100, (500, 599)),
+            ("93M7S", 501, 100, (500, 599)),
+            ("5S90M5S", 506, 100, (500, 599)),
+            # Hard clips count too, and are absent from SEQ
+            ("5H95M", 506, 95, (500, 599)),
+            # Deletions and skips consume reference bases; insertions do not
+            ("50M10D50M", 501, 100, (500, 609)),
+            ("50M10N50M", 501, 100, (500, 609)),
+            ("50M10I50M", 501, 110, (500, 599)),
+        ],
+    )
+    def test_counts_clipped_bases_as_aligned(
+        self,
+        tmp_path: Path,
+        cigar: str,
+        pos: int,
+        length: int,
+        expected: tuple[int, int],
+    ) -> None:
+        read = self._make_read(tmp_path, cigar, pos, length)
+        assert process_viral_minimap2_sam.unclipped_bounds(read) == expected
