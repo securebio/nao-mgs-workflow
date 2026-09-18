@@ -31,7 +31,6 @@ type FieldDict = dict[str, FieldValue]
 CIGAR_REF_OPS = frozenset("MDN=X")
 CIGAR_CLIP_OPS = frozenset("SH")
 # A CIGAR string is a run of length-operation pairs, or "*" where there is none
-CIGAR_PATTERN = re.compile(r"(?:\d+[MIDNSHP=X])+")
 CIGAR_OP_PATTERN = re.compile(r"(\d+)([MIDNSHP=X])")
 
 # =======================================================================
@@ -267,21 +266,21 @@ def parse_cigar(cigar: str) -> list[tuple[int, str]]:
     """
     if cigar == "*":
         return []
-    if not CIGAR_PATTERN.fullmatch(cigar):
+    ops = [(int(n), op) for n, op in CIGAR_OP_PATTERN.findall(cigar)]
+    # findall skips anything it cannot read, so check the operations account for the
+    # whole string rather than silently dropping part of it
+    if not ops or "".join(f"{n}{op}" for n, op in ops) != cigar:
         msg = f"Malformed CIGAR string: {cigar}"
         logger.error(msg)
         raise ValueError(msg)
-    return [(int(n), op) for n, op in CIGAR_OP_PATTERN.findall(cigar)]
+    return ops
 
 
 def unclipped_bounds(ref_start: int, cigar: str) -> tuple[FieldValue, FieldValue]:
     """
     Reference bounds of an alignment with clipped bases counted as if aligned.
     The CIGAR is in reference orientation, so its leading operations are the
-    reference-leftmost ones regardless of which strand the read aligned to. `samtools markdup`
-    keys on whichever of the two bounds is the read's 5' end -- the start on the
-    forward strand, the end on the reverse -- and unlike POS neither bound moves
-    when the aligner clips a read end.
+    reference-leftmost ones regardless of which strand the read aligned to.
     Args:
         ref_start (int): 0-based leftmost aligned reference position (SAM POS - 1).
         cigar (str): CIGAR string for the alignment.
