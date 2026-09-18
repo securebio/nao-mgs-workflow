@@ -215,7 +215,7 @@
     {
       "name": "prim_align_fragment_length",
       "title": "Fragment Length",
-      "description": "Inferred fragment length from the primary alignment (distance between outer edges of the read pair alignment). Only present for paired-end (short-read) data; NA for ONT.",
+      "description": "Inferred fragment length from the primary alignment: Bowtie2's TLEN, the distance between the pair's outer ends counting soft-clipped bases. NA when the mates align to different genomes. Only present for paired-end (short-read) data; NA for ONT.",
       "type": "integer",
       "constraints": {
         "minimum": 0
@@ -267,7 +267,7 @@
     {
       "name": "prim_align_ref_start",
       "title": "Reference Start Position",
-      "description": "0-based start position of the alignment on the reference genome. For paired-end data, this is the forward read position.",
+      "description": "0-based start position of the alignment on the reference genome, excluding soft-clipped bases. For paired-end data, this is mate 1's position.",
       "type": "integer",
       "constraints": {
         "required": true,
@@ -278,7 +278,7 @@
     {
       "name": "prim_align_ref_start_rev",
       "title": "Reference Start Position (Reverse)",
-      "description": "0-based start position of the reverse read alignment on the reference genome. Only present for paired-end (short-read) data; NA for ONT.",
+      "description": "0-based start position of mate 2's alignment on the reference genome, excluding soft-clipped bases. Only present for paired-end (short-read) data; NA for ONT.",
       "type": "integer",
       "constraints": {
         "minimum": 0
@@ -288,7 +288,7 @@
     {
       "name": "prim_align_query_rc",
       "title": "Query Reverse Complement",
-      "description": "Whether the read was reverse-complemented in the primary alignment. For paired-end data, this is the forward read flag.",
+      "description": "Whether the read aligned to the reverse strand, and so was reverse-complemented in the primary alignment. For paired-end data, this is mate 1's flag.",
       "type": "boolean",
       "constraints": {
         "required": true
@@ -298,7 +298,7 @@
     {
       "name": "prim_align_query_rc_rev",
       "title": "Query Reverse Complement (Reverse)",
-      "description": "Whether the reverse read was reverse-complemented in the primary alignment. Only present for paired-end (short-read) data; NA for ONT.",
+      "description": "Whether mate 2 aligned to the reverse strand. Only present for paired-end (short-read) data; NA for ONT.",
       "type": "boolean",
       "example": true
     },
