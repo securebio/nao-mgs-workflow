@@ -1,5 +1,6 @@
 # v3.4.0.0-dev
 
+- Key alignment duplicate marking on each mate's unclipped 5′ coordinate and strand, as `samtools markdup` does, rather than on the two mates' alignment start coordinates. Fixes two over-merging bugs: fragments shorter than the read no longer collapse onto a shared start coordinate, and molecules occupying one span in opposite orientations are no longer grouped. (#1006)
 - Emit unclipped alignment coordinates from RUN: `prim_align_ref_start_unclipped`, `prim_align_ref_end_unclipped` and their `_rev` counterparts give each mate's reference span with soft- and hard-clipped bases counted as if they had aligned. (#1005)
 - Correct documentation of the paired-end mates, `prim_align_ref_start`, and `prim_align_fragment_length`. (#1004)
 - Delete `post-processing/` and `docs/rfc-trunk-based-development.md`. (#1009)
