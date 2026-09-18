@@ -35,9 +35,8 @@ logger.handlers.clear()
 logger.addHandler(handler)
 
 
-# CIGAR operation codes that clip the read rather than aligning it. No equivalent of
-# the Bowtie2 producer's CIGAR_REF_OPS is needed: pysam's reference_end already counts
-# the reference-consuming operations for us.
+# CIGAR operation codes that clip the read rather than aligning it.
+# pysam's reference_end already counts the reference-consuming operations.
 CIGAR_CLIP_OPS = frozenset({4, 5})  # S, H
 
 HEADER_FIELDS = [
@@ -67,10 +66,7 @@ def unclipped_bounds(read: pysam.AlignedSegment) -> tuple[Any, Any]:
     """Reference bounds of an alignment with clipped bases counted as if aligned.
 
     The CIGAR is in reference orientation, so its leading operations are the
-    reference-leftmost ones whichever strand the read aligned to. `samtools markdup`
-    keys on whichever bound is the read's 5' end -- the start on the forward strand,
-    the end on the reverse -- and unlike POS neither bound moves when the aligner
-    clips a read end.
+    reference-leftmost ones whichever strand the read aligned to.
 
     Args:
         read: A mapped pysam alignment.
