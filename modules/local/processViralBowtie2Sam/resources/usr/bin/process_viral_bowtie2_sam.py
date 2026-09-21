@@ -438,11 +438,13 @@ def process_sam_alignment(
     out["taxid"] = int(
         extract_viral_taxid(fields_in[2], genbank_metadata, viral_taxids)
     )
-    out["ref_start"] = int(fields_in[3]) - 1  # Convert from 1-indexing to 0-indexing
+    ref_start = int(fields_in[3]) - 1  # Convert from 1-indexing to 0-indexing
+    cigar = fields_in[5]
+    out["ref_start"] = ref_start
     out["map_qual"] = int(fields_in[4])
-    out["cigar"] = fields_in[5]
+    out["cigar"] = cigar
     out["ref_start_unclipped"], out["ref_end_unclipped"] = unclipped_bounds(
-        int(str(out["ref_start"])), str(out["cigar"])
+        ref_start, cigar
     )
     if paired:
         out["mate_genome_id"] = fields_in[6]

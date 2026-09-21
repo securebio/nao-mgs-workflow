@@ -177,6 +177,9 @@ class TestUnclippedColumns:
         assert row["ref_start_rev"] == "700"
         assert row["ref_start_unclipped_rev"] == "700"
         assert row["ref_end_unclipped_rev"] == "799"
+        # The unclipped span is what the aligner reported as the fragment length
+        span = int(row["ref_end_unclipped_rev"]) - int(row["ref_start_unclipped"]) + 1
+        assert span == int(row["fragment_length"])
 
     def test_a_lone_aligned_mate_fills_only_its_own_slot(self, tmp_path: Path) -> None:
         """An unmapped mate has no CIGAR, so both of its columns are NA."""
