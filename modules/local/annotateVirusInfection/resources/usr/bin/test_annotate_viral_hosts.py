@@ -1596,6 +1596,45 @@ class TestGetVirusHostMapping:
         assert result["1"] == {"100", "101"}  # Duplicates removed
         assert result["2"] == {"200"}
 
+    def test_root_and_blank_hosts_dropped(self, tmp_path: Path) -> None:
+        """Test that root and blank hosts are dropped, taking the virus with them."""
+        # Arrange
+        tsv_content = (
+            "virus tax id\thost tax id\n"
+            "1\t1\n"  # root only -> absent from the mapping
+            "2\t\n"  # blank only -> absent from the mapping
+            "3\t1\n3\t\n"  # root and blank -> absent from the mapping
+            "4\t1\n4\t400\n"  # root alongside a named host -> named host kept
+            "5\t\n5\t500\n"  # blank alongside a named host -> named host kept
+        )
+        tsv_file = tmp_path / "virus_host.tsv"
+        tsv_file.write_text(tsv_content)
+
+        # Act
+        result = get_virus_host_mapping(str(tsv_file))
+
+        # Assert
+        assert "1" not in result
+        assert "2" not in result
+        assert "3" not in result
+        assert result["4"] == {"400"}
+        assert result["5"] == {"500"}
+
+    def test_root_only_virus_is_unresolved(self, tmp_path: Path) -> None:
+        """Test that a dropped virus reaches UNRESOLVED rather than INCONSISTENT."""
+        # Arrange
+        tsv_content = "virus tax id\thost tax id\n1\t1\n2\t200"
+        tsv_file = tmp_path / "virus_host.tsv"
+        tsv_file.write_text(tsv_content)
+        mapping = get_virus_host_mapping(str(tsv_file))
+
+        # Act
+        statuses = mark_direct_infections(pd.Series(["1", "2"]), {"200"}, mapping)
+
+        # Assert
+        assert statuses["1"] == UNRESOLVED
+        assert statuses["2"] == MATCH
+
     def test_empty_file(self, tmp_path: Path) -> None:
         """Test that empty file returns empty dictionary."""
         # Arrange

@@ -43,6 +43,9 @@ CONSISTENT = 3
 UNRESOLVED = -1
 MAYBE_INCONSISTENT = -2
 
+# NCBI taxonomy root; see get_virus_host_mapping()
+ROOT_TAXID = "1"
+
 # =======================================================================
 # Auxiliary functions
 # =======================================================================
@@ -51,19 +54,25 @@ MAYBE_INCONSISTENT = -2
 def get_virus_host_mapping(db_path: str) -> dict[str, set[str]]:
     """
     Import a TSV from Virus-Host-DB and extract virus/host info into
-    a dictionary.
+    a dictionary, dropping hosts that name no organism.
     Args:
         db_path (str): Path to the Virus-Host-DB TSV File.
     Returns:
         dict[str, set[str]]: A dictionary mapping virus taxids to
-            sets of host taxids.
+            sets of host taxids. Viruses left with no hosts are absent,
+            so check_direct_infection() returns UNRESOLVED for them.
     """
     logger.info("Importing Virus-Host-DB.")
     df = pd.read_csv(db_path, sep="\t", dtype=str)
     logger.info("Generating mapping from Virus-Host-DB.")
+    # Virus-Host-DB uses host tax id 1 (root) for a genome recovered from a
+    # sample rather than an isolated host, and leaves the field blank where it
+    # records no host. Neither names an organism, so neither is evidence
+    # against infection; drop both rather than score them INCONSISTENT.
+    named_host = df["host tax id"].notna() & (df["host tax id"] != ROOT_TAXID)
     return cast(
         dict[str, set[str]],
-        df.groupby("virus tax id")["host tax id"].apply(set).to_dict(),
+        df.loc[named_host].groupby("virus tax id")["host tax id"].apply(set).to_dict(),
     )
 
 

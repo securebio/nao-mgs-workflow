@@ -64,7 +64,7 @@ The script determines the host infection status for each viral taxon by executin
 
 The algorithm uses two temporary states during processing that are never present in the final output:
 
-1. **`UNRESOLVED` (-1):** Taxa that are not found in the Virus-Host DB. This is a placeholder used during the initial marking phase to indicate that we have no direct evidence about this taxon's infection status. These are replaced with the appropriate status either during the upward or downward propagation described below.
+1. **`UNRESOLVED` (-1):** Taxa for which the Virus-Host DB names no host organism, either because the taxon is absent from it or because its host entries are all root (taxid 1) or blank. This is a placeholder used during the initial marking phase to indicate that we have no direct evidence about this taxon's infection status. These are replaced with the appropriate status either during the upward or downward propagation described below.
 
 2. **`MAYBE_INCONSISTENT` (-2):** A special intermediate state used during the upward propagation phase. This state is assigned to parent taxa that have at least one **`INCONSISTENT`** child (where the other children are **`UNRESOLVED`**, **`INCONSISTENT`**, or **`MAYBE_INCONSISTENT`**) but are not themselves directly marked as **`INCONSISTENT`** in the database. This prevents premature assignment of the **`UNCLEAR`** (2) status and allows the algorithm to correctly propagate **`INCONSISTENT`** status downward in Phase 3 when appropriate. Without this intermediate state, the algorithm could incorrectly mark entire clades as **`UNCLEAR`** when they should be **`INCONSISTENT`**[^3].
 
@@ -77,7 +77,7 @@ This phase sets the baseline status for each taxon based on direct evidence.
 1.  **Direct Marking** (`mark_direct_infections`): Before performing this step, we call `expand_taxid` to get all descendants of the host taxon. The script then performs an initial scan of all viral taxa against the Virus-Host DB.
     * **`MATCH` (1):** The taxon is explicitly linked to the host group or any of its descendants in the database.
     * **`INCONSISTENT` (0):** The taxon is present in the database but is *not* linked to the host group.
-    * **`UNRESOLVED` (-1):** The taxon is not found in the database.
+    * **`UNRESOLVED` (-1):** The taxon is not found in the database, or every one of its Virus-Host DB host entries is root (taxid 1) or blank. Virus-Host DB records root for a genome recovered from a sample rather than an isolated host, and leaves the field blank where it records no host, so neither names an organism and neither is evidence against infection.
 
 2.  **Hard Exclusions** (`exclude_infections`): User-defined "hard-excluded" taxa and all of their descendants are immediately set to **`INCONSISTENT` (0)**, overriding any status set in the previous step.
 
