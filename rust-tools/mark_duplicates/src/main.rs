@@ -37,7 +37,8 @@ struct MateEnd {
 
 // The coordinate key a read is matched on. Every coordinate it holds is a mate's
 // unclipped 5' position, named `_5p`. Reads carrying different variants are not
-// comparable and never match, so a pair is never grouped with a lone mate.
+// comparable and never match, so a pair is never grouped with a lone mate, unlike
+// `samtools markdup`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum DupKey {
     // Both mates aligned to one genome, on opposite strands (FR or RF).
@@ -52,6 +53,7 @@ enum DupKey {
     // One mate aligned.
     OneMateAligned(MateEnd),
     // Neither mate aligned, so there is no coordinate to compare and nothing matches.
+    // `samtools markdup` does not key an unmapped read at all.
     NeitherAligned,
 }
 
@@ -1033,17 +1035,6 @@ mod tests {
     }
 
     #[test]
-    fn make_read_entry_accepts_a_complete_pair_with_no_fragment_length() {
-        // The key no longer reads the fragment length, so its absence is immaterial
-        let e = parsed(Row {
-            mate_1: ("500", "649", "False"),
-            mate_2: ("800", "949", "True"),
-            ..Row::default()
-        });
-        assert_eq!(e.key, pair(500, 949));
-    }
-
-    #[test]
     fn make_read_entry_sorts_split_genome_ids_and_their_mates_together() {
         // Mates on two genomes: the same pair of genomes always produces the same key
         // regardless of order.
@@ -1073,15 +1064,25 @@ mod tests {
         assert_eq!(f.genome_id, "genome_a/genome_b");
         assert_eq!(e.key, f.key);
         assert!(match_reads(&e, &f, 0));
+
+        // One mate on the other strand is a different molecule
+        let flipped = parsed(Row {
+            name: "r3",
+            genome: "genome_b/genome_a",
+            mate_1: ("500", "649", "True"),
+            mate_2: ("800", "949", "True"),
+            ..Row::default()
+        });
+        assert!(!match_reads(&e, &flipped, 0));
     }
 
 
     #[test]
     fn make_read_entry_matches_copies_clipped_differently() {
-        // Three copies of one fragment: the second has 7 bases clipped off mate 1's
-        // leading end, so its POS is 7 higher, and the third 7 off mate 2's trailing
-        // end, which POS does not see at all. The unclipped bounds are the same, so
-        // the keys are equal at deviation 0.
+        // Three copies of one fragment, clipped at different ends: the second 7 bases
+        // off mate 1's leading end and the third 7 off mate 2's, each moving that
+        // mate's POS by 7. The unclipped bounds are the same, so the keys are equal
+        // at deviation 0.
         let pristine = parsed(Row {
             mate_1: ("500", "649", "False"),
             mate_2: ("800", "949", "True"),
@@ -1095,17 +1096,34 @@ mod tests {
             clipped_starts: Some(("507", "800")),
             ..Row::default()
         });
-        let clipped_trailing = parsed(Row {
+        let clipped_mate_2 = parsed(Row {
             name: "r3",
             mate_1: ("500", "649", "False"),
             mate_2: ("800", "949", "True"),
-            clipped_starts: Some(("500", "800")),
+            clipped_starts: Some(("500", "807")),
             ..Row::default()
         });
         assert_eq!(clipped_leading.key, pair(500, 949));
-        assert_eq!(clipped_trailing.key, pair(500, 949));
+        assert_eq!(clipped_mate_2.key, pair(500, 949));
         assert!(match_reads(&pristine, &clipped_leading, 0));
-        assert!(match_reads(&pristine, &clipped_trailing, 0));
+        assert!(match_reads(&pristine, &clipped_mate_2, 0));
+    }
+
+    #[test]
+    fn make_read_entry_matches_reverse_lone_mates_trimmed_to_different_lengths() {
+        // Two copies of one molecule whose lone reverse mate was trimmed to different
+        // lengths. POS is the 3' end and moves; the unclipped end does not.
+        let long_copy = parsed(Row {
+            mate_1: ("701", "800", "True"),
+            ..Row::default()
+        });
+        let short_copy = parsed(Row {
+            name: "r2",
+            mate_1: ("711", "800", "True"),
+            ..Row::default()
+        });
+        assert_eq!(long_copy.key, lone(800, true));
+        assert!(match_reads(&long_copy, &short_copy, 0));
     }
 
     #[test]
