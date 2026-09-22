@@ -1,6 +1,7 @@
 # v3.4.0.0-dev
 
 - Switch the Kraken2 DB for taxonomic profiling from Standard to PlusPF (`k2_pluspf_20260626`, the current upstream build), which adds protozoan and fungal genomes. (#1000)
+- Key alignment duplicate marking on each mate's unclipped 5′ coordinate and strand, as `samtools markdup -m s` does, rather than on the two mates' alignment start coordinates. Fixes two over-merging bugs: fragments shorter than the read no longer collapse onto a shared start coordinate, and molecules occupying one span in opposite orientations are no longer grouped, whether complete pairs or lone mates. Reads with neither mate aligned also stop grouping, having no coordinate to compare. `mark_duplicates` now reads the unclipped coordinate columns in place of `prim_align_ref_start` and `prim_align_ref_start_rev`, so DOWNSTREAM requires short-read RUN output produced at this version or later. (#1006)
 - Emit unclipped alignment coordinates from RUN: `prim_align_ref_start_unclipped`, `prim_align_ref_end_unclipped` and their `_rev` counterparts give each mate's reference span with soft- and hard-clipped bases counted as if they had aligned, so that duplicate marking can key on them (#1006). (#1005)
 - Correct documentation of the paired-end mates, `prim_align_ref_start`, and `prim_align_fragment_length`. (#1004)
 - Delete `post-processing/` and `docs/rfc-trunk-based-development.md`. (#1009)
