@@ -40,7 +40,7 @@ This configuration file controls the pipeline's main RUN workflow. Its options a
 - `params.contaminants` [str]: Path to a local file containing other contaminant genomes to exclude during contaminant filtering (default [`ref/contaminants.fasta.gz`](./ref/contaminants.fasta.gz).
 - `params.adapters` [str]: Path to the adapter file for adapter masking during reference DB generation (default [`ref/adapters.fasta`](./ref/adapters.fasta).
 - `params.genome_patterns_exclude` [str]: Path to a text file specifying string patterns to hard-exclude genomes during viral genome DB generation (e.g. transgenic sequences) (default [`ref/hv_patterns_exclude.txt`](./ref/hv_patterns_exclude.txt).
-- `params.kraken_db` [str]: Path to pre-generated Kraken2 reference database (we use the Standard database by default)
+- `params.kraken_db` [str]: Path to pre-generated Kraken2 reference database (we use the PlusPF database by default, which adds protozoa and fungi over Standard)
 - `params.blast_db_name` [str]: The BLAST database to download for optional validation of taxonomic assignments — either an `update_blastdb.pl` name (e.g. `core_nt`) or an `http(s)` `.tar.gz` URL (used for CI tests). INDEX publishes it under a fixed `results/blast_db/` directory with a `blast_db` alias.
 - `params.assembly_source` [str]: Assembly source for downloading viral genomes via NCBI datasets CLI. Valid values: `"genbank"`, `"refseq"`, or `"all"`. Default: `"all"`.
 - `params.datasets_summary_extra_args` [str]: Additional arguments passed to `datasets summary genome taxon` in `ENUMERATE_VIRAL_ACCESSIONS`. Default: `""`. Use this for upstream filters that bound the set of enumerated assemblies (e.g. `--assembly-level complete`).

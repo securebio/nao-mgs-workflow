@@ -14,6 +14,7 @@ import contextlib
 import gzip
 import json
 import logging
+import subprocess
 from pathlib import Path
 
 import pandas as pd
@@ -36,6 +37,7 @@ from benchmark_index import (
     infection_status_changes,
     infection_status_columns,
     infection_status_transitions,
+    latest_kraken_release,
     load_overrides,
     metadata_deltas,
     restrict_to_fasta,
@@ -1018,25 +1020,73 @@ class TestRefStaleness:
         assert check_kraken_staleness(params) == []
         assert check_silva_staleness(params) == []
 
+    S3_LISTING = """\
+2026-03-11 15:04:22 85671280533 k2_pluspf_20260226.tar.gz
+2026-07-13 17:05:45 91014091453 k2_pluspf_20260626.tar.gz
+2026-03-11 15:31:07 42003278967 k2_pluspf_16gb_20260226.tar.gz
+2026-03-11 16:11:51 80230502610 k2_standard_20260226.tar.gz
+2026-07-13 17:45:57 85465587439 k2_standard_20260626.tar.gz
+2026-03-11 14:22:03 96671280533 k2_pluspfp_20260226.tar.gz
+"""
+
+    @pytest.mark.parametrize(
+        "database,expected",
+        [
+            # Newest build of the requested database, not of some other one.
+            ("pluspf", ("20260626", "k2_pluspf_20260626.tar.gz")),
+            ("standard", ("20260626", "k2_standard_20260626.tar.gz")),
+            # pluspf must not swallow the pluspfp bundles, or vice versa.
+            ("pluspfp", ("20260226", "k2_pluspfp_20260226.tar.gz")),
+            # No build of this database in the listing.
+            ("nosuchdb", None),
+        ],
+    )
+    def test_latest_kraken_release_selects_within_database(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        database: str,
+        expected: tuple[str, str] | None,
+    ) -> None:
+        def fake_run(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess:
+            return subprocess.CompletedProcess([], 0, stdout=self.S3_LISTING)
+
+        monkeypatch.setattr(subprocess, "run", fake_run)
+        assert latest_kraken_release(database) == expected
+
+    def test_latest_kraken_release_returns_none_on_listing_failure(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        def fake_run(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess:
+            raise subprocess.CalledProcessError(1, "aws s3 ls")
+
+        monkeypatch.setattr(subprocess, "run", fake_run)
+        assert latest_kraken_release("pluspf") is None
+
     @pytest.mark.parametrize(
         "current_url,latest_return,expected_status",
         [
             # current_date matches latest_date → current
             (
-                "https://genome-idx.s3.amazonaws.com/kraken/k2_standard_20260226.tar.gz",
-                ("20260226", "k2_standard_20260226.tar.gz"),
+                "https://genome-idx.s3.amazonaws.com/kraken/k2_pluspf_20260226.tar.gz",
+                ("20260226", "k2_pluspf_20260226.tar.gz"),
                 "current",
             ),
             # current_date older than latest_date → stale
             (
-                "https://genome-idx.s3.amazonaws.com/kraken/k2_standard_20250714.tar.gz",
-                ("20260226", "k2_standard_20260226.tar.gz"),
+                "https://genome-idx.s3.amazonaws.com/kraken/k2_pluspf_20250714.tar.gz",
+                ("20260226", "k2_pluspf_20260226.tar.gz"),
                 "stale",
             ),
             # fetcher returned None (network blip / parse failure) → error
             (
-                "https://genome-idx.s3.amazonaws.com/kraken/k2_standard_20260226.tar.gz",
+                "https://genome-idx.s3.amazonaws.com/kraken/k2_pluspf_20260226.tar.gz",
                 None,
+                "error",
+            ),
+            # unrecognizable bundle (custom/test DB) → error, no lookup
+            (
+                "https://nao-testing.s3.amazonaws.com/tiny-kraken2-db.tar.gz",
+                ("20260226", "k2_pluspf_20260226.tar.gz"),
                 "error",
             ),
         ],
@@ -1049,11 +1099,28 @@ class TestRefStaleness:
         expected_status: str,
     ) -> None:
         monkeypatch.setattr(
-            "benchmark_index.latest_kraken_release", lambda: latest_return
+            "benchmark_index.latest_kraken_release", lambda _database: latest_return
         )
         rows = check_kraken_staleness({"kraken_db": current_url})
         kraken_row = next(r for r in rows if r["ref"] == "kraken_db")
         assert kraken_row["status"] == expected_status
+
+    def test_check_kraken_staleness_compares_within_database(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The configured database, not a hard-coded one, drives the lookup."""
+        seen: list[str] = []
+
+        def fake_latest(database: str) -> tuple[str, str]:
+            seen.append(database)
+            return "20260226", f"k2_{database}_20260226.tar.gz"
+
+        monkeypatch.setattr("benchmark_index.latest_kraken_release", fake_latest)
+        url = "https://genome-idx.s3.amazonaws.com/kraken/k2_pluspf_20260226.tar.gz"
+        rows = check_kraken_staleness({"kraken_db": url})
+        assert seen == ["pluspf"]
+        assert rows[0]["latest"] == "k2_pluspf_20260226.tar.gz"
+        assert rows[0]["status"] == "current"
 
     @pytest.mark.parametrize(
         "current_url,latest_return,expected_status",
@@ -1117,10 +1184,10 @@ class TestRefStaleness:
     ) -> None:
         monkeypatch.setattr(
             "benchmark_index.latest_kraken_release",
-            lambda: ("20260226", "k2_standard_20260226.tar.gz"),
+            lambda _database: ("20260226", "k2_pluspf_20260226.tar.gz"),
         )
         out = tmp_path / "staleness.tsv"
-        write_staleness_table({"kraken_db": ".../k2_standard_20250714.tar.gz"}, out)
+        write_staleness_table({"kraken_db": ".../k2_pluspf_20250714.tar.gz"}, out)
         df = pd.read_csv(out, sep="\t")
         assert list(df["ref"]) == ["kraken_db"]
         assert df.loc[0, "status"] == "stale"

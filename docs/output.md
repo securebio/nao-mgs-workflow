@@ -125,7 +125,7 @@ Main heading represents the folder name, and subheadings describes the tool that
 
 #### Kraken2
 
-- `kraken_db`: Directory containing Kraken2 reference database (default: Most recent version of Standard).
+- `kraken_db`: Directory containing Kraken2 reference database (default: the PlusPF build pinned by `params.kraken_db`).
 
 #### K-mer screening references
 

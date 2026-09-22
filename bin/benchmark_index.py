@@ -90,9 +90,17 @@ def _write_json(path: Path, obj: object) -> None:
 ##########################
 
 
-def latest_kraken_release() -> tuple[str, str] | None:
-    """(date, filename) of the newest k2_standard_*.tar.gz in the public Kraken2
-    bucket, or None on failure."""
+def latest_kraken_release(database: str) -> tuple[str, str] | None:
+    """(date, filename) of the newest k2_<database>_*.tar.gz in the public Kraken2
+    bucket, or None on failure.
+
+    Args:
+        database: Kraken2 database to look up, e.g. "pluspf" or "standard".
+
+    Returns:
+        (build date, bundle filename) for the newest matching build, or None if
+        the listing failed or no build of that database exists.
+    """
     try:
         out = subprocess.run(
             ["aws", "s3", "ls", "s3://genome-idx/kraken/", "--no-sign-request"],
@@ -103,7 +111,7 @@ def latest_kraken_release() -> tuple[str, str] | None:
         ).stdout
     except (subprocess.SubprocessError, OSError):
         return None
-    bundles = re.findall(r"\b(k2_standard_(\d{8})\.tar\.gz)\b", out)
+    bundles = re.findall(rf"\b(k2_{re.escape(database)}_(\d{{8}})\.tar\.gz)\b", out)
     if not bundles:
         return None
     filename, date = max(bundles, key=lambda bundle: bundle[1])
@@ -144,13 +152,17 @@ def _stale(
 
 
 def check_kraken_staleness(new_params: dict) -> list[dict[str, str]]:
-    """Compare the index's Kraken2 DB against the latest available release."""
+    """Compare the index's Kraken2 DB against the latest release of that database."""
     url = new_params.get("kraken_db", "")
     if not url:
         return []
-    m = re.search(r"k2_standard_(\d{8})\.tar\.gz", url)
-    current_date = m.group(1) if m else ""
-    latest = latest_kraken_release()
+    m = re.search(r"k2_([a-z0-9_]+)_(\d{8})\.tar\.gz", url)
+    if m is None:
+        # Not a recognizable public genome-idx bundle (e.g. a custom or test DB),
+        # so there is no upstream release to compare against.
+        return [_stale("kraken_db", url, current_date="")]
+    database, current_date = m.group(1), m.group(2)
+    latest = latest_kraken_release(database)
     if latest is None:
         return [_stale("kraken_db", url, current_date)]
     latest_date, latest_name = latest
