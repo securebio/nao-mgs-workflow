@@ -21,6 +21,10 @@ Below, we've separated out the columns we expect are most relevant to most users
 - `prim_align_fragment_length`: Inferred fragment length, as calculated by the aligner: Bowtie2's TLEN, which counts soft-clipped bases (NA if the two mates align to different genome IDs). For single-read data, this column doesn't exist.
 - `prim_align_ref_start`: Location of start of alignment on reference, excluding soft-clipped bases (for paired-end data, mate 1's alignment)
 - `prim_align_ref_start_rev`: Location of start of alignment of mate 2 on reference, excluding soft-clipped bases. For single-read data, this column doesn't exist.
+- `prim_align_ref_start_unclipped`: Location of the first reference base the read covers, with clipped bases counted as if they had aligned. `prim_align_ref_start` minus the alignment's leading clip (for paired-end data, mate 1's).
+- `prim_align_ref_end_unclipped`: Location of the last reference base the read covers, with the same convention (for paired-end data, mate 1's).
+- `prim_align_ref_start_unclipped_rev`: Location of the first reference base mate 2 covers, with clipped bases. For single-read data, this column doesn't exist.
+- `prim_align_ref_end_unclipped_rev`: Location of the last reference base mate 2 covers, with clipped bases. For single-read data, this column doesn't exist.
 - `query_len`: Length of read, after trimming (for paired-end data, length of forward read) 
 - `query_len_rev`: Length of reverse read. For single-read data, this column doesn't exist. 
 - `query_seq`: Sequence of read (for paired-end data, sequence of forward read). Not reverse-complemented (we undo any reverse-complement performed by aligner). Note that forward and reverse read is arbitrary (for those looking for duplicates, this means that you might try looking for duplicates by reversing the reads). 

@@ -286,6 +286,34 @@
       "example": 921
     },
     {
+      "name": "prim_align_ref_start_unclipped",
+      "title": "Unclipped Reference Start Position",
+      "description": "0-based position of the first reference base the read covers, counting soft- and hard-clipped bases as if they had aligned; `prim_align_ref_start` minus the alignment's leading clip. For paired-end data, this is mate 1's position. Negative where a clip overhangs the start of the reference.",
+      "type": "integer",
+      "example": 5312
+    },
+    {
+      "name": "prim_align_ref_start_unclipped_rev",
+      "title": "Unclipped Reference Start Position (Mate 2)",
+      "description": "0-based position of the first reference base mate 2 covers, counting clipped bases as if they had aligned. Negative where a clip overhangs the start of the reference. Only present for paired-end (short-read) data; NA for ONT.",
+      "type": "integer",
+      "example": 5312
+    },
+    {
+      "name": "prim_align_ref_end_unclipped",
+      "title": "Unclipped Reference End Position",
+      "description": "0-based position of the last reference base the read covers, counting clipped bases as if they had aligned. Past the end of the reference where a clip overhangs it. For paired-end data, this is mate 1's position.",
+      "type": "integer",
+      "example": 5461
+    },
+    {
+      "name": "prim_align_ref_end_unclipped_rev",
+      "title": "Unclipped Reference End Position (Mate 2)",
+      "description": "0-based position of the last reference base mate 2 covers, counting clipped bases as if they had aligned. Past the end of the reference where a clip overhangs it. Only present for paired-end (short-read) data; NA for ONT.",
+      "type": "integer",
+      "example": 5461
+    },
+    {
       "name": "prim_align_query_rc",
       "title": "Query Reverse Complement",
       "description": "Whether the read aligned to the reverse strand, and so was reverse-complemented in the primary alignment. For paired-end data, this is mate 1's flag.",

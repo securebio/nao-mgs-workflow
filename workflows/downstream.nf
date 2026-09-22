@@ -45,7 +45,8 @@ workflow DOWNSTREAM {
                 "prim_align_fragment_length",
                 "prim_align_best_alignment_score_rev",
                 "prim_align_edit_distance_rev",
-                "prim_align_ref_start_rev", "prim_align_query_rc_rev",
+                "prim_align_ref_start_rev", "prim_align_ref_start_unclipped_rev",
+                "prim_align_ref_end_unclipped_rev", "prim_align_query_rc_rev",
                 "prim_align_pair_status", "prim_align_dup_exemplar",
                 "sim_dup_exemplar", "sim_dup_group_size"
             ].join(",")
