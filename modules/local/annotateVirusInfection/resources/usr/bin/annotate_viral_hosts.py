@@ -529,20 +529,21 @@ def check_infection(
           marked in Virus-Host DB as infecting that host group; taxa that are
           descended from such taxa; and taxa whose descendants are all marked MATCH.
         - An infection status of INCONSISTENT (0) designates taxa that are marked
-          as not infecting that host group. It includes taxa that: are included in
-          Virus-Host DB; are not marked in Virus-Host DB as infecting that host group;
+          as not infecting that host group. It includes taxa that: name at least
+          one host organism in Virus-Host DB; are not marked in Virus-Host DB as infecting that host group;
           and have no MATCH-marked descendants. It also includes taxa that are
           descended from such taxa, and taxa whose descendants are all marked INCONSISTENT.
         - An infection status of CONSISTENT (3) designates taxa that are likely to
           infect that host group, but cannot be affirmatively marked as such. It
-          includes taxa that are not included in Virus-Host DB, have at least one
-          MATCH-marked descendant, and no INCONSISTENT-marked descendants. It also
+          includes taxa that name no host organism in Virus-Host DB, have at least
+          one MATCH-marked descendant, and no INCONSISTENT-marked descendants. It also
           includes all taxa that are descended from such taxa and cannot be marked
           MATCH according to the rules above, as well as taxa whose descendants are
           all marked CONSISTENT.
         - Finally, an infection status of UNCLEAR (2) designates taxa of uncertain
-          infection status. It includes all other taxa: those that are not included
-          in Virus-Host DB and have both INCONSISTENT- and MATCH-marked descendants;
+          infection status. It includes all other taxa: those that name no host
+          organism in Virus-Host DB and have both INCONSISTENT- and MATCH-marked
+          descendants;
           those descended from a UNCLEAR-marked taxon that are not given another
           status by the rules above; and those whose descendants are all marked UNCLEAR.
     If a taxon is included in hard_exclude_taxids, it and all descendants

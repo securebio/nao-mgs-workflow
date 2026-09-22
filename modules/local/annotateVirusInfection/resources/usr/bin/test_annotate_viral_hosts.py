@@ -1691,11 +1691,24 @@ class TestCheckInfection:
                 ["2"],
                 {"1": MATCH, "2": MATCH},
             ),
+            # A root-only virus is absent from the mapping, so it starts
+            # UNRESOLVED and is resolved from the taxonomy: its matching sibling
+            # makes the parent CONSISTENT, which propagates down to it. Were it
+            # still keyed with host {"1"} it would be INCONSISTENT instead.
+            (
+                pd.Series(["1", "2", "3"], index=["1", "2", "3"]),
+                {"1": {"2", "3"}, "2": set(), "3": set()},
+                {"2": {"9606"}},
+                [],
+                [],
+                {"1": CONSISTENT, "2": MATCH, "3": CONSISTENT},
+            ),
         ],
         ids=[
             "hard_include_survives_short_circuit",
             "no_matches_no_include_short_circuits",
             "include_wins_on_conflict_with_exclude",
+            "root_only_sibling_resolves_from_taxonomy",
         ],
     )
     def test_check_infection(
@@ -1720,6 +1733,28 @@ class TestCheckInfection:
             pd.Series(expected).sort_index(),
             check_names=False,
         )
+
+    def test_root_only_virus_resolves_from_taxonomy_end_to_end(
+        self, tmp_path: Path
+    ) -> None:
+        """Test the whole path: a root-only TSV row ends CONSISTENT, not INCONSISTENT."""
+        # Arrange
+        tsv_file = tmp_path / "virus_host.tsv"
+        tsv_file.write_text("virus tax id\thost tax id\n2\t9606\n3\t1\n")
+        mapping = get_virus_host_mapping(str(tsv_file))
+
+        # Act
+        result = check_infection(
+            pd.Series(["1", "2", "3"], index=["1", "2", "3"]),
+            {"9606"},
+            {"1": {"2", "3"}, "2": set(), "3": set()},
+            mapping,
+            [],
+            [],
+        )
+
+        # Assert
+        assert result["3"] == CONSISTENT
 
 
 # =======================================================================
