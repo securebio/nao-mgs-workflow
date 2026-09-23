@@ -38,9 +38,11 @@ from benchmark_index import (
     infection_status_columns,
     infection_status_transitions,
     latest_kraken_release,
+    latest_silva_releases,
     load_overrides,
     metadata_deltas,
     restrict_to_fasta,
+    silva_release_dirs,
     summarise_params_changes,
     surveilled_taxids,
     write_genome_taxonomy_tables,
@@ -1122,62 +1124,139 @@ class TestRefStaleness:
         assert rows[0]["latest"] == "k2_pluspf_20260226.tar.gz"
         assert rows[0]["status"] == "current"
 
+    SILVA_ROOT_HTML = """\
+<a href="../">../</a>
+<a href="current/">current/</a>
+<a href="release_132/">release_132/</a>
+<a href="release_138.1/">release_138.1/</a>
+<a href="release_138.2/">release_138.2/</a>
+<a href="release_138_2/">release_138_2/</a>
+<a href="release_144/">release_144/</a>
+<a href="release_template/">release_template/</a>
+<a href="LICENSE.txt">LICENSE.txt</a>
+"""
+    SILVA_LISTINGS = {
+        "https://ftp.arb-silva.de/": SILVA_ROOT_HTML,
+        "https://ftp.arb-silva.de/release_144/Exports/": (
+            '<a href="SILVA_144_SSURef_NR99_tax_silva_trunc.fasta.gz">'
+        ),
+        "https://ftp.arb-silva.de/release_138.2/Exports/": (
+            '<a href="SILVA_138.2_LSURef_NR99_tax_silva.fasta.gz">'
+            '<a href="SILVA_138.2_SSURef_NR99_tax_silva.fasta.gz">'
+        ),
+        "https://ftp.arb-silva.de/release_138.1/Exports/": (
+            '<a href="SILVA_138.1_LSURef_NR99_tax_silva.fasta.gz">'
+        ),
+    }
+
+    def test_silva_release_dirs_dedupes_and_sorts(self) -> None:
+        # One link per version, dotted preferred; non-release links ignored.
+        assert silva_release_dirs(self.SILVA_ROOT_HTML) == [
+            ((144, 0), "release_144/"),
+            ((138, 2), "release_138.2/"),
+            ((138, 1), "release_138.1/"),
+            ((132, 0), "release_132/"),
+        ]
+
+    @pytest.mark.parametrize(
+        "missing_url,expected",
+        [
+            # All listings available: SSU from 144, LSU from 138.2.
+            (None, {"SSU": (144, 0), "LSU": (138, 2)}),
+            # Root listing fails: nothing resolved.
+            ("https://ftp.arb-silva.de/", {"SSU": None, "LSU": None}),
+            # Mid-walk failure keeps SSU but doesn't fall back to an older LSU.
+            (
+                "https://ftp.arb-silva.de/release_138.2/Exports/",
+                {"SSU": (144, 0), "LSU": None},
+            ),
+        ],
+    )
+    def test_latest_silva_releases(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        missing_url: str | None,
+        expected: dict[str, tuple[int, int] | None],
+    ) -> None:
+        fetched: list[str] = []
+
+        def fake_fetch(url: str) -> str | None:
+            fetched.append(url)
+            return None if url == missing_url else self.SILVA_LISTINGS[url]
+
+        monkeypatch.setattr("benchmark_index._fetch_text", fake_fetch)
+        assert latest_silva_releases(["SSU", "LSU"]) == expected
+        # The walk stops once every subunit is resolved or a listing fails.
+        assert "https://ftp.arb-silva.de/release_138.1/Exports/" not in fetched
+
     @pytest.mark.parametrize(
         "current_url,latest_return,expected_status",
         [
             # current matches latest → current
             (
                 "https://www.arb-silva.de/.../release_138.2/Exports/x.gz",
-                "138.2",
+                (138, 2),
                 "current",
             ),
             # current older than latest → stale
             (
                 "https://www.arb-silva.de/.../release_138_1/Exports/x.gz",
-                "138.2",
+                (138, 2),
                 "stale",
             ),
-            # fetcher returned None → error
+            # subunit couldn't be resolved → error
             (
                 "https://www.arb-silva.de/.../release_138.2/Exports/x.gz",
                 None,
                 "error",
             ),
+            # current newer than the discovered latest → error
+            (
+                "https://www.arb-silva.de/.../release_144/Exports/x.gz",
+                (138, 2),
+                "error",
+            ),
+            # no release in the URL → error
+            ("https://example.com/ssu.fasta.gz", (138, 2), "error"),
         ],
     )
     def test_check_silva_staleness_branches(
         self,
         monkeypatch: pytest.MonkeyPatch,
         current_url: str,
-        latest_return: str | None,
+        latest_return: tuple[int, int] | None,
         expected_status: str,
     ) -> None:
         monkeypatch.setattr(
-            "benchmark_index.latest_silva_release", lambda: latest_return
+            "benchmark_index.latest_silva_releases",
+            lambda subunits: dict.fromkeys(subunits, latest_return),
         )
         rows = check_silva_staleness({"ssu_url": current_url})
-        silva_row = next(r for r in rows if r["ref"] == "ssu_url")
-        assert silva_row["status"] == expected_status
+        assert rows[0]["ref"] == "ssu_url"
+        assert rows[0]["status"] == expected_status
 
-    def test_check_silva_staleness_call_hoisted(
+    def test_check_silva_staleness_compares_per_subunit(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        # When both ssu_url and lsu_url are present, latest_silva_release()
-        # is called exactly once (the C3 hoist).
-        calls = {"n": 0}
+        # LSU at 138.2 is current when 144 publishes only SSU.
+        calls: list[list[str]] = []
 
-        def fake() -> str:
-            calls["n"] += 1
-            return "138.2"
+        def fake(subunits: list[str]) -> dict[str, tuple[int, int] | None]:
+            calls.append(subunits)
+            return {"SSU": (144, 0), "LSU": (138, 2)}
 
-        monkeypatch.setattr("benchmark_index.latest_silva_release", fake)
-        check_silva_staleness(
+        monkeypatch.setattr("benchmark_index.latest_silva_releases", fake)
+        rows = check_silva_staleness(
             {
-                "ssu_url": "https://www.arb-silva.de/.../release_138.2/Exports/ssu.gz",
+                "ssu_url": "https://www.arb-silva.de/.../release_144/Exports/ssu.gz",
                 "lsu_url": "https://www.arb-silva.de/.../release_138.2/Exports/lsu.gz",
             }
         )
-        assert calls["n"] == 1
+        assert calls == [["SSU", "LSU"]]
+        assert [(r["ref"], r["latest"], r["status"]) for r in rows] == [
+            ("ssu_url", "release_144", "current"),
+            ("lsu_url", "release_138.2", "current"),
+        ]
 
     def test_write_staleness_table_writes_rows(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
