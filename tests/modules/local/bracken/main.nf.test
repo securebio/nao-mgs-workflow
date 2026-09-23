@@ -29,15 +29,19 @@ nextflow_process {
         }
     }
 
-    test("Should write header-only output for an empty report") {
+    test("Should write header-only output when there is nothing to estimate") {
         tag "expect_success"
         tag "empty_input"
         when {
             params {}
             process {
                 '''
-                input[0] = Channel.of("test")
-                    | combine(Channel.of("${projectDir}/test-data/toy-data/bracken/empty.report"))
+                // An empty report, one with only unclassified reads, and one with nothing at family level
+                input[0] = Channel.of(
+                    ["empty", "${projectDir}/test-data/toy-data/bracken/empty.report"],
+                    ["unclassified", "${projectDir}/test-data/toy-data/bracken/unclassified.report"],
+                    ["no_family", "${projectDir}/test-data/toy-data/bracken/no_family.report"]
+                )
                 input[1] = "${params.ref_dir}/results/kraken_db"
                 input[2] = "F"
                 input[3] = "5"
@@ -46,8 +50,9 @@ nextflow_process {
         }
         then {
             assert process.success
-            def lines = path(process.out[0][0][1]).linesGzip
-            assert lines == ["name\ttaxonomy_id\ttaxonomy_lvl\tkraken_assigned_reads\tadded_reads\tnew_est_reads\tfraction_total_reads"]
+            def header = "name\ttaxonomy_id\ttaxonomy_lvl\tkraken_assigned_reads\tadded_reads\tnew_est_reads\tfraction_total_reads"
+            assert process.out[0].collect { it[0] }.sort() == ["empty", "no_family", "unclassified"]
+            process.out[0].each { sample, out -> assert path(out).linesGzip == [header] : sample }
         }
     }
 
