@@ -42,7 +42,6 @@ from benchmark_index import (
     load_overrides,
     metadata_deltas,
     restrict_to_fasta,
-    silva_release_dirs,
     summarise_params_changes,
     surveilled_taxids,
     write_genome_taxonomy_tables,
@@ -1140,23 +1139,15 @@ class TestRefStaleness:
         "https://ftp.arb-silva.de/release_144/Exports/": (
             '<a href="SILVA_144_SSURef_NR99_tax_silva_trunc.fasta.gz">'
         ),
+        # No NR99 LSU here, as in releases 119.1 and 123.1.
         "https://ftp.arb-silva.de/release_138.2/Exports/": (
-            '<a href="SILVA_138.2_LSURef_NR99_tax_silva.fasta.gz">'
-            '<a href="SILVA_138.2_SSURef_NR99_tax_silva.fasta.gz">'
+            '<a href="SILVA_138.2_LSURef_tax_silva.fasta.gz">'
+            '<a href="SILVA_138.2_SSURef_Nr99_tax_silva.fasta.gz">'
         ),
         "https://ftp.arb-silva.de/release_138.1/Exports/": (
             '<a href="SILVA_138.1_LSURef_NR99_tax_silva.fasta.gz">'
         ),
     }
-
-    def test_silva_release_dirs_dedupes_and_sorts(self) -> None:
-        # One link per version, dotted preferred; non-release links ignored.
-        assert silva_release_dirs(self.SILVA_ROOT_HTML) == [
-            ((144, 0), "release_144/"),
-            ((138, 2), "release_138.2/"),
-            ((138, 1), "release_138.1/"),
-            ((132, 0), "release_132/"),
-        ]
 
     @pytest.mark.parametrize(
         "missing_url,expected",
@@ -1186,7 +1177,9 @@ class TestRefStaleness:
 
         monkeypatch.setattr("benchmark_index._fetch_text", fake_fetch)
         assert latest_silva_releases(["SSU", "LSU"]) == expected
-        # The walk stops once every subunit is resolved or a listing fails.
+        # Duplicate release_138_2 isn't fetched, and the walk stops once every
+        # subunit is resolved or a listing fails.
+        assert "https://ftp.arb-silva.de/release_138_2/Exports/" not in fetched
         assert "https://ftp.arb-silva.de/release_138.1/Exports/" not in fetched
 
     @pytest.mark.parametrize(

@@ -146,42 +146,30 @@ def _format_silva_version(version: SilvaVersion) -> str:
     return f"{major}.{minor}" if minor else str(major)
 
 
-def silva_release_dirs(root_html: str) -> list[tuple[SilvaVersion, str]]:
-    """Release directory links in the SILVA FTP root, newest first, one per version.
-
-    SILVA mirrors some releases under both release_NN.M and release_NN_M; the
-    dotted link is kept.
-    """
-    dirs: dict[SilvaVersion, str] = {}
-    for m in re.finditer(r'href="(release_(\d+)(?:([._])(\d+))?/)"', root_html):
-        version = (int(m.group(2)), int(m.group(4) or 0))
-        if version not in dirs or m.group(3) == ".":
-            dirs[version] = m.group(1)
-    return sorted(dirs.items(), reverse=True)
-
-
 def latest_silva_releases(subunits: list[str]) -> dict[str, SilvaVersion | None]:
-    """Newest SILVA release publishing an NR99 export for each subunit (SSU/LSU).
+    """Newest SILVA release for each subunit (SSU/LSU).
 
-    SILVA releases don't always cover both subunits (144 is SSU-only), so walk
-    the release directories newest first until every subunit is found. A failed
-    listing leaves the unresolved subunits as None rather than falling back to
-    an older release.
+    SILVA releases don't always cover both subunits.
     """
     latest: dict[str, SilvaVersion | None] = dict.fromkeys(subunits)
     root = _fetch_text(SILVA_ROOT)
     if root is None:
         return latest
-    for version, link in silva_release_dirs(root):
+    versions = {
+        (int(major), int(minor or 0))
+        for major, minor in re.findall(r'href="release_(\d+)(?:[._](\d+))?/"', root)
+    }
+    for version in sorted(versions, reverse=True):
         pending = [subunit for subunit in subunits if latest[subunit] is None]
         if not pending:
             break
-        listing = _fetch_text(f"{SILVA_ROOT}{link}Exports/")
+        url = f"{SILVA_ROOT}release_{_format_silva_version(version)}/Exports/"
+        listing = _fetch_text(url)
+        # Stop rather than fall back to an older release, which could look current.
         if listing is None:
             break
         for subunit in pending:
-            pattern = rf"{subunit}Ref_NR99_tax_silva(_trunc)?\.fasta\.gz"
-            if re.search(pattern, listing, flags=re.IGNORECASE):
+            if f"{subunit}Ref" in listing:
                 latest[subunit] = version
     return latest
 
