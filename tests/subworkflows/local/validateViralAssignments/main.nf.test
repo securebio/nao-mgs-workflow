@@ -43,6 +43,48 @@ nextflow_workflow {
         }
     }
 
+    test("Should publish header-only hits for an empty group but nothing for a failed one") {
+        tag "expect_failed"
+        tag "empty_input"
+        config "tests/configs/downstream_blast_ignored.config"
+        when {
+            params {
+                n_sample = 3
+                taxid_artificial = 81077
+            }
+            workflow {
+                '''
+                def validation_params = [
+                    validation_n_sample: params.n_sample,
+                    blast_perc_id: params.blast_perc_id,
+                    blast_qcov_hsp_perc: params.blast_qcov_hsp_perc,
+                    blast_max_rank: params.blast_max_rank,
+                    blast_min_frac: params.blast_min_frac,
+                    taxid_artificial: params.taxid_artificial,
+                    db_download_timeout: params.db_download_timeout,
+                    platform: params.platform
+                ]
+                input[0] = Channel.of(
+                    ["ok", "${projectDir}/test-data/validateViralAssignments/input_valid.tsv"],
+                    ["failed", "${projectDir}/test-data/validateViralAssignments/input_valid.tsv"],
+                    ["empty", "${projectDir}/test-data/splitViralTsvBySelectedTaxid/input_headers_only.tsv"]
+                )
+                input[1] = Channel.of("${params.ref_dir}/results/total-virus-db-annotated.tsv.gz") // db
+                input[2] = params.ref_dir
+                input[3] = validation_params
+                '''
+            }
+        }
+        then {
+            // failOnIgnore fails the run once the ignored BLAST task is counted
+            assert workflow.failed
+            def hits = workflow.out.annotated_hits.collectEntries { [(it[0]): path(it[1]).linesGzip] }
+            assert hits.keySet() == ["ok", "empty"] as Set
+            assert hits["empty"].size() == 1
+            assert hits["ok"].size() > 1
+        }
+    }
+
     test("Should run without failures on valid input data") {
         tag "expect_success"
         when {

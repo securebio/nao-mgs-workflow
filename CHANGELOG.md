@@ -1,5 +1,6 @@
 # v3.4.0.0-dev
 
+- Stop publishing a header-only `validation_hits` for a DOWNSTREAM group whose validation failed. `PARTITION_TSV` now writes a header-only `partition_empty_*` file for a group with no hits, and only those groups get an empty table; before, any group missing from the validation output got one, so a failed BLAST job published as zero hits. (#PR1)
 - Check SILVA staleness per subunit in `bin/benchmark_index.py`. (#1014)
 - Update the SSU ribosomal reference from SILVA 138.2 to SILVA 144 and cap BBDuk's Java heap at 75% of task memory. (#1013)
 - Switch the Kraken2 DB for taxonomic profiling from Standard to PlusPF (`k2_pluspf_20260626`, the current upstream build), which adds protozoan and fungal genomes. (#1000)

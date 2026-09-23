@@ -47,8 +47,9 @@ nextflow_workflow {
         then {
             // Should run without failures even when input TSV has no data rows
             assert workflow.success
-            // TSV output should be empty (partition_empty_* filtered out)
+            // The group is reported empty rather than partitioned
             assert workflow.out.tsv.collect{it[1]}.flatten().size() == 0
+            assert workflow.out.empty == ["test"]
             // annotated is not filtered, so unlike tsv it still emits one table per
             // group -- header-only, and already shaped for consumers
             assert workflow.out.annotated.size() == 1
@@ -77,6 +78,7 @@ nextflow_workflow {
         then {
             // Should run without failures
             assert workflow.success
+            assert workflow.out.empty.size() == 0
             // Sorting should work as expected
             def tabs_in = workflow.out.test_in.collect{path(it[1]).csv(sep: "\t")}
             def tabs_sort = workflow.out.test_sort.collect{path(it[1]).csv(sep: "\t")}
