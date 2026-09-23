@@ -1,7 +1,7 @@
 {
   "$schema": "https://datapackage.org/profiles/2.0/tableschema.json",
   "title": "Summary Statistics for Alignment-Based Duplicate Marking",
-  "description": "Summary statistics for groups of duplicate reads identified by the DOWNSTREAM workflow. Each row represents a single duplicate group: a set of reads aligned to the same genome and the same strands, with matching unclipped 5' coordinates (within a configurable tolerance) for both mates. Groups are defined based on the primary alignment of each read and do not account for LCA information.",
+  "description": "Summary statistics for groups of duplicate reads identified by the DOWNSTREAM workflow. Each row represents a single duplicate group: a set of reads aligned to the same genome and the same strands, with matching unclipped 5' coordinates (within a configurable tolerance) for both mates, plus any reads with one mate unaligned that were attached to the group on their single 5' coordinate. Groups are defined based on the primary alignment of each read and do not account for LCA information.",
   "missingValues": ["", "NA"],
   "primaryKey": ["prim_align_dup_exemplar"],
   "fields": [

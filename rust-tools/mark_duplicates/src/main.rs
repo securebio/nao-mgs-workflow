@@ -1702,20 +1702,28 @@ mod tests {
     }
 
     #[test]
-    fn attach_lone_mates_reaches_same_strand_and_split_genome_pairs() {
-        let same_strand = vec![
+    fn attach_lone_mates_reaches_a_same_strand_pair() {
+        let reads = vec![
             entry("p", "g", DupKey::PairSameStrand { left_5p: 500, right_5p: 800, reverse: true }, 36.0),
             entry("l", "g", lone(800, true), 30.0),
         ];
-        assert_eq!(attached_groups(same_strand, 1), vec![vec!["l*", "p"]]);
-        let split = vec![
-            entry("p", "g", DupKey::SplitGenomes {
-                first_mate: MateEnd { five_prime: 500, reverse: false },
-                second_mate: MateEnd { five_prime: 800, reverse: true },
-            }, 36.0),
-            entry("l", "g", lone(500, false), 30.0),
-        ];
-        assert_eq!(attached_groups(split, 1), vec![vec!["l*", "p"]]);
+        assert_eq!(attached_groups(reads, 1), vec![vec!["l*", "p"]]);
+    }
+
+    #[test]
+    fn attach_lone_mates_never_reaches_a_split_genome_pair() {
+        // Groups are built per `genome_id`, and a split pair carries both genomes at
+        // once, so it lands in a partition no lone mate can be in. `samtools markdup`,
+        // which keys each read against its own reference, would attach here.
+        let mut split = vec![vec![entry("p", "genome_a/genome_b", DupKey::SplitGenomes {
+            first_mate: MateEnd { five_prime: 500, reverse: false },
+            second_mate: MateEnd { five_prime: 800, reverse: true },
+        }, 36.0)]];
+        let mut single = vec![vec![entry("l", "genome_a", lone(500, false), 30.0)]];
+        attach_lone_mates(&mut split, 1);
+        attach_lone_mates(&mut single, 1);
+        assert_eq!(single[0].len(), 1);
+        assert!(!single[0][0].attached);
     }
 
     #[test]
