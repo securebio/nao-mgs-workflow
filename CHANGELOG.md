@@ -1,5 +1,6 @@
 # v3.4.0.0-dev
 
+- Fail the RUN and DOWNSTREAM sentinels as soon as an expected output was never produced, rather than polling for it until `sentinel_max_wait_mins` runs out, twice. Also stop the polling backoff overshooting that limit: the 32-minute default waited 64. A failed task no longer delays the run's non-zero exit by about two hours. (#1021)
 - Drop a DOWNSTREAM group from validation when downsampling fails for one of its species, rather than validating the rest and labelling that species' reads `not_sampled`. (#1017)
 - Stop publishing a header-only `validation_hits` for a DOWNSTREAM group whose validation failed, and delete `CREATE_EMPTY_GROUP_OUTPUTS`. A group with no hits now runs the whole validation path, BLAST included, and writes a header-only table from the real code rather than from the schema, so a group that failed publishes nothing. `PARTITION_TSV` writes a header-only `partition_empty_*` file for header-only input, and the processes that label files by partition accept it. (#1016)
 - Switch the Kraken2 DB for taxonomic profiling from Standard to PlusPF (`k2_pluspf_20260626`, the current upstream build), which adds protozoan and fungal genomes. (#1000)

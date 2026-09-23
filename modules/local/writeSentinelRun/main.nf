@@ -7,7 +7,7 @@ process WRITE_SENTINEL_RUN {
     label "sentinel"
     tag "id=util"
     input:
-        val(ready)           // Dependency signal: collected items from all output channels
+        val(ready)           // Collected items from all output channels
         val(sample_names)    // List of sample names from samplesheet
         val(start_time)      // Start time string
         val(params_map)      // Workflow params (+ output_dir and pyproject_path injected by caller)
@@ -18,6 +18,7 @@ process WRITE_SENTINEL_RUN {
         def keys = ["run"]
         if (params_map.platform == "illumina") keys.add("run-shortread-extra")
         def expected = SentinelUtils.getExpectedOutputs(pyprojectText, keys, "SAMPLE", sample_names as List)
+        SentinelUtils.checkEmitted(expected, ready as List)
         SentinelUtils.waitForFiles(expected, params_map.output_dir as String, SentinelUtils.resolveMaxWaitMins(params_map)) { p -> file(p).exists() }
         def sentinelContent = [
             runStartedAt: start_time,

@@ -34,8 +34,29 @@ class SentinelUtils {
         return expected.sort().unique()
     }
 
+    // Expected outputs whose file name no upstream task emitted. A failed task emits nothing,
+    // so these will never be published and there is no point polling for them.
+    //   emitted : the values collected from the publish channels, nested in any way
+    static List<String> neverEmitted(List<String> expected, Collection emitted) {
+        def names = emitted.flatten()
+            .findAll { it instanceof java.nio.file.Path }
+            .collect { it.fileName.toString() } as Set
+        return expected.findAll { !names.contains(it.tokenize("/").last()) }
+    }
+
+    // Throw if any expected output was never emitted, naming the missing files.
+    static void checkEmitted(List<String> expected, Collection emitted) {
+        def missing = neverEmitted(expected, emitted)
+        if (!missing.isEmpty()) {
+            throw new RuntimeException(
+                "${missing.size()}/${expected.size()} expected output file(s) were never produced, " +
+                "so an upstream task failed:\n  " + missing.join("\n  "))
+        }
+    }
+
     // Poll outputDir for each expected file with exponential backoff starting at 15s
-    // (each interval doubles, uncapped). Throws on timeout with a message listing missing files.
+    // (each interval doubles, and the last is cut short so the total never exceeds maxWaitMins).
+    // Throws on timeout with a message listing missing files.
     //   exists : closure taking a full path string and returning true if the file exists.
     //            Callers pass `{ p -> file(p).exists() }` so S3 paths work via Nextflow's file() API.
     static void waitForFiles(List<String> expected, String outputDir, long maxWaitMins,
@@ -54,8 +75,9 @@ class SentinelUtils {
                     "${missing.size()}/${expected.size()} remaining published output file(s):\n  " +
                     missing.join("\n  "))
             }
-            Thread.sleep(intervalMs)
-            totalWaitedMs += intervalMs
+            def sleepMs = Math.min(intervalMs, maxWaitMs - totalWaitedMs)
+            Thread.sleep(sleepMs)
+            totalWaitedMs += sleepMs
             intervalMs = intervalMs * 2
             missing = expected.findAll { !exists.call("${outputDir}/${it}") }
         }
