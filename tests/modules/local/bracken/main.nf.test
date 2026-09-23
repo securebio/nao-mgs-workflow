@@ -29,4 +29,26 @@ nextflow_process {
         }
     }
 
+    test("Should write header-only output for an empty report") {
+        tag "expect_success"
+        tag "empty_input"
+        when {
+            params {}
+            process {
+                '''
+                input[0] = Channel.of("test")
+                    | combine(Channel.of("${projectDir}/test-data/toy-data/bracken/empty.report"))
+                input[1] = "${params.ref_dir}/results/kraken_db"
+                input[2] = "F"
+                input[3] = "5"
+                '''
+            }
+        }
+        then {
+            assert process.success
+            def lines = path(process.out[0][0][1]).linesGzip
+            assert lines == ["name\ttaxonomy_id\ttaxonomy_lvl\tkraken_assigned_reads\tadded_reads\tnew_est_reads\tfraction_total_reads"]
+        }
+    }
+
 }

@@ -85,6 +85,10 @@ nextflow_pipeline {
         then {
             // Should run without failures
             assert workflow.success
+            // Every published table should still carry its header
+            def tables = path("${launchDir}/output/results").toFile().listFiles().findAll { it.name.endsWith(".tsv.gz") }
+            assert !tables.isEmpty()
+            tables.each { t -> assert path(t.path).linesGzip.size() >= 1 : "${t.name} has no header" }
             assertSentinelValid("${launchDir}/output")
             assertTraceTagsValid("${launchDir}")
         }

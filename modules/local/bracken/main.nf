@@ -11,6 +11,8 @@ process BRACKEN {
     output:
         tuple val(sample), path("${sample}.bracken.gz")
     script:
+        // Bracken's output columns, written alone when there is nothing for it to estimate
+        def header = ["name", "taxonomy_id", "taxonomy_lvl", "kraken_assigned_reads", "added_reads", "new_est_reads", "fraction_total_reads"].join("\\t")
         def db = db_path
         def out = "${sample}.bracken"
         """
@@ -38,14 +40,14 @@ process BRACKEN {
         echo "Number of 'unclassified' lines (y): \${y}"
         echo "Number of lines with classification level ${classificationLevel} (z): \${z}"
         if [[ \${x} -eq "0" && \${y} -eq "0" ]]; then
-            echo "Empty input file - creating empty output."
-            touch ${out}
+            echo "Empty input file - writing header-only output."
+            printf "${header}\\n" > ${out}
         elif [[ \${x} -eq "1" && \${y} -eq "1" ]]; then
-            echo "No classified reads in input - creating empty output."
-            touch ${out}
+            echo "No classified reads in input - writing header-only output."
+            printf "${header}\\n" > ${out}
         elif [[ \${z} -eq "0" ]]; then
-            echo "No reads classified at desired level in input - creating empty output."
-            touch ${out}
+            echo "No reads classified at desired level in input - writing header-only output."
+            printf "${header}\\n" > ${out}
         else
             # Run Bracken
             io="-d ${db} -i \${in} -o ${out} -t ${threshold}"
