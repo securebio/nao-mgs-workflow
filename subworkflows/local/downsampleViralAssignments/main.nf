@@ -32,12 +32,16 @@ workflow DOWNSAMPLE_VIRAL_ASSIGNMENTS {
         }
         // 1. Downsample each partition, one task each; exemplar_columns optionally
         // confines sampling to duplicate-group exemplars
-        partition_ch = tsv_ch.transpose()
+        // Key each partition with its group's size, so a group missing a failed partition
+        // is dropped rather than regrouped without it
+        partition_ch = tsv_ch
+            .map { label, files -> [groupKey(label, files.size()), files] }
+            .transpose()
         downsampled_ch = DOWNSAMPLE_TSV_BY_HASH(partition_ch, "seq_id", n_sample, exemplar_columns).output
         // Sort the group: it reaches the processes below as a command-line argument, so
         // task-completion order would change their task hashes and defeat -resume
         sampled_ch = downsampled_ch.groupTuple()
-            .map { label, files -> [label, files.sort { f -> f.name }] }
+            .map { key, files -> [key.getGroupTarget(), files.sort { f -> f.name }] }
         // 2. Extract the retained reads into interleaved FASTQ
         fastq_ch = EXTRACT_VIRAL_HITS_TO_FASTQ_NOREF_LABELED_LIST(sampled_ch, false).output.map(listFiles)
         // 3. Merge and join pairs to produce a single sequence per retained read pair

@@ -1,5 +1,6 @@
 # v3.4.0.0-dev
 
+- Drop a DOWNSTREAM group from validation when downsampling fails for one of its species, rather than validating the rest and labelling that species' reads `not_sampled`. (#1017)
 - Stop publishing a header-only `validation_hits` for a DOWNSTREAM group whose validation failed. `PARTITION_TSV` now writes a header-only `partition_empty_*` file for a group with no hits, and only those groups get an empty table; before, any group missing from the validation output got one, so a failed BLAST job published as zero hits. (#1016)
 - Switch the Kraken2 DB for taxonomic profiling from Standard to PlusPF (`k2_pluspf_20260626`, the current upstream build), which adds protozoan and fungal genomes. (#1000)
 - Key alignment duplicate marking on each mate's unclipped 5′ coordinate and strand, as `samtools markdup -m s` does, rather than on the two mates' alignment start coordinates. Fixes two over-merging bugs: fragments shorter than the read no longer collapse onto a shared start coordinate, and molecules occupying one span in opposite orientations are no longer grouped, whether complete pairs or lone mates. Reads with neither mate aligned also stop grouping, having no coordinate to compare. `mark_duplicates` now reads the unclipped coordinate columns in place of `prim_align_ref_start` and `prim_align_ref_start_rev`, so DOWNSTREAM requires short-read RUN output produced at this version or later. (#1006)
@@ -433,7 +434,6 @@ This version involved numerous changes intended to make new releases easier, fas
     - Fixed bug in ANNOTATE_VIRUS_INFECTION that incorrectly assigned certain viruses to specific hosts (e.g. porcine respiratory coronavirus mislabeled as human-infecting; resolves issue #311).
 
 ### Other changes (relevant mainly to developers)
-- Bug fixes:
     - RAISE_TAXONOMY_RANKS: Adjusted for updated classification of "Viruses" taxon in NCBI taxonomy database.
     - FILTER_VIRAL_SAM: Now correctly handles concordant pairs with identical positions but differing alignment scores.
     - VALIDATE_GROUPING: Fixed output file name collisions.
@@ -542,7 +542,6 @@ This version involved numerous changes intended to make new releases easier, fas
 - Modified Github Actions to pull specific Nextflow version (rather than "latest")
 - Fixed missing-columns bug for empty files in SUMMARIZE_MULTIQC
 - Restructured SORT_TSV process to improve memory efficiency
-- Continued working on post-hoc validation of putative viral hits in the DOWNSTREAM workflow
     - Split out core of BLAST_VIRAL subworkflow into a new BLAST_FASTA subworkflow that is called by both BLAST_VIRAL and VALIDATE_VIRAL_ASSIGNMENTS
     - Added tests for BLAST_FASTA and updated tests for VALIDATE_VIRAL_ASSIGNMENTS
     - Implemented basic algorithm for computing the lowest common ancestor of sets of taxids in tabular TSV data (LCA_TSV), including special handling of artificial and unclassified taxids
