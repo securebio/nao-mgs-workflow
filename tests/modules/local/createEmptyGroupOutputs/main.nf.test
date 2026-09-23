@@ -26,13 +26,13 @@ nextflow_process {
     tag "module"
     tag "create_empty_group_outputs"
 
-    test("Should create empty output files for missing groups") {
+    test("Should create empty output files for a group") {
         tag "expect_success"
         when {
             params {}
             process {
                 '''
-                input[0] = ["group1", "group2"]
+                input[0] = "group1"
                 input[1] = file("${projectDir}/pyproject.toml")
                 input[2] = file("${projectDir}/schemas")
                 input[3] = "illumina"
@@ -42,14 +42,15 @@ nextflow_process {
         }
         then {
             assert process.success
-            def groups = ["group1", "group2"]
+            def groups = ["group1"]
             def pyproject = path(process.out.pyproject[0])
             def schemasDir = process.out.schemas[0]
             // Ignore JSON files (these are handled separately by dedicated aggregation code)
             def patterns = getGroupPatterns(pyproject, "illumina").findAll { !it.endsWith(".json") }
 
             // Verify outputs: one per group per pattern
-            def files = process.out.outputs.flatten()
+            assert process.out.outputs[0][0] == "group1"
+            def files = process.out.outputs.collect { it[1] }.flatten()
             assert files.size() == groups.size() * patterns.size()
             def filenames = files.collect { it.toString().split('/').last() }.sort()
             groups.each { group ->
@@ -81,7 +82,7 @@ nextflow_process {
             params {}
             process {
                 '''
-                input[0] = ["group1", "group2"]
+                input[0] = "group1"
                 input[1] = file("${projectDir}/pyproject.toml")
                 input[2] = file("${projectDir}/schemas")
                 input[3] = "illumina"
@@ -91,21 +92,20 @@ nextflow_process {
         }
         then {
             assert process.success
-            def files = process.out.outputs.flatten()
-            // Only validation_hits patterns should be created
-            assert files.size() == 2
-            def filenames = files.collect { it.toString().split('/').last() }.sort()
-            assert filenames == ["group1_validation_hits.tsv.gz", "group2_validation_hits.tsv.gz"]
+            // Only the validation_hits pattern should be created
+            assert process.out.outputs.size() == 1
+            assert process.out.outputs[0][0] == "group1"
+            assert path(process.out.outputs[0][1]).fileName.toString() == "group1_validation_hits.tsv.gz"
         }
     }
 
-    test("Should create ONT output files for missing groups") {
+    test("Should create ONT output files for a group") {
         tag "expect_success"
         when {
             params {}
             process {
                 '''
-                input[0] = ["group1"]
+                input[0] = "group1"
                 input[1] = file("${projectDir}/pyproject.toml")
                 input[2] = file("${projectDir}/schemas")
                 input[3] = "ont"
@@ -117,7 +117,7 @@ nextflow_process {
             assert process.success
             def pyproject = path(process.out.pyproject[0])
             def patterns = getGroupPatterns(pyproject, "ont")
-            def files = process.out.outputs.flatten()
+            def files = process.out.outputs.collect { it[1] }.flatten()
             assert files.size() == patterns.size()
             def filenames = files.collect { it.toString().split('/').last() }.sort()
             def expectedFilenames = patterns.collect { it.replace("{GROUP}", "group1") }.sort()

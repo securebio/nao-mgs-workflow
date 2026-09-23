@@ -50,7 +50,7 @@ class TestPartitionTsv:
             os.chdir(original_cwd)
 
     def test_header_only_input(self, tsv_factory: Any, tmp_path: Path) -> None:
-        """Test that header-only input produces no output files."""
+        """Test that header-only input produces one header-only empty partition."""
         input_content = "x\ty\tz\n"
         input_file = tsv_factory.create_plain("input.tsv", input_content)
 
@@ -62,9 +62,10 @@ class TestPartitionTsv:
         try:
             partition_tsv.partition(os.path.basename(input_file), "x")
 
-            # Check that no partition files were created
             partition_files = glob.glob("partition_*_input.tsv")
-            assert len(partition_files) == 0
+            assert partition_files == ["partition_empty_input.tsv"]
+            with open(partition_files[0]) as f:
+                assert f.read() == input_content
         finally:
             os.chdir(original_cwd)
 
