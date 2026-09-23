@@ -72,7 +72,8 @@ class SentinelUtils {
             if (totalWaitedMs >= maxWaitMs) {
                 throw new RuntimeException(
                     "Timed out after ${maxWaitMins} minutes waiting for " +
-                    "${missing.size()}/${expected.size()} remaining published output file(s):\n  " +
+                    "${missing.size()}/${expected.size()} remaining published output file(s) " +
+                    "(polled for ${totalWaitedMs.intdiv(1000)}s):\n  " +
                     missing.join("\n  "))
             }
             def sleepMs = Math.min(intervalMs, maxWaitMs - totalWaitedMs)
