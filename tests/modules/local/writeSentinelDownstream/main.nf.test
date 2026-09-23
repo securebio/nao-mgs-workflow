@@ -124,6 +124,31 @@ nextflow_process {
         }
     }
 
+    test("Should stop polling at max_wait_mins") {
+        tag "expect_fail"
+        when {
+            params {}
+            process {
+                '''
+                input[0] = "tt1"
+                input[1] = files("${projectDir}/test-data/writeSentinelDownstream/output_shortread/**")
+                input[2] = "2026-01-01 00:00:00 UTC (+0000)"
+                input[3] = [
+                    output_dir: "${projectDir}/test-data/writeSentinelDownstream/nonexistent_output_dir",
+                    pyproject_path: "${projectDir}/test-data/writeSentinelDownstream/pyproject.toml",
+                    platform: "illumina",
+                    sentinel_max_wait_mins: 1
+                ]
+                '''
+            }
+        }
+        then {
+            // Intervals of 15s and 30s, then 15s of the next 60s, rather than all of it
+            assert process.failed
+            assert process.errorReport.contains("(polled for 60s)")
+        }
+    }
+
     test("Should fail when max_wait_mins is negative") {
         tag "expect_fail"
         when {
