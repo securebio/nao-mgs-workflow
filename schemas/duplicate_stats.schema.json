@@ -30,7 +30,7 @@
     {
       "name": "prim_align_dup_count",
       "title": "Duplicate Count",
-      "description": "Number of reads in this duplicate group. A value of 1 indicates a unique read with no duplicates.",
+      "description": "Number of reads in this duplicate group, including any reads with one mate unaligned that were attached to it. A value of 1 indicates a unique read with no duplicates.",
       "type": "integer",
       "constraints": {
         "required": true,
@@ -41,7 +41,7 @@
     {
       "name": "prim_align_dup_pairwise_match_frac",
       "title": "Pairwise Match Fraction",
-      "description": "Quality control metric indicating the fraction of all pairwise comparisons within the duplicate group that match according to the position tolerance. A value of 1.0 indicates perfect transitivity (all pairs match); lower values indicate fuzzy grouping edge cases.",
+      "description": "Quality control metric indicating the fraction of all pairwise comparisons within the duplicate group that match according to the position tolerance. A value of 1.0 indicates perfect transitivity (all pairs match); lower values indicate fuzzy grouping edge cases. Reads with one mate unaligned that were attached to the group are counted in the group size but excluded here, having only one coordinate to compare.",
       "type": "number",
       "constraints": {
         "required": true,

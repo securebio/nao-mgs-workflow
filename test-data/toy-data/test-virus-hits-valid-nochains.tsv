@@ -17,7 +17,7 @@ grp_5_0	test_gid_5	250	300	250	300	299	349	False	True	JJJJJJ	JJJJJJ	grp_5_0	grp_
 grp_5_1	test_gid_5	250	300	250	300	299	349	False	True	JJJJJJ	JJJJJJ	grp_5_0	grp_5_0	grp_5_0	Exact duplicate with grp_5_0
 grp_5_2	test_gid_5	150	500	150	500	199	549	False	True	JJJJJJ	JJJJJJ	grp_5_2	grp_5_2	grp_5_2	Non-duplicate on same reference
 grp_6_0	test_gid_6	200	300	200	300	249	349	False	True	JJJJJJ	JJJJJJ	grp_6_0	grp_6_0	grp_6_0	Group 6 singleton exemplar
-grp_7_0	test_gid_1	1	NA	1	NA	50	NA	False	NA	JJJJJJ	JJJJJJ	grp_7_0	grp_7_0	grp_7_0	Group 7 singleton with NA and gid match to 1
+grp_7_0	test_gid_1	1	NA	1	NA	50	NA	False	NA	JJJJJJ	JJJJJJ	grp_1_1	grp_1_1	grp_1_1	Mate 2 unaligned, attaches to group 1 on its 5' end
 grp_8_0	test_gid_8	100	NA	100	NA	149	NA	False	NA	JJJJJJ	JJJJJJ	grp_8_0	grp_8_0	grp_8_0	Group 8 exemplar
 grp_8_1	test_gid_8	100	NA	100	NA	149	NA	False	NA	JJJJJJ	JJJJJJ	grp_8_0	grp_8_0	grp_8_0	Exact duplicate with grp_8_0 with NA
 grp_8_2	test_gid_8	NA	100	NA	100	NA	149	NA	True	JJJJJJ	JJJJJJ	grp_8_2	grp_8_2	grp_8_2	Mate 2 aligned on the opposite strand to grp_8_0

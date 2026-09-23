@@ -23,6 +23,9 @@ struct ReadEntry {
     genome_id: String,
     key: DupKey,
     avg_quality: f64,
+    // A lone mate attached to a complete pair's group. Attached reads are duplicates of
+    // the group but are not compared against it, and never become its exemplar.
+    attached: bool,
 }
 
 // One mate's unclipped 5' reference position, and the strand it aligned to.
@@ -37,8 +40,8 @@ struct MateEnd {
 
 // The coordinate key a read is matched on. Every coordinate it holds is a mate's
 // unclipped 5' position, named `_5p`. Reads carrying different variants are not
-// comparable and never match, so a pair is never grouped with a lone mate, unlike
-// `samtools markdup`.
+// comparable and never match. A lone mate reaches a pair's group through
+// `attach_lone_mates` instead, as `samtools markdup` does.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum DupKey {
     // Both mates aligned to one genome, on opposite strands (FR or RF).
@@ -83,6 +86,22 @@ impl DupKey {
             DupKey::SplitGenomes { first_mate, second_mate } => {
                 Some(first_mate.five_prime.max(second_mate.five_prime))
             }
+            DupKey::OneMateAligned(_) | DupKey::NeitherAligned => None,
+        }
+    }
+
+    // The two mates of a complete pair, or nothing for a lone mate or an unaligned read.
+    fn pair_mates(&self) -> Option<[MateEnd; 2]> {
+        match *self {
+            DupKey::PairOppositeStrands { forward_5p, reverse_5p } => Some([
+                MateEnd { five_prime: forward_5p, reverse: false },
+                MateEnd { five_prime: reverse_5p, reverse: true },
+            ]),
+            DupKey::PairSameStrand { left_5p, right_5p, reverse } => Some([
+                MateEnd { five_prime: left_5p, reverse },
+                MateEnd { five_prime: right_5p, reverse },
+            ]),
+            DupKey::SplitGenomes { first_mate, second_mate } => Some([first_mate, second_mate]),
             DupKey::OneMateAligned(_) | DupKey::NeitherAligned => None,
         }
     }
@@ -362,6 +381,90 @@ fn build_groups_from_sorted_reads(
     final_groups.into_values().collect()
 }
 
+// Attach each lone mate to the group of a complete pair sharing its 5' end and strand,
+// as `samtools markdup` does. The attachment is one-way: the lone mate joins one pair's
+// group, so a shared coordinate can never merge two groups of pairs.
+//
+// Lone mates that leave a group of lone mates can take with them the coordinates that
+// chained the rest together. The reads left behind stay in the group they were built
+// into rather than being regrouped, so attaching a lone mate never creates an exemplar.
+fn attach_lone_mates(groups: &mut Vec<Vec<ReadEntry>>, deviation: u8) {
+    // Index every complete pair's mates by strand and 5' end, recording where each sits
+    let mut mates: Vec<(bool, i32, usize, usize)> = Vec::new();
+    for (group_index, group) in groups.iter().enumerate() {
+        for (read_index, read) in group.iter().enumerate() {
+            if let Some(pair_mates) = read.key.pair_mates() {
+                for mate in pair_mates {
+                    mates.push((mate.reverse, mate.five_prime, group_index, read_index));
+                }
+            }
+        }
+    }
+    if mates.is_empty() {
+        return;
+    }
+    mates.sort_unstable_by_key(|&(reverse, five_prime, _, _)| (reverse, five_prime));
+    // Choose every destination against the groups as built, then rebuild them in one pass
+    let destinations: Vec<Vec<Option<usize>>> = groups
+        .iter()
+        .map(|group| {
+            group
+                .iter()
+                .map(|read| match read.key {
+                    DupKey::OneMateAligned(mate) => {
+                        nearest_pair_group(&mates, groups, mate, deviation)
+                    }
+                    _ => None,
+                })
+                .collect()
+        })
+        .collect();
+    let mut rebuilt: Vec<Vec<ReadEntry>> = vec![Vec::new(); groups.len()];
+    for (group_index, group) in std::mem::take(groups).into_iter().enumerate() {
+        for (read_index, mut read) in group.into_iter().enumerate() {
+            match destinations[group_index][read_index] {
+                Some(target) => {
+                    read.attached = true;
+                    rebuilt[target].push(read);
+                }
+                None => rebuilt[group_index].push(read),
+            }
+        }
+    }
+    rebuilt.retain(|group| !group.is_empty());
+    *groups = rebuilt;
+}
+
+// The group of the pair mate closest to this lone mate, breaking ties on read name so
+// the choice does not depend on the order the groups were built in.
+fn nearest_pair_group(
+    mates: &[(bool, i32, usize, usize)],
+    groups: &[Vec<ReadEntry>],
+    mate: MateEnd,
+    deviation: u8,
+) -> Option<usize> {
+    let deviation = deviation as i32;
+    let first = mates.partition_point(|&(reverse, five_prime, _, _)| {
+        (reverse, five_prime) < (mate.reverse, mate.five_prime - deviation)
+    });
+    let mut best: Option<(i32, &str, usize)> = None;
+    for &(reverse, five_prime, group_index, read_index) in &mates[first..] {
+        if reverse != mate.reverse || five_prime > mate.five_prime + deviation {
+            break;
+        }
+        let name = groups[group_index][read_index].query_name.as_str();
+        let distance = (five_prime - mate.five_prime).abs();
+        let better = match best {
+            None => true,
+            Some((best_distance, best_name, _)) => (distance, name) < (best_distance, best_name),
+        };
+        if better {
+            best = Some((distance, name, group_index));
+        }
+    }
+    best.map(|(_, _, group_index)| group_index)
+}
+
 // Resolve group merges by processing in descending order of group IDs
 // Assigns each group ID to the largest group ID in its merge set
 fn resolve_group_merges(group_merges: HashMap<usize, HashSet<usize>>) -> HashMap<usize, usize> {
@@ -520,6 +623,7 @@ fn make_read_entry(
         genome_id: genome_id_sorted,
         key,
         avg_quality,
+        attached: false,
     })
 }
 
@@ -600,7 +704,8 @@ fn extract_read_groups(input_path: &str,
         .into_par_iter()
         .map(|(genome_id, reads)| {
             // Use optimized sorted sliding window approach
-            let groups = build_groups_from_sorted_reads(reads, deviation);
+            let mut groups = build_groups_from_sorted_reads(reads, deviation);
+            attach_lone_mates(&mut groups, deviation);
             (genome_id, groups)
         })
         .collect();
@@ -632,27 +737,36 @@ fn process_read_groups(
     let group_results: Vec<(DuplicateGroup, Vec<(String, String, String)>)> = all_groups
         .par_iter()  // Parallel iterator
         .map(|(genome_id, dup_group)| {
-            // Find the exemplar using compare_reads
-            let exemplar = dup_group.iter().max_by(|a, b| compare_reads(a, b)).unwrap();
+            // Find the exemplar using compare_reads, among the reads the group was
+            // built from: an attached lone mate always loses, as in `samtools markdup`
+            let exemplar = dup_group.iter()
+                .filter(|read| !read.attached)
+                .max_by(|a, b| compare_reads(a, b))
+                .expect("a group is built from at least one unattached read");
             let exemplar_name = exemplar.query_name.clone();
-            // Calculate size of duplicate group
+            // Calculate size of duplicate group, attached lone mates included
             let dup_count = dup_group.len();
-            // Calculate fraction of pairwise matches (as a QC metric for the group as a whole)
+            // Calculate fraction of pairwise matches (as a QC metric for the group as a
+            // whole), over the reads the group was built from: an attached lone mate
+            // carries one coordinate and is not comparable to the pairs it joined
+            let compared: Vec<&ReadEntry> =
+                dup_group.iter().filter(|read| !read.attached).collect();
+            let compared_count = compared.len();
             let pairwise_match_frac: f64;
-            if dup_count == 1 {
+            if compared_count <= 1 {
                 pairwise_match_frac = 1.0;
             } else {
                 // Stage 2 Multithreading: Parallel pairwise matching
                 // Generate all pairs (i,j) where i < j and process them in parallel
-                let dup_count_float: f64 = dup_count as f64;
-                let n_pairs: f64 = dup_count_float * (dup_count_float - 1.0) / 2.0;
+                let compared_float: f64 = compared_count as f64;
+                let n_pairs: f64 = compared_float * (compared_float - 1.0) / 2.0;
                 // Use rayon to parallelize pairwise comparisons
-                let pairwise_match_count: f64 = (0..dup_count)
+                let pairwise_match_count: f64 = (0..compared_count)
                     .into_par_iter()  // Parallel iterator
-                    .flat_map(|i| (i + 1..dup_count).into_par_iter().map(move |j| (i, j)))
+                    .flat_map(|i| (i + 1..compared_count).into_par_iter().map(move |j| (i, j)))
                     .map(|(i, j)| {
-                        let read_i = &dup_group[i];
-                        let read_j = &dup_group[j];
+                        let read_i = compared[i];
+                        let read_j = compared[j];
                         if match_reads(read_i, read_j, deviation) { 1.0 } else { 0.0 }
                     })
                     .sum();  // Rayon's parallel sum reduction
@@ -884,6 +998,7 @@ mod tests {
             genome_id: genome.to_string(),
             key,
             avg_quality: quality,
+            attached: false,
         }
     }
 
@@ -1471,6 +1586,151 @@ mod tests {
             group_names(build_groups_from_sorted_reads(reads, 1)),
             vec![vec!["a", "c"], vec!["b"], vec!["d"], vec!["e"]]
         );
+    }
+
+    // --- Attaching lone mates to pairs ---
+
+    // Group the reads, attach the lone mates, and report the groups by name with the
+    // attached reads marked
+    fn attached_groups(reads: Vec<ReadEntry>, deviation: u8) -> Vec<Vec<String>> {
+        let mut groups = build_groups_from_sorted_reads(reads, deviation);
+        attach_lone_mates(&mut groups, deviation);
+        let mut out: Vec<Vec<String>> = groups
+            .into_iter()
+            .map(|group| {
+                let mut names: Vec<String> = group
+                    .into_iter()
+                    .map(|read| if read.attached {
+                        format!("{}*", read.query_name)
+                    } else {
+                        read.query_name
+                    })
+                    .collect();
+                names.sort();
+                names
+            })
+            .collect();
+        out.sort();
+        out
+    }
+
+    #[test]
+    fn attach_lone_mates_marks_a_lone_mate_against_a_pair_on_its_five_prime_end() {
+        let reads = vec![
+            entry("p", "g", pair(500, 949), 36.0),
+            entry("l", "g", lone(500, false), 30.0),
+        ];
+        assert_eq!(attached_groups(reads, 1), vec![vec!["l*", "p"]]);
+    }
+
+    #[test]
+    fn attach_lone_mates_reaches_either_mate_of_a_pair() {
+        // samtools keys both mates of a pair into its singles hash
+        let reads = vec![
+            entry("p", "g", pair(500, 949), 36.0),
+            entry("l", "g", lone(949, true), 30.0),
+        ];
+        assert_eq!(attached_groups(reads, 1), vec![vec!["l*", "p"]]);
+    }
+
+    #[test]
+    fn attach_lone_mates_requires_the_same_strand() {
+        let reads = vec![
+            entry("p", "g", pair(500, 949), 36.0),
+            entry("l", "g", lone(500, true), 30.0),
+        ];
+        assert_eq!(attached_groups(reads, 1), vec![vec!["l"], vec!["p"]]);
+    }
+
+    #[test]
+    fn attach_lone_mates_leaves_a_lone_mate_that_reaches_no_pair() {
+        let reads = vec![
+            entry("p", "g", pair(500, 949), 36.0),
+            entry("l", "g", lone(600, false), 30.0),
+        ];
+        assert_eq!(attached_groups(reads, 1), vec![vec!["l"], vec!["p"]]);
+    }
+
+    #[test]
+    fn attach_lone_mates_never_merges_two_groups_of_pairs() {
+        // Both pairs start at 500, so the lone mate reaches both. It joins one of them
+        // and the two pairs stay apart, which is what keeps a shared coordinate from
+        // collapsing unrelated fragments.
+        let reads = vec![
+            entry("p1", "g", pair(500, 949), 36.0),
+            entry("p2", "g", pair(500, 1200), 36.0),
+            entry("l", "g", lone(500, false), 30.0),
+        ];
+        assert_eq!(attached_groups(reads, 1), vec![vec!["l*", "p1"], vec!["p2"]]);
+    }
+
+    #[test]
+    fn attach_lone_mates_picks_the_nearest_pair_then_the_first_name() {
+        let nearest = vec![
+            entry("p1", "g", pair(498, 949), 36.0),
+            entry("p2", "g", pair(501, 949), 36.0),
+            entry("l", "g", lone(500, false), 30.0),
+        ];
+        assert_eq!(attached_groups(nearest, 2), vec![vec!["l*", "p2"], vec!["p1"]]);
+        // Equidistant on either side, so the name decides and the choice does not
+        // depend on the order the groups came out of the map
+        let tied = vec![
+            entry("p2", "g", pair(499, 949), 36.0),
+            entry("p1", "g", pair(501, 949), 36.0),
+            entry("l", "g", lone(500, false), 30.0),
+        ];
+        assert_eq!(attached_groups(tied, 1), vec![vec!["l*", "p1"], vec!["p2"]]);
+    }
+
+    #[test]
+    fn attach_lone_mates_leaves_the_rest_of_a_cut_chain_in_one_group() {
+        // The lone mates at 800-802 attach, taking with them the coordinates that
+        // chained 799 to 803. The two left behind stay in the group they were built
+        // into, so cutting a chain never produces an extra exemplar.
+        let reads = vec![
+            entry("p", "g", pair(801, 1200), 36.0),
+            entry("l799", "g", lone(799, false), 30.0),
+            entry("l800", "g", lone(800, false), 30.0),
+            entry("l801", "g", lone(801, false), 30.0),
+            entry("l802", "g", lone(802, false), 30.0),
+            entry("l803", "g", lone(803, false), 30.0),
+        ];
+        assert_eq!(
+            attached_groups(reads, 1),
+            vec![vec!["l799", "l803"], vec!["l800*", "l801*", "l802*", "p"]]
+        );
+    }
+
+    #[test]
+    fn attach_lone_mates_reaches_same_strand_and_split_genome_pairs() {
+        let same_strand = vec![
+            entry("p", "g", DupKey::PairSameStrand { left_5p: 500, right_5p: 800, reverse: true }, 36.0),
+            entry("l", "g", lone(800, true), 30.0),
+        ];
+        assert_eq!(attached_groups(same_strand, 1), vec![vec!["l*", "p"]]);
+        let split = vec![
+            entry("p", "g", DupKey::SplitGenomes {
+                first_mate: MateEnd { five_prime: 500, reverse: false },
+                second_mate: MateEnd { five_prime: 800, reverse: true },
+            }, 36.0),
+            entry("l", "g", lone(500, false), 30.0),
+        ];
+        assert_eq!(attached_groups(split, 1), vec![vec!["l*", "p"]]);
+    }
+
+    #[test]
+    fn an_attached_lone_mate_never_becomes_the_exemplar() {
+        // The lone mate scores higher, but samtools always marks the single read
+        let mut group = vec![entry("pair", "g", pair(500, 949), 20.0)];
+        let mut attached = entry("lone", "g", lone(500, false), 40.0);
+        attached.attached = true;
+        group.push(attached);
+        let groups = HashMap::from([("g".to_string(), vec![group])]);
+        let (exemplars, stats) = process_read_groups(groups, 1).unwrap();
+        assert_eq!(exemplars["lone"].1, "pair");
+        assert_eq!(stats[0].group_size, 2);
+        // The attached read is not comparable to the pair, so it sits out the metric
+        assert_eq!(stats[0].pairwise_match_frac, 1.0);
     }
 
     #[test]
