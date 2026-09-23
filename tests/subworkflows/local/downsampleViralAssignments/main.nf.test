@@ -85,6 +85,33 @@ nextflow_workflow {
         }
     }
 
+    test("Should drop a group when one of its partitions fails") {
+        tag "expect_failed"
+        config "tests/configs/downstream_downsample_ignored.config"
+        when {
+            params {
+                n_sample = 4
+            }
+            workflow {
+                '''
+                input[0] = channel.of(["test", [
+                    "${projectDir}/test-data/downsampleViralAssignments/partition_10239_hits.tsv",
+                    "${projectDir}/test-data/downsampleViralAssignments/partition_186538_hits.tsv"
+                ]])
+                input[1] = params.n_sample
+                input[2] = channel.of(false)
+                input[3] = ""
+                '''
+            }
+        }
+        then {
+            // failOnIgnore fails the run once the ignored task is counted
+            assert workflow.failed
+            assert workflow.out.tsv.size() == 0
+            assert workflow.out.fasta.size() == 0
+        }
+    }
+
     test("Should emit the grouped partitions in filename order") {
         tag "expect_success"
         tag "grouping_order"

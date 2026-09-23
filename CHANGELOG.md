@@ -1,5 +1,6 @@
 # v3.4.0.0-dev
 
+- Drop a DOWNSTREAM group from validation when downsampling fails for one of its species, rather than validating the rest and labelling that species' reads `not_sampled`. (#1017)
 - Delete `CREATE_EMPTY_GROUP_OUTPUTS` and instead have `PARTITION_TSV` emit an empty list for a group with no hits. That group's header-only table runs through the entire validation subworkflow to produce a final header-only table, disambiguating it from the case where an intermediate step failed and produced an empty channel. (#1028)
 - Add a host-infection override to `ref/host-infection-overrides.json` restoring mammal and vertebrate infection status for Rotavirus kappagastroenteritidis (Rotavirus K), which was demoted after the 20260702 index despite being most closely related to the human-infecting Rotavirus C. (#1025)
 - Check SILVA staleness per subunit in `bin/benchmark_index.py`. (#1014)
