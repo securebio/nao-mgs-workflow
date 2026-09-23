@@ -3,6 +3,8 @@ process EXTRACT_VERSIONS {
     label "single"
     label "python"
     tag "id=util"
+    // Retry a lost task, then stop the run rather than skip the version check
+    errorStrategy { task.attempt <= task.maxRetries ? "retry" : "terminate" }
     input:
         path pipeline_pyproject, stageAs: "pipeline_pyproject.toml"
         path index_pyproject, stageAs: "index_pyproject.toml"
