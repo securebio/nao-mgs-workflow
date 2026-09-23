@@ -111,6 +111,29 @@ nextflow_workflow {
         }
     }
 
+    test("Should stop the run when versions can't be read, even where failures are ignored") {
+        tag "expect_failed"
+        config "tests/configs/run_ignore_failures.config"
+        when {
+            params {}
+            workflow {
+                """
+                input[0] = "${projectDir}/test-data/checkVersionCompatibility/index-unparseable"
+                input[1] = "${projectDir}/test-data/checkVersionCompatibility/index-unparseable"
+                input[2] = "mgs-workflow"
+                """
+            }
+        }
+        then {
+            assert workflow.failed
+            // Retried once, then terminated rather than ignored
+            def rows = new File("${launchDir}/meta/trace.csv").readLines()*.split("\t")
+            def col = { n -> rows[0].findIndexOf { it == n } }
+            def actions = rows.drop(1).findAll { it[col("name")].contains("EXTRACT_VERSIONS") }.collect { it[col("error_action")] }
+            assert actions == ["RETRY", "TERMINATE"]
+        }
+    }
+
     test("Should fail if pipeline is too old for index") {
         tag "expect_failed"
         config "tests/configs/run.config"
