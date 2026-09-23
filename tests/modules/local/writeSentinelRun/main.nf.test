@@ -13,7 +13,7 @@ nextflow_process {
             params {}
             process {
                 '''
-                input[0] = ["done"]
+                input[0] = files("${projectDir}/test-data/writeSentinelRun/output_shortread/**")
                 input[1] = ["sample1"]
                 input[2] = "2026-01-01 00:00:00 UTC (+0000)"
                 input[3] = [
@@ -44,7 +44,7 @@ nextflow_process {
                 '''
                 // ONT output dir has no shortread-extra files (no extra.json)
                 // This verifies that ONT mode skips expected-outputs-run-shortread-extra
-                input[0] = ["done"]
+                input[0] = files("${projectDir}/test-data/writeSentinelRun/output_ont/**")
                 input[1] = ["sample1"]
                 input[2] = "2026-01-01 00:00:00 UTC (+0000)"
                 input[3] = [
@@ -74,7 +74,7 @@ nextflow_process {
                 '''
                 // Uses existing files in the nao-testing bucket with a fixture
                 // pyproject that has patterns matching those files (no {SAMPLE} expansion)
-                input[0] = ["done"]
+                input[0] = [file("s3://nao-testing/tiny-test/raw/tiny-test_R1.fastq.gz"), file("s3://nao-testing/tiny-test/raw/tiny-test_R2.fastq.gz")]
                 input[1] = []
                 input[2] = "2026-01-01 00:00:00 UTC (+0000)"
                 input[3] = [
@@ -103,7 +103,7 @@ nextflow_process {
             process {
                 '''
                 // Point at a directory that exists but has no expected output files
-                input[0] = ["done"]
+                input[0] = files("${projectDir}/test-data/writeSentinelRun/output_shortread/**")
                 input[1] = ["sample1"]
                 input[2] = "2026-01-01 00:00:00 UTC (+0000)"
                 input[3] = [
@@ -119,6 +119,32 @@ nextflow_process {
             assert process.failed
             assert process.errorReport.contains("Timed out after 0 minutes waiting for")
             assert process.errorReport.contains("published output file(s)")
+        }
+    }
+
+    test("Should fail without waiting when an expected output was never emitted") {
+        tag "expect_fail"
+        when {
+            params {}
+            process {
+                '''
+                input[0] = files("${projectDir}/test-data/writeSentinelRun/output_shortread/**").findAll { !it.name.endsWith(".json") }
+                input[1] = ["sample1"]
+                input[2] = "2026-01-01 00:00:00 UTC (+0000)"
+                input[3] = [
+                    output_dir: "${projectDir}/test-data/writeSentinelRun/output_shortread",
+                    pyproject_path: "${projectDir}/test-data/writeSentinelRun/pyproject.toml",
+                    platform: "illumina",
+                    sentinel_max_wait_mins: 1
+                ]
+                '''
+            }
+        }
+        then {
+            assert process.failed
+            assert process.errorReport.contains("were never produced")
+            assert process.errorReport.contains("sample1_extra.json")
+            assert !process.errorReport.contains("Timed out")
         }
     }
 }
