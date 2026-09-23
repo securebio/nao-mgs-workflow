@@ -434,6 +434,7 @@ This version involved numerous changes intended to make new releases easier, fas
     - Fixed bug in ANNOTATE_VIRUS_INFECTION that incorrectly assigned certain viruses to specific hosts (e.g. porcine respiratory coronavirus mislabeled as human-infecting; resolves issue #311).
 
 ### Other changes (relevant mainly to developers)
+- Bug fixes:
     - RAISE_TAXONOMY_RANKS: Adjusted for updated classification of "Viruses" taxon in NCBI taxonomy database.
     - FILTER_VIRAL_SAM: Now correctly handles concordant pairs with identical positions but differing alignment scores.
     - VALIDATE_GROUPING: Fixed output file name collisions.
@@ -542,6 +543,7 @@ This version involved numerous changes intended to make new releases easier, fas
 - Modified Github Actions to pull specific Nextflow version (rather than "latest")
 - Fixed missing-columns bug for empty files in SUMMARIZE_MULTIQC
 - Restructured SORT_TSV process to improve memory efficiency
+- Continued working on post-hoc validation of putative viral hits in the DOWNSTREAM workflow
     - Split out core of BLAST_VIRAL subworkflow into a new BLAST_FASTA subworkflow that is called by both BLAST_VIRAL and VALIDATE_VIRAL_ASSIGNMENTS
     - Added tests for BLAST_FASTA and updated tests for VALIDATE_VIRAL_ASSIGNMENTS
     - Implemented basic algorithm for computing the lowest common ancestor of sets of taxids in tabular TSV data (LCA_TSV), including special handling of artificial and unclassified taxids
