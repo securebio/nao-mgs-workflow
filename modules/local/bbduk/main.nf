@@ -23,7 +23,10 @@ process BBDUK {
         // pigz=t / unpigz=t makes bbduk.sh shell out to pigz for output
         // compression and (when applicable) input decompression instead of using
         // its single-threaded internal gzip.
-        def par = "minkmerfraction=${params_map.min_kmer_fraction} k=${params_map.k} t=${task.cpus} pigz=t unpigz=t -Xmx${task.memory.toGiga()}g"
+        // Cap the heap at 75% of task memory to leave room for JVM native memory and pigz;
+        // bbduk.sh sets -Xms to match, so a full-size heap defers GC until the task is near its limit.
+        def heap_gb = Math.max(1, (task.memory.toGiga() * 0.75) as int)
+        def par = "minkmerfraction=${params_map.min_kmer_fraction} k=${params_map.k} t=${task.cpus} pigz=t unpigz=t -Xmx${heap_gb}g"
         """
         ${extractCmd} ${reads} | bbduk.sh ${io} ${par}
         ln -s ${reads} input_${reads}
