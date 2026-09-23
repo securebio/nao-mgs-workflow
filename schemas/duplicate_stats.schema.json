@@ -20,7 +20,7 @@
     {
       "name": "prim_align_dup_exemplar",
       "title": "Exemplar Read ID",
-      "description": "Query name (read ID) of the exemplar read selected to represent this duplicate group. Each group has a single exemplar read, which is the read with the highest average quality score; ties are broken lexicographically by query name.",
+      "description": "Query name (read ID) of the exemplar read selected to represent this duplicate group. Each group has a single exemplar read, which is the read with the highest average quality score among the reads the group was built from; ties are broken lexicographically by query name. Reads with one mate unaligned that were attached to the group are never selected, whatever they score.",
       "type": "string",
       "constraints": {
         "minLength": 1
