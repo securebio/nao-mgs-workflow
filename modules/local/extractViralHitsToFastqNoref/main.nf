@@ -11,7 +11,7 @@ process EXTRACT_VIRAL_HITS_TO_FASTQ_NOREF_LABELED_LIST {
     script:
         """
         for tsv in ${tsvs}; do
-            species=\$(basename \${tsv} | grep -oP 'partition_\\K\\d+(?=_)')
+            species=\$(basename \${tsv} | grep -oP 'partition_\\K(\\d+|empty)(?=_)')
             if [ -z "\$species" ]; then
                 >&2 echo "Error: Could not extract species from filename: \${tsv}"
                 exit 1

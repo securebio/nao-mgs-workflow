@@ -62,7 +62,7 @@ process BBMERGE_LIST {
         set -euo pipefail
         for reads in ${reads_interleaved}; do
             # Prepare inputs and outputs
-            species=\$(basename \${reads} | grep -oP '${sample}_\\K\\d+(?=_)')
+            species=\$(basename \${reads} | grep -oP '${sample}_\\K(\\d+|empty)(?=_)')
             if [ -z "\${species}" ]; then
                 >&2 echo "Error: Could not extract species from filename: \${reads}"
                 exit 1

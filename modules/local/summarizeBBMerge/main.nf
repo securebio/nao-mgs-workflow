@@ -44,7 +44,7 @@ process SUMMARIZE_BBMERGE_LIST {
         set -euo pipefail
 
         for merged_file in ${merged_reads}; do
-            species=\$(basename \${merged_file} | grep -oP '${sample}_\\K\\d+(?=_)')
+            species=\$(basename \${merged_file} | grep -oP '${sample}_\\K(\\d+|empty)(?=_)')
             if [ -z "\$species" ]; then
                 >&2 echo "Error: Could not extract species from filename: \${merged_file}"
                 exit 1

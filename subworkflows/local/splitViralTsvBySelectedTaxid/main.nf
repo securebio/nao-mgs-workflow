@@ -63,26 +63,16 @@ workflow SPLIT_VIRAL_TSV_BY_SELECTED_TAXID {
             def file_list = files instanceof List ? files : [files]
             [sample, file_list]
         }
-        // 4. Route groups with no data rows, for which PARTITION_TSV writes a single
-        // header-only partition_empty_* file, away from the per-species partitions
-        part_branch = part_ch.branch { _sample, files ->
-            empty: files.every { f -> f.name.startsWith("partition_empty_") }
-            nonempty: true
-        }
-        part_filtered_ch = part_branch.nonempty
-        empty_ch = part_branch.empty.map { sample, _files -> sample }
-        // 5. Emit the whole joined table for consumers that need every read.
+        // 4. Emit the whole joined table for consumers that need every read.
         // taxid_species is scaffolding for computing selected_taxid and carries no
         // further information, so it is dropped here rather than left for callers.
         annotated_ch = DROP_SPECIES_TAXID(join_sorted_ch, "taxid_species", "drop").output
     emit:
-        tsv = part_filtered_ch
-        empty = empty_ch // Labels of groups with no data rows
+        tsv = part_ch // A group with no data rows has one header-only partition_empty_* file
         annotated = annotated_ch
         test_in   = groups
         test_db   = db
         test_sort = sorted_ch
         test_join = join_ch
         test_part = part_ch
-        test_part_filtered = part_filtered_ch
 }

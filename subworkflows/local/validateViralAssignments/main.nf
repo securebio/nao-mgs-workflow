@@ -25,7 +25,6 @@ include { ANNOTATE_VALIDATION_STATUS } from "../../../modules/local/annotateVali
 include { SORT_TSV } from "../../../modules/local/sortTsv"
 include { COPY_FILE as COPY_HITS } from "../../../modules/local/copyFile"
 include { COPY_FILE as COPY_BLAST } from "../../../modules/local/copyFile"
-include { CREATE_EMPTY_GROUP_OUTPUTS } from "../../../modules/local/createEmptyGroupOutputs"
 
 /***********
 | WORKFLOW |
@@ -82,22 +81,9 @@ workflow VALIDATE_VIRAL_ASSIGNMENTS {
         sorted_ch = SORT_TSV(annotate_ch, "seq_id").sorted
         output_hits_ch = COPY_HITS(sorted_ch, "validation_hits.tsv.gz")
         output_blast_ch = COPY_BLAST(blast_ch.blast, "validation_blast.tsv.gz")
-
-        // 8. Create header-only validation_hits for groups with no hits. Only groups that
-        // SPLIT_VIRAL_TSV_BY_SELECTED_TAXID found empty qualify, so a group that failed
-        // anywhere above publishes nothing rather than an empty table
-        platform = params_map.platform ?: "illumina"
-        empty_outputs_ch = CREATE_EMPTY_GROUP_OUTPUTS(
-            split_ch.empty,
-            file("${projectDir}/pyproject.toml"),
-            file("${projectDir}/schemas"),
-            platform,
-            "validation_hits"
-        )
-        all_hits_ch = output_hits_ch.mix(empty_outputs_ch.outputs)
     emit:
         // Main output
-        annotated_hits = all_hits_ch
+        annotated_hits = output_hits_ch
         // Intermediate output
         blast_results = output_blast_ch
         // Extra outputs for testing
