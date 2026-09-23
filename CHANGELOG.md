@@ -1,5 +1,6 @@
 # v3.4.0.0-dev
 
+- Stop the run when the pipeline and index versions are incompatible. Since #845 an ignored failure let every other task finish, so an incompatible index published a full set of RUN outputs and a sentinel, with only a non-zero exit to show for it: nothing waited on the check. (#1024)
 - Fail the RUN and DOWNSTREAM sentinels immediately if an expected output is not emitted. (#1021)
 - Skip a group's entire validation when one of its per-species downsampling tasks is ignored, rather than validating the partial group. (#1017)
 - Delete `CREATE_EMPTY_GROUP_OUTPUTS` and instead have `PARTITION_TSV` emit an empty list for a group with no hits. That group's header-only table runs through the entire validation subworkflow to produce a final header-only table, disambiguating it from the case where an intermediate step failed and produced an empty channel. (#1028)
