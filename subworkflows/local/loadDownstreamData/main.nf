@@ -15,8 +15,6 @@ workflow LOAD_DOWNSTREAM_DATA {
         input_file
         input_base_dir  // Base directory for resolving relative paths in input CSV
     main:
-        start_time = new Date()
-        start_time_str = start_time.format("yyyy-MM-dd HH:mm:ss z (Z)")
         // Validate headers
         def required_headers = ['label', 'run_results_dir', 'groups_tsv']
         def headers = file(input_file).readLines().first().tokenize(',')*.trim()
@@ -52,6 +50,5 @@ workflow LOAD_DOWNSTREAM_DATA {
     emit:
         run_dirs = run_dirs_ch   // tuple(label, resolved_run_results_dir)
         groups = groups_ch       // tuple(label, sample, group)
-        start_time_str = start_time_str
         test_input = input_file
 }

@@ -1,5 +1,6 @@
 # v3.4.0.0-dev
 
+- Stop writing the RUN `logging/sentinel.json` and DOWNSTREAM `logging_downstream/{GROUP}_sentinel.json` completion markers, and drop the `sentinel_max_wait_mins` parameter. Nothing read them, and when a task failed they waited out their timeout twice (about 2 hours at the default) before the run could exit non-zero. The Nextflow exit status reports whether a run succeeded. (#1018)
 - Drop a DOWNSTREAM group from validation when downsampling fails for one of its species, rather than validating the rest and labelling that species' reads `not_sampled`. (#1017)
 - Stop publishing a header-only `validation_hits` for a DOWNSTREAM group whose validation failed. `PARTITION_TSV` now writes a header-only `partition_empty_*` file for a group with no hits, and only those groups get an empty table; before, any group missing from the validation output got one, so a failed BLAST job published as zero hits. (#1016)
 - Switch the Kraken2 DB for taxonomic profiling from Standard to PlusPF (`k2_pluspf_20260626`, the current upstream build), which adds protozoan and fungal genomes. (#1000)

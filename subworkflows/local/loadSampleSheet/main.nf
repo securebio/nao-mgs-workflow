@@ -8,10 +8,6 @@ workflow LOAD_SAMPLESHEET {
         platform
         development_mode // less strict validation for platform/endedness
     main:
-        // Start time
-        start_time = new Date()
-        start_time_str = start_time.format("yyyy-MM-dd HH:mm:ss z (Z)")
-
         // Check pairing and validate headers
         def headers = file(sample_sheet).readLines().first().tokenize(',')*.trim()
         def expected_headers_se = ['sample', 'fastq']
@@ -81,6 +77,5 @@ workflow LOAD_SAMPLESHEET {
     emit:
         single_end = single_end
         samplesheet = samplesheet_ch
-        start_time_str = start_time_str
         test_input = sample_sheet
 }

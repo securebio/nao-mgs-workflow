@@ -24,7 +24,6 @@ nextflow_workflow {
             // Parse input CSV from workflow output
             def inputCsv = path(workflow.out.test_input[0]).csv
             def expectedLabels = inputCsv.columns["label"] as Set
-            assert workflow.out.start_time_str != null
             // Verify run_dirs output: tuple(label, resolved_run_results_dir), unique
             assert workflow.out.run_dirs.size() > 0
             def runDirLabels = workflow.out.run_dirs.collect { it[0] } as Set

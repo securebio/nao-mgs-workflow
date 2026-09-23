@@ -2,7 +2,6 @@ import static groovy.io.FileType.FILES
 
 // Get expected output files from pyproject.toml
 // Replaces {SAMPLE} and {GROUP} wildcards with the provided name
-// Note: this regex approach is also used in modules/local/writeSentinelRun/main.nf
 def getExpectedOutputs = { pyprojectPath, workflowKey, sampleOrGroupName ->
     def pyprojectText = pyprojectPath.text
     def key = "expected-outputs-${workflowKey}"
@@ -18,7 +17,7 @@ def getExpectedOutputs = { pyprojectPath, workflowKey, sampleOrGroupName ->
 
 // Get observed output files, excluding intermediates and trace files
 def getObservedOutputs = { outputDir ->
-    def excludePatterns = ["intermediates", "trace", "experimental", "sentinel"]
+    def excludePatterns = ["intermediates", "trace", "experimental"]
     def observedFiles = []
     outputDir.eachFileRecurse(FILES) { file ->
         def relPath = outputDir.relativize(file).toString()
@@ -33,15 +32,6 @@ def getResultPaths = { outputDir, expectedFiles ->
     return expectedFiles
         .findAll { it.startsWith("results/") }
         .collect { path(outputDir + "/" + it) }
-}
-
-// Verify sentinel.json exists and contains expected fields
-def assertSentinelValid = { outputDir ->
-    def sentinelFile = path("${outputDir}/logging/sentinel.json")
-    assert sentinelFile.exists() : "sentinel.json not found"
-    def sentinelData = new groovy.json.JsonSlurper().parse(sentinelFile.toFile())
-    assert sentinelData.runStartedAt != null : "runStartedAt missing"
-    assert sentinelData.runCompletedAt != null : "runCompletedAt missing"
 }
 
 // Verify the trace has a tag column populated with id=... values on every row.
@@ -85,7 +75,6 @@ nextflow_pipeline {
         then {
             // Should run without failures
             assert workflow.success
-            assertSentinelValid("${launchDir}/output")
             assertTraceTagsValid("${launchDir}")
         }
     }
@@ -106,7 +95,6 @@ nextflow_pipeline {
             // Verify result file contents match snapshot
             def resultPaths = getResultPaths("${launchDir}/output", expected)
             assert snapshot(*resultPaths).match("run_output_shortread")
-            assertSentinelValid("${launchDir}/output")
             assertTraceTagsValid("${launchDir}")
         }
     }
@@ -124,7 +112,6 @@ nextflow_pipeline {
             // Verify result file contents match snapshot
             def resultPaths = getResultPaths("${launchDir}/output", expected)
             assert snapshot(*resultPaths).match("run_output_ont")
-            assertSentinelValid("${launchDir}/output")
             assertTraceTagsValid("${launchDir}")
         }
     }

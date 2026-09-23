@@ -19,7 +19,7 @@ These guidelines represent best practices to implement in new code, though some 
     - We use a workflow of workflows organization (`main.nf` -> workflow -> subworkflow -> process). 
     - Aim for one process per module, in a `main.nf` file.
     - Avoid creating duplicate processes. If you need a slight variation on existing behavior, parameterize or otherwise tweak an existing process.
-    - Shared Groovy helpers used by multiple `exec:` blocks live in top-level `lib/*.groovy` files (auto-loaded by Nextflow). See `lib/SentinelUtils.groovy` for an example.
+    - Shared Groovy helpers live in top-level `lib/*.groovy` files (auto-loaded by Nextflow). See `lib/SortUtils.groovy` for an example.
     - Avoid very large `script` or `shell` blocks in Nextflow processes where possible.
         - If the block gets bigger than about 20 lines, we probably want to split it into multiple processes, or move functionality into a Rust or Python script. 
 - Documentation
@@ -39,7 +39,7 @@ These guidelines represent best practices to implement in new code, though some 
         - **Per-task processes** (one task per labeled input) use `tag "id=${sample}"` — substitute `${group}` or `${label}` to match the local input variable name.
         - **Index-only single-shot processes** (one task per pipeline run, building or fetching index data) use `tag "id=index"`.
         - **Index fan-out processes** (one task per item being fetched or built into the index, e.g. `BOWTIE2_INDEX`, `MINIMAP2_INDEX`, `DOWNLOAD_VIRAL_GENOMES`, `WGET`, `GET_TARBALL`, `DOWNLOAD_GENOME`) use a compound tag like `tag "id=index,name=${var}"`.
-        - **Workflow-level singletons** (sentinels, version checks, input logging) use `tag "id=util"`.
+        - **Workflow-level singletons** (version checks, input logging) use `tag "id=util"`.
         - **Stage-qualified processes** (per-task processes that run multiple times across different pipeline stages, e.g. `MULTIQC_LABELED`, `SUMMARIZE_MULTIQC`) append a `stage=` component, e.g. `tag "id=${sample},stage=${stage_label}"`, so each stage's invocation is distinguishable in the trace.
     - All processes should emit their input (for testing validation); use `ln -s` to link the input to the output.
     - Most processes have two output channels, `input` and `output`. If a process emits multiple types of output, use meaningful emit names describing the output types (e.g. `match`, `nomatch`, and `log` from `process BBDUK`).

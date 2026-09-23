@@ -28,14 +28,12 @@ workflow {
         qc_results_run = params.mode == 'run' ? run_out.qc_results_run : channel.empty()
         other_results_run = params.mode == 'run' ? run_out.other_results_run : channel.empty()
         experimental_run = params.mode == 'run' ? run_out.experimental_run : channel.empty()
-        sentinel_run = params.mode == 'run' ? run_out.sentinel_run : channel.empty()
         // DOWNSTREAM workflow publishing
         input_downstream = params.mode == 'downstream' ? downstream_out.input_downstream  : channel.empty()
         logging_downstream = params.mode == 'downstream' ? downstream_out.logging_downstream  : channel.empty()
         intermediates_downstream = params.mode == 'downstream' ? downstream_out.intermediates_downstream  : channel.empty()
         results_downstream = params.mode == 'downstream' ? downstream_out.results_downstream  : channel.empty()
         experimental_downstream = params.mode == 'downstream' ? downstream_out.experimental_downstream  : channel.empty()
-        sentinel_downstream = params.mode == 'downstream' ? downstream_out.sentinel_downstream  : channel.empty()
 }
         
 output {
@@ -93,10 +91,6 @@ output {
         path "experimental"
         tags nextflow_file_class: "publish", "nextflow.io/temporary": "false"
     }
-    sentinel_run {
-        path "logging"
-        tags nextflow_file_class: "publish", "nextflow.io/temporary": "false"
-    }
     // DOWNSTREAM workflow output
     input_downstream {
         path "input_downstream"
@@ -116,10 +110,6 @@ output {
     }
     experimental_downstream {
         path "experimental_downstream"
-        tags nextflow_file_class: "publish", "nextflow.io/temporary": "false"
-    }
-    sentinel_downstream {
-        path "logging_downstream"
         tags nextflow_file_class: "publish", "nextflow.io/temporary": "false"
     }
 }

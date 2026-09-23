@@ -17,7 +17,7 @@ def getExpectedOutputs = { pyprojectPath, workflowKey, sampleOrGroupName ->
 
 // Get observed output files, excluding intermediates and trace files
 def getObservedOutputs = { outputDir ->
-    def excludePatterns = ["intermediates", "intermediates_downstream", "trace", "experimental", "experimental_downstream", "sentinel"]
+    def excludePatterns = ["intermediates", "intermediates_downstream", "trace", "experimental", "experimental_downstream"]
     def observedFiles = []
     outputDir.eachFileRecurse(FILES) { file ->
         def relPath = outputDir.relativize(file).toString()
@@ -32,18 +32,6 @@ def getResultPaths = { outputDir, expectedFiles ->
     return expectedFiles
         .findAll { it.startsWith("results_downstream/") }
         .collect { path(outputDir + "/" + it) }
-}
-
-// Verify per-group sentinel.json exists and contains expected fields
-def assertSentinelValid = { outputDir, group ->
-    def sentinelFile = path("${outputDir}/logging_downstream/${group}_sentinel.json")
-    assert sentinelFile.exists() : "${group}_sentinel.json not found"
-    def sentinelData = new groovy.json.JsonSlurper().parse(sentinelFile.toFile())
-    assert sentinelData.downstreamStartedAt != null : "downstreamStartedAt missing"
-    assert sentinelData.downstreamCompletedAt != null : "downstreamCompletedAt missing"
-    def timestampFormat = /\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} UTC \(\+0000\)/
-    assert sentinelData.downstreamStartedAt ==~ timestampFormat : "downstreamStartedAt format mismatch"
-    assert sentinelData.downstreamCompletedAt ==~ timestampFormat : "downstreamCompletedAt format mismatch"
 }
 
 // Verify the trace has a tag column populated with id=... values on every row.
@@ -88,7 +76,6 @@ nextflow_pipeline {
             // Verify result file contents match snapshot
             def resultPaths = getResultPaths("${launchDir}/output", expected)
             assert snapshot(*resultPaths).match("downstream_output_shortread")
-            assertSentinelValid("${launchDir}/output", "tt1")
             assertTraceTagsValid("${launchDir}")
         }
     }
@@ -111,7 +98,6 @@ nextflow_pipeline {
             // Uses new File() instead of path() because path() fails if the directory doesn't exist
             def experimentalDir = new File("${launchDir}/output/experimental_downstream")
             assert !experimentalDir.exists() || experimentalDir.list().length == 0
-            assertSentinelValid("${launchDir}/output", "tt1")
             assertTraceTagsValid("${launchDir}")
         }
     }
@@ -134,7 +120,6 @@ nextflow_pipeline {
             // header and nothing else
             def lines = path("${launchDir}/output/results_downstream/empty_group_validation_hits.tsv.gz").linesGzip
             assert lines.size() == 1
-            assertSentinelValid("${launchDir}/output", "empty_group")
             assertTraceTagsValid("${launchDir}")
         }
     }
