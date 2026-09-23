@@ -67,7 +67,7 @@ nextflow_workflow {
                 input[0] = Channel.of(
                     ["ok", "${projectDir}/test-data/validateViralAssignments/input_valid.tsv"],
                     ["failed", "${projectDir}/test-data/validateViralAssignments/input_valid.tsv"],
-                    ["empty", "${projectDir}/test-data/splitViralTsvBySelectedTaxid/input_headers_only.tsv"]
+                    ["empty", "${projectDir}/test-data/validateViralAssignments/input_header_only.tsv"]
                 )
                 input[1] = Channel.of("${params.ref_dir}/results/total-virus-db-annotated.tsv.gz") // db
                 input[2] = params.ref_dir
@@ -204,7 +204,7 @@ nextflow_workflow {
         }
     }
 
-    test("Should create empty validation_hits for header-only input") {
+    test("Should write header-only validation_hits for header-only input") {
         tag "expect_success"
         tag "empty_input"
         when {
@@ -234,14 +234,15 @@ nextflow_workflow {
         }
         then {
             assert workflow.success
-            // Should produce one empty validation_hits file for the group
+            // The group runs the whole validation path and comes out header-only, with the
+            // columns the schema promises
             assert workflow.out.annotated_hits.size() == 1
             def output = workflow.out.annotated_hits[0]
             assert output[0] == "empty_group"
-            assert output[1].toString().contains("validation_hits")
-            // The file should contain only the header row (the schema for
-            // validation_hits defines the expected columns)
-            assert path(output[1]).linesGzip.size() == 1
+            def lines = path(output[1]).linesGzip
+            assert lines.size() == 1
+            def schema = new groovy.json.JsonSlurper().parse(new File("${projectDir}/schemas/validation_hits.schema.json"))
+            assert lines[0].split("\t") as List == schema.fields.collect { it.name }
         }
     }
 

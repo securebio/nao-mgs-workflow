@@ -38,7 +38,7 @@ process JOIN_FASTQ_LIST {
         tuple val(sample), path(merged_reads), path(unmerged_reads)
         val(debug)
     output:
-        tuple val(sample), path("${sample}_*[0-9]_joined.fastq.gz"), emit: reads
+        tuple val(sample), path("${sample}_*_joined.fastq.gz"), emit: reads
         tuple val(sample), path("${sample}_*_joined_in_{merged,unmerged}.fastq.gz"), emit: input
     script:
         """
@@ -51,7 +51,7 @@ process JOIN_FASTQ_LIST {
             merged_file="\${merged_array[\$i]}"
             unmerged_file="\${unmerged_array[\$i]}"
 
-            species=\$(basename \${merged_file} | grep -oP '${sample}_\\K\\d+(?=_)')
+            species=\$(basename \${merged_file} | grep -oP '${sample}_\\K(\\d+|empty)(?=_)')
             if [ -z "\$species" ]; then
                 >&2 echo "Error: Could not extract species from filename: \${merged_file}"
                 exit 1

@@ -130,10 +130,12 @@ nextflow_pipeline {
             def expected = getExpectedOutputs(path("${projectDir}/pyproject.toml"), "downstream", "empty_group")
             def observed = getObservedOutputs(path("${launchDir}/output"))
             assert observed == expected : "Expected ${expected} but got ${observed}"
-            // The empty-group file is built straight from the schema, so it should be a
-            // header and nothing else
+            // The empty group runs the whole validation path and comes out header-only, with
+            // the columns the schema promises
             def lines = path("${launchDir}/output/results_downstream/empty_group_validation_hits.tsv.gz").linesGzip
             assert lines.size() == 1
+            def schema = new groovy.json.JsonSlurper().parse(new File("${projectDir}/schemas/validation_hits.schema.json"))
+            assert lines[0].split("\t") as List == schema.fields.collect { it.name }
             assertSentinelValid("${launchDir}/output", "empty_group")
             assertTraceTagsValid("${launchDir}")
         }
