@@ -16,6 +16,8 @@ process EXTRACT_VERSIONS {
         env('INDEX_MIN_PIPELINE'), emit: index_min_pipeline
     script:
         """
-        eval \$(extract_versions.py pipeline_pyproject.toml index_pyproject.toml --tool-name '${tool_name}')
+        # Assign before eval: eval of a failed command substitution returns 0
+        versions=\$(extract_versions.py pipeline_pyproject.toml index_pyproject.toml --tool-name '${tool_name}')
+        eval "\${versions}"
         """
 }
