@@ -19,6 +19,10 @@
 - Pass the `mark_duplicates` deviation tolerance explicitly instead of through a mutable global, with no change in behavior. (#989)
 - Add unit tests for the `mark_duplicates` Rust tool. (#967)
 
+## Coding agents
+
+- Improve `triage-trivy` skill: count distinct CVEs rather than per-package findings, don't pin a package Trivy found only in SBOM metadata, and expect a second triage round after the user's rebuild. (#941)
+
 # v3.3.0.0
 
 ## Deprecating DOWNSTREAM's VSEARCH clustering with hash-based downsampling
