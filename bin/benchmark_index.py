@@ -118,21 +118,60 @@ def latest_kraken_release(database: str) -> tuple[str, str] | None:
     return date, filename
 
 
-def latest_silva_release() -> str | None:
-    """Highest release_NN[.M] directory in the SILVA FTP root, or None on failure."""
+SILVA_ROOT = "https://ftp.arb-silva.de/"
+SILVA_SUBUNITS = {"ssu_url": "SSU", "lsu_url": "LSU"}
+
+SilvaVersion = tuple[int, int]
+
+
+def _fetch_text(url: str) -> str | None:
+    """Body of an HTTP(S) URL as text, or None on failure."""
     try:
-        with urllib.request.urlopen("https://ftp.arb-silva.de/", timeout=15) as resp:
-            body = resp.read().decode("utf-8", errors="replace")
+        with urllib.request.urlopen(url, timeout=15) as resp:
+            body: bytes = resp.read()
     except (urllib.error.URLError, OSError, TimeoutError):
         return None
-    releases = {
-        (int(m.group(1)), int(m.group(2) or 0))
-        for m in re.finditer(r"release_(\d+)(?:[._](\d+))?", body)
-    }
-    if not releases:
-        return None
-    major, minor = max(releases)
+    return body.decode("utf-8", errors="replace")
+
+
+def _silva_version(text: str) -> SilvaVersion | None:
+    """First release_NN[.M] (or release_NN_M) version in text, or None."""
+    m = re.search(r"release_(\d+)(?:[._](\d+))?", text)
+    return (int(m.group(1)), int(m.group(2) or 0)) if m else None
+
+
+def _format_silva_version(version: SilvaVersion) -> str:
+    """Render a SILVA version as SILVA does, e.g. 144 or 138.2."""
+    major, minor = version
     return f"{major}.{minor}" if minor else str(major)
+
+
+def latest_silva_releases(subunits: list[str]) -> dict[str, SilvaVersion | None]:
+    """Newest SILVA release for each subunit (SSU/LSU).
+
+    SILVA releases don't always cover both subunits.
+    """
+    latest: dict[str, SilvaVersion | None] = dict.fromkeys(subunits)
+    root = _fetch_text(SILVA_ROOT)
+    if root is None:
+        return latest
+    versions = {
+        (int(major), int(minor or 0))
+        for major, minor in re.findall(r'href="release_(\d+)(?:[._](\d+))?/"', root)
+    }
+    for version in sorted(versions, reverse=True):
+        pending = [subunit for subunit in subunits if latest[subunit] is None]
+        if not pending:
+            break
+        url = f"{SILVA_ROOT}release_{_format_silva_version(version)}/Exports/"
+        listing = _fetch_text(url)
+        # Stop rather than fall back to an older release, which could look current.
+        if listing is None:
+            break
+        for subunit in pending:
+            if f"{subunit}Ref" in listing:
+                latest[subunit] = version
+    return latest
 
 
 STALENESS_COLS = "ref", "current", "current_date", "latest", "latest_date", "status"
@@ -171,21 +210,29 @@ def check_kraken_staleness(new_params: dict) -> list[dict[str, str]]:
 
 
 def check_silva_staleness(new_params: dict) -> list[dict[str, str]]:
-    """Compare the index's SILVA SSU/LSU refs against the latest release."""
-    keys = [key for key in ("ssu_url", "lsu_url") if new_params.get(key)]
+    """Compare the index's SILVA SSU/LSU refs against the latest release of each."""
+    keys = [key for key in SILVA_SUBUNITS if new_params.get(key)]
     if not keys:
         return []
-    latest = latest_silva_release()
+    latest = latest_silva_releases([SILVA_SUBUNITS[key] for key in keys])
     rows: list[dict[str, str]] = []
     for key in keys:
         url = new_params[key]
-        m = re.search(r"release_(\d+(?:[._]\d+)?)", url)
-        current = m.group(1).replace("_", ".") if m else ""
-        if latest is None:
-            rows.append(_stale(key, url, current))
+        current = _silva_version(url)
+        newest = latest[SILVA_SUBUNITS[key]]
+        current_label = _format_silva_version(current) if current else ""
+        # A release newer than any SILVA publishes for the subunit means the
+        # lookup misread the listing, so don't report it as current.
+        if current is None or newest is None or current > newest:
+            rows.append(_stale(key, url, current_label))
             continue
-        status = "current" if current == latest else "stale"
-        rows.append(_stale(key, url, current, f"release_{latest}", latest, status))
+        newest_label = _format_silva_version(newest)
+        status = "current" if current == newest else "stale"
+        rows.append(
+            _stale(
+                key, url, current_label, f"release_{newest_label}", newest_label, status
+            )
+        )
     return rows
 
 
