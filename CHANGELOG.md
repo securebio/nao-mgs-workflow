@@ -1,5 +1,6 @@
 # v3.4.0.0-dev
 
+- Stop publishing a header-only `validation_hits` for a DOWNSTREAM group whose validation failed, and delete `CREATE_EMPTY_GROUP_OUTPUTS`. `PARTITION_TSV` now emits an empty list for a group with no hits, rather than nothing, and that group's header-only table runs the whole validation path, BLAST included, so its header-only `validation_hits` comes from the real code rather than the schema and a group that failed publishes nothing. FASTQ extraction labels per-partition files by position rather than taxid. (#1028)
 - Add a host-infection override to `ref/host-infection-overrides.json` restoring mammal and vertebrate infection status for Rotavirus kappagastroenteritidis (Rotavirus K), which was demoted after the 20260702 index despite being most closely related to the human-infecting Rotavirus C. (#1025)
 - Check SILVA staleness per subunit in `bin/benchmark_index.py`. (#1014)
 - Update the SSU ribosomal reference from SILVA 138.2 to SILVA 144 and cap BBDuk's Java heap at 75% of task memory. (#1013)

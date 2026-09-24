@@ -41,5 +41,26 @@ nextflow_process {
         }
     }
 
-}
+    test("Should emit an empty list for header-only input") {
+        tag "expect_success"
+        tag "empty_input"
+        when {
+            params {
+                column = "x"
+            }
+            process {
+                '''
+                input[0] = Channel.of("test")
+                    | combine(Channel.of("${projectDir}/test-data/toy-data/test_tab_empty.tsv"))
+                input[1] = params.column
+                '''
+            }
+        }
+        then {
+            // A positive signal that the table was read and holds no rows, unlike a failed task
+            assert process.success
+            assert process.out.output == [["test", []]]
+        }
+    }
 
+}

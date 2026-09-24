@@ -308,6 +308,6 @@ Under our [versioning policy](./versioning.md), changes to schema `title` and `d
 ### Working with schemas
 
 - If you are working on a change that affects pipeline outputs, review the schema files for affected outputs where available, to know what's expected for each column.
-- If an input to DOWNSTREAM has no data, the `createEmptyGroupOutputs` module will generate header-only TSV outputs. Output files with no corresponding schema will be empty.
+- Steps pass a header-only input through as header-only output, so a DOWNSTREAM group with no hits runs the same processes as any other and publishes header-only tables. `PARTITION_TSV` emits an empty list for such a group, and validation passes on the group's header-only table in place of partitions.
 - To validate output files locally, run `bin/validate_schemas.py`.
 - If you are developing code external to this repository that depends on its outputs, you should review the corresponding schemas to understand what guarantees you can expect.

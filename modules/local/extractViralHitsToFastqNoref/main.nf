@@ -10,15 +10,13 @@ process EXTRACT_VIRAL_HITS_TO_FASTQ_NOREF_LABELED_LIST {
         tuple val(sample), path("${sample}_*_hits_in.tsv.gz"), emit: input
     script:
         """
+        # Label outputs by position: a group with no hits passes one unpartitioned table
+        i=0
         for tsv in ${tsvs}; do
-            species=\$(basename \${tsv} | grep -oP 'partition_\\K\\d+(?=_)')
-            if [ -z "\$species" ]; then
-                >&2 echo "Error: Could not extract species from filename: \${tsv}"
-                exit 1
-            fi
-            fastq_out=${sample}_\${species}_hits_out.fastq.gz
+            fastq_out=${sample}_\${i}_hits_out.fastq.gz
             extract_viral_hits.py ${drop_unpaired ? "-d" : ""} -i \${tsv} -o \${fastq_out}
-            ln -s \${tsv} ${sample}_\${species}_hits_in.tsv.gz
+            ln -s \${tsv} ${sample}_\${i}_hits_in.tsv.gz
+            i=\$((i + 1))
         done
         """
 }
