@@ -36,9 +36,13 @@ nextflow_workflow {
             // The cap applies per partition: 10-row partition capped at 4, 3-row passed whole
             assert sampled.collect{it.rowCount}.toSorted() == [3, 4]
 
-            // Every output file carries its partition taxid, and FASTQ/FASTA record names
-            // carry a " 1"/" 2" mate suffix on top of the seq_id
+            // Sampled TSVs carry their partition taxid; FASTQ and FASTA files carry the
+            // partition's position in the group's sorted file list, which is how extraction
+            // labels them. FASTQ/FASTA record names carry a " 1"/" 2" mate suffix on top of
+            // the seq_id
             def taxidOf = { f -> (f.toString() =~ /_(\d+)_/)[0][1] }
+            def taxids = workflow.out.tsv[0][1].collect { f -> taxidOf(f) }
+            def partitionOf = { f -> taxids[(f.toString().tokenize("/")[-1] =~ /test_(\d+)_/)[0][1] as int] }
             def seqIdOf = { name -> name.tokenize(" ")[0] }
 
             // Track identities per partition, not just totals: comparing only aggregate
@@ -59,8 +63,8 @@ nextflow_workflow {
             def fastq_ids = [:]
             workflow.out.fastq[0][1].each { f ->
                 def fq = path(f).fastq
-                fastq_ids[taxidOf(f)] = fq.readNames.collect{ n -> seqIdOf(n) }.toSet()
-                assert fq.sequences.size() == sampled_ids[taxidOf(f)].size() * 2
+                fastq_ids[partitionOf(f)] = fq.readNames.collect{ n -> seqIdOf(n) }.toSet()
+                assert fq.sequences.size() == sampled_ids[partitionOf(f)].size() * 2
             }
             assert fastq_ids == sampled_ids
 
@@ -68,8 +72,8 @@ nextflow_workflow {
             def fasta_ids = [:]
             workflow.out.fasta[0][1].each { f ->
                 def fa = path(f).fasta
-                fasta_ids[taxidOf(f)] = fa.keySet().collect{ n -> seqIdOf(n) }.toSet()
-                assert fa.keySet().size() == sampled_ids[taxidOf(f)].size()
+                fasta_ids[partitionOf(f)] = fa.keySet().collect{ n -> seqIdOf(n) }.toSet()
+                assert fa.keySet().size() == sampled_ids[partitionOf(f)].size()
             }
             assert fasta_ids == sampled_ids
 

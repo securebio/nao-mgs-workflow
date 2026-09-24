@@ -43,6 +43,48 @@ nextflow_workflow {
         }
     }
 
+    test("Should publish header-only hits for an empty group but nothing for a failed one") {
+        tag "expect_failed"
+        tag "empty_input"
+        config "tests/configs/downstream_blast_ignored.config"
+        when {
+            params {
+                n_sample = 3
+                taxid_artificial = 81077
+            }
+            workflow {
+                '''
+                def validation_params = [
+                    validation_n_sample: params.n_sample,
+                    blast_perc_id: params.blast_perc_id,
+                    blast_qcov_hsp_perc: params.blast_qcov_hsp_perc,
+                    blast_max_rank: params.blast_max_rank,
+                    blast_min_frac: params.blast_min_frac,
+                    taxid_artificial: params.taxid_artificial,
+                    db_download_timeout: params.db_download_timeout,
+                    platform: params.platform
+                ]
+                input[0] = Channel.of(
+                    ["ok", "${projectDir}/test-data/validateViralAssignments/input_valid.tsv"],
+                    ["failed", "${projectDir}/test-data/validateViralAssignments/input_valid.tsv"],
+                    ["empty", "${projectDir}/test-data/validateViralAssignments/input_header_only.tsv"]
+                )
+                input[1] = Channel.of("${params.ref_dir}/results/total-virus-db-annotated.tsv.gz") // db
+                input[2] = params.ref_dir
+                input[3] = validation_params
+                '''
+            }
+        }
+        then {
+            // failOnIgnore fails the run once the ignored BLAST task is counted
+            assert workflow.failed
+            def hits = workflow.out.annotated_hits.collectEntries { [(it[0]): path(it[1]).linesGzip] }
+            assert hits.keySet() == ["ok", "empty"] as Set
+            assert hits["empty"].size() == 1
+            assert hits["ok"].size() > 1
+        }
+    }
+
     test("Should run without failures on valid input data") {
         tag "expect_success"
         when {
@@ -162,7 +204,7 @@ nextflow_workflow {
         }
     }
 
-    test("Should create empty validation_hits for header-only input") {
+    test("Should write header-only validation_hits for header-only input") {
         tag "expect_success"
         tag "empty_input"
         when {
@@ -192,14 +234,15 @@ nextflow_workflow {
         }
         then {
             assert workflow.success
-            // Should produce one empty validation_hits file for the group
+            // The group runs the whole validation path and comes out header-only, with the
+            // columns the schema promises
             assert workflow.out.annotated_hits.size() == 1
             def output = workflow.out.annotated_hits[0]
             assert output[0] == "empty_group"
-            assert output[1].toString().contains("validation_hits")
-            // The file should contain only the header row (the schema for
-            // validation_hits defines the expected columns)
-            assert path(output[1]).linesGzip.size() == 1
+            def lines = path(output[1]).linesGzip
+            assert lines.size() == 1
+            def schema = new groovy.json.JsonSlurper().parse(new File("${projectDir}/schemas/validation_hits.schema.json"))
+            assert lines[0].split("\t") as List == schema.fields.collect { it.name }
         }
     }
 

@@ -1,5 +1,6 @@
 # v3.4.0.0-dev
 
+- Stop publishing a header-only `validation_hits` for a DOWNSTREAM group whose validation failed, and delete `CREATE_EMPTY_GROUP_OUTPUTS`. `PARTITION_TSV` now emits an empty list for a group with no hits, rather than nothing, and that group's header-only table runs the whole validation path, BLAST included, so its header-only `validation_hits` comes from the real code rather than the schema and a group that failed publishes nothing. FASTQ extraction labels per-partition files by position rather than taxid. (#1028)
 - Size `MARK_SIMILARITY_DUPLICATES` memory by input size (4–64 GB tiers, new `mark_similarity_duplicates_resources` label) instead of a fixed 4 GB, which large groups exceeded. (#1036)
 - Pass modules only the parameters they read to avoid invalidating caches with launch-specific values. Also fixes PROFILE's ribosomal intermediates being named with a `null` suffix, BBDuk treating single-end reads as interleaved, and BBDuk's task context failing to serialize, which disabled `-resume` for it. (#1034)
 - Add a host-infection override to `ref/host-infection-overrides.json` restoring mammal and vertebrate infection status for Rotavirus kappagastroenteritidis (Rotavirus K), which was demoted after the 20260702 index despite being most closely related to the human-infecting Rotavirus C. (#1025)
