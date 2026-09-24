@@ -28,37 +28,37 @@
         {
             "taxid": "2844805",
             "name": "Gyrovirus homsa4",
-            "rationale": "Member of genus Gyrovirus (Anelloviridae), which includes well-established vertebrate-infecting viruses (e.g. chicken anemia virus); demoted in later indexes. Hosts match this taxon's infection statuses in the 20260702 index; no confirmatory evidence has emerged that it does not infect vertebrates.",
+            "rationale": "Member of genus Gyrovirus (Anelloviridae). Lost its infection statuses after the 20260702 index with no clear cause other than a taxonomic reorganisation breaking status propagation from Virus-Host DB. Absent confirmatory evidence justifying a demotion, hosts are kept identical to this taxon's infection statuses in the 20260702 index.",
             "hosts": ["human", "primate", "mammal", "vertebrate"]
         },
         {
             "taxid": "3429808",
             "name": "Hudisavirus jaqis",
-            "rationale": "Member of genus Hudisavirus (Endolinaviridae), closely related to known vertebrate-infecting viruses; demoted in later indexes. Hosts match this taxon's infection statuses in the 20260702 index; no confirmatory evidence has emerged that it does not infect vertebrates.",
+            "rationale": "Member of genus Hudisavirus (Endolinaviridae). Lost its infection statuses after the 20260702 index with no clear cause other than a taxonomic reorganisation breaking status propagation from Virus-Host DB. Absent confirmatory evidence justifying a demotion, hosts are kept identical to this taxon's infection statuses in the 20260702 index.",
             "hosts": ["human", "primate", "mammal", "vertebrate"]
         },
         {
             "taxid": "3427694",
             "name": "Camdisavirus lingis",
-            "rationale": "Member of genus Camdisavirus (Endolinaviridae), closely related to known vertebrate-infecting viruses; demoted in later indexes. Hosts match this taxon's infection statuses in the 20260702 index; no confirmatory evidence has emerged that it does not infect vertebrates.",
+            "rationale": "Member of genus Camdisavirus (Endolinaviridae). Lost its infection statuses after the 20260702 index with no clear cause other than a taxonomic reorganisation breaking status propagation from Virus-Host DB. Absent confirmatory evidence justifying a demotion, hosts are kept identical to this taxon's infection statuses in the 20260702 index.",
             "hosts": ["primate", "mammal", "vertebrate"]
         },
         {
             "taxid": "2016460",
             "name": "Giant panda anellovirus",
-            "rationale": "Anellovirus identified in giant pandas; closely related anelloviruses are established vertebrate-infecting viruses; demoted in later indexes. Hosts match this taxon's infection statuses in the 20260702 index; no confirmatory evidence has emerged that it does not infect vertebrates.",
+            "rationale": "Anellovirus identified in giant pandas. Lost its infection statuses after the 20260702 index with no clear cause other than a taxonomic reorganisation breaking status propagation from Virus-Host DB. Absent confirmatory evidence justifying a demotion, hosts are kept identical to this taxon's infection statuses in the 20260702 index.",
             "hosts": ["mammal", "vertebrate"]
         },
         {
             "taxid": "3432200",
             "name": "Rotavirus kappagastroenteritidis (Rotavirus K)",
-            "rationale": "Rotavirus species identified in shrews; genus Rotavirus comprises established mammalian and avian pathogens (e.g. Rotavirus A); demoted in later indexes. Hosts match this taxon's infection statuses in the 20260702 index; no confirmatory evidence has emerged that it does not infect vertebrates.",
+            "rationale": "Rotavirus species identified in shrews. Lost its infection statuses after the 20260702 index with no clear cause other than a taxonomic reorganisation breaking status propagation from Virus-Host DB. Absent confirmatory evidence justifying a demotion, hosts are kept identical to this taxon's infection statuses in the 20260702 index.",
             "hosts": ["mammal", "vertebrate"]
         },
         {
             "taxid": "795382",
             "name": "Circoviridae TM-6c",
-            "rationale": "Draupnirviridae isolate (sub-species taxon under Ferullusivirus baguanis) closely related to known vertebrate-infecting circular Rep-encoding ssDNA viruses; demoted in later indexes. Hosts match this taxon's infection statuses in the 20260702 index; no confirmatory evidence has emerged that it does not infect vertebrates.",
+            "rationale": "Draupnirviridae isolate (sub-species taxon under Ferullusivirus baguanis). Lost its infection statuses after the 20260702 index with no clear cause other than a taxonomic reorganisation breaking status propagation from Virus-Host DB. Absent confirmatory evidence justifying a demotion, hosts are kept identical to this taxon's infection statuses in the 20260702 index.",
             "hosts": ["mammal", "vertebrate"]
         }
     ]
