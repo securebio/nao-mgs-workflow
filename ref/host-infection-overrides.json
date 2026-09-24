@@ -26,39 +26,9 @@
             "hosts": ["human", "primate", "mammal", "vertebrate"]
         },
         {
-            "taxid": "2844805",
-            "name": "Gyrovirus homsa4",
-            "rationale": "Member of genus Gyrovirus (Anelloviridae). Lost its infection statuses after the 20260702 index with no clear cause other than a taxonomic reorganisation breaking status propagation from Virus-Host DB. Absent confirmatory evidence justifying a demotion, hosts are kept identical to this taxon's infection statuses in the 20260702 index.",
-            "hosts": ["human", "primate", "mammal", "vertebrate"]
-        },
-        {
-            "taxid": "3429808",
-            "name": "Hudisavirus jaqis",
-            "rationale": "Member of genus Hudisavirus (Endolinaviridae). Lost its infection statuses after the 20260702 index with no clear cause other than a taxonomic reorganisation breaking status propagation from Virus-Host DB. Absent confirmatory evidence justifying a demotion, hosts are kept identical to this taxon's infection statuses in the 20260702 index.",
-            "hosts": ["human", "primate", "mammal", "vertebrate"]
-        },
-        {
-            "taxid": "3427694",
-            "name": "Camdisavirus lingis",
-            "rationale": "Member of genus Camdisavirus (Endolinaviridae). Lost its infection statuses after the 20260702 index with no clear cause other than a taxonomic reorganisation breaking status propagation from Virus-Host DB. Absent confirmatory evidence justifying a demotion, hosts are kept identical to this taxon's infection statuses in the 20260702 index.",
-            "hosts": ["primate", "mammal", "vertebrate"]
-        },
-        {
-            "taxid": "2016460",
-            "name": "Giant panda anellovirus",
-            "rationale": "Anellovirus identified in giant pandas. Lost its infection statuses after the 20260702 index with no clear cause other than a taxonomic reorganisation breaking status propagation from Virus-Host DB. Absent confirmatory evidence justifying a demotion, hosts are kept identical to this taxon's infection statuses in the 20260702 index.",
-            "hosts": ["mammal", "vertebrate"]
-        },
-        {
             "taxid": "3432200",
             "name": "Rotavirus kappagastroenteritidis (Rotavirus K)",
-            "rationale": "Rotavirus species identified in shrews. Lost its infection statuses after the 20260702 index with no clear cause other than a taxonomic reorganisation breaking status propagation from Virus-Host DB. Absent confirmatory evidence justifying a demotion, hosts are kept identical to this taxon's infection statuses in the 20260702 index.",
-            "hosts": ["mammal", "vertebrate"]
-        },
-        {
-            "taxid": "795382",
-            "name": "Circoviridae TM-6c",
-            "rationale": "Draupnirviridae isolate (sub-species taxon under Ferullusivirus baguanis). Lost its infection statuses after the 20260702 index with no clear cause other than a taxonomic reorganisation breaking status propagation from Virus-Host DB. Absent confirmatory evidence justifying a demotion, hosts are kept identical to this taxon's infection statuses in the 20260702 index.",
+            "rationale": "Putative rotavirus species identified in common shrews (Sorex araneus) in Germany. Whole-genome analysis places it as most closely related to Rotavirus C, a human and animal pathogen, with RVK and RVC forming a common branch for most of the 11 viral proteins (Johne et al. 2023, Virus Research, doi:10.1016/j.virusres.2023.199171). Demoted from 1 (mammal, vertebrate) in the 20260702 index to 0 in later builds.",
             "hosts": ["mammal", "vertebrate"]
         }
     ]
