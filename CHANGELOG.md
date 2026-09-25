@@ -1,6 +1,6 @@
 # v3.4.0.0-dev
 
-- Fail the RUN and DOWNSTREAM sentinels as soon as an expected output was never produced, rather than polling for it until `sentinel_max_wait_mins` runs out, twice. Also stop the polling backoff overshooting that limit: the 32-minute default waited 64. A failed task no longer delays the run's non-zero exit by about two hours. (#1021)
+- Fail the RUN and DOWNSTREAM sentinels immediately if an expected output is not emitted. (#1021)
 - Skip a group's entire validation when one of its per-species downsampling tasks is ignored, rather than validating the partial group. (#1017)
 - Delete `CREATE_EMPTY_GROUP_OUTPUTS` and instead have `PARTITION_TSV` emit an empty list for a group with no hits. That group's header-only table runs through the entire validation subworkflow to produce a final header-only table, disambiguating it from the case where an intermediate step failed and produced an empty channel. (#1028)
 - Add a host-infection override to `ref/host-infection-overrides.json` restoring mammal and vertebrate infection status for Rotavirus kappagastroenteritidis (Rotavirus K), which was demoted after the 20260702 index despite being most closely related to the human-infecting Rotavirus C. (#1025)
