@@ -1,6 +1,6 @@
 # v3.4.0.0-dev
 
-- Drop a DOWNSTREAM group from validation when downsampling fails for one of its species, rather than validating the rest and labelling that species' reads `not_sampled`. (#1017)
+- Size the gather after downsampling in DOWNSTREAM validation with `groupKey`, so an ignored failure for one species propagates to its group's whole validation subtree, rather than the group being validated without that species and its reads labelled `not_sampled`. (#1017)
 - Delete `CREATE_EMPTY_GROUP_OUTPUTS` and instead have `PARTITION_TSV` pass on a group's header-only table, as `header_only_<input>`, when the group has no hits. That table runs through the entire validation subworkflow to produce a final header-only table, disambiguating it from the case where an intermediate step failed and produced an empty channel. (#1028)
 - Size `MARK_SIMILARITY_DUPLICATES` memory by input size (4–64 GB tiers, new `mark_similarity_duplicates_resources` label) instead of a fixed 4 GB, which large groups exceeded. (#1036)
 - Pass modules only the parameters they read to avoid invalidating caches with launch-specific values. Also fixes PROFILE's ribosomal intermediates being named with a `null` suffix, BBDuk treating single-end reads as interleaved, and BBDuk's task context failing to serialize, which disabled `-resume` for it. (#1034)
