@@ -40,9 +40,12 @@ nextflow_workflow {
             // partition's position in the group's sorted file list, which is how extraction
             // labels them. FASTQ/FASTA record names carry a " 1"/" 2" mate suffix on top of
             // the seq_id
-            def taxidOf = { f -> (f.toString() =~ /_(\d+)_/)[0][1] }
+            // The number after `prefix` in a file's name: TSVs are named partition_<taxid>_...,
+            // and FASTQ/FASTA files <sample>_<position>_... with sample "test"
+            def numberAfter = { f, prefix -> (f.toString().tokenize("/")[-1] =~ /${prefix}_(\d+)_/)[0][1] }
+            def taxidOf = { f -> numberAfter(f, "partition") }
             def taxids = workflow.out.tsv[0][1].collect { f -> taxidOf(f) }
-            def partitionOf = { f -> taxids[(f.toString().tokenize("/")[-1] =~ /test_(\d+)_/)[0][1] as int] }
+            def partitionOf = { f -> taxids[numberAfter(f, "test") as int] }
             def seqIdOf = { name -> name.tokenize(" ")[0] }
 
             // Track identities per partition, not just totals: comparing only aggregate
