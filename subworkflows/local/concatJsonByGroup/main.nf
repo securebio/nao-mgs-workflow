@@ -26,7 +26,7 @@ workflow CONCAT_JSON_BY_GROUP {
         // Group files by group and combine
         files_by_group = filtered
             .map { _label, _sample, file, group -> [group, file] }
-            .groupTuple() // complete: files found and validated on the head node, not task outputs
+            .groupTuple() // check_fan_in: files found and validated on the head node, not task outputs
         combined_ch = COMBINE_SAMPLE_JSONS(files_by_group, suffix).output
         // Rename to final output name: {group}_{output_name}.json
         renamed_ch = COPY_FILE(combined_ch, "${output_name}.json")

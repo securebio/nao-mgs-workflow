@@ -51,13 +51,13 @@ workflow MAKE_VIRUS_GENOME_DB {
         download_ch = DOWNLOAD_VIRAL_GENOMES(chunk_ch, assembly_source, other_params.datasets_download_extra_args, 5)
         // Gather each output only once every chunk's download has arrived: an ignored download
         // would otherwise build the database silently missing that chunk
-        // complete: counts the chunk list one successful task produced
+        // check_fan_in: counts the chunk list one successful task produced
         n_chunks_ch = chunk_ch.count()
         all_maps_ch = gatherChunks(download_ch.accession_map, n_chunks_ch)
         all_genomes_ch = gatherChunks(download_ch.genomes, n_chunks_ch)
         // 4. Merge the per-chunk maps deterministically, then join with the filtered metadata to
         //    add species_taxid and expand each assembly to one row per genome_id.
-        merged_map_ch = all_maps_ch.flatten().collectFile( // complete: gathered from every chunk above
+        merged_map_ch = all_maps_ch.flatten().collectFile( // check_fan_in: gathered from every chunk above
             name: "accession_map.tsv", keepHeader: true, skip: 1, sort: { it.name }
         )
         gid_ch = PREPARE_VIRAL_METADATA(filter_ch.db, virus_db, merged_map_ch, "virus-genome").metadata
@@ -82,6 +82,6 @@ workflow MAKE_VIRUS_GENOME_DB {
 def gatherChunks(ch, n_chunks_ch) {
     return ch.combine(n_chunks_ch)
         .map { files, n -> [groupKey("chunks", n as int), files] }
-        .groupTuple() // complete: sized with groupKey, so a failed download drops the gather
+        .groupTuple() // check_fan_in: sized with groupKey, so a failed download drops the gather
         .map { _key, files -> files.flatten() }
 }

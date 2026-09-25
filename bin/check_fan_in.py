@@ -11,16 +11,22 @@ whatever arrived, and everything downstream runs on the partial result. For
 example, an unsized `groupTuple()` over per-species downsampling tasks validated
 a group without the failed species.
 
-Each gathering operator (`collect`, in either form, `collectFile`, `toList`, `toSortedList`,
-`reduce`, `count`, `groupTuple`, or a `join` with `remainder: true`) must carry
-a `// complete: <reason>` comment on its line or in the comment block directly
-above that line. The reason is usually that the gather is sized with
-`groupKey(key, n)`, which drops an incomplete group, or that its input comes
-from the head node rather than from tasks that can fail.
+Each gathering operator (`collect`, in either form, `collectFile`, `toList`,
+`toSortedList`, `reduce`, `count`, `groupTuple`, or a `join` with
+`remainder: true`) must carry a `// check_fan_in: <reason>` comment on its line
+or in the comment block directly above that line. The reason is usually that
+the gather is sized with `groupKey(key, n)`, which drops an incomplete group, or
+that its input comes from the head node rather than from tasks that can fail.
+
+The annotation is a prompt to think it through, not proof: this check can't
+verify the reason given. What shows a gather is safe is a failure-injection
+test, which makes one upstream task fail under `errorStrategy 'ignore'` and
+asserts nothing downstream of the gather runs (see tests/configs/*_ignored.config).
+Nextflow itself has no setting that detects an unsized gather.
 
 Exit codes:
   0 - Every gathering operator is annotated
-  1 - One or more gathering operators lack a `// complete:` annotation
+  1 - One or more gathering operators lack a `// check_fan_in:` annotation
 """
 
 ###########
@@ -69,7 +75,7 @@ GATHER = re.compile(
     r"|\.reduce\s*[({]"
     r"|\bremainder\s*:\s*true"
 )
-ANNOTATION = re.compile(r"//\s*complete:\s*\S")
+ANNOTATION = re.compile(r"//\s*check_fan_in:\s*\S")
 COMMENT_LINE = re.compile(r"\s*//")
 # Workflow sources to scan, relative to the repository root.
 SOURCE_GLOBS = ("main.nf", "workflows/*.nf", "subworkflows/local/*/main.nf")
@@ -81,7 +87,7 @@ SOURCE_GLOBS = ("main.nf", "workflows/*.nf", "subworkflows/local/*/main.nf")
 
 def is_annotated(lines: list[str], index: int) -> bool:
     """
-    Check whether the line at `index` carries a `// complete:` annotation.
+    Check whether the line at `index` carries a `// check_fan_in:` annotation.
 
     Args:
         lines: Lines of a Nextflow source file.
@@ -102,7 +108,7 @@ def is_annotated(lines: list[str], index: int) -> bool:
 
 def find_unannotated_gathers(content: str) -> list[tuple[int, str]]:
     """
-    Find gathering operators without a `// complete:` annotation.
+    Find gathering operators without a `// check_fan_in:` annotation.
 
     Args:
         content: Full text of a Nextflow source file.
@@ -172,7 +178,7 @@ def main() -> None:
                 logger.error("%s:%d: %s", path, line_number, line)
         total = sum(len(v) for v in found.values())
         raise ValueError(
-            f"{total} gathering operator(s) lack a `// complete: <reason>` comment. "
+            f"{total} gathering operator(s) lack a `// check_fan_in: <reason>` comment. "
             "Under the ignore error strategy an unsized gather passes on a partial result "
             "when an upstream task fails: size it with groupKey(key, n), or say why its "
             "input is complete."

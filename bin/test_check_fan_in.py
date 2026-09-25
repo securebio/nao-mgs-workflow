@@ -18,12 +18,16 @@ from check_fan_in import find_unannotated_gathers, is_annotated, scan_sources
 @pytest.mark.parametrize(
     ("lines", "index", "expected"),
     [
-        (["x = ch.collect() // complete: head node"], 0, True),
-        (["// complete: head node", "x = ch.collect()"], 1, True),
-        (["// complete: head node", "// more context", "x = ch.collect()"], 2, True),
-        (["// complete: head node", "y = 1", "x = ch.collect()"], 2, False),
+        (["x = ch.collect() // check_fan_in: head node"], 0, True),
+        (["// check_fan_in: head node", "x = ch.collect()"], 1, True),
+        (
+            ["// check_fan_in: head node", "// more context", "x = ch.collect()"],
+            2,
+            True,
+        ),
+        (["// check_fan_in: head node", "y = 1", "x = ch.collect()"], 2, False),
         (["// some other comment", "x = ch.collect()"], 1, False),
-        (["x = ch.collect() // complete:"], 0, False),
+        (["x = ch.collect() // check_fan_in:"], 0, False),
     ],
 )
 def test_is_annotated(lines: list[str], index: int, expected: bool) -> None:
@@ -60,9 +64,7 @@ def test_find_unannotated_gathers_operators(line: str, flagged: bool) -> None:
 
 
 def test_find_unannotated_gathers_reports_line_numbers() -> None:
-    content = (
-        "a = ch.map { it }\nb = ch.collect()\n// complete: sized\nc = ch.groupTuple()\n"
-    )
+    content = "a = ch.map { it }\nb = ch.collect()\n// check_fan_in: sized\nc = ch.groupTuple()\n"
     assert find_unannotated_gathers(content) == [(2, "b = ch.collect()")]
 
 
@@ -75,7 +77,7 @@ def test_scan_sources_reports_only_unannotated(tmp_path: Path) -> None:
     (tmp_path / "workflows").mkdir()
     (tmp_path / "subworkflows" / "local" / "foo").mkdir(parents=True)
     (tmp_path / "workflows" / "run.nf").write_text(
-        "x = ch.collect() // complete: head node\n"
+        "x = ch.collect() // check_fan_in: head node\n"
     )
     bad = tmp_path / "subworkflows" / "local" / "foo" / "main.nf"
     bad.write_text("y = ch.groupTuple()\n")

@@ -68,7 +68,7 @@ workflow DOWNSTREAM {
         validate_ch = VALIDATE_VIRAL_ASSIGNMENTS(viral_hits_ch, viral_db, params.ref_dir, validation_params)
         // Prepare publishing channels
         params_str = groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(params))
-        // complete: the head node builds this from a value, not from task outputs
+        // check_fan_in: the head node builds this from a value, not from task outputs
         params_ch = channel.of(params_str).collectFile(name: "params-downstream.json")
         pyproject_ch = COPY_PYPROJECT(channel.fromPath(pipeline_pyproject_path), "pyproject.toml")
         input_file_ch = COPY_INPUT(channel.fromPath(params.input_file), "input_file.csv")
@@ -89,7 +89,7 @@ workflow DOWNSTREAM {
         sentinel_params = params + [output_dir: "${params.base_dir}/output", pyproject_path: "${projectDir}/pyproject.toml"]
         sentinel_ch = WRITE_SENTINEL_DOWNSTREAM(
             groups_only_ch,
-            // complete: partial on purpose; the sentinel checks that every expected output was produced
+            // check_fan_in: partial on purpose; the sentinel checks that every expected output was produced
             input_downstream_ch.mix(logging_downstream_ch, results_downstream_ch).collect(),
             start_time_str,
             sentinel_params

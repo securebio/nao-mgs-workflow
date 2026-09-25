@@ -77,6 +77,14 @@ Runs `mypy` on all Python code in `bin/` and `modules/local/`. Uses `dorny/paths
 
 Runs `ruff check .` (lint) and `ruff format --check .` (formatting verification) on the whole repo, using the `[tool.ruff]` configuration in `pyproject.toml`. Both checks are read-only — CI never auto-fixes; contributors must run `ruff check --fix .` and `ruff format .` locally and commit the results. Uses `dorny/paths-filter` to trivially succeed when no Python files, `pyproject.toml`, or the workflow itself have changed.
 
+### Process tag check (`check-process-tags.yml`)
+
+Runs `bin/check_process_tags.py`, which requires every process in `modules/local/` to declare a well-formed `tag "id=<value>"` directive referencing its own inputs, for per-task cost attribution.
+
+### Fan-in annotation check (`check-fan-in.yml`)
+
+Runs `bin/check_fan_in.py`, which requires every gathering channel operator in `main.nf`, `workflows/` and `subworkflows/local/` (`collect`, `toList`, `groupTuple`, ...) to carry a `// check_fan_in: <reason>` comment. Under the `ignore` error strategy, an unsized gather over task outputs would pass on a partial result, so a gather should be sized with `groupKey`. The check only requires that a reason be stated; failure-injection tests are what show a gather is safe. The same check also runs as part of the pytest suite.
+
 ### Rust tools (`rust-tools.yml`)
 
 Runs Rust unit tests and builds the `nao-rust-tools` container when Rust source files change. This workflow runs on all PRs but uses `dorny/paths-filter` to trivially succeed (~10 seconds) when no Rust files have changed. When Rust files are modified, it runs `cargo test` and builds the container. On push to `dev` or `main`, it also pushes the container to ECR.

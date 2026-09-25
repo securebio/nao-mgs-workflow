@@ -25,7 +25,7 @@ workflow CONCAT_BY_GROUP {
         // Group files by group and concatenate
         files_by_group = filtered
             .map { _label, _sample, file, group -> [group, file] }
-            .groupTuple() // complete: files found and validated on the head node, not task outputs
+            .groupTuple() // check_fan_in: files found and validated on the head node, not task outputs
         concatenated_ch = CONCATENATE_TSVS_LABELED(files_by_group, "concat").output
         // Add group column to concatenated files
         grouped_ch = ADD_GROUP_COLUMN(concatenated_ch, "group", "grouped").output

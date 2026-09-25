@@ -25,7 +25,7 @@ workflow DISCOVER_RUN_OUTPUT {
             .combine(suffixes_ch)        // [label, sample, group, dir, suffixes_str]
             .flatMap { label, sample, group, dir, suffixes_str ->
                 def resolved = dir.endsWith('/') ? dir : "${dir}/"
-                // complete: a Groovy list, not a channel
+                // check_fan_in: a Groovy list, not a channel
                 suffixes_str.split(',').collect { suffix ->
                     def gz_path = file("${resolved}${sample}_${suffix}.gz")
                     def plain_path = file("${resolved}${sample}_${suffix}")
@@ -35,15 +35,15 @@ workflow DISCOVER_RUN_OUTPUT {
             }
         // Validate all expected files were found, then emit output tuples
         validated_output_ch = candidates_ch
-            .toList() // complete: path probes run on the head node, not tasks
+            .toList() // check_fan_in: path probes run on the head node, not tasks
             .flatMap { all_candidates ->
                 def missing = all_candidates
                     .findAll { c -> c[4] == null }
-                    // complete: a Groovy list, not a channel
+                    // check_fan_in: a Groovy list, not a channel
                     .collect { c -> "${c[0]}\t${c[1]}\t${c[3]}" }
                 if (missing) {
                     def unique_missing = (missing as Set).sort()
-                    // complete: a Groovy list, not a channel
+                    // check_fan_in: a Groovy list, not a channel
                     def formatted = unique_missing.collect { line -> line.replace('\t', ' / ') }.join('\n  ')
                     throw new RuntimeException(
                         "Missing ${unique_missing.size()} expected RUN output file(s) in run_results_dir:\n  " +
@@ -51,7 +51,7 @@ workflow DISCOVER_RUN_OUTPUT {
                         "Ensure the RUN workflow has completed and all files are available."
                     )
                 }
-                // complete: a Groovy list, not a channel
+                // check_fan_in: a Groovy list, not a channel
                 all_candidates.collect { label, sample, group, _suffix, found ->
                     tuple(label, sample, found, group)
                 }

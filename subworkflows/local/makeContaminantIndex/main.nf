@@ -30,7 +30,7 @@ workflow MAKE_CONTAMINANT_INDEX {
         n_genomes = genome_urls.size()
         all_downloads_ch = n_genomes == 0 ? channel.value([]) : downloaded_ch
             .map { f -> [groupKey("genomes", n_genomes), f] }
-            .groupTuple() // complete: sized with groupKey, so a failed download drops the gather
+            .groupTuple() // check_fan_in: sized with groupKey, so a failed download drops the gather
             .map { _key, files -> files }
         combined_ch = all_downloads_ch.map { files -> files + [file(contaminants_path)] }
 
