@@ -61,11 +61,12 @@ logger.addHandler(handler)
 #############
 
 # Channel operators that gather many items into one emission. The closure form of `collect`
-# is matched only on channel-looking receivers (a `*_ch` name or a `channel.` expression),
-# since Groovy's list `collect { ... }` maps a list instead.
+# is matched only on channel-looking receivers (a `ch` or `*_ch` name, a process's `.out`, or a
+# `channel.` expression), since Groovy's list `collect { ... }` maps a list instead; the two
+# can't be told apart in general, so name channels accordingly.
 GATHER = re.compile(
     r"\.(collect|collectFile|toList|toSortedList|count|groupTuple)\s*\("
-    r"|(\b\w+_ch|\bchannel\.\w+\([^)]*\))\s*\.collect\s*\{"
+    r"|(\bch|\b\w+_ch|\.out(\.\w+)?|\bchannel\.\w+\([^)]*\))\s*\.collect\s*\{"
     r"|\.reduce\s*[({]"
     r"|\bremainder\s*:\s*true"
 )
