@@ -37,7 +37,17 @@ class SentinelUtils {
     // Expected outputs whose file name no upstream task emitted. A failed task emits nothing,
     // so these will never be published and there is no point polling for them.
     //   emitted : the values collected from the publish channels, nested in any way
+    // Emitted files are matched by name, since their publish directory isn't known here, so
+    // expected names must be unique. A match only skips this fast check: waitForFiles still
+    // checks each exact published path. Non-Path values (e.g. sample names) are ignored.
     static List<String> neverEmitted(List<String> expected, Collection emitted) {
+        def repeated = expected.collect { it.tokenize("/").last() }
+            .countBy { it }.findAll { name, n -> n > 1 }.keySet()
+        if (!repeated.isEmpty()) {
+            throw new IllegalStateException(
+                "Expected outputs share file names, so emitted files can't be matched to them: " +
+                repeated.sort().join(", "))
+        }
         def names = emitted.flatten()
             .findAll { it instanceof java.nio.file.Path }
             .collect { it.fileName.toString() } as Set
@@ -49,13 +59,14 @@ class SentinelUtils {
         def missing = neverEmitted(expected, emitted)
         if (!missing.isEmpty()) {
             throw new RuntimeException(
-                "${missing.size()}/${expected.size()} expected output file(s) were never produced, " +
+                "${missing.size()}/${expected.size()} expected output file(s) were never emitted, " +
                 "so an upstream task failed:\n  " + missing.join("\n  "))
         }
     }
 
     // Poll outputDir for each expected file with exponential backoff starting at 15s
-    // (each interval doubles, and the last is cut short so the total never exceeds maxWaitMins).
+    // (each interval doubles, and the last is cut short so the total wait never exceeds
+    // maxWaitMins, the timeout).
     // Throws on timeout with a message listing missing files.
     //   exists : closure taking a full path string and returning true if the file exists.
     //            Callers pass `{ p -> file(p).exists() }` so S3 paths work via Nextflow's file() API.
@@ -64,19 +75,19 @@ class SentinelUtils {
         if (maxWaitMins < 0) {
             throw new IllegalArgumentException("max_wait_mins must be >= 0, got ${maxWaitMins}")
         }
-        def maxWaitMs = maxWaitMins * 60 * 1000
+        def timeoutMs = maxWaitMins * 60 * 1000
         def intervalMs = 15000L
         def totalWaitedMs = 0L
         def missing = expected.findAll { !exists.call("${outputDir}/${it}") }
         while (!missing.isEmpty()) {
-            if (totalWaitedMs >= maxWaitMs) {
+            if (totalWaitedMs >= timeoutMs) {
                 throw new RuntimeException(
                     "Timed out after ${maxWaitMins} minutes waiting for " +
                     "${missing.size()}/${expected.size()} remaining published output file(s) " +
                     "(polled for ${totalWaitedMs.intdiv(1000)}s):\n  " +
                     missing.join("\n  "))
             }
-            def sleepMs = Math.min(intervalMs, maxWaitMs - totalWaitedMs)
+            def sleepMs = Math.min(intervalMs, timeoutMs - totalWaitedMs)
             Thread.sleep(sleepMs)
             totalWaitedMs += sleepMs
             intervalMs = intervalMs * 2
