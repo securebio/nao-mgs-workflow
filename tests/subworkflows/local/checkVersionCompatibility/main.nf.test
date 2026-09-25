@@ -118,8 +118,8 @@ nextflow_workflow {
             params {}
             workflow {
                 """
-                input[0] = "${projectDir}/test-data/checkVersionCompatibility/index-unparseable"
-                input[1] = "${projectDir}/test-data/checkVersionCompatibility/index-unparseable"
+                input[0] = "${projectDir}/test-data/checkVersionCompatibility/index-no-version"
+                input[1] = "${projectDir}/test-data/checkVersionCompatibility/index-no-version"
                 input[2] = "mgs-workflow"
                 """
             }
