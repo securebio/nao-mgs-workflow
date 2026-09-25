@@ -47,8 +47,11 @@ nextflow_workflow {
         then {
             // Should run without failures even when input TSV has no data rows
             assert workflow.success
-            // TSV output should be empty (partition_empty_* filtered out)
-            assert workflow.out.tsv.collect{it[1]}.flatten().size() == 0
+            // With no partitions, the group's own header-only table is passed on in their place
+            def parts = workflow.out.tsv.collect{it[1]}.flatten()
+            assert parts.size() == 1
+            assert !path(parts[0]).fileName.toString().startsWith("partition_")
+            assert path(parts[0]).linesGzip.size() == 1
             // annotated is not filtered, so unlike tsv it still emits one table per
             // group -- header-only, and already shaped for consumers
             assert workflow.out.annotated.size() == 1
@@ -107,7 +110,7 @@ nextflow_workflow {
             def n_parts_obs
             for (int i=0; i < tabs_join.size(); i++) {
                 n_parts_exp = tabs_join[i].columns["taxid_species"].unique().size()
-                n_parts_obs = workflow.out.test_part[i][1].size()
+                n_parts_obs = workflow.out.tsv[i][1].size()
                 assert n_parts_exp == n_parts_obs
                 n_parts_total += n_parts_obs
             }

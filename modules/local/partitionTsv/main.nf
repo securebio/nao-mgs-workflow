@@ -7,7 +7,9 @@ process PARTITION_TSV {
         tuple val(sample), path(tsv)
         val(column)
     output:
-        tuple val(sample), path("partition_*_${tsv}"), emit: output, optional: true
+        // Header-only input produces no partitions: emit an empty list explicitly to disambiguate
+        // from a failed process with an empty channel.
+        tuple val(sample), path("partition_*_${tsv}", arity: "0..*"), emit: output
         tuple val(sample), path("input_${tsv}"), emit: input
     script:
         """
