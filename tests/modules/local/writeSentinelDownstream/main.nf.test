@@ -14,7 +14,7 @@ nextflow_process {
             process {
                 '''
                 input[0] = "tt1"
-                input[1] = ["done"]
+                input[1] = files("${projectDir}/test-data/writeSentinelDownstream/output_shortread/**")
                 input[2] = "2026-01-01 00:00:00 UTC (+0000)"
                 input[3] = [
                     output_dir: "${projectDir}/test-data/writeSentinelDownstream/output_shortread",
@@ -44,7 +44,7 @@ nextflow_process {
                 '''
                 // ONT fixture lacks short-read-only files (e.g. extra.json); ONT key must be used
                 input[0] = "tt1"
-                input[1] = ["done"]
+                input[1] = files("${projectDir}/test-data/writeSentinelDownstream/output_ont/**")
                 input[2] = "2026-01-01 00:00:00 UTC (+0000)"
                 input[3] = [
                     output_dir: "${projectDir}/test-data/writeSentinelDownstream/output_ont",
@@ -74,7 +74,7 @@ nextflow_process {
                 // Uses existing files in the nao-testing bucket with a fixture
                 // pyproject that has patterns matching those files (no {GROUP} expansion)
                 input[0] = "fixture_group"
-                input[1] = ["done"]
+                input[1] = [file("s3://nao-testing/tiny-test/raw/tiny-test_R1.fastq.gz"), file("s3://nao-testing/tiny-test/raw/tiny-test_R2.fastq.gz")]
                 input[2] = "2026-01-01 00:00:00 UTC (+0000)"
                 input[3] = [
                     output_dir: "s3://nao-testing/tiny-test",
@@ -103,7 +103,7 @@ nextflow_process {
                 '''
                 // Point at a nonexistent path so the test is robust to future fixture additions
                 input[0] = "tt1"
-                input[1] = ["done"]
+                input[1] = files("${projectDir}/test-data/writeSentinelDownstream/output_shortread/**")
                 input[2] = "2026-01-01 00:00:00 UTC (+0000)"
                 input[3] = [
                     output_dir: "${projectDir}/test-data/writeSentinelDownstream/nonexistent_output_dir",
@@ -124,6 +124,31 @@ nextflow_process {
         }
     }
 
+    test("Should stop polling at max_wait_mins") {
+        tag "expect_fail"
+        when {
+            params {}
+            process {
+                '''
+                input[0] = "tt1"
+                input[1] = files("${projectDir}/test-data/writeSentinelDownstream/output_shortread/**")
+                input[2] = "2026-01-01 00:00:00 UTC (+0000)"
+                input[3] = [
+                    output_dir: "${projectDir}/test-data/writeSentinelDownstream/nonexistent_output_dir",
+                    pyproject_path: "${projectDir}/test-data/writeSentinelDownstream/pyproject.toml",
+                    platform: "illumina",
+                    sentinel_max_wait_mins: 1
+                ]
+                '''
+            }
+        }
+        then {
+            // Intervals of 15s and 30s, then 15s of the next 60s, rather than all of it
+            assert process.failed
+            assert process.errorReport.contains("(polled for 60s)")
+        }
+    }
+
     test("Should fail when max_wait_mins is negative") {
         tag "expect_fail"
         when {
@@ -131,7 +156,7 @@ nextflow_process {
             process {
                 '''
                 input[0] = "tt1"
-                input[1] = ["done"]
+                input[1] = files("${projectDir}/test-data/writeSentinelDownstream/output_shortread/**")
                 input[2] = "2026-01-01 00:00:00 UTC (+0000)"
                 input[3] = [
                     output_dir: "${projectDir}/test-data/writeSentinelDownstream/output_shortread",
@@ -145,6 +170,59 @@ nextflow_process {
         then {
             assert process.failed
             assert process.errorReport.contains("max_wait_mins must be >= 0")
+        }
+    }
+
+    test("Should fail without waiting when an expected output was never emitted") {
+        tag "expect_fail"
+        when {
+            params {}
+            process {
+                '''
+                input[0] = "tt1"
+                input[1] = files("${projectDir}/test-data/writeSentinelDownstream/output_shortread/**").findAll { !it.name.endsWith(".json") }
+                input[2] = "2026-01-01 00:00:00 UTC (+0000)"
+                input[3] = [
+                    // No published files, and no time to poll: if the emitted check ran after polling,
+                    // this would time out instead
+                    output_dir: "${projectDir}/test-data/writeSentinelDownstream/nonexistent_output_dir",
+                    pyproject_path: "${projectDir}/test-data/writeSentinelDownstream/pyproject.toml",
+                    platform: "illumina",
+                    sentinel_max_wait_mins: 0
+                ]
+                '''
+            }
+        }
+        then {
+            assert process.failed
+            assert process.errorReport.contains("were never emitted")
+            assert process.errorReport.contains("tt1_extra.json")
+            assert !process.errorReport.contains("Timed out")
+        }
+    }
+
+    test("Should fail when expected outputs share a file name") {
+        tag "expect_fail"
+        when {
+            params {}
+            process {
+                '''
+                input[0] = "tt1"
+                input[1] = files("${projectDir}/test-data/writeSentinelDownstream/output_shortread/**")
+                input[2] = "2026-01-01 00:00:00 UTC (+0000)"
+                input[3] = [
+                    output_dir: "${projectDir}/test-data/writeSentinelDownstream/output_shortread",
+                    pyproject_path: "${projectDir}/test-data/writeSentinelDownstream/pyproject_duplicate_names.toml",
+                    platform: "illumina",
+                    sentinel_max_wait_mins: 0
+                ]
+                '''
+            }
+        }
+        then {
+            assert process.failed
+            assert process.errorReport.contains("Expected outputs share file names")
+            assert process.errorReport.contains("tt1_counts.tsv.gz")
         }
     }
 }
