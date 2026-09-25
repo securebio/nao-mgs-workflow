@@ -3,6 +3,8 @@ process EXTRACT_VERSIONS {
     label "single"
     label "python"
     tag "id=util"
+    // Retry a lost task, then stop the run rather than skip the version check
+    errorStrategy { task.attempt <= task.maxRetries ? "retry" : "terminate" }
     input:
         path pipeline_pyproject, stageAs: "pipeline_pyproject.toml"
         path index_pyproject, stageAs: "index_pyproject.toml"
@@ -14,6 +16,8 @@ process EXTRACT_VERSIONS {
         env('INDEX_MIN_PIPELINE'), emit: index_min_pipeline
     script:
         """
-        eval \$(extract_versions.py pipeline_pyproject.toml index_pyproject.toml --tool-name '${tool_name}')
+        # Assign before eval: eval of a failed command substitution returns 0
+        versions=\$(extract_versions.py pipeline_pyproject.toml index_pyproject.toml --tool-name '${tool_name}')
+        eval "\${versions}"
         """
 }
