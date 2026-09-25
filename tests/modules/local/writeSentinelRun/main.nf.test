@@ -132,17 +132,19 @@ nextflow_process {
                 input[1] = ["sample1"]
                 input[2] = "2026-01-01 00:00:00 UTC (+0000)"
                 input[3] = [
-                    output_dir: "${projectDir}/test-data/writeSentinelRun/output_shortread",
+                    // No published files, and no time to poll: if the emitted check ran after polling,
+                    // this would time out instead
+                    output_dir: "${projectDir}/test-data/writeSentinelRun/nonexistent_output_dir",
                     pyproject_path: "${projectDir}/test-data/writeSentinelRun/pyproject.toml",
                     platform: "illumina",
-                    sentinel_max_wait_mins: 1
+                    sentinel_max_wait_mins: 0
                 ]
                 '''
             }
         }
         then {
             assert process.failed
-            assert process.errorReport.contains("were never produced")
+            assert process.errorReport.contains("were never emitted")
             assert process.errorReport.contains("sample1_extra.json")
             assert !process.errorReport.contains("Timed out")
         }

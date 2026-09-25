@@ -1,0 +1,11 @@
+# Fixture: two expected outputs share a file name, which emitted files cannot be matched to
+[project]
+version = "0.0.0"
+
+[tool.mgs-workflow]
+expected-outputs-downstream = [
+    "input_downstream/{GROUP}_counts.tsv.gz",
+    "results_downstream/{GROUP}_counts.tsv.gz",
+]
+
+expected-outputs-downstream-ont = []
