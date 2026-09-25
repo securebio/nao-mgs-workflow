@@ -1,0 +1,31 @@
+nextflow_workflow {
+
+    name "Test workflow MAKE_CONTAMINANT_INDEX"
+    script "subworkflows/local/makeContaminantIndex/main.nf"
+    workflow "MAKE_CONTAMINANT_INDEX"
+    config "tests/configs/index_genome_download_ignored.config"
+    tag "subworkflow"
+    tag "make_contaminant_index"
+
+    test("Should build no index when one genome download fails") {
+        tag "expect_failed"
+        when {
+            params {}
+            workflow {
+                '''
+                input[0] = [
+                    first: "https://www.ebi.ac.uk/ena/browser/api/fasta/AF158101.6?range=1-1000",
+                    second: "https://www.ebi.ac.uk/ena/browser/api/fasta/AF158101.6?range=1001-2000"
+                ]
+                input[1] = "${projectDir}/test-data/tiny-index/output/results/ribo-ref-concat.fasta.gz"
+                '''
+            }
+        }
+        then {
+            // An index missing a genome would otherwise be built from the rest
+            assert workflow.failed
+            assert workflow.out.bt2.size() == 0
+            assert workflow.out.mm2.size() == 0
+        }
+    }
+}

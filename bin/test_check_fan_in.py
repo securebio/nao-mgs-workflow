@@ -49,6 +49,8 @@ def test_is_annotated(lines: list[str], index: int, expected: bool) -> None:
         ("x = a.join(b, remainder: true)", True),
         ("x = a.join(b)", False),
         ("x = list.collect { it * 2 }", False),
+        ("x = hits_ch.collect { it.name }", True),
+        ("x = channel.of(1, 2).collect { it * 2 }", True),
         ("x = ch.map { it }", False),
         ("// ch.collect() in a comment", False),
     ],
