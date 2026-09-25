@@ -74,5 +74,4 @@ workflow SPLIT_VIRAL_TSV_BY_SELECTED_TAXID {
         test_db   = db
         test_sort = sorted_ch
         test_join = join_ch
-        test_part = part_ch
 }

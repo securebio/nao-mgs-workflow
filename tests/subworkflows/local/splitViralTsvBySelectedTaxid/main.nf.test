@@ -110,7 +110,7 @@ nextflow_workflow {
             def n_parts_obs
             for (int i=0; i < tabs_join.size(); i++) {
                 n_parts_exp = tabs_join[i].columns["taxid_species"].unique().size()
-                n_parts_obs = workflow.out.test_part[i][1].size()
+                n_parts_obs = workflow.out.tsv[i][1].size()
                 assert n_parts_exp == n_parts_obs
                 n_parts_total += n_parts_obs
             }
