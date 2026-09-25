@@ -32,8 +32,9 @@ workflow DOWNSAMPLE_VIRAL_ASSIGNMENTS {
         }
         // 1. Downsample each partition, one task each; exemplar_columns optionally
         // confines sampling to duplicate-group exemplars
-        // Key each partition with its group's size, so a group missing a failed partition
-        // is dropped rather than regrouped without it
+        // Carry each group's expected partition count in its key, so groupTuple() emits only
+        // complete groups: if an ignored downsampling task emits nothing, its group gets no
+        // downstream input
         partition_ch = tsv_ch
             .map { label, files -> [groupKey(label, files.size()), files] }
             .transpose()
