@@ -11,7 +11,7 @@ whatever arrived, and everything downstream runs on the partial result. For
 example, an unsized `groupTuple()` over per-species downsampling tasks validated
 a group without the failed species.
 
-Each gathering operator (`collect`, `collectFile`, `toList`, `toSortedList`,
+Each gathering operator (`collect`, in either form, `collectFile`, `toList`, `toSortedList`,
 `reduce`, `count`, `groupTuple`, or a `join` with `remainder: true`) must carry
 a `// complete: <reason>` comment on its line or in the comment block directly
 above that line. The reason is usually that the gather is sized with
@@ -60,13 +60,12 @@ logger.addHandler(handler)
 # CONSTANTS #
 #############
 
-# Channel operators that gather many items into one emission. The closure form of `collect`
-# is matched only on channel-looking receivers (a `ch` or `*_ch` name, a process's `.out`, or a
-# `channel.` expression), since Groovy's list `collect { ... }` maps a list instead; the two
-# can't be told apart in general, so name channels accordingly.
+# Channel operators that gather many items into one emission. A Groovy list's `collect { ... }`
+# can't be told apart from a channel's without type information, so every closure-form
+# `collect` is matched too, and list transformations are annotated as such.
 GATHER = re.compile(
     r"\.(collect|collectFile|toList|toSortedList|count|groupTuple)\s*\("
-    r"|(\bch|\b\w+_ch|\.out(\.\w+)?|\bchannel\.\w+\([^)]*\))\s*\.collect\s*\{"
+    r"|\.collect\s*\{"
     r"|\.reduce\s*[({]"
     r"|\bremainder\s*:\s*true"
 )

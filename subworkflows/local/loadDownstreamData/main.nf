@@ -45,6 +45,7 @@ workflow LOAD_DOWNSTREAM_DATA {
         groups_ch = rows_ch
             .map { row -> tuple(row.label, resolvePath(row.groups_tsv, input_base_dir)) }
             .flatMap { label, groups_file ->
+                // complete: a Groovy list, not a channel
                 groups_file.splitCsv(sep: '\t', header: true).collect { gRow ->
                     tuple(label, gRow.sample, gRow.group)
                 }
