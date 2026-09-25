@@ -39,8 +39,10 @@ workflow RUN {
         other_results_ch = viral_ch.hits_final.mix(profile_ch.bracken, profile_ch.kraken)
         // Validate published outputs and write sentinel
         expected_ch = input_log_ch.input_run.mix(input_log_ch.logging_run, qc_results_ch, other_results_ch)
+        // check_fan_in: the samplesheet is parsed on the head node
         sentinel_samples = samplesheet_ch.samplesheet.map { sample, _reads -> sample }.collect()
         sentinel_params = params + [output_dir: "${params.base_dir}/output", pyproject_path: "${projectDir}/pyproject.toml"]
+        // check_fan_in: partial on purpose; the sentinel checks that every expected output was produced
         sentinel_ch = WRITE_SENTINEL_RUN(expected_ch.collect(), sentinel_samples, samplesheet_ch.start_time_str, sentinel_params)
     emit:
         input_run = input_log_ch.input_run

@@ -57,7 +57,9 @@ workflow INDEX {
         kraken_ch = GET_KRAKEN_DB(params.kraken_db, "kraken_db", true)
         // Prepare results for publishing
         params_str = groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(params))
+        // check_fan_in: the head node builds this from a value, not from task outputs
         params_ch = channel.of(params_str).collectFile(name: "index-params.json")
+        // check_fan_in: the head node builds this from a value, not from task outputs
         time_ch = channel.of(start_time_str + "\n").collectFile(name: "time.txt")
         pipeline_pyproject_path = file("${projectDir}/pyproject.toml")
         pyproject_ch = COPY_PYPROJECT(channel.fromPath(pipeline_pyproject_path), "pyproject.toml")

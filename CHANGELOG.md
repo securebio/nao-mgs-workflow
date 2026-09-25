@@ -1,5 +1,6 @@
 # v3.4.0.0-dev
 
+- Size gathers of task outputs by their expected number of inputs, and add `bin/check_fan_in.py` to CI to flag gathers that lack a stated reason they're complete. (#1030)
 - Stop the run when the pipeline and index versions are incompatible or can't be read, rather than letting unrelated tasks finish under the `ignore` errorStrategy. (#1024)
 - Fail the RUN and DOWNSTREAM sentinels immediately if an expected output is not emitted. (#1021)
 - Skip a group's entire validation when one of its per-species downsampling tasks is ignored, rather than validating the partial group. (#1017)
