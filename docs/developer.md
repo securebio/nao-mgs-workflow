@@ -20,6 +20,7 @@ These guidelines represent best practices to implement in new code, though some 
     - Aim for one process per module, in a `main.nf` file.
     - Avoid creating duplicate processes. If you need a slight variation on existing behavior, parameterize or otherwise tweak an existing process.
     - Shared Groovy helpers used by multiple `exec:` blocks live in top-level `lib/*.groovy` files (auto-loaded by Nextflow). See `lib/SentinelUtils.groovy` for an example.
+    - Gather task outputs only once all of them have arrived. A task that fails its retry is ignored, so an operator that gathers without knowing how many items to expect (`collect()`, `toList()`, an unsized `groupTuple()`, ...) passes on whatever arrived. Size the gather with `groupKey(key, n)`, which drops an incomplete group, and mark every gathering operator with a `// complete: <reason>` comment; `bin/check_fan_in.py` enforces this.
     - Avoid very large `script` or `shell` blocks in Nextflow processes where possible.
         - If the block gets bigger than about 20 lines, we probably want to split it into multiple processes, or move functionality into a Rust or Python script. 
 - Documentation

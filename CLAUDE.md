@@ -118,6 +118,7 @@ When snapshot tests fail, **always verify the output changes are intentional** b
 
 Refer to `docs/developer.md` for comprehensive coding style guidelines. Key points:
 - Nextflow: `lower_snake_case` for variables, `UPPER_SNAKE_CASE` for processes
+- Nextflow: size any gather over task outputs with `groupKey(key, n)` and mark every gathering operator with `// complete: <reason>`, since ignored failures would otherwise pass on partial input (`bin/check_fan_in.py`)
 - Keep PRs small and focused
 - Avoid over-engineering; only make requested changes
 - When the user or a linter modifies a file between your edits, preserve those changes — never revert formatting the user has applied

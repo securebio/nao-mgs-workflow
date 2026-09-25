@@ -34,7 +34,7 @@ workflow DISCOVER_RUN_OUTPUT {
             }
         // Validate all expected files were found, then emit output tuples
         validated_output_ch = candidates_ch
-            .toList()
+            .toList() // complete: path probes run on the head node, not tasks
             .flatMap { all_candidates ->
                 def missing = all_candidates
                     .findAll { c -> c[4] == null }

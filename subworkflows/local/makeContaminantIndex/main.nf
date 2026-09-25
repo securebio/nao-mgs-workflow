@@ -24,10 +24,17 @@ workflow MAKE_CONTAMINANT_INDEX {
             }
 
         downloaded_ch = DOWNLOAD_GENOME(ref_ch)
+        // Gather only once every download has arrived: an ignored download would otherwise
+        // build the index without that genome
+        n_genomes = genome_urls.size()
+        all_downloads_ch = downloaded_ch
+            .map { f -> [groupKey("genomes", n_genomes), f] }
+            .groupTuple() // complete: sized with groupKey, so a failed download drops the gather
+            .map { _key, files -> files }
 
-        combined_ch = downloaded_ch
+        combined_ch = all_downloads_ch
             .mix(channel.fromPath(contaminants_path))
-            .collect()
+            .collect() // complete: every download is gathered above
 
         // Then use combined_ch for the rest of your workflow
         genome_ch = CONCATENATE_FASTA_GZIPPED(combined_ch, "ref_concat")

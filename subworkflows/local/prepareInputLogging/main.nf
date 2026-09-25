@@ -24,6 +24,7 @@ workflow PREPARE_INPUT_LOGGING {
     main:
         // Serialize run params to JSON
         params_str = groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(params_map))
+        // complete: the head node builds this from a value, not from task outputs
         params_ch = channel.of(params_str).collectFile(name: "params-run.json")
         // Copy index files for publishing
         index_params_path = file("${params_map.ref_dir}/input/index-params.json")
