@@ -1,5 +1,6 @@
 # v3.4.0.0-dev
 
+- Size `MARK_SIMILARITY_DUPLICATES` memory by input size (4–64 GB tiers, new `mark_similarity_duplicates_resources` label) instead of a fixed 4 GB, which large groups exceeded. (#PR)
 - Pass modules only the parameters they read to avoid invalidating caches with launch-specific values. Also fixes PROFILE's ribosomal intermediates being named with a `null` suffix, BBDuk treating single-end reads as interleaved, and BBDuk's task context failing to serialize, which disabled `-resume` for it. (#1034)
 - Add a host-infection override to `ref/host-infection-overrides.json` restoring mammal and vertebrate infection status for Rotavirus kappagastroenteritidis (Rotavirus K), which was demoted after the 20260702 index despite being most closely related to the human-infecting Rotavirus C. (#1025)
 - Check SILVA staleness per subunit in `bin/benchmark_index.py`. (#1014)
