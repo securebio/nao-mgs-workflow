@@ -104,4 +104,34 @@ nextflow_workflow {
             assert workflow.out.metadata[0].toString().endsWith("virus-genome-metadata-gid.tsv.gz")
         }
     }
+
+    test("Should build nothing when one chunk's download fails") {
+        tag "expect_failed"
+        config "tests/configs/index_download_ignored.config"
+        when {
+            params {}
+            workflow {
+                '''
+                input[0] = "10530"
+                input[1] = params.assembly_source
+                input[2] = file("${projectDir}/test-data/makeVirusGenomeDB/virus-db-annotated.tsv")
+                input[3] = params.collectEntries { key, value -> [key, value] } + [
+                    k: "20",
+                    hdist: "3",
+                    entropy: "0.5",
+                    polyx_len: "10",
+                    datasets_summary_extra_args: "",
+                    genome_patterns_exclude: "${projectDir}/test-data/toy-data/empty_file.txt",
+                    host_taxa_screen: "vertebrate",
+                ]
+                '''
+            }
+        }
+        then {
+            // A database missing a chunk's genomes would otherwise be built from the rest
+            assert workflow.failed
+            assert workflow.out.fasta.size() == 0
+            assert workflow.out.metadata.size() == 0
+        }
+    }
 }
