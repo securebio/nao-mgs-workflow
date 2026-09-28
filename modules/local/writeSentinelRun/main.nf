@@ -7,7 +7,7 @@ process WRITE_SENTINEL_RUN {
     label "sentinel"
     tag "id=util"
     input:
-        val(ready)           // Collected items from all output channels
+        val(ready)           // Items emitted to the output channels: task outputs in their work directories, not the published copies
         val(sample_names)    // List of sample names from samplesheet
         val(start_time)      // Start time string
         val(params_map)      // Workflow params (+ output_dir and pyproject_path injected by caller)

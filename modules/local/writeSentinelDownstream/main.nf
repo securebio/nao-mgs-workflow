@@ -10,7 +10,7 @@ process WRITE_SENTINEL_DOWNSTREAM {
     tag "id=${group}"
     input:
         val(group)                     // Group name; drives per-group fan-out
-        val(ready)                     // Collected items from all downstream publish channels
+        val(ready)                     // Items emitted to the publish channels: task outputs in their work directories, not the published copies
         val(downstream_start_time)     // DOWNSTREAM start time string
         val(params_map)                // Workflow params (+ output_dir and pyproject_path injected by caller)
     output:
