@@ -39,7 +39,13 @@ workflow BLAST_FASTA {
         nodes_db = "${ref_dir}/results/taxonomy-nodes.dmp"
         names_db = "${ref_dir}/results/taxonomy-names.dmp"
         // 1. Run BLAST
-        blast_ch = BLAST(query_fasta, blast_db_dir, params_map)
+        // Pass only the keys BLAST reads, so launch-specific params don't bust the -resume cache
+        blast_params = [
+            blast_perc_id: params_map.blast_perc_id,
+            blast_qcov_hsp_perc: params_map.blast_qcov_hsp_perc,
+            db_download_timeout: params_map.db_download_timeout
+        ]
+        blast_ch = BLAST(query_fasta, blast_db_dir, blast_params)
         // 2. Filter BLAST output to only one row per query/subject combination
         sort_str_1 = "-t\$\'\\t\' -k1,1 -k2,2 -k7,7nr -k9,9nr" // Sort by query, subject, bitscore, length
         sort_ch_1 = SORT_BLAST_1(blast_ch.output, sort_str_1, "blast")
