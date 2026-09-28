@@ -57,13 +57,10 @@ workflow SPLIT_VIRAL_TSV_BY_SELECTED_TAXID {
             new_hdr: "selected_taxid"
         ]).tsv
         join_sorted_ch = SORT_JOINED_SPECIES(updated_col, "selected_taxid").sorted
-        part_raw_ch = PARTITION_TSV(join_sorted_ch, "selected_taxid").output
-        // 4. A group with no data rows has no partitions, so pass on its header-only table
-        // in their place: every later step then writes header-only output of its own
-        part_ch = part_raw_ch.join(join_sorted_ch).map { sample, parts, table ->
-            [sample, parts ?: [table]]
-        }
-        // 5. Emit the whole joined table for consumers that need every read.
+        // A group with no data rows gets its header-only table back in place of partitions, so
+        // every later step writes header-only output of its own
+        part_ch = PARTITION_TSV(join_sorted_ch, "selected_taxid").output
+        // 4. Emit the whole joined table for consumers that need every read.
         // taxid_species is scaffolding for computing selected_taxid and carries no
         // further information, so it is dropped here rather than left for callers.
         annotated_ch = DROP_SPECIES_TAXID(join_sorted_ch, "taxid_species", "drop").output

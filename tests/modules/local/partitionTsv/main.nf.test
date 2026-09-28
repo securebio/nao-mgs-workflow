@@ -41,7 +41,7 @@ nextflow_process {
         }
     }
 
-    test("Should emit an empty list for header-only input") {
+    test("Should emit the input table itself for header-only input") {
         tag "expect_success"
         tag "empty_input"
         when {
@@ -59,7 +59,11 @@ nextflow_process {
         then {
             // A positive signal that the table was read and holds no rows, unlike a failed task
             assert process.success
-            assert process.out.output == [["test", []]]
+            assert process.out.output.size() == 1
+            assert process.out.output[0][1].size() == 1
+            def out = path(process.out.output[0][1][0])
+            assert out.fileName.toString() == "unpartitioned_test_tab_empty.tsv"
+            assert out.readLines() == ["x\ty\tz"]
         }
     }
 

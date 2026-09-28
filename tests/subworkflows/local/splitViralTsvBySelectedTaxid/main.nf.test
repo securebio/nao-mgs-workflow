@@ -47,7 +47,7 @@ nextflow_workflow {
         then {
             // Should run without failures even when input TSV has no data rows
             assert workflow.success
-            // With no partitions, the group's own header-only table is passed on in their place
+            // With no partitions, PARTITION_TSV emits the group's own header-only table instead
             def parts = workflow.out.tsv.collect{it[1]}.flatten()
             assert parts.size() == 1
             assert !path(parts[0]).fileName.toString().startsWith("partition_")

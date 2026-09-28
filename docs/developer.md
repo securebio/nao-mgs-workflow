@@ -309,6 +309,6 @@ Under our [versioning policy](./versioning.md), changes to schema `title` and `d
 ### Working with schemas
 
 - If you are working on a change that affects pipeline outputs, review the schema files for affected outputs where available, to know what's expected for each column.
-- Steps pass a header-only input through as header-only output, so a DOWNSTREAM group with no hits runs the same processes as any other and publishes header-only tables. `PARTITION_TSV` emits an empty list for such a group, and validation passes on the group's header-only table in place of partitions.
+- Steps pass a header-only input through as header-only output, so a DOWNSTREAM group with no hits runs the same processes as any other and publishes header-only tables. `PARTITION_TSV` emits a header-only input table itself in place of partitions, so such a group isn't dropped before validation.
 - To validate output files locally, run `bin/validate_schemas.py`.
 - If you are developing code external to this repository that depends on its outputs, you should review the corresponding schemas to understand what guarantees you can expect.
