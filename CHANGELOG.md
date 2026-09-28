@@ -1,6 +1,6 @@
 # v3.4.0.0-dev
 
-- Pass BLASTN, PROFILE's ribosomal BBDuk/minimap2, and INDEX's `MASK_GENOME_FASTA` only the parameters they read, rather than the whole params map. Launch-specific values such as `params.trace_timestamp` no longer change their task hashes, so `-resume` reuses them and everything downstream. Also fixes PROFILE's ribosomal intermediates being named with a `null` suffix and BBDuk treating single-end reads as interleaved. (#PR)
+- Pass BLASTN, PROFILE's ribosomal BBDuk/minimap2, and INDEX's `MASK_GENOME_FASTA` only the parameters they read, rather than the whole params map. Launch-specific values such as `params.trace_timestamp` no longer change their task hashes, so `-resume` reuses them and everything downstream. Also fixes PROFILE's ribosomal intermediates being named with a `null` suffix and BBDuk treating single-end reads as interleaved. (#1034)
 - Add a host-infection override to `ref/host-infection-overrides.json` restoring mammal and vertebrate infection status for Rotavirus kappagastroenteritidis (Rotavirus K), which was demoted after the 20260702 index despite being most closely related to the human-infecting Rotavirus C. (#1025)
 - Check SILVA staleness per subunit in `bin/benchmark_index.py`. (#1014)
 - Update the SSU ribosomal reference from SILVA 138.2 to SILVA 144 and cap BBDuk's Java heap at 75% of task memory. (#1013)
