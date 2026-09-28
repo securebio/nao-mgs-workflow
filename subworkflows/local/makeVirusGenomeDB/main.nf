@@ -57,7 +57,7 @@ workflow MAKE_VIRUS_GENOME_DB {
         // 4. Merge the per-chunk maps deterministically, then join with the filtered metadata to
         //    add species_taxid and expand each assembly to one row per genome_id.
         merged_map_ch = all_maps_ch.flatten().collectFile(
-            name: "accession_map.tsv", keepHeader: true, skip: 1, sort: { it.name }
+            name: "accession_map.tsv", keepHeader: true, skip: 1, sort: { f -> f.name }
         )
         gid_ch = PREPARE_VIRAL_METADATA(filter_ch.db, virus_db, merged_map_ch, "virus-genome").metadata
         // 5. Concatenate matching genomes.
