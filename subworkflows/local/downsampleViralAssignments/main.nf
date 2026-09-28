@@ -41,6 +41,7 @@ workflow DOWNSAMPLE_VIRAL_ASSIGNMENTS {
         downsampled_ch = DOWNSAMPLE_TSV_BY_HASH(partition_ch, "seq_id", n_sample, exemplar_columns).output
         // Sort the group: it reaches the processes below as a command-line argument, so
         // task-completion order would change their task hashes and defeat -resume
+        // check_fan_in: sized with groupKey above, so a group missing a partition is dropped
         sampled_ch = downsampled_ch.groupTuple()
             .map { key, files -> [key.getGroupTarget(), files.sort { f -> f.name }] }
         // 2. Extract the retained reads into interleaved FASTQ

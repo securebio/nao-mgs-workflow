@@ -1,5 +1,6 @@
 # v3.4.0.0-dev
 
+- Add `bin/check_fan_in.py` to CI, requiring every gathering channel operator in the workflows to carry a `// check_fan_in: <reason>` comment saying why its input is complete. (#1030)
 - Size the INDEX viral-genome and contaminant gathers by their expected number of downloads, so an ignored download failure builds no index rather than one missing that download. (#1031)
 - Stop the run when the pipeline and index versions are incompatible or can't be read, rather than letting unrelated tasks finish under the `ignore` errorStrategy. (#1024)
 - Fail the RUN and DOWNSTREAM sentinels immediately if an expected output is not emitted. (#1021)

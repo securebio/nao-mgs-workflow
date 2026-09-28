@@ -38,6 +38,7 @@ workflow PROCESS_LCA_ALIGNER_OUTPUT {
         selected_ch = SELECT_TSV_COLUMNS(filtered_ch.output, col_keep, "keep")
         // Step 6: Rename columns with prefix using REHEAD_TSV
         old_cols = col_keep_add_prefix.join(",")
+        // check_fan_in: a Groovy list, not a channel
         new_cols = col_keep_add_prefix.collect { c -> "${column_prefix}${c}" }.join(",")
         renamed_ch = REHEAD_TSV(selected_ch.output, old_cols, new_cols)
         // Step 7: Add sample column to LCA TSV for intermediate output
