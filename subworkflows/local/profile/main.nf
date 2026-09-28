@@ -29,6 +29,7 @@ workflow PROFILE {
     main:
         kraken_db_ch = "${params_map.ref_dir}/results/kraken_db"
         // Separate ribosomal reads
+        // Processes get literal maps, not params_map: launch-specific params would bust the -resume cache
         if (params_map.platform == "ont") {
             ribo_ref = "${params_map.ref_dir}/results/mm2-ribo-index"
             ribo_minimap2_params = [
@@ -71,4 +72,7 @@ workflow PROFILE {
     emit:
         bracken = br_per_sample.output
         kraken = kr_per_sample.output
+        // Extra outputs for testing
+        test_ribo = ribo_in
+        test_noribo = noribo_in
 }
