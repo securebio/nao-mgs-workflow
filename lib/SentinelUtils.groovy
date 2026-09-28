@@ -35,19 +35,13 @@ class SentinelUtils {
     }
 
     // Expected outputs whose file name no upstream task emitted. A failed task emits nothing,
-    // so these will never be published and there is no point polling for them.
-    //   emitted : the values collected from the publish channels, nested in any way
-    // Emitted files are matched by name, since their publish directory isn't known here, so
-    // expected names must be unique. A match only skips this fast check: waitForFiles still
-    // checks each exact published path. Non-Path values (e.g. sample names) are ignored.
+    // so these will never be published and we fail the sentinel modules fast instead of polling.
+    // Emitted files are matched by name, since their publish directory isn't known. A match
+    // only skips this fast check: waitForFiles still checks the exact published path.
+    //   emitted : the values collected from the publish channels, nested in any way: task
+    //             output files in their work directories, alongside labels such as the sample
+    //             name in a [sample, file] tuple, which aren't files and are skipped
     static List<String> neverEmitted(List<String> expected, Collection emitted) {
-        def repeated = expected.collect { it.tokenize("/").last() }
-            .countBy { it }.findAll { name, n -> n > 1 }.keySet()
-        if (!repeated.isEmpty()) {
-            throw new IllegalStateException(
-                "Expected outputs share file names, so emitted files can't be matched to them: " +
-                repeated.sort().join(", "))
-        }
         def names = emitted.flatten()
             .findAll { it instanceof java.nio.file.Path }
             .collect { it.fileName.toString() } as Set
