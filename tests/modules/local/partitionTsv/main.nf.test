@@ -41,7 +41,7 @@ nextflow_process {
         }
     }
 
-    test("Should emit the input table itself for header-only input") {
+    test("Should write header-only input unpartitioned") {
         tag "expect_success"
         tag "empty_input"
         when {
