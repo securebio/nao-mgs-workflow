@@ -9,12 +9,9 @@ run, so the failure skips its own subtree. An operator that gathers without
 knowing how many items to expect does not wait for the missing one: it emits
 whatever arrived, and everything downstream runs on the partial result.
 
-Each gathering operator (`collect`, in either form, `collectFile`, `toList`,
-`toSortedList`, `reduce`, `count` and its `countFasta`-style variants,
-`groupTuple`, `buffer`, `collate`, or a `join` with `remainder: true`) must
-carry a `// check_fan_in: <reason>` comment on its line or in the comment block
-directly above that line justifying that the gather is properly sized or that
-such sizing is not needed.
+Each gathering operator must carry a `// check_fan_in: <reason>`
+comment on its line or in the comment block directly above that line
+justifying that the gather is properly sized or that such sizing is not needed.
 
 Exit codes:
   0 - Every gathering operator is annotated
@@ -58,12 +55,12 @@ logger.addHandler(handler)
 # CONSTANTS #
 #############
 
-# Channel operators that gather many items into one emission, picked by hand from Nextflow's
+# Channel operators that gather many items into one emission, picked from Nextflow's
 # operator reference (https://docs.seqera.io/nextflow/reference/operator): those whose output
-# depends on every item, or on how many items arrive. Nextflow publishes no such list, so new
-# gathering operators need adding here. A Groovy list's `collect { ... }`
-# can't be told apart from a channel's without type information, so every closure-form
-# `collect` is matched too, and list transformations are annotated as such.
+# depends on every item, or on how many items arrive. New operators must be added here.
+# A Groovy list's `collect { ... }` can't be told apart from a channel's without type
+# information, so every closure-form `collect` is matched too, and list transformations are
+# annotated as such.
 GATHER = re.compile(
     r"\.(collect|collectFile|toList|toSortedList|count\w*|groupTuple|buffer|collate)\s*\("
     r"|\.collect\s*\{"
