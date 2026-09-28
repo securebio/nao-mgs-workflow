@@ -39,7 +39,6 @@ workflow BLAST_FASTA {
         nodes_db = "${ref_dir}/results/taxonomy-nodes.dmp"
         names_db = "${ref_dir}/results/taxonomy-names.dmp"
         // 1. Run BLAST
-        // Pass only the keys BLAST reads, so launch-specific params don't bust the -resume cache
         blast_params = [
             blast_perc_id: params_map.blast_perc_id,
             blast_qcov_hsp_perc: params_map.blast_qcov_hsp_perc,

@@ -61,7 +61,6 @@ workflow MAKE_VIRUS_GENOME_DB {
         //    pattern (genome_patterns_exclude only matchable post-download).
         filter_genome_ch = FILTER_GENOME_FASTA(genome_concat_ch, other_params.genome_patterns_exclude, "virus-genomes-filtered")
         // 7. Mask to remove adapters, low-entropy regions, and polyX.
-        // Pass only the masking keys, so launch-specific params don't bust the -resume cache
         mask_params = other_params.subMap(["k", "hdist", "entropy", "polyx_len"]) + [name_pattern: "virus-genomes"]
         mask_ch = MASK_GENOME_FASTA(filter_genome_ch, other_params.adapters, mask_params)
         published_fasta_ch = mask_ch.masked
