@@ -1,6 +1,5 @@
-// Test-only workflows that exercise the input-size-aware memory closures
-// attached to the `bbmask_resources` and `mark_similarity_duplicates_resources`
-// labels in configs/resources.config.
+// Test-only workflow that exercises the input-size-aware memory closure
+// attached to the `bbmask_resources` label in configs/resources.config.
 // MAKE_SPARSE_FILE creates a logical-size-only file of a given byte count via
 // truncate (consuming negligible disk). PROBE_BBMASK_MEMORY then takes that
 // file under the bbmask_resources label and emits the resolved
@@ -38,35 +37,6 @@ process PROBE_BBMASK_MEMORY {
         """
         echo "${size_bytes},${task.memory.toBytes()}" > row.csv
         """
-}
-
-process PROBE_SIM_DUP_MEMORY {
-    label "mark_similarity_duplicates_resources"
-    label "coreutils"
-
-    input:
-        tuple val(size_bytes), path(tsv)
-
-    output:
-        path "row.csv"
-
-    script:
-        """
-        echo "${size_bytes},${task.memory.toBytes()}" > row.csv
-        """
-}
-
-workflow PROBE_SIM_DUP_TIER {
-    take:
-        sizes_ch  // val: logical file size in bytes
-
-    main:
-        sparse_ch = MAKE_SPARSE_FILE(sizes_ch)
-        rows_ch = PROBE_SIM_DUP_MEMORY(sparse_ch)
-        report_ch = rows_ch.collectFile(name: 'report.csv', sort: true)
-
-    emit:
-        report = report_ch
 }
 
 workflow PROBE_RESOURCE_TIER {
