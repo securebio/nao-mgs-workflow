@@ -31,13 +31,23 @@ workflow PROFILE {
         // Separate ribosomal reads
         if (params_map.platform == "ont") {
             ribo_ref = "${params_map.ref_dir}/results/mm2-ribo-index"
-            ribo_minimap2_params = params_map + [remove_sq: false, alignment_params: ""]
+            ribo_minimap2_params = [
+                suffix: params_map.ribo_suffix,
+                remove_sq: false,
+                alignment_params: "",
+                db_download_timeout: params_map.db_download_timeout
+            ]
             ribo_ch = MINIMAP2(reads_ch, ribo_ref, ribo_minimap2_params)
             ribo_in = ribo_ch.reads_mapped
             noribo_in = ribo_ch.reads_unmapped
         } else {
             ribo_path = "${params_map.ref_dir}/results/ribo-ref-concat.fasta.gz"
-            ribo_bbduk_params = params_map + [interleaved: single_end.map { v -> !v }]
+            ribo_bbduk_params = single_end.map { v -> [
+                min_kmer_fraction: params_map.min_kmer_fraction,
+                k: params_map.k,
+                suffix: params_map.ribo_suffix,
+                interleaved: !v
+            ] }
             ribo_ch = BBDUK(reads_ch, ribo_path, ribo_bbduk_params)
             ribo_in = ribo_ch.match
             noribo_in = ribo_ch.nomatch
@@ -61,4 +71,7 @@ workflow PROFILE {
     emit:
         bracken = br_per_sample.output
         kraken = kr_per_sample.output
+        // Extra outputs for testing
+        test_ribo = ribo_in
+        test_noribo = noribo_in
 }
