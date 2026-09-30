@@ -10,7 +10,7 @@ process EXTRACT_VIRAL_HITS_TO_FASTQ_NOREF_LABELED_LIST {
         tuple val(sample), path("${sample}_*_hits_in.tsv.gz"), emit: input
     script:
         """
-        # Label outputs by position: a group with no hits passes one unpartitioned table
+        # Label outputs by position: a group with no hits passes one header-only table, with no taxid in its name
         i=0
         for tsv in ${tsvs}; do
             fastq_out=${sample}_\${i}_hits_out.fastq.gz

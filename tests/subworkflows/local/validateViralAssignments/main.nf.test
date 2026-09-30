@@ -46,7 +46,7 @@ nextflow_workflow {
     test("Should publish header-only hits for an empty group but nothing for a failed one") {
         tag "expect_failed"
         tag "empty_input"
-        config "tests/configs/downstream_blast_ignored.config"
+        config "tests/configs/downstream_blast_ignored.config" // Fails and ignores BLAST for group "failed"
         when {
             params {
                 n_sample = 3

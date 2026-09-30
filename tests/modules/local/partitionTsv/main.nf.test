@@ -41,7 +41,7 @@ nextflow_process {
         }
     }
 
-    test("Should write header-only input unpartitioned") {
+    test("Should pass header-only input on as a header-only table") {
         tag "expect_success"
         tag "empty_input"
         when {
@@ -62,7 +62,7 @@ nextflow_process {
             assert process.out.output.size() == 1
             assert process.out.output[0][1].size() == 1
             def out = path(process.out.output[0][1][0])
-            assert out.fileName.toString() == "unpartitioned_test_tab_empty.tsv"
+            assert out.fileName.toString() == "header_only_test_tab_empty.tsv"
             assert out.readLines() == ["x\ty\tz"]
         }
     }
