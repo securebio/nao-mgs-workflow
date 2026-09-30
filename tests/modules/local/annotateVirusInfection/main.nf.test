@@ -15,6 +15,7 @@ nextflow_process {
                 host_db = "${projectDir}/test-data/toy-data/virus-taxonomy/test-host-db.tsv"
                 infection_db = "${projectDir}/test-data/toy-data/virus-taxonomy/test-infection-db.tsv"
                 nodes = "${projectDir}/test-data/toy-data/virus-taxonomy/test-nodes.tsv"
+                merged = "${projectDir}/test-data/toy-data/virus-taxonomy/test-merged.dmp"
                 hard_exclude_taxids = file("${projectDir}/test-data/toy-data/virus-taxonomy/test-hard-excluded-taxids.txt").readLines().first()
                 host_infection_overrides = "${projectDir}/test-data/toy-data/virus-taxonomy/test-host-infection-overrides-empty.json"
             }
@@ -24,8 +25,9 @@ nextflow_process {
                 input[1] = params.host_db
                 input[2] = params.infection_db
                 input[3] = params.nodes
-                input[4] = params.hard_exclude_taxids
-                input[5] = params.host_infection_overrides
+                input[4] = params.merged
+                input[5] = params.hard_exclude_taxids
+                input[6] = params.host_infection_overrides
                 '''
             }
         }
@@ -58,6 +60,7 @@ nextflow_process {
                 host_db = "${projectDir}/test-data/toy-data/virus-taxonomy/test-host-db.tsv"
                 infection_db = "${projectDir}/test-data/toy-data/virus-taxonomy/test-infection-db.tsv"
                 nodes = "${projectDir}/test-data/toy-data/virus-taxonomy/test-nodes.tsv"
+                merged = "${projectDir}/test-data/toy-data/virus-taxonomy/test-merged.dmp"
                 hard_exclude_taxids = file("${projectDir}/test-data/toy-data/virus-taxonomy/test-hard-excluded-taxids.txt").readLines().first()
                 host_infection_overrides = "${projectDir}/test-data/toy-data/virus-taxonomy/test-host-infection-overrides-with-entry.json"
             }
@@ -67,8 +70,9 @@ nextflow_process {
                 input[1] = params.host_db
                 input[2] = params.infection_db
                 input[3] = params.nodes
-                input[4] = params.hard_exclude_taxids
-                input[5] = params.host_infection_overrides
+                input[4] = params.merged
+                input[5] = params.hard_exclude_taxids
+                input[6] = params.host_infection_overrides
                 '''
             }
         }

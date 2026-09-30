@@ -48,18 +48,43 @@ MAYBE_INCONSISTENT = -2
 # =======================================================================
 
 
-def get_virus_host_mapping(db_path: str) -> dict[str, set[str]]:
+def load_merged_taxids(merged_path: str) -> dict[str, str]:
+    """
+    Map each taxid NCBI has retired to the taxid it was merged into.
+    Args:
+        merged_path (str): Path to the NCBI taxonomy merged.dmp file (may be empty).
+    Returns:
+        dict[str, str]: A dictionary mapping retired taxids to current ones.
+    """
+    if Path(merged_path).stat().st_size == 0:
+        return {}
+    df = pd.read_csv(merged_path, sep="\t", dtype=str, header=None, usecols=[0, 2])
+    return dict(zip(df[0], df[2], strict=True))
+
+
+def get_virus_host_mapping(
+    db_path: str, merged: dict[str, str] | None = None
+) -> dict[str, set[str]]:
     """
     Import a TSV from Virus-Host-DB and extract virus/host info into
     a dictionary.
     Args:
         db_path (str): Path to the Virus-Host-DB TSV File.
+        merged (dict[str, str] | None): Retired NCBI taxids mapped to their
+            replacements, so taxids Virus-Host-DB still uses match the current taxonomy.
     Returns:
         dict[str, set[str]]: A dictionary mapping virus taxids to
             sets of host taxids.
     """
     logger.info("Importing Virus-Host-DB.")
     df = pd.read_csv(db_path, sep="\t", dtype=str)
+    if merged:
+        cols = ["virus tax id", "host tax id"]
+        n = int(df[cols].isin(merged.keys()).to_numpy().sum())
+        logger.info(
+            f"Mapping {n} retired taxid(s) in Virus-Host-DB to their replacements."
+        )
+        df[cols] = df[cols].replace(merged)
     logger.info("Generating mapping from Virus-Host-DB.")
     return cast(
         dict[str, set[str]],
@@ -714,6 +739,9 @@ def main() -> None:
         "nodes_db", type=Path, help="Path to NCBI taxonomy nodes file."
     )
     _ = parser.add_argument(
+        "merged_db", type=Path, help="Path to NCBI taxonomy merged file."
+    )
+    _ = parser.add_argument(
         "hard_exclude_taxids",
         type=str,
         help="Space-delimited list of viral taxids to hard-exclude from host annotation.",
@@ -736,7 +764,8 @@ def main() -> None:
         .iloc[:, [0, 2]]
         .rename(columns={0: "taxid", 2: "parent_taxid"})
     )
-    virus_host_mapping = get_virus_host_mapping(args.infection_db)
+    merged = load_merged_taxids(args.merged_db)
+    virus_host_mapping = get_virus_host_mapping(args.infection_db, merged)
     hard_exclude_taxids = args.hard_exclude_taxids.split(" ")
     hard_include_mapping = load_host_overrides(args.host_infection_overrides)
     # Prepare dictionary of host taxids

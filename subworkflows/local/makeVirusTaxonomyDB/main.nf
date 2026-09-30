@@ -33,7 +33,7 @@ workflow MAKE_VIRUS_TAXONOMY_DB {
         raised_ch = RAISE_TAXONOMY_RANKS(virus_ch, "species genus family order class phylum")
         // Annotate virus taxid DB with infection status for host taxa
         annot_ch = ANNOTATE_VIRUS_INFECTION(raised_ch, host_taxon_db, vh_ch,
-            ext_ch.nodes, hard_exclude_taxids, host_infection_overrides)
+            ext_ch.nodes, ext_ch.merged, hard_exclude_taxids, host_infection_overrides)
     emit:
         db = annot_ch
         nodes = ext_ch.nodes

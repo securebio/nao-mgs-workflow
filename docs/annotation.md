@@ -74,7 +74,7 @@ The algorithm uses two temporary states during processing that are never present
 
 This phase sets the baseline status for each taxon based on direct evidence.
 
-1.  **Direct Marking** (`mark_direct_infections`): Before performing this step, we call `expand_taxid` to get all descendants of the host taxon. The script then performs an initial scan of all viral taxa against the Virus-Host DB.
+1.  **Direct Marking** (`mark_direct_infections`): Before performing this step, we call `expand_taxid` to get all descendants of the host taxon. The script then performs an initial scan of all viral taxa against the Virus-Host DB, after mapping any Virus-Host DB taxids that NCBI has retired to their replacements (from the taxonomy's `merged.dmp`).
     * **`MATCH` (1):** The taxon is explicitly linked to the host group or any of its descendants in the database.
     * **`INCONSISTENT` (0):** The taxon is present in the database but is *not* linked to the host group.
     * **`UNRESOLVED` (-1):** The taxon is not found in the database.
