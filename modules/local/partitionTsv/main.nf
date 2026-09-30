@@ -7,9 +7,10 @@ process PARTITION_TSV {
         tuple val(sample), path(tsv)
         val(column)
     output:
-        // Header-only input is passed on as header_only_<input>: a positive signal of an empty group,
-        // unlike a failed process, which emits nothing.
-        tuple val(sample), path("{partition_*,header_only}_${tsv}", arity: "1..*"), emit: output
+        // Header-only input is passed on as partition_header_only_<input>: a positive signal of an
+        // empty group, unlike a failed process, which emits nothing. Keep this a single glob: Fusion
+        // drops task files matching no output pattern, and can't match a wildcard inside braces.
+        tuple val(sample), path("partition_*_${tsv}", arity: "1..*"), emit: output
         tuple val(sample), path("input_${tsv}"), emit: input
     script:
         """

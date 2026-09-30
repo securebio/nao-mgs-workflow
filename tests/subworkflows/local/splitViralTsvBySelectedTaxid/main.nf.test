@@ -50,7 +50,7 @@ nextflow_workflow {
             // With no partitions, PARTITION_TSV passes the group's own header-only table on instead
             def parts = workflow.out.tsv.collect{it[1]}.flatten()
             assert parts.size() == 1
-            assert path(parts[0]).fileName.toString() == "header_only_sorted_selected_taxid_added_selected_taxid_test_taxonomy_left_joined_aligner_taxid_lca.tsv.gz"
+            assert path(parts[0]).fileName.toString() == "partition_header_only_sorted_selected_taxid_added_selected_taxid_test_taxonomy_left_joined_aligner_taxid_lca.tsv.gz"
             assert path(parts[0]).linesGzip.size() == 1
             // annotated is not filtered, so unlike tsv it still emits one table per
             // group -- header-only, and already shaped for consumers
