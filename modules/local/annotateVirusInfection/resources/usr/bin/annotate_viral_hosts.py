@@ -84,7 +84,7 @@ def get_virus_host_mapping(
         logger.info(
             f"Mapping {n} retired taxid(s) in Virus-Host-DB to their replacements."
         )
-        df[cols] = df[cols].replace(merged)
+        df[cols] = df[cols].map(lambda taxid: merged.get(taxid, taxid))
     logger.info("Generating mapping from Virus-Host-DB.")
     return cast(
         dict[str, set[str]],

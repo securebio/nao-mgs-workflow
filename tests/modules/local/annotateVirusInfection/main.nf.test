@@ -52,6 +52,51 @@ nextflow_process {
         }
     }
 
+    test("Should map retired virus and host taxids to their replacements"){
+        tag "expect_success"
+        when {
+            params {
+                virus_db = "${projectDir}/test-data/toy-data/virus-taxonomy/test-virus-db.tsv"
+                host_db = "${projectDir}/test-data/toy-data/virus-taxonomy/test-host-db.tsv"
+                infection_db = "${projectDir}/test-data/toy-data/virus-taxonomy/test-infection-db-retired.tsv" // 999001 and its host 888002 given retired taxids
+                nodes = "${projectDir}/test-data/toy-data/virus-taxonomy/test-nodes.tsv"
+                merged = "${projectDir}/test-data/toy-data/virus-taxonomy/test-merged.dmp"
+                hard_exclude_taxids = file("${projectDir}/test-data/toy-data/virus-taxonomy/test-hard-excluded-taxids.txt").readLines().first()
+                host_infection_overrides = "${projectDir}/test-data/toy-data/virus-taxonomy/test-host-infection-overrides-empty.json"
+            }
+            process {
+                '''
+                input[0] = params.virus_db
+                input[1] = params.host_db
+                input[2] = params.infection_db
+                input[3] = params.nodes
+                input[4] = params.merged
+                input[5] = params.hard_exclude_taxids
+                input[6] = params.host_infection_overrides
+                '''
+            }
+        }
+        then {
+            // Should run without errors
+            assert process.success
+            // Output should match input with one extra column per host taxon
+            def virus_tab_out = path(process.out.db[0]).csv(sep: "\t", decompress: true)
+            def virus_tab_in = path(params.virus_db).csv(sep: "\t")
+            def host_tab_in = path(params.host_db).csv(sep: "\t")
+            assert virus_tab_out.rowCount == virus_tab_in.rowCount
+            assert virus_tab_out.columnCount == virus_tab_in.columnCount + host_tab_in.rowCount
+            for (c in virus_tab_in.columnNames){
+                assert virus_tab_in.columns[c] == virus_tab_out.columns[c]
+            }
+            // Infection status should match expected status for each host taxon
+            for (host in host_tab_in.columns["name"]){
+                def col_exp = "expected_status_" + host
+                def col_obs = "infection_status_" + host
+                assert virus_tab_out.columns[col_exp] == virus_tab_out.columns[col_obs]
+            }
+        }
+    }
+
     test("Should apply hard-include override end-to-end"){
         tag "expect_success"
         when {
