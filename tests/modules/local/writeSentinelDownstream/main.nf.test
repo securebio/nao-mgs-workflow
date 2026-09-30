@@ -200,4 +200,31 @@ nextflow_process {
             assert !process.errorReport.contains("Timed out")
         }
     }
+
+    test("Should fail a group whose outputs were never emitted, even when another group's were") {
+        tag "expect_fail"
+        when {
+            params {}
+            process {
+                '''
+                input[0] = "tt2"
+                // Only group tt1's outputs were emitted
+                input[1] = files("${projectDir}/test-data/writeSentinelDownstream/output_shortread/**")
+                input[2] = "2026-01-01 00:00:00 UTC (+0000)"
+                input[3] = [
+                    output_dir: "${projectDir}/test-data/writeSentinelDownstream/nonexistent_output_dir",
+                    pyproject_path: "${projectDir}/test-data/writeSentinelDownstream/pyproject.toml",
+                    platform: "illumina",
+                    sentinel_max_wait_mins: 0
+                ]
+                '''
+            }
+        }
+        then {
+            assert process.failed
+            assert process.errorReport.contains("were never emitted")
+            assert process.errorReport.contains("tt2_counts.tsv.gz")
+            assert !process.errorReport.contains("tt1_")
+        }
+    }
 }

@@ -37,7 +37,8 @@ class SentinelUtils {
     // Expected outputs whose file name no upstream task emitted. A failed task emits nothing,
     // so these will never be published and we fail the sentinel modules fast instead of polling.
     // Emitted files are matched by name, since their publish directory isn't known. A match
-    // only skips this fast check: waitForFiles still checks the exact published path.
+    // only skips this fast check: waitForFiles still checks the exact published path. This
+    // assumes publishing keeps file names: a publish-time rename would fail every run, loudly.
     //   emitted : the values collected from the publish channels, nested in any way: task
     //             output files in their work directories, alongside labels such as the sample
     //             name in a [sample, file] tuple, which aren't files and are skipped
