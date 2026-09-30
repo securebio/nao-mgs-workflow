@@ -19,7 +19,7 @@
 
 - Switch the Kraken2 profiling DB from Standard to PlusPF (`k2_pluspf_20260626`), which adds protozoan and fungal genomes. (#1000)
 - Update the SSU ribosomal reference from SILVA 138.2 to SILVA 144; LSU stays at 138.2. `bin/benchmark_index.py` now checks each subunit's staleness separately. (#1013, #1014)
-- Restore mammal and vertebrate infection status for Rotavirus K, demoted in builds after the 20260702 index despite its close relation to the human-infecting Rotavirus C. (#1025)
+- Hard-include Rotavirus K as mammalian- and vertebrate-infecting. (#1025)
 
 ## Stopped publishing complete-looking output when a task fails
 
@@ -32,7 +32,6 @@
 ## Other changes
 
 - Publish FASTQC's overrepresented sequences as `{SAMPLE}_qc_overrepresented_{raw,cleaned}.tsv.gz` from RUN and `{GROUP}_qc_overrepresented_{raw,cleaned}.tsv.gz` from DOWNSTREAM, with a new schema. (#954)
-    - Each lists up to the 100 most frequent sequences per sample and stage, and is header-only when none were reported; see [output.md](docs/output.md). Use these rather than FASTP's always-empty `overrepresented_sequences`.
 - Fix `-resume` by passing modules only the parameters they read, so launch-specific values no longer invalidate caches. (#1034)
     - Also fixes PROFILE's ribosomal intermediates being named with a `null` suffix, BBDuk treating single-end reads as interleaved, and BBDuk's task context failing to serialize.
 - Size `MARK_SIMILARITY_DUPLICATES` memory by input size (4–64 GB) rather than a fixed 4 GB, which large groups exceeded, and cap BBDuk's Java heap at 75% of task memory. (#1013, #1036)
