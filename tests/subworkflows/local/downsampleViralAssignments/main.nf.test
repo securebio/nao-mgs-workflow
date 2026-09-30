@@ -87,7 +87,7 @@ nextflow_workflow {
 
     test("Should drop a group when one of its partitions fails") {
         tag "expect_failed"
-        config "tests/configs/downstream_downsample_ignored.config"
+        config "tests/configs/downstream_downsample_ignored.config" // Fails and ignores downsampling for partition 186538
         when {
             params {
                 n_sample = 4
