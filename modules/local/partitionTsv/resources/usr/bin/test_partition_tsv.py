@@ -21,9 +21,13 @@ class TestPartitionTsv:
         with pytest.raises(ValueError, match="Input file is empty"):
             partition_tsv.partition(input_file, "x")
 
-    def test_missing_column_raises_error(self, tsv_factory: Any) -> None:
-        """Test that missing partition column raises ValueError."""
-        input_content = "x\ty\tz\n0\t1\t2\n3\t4\t5\n"
+    @pytest.mark.parametrize(
+        "input_content", ["x\ty\tz\n0\t1\t2\n3\t4\t5\n", "x\ty\tz\n"]
+    )
+    def test_missing_column_raises_error(
+        self, tsv_factory: Any, input_content: str
+    ) -> None:
+        """Test that missing partition column raises ValueError, with or without data rows."""
         input_file = tsv_factory.create_plain("input.tsv", input_content)
 
         with pytest.raises(
@@ -50,7 +54,7 @@ class TestPartitionTsv:
             os.chdir(original_cwd)
 
     def test_header_only_input(self, tsv_factory: Any, tmp_path: Path) -> None:
-        """Test that header-only input produces no output files."""
+        """Test that header-only input is passed on as a header-only table."""
         input_content = "x\ty\tz\n"
         input_file = tsv_factory.create_plain("input.tsv", input_content)
 
@@ -62,9 +66,9 @@ class TestPartitionTsv:
         try:
             partition_tsv.partition(os.path.basename(input_file), "x")
 
-            # Check that no partition files were created
-            partition_files = glob.glob("partition_*_input.tsv")
-            assert len(partition_files) == 0
+            assert glob.glob("partition_*_input.tsv") == []
+            with open("header_only_input.tsv") as f:
+                assert f.read() == input_content
         finally:
             os.chdir(original_cwd)
 

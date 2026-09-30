@@ -1,5 +1,6 @@
 # v3.4.0.0-dev
 
+- Delete `CREATE_EMPTY_GROUP_OUTPUTS` and instead have `PARTITION_TSV` pass on a group's header-only table, as `header_only_<input>`, when the group has no hits. That table runs through the entire validation subworkflow to produce a final header-only table, disambiguating it from the case where an intermediate step failed and produced an empty channel. (#1028)
 - Size `MARK_SIMILARITY_DUPLICATES` memory by input size (4–64 GB tiers, new `mark_similarity_duplicates_resources` label) instead of a fixed 4 GB, which large groups exceeded. (#1036)
 - Pass modules only the parameters they read to avoid invalidating caches with launch-specific values. Also fixes PROFILE's ribosomal intermediates being named with a `null` suffix, BBDuk treating single-end reads as interleaved, and BBDuk's task context failing to serialize, which disabled `-resume` for it. (#1034)
 - Add a host-infection override to `ref/host-infection-overrides.json` restoring mammal and vertebrate infection status for Rotavirus kappagastroenteritidis (Rotavirus K), which was demoted after the 20260702 index despite being most closely related to the human-infecting Rotavirus C. (#1025)
