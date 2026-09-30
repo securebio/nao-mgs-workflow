@@ -1,5 +1,6 @@
 # v3.4.0.0-dev
 
+- Size the INDEX viral-genome and contaminant gathers by their expected number of downloads, so when a download fails its retry and is ignored, INDEX doesn't build the database or index that download feeds, and the run exits non-zero, rather than building it without that download. (#1031)
 - Stop the run when the pipeline and index versions are incompatible or can't be read, rather than letting unrelated tasks finish under the `ignore` errorStrategy. (#1024)
 - Fail the RUN and DOWNSTREAM sentinels immediately if an expected output is not emitted. (#1021)
 - When one of a group's per-species downsampling tasks fails its retry and is ignored, fail the whole group: it gets no BLAST validation and publishes no `validation_hits`, and the run exits non-zero. Previously the rest of the group was validated and the missing species' reads labelled `not_sampled`. (#1017)
