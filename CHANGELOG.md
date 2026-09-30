@@ -8,35 +8,33 @@
 
 ## Fixed alignment-based duplicate marking bugs
 
-- Key alignment duplicate marking on each mate's unclipped 5′ coordinate and strand, as `samtools markdup -m s` does, rather than on the mates' alignment start coordinates. RUN now emits `prim_align_ref_{start,end}_unclipped` and their `_rev` counterparts, which count soft- and hard-clipped bases as aligned. (#1005, #1006)
+- Key alignment duplicate marking on each mate's unclipped 5′ coordinate and strand, as `samtools markdup -m s` does, rather than on alignment start coordinates. (#1005, #1006)
+    - RUN now emits `prim_align_ref_{start,end}_unclipped` and their `_rev` counterparts, which count soft- and hard-clipped bases as aligned.
     - Fragments shorter than the read no longer collapse onto a shared start coordinate, and molecules occupying one span in opposite orientations are no longer grouped.
     - Copies previously separated by clipping or by trimming a reverse mate's 3′ end now group together.
     - Reads with neither mate aligned no longer group, having no coordinate to compare.
-- Pass the deviation tolerance explicitly rather than through a mutable global, without changing behavior, and add unit tests for `mark_duplicates`. (#967, #989)
 - Correct the documentation of the paired-end mates, `prim_align_ref_start`, and `prim_align_fragment_length`. (#1004)
 
 ## Bumped INDEX reference databases
-
-These change INDEX's defaults, so they reach RUN and DOWNSTREAM through an index built with them.
 
 - Switch the Kraken2 profiling DB from Standard to PlusPF (`k2_pluspf_20260626`), which adds protozoan and fungal genomes. (#1000)
 - Update the SSU ribosomal reference from SILVA 138.2 to SILVA 144; LSU stays at 138.2. `bin/benchmark_index.py` now checks each subunit's staleness separately. (#1013, #1014)
 - Restore mammal and vertebrate infection status for Rotavirus K, demoted in builds after the 20260702 index despite its close relation to the human-infecting Rotavirus C. (#1025)
 
-## Published FASTQC overrepresented sequences
-
-- Publish `{SAMPLE}_qc_overrepresented_{raw,cleaned}.tsv.gz` from RUN and matching `{GROUP}_qc_overrepresented_{raw,cleaned}.tsv.gz` from DOWNSTREAM, with a new schema: up to the 100 most frequent sequences per sample and stage, and header-only when none were reported. Use these rather than FASTP's `overrepresented_sequences`, which is always empty in this pipeline. See [output.md](docs/output.md) for how to read them. (#954)
-
 ## Stopped publishing complete-looking output when a task fails
 
-- A DOWNSTREAM group whose validation fails at any step publishes no `validation_hits` and the run exits non-zero, rather than publishing a header-only table or one with the missing species labelled `not_sampled`. A group with no hits runs through validation like any other and publishes a header-only table. (#1017, #1028)
-- A failed viral-genome or contaminant download builds no database or index from the downloads that survived, and INDEX exits non-zero. (#1031)
-- Stop the run when the pipeline and index versions are incompatible or can't be read, rather than letting unrelated tasks finish. (#1024)
-- Fail the RUN and DOWNSTREAM sentinels as soon as they find an expected output that no task emitted, rather than polling until the timeout, and make `sentinel_max_wait_mins` the true total wait; the 32-minute default used to wait 64. (#1021)
+- Publish no `validation_hits` for a DOWNSTREAM group whose validation fails at any step, and exit non-zero, rather than publishing a header-only or partial table. A group with no hits still publishes a header-only table. (#1017, #1028)
+- Build no viral-genome database or contaminant index when one of its downloads fails, and exit non-zero. (#1031)
+- Stop the run when the pipeline and index versions are incompatible or can't be read. (#1024)
+- Fail the RUN and DOWNSTREAM sentinels as soon as an expected output was never emitted, rather than polling until the timeout. (#1021)
+    - `sentinel_max_wait_mins` is now the true total wait; the 32-minute default used to wait 64.
 
-## Other fixes and cleanup
+## Other changes
 
-- Pass modules only the parameters they read, so launch-specific values no longer invalidate `-resume` caches. Also fixes PROFILE's ribosomal intermediates being named with a `null` suffix, BBDuk treating single-end reads as interleaved, and BBDuk's task context failing to serialize, which disabled `-resume` for it. (#1034)
+- Publish FASTQC's overrepresented sequences as `{SAMPLE}_qc_overrepresented_{raw,cleaned}.tsv.gz` from RUN and `{GROUP}_qc_overrepresented_{raw,cleaned}.tsv.gz` from DOWNSTREAM, with a new schema. (#954)
+    - Each lists up to the 100 most frequent sequences per sample and stage, and is header-only when none were reported; see [output.md](docs/output.md). Use these rather than FASTP's always-empty `overrepresented_sequences`.
+- Fix `-resume` by passing modules only the parameters they read, so launch-specific values no longer invalidate caches. (#1034)
+    - Also fixes PROFILE's ribosomal intermediates being named with a `null` suffix, BBDuk treating single-end reads as interleaved, and BBDuk's task context failing to serialize.
 - Size `MARK_SIMILARITY_DUPLICATES` memory by input size (4–64 GB) rather than a fixed 4 GB, which large groups exceeded, and cap BBDuk's Java heap at 75% of task memory. (#1013, #1036)
 - Delete `post-processing/` and `docs/rfc-trunk-based-development.md`. (#1009)
 
