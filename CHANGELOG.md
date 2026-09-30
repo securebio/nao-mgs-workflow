@@ -3,7 +3,7 @@
 ## Promoted similarity-based duplicate marking from experimental to `validation_hits`
 
 - Publish `sim_dup_exemplar` and `sim_dup_group_size` as columns of `{GROUP}_validation_hits.tsv.gz`, and stop publishing `experimental_downstream/{GROUP}_duplicate_reads_similarity.tsv.gz`. Clade counts now deduplicate on `sim_dup_exemplar` rather than `prim_align_dup_exemplar`. (#972)
-- Restrict Illumina BLAST validation downsampling to reads that are unique under both duplicate-marking passes. A taxon whose reads all duplicate exemplars assigned elsewhere can get no BLAST validation, leaving its reads `not_sampled`. (#973)
+- Restrict Illumina BLAST validation downsampling to reads that are unique under both duplicate-marking passes. (#973)
 - Add `reads_direct_total_by_exemplar` and `reads_clade_total_by_exemplar` to clade counts, counting every read under the taxon of the exemplar representing it rather than under its own. (#980)
 
 ## Fixed alignment-based duplicate marking bugs
@@ -18,16 +18,15 @@
 ## Bumped INDEX reference databases
 
 - Switch the Kraken2 profiling DB from Standard to PlusPF (`k2_pluspf_20260626`), which adds protozoan and fungal genomes. (#1000)
-- Update the SSU ribosomal reference from SILVA 138.2 to SILVA 144; LSU stays at 138.2. `bin/benchmark_index.py` now checks each subunit's staleness separately. (#1013, #1014)
+- Update the SSU ribosomal reference from SILVA 138.2 to SILVA 144. `bin/benchmark_index.py` now checks each subunit's staleness separately. (#1013, #1014)
 - Hard-include Rotavirus K as mammalian- and vertebrate-infecting. (#1025)
 
 ## Stopped publishing complete-looking output when a task fails
 
-- Publish no `validation_hits` for a DOWNSTREAM group whose validation fails at any step, and exit non-zero, rather than publishing a header-only or partial table. A group with no hits still publishes a header-only table. (#1017, #1028)
-- Build no viral-genome database or contaminant index when one of its downloads fails, and exit non-zero. (#1031)
-- Stop the run when the pipeline and index versions are incompatible or can't be read. (#1024)
-- Fail the RUN and DOWNSTREAM sentinels as soon as an expected output was never emitted, rather than polling until the timeout. (#1021)
-    - `sentinel_max_wait_mins` is now the true total wait; the 32-minute default used to wait 64.
+- Publish no `validation_hits` for a DOWNSTREAM group whose validation fails at any step, rather than publishing a header-only or partial table. A group with no hits still publishes a header-only table. (#1017, #1028)
+- Skip viral-genome database and contaminant index builds when any of their downloads fail, rather than producing partial output. (#1031)
+- Immediately fail workflow when the pipeline and index versions are incompatible or can't be read. (#1024)
+- Fail the RUN and DOWNSTREAM sentinels as soon as an expected output was never emitted, rather than polling until the timeout. Update `sentinel_max_wait_mins` to be the true total wait time (32 minutes by default). (#1021)
 
 ## Other changes
 
