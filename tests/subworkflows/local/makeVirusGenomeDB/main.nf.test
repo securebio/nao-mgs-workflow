@@ -107,7 +107,7 @@ nextflow_workflow {
 
     test("Should build nothing when one chunk's download fails") {
         tag "expect_failed"
-        config "tests/configs/index_download_ignored.config"
+        config "tests/configs/index_download_ignored.config" // Fails and ignores the download of chunk_1
         when {
             params {}
             workflow {

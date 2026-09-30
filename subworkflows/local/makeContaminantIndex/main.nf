@@ -24,9 +24,9 @@ workflow MAKE_CONTAMINANT_INDEX {
             }
 
         downloaded_ch = DOWNLOAD_GENOME(ref_ch)
-        // Gather only once every download has arrived, and add the local contaminants to that
-        // list rather than mixing them in: a gather dropped for a failed download must leave
-        // nothing to index, not the contaminants alone
+        // Gather the downloads only once all of them have arrived; a failed download drops the
+        // gather, so nothing is indexed. The local contaminants are added after the gather, so
+        // they're never indexed on their own.
         n_genomes = genome_urls.size()
         all_downloads_ch = n_genomes == 0 ? channel.value([]) : downloaded_ch
             .map { f -> [groupKey("genomes", n_genomes), f] }

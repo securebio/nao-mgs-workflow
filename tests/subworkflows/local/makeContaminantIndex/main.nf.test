@@ -3,7 +3,7 @@ nextflow_workflow {
     name "Test workflow MAKE_CONTAMINANT_INDEX"
     script "subworkflows/local/makeContaminantIndex/main.nf"
     workflow "MAKE_CONTAMINANT_INDEX"
-    config "tests/configs/index_genome_download_ignored.config"
+    config "tests/configs/index_genome_download_ignored.config" // Fails and ignores the download of genome "second"
     tag "subworkflow"
     tag "make_contaminant_index"
 
