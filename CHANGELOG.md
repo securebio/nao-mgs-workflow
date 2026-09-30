@@ -1,5 +1,6 @@
 # v3.4.0.0-dev
 
+- Fail the RUN and DOWNSTREAM sentinels immediately if an expected output is not emitted. (#1021)
 - When one of a group's per-species downsampling tasks fails its retry and is ignored, fail the whole group: it gets no BLAST validation and publishes no `validation_hits`, and the run exits non-zero. Previously the rest of the group was validated and the missing species' reads labelled `not_sampled`. (#1017)
 - Delete `CREATE_EMPTY_GROUP_OUTPUTS` and instead have `PARTITION_TSV` pass on a group's header-only table, as `header_only_<input>`, when the group has no hits. That table runs through the entire validation subworkflow to produce a final header-only table, disambiguating it from the case where an intermediate step failed and produced an empty channel. (#1028)
 - Size `MARK_SIMILARITY_DUPLICATES` memory by input size (4–64 GB tiers, new `mark_similarity_duplicates_resources` label) instead of a fixed 4 GB, which large groups exceeded. (#1036)
