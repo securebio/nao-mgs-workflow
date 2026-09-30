@@ -1,30 +1,44 @@
-# v3.4.0.0-dev
+# v3.4.0.0
 
-- Size the INDEX viral-genome and contaminant gathers by their expected number of downloads, so when a download fails its retry and is ignored, INDEX doesn't build the database or index that download feeds, and the run exits non-zero, rather than building it without that download. (#1031)
-- Stop the run when the pipeline and index versions are incompatible or can't be read, rather than letting unrelated tasks finish under the `ignore` errorStrategy. (#1024)
-- Fail the RUN and DOWNSTREAM sentinels immediately if an expected output is not emitted. (#1021)
-- When one of a group's per-species downsampling tasks fails its retry and is ignored, fail the whole group: it gets no BLAST validation and publishes no `validation_hits`, and the run exits non-zero. Previously the rest of the group was validated and the missing species' reads labelled `not_sampled`. (#1017)
-- Delete `CREATE_EMPTY_GROUP_OUTPUTS` and instead have `PARTITION_TSV` pass on a group's header-only table, as `header_only_<input>`, when the group has no hits. That table runs through the entire validation subworkflow to produce a final header-only table, disambiguating it from the case where an intermediate step failed and produced an empty channel. (#1028)
-- Size `MARK_SIMILARITY_DUPLICATES` memory by input size (4–64 GB tiers, new `mark_similarity_duplicates_resources` label) instead of a fixed 4 GB, which large groups exceeded. (#1036)
-- Pass modules only the parameters they read to avoid invalidating caches with launch-specific values. Also fixes PROFILE's ribosomal intermediates being named with a `null` suffix, BBDuk treating single-end reads as interleaved, and BBDuk's task context failing to serialize, which disabled `-resume` for it. (#1034)
-- Add a host-infection override to `ref/host-infection-overrides.json` restoring mammal and vertebrate infection status for Rotavirus kappagastroenteritidis (Rotavirus K), which was demoted after the 20260702 index despite being most closely related to the human-infecting Rotavirus C. (#1025)
-- Check SILVA staleness per subunit in `bin/benchmark_index.py`. (#1014)
-- Update the SSU ribosomal reference from SILVA 138.2 to SILVA 144 and cap BBDuk's Java heap at 75% of task memory. (#1013)
-- Switch the Kraken2 DB for taxonomic profiling from Standard to PlusPF (`k2_pluspf_20260626`, the current upstream build), which adds protozoan and fungal genomes. (#1000)
-- Key alignment duplicate marking on each mate's unclipped 5′ coordinate and strand, as `samtools markdup -m s` does, rather than on the two mates' alignment start coordinates. Fixes two over-merging bugs: fragments shorter than the read no longer collapse onto a shared start coordinate, and molecules occupying one span in opposite orientations are no longer grouped, whether complete pairs or lone mates. Reads with neither mate aligned also stop grouping, having no coordinate to compare. `mark_duplicates` now reads the unclipped coordinate columns in place of `prim_align_ref_start` and `prim_align_ref_start_rev`, so DOWNSTREAM requires short-read RUN output produced at this version or later. (#1006)
-- Emit unclipped alignment coordinates from RUN: `prim_align_ref_start_unclipped`, `prim_align_ref_end_unclipped` and their `_rev` counterparts give each mate's reference span with soft- and hard-clipped bases counted as if they had aligned, so that duplicate marking can key on them (#1006). (#1005)
-- Correct documentation of the paired-end mates, `prim_align_ref_start`, and `prim_align_fragment_length`. (#1004)
+## Promoted similarity-based duplicate marking from experimental to `validation_hits`
+
+- Publish `sim_dup_exemplar` and `sim_dup_group_size` as columns of `{GROUP}_validation_hits.tsv.gz`, and stop publishing `experimental_downstream/{GROUP}_duplicate_reads_similarity.tsv.gz`. Clade counts now deduplicate on `sim_dup_exemplar` rather than `prim_align_dup_exemplar`. (#972)
+- Restrict Illumina BLAST validation downsampling to reads that are unique under both duplicate-marking passes. A taxon whose reads all duplicate exemplars assigned elsewhere can get no BLAST validation, leaving its reads `not_sampled`. (#973)
+- Add `reads_direct_total_by_exemplar` and `reads_clade_total_by_exemplar` to clade counts, counting every read under the taxon of the exemplar representing it rather than under its own. (#980)
+
+## Fixed alignment-based duplicate marking bugs
+
+- Key alignment duplicate marking on each mate's unclipped 5′ coordinate and strand, as `samtools markdup -m s` does, rather than on the mates' alignment start coordinates. RUN now emits `prim_align_ref_{start,end}_unclipped` and their `_rev` counterparts, which count soft- and hard-clipped bases as aligned. (#1005, #1006)
+    - Fragments shorter than the read no longer collapse onto a shared start coordinate, and molecules occupying one span in opposite orientations are no longer grouped.
+    - Copies previously separated by clipping or by trimming a reverse mate's 3′ end now group together.
+    - Reads with neither mate aligned no longer group, having no coordinate to compare.
+- Pass the deviation tolerance explicitly rather than through a mutable global, without changing behavior, and add unit tests for `mark_duplicates`. (#967, #989)
+- Correct the documentation of the paired-end mates, `prim_align_ref_start`, and `prim_align_fragment_length`. (#1004)
+
+## Bumped INDEX reference databases
+
+These change INDEX's defaults, so they reach RUN and DOWNSTREAM through an index built with them.
+
+- Switch the Kraken2 profiling DB from Standard to PlusPF (`k2_pluspf_20260626`), which adds protozoan and fungal genomes. (#1000)
+- Update the SSU ribosomal reference from SILVA 138.2 to SILVA 144; LSU stays at 138.2. `bin/benchmark_index.py` now checks each subunit's staleness separately. (#1013, #1014)
+- Restore mammal and vertebrate infection status for Rotavirus K, demoted in builds after the 20260702 index despite its close relation to the human-infecting Rotavirus C. (#1025)
+
+## Published FASTQC overrepresented sequences
+
+- Publish `{SAMPLE}_qc_overrepresented_{raw,cleaned}.tsv.gz` from RUN and matching `{GROUP}_qc_overrepresented_{raw,cleaned}.tsv.gz` from DOWNSTREAM, with a new schema: up to the 100 most frequent sequences per sample and stage, and header-only when none were reported. Use these rather than FASTP's `overrepresented_sequences`, which is always empty in this pipeline. See [output.md](docs/output.md) for how to read them. (#954)
+
+## Stopped publishing complete-looking output when a task fails
+
+- A DOWNSTREAM group whose validation fails at any step publishes no `validation_hits` and the run exits non-zero, rather than publishing a header-only table or one with the missing species labelled `not_sampled`. A group with no hits runs through validation like any other and publishes a header-only table. (#1017, #1028)
+- A failed viral-genome or contaminant download builds no database or index from the downloads that survived, and INDEX exits non-zero. (#1031)
+- Stop the run when the pipeline and index versions are incompatible or can't be read, rather than letting unrelated tasks finish. (#1024)
+- Fail the RUN and DOWNSTREAM sentinels as soon as they find an expected output that no task emitted, rather than polling until the timeout, and make `sentinel_max_wait_mins` the true total wait; the 32-minute default used to wait 64. (#1021)
+
+## Other fixes and cleanup
+
+- Pass modules only the parameters they read, so launch-specific values no longer invalidate `-resume` caches. Also fixes PROFILE's ribosomal intermediates being named with a `null` suffix, BBDuk treating single-end reads as interleaved, and BBDuk's task context failing to serialize, which disabled `-resume` for it. (#1034)
+- Size `MARK_SIMILARITY_DUPLICATES` memory by input size (4–64 GB) rather than a fixed 4 GB, which large groups exceeded, and cap BBDuk's Java heap at 75% of task memory. (#1013, #1036)
 - Delete `post-processing/` and `docs/rfc-trunk-based-development.md`. (#1009)
-- Add exemplar-attributed total columns to clade counts: `reads_direct_total_by_exemplar` and `reads_clade_total_by_exemplar` count every read under the taxon of the exemplar representing it, rather than under its own. (#980)
-- Restrict Illumina BLAST validation downsampling to reads that are unique under both duplicate-marking passes. (#973)
-- Promote similarity-based duplicate marking out of experimental, publishing columns into `results_downstream/{GROUP}_validation_hits.tsv.gz`. (#972)
-    - Stop publishing `experimental_downstream/{GROUP}_duplicate_reads_similarity.tsv.gz`.
-    - `{GROUP}_clade_counts.tsv.gz` now deduplicates on `sim_dup_exemplar` rather than `prim_align_dup_exemplar`.
-- Publish FASTQC's overrepresented sequences as `{sample}_qc_overrepresented_{raw,cleaned}.tsv.gz` RUN outputs and matching `{group}_qc_overrepresented_{raw,cleaned}.tsv.gz` DOWNSTREAM outputs, with a new schema. Also correct the `overrepresented_sequences` description in `fastp.schema.json` and `output.md`. (#954)
-    - See [output.md](docs/output.md) for how to read the numbers. A header-only file means no overrepresented sequences were reported.
-    - DOWNSTREAM at this version requires RUN output produced at this version or later, since it treats every entry in `expected-outputs-run` as mandatory.
-- Pass the `mark_duplicates` deviation tolerance explicitly instead of through a mutable global, with no change in behavior. (#989)
-- Add unit tests for the `mark_duplicates` Rust tool. (#967)
 
 # v3.3.0.0
 
