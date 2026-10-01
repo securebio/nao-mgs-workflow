@@ -36,6 +36,10 @@
 - Size `MARK_SIMILARITY_DUPLICATES` memory by input size (4–64 GB) rather than a fixed 4 GB, which large groups exceeded, and cap BBDuk's Java heap at 75% of task memory. (#1013, #1036)
 - Delete `post-processing/` and `docs/rfc-trunk-based-development.md`. (#1009)
 
+## Coding agents
+
+- Improve `triage-trivy` skill: count distinct CVEs rather than per-package findings, don't pin a package Trivy found only in SBOM metadata, and expect a second triage round after the user's rebuild. (#941)
+
 # v3.3.0.0
 
 ## Deprecating DOWNSTREAM's VSEARCH clustering with hash-based downsampling
