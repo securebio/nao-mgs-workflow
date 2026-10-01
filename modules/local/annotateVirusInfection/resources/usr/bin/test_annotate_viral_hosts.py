@@ -67,6 +67,7 @@ from annotate_viral_hosts import (
     annotate_virus_db_single,
     build_virus_tree,
     check_infection,
+    check_merged_taxids_retired,
     exclude_infections,
     expand_taxid,
     get_host_taxids,
@@ -1611,10 +1612,14 @@ class TestGetVirusHostMapping:
         assert result == {}
 
     def test_retired_taxids_mapped(self, tmp_path: Path) -> None:
-        # Retired taxids are replaced, and rows already on the replacement are kept: host sets union
         tsv_file = tmp_path / "virus_host.tsv"
         tsv_file.write_text("virus tax id\thost tax id\n1\t100\n5\t101\n6\t102\n")
         result = get_virus_host_mapping(str(tsv_file), {"100": "200", "5": "6"})
+        # VHDB lists 1 as infecting 100, 5 as infecting 101, and 6 as infecting 102.
+        # Old 100 maps to new 200 and old 5 maps to new 6 via merged.dmp.
+        # Therefore:
+        # - 1 infects 200 (new host taxid)
+        # - 6 (new taxid) infects 101 (via old viral taxid 5) and 102 (via 6)
         assert result == {"1": {"200"}, "6": {"101", "102"}}
 
 
@@ -1623,6 +1628,15 @@ class TestLoadMergedTaxids:
         merged_file = tmp_path / "merged.dmp"
         merged_file.write_text("100\t|\t200\t|\n12\t|\t34\t|\n")
         assert load_merged_taxids(str(merged_file)) == {"100": "200", "12": "34"}
+
+
+class TestCheckMergedTaxidsRetired:
+    def test_passes_when_retired(self) -> None:
+        check_merged_taxids_retired({"100": "200"}, {"1", "200"})
+
+    def test_raises_when_still_live(self) -> None:
+        with pytest.raises(ValueError, match="still in nodes.dmp"):
+            check_merged_taxids_retired({"100": "200"}, {"100", "200"})
 
 
 # =======================================================================
