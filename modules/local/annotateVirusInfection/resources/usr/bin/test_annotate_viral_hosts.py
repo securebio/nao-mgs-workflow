@@ -1611,10 +1611,11 @@ class TestGetVirusHostMapping:
         assert result == {}
 
     def test_retired_taxids_mapped(self, tmp_path: Path) -> None:
+        # Retired taxids are replaced, and rows already on the replacement are kept: host sets union
         tsv_file = tmp_path / "virus_host.tsv"
-        tsv_file.write_text("virus tax id\thost tax id\n1\t100\n5\t101\n")
+        tsv_file.write_text("virus tax id\thost tax id\n1\t100\n5\t101\n6\t102\n")
         result = get_virus_host_mapping(str(tsv_file), {"100": "200", "5": "6"})
-        assert result == {"1": {"200"}, "6": {"101"}}
+        assert result == {"1": {"200"}, "6": {"101", "102"}}
 
 
 class TestLoadMergedTaxids:
