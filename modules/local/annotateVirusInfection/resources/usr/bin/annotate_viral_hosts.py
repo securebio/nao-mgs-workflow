@@ -60,10 +60,11 @@ def load_merged_taxids(merged_path: str) -> dict[str, str]:
     return dict(zip(df[0], df[2], strict=True))
 
 
-def check_merged_taxids_retired(merged: dict[str, str], node_taxids: set[str]) -> None:
+def check_merged_taxids(merged: dict[str, str], node_taxids: set[str]) -> None:
     """
-    Raise ValueError if any taxid in merged.dmp is still a live node, since
-    get_virus_host_mapping() replaces retired taxids rather than keeping both.
+    Raise ValueError unless every retired taxid in merged.dmp is gone from nodes.dmp
+    and every replacement is in it. get_virus_host_mapping() replaces in one step, so
+    this also rules out merge chains and cycles, which NCBI's docs don't exclude.
     Args:
         merged (dict[str, str]): Retired NCBI taxids mapped to their replacements.
         node_taxids (set[str]): Taxids present in the NCBI taxonomy nodes file.
@@ -72,6 +73,11 @@ def check_merged_taxids_retired(merged: dict[str, str], node_taxids: set[str]) -
     if live:
         raise ValueError(
             f"{len(live)} taxid(s) in merged.dmp are still in nodes.dmp: {live[:10]}"
+        )
+    missing = sorted(set(merged.values()) - node_taxids)
+    if missing:
+        raise ValueError(
+            f"{len(missing)} merged.dmp replacement taxid(s) are not in nodes.dmp: {missing[:10]}"
         )
 
 
@@ -780,7 +786,7 @@ def main() -> None:
         .rename(columns={0: "taxid", 2: "parent_taxid"})
     )
     merged = load_merged_taxids(args.merged_db)
-    check_merged_taxids_retired(merged, set(nodes_db["taxid"]))
+    check_merged_taxids(merged, set(nodes_db["taxid"]))
     virus_host_mapping = get_virus_host_mapping(args.infection_db, merged)
     hard_exclude_taxids = args.hard_exclude_taxids.split(" ")
     hard_include_mapping = load_host_overrides(args.host_infection_overrides)

@@ -67,7 +67,7 @@ from annotate_viral_hosts import (
     annotate_virus_db_single,
     build_virus_tree,
     check_infection,
-    check_merged_taxids_retired,
+    check_merged_taxids,
     exclude_infections,
     expand_taxid,
     get_host_taxids,
@@ -1630,13 +1630,22 @@ class TestLoadMergedTaxids:
         assert load_merged_taxids(str(merged_file)) == {"100": "200", "12": "34"}
 
 
-class TestCheckMergedTaxidsRetired:
+class TestCheckMergedTaxids:
     def test_passes_when_retired(self) -> None:
-        check_merged_taxids_retired({"100": "200"}, {"1", "200"})
+        check_merged_taxids({"100": "200"}, {"1", "200"})
 
     def test_raises_when_still_live(self) -> None:
         with pytest.raises(ValueError, match="still in nodes.dmp"):
-            check_merged_taxids_retired({"100": "200"}, {"100", "200"})
+            check_merged_taxids({"100": "200"}, {"100", "200"})
+
+    @pytest.mark.parametrize(
+        "merged",
+        [{"100": "200", "200": "300"}, {"100": "200", "200": "100"}, {"100": "999"}],
+        ids=["chain", "cycle", "dangling"],
+    )
+    def test_raises_when_replacement_not_live(self, merged: dict[str, str]) -> None:
+        with pytest.raises(ValueError, match="replacement taxid"):
+            check_merged_taxids(merged, {"1", "300"})
 
 
 # =======================================================================
