@@ -62,22 +62,30 @@ def load_merged_taxids(merged_path: str) -> dict[str, str]:
 
 def check_merged_taxids(merged: dict[str, str], node_taxids: set[str]) -> None:
     """
-    Raise ValueError unless every retired taxid in merged.dmp is gone from nodes.dmp
-    and every replacement is in it. get_virus_host_mapping() replaces in one step, so
-    this also rules out merge chains and cycles, which NCBI's docs don't exclude.
+    Raise ValueError unless every retired taxid in merged.dmp is gone from nodes.dmp,
+    every replacement is in it, and there are no merge chains or cycles in merged.dmp.
+    get_virus_host_mapping() replaces in one step, and NCBI's docs guarantee none of these.
     Args:
         merged (dict[str, str]): Retired NCBI taxids mapped to their replacements.
         node_taxids (set[str]): Taxids present in the NCBI taxonomy nodes file.
     """
-    live = sorted(set(merged) & node_taxids)
-    if live:
+    taxids_in_both_columns = sorted(set(merged.keys()) & set(merged.values()))
+    if taxids_in_both_columns:
         raise ValueError(
-            f"{len(live)} taxid(s) in merged.dmp are still in nodes.dmp: {live[:10]}"
+            f"{len(taxids_in_both_columns)} taxid(s) are both retired and a replacement "
+            f"in merged.dmp (a merge chain or cycle): {taxids_in_both_columns[:10]}"
         )
-    missing = sorted(set(merged.values()) - node_taxids)
-    if missing:
+    merged_taxids_present_in_nodes = sorted(set(merged.keys()) & node_taxids)
+    if merged_taxids_present_in_nodes:
         raise ValueError(
-            f"{len(missing)} merged.dmp replacement taxid(s) are not in nodes.dmp: {missing[:10]}"
+            f"{len(merged_taxids_present_in_nodes)} taxid(s) in merged.dmp are still in "
+            f"nodes.dmp: {merged_taxids_present_in_nodes[:10]}"
+        )
+    replacements_missing_from_nodes = sorted(set(merged.values()) - node_taxids)
+    if replacements_missing_from_nodes:
+        raise ValueError(
+            f"{len(replacements_missing_from_nodes)} merged.dmp replacement taxid(s) are "
+            f"not in nodes.dmp: {replacements_missing_from_nodes[:10]}"
         )
 
 

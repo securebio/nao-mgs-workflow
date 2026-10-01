@@ -1640,12 +1640,18 @@ class TestCheckMergedTaxids:
 
     @pytest.mark.parametrize(
         "merged",
-        [{"100": "200", "200": "300"}, {"100": "200", "200": "100"}, {"100": "999"}],
-        ids=["chain", "cycle", "dangling"],
+        [{"100": "200", "200": "300"}, {"100": "200", "200": "100"}],
+        ids=["chain", "cycle"],
     )
-    def test_raises_when_replacement_not_live(self, merged: dict[str, str]) -> None:
-        with pytest.raises(ValueError, match="replacement taxid"):
+    def test_raises_on_chain_or_cycle(self, merged: dict[str, str]) -> None:
+        # 200 is both retired and a replacement, so a one-step lookup lands on a dead taxid
+        with pytest.raises(ValueError, match="chain or cycle"):
             check_merged_taxids(merged, {"1", "300"})
+
+    def test_raises_when_replacement_not_live(self) -> None:
+        # 999 is no node in the taxonomy, so nothing could match it
+        with pytest.raises(ValueError, match="replacement taxid"):
+            check_merged_taxids({"100": "999"}, {"1", "300"})
 
 
 # =======================================================================
