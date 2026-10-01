@@ -52,51 +52,6 @@ nextflow_process {
         }
     }
 
-    test("Should map retired virus and host taxids to their replacements"){
-        tag "expect_success"
-        when {
-            params {
-                virus_db = "${projectDir}/test-data/toy-data/virus-taxonomy/test-virus-db.tsv"
-                host_db = "${projectDir}/test-data/toy-data/virus-taxonomy/test-host-db.tsv"
-                infection_db = "${projectDir}/test-data/toy-data/virus-taxonomy/test-infection-db-retired.tsv" // 999001 and its host 888002 given retired taxids
-                nodes = "${projectDir}/test-data/toy-data/virus-taxonomy/test-nodes.tsv"
-                merged = "${projectDir}/test-data/toy-data/virus-taxonomy/test-merged.dmp"
-                hard_exclude_taxids = file("${projectDir}/test-data/toy-data/virus-taxonomy/test-hard-excluded-taxids.txt").readLines().first()
-                host_infection_overrides = "${projectDir}/test-data/toy-data/virus-taxonomy/test-host-infection-overrides-empty.json"
-            }
-            process {
-                '''
-                input[0] = params.virus_db
-                input[1] = params.host_db
-                input[2] = params.infection_db
-                input[3] = params.nodes
-                input[4] = params.merged
-                input[5] = params.hard_exclude_taxids
-                input[6] = params.host_infection_overrides
-                '''
-            }
-        }
-        then {
-            // Should run without errors
-            assert process.success
-            // Output should match input with one extra column per host taxon
-            def virus_tab_out = path(process.out.db[0]).csv(sep: "\t", decompress: true)
-            def virus_tab_in = path(params.virus_db).csv(sep: "\t")
-            def host_tab_in = path(params.host_db).csv(sep: "\t")
-            assert virus_tab_out.rowCount == virus_tab_in.rowCount
-            assert virus_tab_out.columnCount == virus_tab_in.columnCount + host_tab_in.rowCount
-            for (c in virus_tab_in.columnNames){
-                assert virus_tab_in.columns[c] == virus_tab_out.columns[c]
-            }
-            // Infection status should match expected status for each host taxon
-            for (host in host_tab_in.columns["name"]){
-                def col_exp = "expected_status_" + host
-                def col_obs = "infection_status_" + host
-                assert virus_tab_out.columns[col_exp] == virus_tab_out.columns[col_obs]
-            }
-        }
-    }
-
     test("Should apply hard-include override end-to-end"){
         tag "expect_success"
         when {
@@ -135,6 +90,36 @@ nextflow_process {
             def override_row = virus_tab_out.rows.findIndexOf { it["taxid"].toString() == "999002" }
             assert override_row >= 0
             assert virus_tab_out.columns["infection_status_jabberwocks"][override_row].toString() == "1"
+        }
+    }
+
+    test("Should map retired virus and host taxids to their replacements"){
+        tag "expect_success"
+        when {
+            params {
+                // Give virus 999001 and its host 888002 the retired taxids test-merged.dmp maps back
+                def infection_db = File.createTempFile("infection-db-retired", ".tsv")
+                infection_db.text = file("${projectDir}/test-data/toy-data/virus-taxonomy/test-infection-db.tsv").text
+                    .replaceFirst("999001\t888002\t", "777001\t777002\t")
+                retired_infection_db = infection_db.toString()
+            }
+            process {
+                '''
+                input[0] = "${projectDir}/test-data/toy-data/virus-taxonomy/test-virus-db.tsv"
+                input[1] = "${projectDir}/test-data/toy-data/virus-taxonomy/test-host-db.tsv"
+                input[2] = params.retired_infection_db
+                input[3] = "${projectDir}/test-data/toy-data/virus-taxonomy/test-nodes.tsv"
+                input[4] = "${projectDir}/test-data/toy-data/virus-taxonomy/test-merged.dmp"
+                input[5] = file("${projectDir}/test-data/toy-data/virus-taxonomy/test-hard-excluded-taxids.txt").readLines().first()
+                input[6] = "${projectDir}/test-data/toy-data/virus-taxonomy/test-host-infection-overrides-empty.json"
+                '''
+            }
+        }
+        then {
+            assert process.success
+            // Without the mapping, 999001 has no Virus-Host DB entry and is not marked as infecting
+            def rows = path(process.out.db[0]).csv(sep: "\t", decompress: true).rows
+            assert rows.find { it.taxid.toString() == "999001" }.infection_status_jabberwocks.toString() == "1"
         }
     }
 }

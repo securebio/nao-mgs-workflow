@@ -52,12 +52,10 @@ def load_merged_taxids(merged_path: str) -> dict[str, str]:
     """
     Map each taxid NCBI has retired to the taxid it was merged into.
     Args:
-        merged_path (str): Path to the NCBI taxonomy merged.dmp file (may be empty).
+        merged_path (str): Path to the NCBI taxonomy merged.dmp file.
     Returns:
         dict[str, str]: A dictionary mapping retired taxids to current ones.
     """
-    if Path(merged_path).stat().st_size == 0:
-        return {}
     df = pd.read_csv(merged_path, sep="\t", dtype=str, header=None, usecols=[0, 2])
     return dict(zip(df[0], df[2], strict=True))
 

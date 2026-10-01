@@ -15,7 +15,6 @@ process EXTRACT_NCBI_TAXONOMY {
         unzip ${taxonomy_zip} -d taxonomy
         cp taxonomy/nodes.dmp taxonomy-nodes.dmp
         cp taxonomy/names.dmp taxonomy-names.dmp
-        # NCBI's new_taxdump always has merged.dmp; an empty file (as in the tiny test taxonomy) maps nothing
-        if [ -f taxonomy/merged.dmp ]; then cp taxonomy/merged.dmp taxonomy-merged.dmp; else touch taxonomy-merged.dmp; fi
+        cp taxonomy/merged.dmp taxonomy-merged.dmp
         """
 }

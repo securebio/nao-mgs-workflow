@@ -1623,11 +1623,6 @@ class TestLoadMergedTaxids:
         merged_file.write_text("100\t|\t200\t|\n12\t|\t34\t|\n")
         assert load_merged_taxids(str(merged_file)) == {"100": "200", "12": "34"}
 
-    def test_empty_file(self, tmp_path: Path) -> None:
-        merged_file = tmp_path / "merged.dmp"
-        merged_file.write_text("")
-        assert load_merged_taxids(str(merged_file)) == {}
-
 
 # =======================================================================
 # Tests for check_infection
