@@ -29,7 +29,8 @@ FROM alpine:3.21
 # grep:   GNU grep with PCRE support (-oP) used in Nextflow modules
 # procps: Nextflow resource monitoring
 # pigz:   parallel (de)compression for use by module scripts
-RUN apk add --no-cache bash grep procps pigz
+# apk upgrade picks up security fixes released since the alpine:3.21 base image was built
+RUN apk upgrade --no-cache && apk add --no-cache bash grep procps pigz
 
 # Copy compiled binaries from builder
 # Add additional binaries here as tools are added to the workspace
