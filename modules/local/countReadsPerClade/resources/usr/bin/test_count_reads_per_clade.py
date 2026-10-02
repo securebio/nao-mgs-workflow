@@ -28,19 +28,20 @@ def test_read_tsv_leading_quote_field(tsv_factory: Any) -> None:
 
 
 def test_is_duplicate() -> None:
-    # Test case where read is not a duplicate (seq_id matches exemplar)
-    read_not_duplicate = {"seq_id": "read123", "prim_align_dup_exemplar": "read123"}
-    assert not is_duplicate(read_not_duplicate)
+    # Unique under both passes: seq_id matches exemplar
+    assert not is_duplicate({"seq_id": "read123", "sim_dup_exemplar": "read123"})
 
-    # Test case where read is a duplicate (seq_id differs from exemplar)
-    read_is_duplicate = {"seq_id": "read456", "prim_align_dup_exemplar": "read123"}
-    assert is_duplicate(read_is_duplicate)
+    # Similarity duplicate: exemplar is another read
+    assert is_duplicate({"seq_id": "read456", "sim_dup_exemplar": "read123"})
+
+    # Alignment duplicate: similarity marking never examines it, so it carries NA
+    assert is_duplicate({"seq_id": "read789", "sim_dup_exemplar": "NA"})
 
     # Test KeyError when seq_id is missing
     with pytest.raises(KeyError):
-        is_duplicate({"prim_align_dup_exemplar": "read123"})
+        is_duplicate({"sim_dup_exemplar": "read123"})
 
-    # Test KeyError when prim_align_dup_exemplar is missing
+    # Test KeyError when sim_dup_exemplar is missing
     with pytest.raises(KeyError):
         is_duplicate({"seq_id": "read123"})
 
@@ -285,30 +286,36 @@ def test_count_direct_reads_per_taxid() -> None:
         {
             "aligner_taxid_lca": "100",
             "seq_id": "read1",
-            "prim_align_dup_exemplar": "read1",
+            "sim_dup_exemplar": "read1",
+            "sim_dup_group_size": "2",
             "group": "sample1",
-        },  # not duplicate
+        },  # exemplar, stands for itself and read2
         {
             "aligner_taxid_lca": "100",
             "seq_id": "read2",
-            "prim_align_dup_exemplar": "read1",
+            "sim_dup_exemplar": "read1",
+            "sim_dup_group_size": "NA",
             "group": "sample1",
         },  # duplicate
         {
             "aligner_taxid_lca": "200",
             "seq_id": "read3",
-            "prim_align_dup_exemplar": "read3",
+            "sim_dup_exemplar": "read3",
+            "sim_dup_group_size": "1",
             "group": "sample1",
         },  # not duplicate
         {
             "aligner_taxid_lca": "100",
             "seq_id": "read4",
-            "prim_align_dup_exemplar": "read4",
+            "sim_dup_exemplar": "read4",
+            "sim_dup_group_size": "1",
             "group": "sample1",
         },  # not duplicate
     ]
 
-    total, dedup = count_direct_reads_per_taxid(iter(read_data), "sample1")
+    total, dedup, total_by_exemplar = count_direct_reads_per_taxid(
+        iter(read_data), "sample1"
+    )
 
     # Total counts: taxid 100 has 3 reads, taxid 200 has 1 read
     assert total[100] == 3
@@ -318,30 +325,87 @@ def test_count_direct_reads_per_taxid() -> None:
     assert dedup[100] == 2
     assert dedup[200] == 1
 
+    # Exemplar-attributed counts weight each exemplar by its group size. read1 stands
+    # for itself and read2, so taxid 100 gets 2 from read1 plus 1 from read4.
+    assert total_by_exemplar[100] == 3
+    assert total_by_exemplar[200] == 1
+
     # Test with custom taxid field
     read_data = [
         {
             "custom_taxid": "50",
             "seq_id": "read1",
-            "prim_align_dup_exemplar": "read1",
+            "sim_dup_exemplar": "read1",
+            "sim_dup_group_size": "1",
             "group": "test_group",
         }
     ]
-    total, dedup = count_direct_reads_per_taxid(
+    total, dedup, total_by_exemplar = count_direct_reads_per_taxid(
         iter(read_data), "test_group", taxid_field="custom_taxid"
     )
     assert total[50] == 1
     assert dedup[50] == 1
+    assert total_by_exemplar[50] == 1
 
     # Test with empty data
-    total, dedup = count_direct_reads_per_taxid(iter([]), "empty_group")
+    total, dedup, total_by_exemplar = count_direct_reads_per_taxid(
+        iter([]), "empty_group"
+    )
     assert len(total) == 0
     assert len(dedup) == 0
+    assert len(total_by_exemplar) == 0
 
     # Test return types are Counters
-    total, dedup = count_direct_reads_per_taxid(iter([]), "empty_group")
+    total, dedup, total_by_exemplar = count_direct_reads_per_taxid(
+        iter([]), "empty_group"
+    )
     assert isinstance(total, Counter)
     assert isinstance(dedup, Counter)
+    assert isinstance(total_by_exemplar, Counter)
+
+
+def test_total_by_exemplar_redistributes_across_taxids() -> None:
+    """A duplicate group spanning two taxids moves weight to the exemplar's taxid."""
+    read_data = [
+        {
+            "aligner_taxid_lca": "100",
+            "seq_id": "read1",
+            "sim_dup_exemplar": "read1",
+            "sim_dup_group_size": "3",
+            "group": "g",
+        },
+        {
+            "aligner_taxid_lca": "200",
+            "seq_id": "read2",
+            "sim_dup_exemplar": "read1",
+            "sim_dup_group_size": "NA",
+            "group": "g",
+        },
+        {
+            "aligner_taxid_lca": "200",
+            "seq_id": "read3",
+            "sim_dup_exemplar": "NA",
+            "sim_dup_group_size": "NA",
+            "group": "g",
+        },
+    ]
+    total, dedup, total_by_exemplar = count_direct_reads_per_taxid(iter(read_data), "g")
+
+    # Per read, under its own taxid
+    assert total[100] == 1
+    assert total[200] == 2
+
+    # Under the exemplar's taxid: all three reads belong to read1's group
+    assert total_by_exemplar[100] == 3
+    assert total_by_exemplar[200] == 0
+
+    # Total reads are conserved, only their distribution changes
+    assert sum(total.values()) == sum(total_by_exemplar.values()) == 3
+
+    # And the dedup count is the same under either attribution, since an exemplar is
+    # its own exemplar
+    assert dedup[100] == 1
+    assert dedup[200] == 0
 
 
 def test_count_direct_reads_per_taxid_group_validation() -> None:
@@ -351,7 +415,8 @@ def test_count_direct_reads_per_taxid_group_validation() -> None:
         {
             "aligner_taxid_lca": "100",
             "seq_id": "read1",
-            "prim_align_dup_exemplar": "read1",
+            "sim_dup_exemplar": "read1",
+            "sim_dup_group_size": "1",
             "group": "wrong_group",
         }
     ]
@@ -366,13 +431,15 @@ def test_count_direct_reads_per_taxid_group_validation() -> None:
         {
             "aligner_taxid_lca": "100",
             "seq_id": "read1",
-            "prim_align_dup_exemplar": "read1",
+            "sim_dup_exemplar": "read1",
+            "sim_dup_group_size": "1",
             "group": "correct_group",
         },
         {
             "aligner_taxid_lca": "200",
             "seq_id": "read2",
-            "prim_align_dup_exemplar": "read2",
+            "sim_dup_exemplar": "read2",
+            "sim_dup_group_size": "1",
             "group": "wrong_group",
         },
     ]
@@ -455,12 +522,12 @@ def test_get_clade_counts() -> None:
 
 @pytest.mark.parametrize(
     "missing_column",
-    ["seq_id", "prim_align_dup_exemplar", "aligner_taxid_lca", "group"],
+    ["seq_id", "sim_dup_exemplar", "aligner_taxid_lca", "group"],
 )
 def test_missing_reads_columns(tsv_factory: Any, missing_column: str) -> None:
     """Test that missing required columns in reads file raise KeyError."""
     # Start with all required columns and appropriate test values
-    all_columns = ["seq_id", "prim_align_dup_exemplar", "aligner_taxid_lca", "group"]
+    all_columns = ["seq_id", "sim_dup_exemplar", "aligner_taxid_lca", "group"]
     test_values = ["read1", "read1", "100", "test"]
 
     # Remove the missing column and its corresponding value
@@ -503,7 +570,9 @@ def test_missing_taxonomy_columns(tsv_factory: Any, missing_column: str) -> None
 def test_group_mismatch_error(tsv_factory: Any) -> None:
     """Test that group mismatch raises AssertionError."""
     # Create reads file with group "test"
-    reads_content = "seq_id\tprim_align_dup_exemplar\taligner_taxid_lca\tgroup\nread1\tread1\t100\ttest\n"
+    reads_content = (
+        "seq_id\tsim_dup_exemplar\taligner_taxid_lca\tgroup\nread1\tread1\t100\ttest\n"
+    )
     reads_file = tsv_factory.create_plain("reads.tsv", reads_content)
 
     # Try to process with wrong group
@@ -516,7 +585,7 @@ def test_group_mismatch_error(tsv_factory: Any) -> None:
 def test_header_only_reads_file(tsv_factory: Any) -> None:
     """Test that header-only reads file produces header-only output."""
     # Create header-only reads file
-    reads_content = "seq_id\tprim_align_dup_exemplar\taligner_taxid_lca\tgroup\n"
+    reads_content = "seq_id\tsim_dup_exemplar\taligner_taxid_lca\tgroup\n"
     reads_file = tsv_factory.create_plain("reads.tsv", reads_content)
 
     # Create valid taxonomy file
@@ -524,17 +593,26 @@ def test_header_only_reads_file(tsv_factory: Any) -> None:
     tax_file = tsv_factory.create_plain("taxonomy.tsv", tax_content)
 
     # Process the files
-    direct_total, direct_dedup = count_direct_reads_per_taxid(
+    direct_total, direct_dedup, direct_total_by_exemplar = count_direct_reads_per_taxid(
         read_tsv(reads_file), "test"
     )
     tree = build_tree(read_tsv(tax_file))
     clade_total = get_clade_counts(direct_total, tree)
     clade_dedup = get_clade_counts(direct_dedup, tree)
+    clade_total_by_exemplar = get_clade_counts(direct_total_by_exemplar, tree)
 
     # Write output
     output_file = tsv_factory.get_path("output.tsv.gz")
     write_output_tsv(
-        output_file, "test", tree, direct_total, direct_dedup, clade_total, clade_dedup
+        output_file,
+        "test",
+        tree,
+        direct_total,
+        direct_dedup,
+        direct_total_by_exemplar,
+        clade_total,
+        clade_dedup,
+        clade_total_by_exemplar,
     )
 
     # Read and verify output is header-only
@@ -545,5 +623,9 @@ def test_header_only_reads_file(tsv_factory: Any) -> None:
     assert len(lines) == 1
 
     # Verify header
-    expected_header = "group\ttaxid\tparent_taxid\treads_direct_total\treads_direct_dedup\treads_clade_total\treads_clade_dedup"
+    expected_header = (
+        "group\ttaxid\tparent_taxid"
+        "\treads_direct_total\treads_direct_dedup\treads_direct_total_by_exemplar"
+        "\treads_clade_total\treads_clade_dedup\treads_clade_total_by_exemplar"
+    )
     assert lines[0] == expected_header

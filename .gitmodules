@@ -1,3 +1,0 @@
-[submodule "post-processing/deps/nao_dedup"]
-	path = post-processing/deps/nao_dedup
-	url = https://github.com/securebio/nao-dedup

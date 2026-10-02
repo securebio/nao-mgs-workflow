@@ -35,7 +35,7 @@ Main heading represents the folder name, and subheadings represent a description
 
 - `pyproject.toml`: Project configuration file containing the pipeline version and compatibility version constraints (copied from repository).
 - `pyproject-index.toml`: Project configuration file from the index directory, containing the index's pipeline version and compatibility constraints (copied from index directory).
-- `sentinel.json`: Completion marker written after all expected output files have been verified. Contains `runStartedAt` and `runCompletedAt` timestamps. External systems can check for this file to confirm the run completed successfully. The `sentinel_max_wait_mins` parameter (default 32) controls how long to wait for expected outputs before timing out.
+- `sentinel.json`: Completion marker written after all expected output files have been verified. Contains `runStartedAt` and `runCompletedAt` timestamps. External systems can check for this file to confirm the run completed successfully. The `sentinel_max_wait_mins` parameter (default 32) controls how long to wait for expected outputs to be published before timing out; an expected output that no task emitted fails the sentinel at once.
 - `trace_<timestamp>.tsv`: Tab delimited log of all the information for each task run in the pipeline including runtime, memory usage, exit status, etc. Can be used to create an execution timeline using the the script `bin/plot-timeline-script.R` after the pipeline has finished running. More information regarding the trace file format can be found [here](https://www.nextflow.io/docs/latest/reports.html#trace-file).
 
 ### `intermediates/`
@@ -57,9 +57,14 @@ Main heading represents the folder name, and subheadings represent a description
     - Percent duplicates as measured by FASTQC (`percent_duplicates`);
     - Pass/fail scores for each test conducted by FASTQC.
 - `{sample}_qc_length_stats_raw.tsv.gz` and `{sample}_qc_length_stats_cleaned.tsv.gz`: Per-read length statistics calculated by FASTQC for subset sample before (`raw`) and after (`cleaned`) adapter trimming, given as the number of reads (`n_sequences`) with a given read length (`read_length`) for each read in the read pair (`read_pair`).
+- `{sample}_qc_overrepresented_raw.tsv.gz` and `{sample}_qc_overrepresented_cleaned.tsv.gz`: Overrepresented sequences identified by FASTQC for subset sample before (`raw`) and after (`cleaned`) adapter trimming, given as the sequence (`sequence`), the number of reads matching it (`n_occurrences`), and that count as a percentage of the sample's reads at that stage (`pc_reads`). Some details about the FASTQC implementation:
+    - FASTQC truncates each read to its first 50 bases before comparing them, so two reads that agree on those first 50 bases but differ afterward are treated as the same (50 base) sequence. At our read lengths that applies to essentially every read on both platforms.
+    - Only sequences making up more than 0.1% of the sample's reads at that stage are listed, and at most the 100 most frequent are published.
+    - Percentages are relative to that sample and stage's own read count, counted in **mates, not pairs**. A sequence present in every R1 and no R2 therefore reads as ~50%.
+    - To bound memory, FASTQC only tracks sequences seen among the first 100,000 unique sequences in the file.
 - `{sample}_qc_quality_base_stats_raw.tsv.gz` and `{sample}_qc_quality_base_stats_cleaned.tsv.gz`: Per-base read-quality statistics calculated by FASTQC for subset sample before (`raw`) and after (`cleaned`) adapter trimming, given as the mean Phred score (`mean_phred_score`) at each position along the read (`position`) for each read in the read pair (`read_pair`).
 - `{sample}_qc_quality_sequence_stats_raw.tsv.gz` and `{sample}_qc_quality_sequence_stats_cleaned.tsv.gz`: Per-sequence read-quality statistics calculated by FASTQC for subset sample before (`raw`) and after (`cleaned`) adapter trimming, given as the number of reads (`n_sequences`) with a given mean Phred score (`mean_phred_score`) for each read in the read pair (`read_pair`).
-- `{sample}_fastp.json`: Per-sample FASTP diagnostic data in JSON format, including read counts, quality metrics (Q20/Q30 rates), adapter statistics, and filtering results. Only produced for short-read (non-ONT) runs.
+- `{sample}_fastp.json`: Per-sample FASTP diagnostic data in JSON format, including read counts, quality metrics (Q20/Q30 rates), adapter statistics, and filtering results. Only produced for short-read (non-ONT) runs. Note that the `overrepresented_sequences` keys in this file are always empty since we do not pass `-p` to fastp. Use `{sample}_qc_overrepresented_{stage}.tsv.gz` instead.
 
 #### Viral identification
 - `virus_hits_final.tsv.gz`: TSV output from EXTRACT_VIRAL_READS, giving information about each read pair assigned to a host-infecting virus, using the LCA taxid assignment as the source of truth. Contains both LCA-based taxonomic assignments (columns with `aligner_` prefix) that utilize multiple alignments per read, and read sequence information plus primary alignment details (columns with `prim_align_` prefix) for the DOWNSTREAM workflow. See [virus_hits_final.md](./virus_hits_final.md) for documentation of column names.
@@ -72,7 +77,7 @@ Main heading represents the folder name, and subheadings represent a description
 
 ### `logging_downstream/`
 
-- `{group}_sentinel.json`: Per-group completion marker written after all expected DOWNSTREAM output files for that group have been verified. Contains `downstreamStartedAt` and `downstreamCompletedAt` timestamps. One file is written and published independently per group in the input CSV, so external systems can check for each file to confirm DOWNSTREAM completed successfully for that group. If the input CSV resolves to an empty groups channel (e.g. a groups TSV with only a header), no sentinels are written at all. The `sentinel_max_wait_mins` parameter (default 32) controls how long to wait for expected outputs before timing out.
+- `{group}_sentinel.json`: Per-group completion marker written after all expected DOWNSTREAM output files for that group have been verified. Contains `downstreamStartedAt` and `downstreamCompletedAt` timestamps. One file is written and published independently per group in the input CSV, so external systems can check for each file to confirm DOWNSTREAM completed successfully for that group. If the input CSV resolves to an empty groups channel (e.g. a groups TSV with only a header), no sentinels are written at all. The `sentinel_max_wait_mins` parameter (default 32) controls how long to wait for expected outputs to be published before timing out; an expected output that no task emitted fails the sentinel at once.
 
 ## Index workflow
 
@@ -120,7 +125,7 @@ Main heading represents the folder name, and subheadings describes the tool that
 
 #### Kraken2
 
-- `kraken_db`: Directory containing Kraken2 reference database (default: Most recent version of Standard).
+- `kraken_db`: Directory containing Kraken2 reference database (default: the PlusPF build pinned by `params.kraken_db`).
 
 #### K-mer screening references
 

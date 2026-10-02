@@ -23,6 +23,6 @@ workflow QC {
         // 3. Summarize MultiQC information for each read file / pair of read files
         process_ch = SUMMARIZE_MULTIQC(multiqc_ch.data, single_end)
     emit:
-        qc = process_ch  // tuple(sample, basic, adapt, qbase, qseqs, lengths) per sample
+        qc = process_ch  // tuple(sample, basic, adapt, qbase, qseqs, lengths, overrep) per sample
         test_input = reads
 }

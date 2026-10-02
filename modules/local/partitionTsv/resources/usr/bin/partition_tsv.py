@@ -56,7 +56,10 @@ def partition(input_path: str, column: str) -> None:
         # Read first line of data and initialize first output file
         fields = read_line(inf)
         if fields is None:  # Empty apart from headers
-            print_log("Input file has no data rows, skipping partition.")
+            # Pass the header-only table on, so the group isn't dropped downstream
+            print_log("Input file has no data rows, writing it header-only.")
+            with open_by_suffix(f"partition_header_only_{input_path}", "w") as outf:
+                write_line(outf, headers)
             return
         index = fields[column_index]
         file_index = index

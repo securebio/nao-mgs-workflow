@@ -14,6 +14,7 @@ import contextlib
 import gzip
 import json
 import logging
+import subprocess
 from pathlib import Path
 
 import pandas as pd
@@ -36,6 +37,8 @@ from benchmark_index import (
     infection_status_changes,
     infection_status_columns,
     infection_status_transitions,
+    latest_kraken_release,
+    latest_silva_releases,
     load_overrides,
     metadata_deltas,
     restrict_to_fasta,
@@ -1018,25 +1021,73 @@ class TestRefStaleness:
         assert check_kraken_staleness(params) == []
         assert check_silva_staleness(params) == []
 
+    S3_LISTING = """\
+2026-03-11 15:04:22 85671280533 k2_pluspf_20260226.tar.gz
+2026-07-13 17:05:45 91014091453 k2_pluspf_20260626.tar.gz
+2026-03-11 15:31:07 42003278967 k2_pluspf_16gb_20260226.tar.gz
+2026-03-11 16:11:51 80230502610 k2_standard_20260226.tar.gz
+2026-07-13 17:45:57 85465587439 k2_standard_20260626.tar.gz
+2026-03-11 14:22:03 96671280533 k2_pluspfp_20260226.tar.gz
+"""
+
+    @pytest.mark.parametrize(
+        "database,expected",
+        [
+            # Newest build of the requested database, not of some other one.
+            ("pluspf", ("20260626", "k2_pluspf_20260626.tar.gz")),
+            ("standard", ("20260626", "k2_standard_20260626.tar.gz")),
+            # pluspf must not swallow the pluspfp bundles, or vice versa.
+            ("pluspfp", ("20260226", "k2_pluspfp_20260226.tar.gz")),
+            # No build of this database in the listing.
+            ("nosuchdb", None),
+        ],
+    )
+    def test_latest_kraken_release_selects_within_database(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        database: str,
+        expected: tuple[str, str] | None,
+    ) -> None:
+        def fake_run(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess:
+            return subprocess.CompletedProcess([], 0, stdout=self.S3_LISTING)
+
+        monkeypatch.setattr(subprocess, "run", fake_run)
+        assert latest_kraken_release(database) == expected
+
+    def test_latest_kraken_release_returns_none_on_listing_failure(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        def fake_run(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess:
+            raise subprocess.CalledProcessError(1, "aws s3 ls")
+
+        monkeypatch.setattr(subprocess, "run", fake_run)
+        assert latest_kraken_release("pluspf") is None
+
     @pytest.mark.parametrize(
         "current_url,latest_return,expected_status",
         [
             # current_date matches latest_date → current
             (
-                "https://genome-idx.s3.amazonaws.com/kraken/k2_standard_20260226.tar.gz",
-                ("20260226", "k2_standard_20260226.tar.gz"),
+                "https://genome-idx.s3.amazonaws.com/kraken/k2_pluspf_20260226.tar.gz",
+                ("20260226", "k2_pluspf_20260226.tar.gz"),
                 "current",
             ),
             # current_date older than latest_date → stale
             (
-                "https://genome-idx.s3.amazonaws.com/kraken/k2_standard_20250714.tar.gz",
-                ("20260226", "k2_standard_20260226.tar.gz"),
+                "https://genome-idx.s3.amazonaws.com/kraken/k2_pluspf_20250714.tar.gz",
+                ("20260226", "k2_pluspf_20260226.tar.gz"),
                 "stale",
             ),
             # fetcher returned None (network blip / parse failure) → error
             (
-                "https://genome-idx.s3.amazonaws.com/kraken/k2_standard_20260226.tar.gz",
+                "https://genome-idx.s3.amazonaws.com/kraken/k2_pluspf_20260226.tar.gz",
                 None,
+                "error",
+            ),
+            # unrecognizable bundle (custom/test DB) → error, no lookup
+            (
+                "https://nao-testing.s3.amazonaws.com/tiny-kraken2-db.tar.gz",
+                ("20260226", "k2_pluspf_20260226.tar.gz"),
                 "error",
             ),
         ],
@@ -1049,11 +1100,87 @@ class TestRefStaleness:
         expected_status: str,
     ) -> None:
         monkeypatch.setattr(
-            "benchmark_index.latest_kraken_release", lambda: latest_return
+            "benchmark_index.latest_kraken_release", lambda _database: latest_return
         )
         rows = check_kraken_staleness({"kraken_db": current_url})
         kraken_row = next(r for r in rows if r["ref"] == "kraken_db")
         assert kraken_row["status"] == expected_status
+
+    def test_check_kraken_staleness_compares_within_database(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The configured database, not a hard-coded one, drives the lookup."""
+        seen: list[str] = []
+
+        def fake_latest(database: str) -> tuple[str, str]:
+            seen.append(database)
+            return "20260226", f"k2_{database}_20260226.tar.gz"
+
+        monkeypatch.setattr("benchmark_index.latest_kraken_release", fake_latest)
+        url = "https://genome-idx.s3.amazonaws.com/kraken/k2_pluspf_20260226.tar.gz"
+        rows = check_kraken_staleness({"kraken_db": url})
+        assert seen == ["pluspf"]
+        assert rows[0]["latest"] == "k2_pluspf_20260226.tar.gz"
+        assert rows[0]["status"] == "current"
+
+    SILVA_ROOT_HTML = """\
+<a href="../">../</a>
+<a href="current/">current/</a>
+<a href="release_132/">release_132/</a>
+<a href="release_138.1/">release_138.1/</a>
+<a href="release_138.2/">release_138.2/</a>
+<a href="release_138_2/">release_138_2/</a>
+<a href="release_144/">release_144/</a>
+<a href="release_template/">release_template/</a>
+<a href="LICENSE.txt">LICENSE.txt</a>
+"""
+    SILVA_LISTINGS = {
+        "https://ftp.arb-silva.de/": SILVA_ROOT_HTML,
+        "https://ftp.arb-silva.de/release_144/Exports/": (
+            '<a href="SILVA_144_SSURef_NR99_tax_silva_trunc.fasta.gz">'
+        ),
+        # No NR99 LSU here, as in releases 119.1 and 123.1.
+        "https://ftp.arb-silva.de/release_138.2/Exports/": (
+            '<a href="SILVA_138.2_LSURef_tax_silva.fasta.gz">'
+            '<a href="SILVA_138.2_SSURef_Nr99_tax_silva.fasta.gz">'
+        ),
+        "https://ftp.arb-silva.de/release_138.1/Exports/": (
+            '<a href="SILVA_138.1_LSURef_NR99_tax_silva.fasta.gz">'
+        ),
+    }
+
+    @pytest.mark.parametrize(
+        "missing_url,expected",
+        [
+            # All listings available: SSU from 144, LSU from 138.2.
+            (None, {"SSU": (144, 0), "LSU": (138, 2)}),
+            # Root listing fails: nothing resolved.
+            ("https://ftp.arb-silva.de/", {"SSU": None, "LSU": None}),
+            # Mid-walk failure keeps SSU but doesn't fall back to an older LSU.
+            (
+                "https://ftp.arb-silva.de/release_138.2/Exports/",
+                {"SSU": (144, 0), "LSU": None},
+            ),
+        ],
+    )
+    def test_latest_silva_releases(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        missing_url: str | None,
+        expected: dict[str, tuple[int, int] | None],
+    ) -> None:
+        fetched: list[str] = []
+
+        def fake_fetch(url: str) -> str | None:
+            fetched.append(url)
+            return None if url == missing_url else self.SILVA_LISTINGS[url]
+
+        monkeypatch.setattr("benchmark_index._fetch_text", fake_fetch)
+        assert latest_silva_releases(["SSU", "LSU"]) == expected
+        # Duplicate release_138_2 isn't fetched, and the walk stops once every
+        # subunit is resolved or a listing fails.
+        assert "https://ftp.arb-silva.de/release_138_2/Exports/" not in fetched
+        assert "https://ftp.arb-silva.de/release_138.1/Exports/" not in fetched
 
     @pytest.mark.parametrize(
         "current_url,latest_return,expected_status",
@@ -1061,66 +1188,78 @@ class TestRefStaleness:
             # current matches latest → current
             (
                 "https://www.arb-silva.de/.../release_138.2/Exports/x.gz",
-                "138.2",
+                (138, 2),
                 "current",
             ),
             # current older than latest → stale
             (
                 "https://www.arb-silva.de/.../release_138_1/Exports/x.gz",
-                "138.2",
+                (138, 2),
                 "stale",
             ),
-            # fetcher returned None → error
+            # subunit couldn't be resolved → error
             (
                 "https://www.arb-silva.de/.../release_138.2/Exports/x.gz",
                 None,
                 "error",
             ),
+            # current newer than the discovered latest → error
+            (
+                "https://www.arb-silva.de/.../release_144/Exports/x.gz",
+                (138, 2),
+                "error",
+            ),
+            # no release in the URL → error
+            ("https://example.com/ssu.fasta.gz", (138, 2), "error"),
         ],
     )
     def test_check_silva_staleness_branches(
         self,
         monkeypatch: pytest.MonkeyPatch,
         current_url: str,
-        latest_return: str | None,
+        latest_return: tuple[int, int] | None,
         expected_status: str,
     ) -> None:
         monkeypatch.setattr(
-            "benchmark_index.latest_silva_release", lambda: latest_return
+            "benchmark_index.latest_silva_releases",
+            lambda subunits: dict.fromkeys(subunits, latest_return),
         )
         rows = check_silva_staleness({"ssu_url": current_url})
-        silva_row = next(r for r in rows if r["ref"] == "ssu_url")
-        assert silva_row["status"] == expected_status
+        assert rows[0]["ref"] == "ssu_url"
+        assert rows[0]["status"] == expected_status
 
-    def test_check_silva_staleness_call_hoisted(
+    def test_check_silva_staleness_compares_per_subunit(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        # When both ssu_url and lsu_url are present, latest_silva_release()
-        # is called exactly once (the C3 hoist).
-        calls = {"n": 0}
+        # LSU at 138.2 is current when 144 publishes only SSU.
+        calls: list[list[str]] = []
 
-        def fake() -> str:
-            calls["n"] += 1
-            return "138.2"
+        def fake(subunits: list[str]) -> dict[str, tuple[int, int] | None]:
+            calls.append(subunits)
+            return {"SSU": (144, 0), "LSU": (138, 2)}
 
-        monkeypatch.setattr("benchmark_index.latest_silva_release", fake)
-        check_silva_staleness(
+        monkeypatch.setattr("benchmark_index.latest_silva_releases", fake)
+        rows = check_silva_staleness(
             {
-                "ssu_url": "https://www.arb-silva.de/.../release_138.2/Exports/ssu.gz",
+                "ssu_url": "https://www.arb-silva.de/.../release_144/Exports/ssu.gz",
                 "lsu_url": "https://www.arb-silva.de/.../release_138.2/Exports/lsu.gz",
             }
         )
-        assert calls["n"] == 1
+        assert calls == [["SSU", "LSU"]]
+        assert [(r["ref"], r["latest"], r["status"]) for r in rows] == [
+            ("ssu_url", "release_144", "current"),
+            ("lsu_url", "release_138.2", "current"),
+        ]
 
     def test_write_staleness_table_writes_rows(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         monkeypatch.setattr(
             "benchmark_index.latest_kraken_release",
-            lambda: ("20260226", "k2_standard_20260226.tar.gz"),
+            lambda _database: ("20260226", "k2_pluspf_20260226.tar.gz"),
         )
         out = tmp_path / "staleness.tsv"
-        write_staleness_table({"kraken_db": ".../k2_standard_20250714.tar.gz"}, out)
+        write_staleness_table({"kraken_db": ".../k2_pluspf_20250714.tar.gz"}, out)
         df = pd.read_csv(out, sep="\t")
         assert list(df["ref"]) == ["kraken_db"]
         assert df.loc[0, "status"] == "stale"

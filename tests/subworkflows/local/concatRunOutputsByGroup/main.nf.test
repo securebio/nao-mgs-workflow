@@ -29,6 +29,8 @@ nextflow_workflow {
                     ["tt1", "tiny_test", file("${run_dir}/tiny_test_qc_basic_stats_raw.tsv"), "group_a"],
                     ["tt1", "tiny_test", file("${run_dir}/tiny_test_qc_length_stats_cleaned.tsv"), "group_a"],
                     ["tt1", "tiny_test", file("${run_dir}/tiny_test_qc_length_stats_raw.tsv"), "group_a"],
+                    ["tt1", "tiny_test", file("${run_dir}/tiny_test_qc_overrepresented_cleaned.tsv"), "group_a"],
+                    ["tt1", "tiny_test", file("${run_dir}/tiny_test_qc_overrepresented_raw.tsv"), "group_a"],
                     ["tt1", "tiny_test", file("${run_dir}/tiny_test_qc_quality_base_stats_cleaned.tsv"), "group_a"],
                     ["tt1", "tiny_test", file("${run_dir}/tiny_test_qc_quality_base_stats_raw.tsv"), "group_a"],
                     ["tt1", "tiny_test", file("${run_dir}/tiny_test_qc_quality_sequence_stats_cleaned.tsv"), "group_a"],
@@ -44,6 +46,8 @@ nextflow_workflow {
                     ["tt2", "tiny_test", file("${ont_dir}/tiny_test_qc_basic_stats_raw.tsv"), "group_b"],
                     ["tt2", "tiny_test", file("${ont_dir}/tiny_test_qc_length_stats_cleaned.tsv"), "group_b"],
                     ["tt2", "tiny_test", file("${ont_dir}/tiny_test_qc_length_stats_raw.tsv"), "group_b"],
+                    ["tt2", "tiny_test", file("${ont_dir}/tiny_test_qc_overrepresented_cleaned.tsv"), "group_b"],
+                    ["tt2", "tiny_test", file("${ont_dir}/tiny_test_qc_overrepresented_raw.tsv"), "group_b"],
                     ["tt2", "tiny_test", file("${ont_dir}/tiny_test_qc_quality_base_stats_cleaned.tsv"), "group_b"],
                     ["tt2", "tiny_test", file("${ont_dir}/tiny_test_qc_quality_base_stats_raw.tsv"), "group_b"],
                     ["tt2", "tiny_test", file("${ont_dir}/tiny_test_qc_quality_sequence_stats_cleaned.tsv"), "group_b"],
@@ -69,8 +73,8 @@ nextflow_workflow {
                 assert val == "group_a"
             }
 
-            // Should produce 26 items in other (13 per group)
-            assert workflow.out.other.size() == 26
+            // Should produce 30 items in other (15 per group)
+            assert workflow.out.other.size() == 30
             def other_groups = workflow.out.other.collect { it[0] } as Set
             assert other_groups == ["group_a", "group_b"] as Set
 
@@ -89,6 +93,8 @@ nextflow_workflow {
                 "group_a_qc_basic_stats_raw.tsv.gz",
                 "group_a_qc_length_stats_cleaned.tsv.gz",
                 "group_a_qc_length_stats_raw.tsv.gz",
+                "group_a_qc_overrepresented_cleaned.tsv.gz",
+                "group_a_qc_overrepresented_raw.tsv.gz",
                 "group_a_qc_quality_base_stats_cleaned.tsv.gz",
                 "group_a_qc_quality_base_stats_raw.tsv.gz",
                 "group_a_qc_quality_sequence_stats_cleaned.tsv.gz",

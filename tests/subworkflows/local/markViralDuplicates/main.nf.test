@@ -27,8 +27,8 @@ nextflow_workflow {
             assert workflow.success
             // Output should have expected dimensions
             def tab_in = path(workflow.out.test_in[0][1]).csv(sep: "\t")
-            def tab_out = path(workflow.out.dup[0][1]).csv(sep: "\t", decompress: true)
-            def tab_meta = path(workflow.out.dup[0][2]).csv(sep: "\t", decompress: true)
+            def tab_out = path(workflow.out.test_align_marked[0][1]).csv(sep: "\t", decompress: true)
+            def tab_meta = path(workflow.out.stats[0][1]).csv(sep: "\t", decompress: true)
             assert tab_out.rowCount == tab_in.rowCount
             assert tab_out.columnCount == tab_in.columnCount + 1
             // Output should have expected headers
@@ -48,8 +48,9 @@ nextflow_workflow {
                 assert r["prim_align_dup_count"] == tab_out.columns["prim_align_dup_exemplar"].count(exemplar) // Dup counts should match exemplar assignments
             }
             assert tab_meta.columns["prim_align_dup_count"].sum() == tab_out.rowCount
-            // Similarity duplicate output: structure only, value correctness tested at module level
-            def tab_sim = path(workflow.out.sim_dup[0][1]).csv(sep: "\t", decompress: true)
+            // The subworkflow's hits output carries both marking passes; value correctness
+            // for the similarity pass is tested at module level
+            def tab_sim = path(workflow.out.hits[0][1]).csv(sep: "\t", decompress: true)
             assert tab_sim.rowCount == tab_in.rowCount
             assert tab_sim.columnCount == tab_in.columnCount + 3
             assert "sim_dup_exemplar" in tab_sim.columnNames
@@ -77,8 +78,8 @@ nextflow_workflow {
             assert workflow.success
             // Output should have expected dimensions
             def tab_in = path(workflow.out.test_in[0][1]).csv(sep: "\t")
-            def tab_out = path(workflow.out.dup[0][1]).csv(sep: "\t", decompress: true)
-            def tab_meta = path(workflow.out.dup[0][2]).csv(sep: "\t", decompress: true)
+            def tab_out = path(workflow.out.test_align_marked[0][1]).csv(sep: "\t", decompress: true)
+            def tab_meta = path(workflow.out.stats[0][1]).csv(sep: "\t", decompress: true)
             assert tab_out.rowCount == tab_in.rowCount
             assert tab_out.columnCount == tab_in.columnCount + 1
             // Output should have expected headers
@@ -98,8 +99,9 @@ nextflow_workflow {
                 assert r["prim_align_dup_count"] == tab_out.columns["prim_align_dup_exemplar"].count(exemplar) // Dup counts should match exemplar assignments
             }
             assert tab_meta.columns["prim_align_dup_count"].sum() == tab_out.rowCount
-            // Similarity duplicate output: structure only, value correctness tested at module level
-            def tab_sim = path(workflow.out.sim_dup[0][1]).csv(sep: "\t", decompress: true)
+            // The subworkflow's hits output carries both marking passes; value correctness
+            // for the similarity pass is tested at module level
+            def tab_sim = path(workflow.out.hits[0][1]).csv(sep: "\t", decompress: true)
             assert tab_sim.rowCount == tab_in.rowCount
             assert tab_sim.columnCount == tab_in.columnCount + 3
             assert "sim_dup_exemplar" in tab_sim.columnNames
@@ -127,8 +129,8 @@ nextflow_workflow {
             assert workflow.success
             // Output should have expected dimensions
             def tab_in = path(workflow.out.test_in[0][1]).csv(sep: "\t")
-            def tab_out = path(workflow.out.dup[0][1]).csv(sep: "\t", decompress: true)
-            def tab_meta = path(workflow.out.dup[0][2]).csv(sep: "\t", decompress: true)
+            def tab_out = path(workflow.out.test_align_marked[0][1]).csv(sep: "\t", decompress: true)
+            def tab_meta = path(workflow.out.stats[0][1]).csv(sep: "\t", decompress: true)
             assert tab_out.rowCount == tab_in.rowCount
             assert tab_out.columnCount == tab_in.columnCount + 1
             // Output should have expected headers
@@ -148,8 +150,9 @@ nextflow_workflow {
                 assert r["prim_align_dup_count"] == tab_out.columns["prim_align_dup_exemplar"].count(exemplar) // Dup counts should match exemplar assignments
             }
             assert tab_meta.columns["prim_align_dup_count"].sum() == tab_out.rowCount
-            // Similarity duplicate output: structure only, value correctness tested at module level
-            def tab_sim = path(workflow.out.sim_dup[0][1]).csv(sep: "\t", decompress: true)
+            // The subworkflow's hits output carries both marking passes; value correctness
+            // for the similarity pass is tested at module level
+            def tab_sim = path(workflow.out.hits[0][1]).csv(sep: "\t", decompress: true)
             assert tab_sim.rowCount == tab_in.rowCount
             assert tab_sim.columnCount == tab_in.columnCount + 3
             assert "sim_dup_exemplar" in tab_sim.columnNames

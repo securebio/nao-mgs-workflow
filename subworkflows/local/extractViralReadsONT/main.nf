@@ -44,7 +44,7 @@ workflow EXTRACT_VIRAL_READS_ONT {
                               "aligner_length_normalized_score_mean_artificial", "query_len", "query_seq",  
                                "query_qual"]
         col_keep_add_prefix = ["genome_id_all", "taxid_all", "best_alignment_score", "edit_distance",  
-                               "ref_start", "query_rc"]
+                               "ref_start", "ref_start_unclipped", "ref_end_unclipped", "query_rc"]
         // Filter reads by length and quality scores
         filtered_ch = FILTLONG(reads_ch, 50, 15000, 90)
         // Mask non-complex read sections

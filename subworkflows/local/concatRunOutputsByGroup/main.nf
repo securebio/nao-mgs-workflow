@@ -12,6 +12,8 @@ include { CONCAT_BY_GROUP as CONCAT_QC_BASIC_STATS_CLEANED_BY_GROUP } from "../c
 include { CONCAT_BY_GROUP as CONCAT_QC_BASIC_STATS_RAW_BY_GROUP } from "../concatByGroup"
 include { CONCAT_BY_GROUP as CONCAT_QC_LENGTH_STATS_CLEANED_BY_GROUP } from "../concatByGroup"
 include { CONCAT_BY_GROUP as CONCAT_QC_LENGTH_STATS_RAW_BY_GROUP } from "../concatByGroup"
+include { CONCAT_BY_GROUP as CONCAT_QC_OVERREPRESENTED_CLEANED_BY_GROUP } from "../concatByGroup"
+include { CONCAT_BY_GROUP as CONCAT_QC_OVERREPRESENTED_RAW_BY_GROUP } from "../concatByGroup"
 include { CONCAT_BY_GROUP as CONCAT_QC_QUALITY_BASE_STATS_CLEANED_BY_GROUP } from "../concatByGroup"
 include { CONCAT_BY_GROUP as CONCAT_QC_QUALITY_BASE_STATS_RAW_BY_GROUP } from "../concatByGroup"
 include { CONCAT_BY_GROUP as CONCAT_QC_QUALITY_SEQUENCE_STATS_CLEANED_BY_GROUP } from "../concatByGroup"
@@ -36,6 +38,8 @@ workflow CONCAT_RUN_OUTPUTS_BY_GROUP {
         qc_basic_stats_raw_ch                = CONCAT_QC_BASIC_STATS_RAW_BY_GROUP(files, "qc_basic_stats_raw.tsv", "qc_basic_stats_raw").groups
         qc_length_stats_cleaned_ch           = CONCAT_QC_LENGTH_STATS_CLEANED_BY_GROUP(files, "qc_length_stats_cleaned.tsv", "qc_length_stats_cleaned").groups
         qc_length_stats_raw_ch               = CONCAT_QC_LENGTH_STATS_RAW_BY_GROUP(files, "qc_length_stats_raw.tsv", "qc_length_stats_raw").groups
+        qc_overrepresented_cleaned_ch        = CONCAT_QC_OVERREPRESENTED_CLEANED_BY_GROUP(files, "qc_overrepresented_cleaned.tsv", "qc_overrepresented_cleaned").groups
+        qc_overrepresented_raw_ch            = CONCAT_QC_OVERREPRESENTED_RAW_BY_GROUP(files, "qc_overrepresented_raw.tsv", "qc_overrepresented_raw").groups
         qc_quality_base_stats_cleaned_ch     = CONCAT_QC_QUALITY_BASE_STATS_CLEANED_BY_GROUP(files, "qc_quality_base_stats_cleaned.tsv", "qc_quality_base_stats_cleaned").groups
         qc_quality_base_stats_raw_ch         = CONCAT_QC_QUALITY_BASE_STATS_RAW_BY_GROUP(files, "qc_quality_base_stats_raw.tsv", "qc_quality_base_stats_raw").groups
         qc_quality_sequence_stats_cleaned_ch = CONCAT_QC_QUALITY_SEQUENCE_STATS_CLEANED_BY_GROUP(files, "qc_quality_sequence_stats_cleaned.tsv", "qc_quality_sequence_stats_cleaned").groups
@@ -48,6 +52,7 @@ workflow CONCAT_RUN_OUTPUTS_BY_GROUP {
             qc_adapter_stats_cleaned_ch, qc_adapter_stats_raw_ch,
             qc_basic_stats_cleaned_ch, qc_basic_stats_raw_ch,
             qc_length_stats_cleaned_ch, qc_length_stats_raw_ch,
+            qc_overrepresented_cleaned_ch, qc_overrepresented_raw_ch,
             qc_quality_base_stats_cleaned_ch, qc_quality_base_stats_raw_ch,
             qc_quality_sequence_stats_cleaned_ch, qc_quality_sequence_stats_raw_ch,
         )

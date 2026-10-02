@@ -9,7 +9,9 @@ process MULTIQC_LABELED {
         path("multiqc_report.html"), emit: report
         tuple val(stage_label), val(sample), path("multiqc_data"), emit: data
     script:
+        // Publish the 100 most frequent overrepresented sequences, ranked by
+        // total occurrences.
         """
-        multiqc .
+        multiqc --cl-config 'fastqc_config: { top_overrepresented_sequences: 100, top_overrepresented_sequences_by: total }' .
         """
 }

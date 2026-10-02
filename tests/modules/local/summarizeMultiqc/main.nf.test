@@ -115,6 +115,11 @@ nextflow_process {
             def tsv_qseqs_headers = tsv_qseqs[0].split("\t")
             assert tsv_qseqs.size() == 1
             assert tsv_qseqs_headers.size() == 5
+            // MultiQC omits the overrepresented-sequences table entirely for an
+            // empty input, so the output should be header-only (index 6)
+            def tsv_overrep = path(process.out[0][0][6]).linesGzip
+            assert tsv_overrep.size() == 1
+            assert tsv_overrep[0].split("\t") == ["sequence", "n_occurrences", "pc_reads", "stage", "sample"]
         }
     }
 
@@ -184,6 +189,8 @@ nextflow_process {
             validateTsvStructure(tsv_qseqs, 5, stage, sample)
             def tsv_lengths = process.out[0][0][5]
             validateTsvStructure(tsv_lengths, 5, stage, sample)
+            def tsv_overrep = process.out[0][0][6]
+            validateTsvStructure(tsv_overrep, 5, stage, sample)
         }
     }
 
@@ -263,6 +270,8 @@ nextflow_process {
             validateTsvStructure(tsv_qseqs, 5, stage, sample)
             def tsv_lengths = process.out[0][0][5]
             validateTsvStructure(tsv_lengths, 5, stage, sample)
+            def tsv_overrep = process.out[0][0][6]
+            validateTsvStructure(tsv_overrep, 5, stage, sample)
         }
     }
 
@@ -353,6 +362,8 @@ nextflow_process {
                 assert columns["stage"][0] == stage
                 assert columns["sample"][0] == sample
             }
+            def tsv_overrep = path(process.out[0][0][6]).linesGzip
+            assert tsv_overrep[0].split("\t") == ["sequence", "n_occurrences", "pc_reads", "stage", "sample"]
         }
     }
 
@@ -416,6 +427,114 @@ nextflow_process {
                 assert columns["sample"][0] == sample
                 assert columns["n_sequences"][0] == fastq_in.readNames.size()
                 assert columns["length"][0] == fastq_in.sequences[0].length()
+            }
+        }
+    }
+
+    test("Should extract overrepresented sequences with counts and percentages") {
+        tag "expect_success"
+        tag "overrepresented"
+        config "tests/configs/run.config"
+        setup {
+            run("FASTQC_LABELED") {
+                script "modules/local/fastqc/main.nf"
+                process {
+                    '''
+                    input[0] = Channel.of("test")
+                        | combine(Channel.of("${projectDir}/test-data/toy-data/test-overrepresented.fastq"))
+                    '''
+                }
+            }
+            run("MULTIQC_LABELED") {
+                script "modules/local/multiqc/main.nf"
+                process {
+                    '''
+                    input[0] = "test"
+                    input[1] = FASTQC_LABELED.out.zip
+                    '''
+                }
+            }
+        }
+        when {
+            params {}
+            process {
+                """
+                input[0] = MULTIQC_LABELED.out.data
+                input[1] = false
+                """
+            }
+        }
+        then {
+            assert process.success
+            // test-overrepresented.fastq holds 10 reads of 51bp: one sequence
+            // 4x, a second 3x, a third and fourth sharing their first 50bp 1x
+            // each (2x combined once FASTQC truncates to 50bp), and a fifth 1x.
+            def tsv_overrep = path(process.out[0][0][6]).csv(sep: "\t", decompress: true)
+            with (tsv_overrep) {
+                assert columnCount == 5
+                assert rowCount == 4
+                // Rows are ordered by descending occurrence count
+                assert columns["n_occurrences"] == [4, 3, 2, 1]
+                assert columns["pc_reads"] == [40.0, 30.0, 20.0, 10.0]
+                // FASTQC truncates reads longer than 50bp to their first 50bp
+                assert columns["sequence"].every { it.length() == 50 }
+                assert columns["sequence"].every { it ==~ /[ACGTN]+/ }
+                assert columns["sequence"].unique().size() == 4
+                assert columns["stage"].every { it == "test" }
+                assert columns["sample"].every { it == "test" }
+            }
+        }
+    }
+
+    test("Should publish at most the 100 most frequent overrepresented sequences") {
+        tag "expect_success"
+        tag "overrepresented"
+        config "tests/configs/run.config"
+        setup {
+            run("FASTQC_LABELED") {
+                script "modules/local/fastqc/main.nf"
+                process {
+                    '''
+                    input[0] = Channel.of("test")
+                        | combine(Channel.of("${projectDir}/test-data/toy-data/test-overrepresented-cap.fastq"))
+                    '''
+                }
+            }
+            run("MULTIQC_LABELED") {
+                script "modules/local/multiqc/main.nf"
+                process {
+                    '''
+                    input[0] = "test"
+                    input[1] = FASTQC_LABELED.out.zip
+                    '''
+                }
+            }
+        }
+        when {
+            params {}
+            process {
+                """
+                input[0] = MULTIQC_LABELED.out.data
+                input[1] = false
+                """
+            }
+        }
+        then {
+            assert process.success
+            // test-overrepresented-cap.fastq holds 250 reads of 10bp, of which
+            // 100 sequences appear 2x (0.8%) and 50 appear 1x (0.4%). All 150
+            // clear FASTQC's 0.1% reporting threshold, so this exercises the
+            // published cap of 100 that MULTIQC_LABELED configures.
+            def tsv_overrep = path(process.out[0][0][6]).csv(sep: "\t", decompress: true)
+            with (tsv_overrep) {
+                // Exactly the 100 most frequent are kept...
+                assert rowCount == 100
+                // ...so none of the 50 lower-ranked 1x sequences survive the cap
+                assert columns["n_occurrences"].every { it == 2 }
+                assert columns["pc_reads"].every { it == 0.8 }
+                assert columns["sequence"].unique().size() == 100
+                // Reads at or below 50bp are reported whole, without truncation
+                assert columns["sequence"].every { it.length() == 10 }
             }
         }
     }

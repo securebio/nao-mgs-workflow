@@ -1,4 +1,4 @@
-seq_id	prim_align_genome_id_all	prim_align_ref_start	prim_align_ref_start_rev	query_qual	query_qual_rev
-test_0	test_gid	1	100	JJJJJJ	JJJJJJ
-test_1	test_gid	2	99	IIIIII	IIIIII
-test_2	test_gid	50	150	HHHHHH	HHHHHH
+seq_id	prim_align_genome_id_all	prim_align_ref_start	prim_align_ref_start_rev	prim_align_ref_start_unclipped	prim_align_ref_start_unclipped_rev	prim_align_ref_end_unclipped	prim_align_ref_end_unclipped_rev	prim_align_query_rc	prim_align_query_rc_rev	query_qual	query_qual_rev
+test_0	test_gid	1	100	1	100	50	149	False	True	JJJJJJ	JJJJJJ
+test_1	test_gid	2	99	2	99	51	148	False	True	IIIIII	IIIIII
+test_2	test_gid	50	150	50	150	99	199	False	True	HHHHHH	HHHHHH

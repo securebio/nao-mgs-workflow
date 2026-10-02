@@ -49,19 +49,24 @@ workflow MAKE_VIRUS_GENOME_DB {
         //    Nextflow can fan out tasks.
         chunk_ch = filter_ch.accession_chunks.flatten()
         download_ch = DOWNLOAD_VIRAL_GENOMES(chunk_ch, assembly_source, other_params.datasets_download_extra_args, 5)
+        // Gather each output only once every chunk's download has arrived: an ignored download
+        // would otherwise build the database silently missing that chunk
+        n_chunks_ch = chunk_ch.count()
+        all_maps_ch = gatherChunks(download_ch.accession_map, n_chunks_ch)
+        all_genomes_ch = gatherChunks(download_ch.genomes, n_chunks_ch)
         // 4. Merge the per-chunk maps deterministically, then join with the filtered metadata to
         //    add species_taxid and expand each assembly to one row per genome_id.
-        merged_map_ch = download_ch.accession_map.collectFile(
-            name: "accession_map.tsv", keepHeader: true, skip: 1, sort: { it.name }
+        merged_map_ch = all_maps_ch.flatten().collectFile(
+            name: "accession_map.tsv", keepHeader: true, skip: 1, sort: { f -> f.name }
         )
         gid_ch = PREPARE_VIRAL_METADATA(filter_ch.db, virus_db, merged_map_ch, "virus-genome").metadata
         // 5. Concatenate matching genomes.
-        genome_concat_ch = CONCATENATE_GENOME_FASTA(download_ch.genomes.collect())
+        genome_concat_ch = CONCATENATE_GENOME_FASTA(all_genomes_ch)
         // 6. Filter to remove undesired/contaminated genomes by sequence-header
         //    pattern (genome_patterns_exclude only matchable post-download).
         filter_genome_ch = FILTER_GENOME_FASTA(genome_concat_ch, other_params.genome_patterns_exclude, "virus-genomes-filtered")
         // 7. Mask to remove adapters, low-entropy regions, and polyX.
-        mask_params = other_params + [name_pattern: "virus-genomes"]
+        mask_params = other_params.subMap(["k", "hdist", "entropy", "polyx_len"]) + [name_pattern: "virus-genomes"]
         mask_ch = MASK_GENOME_FASTA(filter_genome_ch, other_params.adapters, mask_params)
         published_fasta_ch = mask_ch.masked
         // 8. Filter genome metadata down to one row per sequence present in the genome FASTA.
@@ -70,4 +75,12 @@ workflow MAKE_VIRUS_GENOME_DB {
         fasta = published_fasta_ch
         metadata = metadata_ch
         raw_metadata = raw_metadata_ch  // pre-filter assembly metadata, for benchmarking
+}
+
+// Gather every per-chunk output into one list, emitted only once all `n_chunks_ch` chunks arrive
+def gatherChunks(ch, n_chunks_ch) {
+    return ch.combine(n_chunks_ch)
+        .map { files, n -> [groupKey("chunks", n as int), files] }
+        .groupTuple()
+        .map { _key, files -> files.flatten() }
 }

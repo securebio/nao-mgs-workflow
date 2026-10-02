@@ -29,7 +29,8 @@ FROM alpine:3.21
 # grep:   GNU grep with PCRE support (-oP) used in Nextflow modules
 # procps: Nextflow resource monitoring
 # pigz:   parallel (de)compression for use by module scripts
-RUN apk add --no-cache bash grep procps pigz
+# libcrypto3/libssl3: minimum version fixing CVE-2026-75804 and CVE-2026-84782
+RUN apk add --no-cache bash grep procps pigz 'libcrypto3>=3.3.7-r2' 'libssl3>=3.3.7-r2'
 
 # Copy compiled binaries from builder
 # Add additional binaries here as tools are added to the workspace

@@ -1,24 +1,30 @@
-seq_id	prim_align_genome_id_all	prim_align_ref_start	prim_align_ref_start_rev	query_qual	query_qual_rev	exemplar_exp_0	exemplar_exp_1	exemplar_exp_2	dup_comment
-grp_1_0	test_gid_1	1	100	IIIIII	IIIIII	grp_1_1	grp_1_1	grp_1_1	Exact duplicate with grp_1_1
-grp_1_1	test_gid_1	1	100	JJJJJJ	JJJJJJ	grp_1_1	grp_1_1	grp_1_1	Group 1 exemplar
-grp_1_2	test_gid_1	100	1	JJJJJJ	JJJJJJ	grp_1_1	grp_1_1	grp_1_1	RC duplicate with grp_1_1
-grp_1_3	test_gid_1	100	1	IIIIII	IIIIII	grp_1_1	grp_1_1	grp_1_1	RC duplicate with grp_1_1
-grp_2_0	test_gid_2	50	150	JJJJJJ	JJJJJJ	grp_2_0	grp_2_0	grp_2_0	Group 2 exemplar
-grp_2_1	test_gid_2	150	50	JJJJJJ	JJJJJJ	grp_2_0	grp_2_0	grp_2_0	RC duplicate with grp_2_0
-grp_2_2	test_gid_2	49	151	JJJJJJ	JJJJJJ	grp_2_2	grp_2_0	grp_2_0	1-off duplicate with grp_2_0
-grp_2_3	test_gid_2	151	49	JJJJJJ	JJJJJJ	grp_2_2	grp_2_0	grp_2_0	RC 1-off duplicate with grp_2_0
-grp_3_0	test_gid_3	200	300	JJJJJJ	JJJJJJ	grp_3_0	grp_3_0	grp_3_0	Group 3 exemplar
-grp_3_1	test_gid_3	202	302	JJJJJJ	JJJJJJ	grp_3_1	grp_3_1	grp_3_0	2-off duplicate with grp_3_0
-grp_3_2	test_gid_3	302	202	JJJJJJ	JJJJJJ	grp_3_1	grp_3_1	grp_3_0	RC 2-off duplicate with grp_3_0
-grp_4_0	test_gid_4	500	700	JJJJJJ	JJJJJJ	grp_4_0	grp_4_0	grp_4_0	Group 4 exemplar
-grp_4_1	test_gid_4	497	697	JJJJJJ	JJJJJJ	grp_4_1	grp_4_1	grp_4_1	3-off duplicate with grp_4_0
-grp_4_2	test_gid_4	697	497	JJJJJJ	JJJJJJ	grp_4_1	grp_4_1	grp_4_1	RC 3-off duplicate with grp_4_0
-grp_5_0	test_gid_5	250	300	JJJJJJ	JJJJJJ	grp_5_0	grp_5_0	grp_5_0	Group 5 exemplar
-grp_5_1	test_gid_5	250	300	JJJJJJ	JJJJJJ	grp_5_0	grp_5_0	grp_5_0	Exact duplicate with grp_5_0
-grp_5_2	test_gid_5	150	500	JJJJJJ	JJJJJJ	grp_5_2	grp_5_2	grp_5_2	Non-duplicate on same reference
-grp_6_0	test_gid_6	200	300	JJJJJJ	JJJJJJ	grp_6_0	grp_6_0	grp_6_0	Group 6 singleton exemplar
-grp_7_0	test_gid_1	1	NA	JJJJJJ	JJJJJJ	grp_7_0	grp_7_0	grp_7_0	Group 7 singleton with NA and gid match to 1
-grp_8_0	test_gid_8	100	NA	JJJJJJ	JJJJJJ	grp_8_0	grp_8_0	grp_8_0	Group 8 exemplar
-grp_8_1	test_gid_8	100	NA	JJJJJJ	JJJJJJ	grp_8_0	grp_8_0	grp_8_0	Exact duplicate with grp_8_0 with NA
-grp_8_2	test_gid_8	NA	100	JJJJJJ	JJJJJJ	grp_8_0	grp_8_0	grp_8_0	RC duplicate with grp_8_0 with NA
-grp_8_3	test_gid_8	101	NA	JJJJJJ	JJJJJJ	grp_8_3	grp_8_0	grp_8_0	1-off duplicate with grp_8_0 with NA
+seq_id	prim_align_genome_id_all	prim_align_ref_start	prim_align_ref_start_rev	prim_align_ref_start_unclipped	prim_align_ref_start_unclipped_rev	prim_align_ref_end_unclipped	prim_align_ref_end_unclipped_rev	prim_align_query_rc	prim_align_query_rc_rev	query_qual	query_qual_rev	exemplar_exp_0	exemplar_exp_1	exemplar_exp_2	dup_comment
+grp_1_0	test_gid_1	1	100	1	100	50	149	False	True	IIIIII	IIIIII	grp_1_1	grp_1_1	grp_1_1	Exact duplicate with grp_1_1
+grp_1_1	test_gid_1	1	100	1	100	50	149	False	True	JJJJJJ	JJJJJJ	grp_1_1	grp_1_1	grp_1_1	Group 1 exemplar
+grp_1_2	test_gid_1	100	1	100	1	149	50	True	False	JJJJJJ	JJJJJJ	grp_1_1	grp_1_1	grp_1_1	RC duplicate with grp_1_1
+grp_1_3	test_gid_1	100	1	100	1	149	50	True	False	IIIIII	IIIIII	grp_1_1	grp_1_1	grp_1_1	RC duplicate with grp_1_1
+grp_2_0	test_gid_2	50	150	50	150	99	199	False	True	JJJJJJ	JJJJJJ	grp_2_0	grp_2_0	grp_2_0	Group 2 exemplar
+grp_2_1	test_gid_2	150	50	150	50	199	99	True	False	JJJJJJ	JJJJJJ	grp_2_0	grp_2_0	grp_2_0	RC duplicate with grp_2_0
+grp_2_2	test_gid_2	49	151	49	151	98	200	False	True	JJJJJJ	JJJJJJ	grp_2_2	grp_2_0	grp_2_0	1-off duplicate with grp_2_0
+grp_2_3	test_gid_2	151	49	151	49	200	98	True	False	JJJJJJ	JJJJJJ	grp_2_2	grp_2_0	grp_2_0	RC 1-off duplicate with grp_2_0
+grp_3_0	test_gid_3	200	300	200	300	249	349	False	True	JJJJJJ	JJJJJJ	grp_3_0	grp_3_0	grp_3_0	Group 3 exemplar
+grp_3_1	test_gid_3	202	302	202	302	251	351	False	True	JJJJJJ	JJJJJJ	grp_3_1	grp_3_1	grp_3_0	2-off duplicate with grp_3_0
+grp_3_2	test_gid_3	302	202	302	202	351	251	True	False	JJJJJJ	JJJJJJ	grp_3_1	grp_3_1	grp_3_0	RC 2-off duplicate with grp_3_0
+grp_4_0	test_gid_4	500	700	500	700	549	749	False	True	JJJJJJ	JJJJJJ	grp_4_0	grp_4_0	grp_4_0	Group 4 exemplar
+grp_4_1	test_gid_4	497	697	497	697	546	746	False	True	JJJJJJ	JJJJJJ	grp_4_1	grp_4_1	grp_4_1	3-off duplicate with grp_4_0
+grp_4_2	test_gid_4	697	497	697	497	746	546	True	False	JJJJJJ	JJJJJJ	grp_4_1	grp_4_1	grp_4_1	RC 3-off duplicate with grp_4_0
+grp_5_0	test_gid_5	250	300	250	300	299	349	False	True	JJJJJJ	JJJJJJ	grp_5_0	grp_5_0	grp_5_0	Group 5 exemplar
+grp_5_1	test_gid_5	250	300	250	300	299	349	False	True	JJJJJJ	JJJJJJ	grp_5_0	grp_5_0	grp_5_0	Exact duplicate with grp_5_0
+grp_5_2	test_gid_5	150	500	150	500	199	549	False	True	JJJJJJ	JJJJJJ	grp_5_2	grp_5_2	grp_5_2	Non-duplicate on same reference
+grp_6_0	test_gid_6	200	300	200	300	249	349	False	True	JJJJJJ	JJJJJJ	grp_6_0	grp_6_0	grp_6_0	Group 6 singleton exemplar
+grp_7_0	test_gid_1	1	NA	1	NA	50	NA	False	NA	JJJJJJ	JJJJJJ	grp_7_0	grp_7_0	grp_7_0	Group 7 singleton with NA and gid match to 1
+grp_8_0	test_gid_8	100	NA	100	NA	149	NA	False	NA	JJJJJJ	JJJJJJ	grp_8_0	grp_8_0	grp_8_0	Group 8 exemplar
+grp_8_1	test_gid_8	100	NA	100	NA	149	NA	False	NA	JJJJJJ	JJJJJJ	grp_8_0	grp_8_0	grp_8_0	Exact duplicate with grp_8_0 with NA
+grp_8_2	test_gid_8	NA	100	NA	100	NA	149	NA	True	JJJJJJ	JJJJJJ	grp_8_2	grp_8_2	grp_8_2	Mate 2 aligned on the opposite strand to grp_8_0
+grp_8_3	test_gid_8	101	NA	101	NA	150	NA	False	NA	JJJJJJ	JJJJJJ	grp_8_3	grp_8_0	grp_8_0	1-off duplicate with grp_8_0 with NA
+grp_9_0	test_gid_9	500	700	500	700	549	749	False	True	JJJJJJ	JJJJJJ	grp_9_0	grp_9_0	grp_9_0	Group 9 exemplar: an FR pair
+grp_9_1	test_gid_9	500	700	500	700	549	749	False	False	JJJJJJ	JJJJJJ	grp_9_1	grp_9_1	grp_9_1	Same coordinates as grp_9_0 with both mates forward
+grp_10_0	test_gid_10	400	400	400	400	439	439	False	True	JJJJJJ	JJJJJJ	grp_10_0	grp_10_0	grp_10_0	Group 10 exemplar: a 40 bp fragment, shorter than the read
+grp_10_1	test_gid_10	400	400	400	400	429	429	False	True	JJJJJJ	JJJJJJ	grp_10_1	grp_10_1	grp_10_1	A 30 bp fragment reporting grp_10_0's two starts
+grp_11_0	test_gid_11	600	700	600	700	649	749	False	True	JJJJJJ	JJJJJJ	grp_11_0	grp_11_0	grp_11_0	Group 11 exemplar: nothing clipped
+grp_11_1	test_gid_11	607	700	600	700	649	749	False	True	JJJJJJ	JJJJJJ	grp_11_0	grp_11_0	grp_11_0	Same molecule with 7 bases clipped off mate 1's leading end

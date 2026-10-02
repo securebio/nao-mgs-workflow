@@ -1,7 +1,7 @@
 {
   "$schema": "https://datapackage.org/profiles/2.0/tableschema.json",
   "title": "Validated Viral Hits",
-  "description": "Per-read viral hit assignments with post-hoc BLAST validation results, as produced by the DOWNSTREAM workflow. Each row represents a single putative viral read. The `aligner_*` columns are inherited from the RUN workflow, where reads are aligned by Bowtie2 (short-read) or Minimap2 (ONT) and then processed into per-read summary statistics; LCA and score statistics are calculated post-hoc across all alignments for each read. Reference sequences are partitioned into three subsets: natural (non-artificial NCBI sequences, unsuffixed columns), artificial (descendants of NCBI taxid 81077, i.e. synthetic constructs and vectors, `_artificial` suffix), and combined (both natural and artificial, `_combined` suffix). The `prim_align_*` columns contain data extracted from the primary alignment record (not secondary or supplementary) in the aligner SAM output. For validation, reads are grouped by `selected_taxid`, downsampled to at most `params.validation_n_sample` reads per group, and the retained reads are BLASTed against the NCBI core_nt database; the `validation_*` columns therefore describe each read's own alignments and are NA for reads that were not sampled or produced no alignment, as recorded in `validation_status`. Produced for both short-read and ONT platforms; paired-end-specific columns (not marked `required`) contain NA values for ONT and appear at the end of the ONT output rather than in schema order.",
+  "description": "Per-read viral hit assignments with post-hoc BLAST validation results, as produced by the DOWNSTREAM workflow. Each row represents a single putative viral read. The `aligner_*` columns are inherited from the RUN workflow, where reads are aligned by Bowtie2 (short-read) or Minimap2 (ONT) and then processed into per-read summary statistics; LCA and score statistics are calculated post-hoc across all alignments for each read. Reference sequences are partitioned into three subsets: natural (non-artificial NCBI sequences, unsuffixed columns), artificial (descendants of NCBI taxid 81077, i.e. synthetic constructs and vectors, `_artificial` suffix), and combined (both natural and artificial, `_combined` suffix). The `prim_align_*` columns contain data extracted from the primary alignment record (not secondary or supplementary) in the aligner SAM output. Short-read data is duplicate-marked in two passes: first by alignment coordinates (`prim_align_dup_exemplar`), then by sequence similarity among the reads that survived (`sim_dup_exemplar`, `sim_dup_group_size`); a read that is its own exemplar in both is distinct under both criteria. For validation, reads are grouped by `selected_taxid`, downsampled to at most `params.validation_n_sample` reads per group, and the retained reads are BLASTed against the NCBI core_nt database; the `validation_*` columns therefore describe each read's own alignments and are NA for reads that were not sampled or produced no alignment, as recorded in `validation_status`. Produced for both short-read and ONT platforms; the paired-end-specific columns contain NA values for ONT, where they are appended after the other per-read columns rather than sitting in schema order. Column order is not part of the contract: validation matches the field set, not its arrangement.",
   "fieldsMatch": "equal",
   "missingValues": ["NA"],
   "primaryKey": ["group", "seq_id"],
@@ -215,7 +215,7 @@
     {
       "name": "prim_align_fragment_length",
       "title": "Fragment Length",
-      "description": "Inferred fragment length from the primary alignment (distance between outer edges of the read pair alignment). Only present for paired-end (short-read) data; NA for ONT.",
+      "description": "Inferred fragment length from the primary alignment: Bowtie2's TLEN, the distance between the pair's outer ends counting soft-clipped bases. NA when the mates align to different genomes. Only present for paired-end (short-read) data; NA for ONT.",
       "type": "integer",
       "constraints": {
         "minimum": 0
@@ -267,7 +267,7 @@
     {
       "name": "prim_align_ref_start",
       "title": "Reference Start Position",
-      "description": "0-based start position of the alignment on the reference genome. For paired-end data, this is the forward read position.",
+      "description": "0-based start position of the alignment on the reference genome, excluding soft-clipped bases. For paired-end data, this is mate 1's position.",
       "type": "integer",
       "constraints": {
         "required": true,
@@ -278,7 +278,7 @@
     {
       "name": "prim_align_ref_start_rev",
       "title": "Reference Start Position (Reverse)",
-      "description": "0-based start position of the reverse read alignment on the reference genome. Only present for paired-end (short-read) data; NA for ONT.",
+      "description": "0-based start position of mate 2's alignment on the reference genome, excluding soft-clipped bases. Only present for paired-end (short-read) data; NA for ONT.",
       "type": "integer",
       "constraints": {
         "minimum": 0
@@ -286,9 +286,37 @@
       "example": 921
     },
     {
+      "name": "prim_align_ref_start_unclipped",
+      "title": "Unclipped Reference Start Position",
+      "description": "0-based position of the first reference base the read covers, counting soft- and hard-clipped bases as if they had aligned; `prim_align_ref_start` minus the alignment's leading clip. For paired-end data, this is mate 1's position. Negative where a clip overhangs the start of the reference.",
+      "type": "integer",
+      "example": 5312
+    },
+    {
+      "name": "prim_align_ref_start_unclipped_rev",
+      "title": "Unclipped Reference Start Position (Mate 2)",
+      "description": "0-based position of the first reference base mate 2 covers, counting clipped bases as if they had aligned. Negative where a clip overhangs the start of the reference. Only present for paired-end (short-read) data; NA for ONT.",
+      "type": "integer",
+      "example": 5312
+    },
+    {
+      "name": "prim_align_ref_end_unclipped",
+      "title": "Unclipped Reference End Position",
+      "description": "0-based position of the last reference base the read covers, counting clipped bases as if they had aligned. Past the end of the reference where a clip overhangs it. For paired-end data, this is mate 1's position.",
+      "type": "integer",
+      "example": 5461
+    },
+    {
+      "name": "prim_align_ref_end_unclipped_rev",
+      "title": "Unclipped Reference End Position (Mate 2)",
+      "description": "0-based position of the last reference base mate 2 covers, counting clipped bases as if they had aligned. Past the end of the reference where a clip overhangs it. Only present for paired-end (short-read) data; NA for ONT.",
+      "type": "integer",
+      "example": 5461
+    },
+    {
       "name": "prim_align_query_rc",
       "title": "Query Reverse Complement",
-      "description": "Whether the read was reverse-complemented in the primary alignment. For paired-end data, this is the forward read flag.",
+      "description": "Whether the read aligned to the reverse strand, and so was reverse-complemented in the primary alignment. For paired-end data, this is mate 1's flag.",
       "type": "boolean",
       "constraints": {
         "required": true
@@ -298,7 +326,7 @@
     {
       "name": "prim_align_query_rc_rev",
       "title": "Query Reverse Complement (Reverse)",
-      "description": "Whether the reverse read was reverse-complemented in the primary alignment. Only present for paired-end (short-read) data; NA for ONT.",
+      "description": "Whether mate 2 aligned to the reverse strand. Only present for paired-end (short-read) data; NA for ONT.",
       "type": "boolean",
       "example": true
     },
@@ -332,6 +360,26 @@
         "minLength": 1
       },
       "example": "NC_059681.1_0_0"
+    },
+    {
+      "name": "sim_dup_exemplar",
+      "title": "Similarity Duplicate Exemplar Read ID",
+      "description": "Read ID of the exemplar selected to represent this read's similarity-based duplicate group. Similarity marking runs after alignment-based marking and considers only the reads that survived it, clustering their sequences by minimizers (via nao-dedup). NA for reads that are already alignment duplicates (seq_id != prim_align_dup_exemplar), which similarity marking never examines. A read that is its own exemplar (seq_id == sim_dup_exemplar) survived both passes. Only present for short-read data; NA for ONT.",
+      "type": "string",
+      "constraints": {
+        "minLength": 1
+      },
+      "example": "NC_059681.1_0_0"
+    },
+    {
+      "name": "sim_dup_group_size",
+      "title": "Similarity Duplicate Group Size",
+      "description": "Number of reads this similarity exemplar represents, before either deduplication pass: the members of its similarity group plus each of those members' alignment duplicates. Populated only on the surviving exemplar; NA on every other read, including alignment duplicates and reads that are themselves similarity duplicates. Only present for short-read data; NA for ONT.",
+      "type": "integer",
+      "constraints": {
+        "minimum": 1
+      },
+      "example": 3
     },
     {
       "name": "selected_taxid",

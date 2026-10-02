@@ -35,9 +35,8 @@ package.json
 uv.lock
 tmp/**
 
-# Post-processing build artifacts
-post-processing/bin/
-post-processing/obj/
-
 .DS_Store
 *.egg-info/*
+
+# Scratch space for local tooling (e.g. review-loop state)
+.tmp/
