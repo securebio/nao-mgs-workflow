@@ -23,7 +23,7 @@ RUN cargo install nucleaze --git https://github.com/jackdougle/nucleaze.git --re
 # Alpine eliminates Debian glibc/zlib CVEs; musl + panic=abort makes Rust
 # binaries fully static, so no libgcc runtime dependency is needed.
 # =============================================================================
-FROM alpine:3.21@sha256:ce64758a109eb420d874a118f87920e625e12d3634e03b4a5573fd9f6e5d3507
+FROM alpine:3.21
 
 # bash:   Nextflow script blocks default to /bin/bash
 # grep:   GNU grep with PCRE support (-oP) used in Nextflow modules
