@@ -66,6 +66,7 @@ from annotate_viral_hosts import (
     annotate_virus_db,
     annotate_virus_db_single,
     build_virus_tree,
+    check_hard_excludes_not_retired,
     check_infection,
     check_merged_taxids,
     exclude_infections,
@@ -1577,7 +1578,7 @@ class TestGetVirusHostMapping:
         tsv_file.write_text(tsv_content)
 
         # Act
-        result = get_virus_host_mapping(str(tsv_file))
+        result = get_virus_host_mapping(str(tsv_file), {})
 
         # Assert
         assert result["1"] == {"100", "101"}
@@ -1592,7 +1593,7 @@ class TestGetVirusHostMapping:
         tsv_file.write_text(tsv_content)
 
         # Act
-        result = get_virus_host_mapping(str(tsv_file))
+        result = get_virus_host_mapping(str(tsv_file), {})
 
         # Assert
         assert result["1"] == {"100", "101"}  # Duplicates removed
@@ -1606,7 +1607,7 @@ class TestGetVirusHostMapping:
         tsv_file.write_text(tsv_content)
 
         # Act
-        result = get_virus_host_mapping(str(tsv_file))
+        result = get_virus_host_mapping(str(tsv_file), {})
 
         # Assert
         assert result == {}
@@ -1652,6 +1653,20 @@ class TestCheckMergedTaxids:
         # 999 is no node in the taxonomy, so nothing could match it
         with pytest.raises(ValueError, match="replacement taxid"):
             check_merged_taxids({"100": "999"}, {"1", "300"})
+
+    def test_message_says_when_truncated(self) -> None:
+        merged = {str(t): "1" for t in range(100, 112)}
+        with pytest.raises(ValueError, match=r"\(first 10 of 12\)"):
+            check_merged_taxids(merged, {"1"} | set(merged))
+
+
+class TestCheckHardExcludesNotRetired:
+    def test_passes_when_current(self) -> None:
+        check_hard_excludes_not_retired(["10", "20"], {"5": "10"})
+
+    def test_raises_when_retired(self) -> None:
+        with pytest.raises(ValueError, match="5->10"):
+            check_hard_excludes_not_retired(["5", "20"], {"5": "10"})
 
 
 # =======================================================================

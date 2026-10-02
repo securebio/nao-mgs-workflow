@@ -1,4 +1,4 @@
-// Extract NCBI taxonomy archive and access nodes, names and merged files
+// Extract NCBI taxonomy archive and access its nodes.dmp, names.dmp, and merged.dmp files
 process EXTRACT_NCBI_TAXONOMY {
     label "unzip"
     label "single"

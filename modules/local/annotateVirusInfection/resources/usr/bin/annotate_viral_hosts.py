@@ -60,6 +60,12 @@ def load_merged_taxids(merged_path: str) -> dict[str, str]:
     return dict(zip(df[0], df[2], strict=True))
 
 
+def _first_taxids(taxids: list[str]) -> str:
+    """Format taxids for an error message, saying when only the first 10 are shown."""
+    more = f" (first 10 of {len(taxids)})" if len(taxids) > 10 else ""
+    return f"{taxids[:10]}{more}"
+
+
 def check_merged_taxids(merged: dict[str, str], node_taxids: set[str]) -> None:
     """
     Raise ValueError unless every retired taxid in merged.dmp is gone from nodes.dmp,
@@ -73,31 +79,47 @@ def check_merged_taxids(merged: dict[str, str], node_taxids: set[str]) -> None:
     if taxids_in_both_columns:
         raise ValueError(
             f"{len(taxids_in_both_columns)} taxid(s) are both retired and a replacement "
-            f"in merged.dmp (a merge chain or cycle): {taxids_in_both_columns[:10]}"
+            f"in merged.dmp (a merge chain or cycle): {_first_taxids(taxids_in_both_columns)}"
         )
     merged_taxids_present_in_nodes = sorted(set(merged.keys()) & node_taxids)
     if merged_taxids_present_in_nodes:
         raise ValueError(
             f"{len(merged_taxids_present_in_nodes)} taxid(s) in merged.dmp are still in "
-            f"nodes.dmp: {merged_taxids_present_in_nodes[:10]}"
+            f"nodes.dmp: {_first_taxids(merged_taxids_present_in_nodes)}"
         )
     replacements_missing_from_nodes = sorted(set(merged.values()) - node_taxids)
     if replacements_missing_from_nodes:
         raise ValueError(
             f"{len(replacements_missing_from_nodes)} merged.dmp replacement taxid(s) are "
-            f"not in nodes.dmp: {replacements_missing_from_nodes[:10]}"
+            f"not in nodes.dmp: {_first_taxids(replacements_missing_from_nodes)}"
         )
 
 
-def get_virus_host_mapping(
-    db_path: str, merged: dict[str, str] | None = None
-) -> dict[str, set[str]]:
+def check_hard_excludes_not_retired(
+    hard_exclude_taxids: list[str], merged: dict[str, str]
+) -> None:
+    """
+    Raise ValueError if any hard-exclude taxid has been retired by NCBI, since it
+    would silently match no virus in the current taxonomy.
+    Args:
+        hard_exclude_taxids (list[str]): Viral taxids to hard-exclude from host annotation.
+        merged (dict[str, str]): Retired NCBI taxids mapped to their replacements.
+    """
+    retired = sorted(set(hard_exclude_taxids) & set(merged.keys()))
+    if retired:
+        raise ValueError(
+            f"{len(retired)} hard-exclude taxid(s) are retired in merged.dmp; use their "
+            f"replacements: {_first_taxids([f'{t}->{merged[t]}' for t in retired])}"
+        )
+
+
+def get_virus_host_mapping(db_path: str, merged: dict[str, str]) -> dict[str, set[str]]:
     """
     Import a TSV from Virus-Host-DB and extract virus/host info into
     a dictionary.
     Args:
         db_path (str): Path to the Virus-Host-DB TSV File.
-        merged (dict[str, str] | None): Retired NCBI taxids mapped to their
+        merged (dict[str, str]): Retired NCBI taxids mapped to their
             replacements, so taxids Virus-Host-DB still uses match the current taxonomy.
     Returns:
         dict[str, set[str]]: A dictionary mapping virus taxids to
@@ -797,6 +819,7 @@ def main() -> None:
     check_merged_taxids(merged, set(nodes_db["taxid"]))
     virus_host_mapping = get_virus_host_mapping(args.infection_db, merged)
     hard_exclude_taxids = args.hard_exclude_taxids.split(" ")
+    check_hard_excludes_not_retired(hard_exclude_taxids, merged)
     hard_include_mapping = load_host_overrides(args.host_infection_overrides)
     # Prepare dictionary of host taxids
     host_dict_single = cast(
