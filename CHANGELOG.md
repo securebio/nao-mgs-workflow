@@ -36,7 +36,7 @@
     - Also fixes PROFILE's ribosomal intermediates being named with a `null` suffix, BBDuk treating single-end reads as interleaved, and BBDuk's task context failing to serialize.
 - Size `MARK_SIMILARITY_DUPLICATES` memory by input size (4–64 GB) rather than a fixed 4 GB, which large groups exceeded, and cap BBDuk's Java heap at 75% of task memory. (#1013, #1036)
 - Delete `post-processing/` and `docs/rfc-trunk-based-development.md`. (#1009)
-- Pin the rust-tools image's Alpine base by digest and require OpenSSL 3.3.7-r2 or later, fixing CVE-2026-75804 and CVE-2026-84782, and run its Trivy scan on PRs that change the Dockerfile or Cargo dependencies. (#1045)
+- Pin the rust-tools image's Alpine base by digest and require OpenSSL 3.3.7-r2 or later, fixing CVE-2026-75804 and CVE-2026-84782, and run its Trivy scan on PRs that change its Dockerfile. (#1045)
 
 # v3.3.0.0
 
