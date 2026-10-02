@@ -23,7 +23,7 @@
 
 ## Stopped publishing complete-looking output when a task fails
 
-- Publish no `validation_hits` for a DOWNSTREAM group whose validation fails at any step, rather than publishing a header-only or partial table. A group with no hits still publishes a header-only table. (#1017, #1028)
+- Publish no `validation_hits` for a DOWNSTREAM group whose validation fails at any step, rather than publishing a header-only or partial table. A group with no hits still publishes a header-only table. (#1017, #1028, #1041)
 - Skip viral-genome database and contaminant index builds when any of their downloads fail, rather than producing partial output. (#1031)
 - Immediately fail workflow when the pipeline and index versions are incompatible or can't be read. (#1024)
 - Fail the RUN and DOWNSTREAM sentinels as soon as an expected output was never emitted, rather than polling until the timeout. Update `sentinel_max_wait_mins` to be the true total wait time (32 minutes by default). (#1021)

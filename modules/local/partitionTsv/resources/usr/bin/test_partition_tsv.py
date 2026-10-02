@@ -66,8 +66,10 @@ class TestPartitionTsv:
         try:
             partition_tsv.partition(os.path.basename(input_file), "x")
 
-            assert glob.glob("partition_*_input.tsv") == []
-            with open("header_only_input.tsv") as f:
+            assert glob.glob("partition_*_input.tsv") == [
+                "partition_header_only_input.tsv"
+            ]
+            with open("partition_header_only_input.tsv") as f:
                 assert f.read() == input_content
         finally:
             os.chdir(original_cwd)
