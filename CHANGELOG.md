@@ -19,7 +19,8 @@
 
 - Switch the Kraken2 profiling DB from Standard to PlusPF (`k2_pluspf_20260626`), which adds protozoan and fungal genomes. (#1000)
 - Update the SSU ribosomal reference from SILVA 138.2 to SILVA 144. `bin/benchmark_index.py` now checks each subunit's staleness separately. (#1013, #1014)
-- Hard-include Rotavirus K as mammalian- and vertebrate-infecting. (#1025)
+- Hard-include Rotavirus K, ovine picornavirus, sika deer copiparvovirus, British Columbia amdoparvovirus, Gierle apodemus virus, and Raton olivaceo morbillivirus as mammalian- and vertebrate-infecting. (#1025, #1044)
+- Map Virus-Host DB taxids that NCBI has retired to their replacements using the taxonomy's `merged.dmp`. (#1042)
 
 ## Stopped publishing complete-looking output when a task fails
 
