@@ -1,40 +1,41 @@
 # v3.4.0.0
 
-## Promoted similarity-based duplicate marking from experimental to `validation_hits`
+## Duplicate marking
 
 - Publish `sim_dup_exemplar` and `sim_dup_group_size` as columns of `{GROUP}_validation_hits.tsv.gz`, and stop publishing `experimental_downstream/{GROUP}_duplicate_reads_similarity.tsv.gz`. Clade counts now deduplicate on `sim_dup_exemplar` rather than `prim_align_dup_exemplar`. (#972)
 - Restrict Illumina BLAST validation downsampling to reads that are unique under both duplicate-marking passes. (#973)
 - Add `reads_direct_total_by_exemplar` and `reads_clade_total_by_exemplar` to clade counts, counting every read under the taxon of the exemplar representing it rather than under its own. (#980)
-
-## Fixed alignment-based duplicate marking bugs
-
 - Key alignment duplicate marking on each mate's unclipped 5′ coordinate and strand, as `samtools markdup -m s` does, rather than on alignment start coordinates. (#1005, #1006)
     - RUN now emits `prim_align_ref_{start,end}_unclipped` and their `_rev` counterparts, which count soft- and hard-clipped bases as aligned.
-    - Fragments shorter than the read no longer collapse onto a shared start coordinate, and molecules occupying one span in opposite orientations are no longer grouped.
-    - Copies previously separated by clipping or by trimming a reverse mate's 3′ end now group together.
-    - Reads with neither mate aligned no longer group, having no coordinate to compare.
+    - Fixes over-merging of short fragments and of molecules spanning one region in opposite orientations, and groups copies previously split by clipping or 3′ trimming; reads with neither mate aligned no longer group.
 - Correct the documentation of the paired-end mates, `prim_align_ref_start`, and `prim_align_fragment_length`. (#1004)
 
-## Bumped INDEX reference databases
+## Reference and index data
 
 - Switch the Kraken2 profiling DB from Standard to PlusPF (`k2_pluspf_20260626`), which adds protozoan and fungal genomes. (#1000)
 - Update the SSU ribosomal reference from SILVA 138.2 to SILVA 144. `bin/benchmark_index.py` now checks each subunit's staleness separately. (#1013, #1014)
 - Hard-include Rotavirus K, ovine picornavirus, sika deer copiparvovirus, British Columbia amdoparvovirus, Gierle apodemus virus, and Raton olivaceo morbillivirus as mammalian- and vertebrate-infecting. (#1025, #1044)
 - Map Virus-Host DB taxids that NCBI has retired to their replacements using the taxonomy's `merged.dmp`. (#1042)
-
-## Stopped publishing complete-looking output when a task fails
-
-- Publish no `validation_hits` for a DOWNSTREAM group whose validation fails at any step, rather than publishing a header-only or partial table. A group with no hits still publishes a header-only table. (#1017, #1028, #1041)
 - Skip viral-genome database and contaminant index builds when any of their downloads fail, rather than producing partial output. (#1031)
-- Immediately fail workflow when the pipeline and index versions are incompatible or can't be read. (#1024)
-- Fail the RUN and DOWNSTREAM sentinels as soon as an expected output was never emitted, rather than polling until the timeout. Update `sentinel_max_wait_mins` to be the true total wait time (32 minutes by default). (#1021)
 
-## Other changes
+## New workflow outputs
 
 - Publish FASTQC's overrepresented sequences as `{SAMPLE}_qc_overrepresented_{raw,cleaned}.tsv.gz` from RUN and `{GROUP}_qc_overrepresented_{raw,cleaned}.tsv.gz` from DOWNSTREAM, with a new schema. (#954)
+
+## Bugfixes
+
+- Publish no `validation_hits` for a DOWNSTREAM group whose validation fails at any step, rather than publishing a header-only or partial table. A group with no hits still publishes a header-only table. (#1017, #1028, #1041)
+- Immediately fail workflow when the pipeline and index versions are incompatible or can't be read. (#1024)
+- Fail the RUN and DOWNSTREAM sentinels as soon as an expected output was never emitted, rather than polling until the timeout. Update `sentinel_max_wait_mins` to be the true total wait time (32 minutes by default). (#1021)
 - Fix `-resume` by passing modules only the parameters they read, so launch-specific values no longer invalidate caches. (#1034)
     - Also fixes PROFILE's ribosomal intermediates being named with a `null` suffix, BBDuk treating single-end reads as interleaved, and BBDuk's task context failing to serialize.
+
+## Performance
+
 - Size `MARK_SIMILARITY_DUPLICATES` memory by input size (4–64 GB) rather than a fixed 4 GB, which large groups exceeded, and cap BBDuk's Java heap at 75% of task memory. (#1013, #1036)
+
+## Cleanup and best practice
+
 - Delete `post-processing/` and `docs/rfc-trunk-based-development.md`. (#1009)
 - Require OpenSSL 3.3.7-r2 or later in the rust-tools image, fixing CVE-2026-75804 and CVE-2026-84782, and run its Trivy scan on PRs that change its Dockerfile. (#1045)
 
