@@ -19,6 +19,7 @@ jobs:
     timeout-minutes: 20
     outputs:
       rust-changed: ${{ steps.filter.outputs.rust }}
+      dockerfile-changed: ${{ steps.filter.outputs.dockerfile }}
     steps:
       - uses: actions/checkout@v4
 
@@ -31,6 +32,8 @@ jobs:
               - 'rust-tools/**'
               - 'docker/nao-rust-tools.Dockerfile'
               - '.github/workflows/rust-tools.yml'
+            dockerfile:
+              - 'docker/nao-rust-tools.Dockerfile'
 
       # --- Rust unit tests (runs on GitHub runner, not in Docker) ---
       - name: Install Rust toolchain
@@ -53,11 +56,11 @@ jobs:
         run: docker build --progress=plain -f docker/nao-rust-tools.Dockerfile -t nao-rust-tools:local .
 
       - name: Save container for downstream jobs
-        if: steps.filter.outputs.rust == 'true' && github.event_name == 'push'
+        if: steps.filter.outputs.rust == 'true' && (github.event_name == 'push' || steps.filter.outputs.dockerfile == 'true')
         run: docker save nao-rust-tools:local | gzip > rust-tools.tar.gz
 
       - name: Upload container artifact
-        if: steps.filter.outputs.rust == 'true' && github.event_name == 'push'
+        if: steps.filter.outputs.rust == 'true' && (github.event_name == 'push' || steps.filter.outputs.dockerfile == 'true')
         uses: actions/upload-artifact@v4
         with:
           name: rust-container
@@ -66,7 +69,8 @@ jobs:
 
   scan-vulnerabilities:
     needs: build-and-test
-    if: needs.build-and-test.outputs.rust-changed == 'true' && github.event_name == 'push'
+    # On PRs, only scan when the Dockerfile changes: Trivy sees only its Alpine packages, not Rust crates
+    if: needs.build-and-test.outputs.rust-changed == 'true' && (github.event_name == 'push' || needs.build-and-test.outputs.dockerfile-changed == 'true')
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:

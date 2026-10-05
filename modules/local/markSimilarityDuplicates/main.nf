@@ -1,6 +1,6 @@
 // Tool source: rust-tools/mark_duplicates_similarity/
 process MARK_SIMILARITY_DUPLICATES {
-    label "single"
+    label "mark_similarity_duplicates_resources"
     label "rust_tools"
     tag "id=${sample}"
     input:

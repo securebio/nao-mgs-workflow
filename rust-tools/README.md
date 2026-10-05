@@ -19,10 +19,3 @@ container via `cargo install` in the Dockerfile:
 
 See [docs/developer.md](../docs/developer.md#rust) for build instructions, local
 development workflow, and how to add new tools.
-
-## Note on post-processing/rust_dedup/
-
-The similarity-based duplicate marking tool has been copied into this workspace as
-`mark_duplicates_similarity`. The original source in `post-processing/rust_dedup/`
-is retained for backwards compatibility with `securebio/nao-mgs-partner-reports`
-and will be removed once that dependency is migrated.

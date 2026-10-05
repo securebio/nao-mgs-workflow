@@ -24,6 +24,42 @@
             "name": "Orthoflavivirus banziense (Banzi virus)",
             "rationale": "African flavivirus (Flaviviridae, mosquito-borne) with documented human febrile illness cases in southern Africa. VHDB lists only Mastomys natalensis, Cricetinae gen. sp., and Culex rubinotus as hosts for the species taxid — no Homo sapiens. Demoted from 1 to 0 in the 20260518 index relative to 20250825.",
             "hosts": ["human", "primate", "mammal", "vertebrate"]
+        },
+        {
+            "taxid": "3432200",
+            "name": "Rotavirus kappagastroenteritidis (Rotavirus K)",
+            "rationale": "Putative rotavirus species identified in common shrews (Sorex araneus) in Germany. Whole-genome analysis places it as most closely related to Rotavirus C, a human and animal pathogen, with RVK and RVC forming a common branch for most of the 11 viral proteins (Johne et al. 2023, Virus Research, doi:10.1016/j.virusres.2023.199171). Demoted from 1 (mammal, vertebrate) in the 20260702 index to 0 in later builds.",
+            "hosts": ["mammal", "vertebrate"]
+        },
+        {
+            "taxid": "2509152",
+            "name": "Ovine picornavirus",
+            "rationale": "Picornavirus associated with encephalomyelitis in lambs (Forth et al. 2019, Emerging Infectious Diseases, doi:10.3201/eid2505.181573). Was 1 (mammal, vertebrate) in the 20260702 index but demoted in later builds.",
+            "hosts": ["mammal", "vertebrate"]
+        },
+        {
+            "taxid": "2913392",
+            "name": "Sika deer copiparvovirus",
+            "rationale": "Parvovirus detected in the blood of wild sika deer (Nishizawa et al. 2022, Virus Research, doi:10.1016/j.virusres.2022.198749). Was 1 (mammal, vertebrate) in the 20260702 index but demoted in later builds.",
+            "hosts": ["mammal", "vertebrate"]
+        },
+        {
+            "taxid": "2954191",
+            "name": "British Columbia amdoparvovirus",
+            "rationale": "Amdoparvovirus of North American mink and skunks (Canuti et al. 2017, Emerging Microbes & Infections, doi:10.1038/emi.2017.13). Was 1 (mammal, vertebrate) in the 20260702 index but demoted in later builds.",
+            "hosts": ["mammal", "vertebrate"]
+        },
+        {
+            "taxid": "2940985",
+            "name": "Gierle apodemus virus",
+            "rationale": "Rodent-borne morbillivirus detected in wood mice (Vanmechelen et al. 2022, bioRxiv, doi:10.1101/2022.03.10.483612). Was 1 (mammal, vertebrate) in the 20260702 index but demoted in later builds.",
+            "hosts": ["mammal", "vertebrate"]
+        },
+        {
+            "taxid": "2928189",
+            "name": "Raton olivaceo morbillivirus",
+            "rationale": "Rodent-borne morbillivirus detected in South American field mice (Debat 2022, Viruses, doi:10.3390/v14112403). Was 1 (mammal, vertebrate) in the 20260702 index but demoted in later builds.",
+            "hosts": ["mammal", "vertebrate"]
         }
     ]
 }

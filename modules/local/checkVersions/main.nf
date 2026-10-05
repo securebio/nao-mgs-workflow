@@ -45,6 +45,8 @@ def isVersionLess(version1, version2) {
 process CHECK_VERSIONS {
     executor 'local'
     tag "id=util"
+    // Stop the run: nothing waits on this check, so an ignored failure would let the run finish anyway
+    errorStrategy "terminate"
     input:
         val pipeline_version
         val index_version

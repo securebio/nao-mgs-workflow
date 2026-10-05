@@ -26,8 +26,6 @@ jobs:
       - name: Setup Python environment
         if: steps.filter.outputs.python == 'true'
         uses: ./.github/actions/setup-python
-        with:
-          additional_requirements: post-processing/deps/nao_dedup/requirements-dev.txt
 
       - name: Set up Rust
         if: steps.filter.outputs.python == 'true'
@@ -36,4 +34,4 @@ jobs:
       - name: Run pytest
         if: steps.filter.outputs.python == 'true'
         run: |
-          python -m pytest bin/test_*.py modules/local/*/resources/usr/bin/test_*.py post-processing/tests/ -v --tb=short
+          python -m pytest bin/test_*.py modules/local/*/resources/usr/bin/test_*.py -v --tb=short

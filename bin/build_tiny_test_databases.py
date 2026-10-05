@@ -333,7 +333,11 @@ def build_blast_database(
 
 
 def create_archives(
-    kraken_dir: Path, blast_dir: Path, taxonomy_nodes: Path, taxonomy_names: Path
+    kraken_dir: Path,
+    blast_dir: Path,
+    taxonomy_nodes: Path,
+    taxonomy_names: Path,
+    taxonomy_merged: Path,
 ) -> tuple[Path, Path, Path]:
     """
     Create tarball and zip archives for distribution.
@@ -342,6 +346,7 @@ def create_archives(
         blast_dir (Path): BLAST database directory
         taxonomy_nodes (Path): Path to tiny-taxonomy-nodes.dmp
         taxonomy_names (Path): Path to tiny-taxonomy-names.dmp
+        taxonomy_merged (Path): Path to tiny-taxonomy-merged.dmp
     Returns:
         tuple[Path, Path, Path]: Tuple of (kraken_tarball_path, blast_tarball_path, taxonomy_zip_path)
     """
@@ -374,6 +379,7 @@ def create_archives(
             str(taxonomy_zip),
             str(taxonomy_nodes),
             str(taxonomy_names),
+            str(taxonomy_merged),
         ],
         check=True,
     )
@@ -445,6 +451,12 @@ def parse_arguments() -> argparse.Namespace:
         help=f"Path to taxonomy names.dmp file (default: {default_taxonomy_dir / 'names.dmp'})",
     )
     parser.add_argument(
+        "--taxonomy-merged",
+        type=Path,
+        default=default_taxonomy_dir / "merged.dmp",
+        help=f"Path to taxonomy merged.dmp file (default: {default_taxonomy_dir / 'merged.dmp'})",
+    )
+    parser.add_argument(
         "--s3-bucket",
         type=str,
         default="nao-testing",
@@ -470,6 +482,7 @@ def validate_inputs(args: argparse.Namespace) -> None:
         "Viral genome file": args.viral_genome,
         "Taxonomy nodes file": args.taxonomy_nodes,
         "Taxonomy names file": args.taxonomy_names,
+        "Taxonomy merged file": args.taxonomy_merged,
     }
     for file_desc, file_path in required_files.items():
         if not file_path.exists():
@@ -507,7 +520,11 @@ def run_build(args: argparse.Namespace) -> None:
         build_blast_database(blast_dir, sequences)
         logger.info("Step 4: Creating distribution archives...")
         kraken_tarball, blast_tarball, taxonomy_zip = create_archives(
-            kraken_dir, blast_dir, args.taxonomy_nodes, args.taxonomy_names
+            kraken_dir,
+            blast_dir,
+            args.taxonomy_nodes,
+            args.taxonomy_names,
+            args.taxonomy_merged,
         )
         logger.info("Step 5: Uploading to S3...")
         upload_to_s3(

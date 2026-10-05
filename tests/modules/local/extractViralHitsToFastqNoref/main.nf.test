@@ -49,15 +49,10 @@ nextflow_process {
             def input_tsvs = process.out.input[0][1]
             assert output_fastqs.size() == 2
             assert input_tsvs.size() == 2
-            // Extract species IDs from input filenames and verify they're in output filenames
-            def species_ids = input_tsvs.collect { tsv ->
-                def matcher = tsv.toString() =~ /_(\d+)_hits/
-                matcher ? matcher[0][1] : null
-            }
-            assert species_ids.every { it != null }
-            assert output_fastqs.every { fastq ->
-                species_ids.any { species -> fastq.toString().contains(species) }
-            }
+            // Outputs are labelled by each input's position in the list
+            def labelOf = { f -> (f.toString().tokenize("/")[-1] =~ /_(\d+)_hits_/)[0][1] }
+            assert output_fastqs.collect { labelOf(it) } == ["0", "1"]
+            assert input_tsvs.collect { labelOf(it) } == ["0", "1"]
             def total_reads_in = 0
             def total_reads_out = 0
             for (int i = 0; i < 2; i++) {

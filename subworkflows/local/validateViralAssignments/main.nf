@@ -25,7 +25,6 @@ include { ANNOTATE_VALIDATION_STATUS } from "../../../modules/local/annotateVali
 include { SORT_TSV } from "../../../modules/local/sortTsv"
 include { COPY_FILE as COPY_HITS } from "../../../modules/local/copyFile"
 include { COPY_FILE as COPY_BLAST } from "../../../modules/local/copyFile"
-include { CREATE_EMPTY_GROUP_OUTPUTS } from "../../../modules/local/createEmptyGroupOutputs"
 
 /***********
 | WORKFLOW |
@@ -49,10 +48,11 @@ workflow VALIDATE_VIRAL_ASSIGNMENTS {
         split_ch = SPLIT_VIRAL_TSV_BY_SELECTED_TAXID(groups, db)
         // 2. Downsample each species to a fixed number of reads and render them as FASTA.
         // Validation sits downstream of MARK_VIRAL_DUPLICATES, so sample only duplicate-group
-        // exemplars: a read that duplicates another adds no evidence about its species. ONT
-        // skips duplicate marking, which leaves prim_align_dup_exemplar as NA throughout, so
-        // no restriction is applied there and every read stays eligible.
-        def exemplar_columns = params_map.platform == "ont" ? "" : "seq_id,prim_align_dup_exemplar"
+        // exemplars: a read that duplicates another adds no evidence about its species.
+        // Only exemplars selected by both alignment- and similarity-based marking are eligible.
+        // ONT skips duplicate marking, so no restriction is applied there and every read stays
+        // eligible.
+        def exemplar_columns = params_map.platform == "ont" ? "" : "seq_id,sim_dup_exemplar"
         sample_ch = DOWNSAMPLE_VIRAL_ASSIGNMENTS(split_ch.tsv, params_map.validation_n_sample,
             channel.of(params_map.platform == "ont"), exemplar_columns)
         // 3. Concatenate data across species (prepare for group-level BLAST)
@@ -80,28 +80,9 @@ workflow VALIDATE_VIRAL_ASSIGNMENTS {
         sorted_ch = SORT_TSV(annotate_ch, "seq_id").sorted
         output_hits_ch = COPY_HITS(sorted_ch, "validation_hits.tsv.gz")
         output_blast_ch = COPY_BLAST(blast_ch.blast, "validation_blast.tsv.gz")
-
-        // 8. Create empty validation_hits files for groups that produced no output
-        input_groups = groups.map { label, _file -> label }.collect().ifEmpty([]).map { labels -> ["key", labels] }
-        output_groups = output_hits_ch.map { label, _file -> label }.collect().ifEmpty([]).map { labels -> ["key", labels] }
-        groups_without_output = input_groups.join(output_groups).map { _key, input_list, output_list ->
-            (input_list as Set) - (output_list as Set)
-        }
-        platform = params_map.platform ?: "illumina"
-        empty_outputs_ch = CREATE_EMPTY_GROUP_OUTPUTS(
-            groups_without_output,
-            file("${projectDir}/pyproject.toml"),
-            file("${projectDir}/schemas"),
-            platform,
-            "validation_hits"
-        )
-        all_hits_ch = output_hits_ch.mix(empty_outputs_ch.outputs.flatten().map { f ->
-            def group = f.name.replace("_validation_hits.tsv.gz", "")
-            [group, f]
-        })
     emit:
         // Main output
-        annotated_hits = all_hits_ch
+        annotated_hits = output_hits_ch
         // Intermediate output
         blast_results = output_blast_ch
         // Extra outputs for testing

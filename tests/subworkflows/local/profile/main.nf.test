@@ -73,6 +73,35 @@ nextflow_workflow {
         }
     }
 
+    test("Should split non-empty single-end Illumina data without pairing reads") {
+        tag "expect_success"
+        tag "single_end"
+        config "tests/configs/run.config"
+        when {
+            params {}
+            workflow {
+                '''
+                def profile_params = params + [min_kmer_fraction: "0.4", k: "27", ribo_suffix: "ribo"]
+                input[0] = Channel.of("test")
+                    | combine(Channel.of("${projectDir}/test-data/tiny-index/reads/R1.fastq"))
+                input[1] = Channel.of(true)
+                input[2] = profile_params
+                '''
+            }
+        }
+        then {
+            assert workflow.success
+            def ribo = path(workflow.out.test_ribo[0][1])
+            def noribo = path(workflow.out.test_noribo[0][1])
+            assert ribo.fileName.toString() == "test_ribo_bbduk_match.fastq.gz"
+            assert noribo.fileName.toString() == "test_ribo_bbduk_nomatch.fastq.gz"
+            // Every input read lands in exactly one output, unpaired
+            def input_ids = path("${projectDir}/test-data/tiny-index/reads/R1.fastq").fastq.readNames
+            def output_ids = ribo.fastq.readNames + noribo.fastq.readNames
+            assert output_ids.sort() == input_ids.sort()
+        }
+    }
+
     test("Should run without failures on ONT input") {
         config "tests/configs/run_ont.config"
         tag "expect_success"

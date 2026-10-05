@@ -66,13 +66,16 @@ from annotate_viral_hosts import (
     annotate_virus_db,
     annotate_virus_db_single,
     build_virus_tree,
+    check_hard_excludes_not_retired,
     check_infection,
+    check_merged_taxids,
     exclude_infections,
     expand_taxid,
     get_host_taxids,
     get_virus_host_mapping,
     include_infections,
     load_host_overrides,
+    load_merged_taxids,
     mark_ancestor_infections,
     mark_ancestor_infections_single,
     mark_descendant_infections,
@@ -1575,7 +1578,7 @@ class TestGetVirusHostMapping:
         tsv_file.write_text(tsv_content)
 
         # Act
-        result = get_virus_host_mapping(str(tsv_file))
+        result = get_virus_host_mapping(str(tsv_file), {})
 
         # Assert
         assert result["1"] == {"100", "101"}
@@ -1590,7 +1593,7 @@ class TestGetVirusHostMapping:
         tsv_file.write_text(tsv_content)
 
         # Act
-        result = get_virus_host_mapping(str(tsv_file))
+        result = get_virus_host_mapping(str(tsv_file), {})
 
         # Assert
         assert result["1"] == {"100", "101"}  # Duplicates removed
@@ -1604,10 +1607,66 @@ class TestGetVirusHostMapping:
         tsv_file.write_text(tsv_content)
 
         # Act
-        result = get_virus_host_mapping(str(tsv_file))
+        result = get_virus_host_mapping(str(tsv_file), {})
 
         # Assert
         assert result == {}
+
+    def test_retired_taxids_mapped(self, tmp_path: Path) -> None:
+        tsv_file = tmp_path / "virus_host.tsv"
+        tsv_file.write_text("virus tax id\thost tax id\n1\t100\n5\t101\n6\t102\n")
+        result = get_virus_host_mapping(str(tsv_file), {"100": "200", "5": "6"})
+        # VHDB lists 1 as infecting 100, 5 as infecting 101, and 6 as infecting 102.
+        # Old 100 maps to new 200 and old 5 maps to new 6 via merged.dmp.
+        # Therefore:
+        # - 1 infects 200 (new host taxid)
+        # - 6 (new taxid) infects 101 (via old viral taxid 5) and 102 (via 6)
+        assert result == {"1": {"200"}, "6": {"101", "102"}}
+
+
+class TestLoadMergedTaxids:
+    def test_parses_merged_dmp(self, tmp_path: Path) -> None:
+        merged_file = tmp_path / "merged.dmp"
+        merged_file.write_text("100\t|\t200\t|\n12\t|\t34\t|\n")
+        assert load_merged_taxids(str(merged_file)) == {"100": "200", "12": "34"}
+
+
+class TestCheckMergedTaxids:
+    def test_passes_when_retired(self) -> None:
+        check_merged_taxids({"100": "200"}, {"1", "200"})
+
+    def test_raises_when_still_live(self) -> None:
+        with pytest.raises(ValueError, match="still in nodes.dmp"):
+            check_merged_taxids({"100": "200"}, {"100", "200"})
+
+    @pytest.mark.parametrize(
+        "merged",
+        [{"100": "200", "200": "300"}, {"100": "200", "200": "100"}],
+        ids=["chain", "cycle"],
+    )
+    def test_raises_on_chain_or_cycle(self, merged: dict[str, str]) -> None:
+        # 200 is both retired and a replacement, so a one-step lookup lands on a dead taxid
+        with pytest.raises(ValueError, match="chain or cycle"):
+            check_merged_taxids(merged, {"1", "300"})
+
+    def test_raises_when_replacement_not_live(self) -> None:
+        # 999 is no node in the taxonomy, so nothing could match it
+        with pytest.raises(ValueError, match="replacement taxid"):
+            check_merged_taxids({"100": "999"}, {"1", "300"})
+
+    def test_message_says_when_truncated(self) -> None:
+        merged = {str(t): "1" for t in range(100, 112)}
+        with pytest.raises(ValueError, match=r"\(first 10 of 12\)"):
+            check_merged_taxids(merged, {"1"} | set(merged))
+
+
+class TestCheckHardExcludesNotRetired:
+    def test_passes_when_current(self) -> None:
+        check_hard_excludes_not_retired(["10", "20"], {"5": "10"})
+
+    def test_raises_when_retired(self) -> None:
+        with pytest.raises(ValueError, match="5->10"):
+            check_hard_excludes_not_retired(["5", "20"], {"5": "10"})
 
 
 # =======================================================================

@@ -274,6 +274,39 @@ class TestProcessSam:
         assert rows[2]["query_seq"] == "GTACGTACGT"
         assert rows[2]["query_rc"] == "True"
 
+    def test_unclipped_columns_reach_the_output(
+        self, tmp_path: Path, ref_data: tuple[dict[str, list[str]], set[str]]
+    ) -> None:
+        """A clipped alignment's unclipped bounds land in the output columns."""
+        genbank_metadata, viral_taxids = ref_data
+
+        sam_path = tmp_path / "test.sam"
+        sam_path.write_text(
+            "@HD\tVN:1.6\tSO:queryname\n"
+            "@SQ\tSN:genome1\tLN:10000\n"
+            "read_A\t0\tgenome1\t108\t60\t7S93M\t*\t0\t0\t"
+            + "A" * 100
+            + "\t"
+            + "I" * 100
+            + "\tNM:i:0\tAS:i:90\n"
+        )
+        fastq_path = tmp_path / "test.fastq"
+        fastq_path.write_text("@read_A\n" + "A" * 100 + "\n+\n" + "I" * 100 + "\n")
+
+        out_path = str(tmp_path / "output.tsv.gz")
+        process_viral_minimap2_sam.process_sam(
+            str(sam_path), out_path, genbank_metadata, viral_taxids, str(fastq_path)
+        )
+
+        with gzip.open(out_path, "rt") as f:
+            lines = f.readlines()
+        row = dict(
+            zip(lines[0].strip().split("\t"), lines[1].strip().split("\t"), strict=True)
+        )
+        assert row["ref_start"] == "107"
+        assert row["ref_start_unclipped"] == "100"
+        assert row["ref_end_unclipped"] == "199"
+
     def test_sam_read_missing_from_fastq_raises_error(
         self, tmp_path: Path, ref_data: tuple[dict[str, list[str]], set[str]]
     ) -> None:
@@ -350,3 +383,48 @@ class TestProcessSam:
         # Verify clean seq/qual came from FASTQ, not SAM
         assert rows[0]["query_seq"] == "AAAAA"
         assert rows[1]["query_seq"] == "CCCCC"
+
+
+class TestUnclippedBounds:
+    """Test unclipped reference bounds, the coordinates samtools markdup keys on."""
+
+    def _make_read(self, tmp_path: Path, cigar: str, pos: int, length: int) -> "Any":
+        import pysam
+
+        seq, qual = "A" * length, "I" * length
+        sam_path = tmp_path / "test.sam"
+        sam_path.write_text(
+            "@HD\tVN:1.6\n@SQ\tSN:genome1\tLN:10000\n"
+            f"readA\t0\tgenome1\t{pos}\t42\t{cigar}\t*\t0\t0\t{seq}\t{qual}\tAS:i:30\n"
+        )
+        with pysam.AlignmentFile(str(sam_path), "r") as f:
+            return next(iter(f))
+
+    @pytest.mark.parametrize(
+        "cigar,pos,length,expected",
+        [
+            # A 100 bp read covering 500-599 with nothing clipped
+            ("100M", 501, 100, (500, 599)),
+            # The same read end, clipped by the aligner: POS moves, the unclipped
+            # bounds do not
+            ("7S93M", 508, 100, (500, 599)),
+            ("93M7S", 501, 100, (500, 599)),
+            ("5S90M5S", 506, 100, (500, 599)),
+            # Hard clips count too, and are absent from SEQ
+            ("5H95M", 506, 95, (500, 599)),
+            # Deletions and skips consume reference bases; insertions do not
+            ("50M10D50M", 501, 100, (500, 609)),
+            ("50M10N50M", 501, 100, (500, 609)),
+            ("50M10I50M", 501, 110, (500, 599)),
+        ],
+    )
+    def test_counts_clipped_bases_as_aligned(
+        self,
+        tmp_path: Path,
+        cigar: str,
+        pos: int,
+        length: int,
+        expected: tuple[int, int],
+    ) -> None:
+        read = self._make_read(tmp_path, cigar, pos, length)
+        assert process_viral_minimap2_sam.unclipped_bounds(read) == expected

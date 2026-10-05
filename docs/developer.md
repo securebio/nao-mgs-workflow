@@ -20,6 +20,7 @@ These guidelines represent best practices to implement in new code, though some 
     - Aim for one process per module, in a `main.nf` file.
     - Avoid creating duplicate processes. If you need a slight variation on existing behavior, parameterize or otherwise tweak an existing process.
     - Shared Groovy helpers used by multiple `exec:` blocks live in top-level `lib/*.groovy` files (auto-loaded by Nextflow). See `lib/SentinelUtils.groovy` for an example.
+    - Size every gather of task outputs to its inputs, to prevent inappropriate partial completions. A task that fails its retry is ignored and emits nothing, so an operator that gathers without knowing how many items to expect (`collect()`, `toList()`, an unsized `groupTuple()`, ...) passes on whatever arrived, and everything downstream completes on a partial result. Key each item with `groupKey(key, n)`, where `n` is the number of inputs the gather should receive: [Nextflow's documented pattern](https://docs.seqera.io/nextflow/reference/operator#groupTuple) then emits a group only once all `n` arrive, and drops it otherwise, so the failure skips that group's downstream steps. That page is "legacy" only because it covers operators without static typing; if we adopt static typing, `groupBy` with `(key, n, value)` tuples does the same. Gathers over values built on the head node, rather than task outputs, can't come up short. Cover each sized gather with a failure-injection test.
     - Avoid very large `script` or `shell` blocks in Nextflow processes where possible.
         - If the block gets bigger than about 20 lines, we probably want to split it into multiple processes, or move functionality into a Rust or Python script. 
 - Documentation
@@ -33,6 +34,7 @@ These guidelines represent best practices to implement in new code, though some 
         - The `cpus` directive may also be a closure over process inputs to more heavily parallelize large inputs, especially when `memory` tiers already allocate more of an instance to a given task. However, the ratio between available CPUs and memory can vary and depends on the instance types defined by the compute environment.
         - Scaling `memory` or `cpus` also limits how many tasks pack onto one instance, which can help bound the cumulative local disk usage.
         - A closure over an input variable must use that process's own input name, so closures can only be reused across processes whose inputs are named the same. Avoid using `file` in these closures and process inputs, which shadows Nextflow's `file()` function.
+    - Pass processes a literal map of only the parameters they read (e.g. `[k: params_map.k, suffix: "ribo"]`), never the full `params` map. Launch-specific values such as `params.trace_timestamp` are part of the task hash, so a full map invalidates the `-resume` cache on every launch. Subworkflows may take the full map.
     - All processes should have a label specifying the Docker container to use (e.g. `label "BBTools"`). Containers are then specified in `configs/containers.config`.
     - Any processes that are used only for testing should have `label "testing"`.
     - All processes should have a `tag` directive that identifies the task in the Nextflow trace. Tags use a `key=value` format with `,` as the separator between components, and `id` is always the first key. Tag-component values must not contain commas (`,`) or equals signs (`=`), since these are used as delimiters; substituted variables (e.g. `${sample}`) are expected to satisfy this constraint.
@@ -160,10 +162,6 @@ ruff check .
 ruff format .
 mypy .
 ```
-
-## Post Processing
-
-The `post-processing/` directory contains standalone Python scripts for additional analyses that can be run on workflow outputs. These scripts are not yet integrated into the main pipeline but provide useful functionality for tasks like similarity-based duplicate marking. See [post-processing/README.md](../post-processing/README.md) for details on available scripts and usage.
 
 ## GitHub issues
 We use [GitHub issues](https://github.com/naobservatory/mgs-workflow/issues) to track any issues with the pipeline: bugs, cleanup tasks, and desired new features. 
@@ -312,6 +310,6 @@ Under our [versioning policy](./versioning.md), changes to schema `title` and `d
 ### Working with schemas
 
 - If you are working on a change that affects pipeline outputs, review the schema files for affected outputs where available, to know what's expected for each column.
-- If an input to DOWNSTREAM has no data, the `createEmptyGroupOutputs` module will generate header-only TSV outputs. Output files with no corresponding schema will be empty.
+- Steps pass a header-only input through as header-only output, so a DOWNSTREAM group with no hits runs the same processes as any other and publishes header-only tables. `PARTITION_TSV` passes a header-only input table on as `partition_header_only_<input>`, so such a group isn't dropped before validation.
 - To validate output files locally, run `bin/validate_schemas.py`.
 - If you are developing code external to this repository that depends on its outputs, you should review the corresponding schemas to understand what guarantees you can expect.
