@@ -1865,25 +1865,23 @@ class TestWriteGenomeTaxonomyTables:
 
 
 def test_write_memory_summary(tmp_path: Path) -> None:
-    results = tmp_path / "index" / "output" / "results"
-    for rel, gib in {
-        "blast_db/core_nt.00.nsq": 3,
-        "blast_db/core_nt.00.nin": 1,
-        "blast_db/core_nt.00.nhr": 5,  # headers aren't scanned, so not counted
-        "kraken_db/hash.k2d": 4,
-    }.items():
-        (results / rel).parent.mkdir(parents=True, exist_ok=True)
-        with (results / rel).open("wb") as f:
-            f.truncate(gib * 2**30)  # sparse, so no disk is used
-    resources = tmp_path / "resources.config"
-    resources.write_text(
-        "withLabel: blast_resources {\n cpus = 32\n memory = 8.GB\n}\n"
-        "withLabel: kraken_resources {\n cpus = 16\n memory = 5.GB\n}\n"
-    )
-    write_memory_summary(str(tmp_path / "index"), resources, tmp_path / "out.json")
-    assert json.loads((tmp_path / "out.json").read_text()) == {
-        "blast_resources": {"needed_gib": 4.0, "limit_gib": 8.0, "fraction": 0.5},
-        "kraken_resources": {"needed_gib": 4.0, "limit_gib": 5.0, "fraction": 0.8},
+    for side, gib in {"old": 1, "new": 2}.items():
+        results = tmp_path / side / "output" / "results"
+        for rel in [
+            "blast_db/core_nt.00.nsq",
+            "blast_db/core_nt.00.nin",
+            "blast_db/core_nt.00.nhr",
+            "kraken_db/hash.k2d",
+        ]:
+            (results / rel).parent.mkdir(parents=True, exist_ok=True)
+            with (results / rel).open("wb") as f:
+                f.truncate(gib * 2**30)  # sparse, so no disk is used
+    out = tmp_path / "out.json"
+    write_memory_summary(str(tmp_path / "old"), str(tmp_path / "new"), out)
+    # .nhr headers aren't scanned on every search, so they aren't counted
+    assert json.loads(out.read_text()) == {
+        "blast": {"old": 2.0, "new": 4.0},
+        "kraken2": {"old": 1.0, "new": 2.0},
     }
 
 

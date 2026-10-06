@@ -283,30 +283,22 @@ def list_recursive_sizes(prefix: str) -> dict[str, int]:
     return dict(sizes)
 
 
-# Files each memory-mapped DB touches on every task, keyed by the resource label
-# whose memory must hold them; if they don't fit, the task re-reads them from disk.
-MEMORY_MAPPED_FILES = {
-    "blast_resources": r"\.n(sq|in)$",
-    "kraken_resources": r"(^|/)hash\.k2d$",
-}
+# Files each memory-mapped DB touches on every task. The task's memory limit must
+# hold them, or it re-reads them from disk.
+MEMORY_MAPPED_FILES = {"blast": r"\.n(sq|in)$", "kraken2": r"(^|/)hash\.k2d$"}
 
 
-def write_memory_summary(new_prefix: str, resources: Path, out_path: Path) -> None:
-    """Write each memory-mapped DB's size against its label's memory, in GiB
-    (Nextflow's `GB` is 1024**3 bytes)."""
-    files = list_file_sizes(new_prefix)
-    config = resources.read_text()
-    summary = {}
-    for label, pattern in MEMORY_MAPPED_FILES.items():
-        needed = sum(n for f, n in files.items() if re.search(pattern, f)) / 2**30
-        match = re.search(rf"withLabel: {label} {{[^}}]*memory = ([\d.]+)\.GB", config)
-        assert match, f"No memory for {label} in {resources}"
-        limit = float(match.group(1))
-        summary[label] = {
-            "needed_gib": round(needed, 1),
-            "limit_gib": limit,
-            "fraction": round(needed / limit, 2),
+def write_memory_summary(old_prefix: str, new_prefix: str, out_path: Path) -> None:
+    """Write the GiB each memory-mapped DB needs in memory, per index. GiB to match
+    Nextflow's `GB` (1024**3 bytes)."""
+    files = {"old": list_file_sizes(old_prefix), "new": list_file_sizes(new_prefix)}
+    summary = {
+        db: {
+            side: round(sum(n for f, n in fs.items() if re.search(pat, f)) / 2**30, 1)
+            for side, fs in files.items()
         }
+        for db, pat in MEMORY_MAPPED_FILES.items()
+    }
     _write_json(out_path, summary)
 
 
@@ -1123,11 +1115,7 @@ def main() -> None:
     args.out.mkdir(parents=True, exist_ok=True)
     logger.info(f"Benchmarking {args.old} -> {args.new}")
     write_metrics_table(args.old, args.new, args.out)
-    write_memory_summary(
-        args.new,
-        Path(__file__).resolve().parents[1] / "configs/resources.config",
-        args.out / "memory_summary.json",
-    )
+    write_memory_summary(args.old, args.new, args.out / "memory_summary.json")
     with tempfile.TemporaryDirectory() as td_str:
         work_dir = Path(td_str)
         old_params, new_params = write_params_tables(
