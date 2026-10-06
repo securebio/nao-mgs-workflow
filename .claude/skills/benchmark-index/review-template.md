@@ -33,6 +33,7 @@
 
 **Findings:**
 - Concise bullet list of findings from section
+- Compare the target index's BLAST (`core_nt`) and Kraken2 DB sizes against the `blast_resources` and `kraken_resources` memory in `configs/resources.config`. Both DBs are memory-mapped, so flag a DB larger than ~90% of its label's memory: the task can't keep it in memory and re-reads it from disk.
 
 ### 3. Virus genomes
 
