@@ -1,6 +1,7 @@
 # v3.4.0.1-dev
 
-- Raise BLAST memory from 256 GB to 360 GB so the core_nt database fits in memory, which avoids slow re-reads from disk.
+- Raise BLAST memory from 256 GB to 360 GB and Kraken2 memory from 128 GB to 176 GB, so their memory-mapped databases fit in memory and aren't re-read from disk.
+- `bin/benchmark_index.py` writes `memory_summary.json`, comparing those databases against their memory limits.
 
 # v3.4.0.0
 

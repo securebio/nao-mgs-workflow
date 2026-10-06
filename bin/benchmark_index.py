@@ -248,11 +248,11 @@ def write_staleness_table(new_params: dict, out_path: Path) -> None:
 ###################################
 
 
-def list_recursive_sizes(prefix: str) -> dict[str, int]:
-    """Map each top-level entry under `prefix/output/results/` to its total bytes
-    (directories summed; files keyed by basename). Accepts s3:// or local."""
+def list_file_sizes(prefix: str) -> dict[str, int]:
+    """Map each file under `prefix/output/results/`, keyed by its path relative
+    to that directory, to its bytes. Accepts s3:// or local."""
     base = f"{prefix.rstrip('/')}/output/results/"
-    sizes: Counter[str] = Counter()
+    sizes: dict[str, int] = {}
     if prefix.startswith("s3://"):
         out = subprocess.run(
             ["aws", "s3", "ls", "--recursive", base],
@@ -265,14 +265,49 @@ def list_recursive_sizes(prefix: str) -> dict[str, int]:
             parts = line.split()
             if len(parts) < 4 or parts[2] == "0":
                 continue
-            rel = parts[3].removeprefix(prefix_key)
-            sizes[rel.split("/", 1)[0] or rel] += int(parts[2])
+            sizes[parts[3].removeprefix(prefix_key)] = int(parts[2])
     else:
         base_path = Path(base)
         for f in base_path.rglob("*"):
             if f.is_file():
-                sizes[f.relative_to(base_path).parts[0]] += f.stat().st_size
+                sizes[f.relative_to(base_path).as_posix()] = f.stat().st_size
+    return sizes
+
+
+def list_recursive_sizes(prefix: str) -> dict[str, int]:
+    """Map each top-level entry under `prefix/output/results/` to its total bytes
+    (directories summed; files keyed by basename). Accepts s3:// or local."""
+    sizes: Counter[str] = Counter()
+    for rel, size in list_file_sizes(prefix).items():
+        sizes[rel.split("/", 1)[0]] += size
     return dict(sizes)
+
+
+# Files each memory-mapped DB touches on every task, keyed by the resource label
+# whose memory must hold them; if they don't fit, the task re-reads them from disk.
+MEMORY_MAPPED_FILES = {
+    "blast_resources": r"\.n(sq|in)$",
+    "kraken_resources": r"(^|/)hash\.k2d$",
+}
+
+
+def write_memory_summary(new_prefix: str, resources: Path, out_path: Path) -> None:
+    """Write each memory-mapped DB's size against its label's memory, in GiB
+    (Nextflow's `GB` is 1024**3 bytes)."""
+    files = list_file_sizes(new_prefix)
+    config = resources.read_text()
+    summary = {}
+    for label, pattern in MEMORY_MAPPED_FILES.items():
+        needed = sum(n for f, n in files.items() if re.search(pattern, f)) / 2**30
+        match = re.search(rf"withLabel: {label} {{[^}}]*memory = ([\d.]+)\.GB", config)
+        assert match, f"No memory for {label} in {resources}"
+        limit = float(match.group(1))
+        summary[label] = {
+            "needed_gib": round(needed, 1),
+            "limit_gib": limit,
+            "fraction": round(needed / limit, 2),
+        }
+    _write_json(out_path, summary)
 
 
 # Suffixes that get content metrics beyond byte size; gzip ratio varies with
@@ -1088,6 +1123,11 @@ def main() -> None:
     args.out.mkdir(parents=True, exist_ok=True)
     logger.info(f"Benchmarking {args.old} -> {args.new}")
     write_metrics_table(args.old, args.new, args.out)
+    write_memory_summary(
+        args.new,
+        Path(__file__).resolve().parents[1] / "configs/resources.config",
+        args.out / "memory_summary.json",
+    )
     with tempfile.TemporaryDirectory() as td_str:
         work_dir = Path(td_str)
         old_params, new_params = write_params_tables(

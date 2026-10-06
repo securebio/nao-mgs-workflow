@@ -33,7 +33,7 @@
 
 **Findings:**
 - Concise bullet list of findings from section
-- Compare the target index's BLAST sequence files (`*.nsq`, which BLAST scans on every search) and Kraken2 `hash.k2d` sizes against the `blast_resources` and `kraken_resources` memory in `configs/resources.config`. Both DBs are memory-mapped, so flag either one above ~90% of its label's memory: the task can't keep it in memory and re-reads it from disk.
+- From `memory_summary.json`, report each memory-mapped DB's `needed_gib` against its label's `limit_gib`, and flag any `fraction` above 0.9: the task can't keep the DB in memory and re-reads it from disk.
 
 ### 3. Virus genomes
 

@@ -46,6 +46,7 @@ from benchmark_index import (
     surveilled_taxids,
     write_genome_taxonomy_tables,
     write_index_versions,
+    write_memory_summary,
     write_metrics_table,
     write_staleness_table,
 )
@@ -1861,6 +1862,29 @@ class TestWriteGenomeTaxonomyTables:
         self._write_index(new_root, new_meta, raw.drop(columns="release_date"))
         with pytest.raises(ValueError, match="release_date"):
             self._write_genome_tables(tmp_path, old_root, new_root, old_db, new_db)
+
+
+def test_write_memory_summary(tmp_path: Path) -> None:
+    results = tmp_path / "index" / "output" / "results"
+    for rel, gib in {
+        "blast_db/core_nt.00.nsq": 3,
+        "blast_db/core_nt.00.nin": 1,
+        "blast_db/core_nt.00.nhr": 5,  # headers aren't scanned, so not counted
+        "kraken_db/hash.k2d": 4,
+    }.items():
+        (results / rel).parent.mkdir(parents=True, exist_ok=True)
+        with (results / rel).open("wb") as f:
+            f.truncate(gib * 2**30)  # sparse, so no disk is used
+    resources = tmp_path / "resources.config"
+    resources.write_text(
+        "withLabel: blast_resources {\n cpus = 32\n memory = 8.GB\n}\n"
+        "withLabel: kraken_resources {\n cpus = 16\n memory = 5.GB\n}\n"
+    )
+    write_memory_summary(str(tmp_path / "index"), resources, tmp_path / "out.json")
+    assert json.loads((tmp_path / "out.json").read_text()) == {
+        "blast_resources": {"needed_gib": 4.0, "limit_gib": 8.0, "fraction": 0.5},
+        "kraken_resources": {"needed_gib": 4.0, "limit_gib": 5.0, "fraction": 0.8},
+    }
 
 
 if __name__ == "__main__":
