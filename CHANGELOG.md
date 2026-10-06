@@ -1,3 +1,7 @@
+# v3.4.0.1-dev
+
+- Raise BLAST memory from 256 GB to 360 GB so the core_nt database fits in memory, which avoids slow re-reads from disk.
+
 # v3.4.0.0
 
 ## Duplicate marking
