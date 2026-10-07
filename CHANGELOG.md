@@ -44,6 +44,10 @@
 - Delete `post-processing/` and `docs/rfc-trunk-based-development.md`. (#1009)
 - Require OpenSSL 3.3.7-r2 or later in the rust-tools image, fixing CVE-2026-75804 and CVE-2026-84782, and run its Trivy scan on PRs that change its Dockerfile. (#1045)
 
+## Coding agents
+
+- Improve `triage-trivy` skill: count distinct CVEs rather than per-package findings, don't pin a package Trivy found only in SBOM metadata, and expect a second triage round after the user's rebuild. (#941)
+
 # v3.3.0.0
 
 ## Deprecating DOWNSTREAM's VSEARCH clustering with hash-based downsampling
