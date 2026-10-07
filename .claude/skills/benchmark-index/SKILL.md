@@ -60,14 +60,6 @@ Read the compact script-produced summaries before interpreting detail rows:
 
 - `sizes_summary.json`: counts of top-level output entries that grew, shrank,
   or stayed unchanged.
-- `memory_summary.json`: per memory-mapped DB (BLAST, Kraken2), the GiB its
-  task must keep in memory for each index, and the
-  `files` (path globs) counted. Compare `new` against its process's
-  memory at `pipeline_ref` (Nextflow's `GB` is GiB):
-  `git show <pipeline_ref>:modules/local/{blast,kraken}/main.nf | grep _resources` gives
-  each process's label, and `git show <pipeline_ref>:configs/resources.config` that
-  label's `memory`. Flag a DB above ~90% of its process's memory: the task can't keep
-  it in memory and re-reads it from disk.
 - `genomes_summary.json`: headline genome/taxonomy counts — lost/gained totals,
   per-reason counts, all-lost / all-gained species, reassignments, net delta,
   taxa added/removed, and the four metadata/FASTA agreement counts below. If
@@ -97,6 +89,12 @@ Then read the detailed TSVs needed by the template:
   (`records`, `total_bp`, `n_bp` for FASTAs; `rows` for TSVs) feed the §2 content
   findings and let you flag bytes moving opposite to content (e.g. bytes shrank
   while rows grew).
+  For the §2 memory table, compare the `blast_db` and `kraken_db` `new_gib` against
+  their processes' memory at `pipeline_ref` (Nextflow's `GB` is GiB):
+  `git show <pipeline_ref>:modules/local/{blast,kraken}/main.nf | grep _resources` gives
+  each process's label, and `git show <pipeline_ref>:configs/resources.config` that
+  label's `memory`. Each task downloads its whole DB directory, which needs to fit
+  in the task's memory, so flag a DB above ~95% of its process's memory.
 - `genomes_lost_categorized.tsv`, `genomes_gained_categorized.tsv`, `species_lost_all_genomes.tsv`, `species_gained_all_genomes.tsv`, and `genomes_reassigned.tsv` for §3 and appendices.
 - `species_transitions_*.tsv` and `infection_status_transitions.tsv` for §4.
 

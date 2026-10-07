@@ -32,10 +32,10 @@
 |---|---|---|---|
 | `db_name` | old size | new size | absolute change (relative change in %) |
 
-| Memory-mapped DB | Files counted | Needed in reference index (GiB) | Needed in target index (GiB) | Process memory at pipeline ref `<pipeline ref>` (GiB) | Target / process memory |
-|---|---|---|---|---|---|
-| BLAST | `files` | old | new | limit | % (**flag** above ~90%) |
-| Kraken2 | `files` | old | new | limit | % (**flag** above ~90%) |
+| DB | Size in target index (GiB) | Process memory at pipeline ref `<pipeline ref>` (GiB) | Size / process memory |
+|---|---|---|---|
+| `blast_db` | new size | limit | % (**flag** above ~95%) |
+| `kraken_db` | new size | limit | % (**flag** above ~95%) |
 
 **Findings:**
 - Concise bullet list of findings from section

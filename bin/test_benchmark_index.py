@@ -47,7 +47,6 @@ from benchmark_index import (
     to_gib,
     write_genome_taxonomy_tables,
     write_index_versions,
-    write_memory_summary,
     write_metrics_table,
     write_staleness_table,
 )
@@ -1868,28 +1867,6 @@ class TestWriteGenomeTaxonomyTables:
         self._write_index(new_root, new_meta, raw.drop(columns="release_date"))
         with pytest.raises(ValueError, match="release_date"):
             self._write_genome_tables(tmp_path, old_root, new_root, old_db, new_db)
-
-
-def test_write_memory_summary(tmp_path: Path) -> None:
-    for side, gib in {"old": 1, "new": 2}.items():
-        results = tmp_path / side / "output" / "results"
-        for rel in [
-            "blast_db/core_nt.00.nsq",
-            "blast_db/core_nt.00.nin",
-            "blast_db/core_nt.00.nhr",
-            "kraken_db/hash.k2d",
-            "kraken_db/taxo.k2d",
-        ]:
-            (results / rel).parent.mkdir(parents=True, exist_ok=True)
-            with (results / rel).open("wb") as f:
-                f.truncate(gib * 2**30)  # sparse, so no disk is used
-    out = tmp_path / "out.json"
-    write_memory_summary(str(tmp_path / "old"), str(tmp_path / "new"), out)
-    # BLAST .nhr headers and Kraken2 taxo.k2d aren't read on every task, so aren't counted
-    assert json.loads(out.read_text()) == {
-        "blast": {"files": ["*.nsq", "*.nin"], "old": 2.0, "new": 4.0},
-        "kraken2": {"files": ["*/hash.k2d"], "old": 1.0, "new": 2.0},
-    }
 
 
 def test_to_gib() -> None:

@@ -32,7 +32,6 @@ import urllib.request
 from collections import Counter, defaultdict
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from fnmatch import fnmatch
 from pathlib import Path
 from typing import Any
 
@@ -249,11 +248,11 @@ def write_staleness_table(new_params: dict, out_path: Path) -> None:
 ###################################
 
 
-def list_file_sizes(prefix: str) -> dict[str, int]:
-    """Map each file under `prefix/output/results/`, keyed by its path relative
-    to that directory, to its bytes. Accepts s3:// or local."""
+def list_recursive_sizes(prefix: str) -> dict[str, int]:
+    """Map each top-level entry under `prefix/output/results/` to its total bytes
+    (directories summed; files keyed by basename). Accepts s3:// or local."""
     base = f"{prefix.rstrip('/')}/output/results/"
-    sizes: dict[str, int] = {}
+    sizes: Counter[str] = Counter()
     if prefix.startswith("s3://"):
         out = subprocess.run(
             ["aws", "s3", "ls", "--recursive", base],
@@ -266,45 +265,19 @@ def list_file_sizes(prefix: str) -> dict[str, int]:
             parts = line.split()
             if len(parts) < 4 or parts[2] == "0":
                 continue
-            sizes[parts[3].removeprefix(prefix_key)] = int(parts[2])
+            rel = parts[3].removeprefix(prefix_key)
+            sizes[rel.split("/", 1)[0] or rel] += int(parts[2])
     else:
         base_path = Path(base)
         for f in base_path.rglob("*"):
             if f.is_file():
-                sizes[f.relative_to(base_path).as_posix()] = f.stat().st_size
-    return sizes
-
-
-def list_recursive_sizes(prefix: str) -> dict[str, int]:
-    """Map each top-level entry under `prefix/output/results/` to its total bytes
-    (directories summed; files keyed by basename). Accepts s3:// or local."""
-    sizes: Counter[str] = Counter()
-    for rel, size in list_file_sizes(prefix).items():
-        sizes[rel.split("/", 1)[0]] += size
+                sizes[f.relative_to(base_path).parts[0]] += f.stat().st_size
     return dict(sizes)
 
 
 def to_gib(n_bytes: float) -> float:
     """Convert bytes to GiB (2**30 bytes), the unit of Nextflow's `GB`."""
     return n_bytes / 2**30
-
-
-# Files each memory-mapped DB touches on every task, as path globs. The task's memory
-# limit must hold them, or it re-reads them from disk.
-MEMORY_MAPPED_FILES = {"blast": ["*.nsq", "*.nin"], "kraken2": ["*/hash.k2d"]}
-
-
-def write_memory_summary(old_prefix: str, new_prefix: str, out_path: Path) -> None:
-    """Write the GiB each memory-mapped DB needs in memory, per index, and the
-    files counted."""
-    files = {"old": list_file_sizes(old_prefix), "new": list_file_sizes(new_prefix)}
-    summary: dict[str, dict[str, Any]] = {}
-    for db, globs in MEMORY_MAPPED_FILES.items():
-        summary[db] = {"files": globs}
-        for side, sizes in files.items():
-            matched = [n for f, n in sizes.items() if any(fnmatch(f, g) for g in globs)]
-            summary[db][side] = to_gib(sum(matched))
-    _write_json(out_path, summary)
 
 
 # Suffixes that get content metrics beyond byte size; gzip ratio varies with
@@ -1123,7 +1096,6 @@ def main() -> None:
     args.out.mkdir(parents=True, exist_ok=True)
     logger.info(f"Benchmarking {args.old} -> {args.new}")
     write_metrics_table(args.old, args.new, args.out)
-    write_memory_summary(args.old, args.new, args.out / "memory_summary.json")
     with tempfile.TemporaryDirectory() as td_str:
         work_dir = Path(td_str)
         old_params, new_params = write_params_tables(
