@@ -275,6 +275,11 @@ def list_recursive_sizes(prefix: str) -> dict[str, int]:
     return dict(sizes)
 
 
+def to_gib(n_bytes: float) -> float:
+    """Convert bytes to GiB (2**30 bytes), the unit of Nextflow's `GB`."""
+    return n_bytes / 2**30
+
+
 # Suffixes that get content metrics beyond byte size; gzip ratio varies with
 # content, so compressed bytes alone can mislead.
 _FASTA_SUFFIXES = (".fasta.gz", ".fasta", ".fa.gz", ".fa")
@@ -360,6 +365,9 @@ def write_metrics_table(old_prefix: str, new_prefix: str, out_dir: Path) -> None
     )
     content_stats = collect_content_stats(old_prefix, new_prefix, content_files)
     metrics = compare_metrics(old_sizes, new_sizes, content_stats)
+    is_bytes = metrics["metric"] == "bytes"
+    for col in ("old", "new", "delta"):
+        metrics.loc[is_bytes, f"{col}_gib"] = metrics[col][is_bytes].map(to_gib)
     metrics.to_csv(out_dir / "sizes.tsv", sep="\t", index=False)
     byte_delta = metrics.loc[metrics["metric"] == "bytes", "delta"]
     _write_json(

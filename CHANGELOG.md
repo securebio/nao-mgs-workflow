@@ -1,3 +1,8 @@
+# v3.4.0.1
+
+- Raise BLAST memory from 256 GB to 360 GB and Kraken2 memory from 128 GB to 176 GB, so the current core_nt and PlusPF databases fit in memory instead of being re-read from disk, which slowed BLAST in 3.4.0.0. Results are unchanged. (#1051)
+- Add a check to the `benchmark-index` skill that compares the BLAST and Kraken2 database sizes against the memory limits of the pipeline branch or tag that will run the index, and report index sizes in GiB. (#1052)
+
 # v3.4.0.0
 
 ## Duplicate marking

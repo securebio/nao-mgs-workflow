@@ -2,6 +2,7 @@
 
 - **Target index:** `s3://path/to/new/index` (built with pipeline `X.Y.Z.W`)
 - **Reference index:** `s3://path/to/old/index` (built with pipeline `X.Y.Z.W`)
+- **Pipeline ref for memory limits:** `branch-or-tag`
 - **Report timestamp:** YYYY-MM-DD HH:MM
 
 ---
@@ -27,9 +28,14 @@
 
 ### 2. Database size
 
-| DB | Size in reference index | Size in target index | Δ |
+| DB | Size in reference index (GiB) | Size in target index (GiB) | Δ (GiB) |
 |---|---|---|---|
 | `db_name` | old size | new size | absolute change (relative change in %) |
+
+| DB | Size in target index (GiB) | Process memory at pipeline ref `<pipeline ref>` (GiB) | Size / process memory |
+|---|---|---|---|
+| `blast_db` | new size | limit | % (**flag** above ~95%) |
+| `kraken_db` | new size | limit | % (**flag** above ~95%) |
 
 **Findings:**
 - Concise bullet list of findings from section
