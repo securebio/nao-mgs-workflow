@@ -286,7 +286,7 @@ def list_recursive_sizes(prefix: str) -> dict[str, int]:
 
 def to_gib(n_bytes: float) -> float:
     """Convert bytes to GiB (2**30 bytes), the unit of Nextflow's `GB`."""
-    return round(n_bytes / 2**30, 2)
+    return n_bytes / 2**30
 
 
 # Files each memory-mapped DB touches on every task, as path globs. The task's memory

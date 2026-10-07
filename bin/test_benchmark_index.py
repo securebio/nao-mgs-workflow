@@ -44,6 +44,7 @@ from benchmark_index import (
     restrict_to_fasta,
     summarise_params_changes,
     surveilled_taxids,
+    to_gib,
     write_genome_taxonomy_tables,
     write_index_versions,
     write_memory_summary,
@@ -1007,10 +1008,11 @@ class TestWriteMetricsTable:
         # A .dmp dump and a directory are size-only (not FASTA/TSV).
         assert list(df[df["name"] == "taxonomy-names.dmp"]["metric"]) == ["bytes"]
         assert list(df[df["name"] == "kraken_db"]["metric"]) == ["bytes"]
-        # Byte rows also carry GiB, for comparison with Nextflow memory limits.
-        kraken = df[df["name"] == "kraken_db"].iloc[0]
-        assert kraken["new_gib"] == round(kraken["new"] / 2**30, 2)
-        assert rows_row[["old_gib", "new_gib", "delta_gib"]].isna().all()
+        # Byte rows also carry GiB, for comparison with Nextflow memory limits;
+        # content-metric rows don't.
+        gib_cols = ["old_gib", "new_gib", "delta_gib"]
+        assert df.loc[df["metric"] == "bytes", gib_cols].notna().all().all()
+        assert df.loc[df["metric"] != "bytes", gib_cols].isna().all().all()
         # Summary counts are precomputed for the skill.
         summary = json.loads((tmp_path / "sizes_summary.json").read_text())
         assert set(summary) == {"shrunk", "grown", "unchanged"}
@@ -1888,6 +1890,11 @@ def test_write_memory_summary(tmp_path: Path) -> None:
         "blast": {"files": ["*.nsq", "*.nin"], "old": 2.0, "new": 4.0},
         "kraken2": {"files": ["*/hash.k2d"], "old": 1.0, "new": 2.0},
     }
+
+
+def test_to_gib() -> None:
+    assert to_gib(1.5 * 2**30) == 1.5
+    assert to_gib(2**20) == 2**-10  # not rounded, so small entries stay non-zero
 
 
 if __name__ == "__main__":

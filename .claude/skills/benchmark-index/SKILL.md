@@ -61,7 +61,8 @@ Read the compact script-produced summaries before interpreting detail rows:
 - `sizes_summary.json`: counts of top-level output entries that grew, shrank,
   or stayed unchanged.
 - `memory_summary.json`: per memory-mapped DB (BLAST, Kraken2), the GiB its
-  task must keep in memory for each index, and the `files` (path globs) counted. Compare `new` against its process's
+  task must keep in memory for each index (unrounded; report to 1 decimal), and the
+  `files` (path globs) counted. Compare `new` against its process's
   memory at `pipeline_ref` (Nextflow's `GB` is GiB):
   `git show <pipeline_ref>:modules/local/{blast,kraken}/main.nf | grep _resources` gives
   each process's label, and `git show <pipeline_ref>:configs/resources.config` that
@@ -92,7 +93,7 @@ Then read the detailed TSVs needed by the template:
   `metadata_schema_diff.tsv` for §2 and §5.
   `sizes.tsv` is long-format (one row per `name`, `metric`): `metric == bytes`
   rows give per-entry sizes for the §2 size table (use their `old_gib`, `new_gib`,
-  and `delta_gib` columns); the content metrics
+  and `delta_gib` columns, rounded to 2 decimals); the content metrics
   (`records`, `total_bp`, `n_bp` for FASTAs; `rows` for TSVs) feed the §2 content
   findings and let you flag bytes moving opposite to content (e.g. bytes shrank
   while rows grew).
