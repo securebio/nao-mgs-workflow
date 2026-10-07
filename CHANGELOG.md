@@ -1,3 +1,7 @@
+# v3.4.0.1-dev
+
+- Raise BLAST memory from 256 GB to 360 GB and Kraken2 memory from 128 GB to 176 GB, so their memory-mapped databases fit in memory and aren't re-read from disk.
+
 # v3.4.0.0
 
 ## Duplicate marking
