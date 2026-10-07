@@ -1,7 +1,7 @@
 # v3.4.0.1-dev
 
 - Raise BLAST memory from 256 GB to 360 GB and Kraken2 memory from 128 GB to 176 GB, so their memory-mapped databases fit in memory and aren't re-read from disk.
-- `bin/benchmark_index.py` writes `memory_summary.json`, the memory each of those databases needs, and the `benchmark-index` skill checks it against a given pipeline branch or tag.
+- `bin/benchmark_index.py` writes `memory_summary.json`, the memory each of those databases needs, and the `benchmark-index` skill checks it against a given pipeline branch or tag. `sizes.tsv` byte rows also report GiB.
 
 # v3.4.0.0
 
