@@ -33,7 +33,6 @@
 
 **Findings:**
 - Concise bullet list of findings from section
-- From `memory_summary.json`, report the GiB each memory-mapped DB (BLAST, Kraken2) needs in memory, and flag a target-index value above ~90% of that process's memory in the pipeline version that will run the index: the task can't keep the DB in memory and re-reads it from disk.
 
 ### 3. Virus genomes
 

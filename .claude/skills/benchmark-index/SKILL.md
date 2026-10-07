@@ -59,8 +59,6 @@ Read the compact script-produced summaries before interpreting detail rows:
 
 - `sizes_summary.json`: counts of top-level output entries that grew, shrank,
   or stayed unchanged.
-- `memory_summary.json`: per memory-mapped DB (BLAST, Kraken2), the GiB its
-  task must keep in memory, for each index.
 - `genomes_summary.json`: headline genome/taxonomy counts — lost/gained totals,
   per-reason counts, all-lost / all-gained species, reassignments, net delta,
   taxa added/removed, and the four metadata/FASTA agreement counts below. If
