@@ -32,6 +32,7 @@ import urllib.request
 from collections import Counter, defaultdict
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from fnmatch import fnmatch
 from pathlib import Path
 from typing import Any
 
@@ -283,22 +284,26 @@ def list_recursive_sizes(prefix: str) -> dict[str, int]:
     return dict(sizes)
 
 
-# Files each memory-mapped DB touches on every task. The task's memory limit must
-# hold them, or it re-reads them from disk.
-MEMORY_MAPPED_FILES = {"blast": r"\.n(sq|in)$", "kraken2": r"(^|/)hash\.k2d$"}
+def to_gib(n_bytes: float) -> float:
+    """Convert bytes to GiB (2**30 bytes), the unit of Nextflow's `GB`."""
+    return round(n_bytes / 2**30, 2)
+
+
+# Files each memory-mapped DB touches on every task, as path globs. The task's memory
+# limit must hold them, or it re-reads them from disk.
+MEMORY_MAPPED_FILES = {"blast": ["*.nsq", "*.nin"], "kraken2": ["*/hash.k2d"]}
 
 
 def write_memory_summary(old_prefix: str, new_prefix: str, out_path: Path) -> None:
-    """Write the GiB each memory-mapped DB needs in memory, per index. GiB to match
-    Nextflow's `GB` (1024**3 bytes)."""
+    """Write the GiB each memory-mapped DB needs in memory, per index, and the
+    files counted."""
     files = {"old": list_file_sizes(old_prefix), "new": list_file_sizes(new_prefix)}
-    summary = {
-        db: {
-            side: round(sum(n for f, n in fs.items() if re.search(pat, f)) / 2**30, 1)
-            for side, fs in files.items()
-        }
-        for db, pat in MEMORY_MAPPED_FILES.items()
-    }
+    summary: dict[str, dict[str, Any]] = {}
+    for db, globs in MEMORY_MAPPED_FILES.items():
+        summary[db] = {"files": globs}
+        for side, sizes in files.items():
+            matched = [n for f, n in sizes.items() if any(fnmatch(f, g) for g in globs)]
+            summary[db][side] = to_gib(sum(matched))
     _write_json(out_path, summary)
 
 
@@ -388,8 +393,8 @@ def write_metrics_table(old_prefix: str, new_prefix: str, out_dir: Path) -> None
     content_stats = collect_content_stats(old_prefix, new_prefix, content_files)
     metrics = compare_metrics(old_sizes, new_sizes, content_stats)
     is_bytes = metrics["metric"] == "bytes"
-    for col in ("old", "new", "delta"):  # GiB, to compare with Nextflow's GB
-        metrics.loc[is_bytes, f"{col}_gib"] = (metrics[col][is_bytes] / 2**30).round(2)
+    for col in ("old", "new", "delta"):
+        metrics.loc[is_bytes, f"{col}_gib"] = metrics[col][is_bytes].map(to_gib)
     metrics.to_csv(out_dir / "sizes.tsv", sep="\t", index=False)
     byte_delta = metrics.loc[metrics["metric"] == "bytes", "delta"]
     _write_json(

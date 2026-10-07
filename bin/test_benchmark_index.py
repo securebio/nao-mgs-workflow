@@ -1885,8 +1885,8 @@ def test_write_memory_summary(tmp_path: Path) -> None:
     write_memory_summary(str(tmp_path / "old"), str(tmp_path / "new"), out)
     # BLAST .nhr headers and Kraken2 taxo.k2d aren't read on every task, so aren't counted
     assert json.loads(out.read_text()) == {
-        "blast": {"old": 2.0, "new": 4.0},
-        "kraken2": {"old": 1.0, "new": 2.0},
+        "blast": {"files": ["*.nsq", "*.nin"], "old": 2.0, "new": 4.0},
+        "kraken2": {"files": ["*/hash.k2d"], "old": 1.0, "new": 2.0},
     }
 
 

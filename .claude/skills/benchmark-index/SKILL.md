@@ -61,7 +61,7 @@ Read the compact script-produced summaries before interpreting detail rows:
 - `sizes_summary.json`: counts of top-level output entries that grew, shrank,
   or stayed unchanged.
 - `memory_summary.json`: per memory-mapped DB (BLAST, Kraken2), the GiB its
-  task must keep in memory, for each index. Compare `new` against its process's
+  task must keep in memory for each index, and the `files` (path globs) counted. Compare `new` against its process's
   memory at `pipeline_ref` (Nextflow's `GB` is GiB):
   `git show <pipeline_ref>:modules/local/{blast,kraken}/main.nf | grep _resources` gives
   each process's label, and `git show <pipeline_ref>:configs/resources.config` that
