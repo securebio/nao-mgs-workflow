@@ -32,10 +32,11 @@ and surface the output directory plus the relevant summary files; do not write
 - `new_index` (required): the new (candidate) index to vet — an `s3://nao-mgs-index/<DATE>` URI or a local path (the root containing `output/`).
 - `old_index` (required): the old (reference) index to compare against, same form.
 - `out_dir` (required): directory for the report and tables; use an absolute path.
+- `pipeline_ref` (required): the `nao-mgs-workflow` branch or tag that will run `new_index` (e.g. `dev` or a release tag), whose memory limits the DB sizes are checked against.
 
-If any is missing, ask the user; do not guess. These map to the script's `--new`,
-`--old`, and `--out` (Step 1). Coverage annotations are derived from `new_index`
-itself, so no repo checkout is needed.
+If any is missing, ask the user; do not guess. The first three map to the script's `--new`,
+`--old`, and `--out` (Step 1); `pipeline_ref` is read with `git show` in Step 2.
+Coverage annotations are derived from `new_index` itself.
 
 ## Procedure
 
@@ -59,6 +60,12 @@ Read the compact script-produced summaries before interpreting detail rows:
 
 - `sizes_summary.json`: counts of top-level output entries that grew, shrank,
   or stayed unchanged.
+- `memory_summary.json`: per memory-mapped DB (BLAST, Kraken2), the GiB its
+  task must keep in memory, for each index. Compare `new` against its process's
+  memory at `pipeline_ref`: the resource label in `modules/local/{blast,kraken}/main.nf`
+  and that label's `memory` in `configs/resources.config` (`git show <pipeline_ref>:<path>`;
+  Nextflow's `GB` is GiB). Flag a DB above ~90% of its process's memory: the task
+  can't keep it in memory and re-reads it from disk.
 - `genomes_summary.json`: headline genome/taxonomy counts — lost/gained totals,
   per-reason counts, all-lost / all-gained species, reassignments, net delta,
   taxa added/removed, and the four metadata/FASTA agreement counts below. If
@@ -83,7 +90,8 @@ Then read the detailed TSVs needed by the template:
   `index_versions.json`, `metadata_schema_summary.json`, and
   `metadata_schema_diff.tsv` for §2 and §5.
   `sizes.tsv` is long-format (one row per `name`, `metric`): `metric == bytes`
-  rows give per-entry byte sizes for the §2 size table; the content metrics
+  rows give per-entry byte sizes for the §2 size table, reported in GiB
+  (bytes / 2^30); the content metrics
   (`records`, `total_bp`, `n_bp` for FASTAs; `rows` for TSVs) feed the §2 content
   findings and let you flag bytes moving opposite to content (e.g. bytes shrank
   while rows grew).
