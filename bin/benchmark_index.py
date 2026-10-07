@@ -387,6 +387,9 @@ def write_metrics_table(old_prefix: str, new_prefix: str, out_dir: Path) -> None
     )
     content_stats = collect_content_stats(old_prefix, new_prefix, content_files)
     metrics = compare_metrics(old_sizes, new_sizes, content_stats)
+    is_bytes = metrics["metric"] == "bytes"
+    for col in ("old", "new", "delta"):  # GiB, to compare with Nextflow's GB
+        metrics.loc[is_bytes, f"{col}_gib"] = (metrics[col][is_bytes] / 2**30).round(2)
     metrics.to_csv(out_dir / "sizes.tsv", sep="\t", index=False)
     byte_delta = metrics.loc[metrics["metric"] == "bytes", "delta"]
     _write_json(

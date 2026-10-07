@@ -32,7 +32,7 @@
 |---|---|---|---|
 | `db_name` | old size | new size | absolute change (relative change in %) |
 
-| Memory-mapped DB | Needed in reference index (GiB) | Needed in target index (GiB) | Process memory at pipeline ref (GiB) | Target / process memory |
+| Memory-mapped DB | Needed in reference index (GiB) | Needed in target index (GiB) | Process memory at pipeline ref `<pipeline ref>` (GiB) | Target / process memory |
 |---|---|---|---|---|
 | BLAST | old | new | limit | % (**flag** above ~90%) |
 | Kraken2 | old | new | limit | % (**flag** above ~90%) |

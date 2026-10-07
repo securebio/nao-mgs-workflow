@@ -1007,6 +1007,10 @@ class TestWriteMetricsTable:
         # A .dmp dump and a directory are size-only (not FASTA/TSV).
         assert list(df[df["name"] == "taxonomy-names.dmp"]["metric"]) == ["bytes"]
         assert list(df[df["name"] == "kraken_db"]["metric"]) == ["bytes"]
+        # Byte rows also carry GiB, for comparison with Nextflow memory limits.
+        kraken = df[df["name"] == "kraken_db"].iloc[0]
+        assert kraken["new_gib"] == round(kraken["new"] / 2**30, 2)
+        assert rows_row[["old_gib", "new_gib", "delta_gib"]].isna().all()
         # Summary counts are precomputed for the skill.
         summary = json.loads((tmp_path / "sizes_summary.json").read_text())
         assert set(summary) == {"shrunk", "grown", "unchanged"}
@@ -1872,13 +1876,14 @@ def test_write_memory_summary(tmp_path: Path) -> None:
             "blast_db/core_nt.00.nin",
             "blast_db/core_nt.00.nhr",
             "kraken_db/hash.k2d",
+            "kraken_db/taxo.k2d",
         ]:
             (results / rel).parent.mkdir(parents=True, exist_ok=True)
             with (results / rel).open("wb") as f:
                 f.truncate(gib * 2**30)  # sparse, so no disk is used
     out = tmp_path / "out.json"
     write_memory_summary(str(tmp_path / "old"), str(tmp_path / "new"), out)
-    # .nhr headers aren't scanned on every search, so they aren't counted
+    # BLAST .nhr headers and Kraken2 taxo.k2d aren't read on every task, so aren't counted
     assert json.loads(out.read_text()) == {
         "blast": {"old": 2.0, "new": 4.0},
         "kraken2": {"old": 1.0, "new": 2.0},
