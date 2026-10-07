@@ -32,7 +32,7 @@ and surface the output directory plus the relevant summary files; do not write
 - `new_index` (required): the new (candidate) index to vet — an `s3://nao-mgs-index/<DATE>` URI or a local path (the root containing `output/`).
 - `old_index` (required): the old (reference) index to compare against, same form.
 - `out_dir` (required): directory for the report and tables; use an absolute path.
-- `pipeline_ref` (required): the `nao-mgs-workflow` branch or tag that will run `new_index` (e.g. `dev` or a release tag), whose memory limits the DB sizes are checked against.
+- `pipeline_ref` (required): the `nao-mgs-workflow` branch or tag that will run `new_index` as a fetched remote ref or tag (e.g. `origin/dev`), not the working tree, whose memory limits the DB sizes are checked against.
 
 If any is missing, ask the user; do not guess. The first three map to the script's `--new`,
 `--old`, and `--out` (Step 1); `pipeline_ref` is read with `git show` in Step 2.
@@ -85,7 +85,7 @@ Then read the detailed TSVs needed by the template:
   `metadata_schema_diff.tsv` for §2 and §5.
   `sizes.tsv` is long-format (one row per `name`, `metric`): `metric == bytes`
   rows give per-entry sizes for the §2 size table (use their `old_gib`, `new_gib`,
-  and `delta_gib` columns); the content metrics
+  `delta_gib`, and `pct_change` columns); the content metrics
   (`records`, `total_bp`, `n_bp` for FASTAs; `rows` for TSVs) feed the §2 content
   findings and let you flag bytes moving opposite to content (e.g. bytes shrank
   while rows grew).
@@ -93,8 +93,9 @@ Then read the detailed TSVs needed by the template:
   their processes' memory at `pipeline_ref` (Nextflow's `GB` is GiB):
   `git show <pipeline_ref>:modules/local/{blast,kraken}/main.nf | grep _resources` gives
   each process's label, and `git show <pipeline_ref>:configs/resources.config` that
-  label's `memory`. Each task downloads its whole DB directory, which needs to fit
-  in the task's memory, so flag a DB above ~95% of its process's memory.
+  label's `memory`. The task's memory must hold the whole DB directory (the download
+  leaves it cached, and BLAST/Kraken2 memory-map it), so flag a DB above ~95% of its
+  process's memory, and note if the reference index already exceeded it.
 - `genomes_lost_categorized.tsv`, `genomes_gained_categorized.tsv`, `species_lost_all_genomes.tsv`, `species_gained_all_genomes.tsv`, and `genomes_reassigned.tsv` for §3 and appendices.
 - `species_transitions_*.tsv` and `infection_status_transitions.tsv` for §4.
 
