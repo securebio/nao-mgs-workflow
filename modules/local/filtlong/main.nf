@@ -11,7 +11,6 @@ process FILTLONG {
         tuple val(sample), path("${sample}_filtlong.fastq.gz"), emit: reads
     script:
         // Filter reads based on min length, max length, and min mean quality
-        // Filtlong is single-threaded, so pigz compresses its output in parallel.
         def o = "${sample}_filtlong.fastq.gz"
         def i = reads[0]
         """
