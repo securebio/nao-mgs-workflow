@@ -23,19 +23,8 @@ process MASK_FASTQ_READS {
         # Define parameters
         par="entropy=${entropy} entropywindow=${window_size} entropyk=5 entropymask=t interleaved=f threads=${task.cpus} -Xmx${heap_gb}g"
 
-        # If input is empty, create empty gzipped output
-        if [[ -z "\$(zcat "${reads}" | head)" ]]; then
-            echo -n | gzip > \${out}
-        else
-            # Execute with streaming approach
-            pigz -dc ${reads} | bbduk.sh in=stdin.fastq out=stdout.fastq \${par} | pigz -p ${task.cpus} > \${out}
-
-            # Check for empty output file without empty input
-            if [[ -z "\$(zcat "\${out}" | head)" ]]; then
-                echo "Error: Output file is empty."
-                exit 1
-            fi
-        fi
+        # Execute with streaming approach
+        pigz -dc ${reads} | bbduk.sh in=stdin.fastq out=stdout.fastq \${par} | pigz -p ${task.cpus} > \${out}
 
         # Link input to output for testing
         ln -s ${reads} ${sample}_in.fastq.gz
