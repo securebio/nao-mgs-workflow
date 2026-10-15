@@ -1,3 +1,7 @@
+# v3.4.0.2-dev
+
+- Compress `FILTLONG` output with multithreaded `pigz` instead of single-threaded `gzip`, and stop writing Filtlong's per-read `--verbose` log. Filtered reads are unchanged. Adds `pigz` to the Filtlong container.
+
 # v3.4.0.1
 
 - Raise BLAST memory from 256 GB to 360 GB and Kraken2 memory from 128 GB to 176 GB, so the current core_nt and PlusPF databases fit in memory instead of being re-read from disk, which slowed BLAST in 3.4.0.0. Results are unchanged. (#1051)
