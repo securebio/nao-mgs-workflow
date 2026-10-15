@@ -1,3 +1,7 @@
+# v3.4.1.0-dev
+
+- Lower ONT `validation_n_sample` from 1000000 to 20 to match Illumina, since BLAST-validating every ONT read is too slow when common viruses produce many near-identical reads. (#1056)
+
 # v3.4.0.1
 
 - Raise BLAST memory from 256 GB to 360 GB and Kraken2 memory from 128 GB to 176 GB, so the current core_nt and PlusPF databases fit in memory instead of being re-read from disk, which slowed BLAST in 3.4.0.0. Results are unchanged. (#1051)

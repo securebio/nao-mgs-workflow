@@ -311,7 +311,7 @@ To run the `DOWNSTREAM` workflow, you need:
     - The reference directory containing databases and indices (`params.ref_dir`);
     - The permitted deviation when identifying alignment duplicates (`params.aln_dup_deviation`); **Note: Only used for short-read platforms**
     - Parameter for downsampling during validation:
-        - `params.validation_n_sample`: Maximum reads per selected taxid to validate (default 20 for non-ONT platforms, 1000000 for ONT[^max_sample]).
+        - `params.validation_n_sample`: Maximum reads per selected taxid to validate (default 20).
     - Parameters for BLAST validation:
         - INDEX always publishes the BLAST database to `results/blast_db/`; the originally downloaded database is recorded via the index's `params.blast_db_name`
         - `params.blast_perc_id`: Percentage identity threshold for BLAST hits (default 60 for short-read, 0 for long-read)
@@ -319,8 +319,6 @@ To run the `DOWNSTREAM` workflow, you need:
         - `params.blast_max_rank`: Maximum rank for BLAST hits by bitscore (10 for short-read, 5 for long-read)
         - `params.blast_min_frac`: Minimum fraction of best bitscore to retain hits (default 0.9)
         - `params.taxid_artificial`: Parent taxid for artificial sequences (default 81077)
-
-[^max_sample]: The ONT default is set far above any realistic per-taxid viral read count, so in practice every read is validated. ONT libraries yield far fewer viral reads than short-read ones, so there is no need to subsample them.
 
 > [!NOTE]
 > Currently, the input file and grouping TSV must be generated manually. We intend to implement programmatic generation of these files in the future.
