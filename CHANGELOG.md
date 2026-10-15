@@ -1,6 +1,6 @@
 # v3.4.0.2-dev
 
-- Compress `FILTLONG` output with multithreaded `pigz` instead of single-threaded `gzip`, and stop writing Filtlong's per-read `--verbose` log. Filtered reads are unchanged. Adds `pigz` to the Filtlong container.
+- Compress `FILTLONG` output with `pigz` to reduce runtime (#1057)
 
 # v3.4.0.1
 
