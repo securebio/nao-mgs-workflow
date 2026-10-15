@@ -1,6 +1,7 @@
 # v3.4.0.2-dev
 
 - Compress `FILTLONG` output with `pigz` to reduce runtime (#1057)
+- Mask low-complexity regions of ONT reads with BBDuk instead of BBMask in `MASK_FASTQ_READS`, with the same entropy settings. BBDuk streams reads rather than holding them all in memory, so the step now uses the fixed `large` resources (16 CPUs, 32 GB) instead of tiers up to 128 GB. Masked bases now get quality 0; published outputs are unchanged because masked reads only feed minimap2, which ignores base qualities.
 
 # v3.4.0.1
 
