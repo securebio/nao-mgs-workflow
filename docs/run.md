@@ -252,7 +252,7 @@ config:
 ---
 flowchart LR
 A(Raw reads) --> B[FILTLONG]
-B --> C["BBMask <br> (entropy masking)"]
+B --> C["BBDuk <br> (entropy masking)"]
 C --> D["Minimap2 <br> (human index)"]
 D --> E["Minimap2 <br> (other contaminants index)"]
 E --> F["Minimap2 <br> (viral index)"]
@@ -276,7 +276,7 @@ style A fill:#fff,stroke:#000
 style I fill:#000,color:#fff,stroke:#000
 ```
 
-1. First, reads are filtered for length and quality with [Filtlong](https://github.com/rrwick/Filtlong), and low-complexity regions are masked with [BBMask](https://archive.jgi.doe.gov/data-and-tools/software-tools/bbtools/bb-tools-user-guide/bbmask-guide/) (entropy masking).
+1. First, reads are filtered for length and quality with [Filtlong](https://github.com/rrwick/Filtlong), and low-complexity regions are masked with [BBDuk](https://archive.jgi.doe.gov/data-and-tools/software-tools/bbtools/bb-tools-user-guide/bbduk-guide/) (entropy masking).
 2. Next, common contaminant sequences are removed, by aligning reads to contaminants with [Minimap2](https://github.com/lh3/minimap2) in a series. Contaminants to be screened against include reference genomes from human, cow, pig, carp, mouse and *E. coli*, as well as various genetic engineering vectors.
     - Note that, unlike for EXTRACT_VIRAL_READS_SHORT, contaminant removal is done before viral read identification. EXTRACT_VIRAL_READS_ONT is frequently used on swab samples (not just on wastewater samples); we avoid analyzing human reads from swab samples for privacy/compliance reasons, so we wish to discard human reads as early in the workflow as possible.
 3. Then, reads are aligned to our database of vertebrate-infecting viral genomes using Minimap2 while allowing multiple alignments to be returned. (As noted above, the viral database is generated from Genbank by the index workflow.)

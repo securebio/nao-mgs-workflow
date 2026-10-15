@@ -1,11 +1,11 @@
 nextflow_workflow {
 
-    name "Test bbmask_resources memory-tier closure"
+    name "Test mark_alignment_duplicates_resources memory-tier closure"
     script "tests/configs/resources/main.nf"
     workflow "PROBE_RESOURCE_TIER"
     config "tests/configs/resources/nextflow.config"
     tag "config"
-    tag "bbmask_resources"
+    tag "mark_alignment_duplicates_resources"
 
     test("Should map input byte size to the expected memory tier") {
         tag "expect_success"
@@ -13,9 +13,9 @@ nextflow_workflow {
             workflow {
                 """
                 input[0] = channel.of(
-                    1073741824L,   // 1 GB  -> tier 0 (<= 2 GB)  -> 32 GB
-                    2147483648L,   // 2 GB  -> tier 0 (boundary) -> 32 GB
-                    5368709120L,   // 5 GB  -> tier 1 (<= 10 GB) -> 64 GB
+                    1073741824L,   // 1 GB  -> tier 0 (<= 5 GB)  -> 32 GB
+                    5368709120L,   // 5 GB  -> tier 0 (boundary) -> 32 GB
+                    7516192768L,   // 7 GB  -> tier 1 (<= 10 GB) -> 64 GB
                     10737418240L,  // 10 GB -> tier 1 (boundary) -> 64 GB
                     21474836480L,  // 20 GB -> tier 2 (fallback) -> 128 GB
                 )
@@ -29,8 +29,8 @@ nextflow_workflow {
             def gb = 1073741824L
             def expected = [
                 1073741824L:  32 * gb,
-                2147483648L:  32 * gb,
-                5368709120L:  64 * gb,
+                5368709120L:  32 * gb,
+                7516192768L:  64 * gb,
                 10737418240L: 64 * gb,
                 21474836480L: 128 * gb,
             ]

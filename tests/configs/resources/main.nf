@@ -1,8 +1,9 @@
 // Test-only workflow that exercises the input-size-aware memory closure
-// attached to the `bbmask_resources` label in configs/resources.config.
-// MAKE_SPARSE_FILE creates a logical-size-only file of a given byte count via
-// truncate (consuming negligible disk). PROBE_BBMASK_MEMORY then takes that
-// file under the bbmask_resources label and emits the resolved
+// attached to the `mark_alignment_duplicates_resources` label in
+// configs/resources.config. MAKE_SPARSE_FILE creates a logical-size-only file
+// of a given byte count via truncate (consuming negligible disk).
+// PROBE_TIERED_MEMORY then takes that file under the
+// mark_alignment_duplicates_resources label and emits the resolved
 // task.memory.toBytes() value. Per-input rows are aggregated into a single
 // sorted CSV so the workflow's only output emission is one Path — avoiding
 // nf-test channel-sort warnings on tuple emissions containing Long values.
@@ -23,12 +24,12 @@ process MAKE_SPARSE_FILE {
         """
 }
 
-process PROBE_BBMASK_MEMORY {
-    label "bbmask_resources"
+process PROBE_TIERED_MEMORY {
+    label "mark_alignment_duplicates_resources"
     label "coreutils"
 
     input:
-        tuple val(size_bytes), path(reads)
+        tuple val(size_bytes), path(tsv)
 
     output:
         path "row.csv"
@@ -45,7 +46,7 @@ workflow PROBE_RESOURCE_TIER {
 
     main:
         sparse_ch = MAKE_SPARSE_FILE(sizes_ch)
-        rows_ch = PROBE_BBMASK_MEMORY(sparse_ch)
+        rows_ch = PROBE_TIERED_MEMORY(sparse_ch)
         report_ch = rows_ch.collectFile(name: 'report.csv', sort: true)
 
     emit:
