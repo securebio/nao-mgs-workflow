@@ -44,12 +44,12 @@ nextflow_process {
             def read_ids_out = fastq_out.readNames
             assert read_ids_in.toSet() == read_ids_out.toSet()
 
-            // The first five sequences should be masked
-            def masked_seqs = fastq_out.sequences
-            assert masked_seqs.take(5).every { it.contains("N") }
+            // Five of the input sequences should be masked
+            def out_seqs = fastq_out.sequences
+            assert out_seqs.count { it.contains("N") } == 5
 
             // The remaining sequences should not be masked
-            def non_masked_seqs = fastq_out.sequences.drop(5).toSet()
+            def non_masked_seqs = out_seqs.findAll { !it.contains("N") }.toSet()
             def in_seqs = fastq_in.sequences.drop(5).toSet()
             assert non_masked_seqs == in_seqs
         }

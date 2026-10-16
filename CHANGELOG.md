@@ -1,3 +1,7 @@
+# v3.4.0.2-dev
+
+- Mask low-complexity regions of ONT reads with BBDuk instead of BBMask in `MASK_FASTQ_READS` to reduce memory usage. Also replace gzip with pigz for faster compression. Published outputs are unchanged. (#1058)
+
 # v3.4.0.1
 
 - Raise BLAST memory from 256 GB to 360 GB and Kraken2 memory from 128 GB to 176 GB, so the current core_nt and PlusPF databases fit in memory instead of being re-read from disk, which slowed BLAST in 3.4.0.0. Results are unchanged. (#1051)
