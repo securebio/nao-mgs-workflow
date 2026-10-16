@@ -1,3 +1,7 @@
+# v3.4.0.2-dev
+
+- Compress `FILTLONG` output with `pigz` to reduce runtime (#1057)
+
 # v3.4.0.1
 
 - Raise BLAST memory from 256 GB to 360 GB and Kraken2 memory from 128 GB to 176 GB, so the current core_nt and PlusPF databases fit in memory instead of being re-read from disk, which slowed BLAST in 3.4.0.0. Results are unchanged. (#1051)
