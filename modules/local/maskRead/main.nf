@@ -21,7 +21,7 @@ process MASK_FASTQ_READS {
         out=${sample}_masked.fastq.gz
 
         # Define parameters
-        par="entropy=${entropy} entropywindow=${window_size} entropyk=5 entropymask=t interleaved=f threads=${task.cpus} -Xmx${heap_gb}g"
+        par="entropy=${entropy} entropywindow=${window_size} entropymask=t interleaved=f threads=${task.cpus} -Xmx${heap_gb}g"
 
         # Execute with streaming approach
         pigz -dc ${reads} | bbduk.sh in=stdin.fastq out=stdout.fastq \${par} | pigz -p ${task.cpus} > \${out}
