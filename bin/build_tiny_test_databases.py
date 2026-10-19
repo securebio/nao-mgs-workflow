@@ -128,7 +128,9 @@ def open_by_suffix(filename: str | Path, mode: str = "r") -> IO[str]:
     """
     filename_str = str(filename)
     if filename_str.endswith(".gz"):
-        return gzip.open(filename_str, mode + "t")  # type: ignore[return-value]
+        # Write at level 1, like the pipeline's `pigz -1` steps: much faster than
+        # the default level 9, for somewhat larger files. Ignored when reading.
+        return gzip.open(filename_str, mode + "t", compresslevel=1)  # type: ignore[return-value]
     return open(filename_str, mode)
 
 

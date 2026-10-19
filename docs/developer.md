@@ -69,6 +69,7 @@ These guidelines represent best practices to implement in new code, though some 
 - Performance conventions:
     - Always process large files line-by-line or in manageable chunks.
     - Support compressed file formats (.gz, .bz2, .zst). 
+    - Write gzip output at level 1 (`compresslevel=1`), as `open_by_suffix()` in `bin/build_tiny_test_databases.py` does and as Nextflow processes do with `pigz -1`. Python's default, level 9, is much slower.
 - Python style: 
     - Loosely follow PEP 8 conventions.
     - Type hints are encouraged. When used, prefer Python 3.12+ native syntax (e.g. `list[str]`, `str | None`) over imports from the `typing` module.
