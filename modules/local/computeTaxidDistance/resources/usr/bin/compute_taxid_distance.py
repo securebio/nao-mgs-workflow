@@ -84,7 +84,7 @@ def open_by_suffix(filename: str, mode: str = "r", debug: bool = False) -> IO[st
     """Parse the suffix of a filename to determine the right open method
     to use, then open the file. Can handle .gz and uncompressed files."""
     if filename.endswith(".gz"):
-        return cast(IO[str], gzip.open(filename, mode + "t"))
+        return cast(IO[str], gzip.open(filename, mode + "t", compresslevel=1))
     return open(filename, mode)
 
 
