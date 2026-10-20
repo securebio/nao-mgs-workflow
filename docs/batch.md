@@ -108,7 +108,7 @@ Note: Nextflow cannot distinguish Spot reclamation from other failures (both sur
 
 ## 4. Run Nextflow with Batch
 
-Finally, you need to use all the infrastructure you've just set up to actually run a Nextflow workflow! We recommend using our [test dataset](https://github.com/naobservatory/mgs-workflow/blob/will-merge-master/docs/installation.md#6-run-the-pipeline-on-test-data) to get started.
+Finally, you need to use all the infrastructure you've just set up to actually run a Nextflow workflow! We recommend using our [test dataset](./installation.md#8-run-the-pipeline-on-test-data) to get started.
 
 ### Container credentials on Batch
 

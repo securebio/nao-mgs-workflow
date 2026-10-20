@@ -66,7 +66,7 @@ When a process invokes a containerized CLI whose error path can't be reproduced 
 #### Current test data
 
 - Small (uncompressed) test data files are in `test-data/`; larger test datasets are in S3:
-    - Currently there is no set organization of the `test-data/` directory. It will be organized in the future; see issue [#349](https://github.com/naobservatory/mgs-workflow/issues/349).
+    - Currently there is no set organization of the `test-data/` directory. It will be organized in the future; see issue [#349](https://github.com/securebio/nao-mgs-workflow/issues/349).
     - Small "toy" data files (uncompressed, generally ~1KB or less) may be added freely to the repo in `test-data/toy-data`.
 - Public test datasets are stored in `s3://nao-testing/tiny-test/`. (Older test files, no longer in active use, can be found in `s3://nao-testing/gold-standard-test/` and `s3://nao-testing/ont-ww-test/`.)
 - Results of workflow runs on the test datasets from S3 are in the repo in `test-data/results/`

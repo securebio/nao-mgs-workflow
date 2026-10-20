@@ -2,6 +2,7 @@
 
 - Compress `FILTLONG` output with `pigz` to reduce runtime (#1057)
 - Mask low-complexity regions of ONT reads with BBDuk instead of BBMask in `MASK_FASTQ_READS` to reduce memory usage. Also replace gzip with pigz for faster compression. Published outputs are unchanged. (#1058)
+- Update documentation and config comments to refer to the organization as SecureBio Detection (formerly the Nucleic Acid Observatory), point stale `naobservatory` GitHub links to `securebio`, and fix a broken test-dataset link in `docs/batch.md`. (#1060)
 
 # v3.4.0.1
 

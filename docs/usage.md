@@ -37,7 +37,7 @@ For single-end data (ONT):
 - `sample` (1st column)
 - `fastq` (2nd column)
 
-If you're working with NAO data, [mgs-metadata](https://github.com/naobservatory/mgs-metadata) (private) generates these and puts them in S3 alongside the data.
+If you're working with SecureBio Detection data, [nao-mgs-metadata](https://github.com/securebio/nao-mgs-metadata) (private) generates these and puts them in S3 alongside the data.
 
 ### 1.2. The config file
 

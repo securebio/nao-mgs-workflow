@@ -164,7 +164,7 @@ mypy .
 ```
 
 ## GitHub issues
-We use [GitHub issues](https://github.com/naobservatory/mgs-workflow/issues) to track any issues with the pipeline: bugs, cleanup tasks, and desired new features. 
+We use [GitHub issues](https://github.com/securebio/nao-mgs-workflow/issues) to track any issues with the pipeline: bugs, cleanup tasks, and desired new features. 
 Opening issues:
 - All issues should be self-contained: the description should include enough detail to understand what needs to be done.
 - We use labels to prioritize and track:
