@@ -2,7 +2,7 @@
 
 - Bump the minimum Nextflow version from 26.04.6 to 26.04.7, and defer 26.10.x until we update orchestrator to support stderr output. (#1073)
 - Add a `.gitattributes` that marks `*.config` files as Nextflow, so GitHub highlights them. (#1066)
-- Add a note to the top of the README about the move to a private fork.
+- Add a note to the top of the README about the move to a private fork. (#1068)
 - Compress `FILTLONG` output with `pigz` to reduce runtime (#1057)
 - Mask low-complexity regions of ONT reads with BBDuk instead of BBMask in `MASK_FASTQ_READS` to reduce memory usage. Also replace gzip with pigz for faster compression. Published outputs are unchanged. (#1058)
 - Update documentation and config comments to refer to the organization as SecureBio Detection (formerly the Nucleic Acid Observatory), point stale `naobservatory` GitHub links to `securebio`, and fix a broken test-dataset link in `docs/batch.md`. (#1061)
