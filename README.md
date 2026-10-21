@@ -1,6 +1,6 @@
 # SecureBio Detection Viral Metagenomics Pipeline
 
-> [!NOTE]
+> [!IMPORTANT]
 > As described in more detail in our [blog post](https://securebio.org/blog/taking-our-core-computational-pipeline-private/) on October 15, 2026, we are in the process of making a private fork of this pipeline. This repo will be archived in the future but will remain public. All public test data and ECR images will be preserved. Members of SecureBio can access the new private fork at [`viral-identification`](https://github.com/securebio/det-viral-identification).
 
 This Nextflow pipeline is designed to process metagenomic sequencing data, characterize overall taxonomic composition, and identify and quantify reads mapping to viruses infecting certain host taxa of interest. It was developed by [SecureBio Detection](https://securebio.org/detection/) (formerly the Nucleic Acid Observatory).
