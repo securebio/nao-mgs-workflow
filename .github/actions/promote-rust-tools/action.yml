@@ -58,10 +58,11 @@ runs:
         REPO=public.ecr.aws/q0n1c7g8/nao-mgs-workflow/rust-tools
         aws ecr-public get-login-password --region us-east-1 | \
           docker login --username AWS --password-stdin public.ecr.aws
-        OLD=$(docker buildx imagetools inspect "$REPO:$TAG" --format '{{.Manifest.Digest}}' 2>/dev/null || echo "none")
+        LOOKUP="$GITHUB_ACTION_PATH/../rust-tools-image/lookup.sh"
+        OLD=$("$LOOKUP" "$REPO:$TAG")
         # --prefer-index=false copies the manifest as-is instead of wrapping it in an index
         docker buildx imagetools create --prefer-index=false -t "$REPO:$TAG" "$REPO@$DIGEST"
-        NEW=$(docker buildx imagetools inspect "$REPO:$TAG" --format '{{.Manifest.Digest}}')
+        NEW=$("$LOOKUP" "$REPO:$TAG")
         if [ "$NEW" != "$DIGEST" ]; then
           echo "::error::$REPO:$TAG resolves to $NEW, expected $DIGEST"
           exit 1
@@ -71,6 +72,6 @@ runs:
           echo "### rust-tools:$TAG"
           echo ""
           echo "- **Commit:** $REF"
-          echo "- **Previous digest:** $OLD"
+          echo "- **Previous digest:** ${OLD:-none}"
           echo "- **New digest:** $NEW"
         } >> "$GITHUB_STEP_SUMMARY"
