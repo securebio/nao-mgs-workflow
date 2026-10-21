@@ -24,7 +24,7 @@
         "timestamp": "2026-09-10T19:03:02.734681813",
         "meta": {
             "nf-test": "0.9.5",
-            "nextflow": "26.04.6"
+            "nextflow": "26.10.3"
         }
     },
     "downstream_output_ont": {
@@ -49,7 +49,7 @@
         "timestamp": "2026-09-10T19:04:17.952091421",
         "meta": {
             "nf-test": "0.9.5",
-            "nextflow": "26.04.6"
+            "nextflow": "26.10.3"
         }
     }
 }
