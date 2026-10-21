@@ -4,6 +4,10 @@ on:
   push:
     branches: [main]
 
+permissions:
+  contents: read  # Branch pushes use the GitHub App token
+  id-token: write  # AWS OIDC for promoting rust-tools image tags
+
 jobs:
   reset-branches:
     runs-on: ubuntu-latest
@@ -20,6 +24,16 @@ jobs:
         with:
           fetch-depth: 0  # Fetch all history for branch operations
           token: ${{ steps.generate-token.outputs.token }}
+
+      # Before any branch moves: fail the release here if main's rust-tools build
+      # inputs never got an image on dev. Waits for an in-flight dev build.
+      - name: Promote rust-tools image to :main
+        uses: ./.github/actions/promote-rust-tools
+        with:
+          ref: ${{ github.sha }}
+          tag: main
+          role-to-assume: ${{ secrets.AWS_RUST_TOOLS_PUSH_ROLE_ARN }}
+          wait-minutes: '30'
 
       - name: Reset dev branch to main
         run: |
