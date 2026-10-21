@@ -110,7 +110,7 @@ docker push public.ecr.aws/q0n1c7g8/nao-mgs-workflow/rust-tools:dev-$(whoami)
 nextflow run main.nf --rust_tools_version dev-$(whoami) -profile batch ...
 ```
 
-**Note:** GitHub Actions builds the container only on pushes to `dev`; `reset-branches.yml` retags that same image as `rust-tools:main` on release (see [Rust image tags](./ci.md#rust-image-tags)). Use `--rust_tools_version dev` to test against the dev branch build.
+**Note:** GitHub Actions builds the container only on pushes to `dev`; the release workflows retag that same image as `rust-tools:main` and `rust-tools:stable` (see [Rust image tags](./ci.md#rust-image-tags)). Use `--rust_tools_version dev` to test against the dev branch build.
 
 ## Containers
 

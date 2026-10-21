@@ -120,3 +120,11 @@ jobs:
           git push --force origin stable
 
           echo "Successfully reset stable to main"
+
+      - name: Promote rust-tools image to :stable (point releases only)
+        if: steps.check-point-release.outputs.is_point_release == 'true'
+        uses: ./.github/actions/promote-rust-tools
+        with:
+          ref: ${{ github.sha }}
+          tag: stable
+          role-to-assume: ${{ secrets.AWS_RUST_TOOLS_PUSH_ROLE_ARN }}

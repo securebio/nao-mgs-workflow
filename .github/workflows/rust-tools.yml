@@ -2,7 +2,8 @@ name: Rust Tools CI
 
 # Images are built only on pushes to dev and published under a content-keyed
 # `src-<key>` tag; `:dev` is then pointed at that image. Other floating tags are
-# never built here: reset-branches.yml promotes the already-built image.
+# never built here: reset-branches.yml and manual-reset.yml promote the
+# already-built image.
 on:
   push:
     branches: [dev]
