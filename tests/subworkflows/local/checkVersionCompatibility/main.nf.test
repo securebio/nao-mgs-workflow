@@ -84,9 +84,9 @@ nextflow_workflow {
         then {
             assert workflow.failed
             // Check for actual error (with version numbers), not source code (with ${variable})
-            assert workflow.stdout.any{ it.contains("Index version is older than pipeline minimum") && !it.contains('${') }
-            assert !workflow.stdout.any{ it.contains("Pipeline version is older than index minimum") && !it.contains('${') }
-            assert !workflow.stdout.any{ it.contains("Invalid version format") && !it.contains('${') }
+            assert workflow.stderr.any{ it.contains("Index version is older than pipeline minimum") && !it.contains('${') }
+            assert !workflow.stderr.any{ it.contains("Pipeline version is older than index minimum") && !it.contains('${') }
+            assert !workflow.stderr.any{ it.contains("Invalid version format") && !it.contains('${') }
         }
     }
 
@@ -150,9 +150,9 @@ nextflow_workflow {
         then {
             assert workflow.failed
             // Check for actual error (with version numbers), not source code (with ${variable})
-            assert !workflow.stdout.any{ it.contains("Index version is older than pipeline minimum") && !it.contains('${') }
-            assert workflow.stdout.any{ it.contains("Pipeline version is older than index minimum") && !it.contains('${') }
-            assert !workflow.stdout.any{ it.contains("Invalid version format") && !it.contains('${') }
+            assert !workflow.stderr.any{ it.contains("Index version is older than pipeline minimum") && !it.contains('${') }
+            assert workflow.stderr.any{ it.contains("Pipeline version is older than index minimum") && !it.contains('${') }
+            assert !workflow.stderr.any{ it.contains("Invalid version format") && !it.contains('${') }
         }
     }
 
@@ -176,7 +176,7 @@ nextflow_workflow {
         }
         then {
             assert workflow.failed
-            assert workflow.stdout.any{ it.contains("Index version is older than pipeline minimum") && !it.contains('${') }
+            assert workflow.stderr.any{ it.contains("Index version is older than pipeline minimum") && !it.contains('${') }
         }
     }
 
@@ -199,7 +199,7 @@ nextflow_workflow {
         }
         then {
             assert workflow.failed
-            assert workflow.stdout.any{ it.contains("Pipeline version is older than index minimum") && !it.contains('${') }
+            assert workflow.stderr.any{ it.contains("Pipeline version is older than index minimum") && !it.contains('${') }
         }
     }
 
@@ -219,9 +219,9 @@ nextflow_workflow {
         then {
             assert workflow.failed
             // Check for actual error, not source code
-            assert !workflow.stdout.any{ it.contains("Index version is older than pipeline minimum") && !it.contains('${') }
-            assert !workflow.stdout.any{ it.contains("Pipeline version is older than index minimum") && !it.contains('${') }
-            assert workflow.stdout.any{ it.contains("Invalid version format") }
+            assert !workflow.stderr.any{ it.contains("Index version is older than pipeline minimum") && !it.contains('${') }
+            assert !workflow.stderr.any{ it.contains("Pipeline version is older than index minimum") && !it.contains('${') }
+            assert workflow.stderr.any{ it.contains("Invalid version format") }
         }
     }
 

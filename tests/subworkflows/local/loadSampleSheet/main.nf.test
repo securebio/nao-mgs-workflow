@@ -123,7 +123,7 @@ nextflow_workflow {
         then {
             assert workflow.failed
             assert workflow.exitStatus == 1
-            assert workflow.stdout.any { it.contains("Invalid samplesheet header") }
+            assert workflow.stderr.any { it.contains("Invalid samplesheet header") }
         }
     }
 
@@ -144,7 +144,7 @@ nextflow_workflow {
         then {
             assert workflow.failed
             assert workflow.exitStatus == 1
-            assert workflow.stdout.any { it.contains("Invalid sequencing platform.") }
+            assert workflow.stderr.any { it.contains("Invalid sequencing platform.") }
         }
     }
 
@@ -165,7 +165,7 @@ nextflow_workflow {
         then {
             assert workflow.failed
             assert workflow.exitStatus == 1
-            assert workflow.stdout.any { it.contains("Pipeline is only implemented in production for platform 'illumina' for paired-end data.") }
+            assert workflow.stderr.any { it.contains("Pipeline is only implemented in production for platform 'illumina' for paired-end data.") }
         }
     }
 
@@ -186,7 +186,7 @@ nextflow_workflow {
         then {
             assert workflow.failed
             assert workflow.exitStatus == 1
-            assert workflow.stdout.any { it.contains("Pipeline is only implemented in production for platform 'aviti' for paired-end data.") }
+            assert workflow.stderr.any { it.contains("Pipeline is only implemented in production for platform 'aviti' for paired-end data.") }
         }
     }
 
@@ -208,7 +208,7 @@ nextflow_workflow {
             assert workflow.failed
             assert workflow.exitStatus == 1
             def msg = "Pipeline not yet implemented in production for platform 'pacbio'."
-            assert workflow.stdout.any { it.contains(msg) }
+            assert workflow.stderr.any { it.contains(msg) }
         }
     }
 

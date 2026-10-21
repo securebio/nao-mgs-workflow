@@ -59,7 +59,7 @@ nextflow_workflow {
 
         then {
             assert workflow.failed
-            assert workflow.stdout.any { it.contains("Missing or empty 'run_results_dir'") }
+            assert workflow.stderr.any { it.contains("Missing or empty 'run_results_dir'") }
         }
     }
 
@@ -78,7 +78,7 @@ nextflow_workflow {
         then {
             assert workflow.failed
             assert workflow.exitStatus == 1
-            assert workflow.stdout.any { it.contains("Invalid input header") }
+            assert workflow.stderr.any { it.contains("Invalid input header") }
         }
     }
 
