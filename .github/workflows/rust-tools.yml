@@ -191,7 +191,9 @@ jobs:
         env:
           SHA: ${{ github.sha }}
         run: |
+          set -euo pipefail
           TIP=$(git ls-remote origin refs/heads/dev | cut -f1)
+          [ -n "$TIP" ] || { echo "::error::Could not resolve refs/heads/dev"; exit 1; }
           [ "$TIP" = "$SHA" ] && IS_TIP=true || IS_TIP=false
           echo "dev is at $TIP; this run is $SHA"
           echo "is-tip=$IS_TIP" >> "$GITHUB_OUTPUT"
