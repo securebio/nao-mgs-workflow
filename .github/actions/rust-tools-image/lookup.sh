@@ -18,7 +18,8 @@ while true; do
     echo "$DIGEST"
     exit 0
   fi
-  if grep -q "not found" "$ERR"; then
+  # Match the image-specific message, not e.g. a credential helper "not found in $PATH"
+  if grep -qF "$IMAGE: not found" "$ERR"; then
     if [ "$(date +%s)" -ge "$DEADLINE" ]; then
       echo "$IMAGE not found" >&2
       exit 0
