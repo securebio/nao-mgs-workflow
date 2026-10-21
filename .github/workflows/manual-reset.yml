@@ -12,6 +12,7 @@ on:
 
 permissions:
   contents: write
+  id-token: write  # AWS OIDC for promoting the rust-tools image tag
 
 jobs:
   reset-stable:
@@ -64,10 +65,40 @@ jobs:
           echo "- **Previous stable version:** $STABLE_VERSION" >> $GITHUB_STEP_SUMMARY
           echo "- **New stable version:** $MAIN_VERSION" >> $GITHUB_STEP_SUMMARY
 
+      - name: Capture main commit
+        id: main
+        run: echo "sha=$(git rev-parse origin/main)" >> "$GITHUB_OUTPUT"
+
+      # Check before moving the branch, so a missing image aborts the reset
+      - name: Resolve rust-tools image for main
+        id: image
+        uses: ./.github/actions/rust-tools-image
+        with:
+          ref: ${{ steps.main.outputs.sha }}
+
+      - name: Check rust-tools image exists
+        env:
+          IMAGE: ${{ steps.image.outputs.image }}
+          DIGEST: ${{ steps.image.outputs.digest }}
+        run: |
+          if [ -z "$DIGEST" ]; then
+            echo "::error::No rust-tools image $IMAGE for main; not resetting stable."
+            exit 1
+          fi
+
       - name: Reset stable branch to main
+        env:
+          MAIN_SHA: ${{ steps.main.outputs.sha }}
         run: |
           git checkout stable
-          git reset --hard main
+          git reset --hard "$MAIN_SHA"
           git push --force origin stable
 
           echo "Successfully reset stable to main"
+
+      - name: Promote rust-tools image to :stable
+        uses: ./.github/actions/promote-rust-tools
+        with:
+          ref: ${{ steps.main.outputs.sha }}
+          tag: stable
+          role-to-assume: ${{ secrets.AWS_RUST_TOOLS_PUSH_ROLE_ARN }}
