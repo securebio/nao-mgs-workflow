@@ -4,6 +4,7 @@
 - Mask low-complexity regions of ONT reads with BBDuk instead of BBMask in `MASK_FASTQ_READS` to reduce memory usage. Also replace gzip with pigz for faster compression. Published outputs are unchanged. (#1058)
 - Update documentation and config comments to refer to the organization as SecureBio Detection (formerly the Nucleic Acid Observatory), point stale `naobservatory` GitHub links to `securebio`, and fix a broken test-dataset link in `docs/batch.md`. (#1061)
 - Write gzip output at level 1 instead of Python's default of 9 in RUN and DOWNSTREAM module Python scripts, to reduce runtime. Decompressed outputs are unchanged, but `.tsv.gz` files these scripts write are larger. (#1059)
+- Apply S3 reference-download tuning without modifying the user's AWS configuration.
 
 # v3.4.0.1
 

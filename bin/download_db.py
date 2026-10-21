@@ -28,12 +28,14 @@ import hashlib
 import logging
 import os
 import re
+import shutil
 import subprocess
 import time
 from collections.abc import Generator
-from contextlib import contextmanager
+from contextlib import contextmanager, suppress
 from datetime import UTC, datetime
 from pathlib import Path
+from tempfile import TemporaryDirectory
 
 ###########
 # LOGGING #
@@ -128,8 +130,29 @@ def file_lock(
 #####################
 
 
-def configure_aws_s3_transfer() -> None:
-    """Configure AWS CLI settings for optimal S3 transfer performance."""
+@contextmanager
+def private_aws_config() -> Generator[dict[str, str], None, None]:
+    """
+    Yield an environment whose AWS_CONFIG_FILE is a private copy of the user's config.
+    Settings written to the copy do not touch the user's file, and the copy is
+    removed when the block exits.
+    """
+    env = os.environ.copy()
+    config_path = env.get("AWS_CONFIG_FILE", "~/.aws/config")
+    # Same expansion as the AWS CLI applies to AWS_CONFIG_FILE.
+    source_config = Path(os.path.expanduser(os.path.expandvars(config_path)))
+    with TemporaryDirectory(prefix="download-db-") as temp_dir:
+        temp_config = Path(temp_dir) / "config"
+        temp_config.touch(mode=0o600)
+        # Instance-role authentication also works without an existing config.
+        with suppress(FileNotFoundError):
+            shutil.copyfile(source_config, temp_config)
+        env["AWS_CONFIG_FILE"] = str(temp_config)
+        yield env
+
+
+def configure_aws_s3_transfer(env: dict[str, str]) -> None:
+    """Configure S3 transfer tuning in the supplied environment's config."""
     settings = [
         ("default.s3.max_concurrent_requests", "20"),
         ("default.s3.multipart_threshold", "64MB"),
@@ -140,6 +163,7 @@ def configure_aws_s3_transfer() -> None:
             ["aws", "configure", "set", key, value],
             check=True,
             capture_output=True,
+            env=env,
         )
 
 
@@ -150,13 +174,15 @@ def sync_from_s3(source_path: str, local_path: Path) -> None:
     preventing stale files from previous runs.
     """
     logger.info(f"Syncing from S3: {source_path} -> {local_path}")
-    configure_aws_s3_transfer()
-    subprocess.run(
-        ["aws", "s3", "sync", source_path, str(local_path), "--delete"],
-        check=True,
-        capture_output=True,
-        text=True,
-    )
+    with private_aws_config() as env:
+        configure_aws_s3_transfer(env)
+        subprocess.run(
+            ["aws", "s3", "sync", source_path, str(local_path), "--delete"],
+            check=True,
+            capture_output=True,
+            text=True,
+            env=env,
+        )
     logger.info("S3 sync completed")
 
 

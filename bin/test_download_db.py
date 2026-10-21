@@ -6,6 +6,9 @@ Run with: pytest bin/test_download_db.py
 """
 
 import fcntl
+import os
+import shutil
+import stat
 import subprocess
 from collections.abc import Generator
 from pathlib import Path
@@ -19,6 +22,7 @@ from download_db import (
     get_cache_name,
     main,
     parse_source_path,
+    private_aws_config,
     sync_from_local,
     sync_from_s3,
 )
@@ -92,73 +96,83 @@ class TestFileLock:
             # Lock is released when file is closed
 
 
+@pytest.fixture
+def home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """HOME at tmp_path with AWS variables cleared, away from the developer's config."""
+    monkeypatch.setenv("HOME", str(tmp_path))
+    for variable in ("AWS_CONFIG_FILE", "AWS_PROFILE", "AWS_DEFAULT_PROFILE"):
+        monkeypatch.delenv(variable, raising=False)
+    return tmp_path
+
+
+class TestPrivateAwsConfig:
+    """The private config is a copy of the user's file and is removed afterward."""
+
+    def test_copy_is_private_and_removed(self, home: Path) -> None:
+        user_config = home / ".aws" / "config"
+        user_config.parent.mkdir()
+        user_config.write_bytes(b"[default]\nregion = us-east-1\n")
+        with private_aws_config() as env:
+            copy = Path(env["AWS_CONFIG_FILE"])
+            assert copy != user_config
+            assert copy.read_bytes() == user_config.read_bytes()
+            assert stat.S_IMODE(copy.stat().st_mode) == 0o600
+            assert env == {**os.environ, "AWS_CONFIG_FILE": str(copy)}
+        assert not copy.exists()
+        assert user_config.read_bytes() == b"[default]\nregion = us-east-1\n"
+
+    def test_missing_user_config_starts_empty(self, home: Path) -> None:
+        with private_aws_config() as env:
+            assert Path(env["AWS_CONFIG_FILE"]).read_bytes() == b""
+
+    def test_copy_is_removed_on_error(self, home: Path) -> None:
+        with pytest.raises(RuntimeError), private_aws_config() as env:
+            raise RuntimeError
+        assert not Path(env["AWS_CONFIG_FILE"]).exists()
+
+
 class TestConfigureAwsS3Transfer:
-    """Test AWS S3 transfer configuration."""
+    """Transfer settings land in the default profile and leave the rest alone."""
 
-    @patch("download_db.subprocess.run")
-    def test_configure_aws_s3_transfer(self, mock_run: MagicMock) -> None:
-        """Test that AWS CLI settings are configured correctly."""
-        mock_run.return_value = MagicMock(returncode=0)
-        configure_aws_s3_transfer()
-        assert mock_run.call_count == 3
-        calls = [call[0][0] for call in mock_run.call_args_list]
-        assert [
-            "aws",
-            "configure",
-            "set",
-            "default.s3.max_concurrent_requests",
-            "20",
-        ] in calls
-        assert [
-            "aws",
-            "configure",
-            "set",
-            "default.s3.multipart_threshold",
-            "64MB",
-        ] in calls
-        assert [
-            "aws",
-            "configure",
-            "set",
-            "default.s3.multipart_chunksize",
-            "16MB",
-        ] in calls
-
-    @patch("download_db.subprocess.run")
-    def test_configure_aws_s3_transfer_failure(self, mock_run: MagicMock) -> None:
-        """Test that configuration failure raises exception."""
-        mock_run.side_effect = subprocess.CalledProcessError(1, "aws")
-        with pytest.raises(subprocess.CalledProcessError):
-            configure_aws_s3_transfer()
+    @pytest.mark.skipif(shutil.which("aws") is None, reason="needs the AWS CLI")
+    def test_settings_go_to_default_profile(self, home: Path) -> None:
+        config = home / "aws.config"
+        config.write_text("[default]\nregion = us-east-1\n")
+        configure_aws_s3_transfer({**os.environ, "AWS_CONFIG_FILE": str(config)})
+        assert config.read_text() == (
+            "[default]\n"
+            "region = us-east-1\n"
+            "s3 =\n"
+            "    max_concurrent_requests = 20\n"
+            "    multipart_threshold = 64MB\n"
+            "    multipart_chunksize = 16MB\n"
+        )
 
 
 class TestSyncFromS3:
-    """Test S3 sync function."""
+    """Every AWS command in a sync runs against the same private config."""
 
-    @patch("download_db.configure_aws_s3_transfer")
     @patch("download_db.subprocess.run")
-    def test_sync_from_s3_success(
-        self, mock_run: MagicMock, mock_configure: MagicMock
+    def test_commands_share_private_config(
+        self, mock_run: MagicMock, home: Path
     ) -> None:
-        """Test successful S3 sync."""
-        sync_from_s3("s3://bucket/db", Path("/scratch/db"))
-        mock_configure.assert_called_once()
-        mock_run.assert_called_once_with(
-            ["aws", "s3", "sync", "s3://bucket/db", "/scratch/db", "--delete"],
-            check=True,
-            capture_output=True,
-            text=True,
-        )
-
-    @patch("download_db.configure_aws_s3_transfer")
-    @patch("download_db.subprocess.run")
-    def test_sync_from_s3_failure(
-        self, mock_run: MagicMock, mock_configure: MagicMock
-    ) -> None:
-        """Test S3 sync failure raises CalledProcessError."""
-        mock_run.side_effect = subprocess.CalledProcessError(1, "aws s3 sync")
-        with pytest.raises(subprocess.CalledProcessError):
-            sync_from_s3("s3://bucket/db", Path("/scratch/db"))
+        user_config = home / ".aws" / "config"
+        user_config.parent.mkdir()
+        user_config.touch()
+        sync_from_s3("s3://bucket/db", home / "db")
+        (config,) = {
+            call.kwargs["env"]["AWS_CONFIG_FILE"] for call in mock_run.call_args_list
+        }
+        assert config != str(user_config)
+        assert not Path(config).exists()
+        assert mock_run.call_args.args[0] == [
+            "aws",
+            "s3",
+            "sync",
+            "s3://bucket/db",
+            str(home / "db"),
+            "--delete",
+        ]
 
 
 class TestSyncFromLocal:
