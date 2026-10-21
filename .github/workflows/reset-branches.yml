@@ -32,6 +32,18 @@ jobs:
           fetch-depth: 0  # Fetch all history for branch operations
           token: ${{ steps.generate-token.outputs.token }}
 
+      # A re-run of an older release would roll branches and :main back
+      - name: Check main hasn't moved on
+        env:
+          SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          TIP=$(git ls-remote origin refs/heads/main | cut -f1)
+          if [ "$TIP" != "$SHA" ]; then
+            echo "::error::main is at ${TIP:-unknown}, not $SHA; not resetting from a stale run."
+            exit 1
+          fi
+
       # Before any branch moves: fail the release here if main's rust-tools build
       # inputs never got an image on dev. Waits for an in-flight dev build.
       - name: Promote rust-tools image to :main
