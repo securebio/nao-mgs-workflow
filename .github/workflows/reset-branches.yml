@@ -8,6 +8,12 @@ permissions:
   contents: read  # Branch pushes use the GitHub App token
   id-token: write  # AWS OIDC for promoting rust-tools image tags
 
+# Serialize branch resets and image promotions, so overlapping runs can't
+# leave a branch and its rust-tools tag on different commits
+concurrency:
+  group: release-branch-reset
+  cancel-in-progress: false
+
 jobs:
   reset-branches:
     runs-on: ubuntu-latest
