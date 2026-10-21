@@ -1,0 +1,69 @@
+name: 'Resolve Rust tools image'
+description: >
+  Compute the content key of the rust-tools image for a commit and look up the
+  digest of the matching `src-<key>` image in public ECR. The key covers only
+  the image's build inputs (`rust-tools/` and the Dockerfile), so commits with
+  identical inputs share one image. Lookup is anonymous; no AWS credentials needed.
+
+inputs:
+  ref:
+    description: 'Commit to compute the key for (must be present in the local clone)'
+    required: true
+  wait-minutes:
+    description: 'Poll for the image this long before giving up (0 = check once)'
+    required: false
+    default: '0'
+
+outputs:
+  key:
+    description: 'Content key of the image build inputs'
+    value: ${{ steps.key.outputs.key }}
+  image:
+    description: 'Content-keyed image reference (repo:src-<key>)'
+    value: ${{ steps.key.outputs.image }}
+  digest:
+    description: 'Digest of the content-keyed image, or empty if it does not exist'
+    value: ${{ steps.lookup.outputs.digest }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Compute image key
+      id: key
+      shell: bash
+      env:
+        REF: ${{ inputs.ref }}
+      run: |
+        set -euo pipefail
+        # Git object IDs identify the exact tree/blob contents, including filenames.
+        TREE=$(git rev-parse "$REF:rust-tools")
+        DOCKERFILE=$(git rev-parse "$REF:docker/nao-rust-tools.Dockerfile")
+        KEY=$(printf '%s\n%s\n' "$TREE" "$DOCKERFILE" | sha256sum | cut -c1-16)
+        IMAGE="public.ecr.aws/q0n1c7g8/nao-mgs-workflow/rust-tools:src-$KEY"
+        echo "Rust tools image for $REF: $IMAGE"
+        echo "key=$KEY" >> "$GITHUB_OUTPUT"
+        echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
+
+    - name: Look up image digest
+      id: lookup
+      shell: bash
+      env:
+        IMAGE: ${{ steps.key.outputs.image }}
+        WAIT_MINUTES: ${{ inputs.wait-minutes }}
+      run: |
+        set -euo pipefail
+        DEADLINE=$(( $(date +%s) + WAIT_MINUTES * 60 ))
+        while true; do
+          if DIGEST=$(docker buildx imagetools inspect "$IMAGE" --format '{{.Manifest.Digest}}' 2>/dev/null); then
+            echo "Found $IMAGE at $DIGEST"
+            break
+          fi
+          if [ "$(date +%s)" -ge "$DEADLINE" ]; then
+            echo "$IMAGE not found"
+            DIGEST=""
+            break
+          fi
+          echo "Waiting for $IMAGE..."
+          sleep 30
+        done
+        echo "digest=$DIGEST" >> "$GITHUB_OUTPUT"

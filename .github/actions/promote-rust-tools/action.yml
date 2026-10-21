@@ -1,0 +1,76 @@
+name: 'Promote Rust tools image'
+description: >
+  Point a floating rust-tools tag (dev, main or stable) at the content-keyed
+  image built for a commit. The retag happens registry-side, so the destination
+  tag gets the exact same digest. Fails if no image was built for the commit.
+  The caller must grant `id-token: write`.
+
+inputs:
+  ref:
+    description: 'Commit whose image to promote (must be present in the local clone)'
+    required: true
+  tag:
+    description: 'Floating tag to update (e.g. main, stable)'
+    required: true
+  role-to-assume:
+    description: 'AWS role allowed to push rust-tools tags'
+    required: true
+  wait-minutes:
+    description: 'Wait this long for an in-flight build to publish the image'
+    required: false
+    default: '0'
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Resolve image
+      id: image
+      uses: ./.github/actions/rust-tools-image
+      with:
+        ref: ${{ inputs.ref }}
+        wait-minutes: ${{ inputs.wait-minutes }}
+
+    - name: Check image exists
+      shell: bash
+      env:
+        IMAGE: ${{ steps.image.outputs.image }}
+        DIGEST: ${{ steps.image.outputs.digest }}
+      run: |
+        if [ -z "$DIGEST" ]; then
+          echo "::error::No rust-tools image $IMAGE. The image is built only on pushes to dev; a commit that changed rust-tools/ or the Dockerfile without passing through dev has no image. Push the change through dev, then re-run this workflow."
+          exit 1
+        fi
+
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        role-to-assume: ${{ inputs.role-to-assume }}
+        aws-region: us-east-1
+
+    - name: Retag image
+      shell: bash
+      env:
+        DIGEST: ${{ steps.image.outputs.digest }}
+        TAG: ${{ inputs.tag }}
+        REF: ${{ inputs.ref }}
+      run: |
+        set -euo pipefail
+        REPO=public.ecr.aws/q0n1c7g8/nao-mgs-workflow/rust-tools
+        aws ecr-public get-login-password --region us-east-1 | \
+          docker login --username AWS --password-stdin public.ecr.aws
+        OLD=$(docker buildx imagetools inspect "$REPO:$TAG" --format '{{.Manifest.Digest}}' 2>/dev/null || echo "none")
+        # --prefer-index=false copies the manifest as-is instead of wrapping it in an index
+        docker buildx imagetools create --prefer-index=false -t "$REPO:$TAG" "$REPO@$DIGEST"
+        NEW=$(docker buildx imagetools inspect "$REPO:$TAG" --format '{{.Manifest.Digest}}')
+        if [ "$NEW" != "$DIGEST" ]; then
+          echo "::error::$REPO:$TAG resolves to $NEW, expected $DIGEST"
+          exit 1
+        fi
+        echo "Promoted $REPO:$TAG: $OLD -> $NEW"
+        {
+          echo "### rust-tools:$TAG"
+          echo ""
+          echo "- **Commit:** $REF"
+          echo "- **Previous digest:** $OLD"
+          echo "- **New digest:** $NEW"
+        } >> "$GITHUB_STEP_SUMMARY"
