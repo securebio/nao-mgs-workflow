@@ -14,9 +14,10 @@ process COUNT_READS {
         def countCmd = readFile.toString().endsWith(".gz") ? "rapidgzip --count-lines -P ${task.cpus}" : "wc -l <"
         """
         set -eou pipefail
-        READS=${readFile}
-        # First check if file is empty (before trying to decompress)
-        if [ ! -s \${READS} ]; then
+        READS="${readFile}"
+        # Fail the task if the input size cannot be determined.
+        READ_SIZE=\$(stat -L -c %s -- "\${READS}")
+        if [ "\${READ_SIZE}" -eq 0 ]; then
             COUNT=0 # File is completely empty, set count to 0
         else
             # File has content - try to count lines
