@@ -131,6 +131,7 @@ def file_lock(
 def configure_aws_s3_transfer() -> None:
     """Configure AWS CLI settings for optimal S3 transfer performance."""
     settings = [
+        ("default.s3.preferred_transfer_client", "crt"),
         ("default.s3.max_concurrent_requests", "20"),
         ("default.s3.multipart_threshold", "64MB"),
         ("default.s3.multipart_chunksize", "16MB"),

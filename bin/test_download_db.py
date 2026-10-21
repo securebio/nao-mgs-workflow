@@ -100,8 +100,15 @@ class TestConfigureAwsS3Transfer:
         """Test that AWS CLI settings are configured correctly."""
         mock_run.return_value = MagicMock(returncode=0)
         configure_aws_s3_transfer()
-        assert mock_run.call_count == 3
+        assert mock_run.call_count == 4
         calls = [call[0][0] for call in mock_run.call_args_list]
+        assert [
+            "aws",
+            "configure",
+            "set",
+            "default.s3.preferred_transfer_client",
+            "crt",
+        ] in calls
         assert [
             "aws",
             "configure",
