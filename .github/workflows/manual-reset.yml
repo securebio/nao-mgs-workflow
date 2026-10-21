@@ -19,6 +19,7 @@ permissions:
 concurrency:
   group: release-branch-reset
   cancel-in-progress: false
+  queue: max
 
 jobs:
   reset-stable:
