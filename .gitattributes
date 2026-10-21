@@ -1,2 +1,1 @@
-# Highlight Nextflow configs on GitHub; Linguist cannot infer the language of .config files.
 *.config linguist-language=Nextflow
