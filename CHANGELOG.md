@@ -1,5 +1,6 @@
 # v3.4.0.2-dev
 
+- Retag the rust-tools image as `:stable` whenever the `stable` branch is reset, so `rust-tools:stable` no longer lags the branch. (#TBD)
 - Build the rust-tools image only on `dev`, under a content-keyed tag, and retag that same image as `:main` on release instead of rebuilding it. Publishing now requires a passing Trivy scan. (#TBD)
 - Add CI actions to look up the rust-tools image built for a commit and retag it registry-side, for promoting one image through `dev`, `main` and `stable`. (#1075)
 - Push the rust-tools image with a dedicated AWS role that only pushes to `dev`, `main` and `stable` can assume, and remove the no-op `build-containers.yml` stub, whose implementation was abandoned. (#1072)
