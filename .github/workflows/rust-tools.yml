@@ -1,12 +1,8 @@
 name: Rust Tools CI
 
-# Images are built only on pushes to dev and published under a content-keyed
-# `src-<key>` tag; `:dev` is then pointed at that image. `:main` and `:stable`
-# are never built here: reset-branches.yml and manual-reset.yml promote the
-# already-built image for the commit they move those branches to.
 on:
   push:
-    branches: [dev]
+    branches: [dev, main, stable]
   pull_request:
 
 permissions:
@@ -15,16 +11,14 @@ permissions:
 
 concurrency:
   group: ci-rust-tools-${{ github.event.pull_request.number || github.ref }}
-  # Queue dev pushes rather than cancelling them, so an older run can't
-  # overwrite :dev after a newer one and a publish isn't cut off mid-push.
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  cancel-in-progress: true
 
 jobs:
   build-and-test:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     outputs:
-      build: ${{ steps.decide.outputs.build }}
+      rust-changed: ${{ steps.filter.outputs.rust }}
       dockerfile-changed: ${{ steps.filter.outputs.dockerfile }}
     steps:
       - uses: actions/checkout@v4
@@ -41,55 +35,32 @@ jobs:
             dockerfile:
               - 'docker/nao-rust-tools.Dockerfile'
 
-      - name: Look up existing image
-        if: github.event_name == 'push'
-        id: image
-        uses: ./.github/actions/rust-tools-image
-        with:
-          ref: ${{ github.sha }}
-
-      # PRs build when Rust inputs changed; pushes build when no image exists for
-      # this commit's build inputs, regardless of what the path filter says.
-      - name: Decide whether to build
-        id: decide
-        env:
-          EVENT: ${{ github.event_name }}
-          RUST_CHANGED: ${{ steps.filter.outputs.rust }}
-          DIGEST: ${{ steps.image.outputs.digest }}
-        run: |
-          if [ "$EVENT" = "push" ]; then
-            [ -z "$DIGEST" ] && BUILD=true || BUILD=false
-          else
-            BUILD=$RUST_CHANGED
-          fi
-          echo "build=$BUILD" >> "$GITHUB_OUTPUT"
-
       # --- Rust unit tests (runs on GitHub runner, not in Docker) ---
       - name: Install Rust toolchain
-        if: steps.decide.outputs.build == 'true'
+        if: steps.filter.outputs.rust == 'true'
         uses: dtolnay/rust-toolchain@stable
 
       - name: Cache Rust dependencies
-        if: steps.decide.outputs.build == 'true'
+        if: steps.filter.outputs.rust == 'true'
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: rust-tools
 
       - name: Run Rust unit tests
-        if: steps.decide.outputs.build == 'true'
+        if: steps.filter.outputs.rust == 'true'
         run: cargo test --workspace --release --manifest-path rust-tools/Cargo.toml
 
       # --- Container build (recompiles inside Docker for reproducibility) ---
       - name: Build container
-        if: steps.decide.outputs.build == 'true'
+        if: steps.filter.outputs.rust == 'true'
         run: docker build --progress=plain -f docker/nao-rust-tools.Dockerfile -t nao-rust-tools:local .
 
       - name: Save container for downstream jobs
-        if: steps.decide.outputs.build == 'true' && (github.event_name == 'push' || steps.filter.outputs.dockerfile == 'true')
+        if: steps.filter.outputs.rust == 'true' && (github.event_name == 'push' || steps.filter.outputs.dockerfile == 'true')
         run: docker save nao-rust-tools:local | gzip > rust-tools.tar.gz
 
       - name: Upload container artifact
-        if: steps.decide.outputs.build == 'true' && (github.event_name == 'push' || steps.filter.outputs.dockerfile == 'true')
+        if: steps.filter.outputs.rust == 'true' && (github.event_name == 'push' || steps.filter.outputs.dockerfile == 'true')
         uses: actions/upload-artifact@v4
         with:
           name: rust-container
@@ -99,7 +70,7 @@ jobs:
   scan-vulnerabilities:
     needs: build-and-test
     # On PRs, only scan when the Dockerfile changes: Trivy sees only its Alpine packages, not Rust crates
-    if: needs.build-and-test.outputs.build == 'true' && (github.event_name == 'push' || needs.build-and-test.outputs.dockerfile-changed == 'true')
+    if: needs.build-and-test.outputs.rust-changed == 'true' && (github.event_name == 'push' || needs.build-and-test.outputs.dockerfile-changed == 'true')
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -120,56 +91,33 @@ jobs:
           exit-code: '1'
 
   push-to-ecr:
-    needs: [build-and-test, scan-vulnerabilities]
-    # Runs on every dev push: publishes a new image only if one was built, but
-    # always repoints :dev (e.g. after dev is reset to main). A failed scan blocks
-    # publishing; a skipped scan (nothing built) does not.
-    if: >-
-      always() && github.event_name == 'push' &&
-      needs.build-and-test.result == 'success' &&
-      contains(fromJSON('["success", "skipped"]'), needs.scan-vulnerabilities.result)
+    needs: build-and-test
+    if: needs.build-and-test.outputs.rust-changed == 'true' && github.event_name == 'push'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
-
       - name: Download container artifact
-        if: needs.build-and-test.outputs.build == 'true'
         uses: actions/download-artifact@v4
         with:
           name: rust-container
 
       - name: Load container
-        if: needs.build-and-test.outputs.build == 'true'
         run: gunzip -c rust-tools.tar.gz | docker load
 
-      - name: Resolve image key
-        if: needs.build-and-test.outputs.build == 'true'
-        id: image
-        uses: ./.github/actions/rust-tools-image
-        with:
-          ref: ${{ github.sha }}
-
       - name: Configure AWS credentials
-        if: needs.build-and-test.outputs.build == 'true'
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_RUST_TOOLS_PUSH_ROLE_ARN }}
           aws-region: us-east-1
 
-      - name: Push content-keyed image to ECR
-        if: needs.build-and-test.outputs.build == 'true'
+      - name: Push to ECR
         env:
-          IMAGE: ${{ steps.image.outputs.image }}
+          BRANCH_TAG: ${{ github.ref_name }}
         run: |
           aws ecr-public get-login-password --region us-east-1 | \
             docker login --username AWS --password-stdin public.ecr.aws
-          docker tag nao-rust-tools:local "$IMAGE"
-          docker push "$IMAGE"
 
-      - name: Point :dev at this commit's image
-        uses: ./.github/actions/promote-rust-tools
-        with:
-          ref: ${{ github.sha }}
-          tag: dev
-          role-to-assume: ${{ secrets.AWS_RUST_TOOLS_PUSH_ROLE_ARN }}
+          REPO=public.ecr.aws/q0n1c7g8/nao-mgs-workflow/rust-tools
+
+          docker tag nao-rust-tools:local "$REPO:$BRANCH_TAG"
+          docker push "$REPO:$BRANCH_TAG"

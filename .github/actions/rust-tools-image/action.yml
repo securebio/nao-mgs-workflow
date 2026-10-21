@@ -52,18 +52,5 @@ runs:
         WAIT_MINUTES: ${{ inputs.wait-minutes }}
       run: |
         set -euo pipefail
-        DEADLINE=$(( $(date +%s) + WAIT_MINUTES * 60 ))
-        while true; do
-          if DIGEST=$(docker buildx imagetools inspect "$IMAGE" --format '{{.Manifest.Digest}}' 2>/dev/null); then
-            echo "Found $IMAGE at $DIGEST"
-            break
-          fi
-          if [ "$(date +%s)" -ge "$DEADLINE" ]; then
-            echo "$IMAGE not found"
-            DIGEST=""
-            break
-          fi
-          echo "Waiting for $IMAGE..."
-          sleep 30
-        done
+        DIGEST=$("$GITHUB_ACTION_PATH/lookup.sh" "$IMAGE" "$WAIT_MINUTES")
         echo "digest=$DIGEST" >> "$GITHUB_OUTPUT"

@@ -79,16 +79,7 @@ Runs `ruff check .` (lint) and `ruff format --check .` (formatting verification)
 
 ### Rust tools (`rust-tools.yml`)
 
-Runs Rust unit tests and builds the `nao-rust-tools` container. On PRs it builds only when Rust files changed. On pushes to `dev` it builds when no image exists yet for the commit's build inputs, publishes it once the Trivy scan passes, and points `:dev` at it.
-
-#### Rust image tags
-
-Images are built only on `dev` and published as `rust-tools:src-<key>`, where `<key>` hashes the git object IDs of `rust-tools/` and the Dockerfile. The floating tags `:dev`, `:main` and `:stable` are retagged registry-side to the image for the commit their branch points at, via `.github/actions/promote-rust-tools`:
-- `:dev`: by `rust-tools.yml`, on every push to `dev`.
-- `:main`: by `reset-branches.yml`, before it resets any branch. It waits up to 30 minutes for an in-flight `dev` build.
-- `:stable`: by `reset-branches.yml` (point releases) or `manual-reset.yml`, after the branch reset.
-
-Promotion fails if no image exists for the commit, e.g. when a Rust change reached `main` without going through `dev`.
+Runs Rust unit tests and builds the `nao-rust-tools` container when Rust source files change. This workflow runs on all PRs but uses `dorny/paths-filter` to trivially succeed (~10 seconds) when no Rust files have changed. When Rust files are modified, it runs `cargo test` and builds the container. On push to `dev` or `main`, it also pushes the container to ECR.
 
 ### Trivy container scan (`trivy-scan.yml`)
 
@@ -174,13 +165,11 @@ Triggered on push to `main`. After a release is merged, this workflow:
 2. Resets `ci-test` to match `main` (force push)
 3. Conditionally resets `stable` to match `main` only for point releases (where the first three version numbers X.Y.Z match)
 
-It also promotes `rust-tools:main` and `rust-tools:stable` (see [Rust image tags](#rust-image-tags)).
-
 This uses a GitHub App token for authentication to allow force pushes to protected branches.
 
 ### Manual stable reset (`manual-reset.yml`)
 
-Manually triggered (`workflow_dispatch`). Resets the `stable` branch to match `main` via force push. Used when a non-point release (one that changes any of the first three version numbers) needs to be propagated to `stable`, since `reset-branches.yml` only auto-resets `stable` for point releases. It also promotes `rust-tools:stable`, and refuses to reset if `main` has no rust-tools image. See [`docs/developer.md`](./developer.md) for how this fits into the release process.
+Manually triggered (`workflow_dispatch`). Resets the `stable` branch to match `main` via force push. Used when a non-point release (one that changes any of the first three version numbers) needs to be propagated to `stable`, since `reset-branches.yml` only auto-resets `stable` for point releases. See [`docs/developer.md`](./developer.md) for how this fits into the release process.
 
 The workflow is gated by two layers of protection:
 
