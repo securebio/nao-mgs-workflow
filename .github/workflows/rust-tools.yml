@@ -26,6 +26,7 @@ jobs:
     outputs:
       build: ${{ steps.decide.outputs.build }}
       dockerfile-changed: ${{ steps.filter.outputs.dockerfile }}
+      key: ${{ steps.image.outputs.key }}
     steps:
       - uses: actions/checkout@v4
 
@@ -122,6 +123,12 @@ jobs:
   push-to-ecr:
     needs: [build-and-test, scan-vulnerabilities]
     if: github.event_name == 'push' && needs.build-and-test.outputs.build == 'true'
+    # One publisher per key at a time, so the existence check below and the push
+    # can't race another run's push of the same key
+    concurrency:
+      group: rust-tools-publish-${{ needs.build-and-test.outputs.key }}
+      cancel-in-progress: false
+      queue: max
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -168,11 +175,12 @@ jobs:
       needs.build-and-test.result == 'success' &&
       contains(fromJSON('["success", "skipped"]'), needs.scan-vulnerabilities.result) &&
       contains(fromJSON('["success", "skipped"]'), needs.push-to-ecr.result)
-    # Serialized, and only the commit still at the tip of dev retags, so an
-    # older run can't move :dev back.
+    # Serialized without dropping pending runs, and only the commit still at the
+    # tip of dev retags, so an older run can't move :dev back.
     concurrency:
       group: rust-tools-promote-dev
       cancel-in-progress: false
+      queue: max
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
