@@ -1,6 +1,6 @@
 # v3.4.0.2-dev
 
-- Build the rust-tools image only on `dev` and retag the same image as `:main` and `:stable` when those branches are reset, so `rust-tools:stable` no longer lags the `stable` branch. Publishing now requires a passing Trivy scan. (#TBD)
+- Build the rust-tools image only on `dev` and retag the same image as `:main` and `:stable` when those branches are reset, so `rust-tools:stable` no longer lags the `stable` branch. Publishing now requires a passing Trivy scan. (#1075)
 - Push the rust-tools image with a dedicated AWS role that only pushes to `dev`, `main` and `stable` can assume, and remove the no-op `build-containers.yml` stub, whose implementation was abandoned. (#1072)
 - Bump the minimum Nextflow version from 26.04.6 to 26.04.7, and defer 26.10.x until we update orchestrator to support stderr output. (#1073)
 - Add a `.gitattributes` that marks `*.config` files as Nextflow, so GitHub highlights them. (#1066)
