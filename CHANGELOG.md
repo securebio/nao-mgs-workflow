@@ -1,7 +1,7 @@
 # v3.4.0.2-dev
 
 - Bump the minimum Nextflow version from 26.04.6 to 26.10.3. (#1067)
-- Check Nextflow error messages in subworkflow tests against `workflow.stderr`, where Nextflow 26.10 now writes its console output.
+- Check Nextflow error messages in subworkflow tests against `workflow.stderr`, where Nextflow 26.10 now writes its console output. (#1069)
 - Compress `FILTLONG` output with `pigz` to reduce runtime (#1057)
 - Mask low-complexity regions of ONT reads with BBDuk instead of BBMask in `MASK_FASTQ_READS` to reduce memory usage. Also replace gzip with pigz for faster compression. Published outputs are unchanged. (#1058)
 - Update documentation and config comments to refer to the organization as SecureBio Detection (formerly the Nucleic Acid Observatory), point stale `naobservatory` GitHub links to `securebio`, and fix a broken test-dataset link in `docs/batch.md`. (#1061)
