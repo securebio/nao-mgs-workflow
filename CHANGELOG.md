@@ -1,4 +1,4 @@
-# v3.4.0.2-dev
+# v3.4.0.2
 
 - Add a note to the top of the README about moving development to a private repository. (#1068)
 - Bump the minimum Nextflow version from 26.04.6 to 26.04.7, and defer 26.10.x until nao-mgs-orchestrator supports its stderr output. (#1073)
