@@ -1,5 +1,6 @@
 # v3.4.0.2-dev
 
+- Add CI actions to look up the rust-tools image built for a commit and retag it registry-side, for promoting one image through `dev`, `main` and `stable`. (#1075)
 - Push the rust-tools image with a dedicated AWS role that only pushes to `dev`, `main` and `stable` can assume, and remove the no-op `build-containers.yml` stub, whose implementation was abandoned. (#1072)
 - Bump the minimum Nextflow version from 26.04.6 to 26.04.7, and defer 26.10.x until we update orchestrator to support stderr output. (#1073)
 - Add a `.gitattributes` that marks `*.config` files as Nextflow, so GitHub highlights them. (#1066)
