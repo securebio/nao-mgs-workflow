@@ -36,7 +36,11 @@ logger.addHandler(handler)
 def open_by_suffix(path: str, mode: str = "r", newline: str | None = None) -> IO[str]:
     """Open a file, transparently handling .gz compression (text mode)."""
     if path.endswith(".gz"):
-        return cast(IO[str], gzip.open(path, mode + "t", newline=newline))
+        # INDEX output is downloaded many more times than it's written, so use the
+        # highest compression level.
+        return cast(
+            IO[str], gzip.open(path, mode + "t", newline=newline, compresslevel=9)
+        )
     return cast(IO[str], open(path, mode, newline=newline))
 
 

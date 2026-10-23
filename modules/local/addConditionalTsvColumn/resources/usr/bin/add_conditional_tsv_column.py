@@ -20,7 +20,9 @@ def open_by_suffix(filename: str, mode: str = "r", debug: bool = False) -> IO[st
         print_log(f"\tOpening mode: {mode}")
         print_log(f"\tGZIP mode: {filename.endswith('.gz')}")
     if filename.endswith(".gz"):
-        return cast(IO[str], gzip.open(filename, mode + "t", encoding="utf-8"))
+        return cast(
+            IO[str], gzip.open(filename, mode + "t", encoding="utf-8", compresslevel=1)
+        )
     return open(filename, mode, encoding="utf-8")
 
 

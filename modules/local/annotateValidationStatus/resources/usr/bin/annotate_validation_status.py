@@ -72,7 +72,7 @@ def open_by_suffix(filename: str, mode: str = "r") -> IO[str]:
         An open text-mode file object.
     """
     if filename.endswith(".gz"):
-        return cast(IO[str], gzip.open(filename, mode + "t"))
+        return cast(IO[str], gzip.open(filename, mode + "t", compresslevel=1))
     return open(filename, mode)
 
 

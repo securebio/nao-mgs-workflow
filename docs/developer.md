@@ -30,7 +30,7 @@ These guidelines represent best practices to implement in new code, though some 
 - Process conventions (see `modules/local/lcaTsv/main.nf` for an example of a well-written process that follows these conventions):
     - All processes should have a label specifying needed resources (e.g. `label "small"`). Resources are then specified in `configs/resources.config`.
         - Most labels declare static resources (`cpus = 8; memory = 16.GB`).
-        - When a process's peak memory scales strongly with input size, the label's `memory` directive may be a closure over the process inputs that picks a memory tier based on total byte size. See `bbmask_resources` in `configs/resources.config` for an example, and `tests/configs/resources/` for its associated nf-test.
+        - When a process's peak memory scales strongly with input size, the label's `memory` directive may be a closure over the process inputs that picks a memory tier based on total byte size. See `mark_alignment_duplicates_resources` in `configs/resources.config` for an example.
         - The `cpus` directive may also be a closure over process inputs to more heavily parallelize large inputs, especially when `memory` tiers already allocate more of an instance to a given task. However, the ratio between available CPUs and memory can vary and depends on the instance types defined by the compute environment.
         - Scaling `memory` or `cpus` also limits how many tasks pack onto one instance, which can help bound the cumulative local disk usage.
         - A closure over an input variable must use that process's own input name, so closures can only be reused across processes whose inputs are named the same. Avoid using `file` in these closures and process inputs, which shadows Nextflow's `file()` function.
@@ -69,6 +69,7 @@ These guidelines represent best practices to implement in new code, though some 
 - Performance conventions:
     - Always process large files line-by-line or in manageable chunks.
     - Support compressed file formats (.gz, .bz2, .zst). 
+    - Use compression level 1 in RUN and DOWNSTREAM, e.g. `gzip.open(..., compresslevel=1)` or `pigz -1 ...`. Python versions older than 3.15 use level 9 by default, which is much slower. INDEX output is the exception: it is written rarely and downloaded by every run, so use compression level 9.
 - Python style: 
     - Loosely follow PEP 8 conventions.
     - Type hints are encouraged. When used, prefer Python 3.12+ native syntax (e.g. `list[str]`, `str | None`) over imports from the `typing` module.
@@ -164,7 +165,7 @@ mypy .
 ```
 
 ## GitHub issues
-We use [GitHub issues](https://github.com/naobservatory/mgs-workflow/issues) to track any issues with the pipeline: bugs, cleanup tasks, and desired new features. 
+We use [GitHub issues](https://github.com/securebio/nao-mgs-workflow/issues) to track any issues with the pipeline: bugs, cleanup tasks, and desired new features. 
 Opening issues:
 - All issues should be self-contained: the description should include enough detail to understand what needs to be done.
 - We use labels to prioritize and track:

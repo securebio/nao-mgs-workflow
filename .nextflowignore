@@ -22,3 +22,9 @@
 # install this version. Permanent ignore; remove only if bioconda backfills it.
 25.10.5
 25.10.6
+
+# Defer 26.10.x until we update orchestrator to support stderr output
+26.10.0 exp:2027-01-21
+26.10.1 exp:2027-01-21
+26.10.2 exp:2027-01-21
+26.10.3 exp:2027-01-21

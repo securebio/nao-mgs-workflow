@@ -184,7 +184,7 @@ def process_sam(
     Both sam_file and fastq_file must be sorted by read ID.
     """
     header = "\t".join(HEADER_FIELDS) + "\n"
-    with gzip.open(out_file, "wt") as out_fh:
+    with gzip.open(out_file, "wt", compresslevel=1) as out_fh:
         out_fh.write(header)
         with pysam.AlignmentFile(sam_file, "r") as sam_fh, open(fastq_file) as fastq_fh:
             num_reads = 0

@@ -162,7 +162,14 @@ def main() -> None:
     logger.info("Filtering metadata table.")
     filtered = filter_metadata(meta_db, virus_db, host_taxa)
     logger.info("Writing output.")
-    filtered.to_csv(args.output_db, sep="\t", index=False)
+    filtered.to_csv(
+        args.output_db,
+        sep="\t",
+        index=False,
+        # INDEX output is downloaded many more times than it's written, so
+        # use the highest compression level.
+        compression={"method": "infer", "compresslevel": 9},
+    )
     write_accession_chunks(
         filtered["assembly_accession"], Path(args.output_chunk_dir), args.chunk_size
     )

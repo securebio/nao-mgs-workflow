@@ -68,7 +68,7 @@ def open_by_suffix(filename: str, mode: str = "r") -> IO[str]:
         IO[str]: File handle appropriate for the file compression type
     """
     if filename.endswith(".gz"):
-        return cast(IO[str], gzip.open(filename, mode + "t"))
+        return cast(IO[str], gzip.open(filename, mode + "t", compresslevel=1))
     return open(filename, mode)
 
 

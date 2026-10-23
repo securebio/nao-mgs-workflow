@@ -1,3 +1,20 @@
+# v3.4.0.2
+
+## Performance
+
+- Mask low-complexity regions of ONT reads with BBDuk instead of BBMask, which streams reads rather than holding them all in memory. `MASK_FASTQ_READS` now uses the fixed `large` label (16 CPUs, 32 GB) instead of the input-size-scaled `bbmask_resources` label, which is removed. Published outputs are unchanged. (#1058)
+- Reduce compression time by using multithreaded `pigz` instead of `gzip` in `FILTLONG` and `MASK_FASTQ_READS`, and by writing gzip at level 1 instead of 9 in RUN and DOWNSTREAM Python scripts. Decompressed outputs are unchanged, but `.tsv.gz` files the Python scripts write are larger. (#1057, #1058, #1059)
+
+## Cleanup and best practice
+
+- Add a note to the top of the README about moving development to a private repository. (#1068)
+- Bump the minimum Nextflow version from 26.04.6 to 26.04.9, and defer 26.10.x until nao-mgs-orchestrator supports its stderr output. (#1073, #1083)
+- Raise `process.maxRetries` from 1 to 2, so a task survives a second instance reclamation before it is ignored. (#1065)
+- Refer to the organization as SecureBio Detection (formerly the Nucleic Acid Observatory) in documentation and config comments, point stale `naobservatory` GitHub links to `securebio`, and fix a broken test-dataset link in `docs/batch.md`. (#1061)
+- Push the rust-tools image with a dedicated AWS role that only pushes to `dev`, `main` and `stable` can assume, and remove the no-op `build-containers.yml` stub, whose implementation was abandoned. (#1072)
+- Mark `*.config` files as Nextflow in a new `.gitattributes`, so GitHub highlights them. (#1066)
+- Pin pandas to 2.3.3 for development and CI, matching the production pipeline's containers. Run pytest when `pyproject.toml` changes. (#1083)
+
 # v3.4.0.1
 
 - Raise BLAST memory from 256 GB to 360 GB and Kraken2 memory from 128 GB to 176 GB, so the current core_nt and PlusPF databases fit in memory instead of being re-read from disk, which slowed BLAST in 3.4.0.0. Results are unchanged. (#1051)

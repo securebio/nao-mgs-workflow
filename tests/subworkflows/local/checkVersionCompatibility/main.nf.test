@@ -126,11 +126,11 @@ nextflow_workflow {
         }
         then {
             assert workflow.failed
-            // Retried once, then terminated rather than ignored
+            // Retried maxRetries (2) times, then terminated rather than ignored
             def rows = new File("${launchDir}/meta/trace.csv").readLines()*.split("\t")
             def col = { n -> rows[0].findIndexOf { it == n } }
             def actions = rows.drop(1).findAll { it[col("name")].contains("EXTRACT_VERSIONS") }.collect { it[col("error_action")] }
-            assert actions == ["RETRY", "TERMINATE"]
+            assert actions == ["RETRY", "RETRY", "TERMINATE"]
         }
     }
 
