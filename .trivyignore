@@ -1,15 +1,6 @@
 # Trivy ignore file for known false positives and accepted risks
 # See: https://aquasecurity.github.io/trivy/latest/docs/configuration/filtering/#trivyignore
 
-# ── Rust crates embedded in compiled Polars .so (multiqc dependency) ──
-# These live inside multiqc's prebuilt _polars_runtime.abi3.so; the fix requires
-# Polars to release a build against the patched crate and multiqc to pull it, so
-# no yml pin can reach the fix. Re-eval when multiqc ships a Polars with the fixes.
-# quinn-proto: remote memory exhaustion via unbounded out-of-order stream reassembly
-# (HIGH); fixed in 0.11.15, and the shipped .so carries 0.11.14. multiqc uses Polars
-# only for local dataframe work over pipeline QC files and opens no QUIC connections.
-GHSA-4w2j-m93h-cj5j exp:2026-11-15
-
 # ── Go stdlib v1.23.4 in ncbi-datasets-cli 18.21.0 (ncbi_datasets container) ──
 # The NCBI datasets/dataformat binaries are pre-compiled Go executables distributed
 # via conda-forge. They ship Go stdlib v1.23.4; fixing everything below needs
