@@ -79,7 +79,7 @@ Runs `ruff check .` (lint) and `ruff format --check .` (formatting verification)
 
 ### Rust tools (`rust-tools.yml`)
 
-Runs Rust unit tests and builds the `nao-rust-tools` container when Rust source files change. This workflow runs on all PRs but uses `dorny/paths-filter` to trivially succeed (~10 seconds) when no Rust files have changed. When Rust files are modified, it runs `cargo test` and builds the container. On push to `dev` or `main`, it also pushes the container to ECR.
+Runs Rust unit tests when Rust source files change. This workflow runs on all PRs but uses `dorny/paths-filter` to trivially succeed (~10 seconds) when no Rust files have changed. The container itself is built and published by developers with `bin/build_rust_tools_container.py` (see [developer.md](developer.md#rust)); `check-rust-tools-pin.yml` verifies the pin, and `trivy-scan.yml` scans the pinned image.
 
 ### Trivy container scan (`trivy-scan.yml`)
 
@@ -110,10 +110,6 @@ Lines beginning with `#` and blank lines are ignored; trailing `# ...` comments 
 ## Release tests
 
 These tests run on PRs to `main`, `stable`, and `ci-test`. They are slower or more expensive than development tests and are not required for merging to `dev`, but must pass before merging to `main`.
-
-### Rust container handling
-
-Workflows use the rust-tools image pinned in `configs/containers.config`, which `check-rust-tools-pin.yml` requires to match the Rust sources and to be published. The nf-test workflows' `setup-rust-container` action still builds a local container and runs with the `rust_dev` profile when Rust code differs from `origin/main` and `origin/dev`; with the pin, this is redundant and is due to be removed.
 
 ### Integration test (`test-chained.yml`)
 

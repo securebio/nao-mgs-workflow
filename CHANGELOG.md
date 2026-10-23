@@ -2,6 +2,7 @@
 
 - Add `bin/build_rust_tools_container.py`, which builds the rust-tools container, pushes it under a tag derived from its sources, and pins that tag in `configs/containers.config`, as `bin/build_ecr_container.py` does for the other containers. Its `--check` mode verifies the pin. (#1084)
 - Pin the rust-tools container in `configs/containers.config` to a tag derived from its sources, replacing the `rust_tools_version` parameter and the `RUST_TOOLS_VERSION` variable. Every pipeline version now runs the Rust tools built from its own sources, so a `dev` checkout no longer needs `--rust_tools_version dev`, and resetting `stable` no longer needs to move an image tag. A leftover `--rust_tools_version` is ignored. (#1085)
+- Stop building and publishing rust-tools images in CI, and drop the per-branch image selection from the nf-test, integration and benchmark workflows, which now use the pinned image.
 
 # v3.4.0.2
 
