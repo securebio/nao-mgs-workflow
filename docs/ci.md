@@ -97,6 +97,7 @@ These checks run unconditionally (no path filtering) to ensure version consisten
 |----------|-------------|----------|
 | `check-version.yml` | Runs `bin/check_version.py` to verify version numbers are consistent | all |
 | `check-nextflow-version.yml` | Runs `bin/check_nextflow_version.py` to ensure Nextflow version is current | all |
+| `check-rust-tools-pin.yml` | Runs `bin/build_rust_tools_container.py --check` to verify the rust-tools pin matches the Rust sources, and checks the pinned image is published | all |
 | `check-changelog.yml` | Requires `CHANGELOG.md` update if non-documentation files changed | `dev`, `ci-test` only |
 
 The Nextflow version check compares the version pinned in `configs/profiles.config` against the highest-semver Nextflow release on GitHub, after filtering out any releases listed in `.nextflowignore` at the repo root. To suppress a specific upstream release (for example, a broken release we never want to pin to, or a major bump we are deferring until tooling catches up), add an entry to `.nextflowignore`:

@@ -79,7 +79,7 @@ These guidelines represent best practices to implement in new code, though some 
 
 ### Rust
 
-All Rust tools live in the centralized `rust-tools/` directory, organized as a Cargo workspace. Compiled binaries are NOT stored in the repository; instead, they are built into the `nao-rust-tools` container via GitHub Actions CI.
+All Rust tools live in the centralized `rust-tools/` directory, organized as a Cargo workspace. Compiled binaries are NOT stored in the repository; instead, they are built into the `rust-tools` container, which `configs/containers.config` pins to a tag derived from the Rust sources, like the other containers.
 
 **Adding a new Rust tool:**
 1. Create your Rust project in `rust-tools/{tool_name}/` with `Cargo.toml` and `src/main.rs`
@@ -99,20 +99,7 @@ All Rust tools live in the centralized `rust-tools/` directory, organized as a C
 nextflow run main.nf -profile rust_dev ...
 ```
 
-**Testing on AWS Batch:**
-```bash
-# Build, tag with your username, and push to ECR:
-./bin/build-rust-local.sh
-docker tag nao-rust-tools:local public.ecr.aws/q0n1c7g8/nao-mgs-workflow/rust-tools:dev-$(whoami)
-docker push public.ecr.aws/q0n1c7g8/nao-mgs-workflow/rust-tools:dev-$(whoami)
-
-# Run on Batch with your container:
-nextflow run main.nf --rust_tools_version dev-$(whoami) -profile batch ...
-```
-
-**Pinned images:** `bin/build_rust_tools_container.py` hashes `rust-tools/` and `docker/nao-rust-tools.Dockerfile`, builds the image for `linux/amd64` (under emulation on ARM machines), pushes `rust-tools:<hash>` to ECR Public if it doesn't already exist, and rewrites the `rust_tools` line in `configs/containers.config` to point at it. Like `bin/build_ecr_container.py`, it needs Docker and credentials that can push to ECR Public. `bin/build_rust_tools_container.py --check` only verifies that the pinned tag matches the sources, and needs neither.
-
-**Note:** The container is automatically rebuilt by GitHub Actions when Rust source files change on `dev`, `main`, or `stable`, and is published to ECR under a tag matching the branch name (`rust-tools:dev`, `rust-tools:main`, `rust-tools:stable`). Use `--rust_tools_version dev` to test against the dev branch build.
+**Publishing:** Any change to `rust-tools/` or `docker/nao-rust-tools.Dockerfile` needs a new image. Run `bin/build_rust_tools_container.py` from your branch: it hashes those sources, builds the image for `linux/amd64` (under emulation on ARM machines), pushes `rust-tools:<hash>` to ECR Public if it doesn't already exist, and updates the pin in `configs/containers.config`. Commit the updated pin with your changes. CI fails if the pin doesn't match the sources (`bin/build_rust_tools_container.py --check`). The same pinned image then runs locally, on AWS Batch and in production, so no extra flags are needed to test a branch on Batch.
 
 ## Containers
 

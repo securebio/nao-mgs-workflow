@@ -264,7 +264,7 @@ def parse_arguments() -> argparse.Namespace:
         "--nextflow-args",
         type=str,
         default="",
-        help="Additional arguments to pass through to Nextflow (e.g., '-profile rust_dev' or '--rust_tools_version dev')",
+        help="Additional arguments to pass through to Nextflow (e.g., '-profile rust_dev')",
     )
     return parser.parse_args()
 
