@@ -97,22 +97,39 @@ CVE-2026-97031 exp:2026-12-15
 
 # ── Debian trixie base image (mambaorg/micromamba): no fixes reachable ──
 # The base-image knob (container-base-image in pyproject.toml) is the only
-# permitted lever for these system packages, and the current latest micromamba
-# digest still ships the vulnerable versions — the fixes are not yet installed
-# in any published base layer. Re-eval when micromamba rebuilds against a trixie
-# apt state carrying the fix (then bump the digest and drop the entry).
+# permitted lever for these system packages, and as of 2026-10-23 Debian has no
+# trixie fix for any of them (<no-dsa> or <postponed>), so no base-image bump
+# reaches one. The generated Dockerfiles set USER root, so local privilege-
+# escalation flaws have no less-privileged user to start from. Re-eval when
+# Debian ships a trixie fix (then bump the digest and drop the entry).
 
 # ncurses: stack-based buffer overflow in infocmp CLI tool (no-dsa, low urgency)
 # Our containers never invoke infocmp. Fix only in sid (6.6+).
-CVE-2025-69720 exp:2026-08-31
+CVE-2025-69720 exp:2026-12-15
 
-# acl (libacl1): symlink-traversal local privilege escalation in the acl_*_file()
-# functions (HIGH). Fixed only in Debian sid (acl 2.4.0-1); trixie awaits a point
-# release, so no base-image digest carries the fix yet. The pipeline never invokes
-# the pathname-based libacl APIs, and containers run as root — outside the non-root
-# local-attacker threat model. Re-eval: trixie point release / a micromamba rebuild
-# that carries it.
-CVE-2026-54369 exp:2026-08-31
+# acl (libacl1): symlink-traversal privilege escalation in the pathname-based
+# acl_*_file() functions (HIGH). Debian's coreutils links libacl1, so commands like
+# cp may reach them, but exploiting it needs a less-privileged local user who swaps
+# a path component for a symlink while a privileged process handles it; tasks run
+# as root with no other users. Debian will fix it in sid first, then in a trixie
+# point release.
+CVE-2026-54369 exp:2026-12-15
+
+# systemd-homed: local privilege escalation via missing home-record signature
+# verification (HIGH). libsystemd0 is only a library dependency; no container runs
+# systemd or systemd-homed.
+CVE-2026-16742 exp:2026-12-15
+
+# util-linux 2.41.5-0+deb13u1 (mount, libmount1, bsdutils, …): four local privilege-
+# escalation flaws in mount(8) and nsenter (all HIGH) — X-mount post-hooks running
+# after a failed mount helper, X-mount.subdir escaping via intermediate symlinks,
+# restricted bind mounts not pinning their source, and nsenter --join-cgroup leaking
+# a root cgroup fd. All need an unprivileged user running mount or nsenter; the
+# pipeline invokes neither, and tasks already run as root.
+CVE-2026-76642 exp:2026-12-15
+CVE-2026-78408 exp:2026-12-15
+CVE-2026-78409 exp:2026-12-15
+CVE-2026-78410 exp:2026-12-15
 
 # ── urllib3 < 2.8.0: via awscli in blast, bowtie2_samtools, kraken2,
 # minimap2_samtools; vendored by pip in pysam_biopython ──
@@ -134,7 +151,7 @@ CVE-2026-97687 exp:2026-12-15
 # malicious server, and the worst case is an out-of-memory task.
 CVE-2026-97689 exp:2026-12-15
 
-# ── perl-base (Debian trixie 5.40.1-6): no fixed version available as of 2026-06-04 ──
+# ── perl-base (Debian trixie 5.40.1-6+deb13u1): fix postponed as of 2026-10-23 ──
 # The pipeline's only perl invocation is `update_blastdb.pl` in the maintainer-run
 # INDEX step (modules/local/downloadBlastDB), which fetches official NCBI/AWS BLAST
 # databases via `--source aws`. perl-base is otherwise present only as a Debian
@@ -143,7 +160,7 @@ CVE-2026-97689 exp:2026-12-15
 # a fix to trixie perl-base (a rebuild then clears them), or the pipeline gains a
 # perl path that processes untrusted tar/regex/glob input.
 # Archive::Tar unbounded allocation -> memory-exhaustion DoS (HIGH); trusted tarballs, worst case ephemeral OOM.
-CVE-2026-9538 exp:2026-08-31
+CVE-2026-9538 exp:2026-12-15
 
 # ── pip's vendored dependencies (pysam_biopython) ──
 # msgpack out-of-bounds read on Unpacker reuse after a caught error, and a setuptools
