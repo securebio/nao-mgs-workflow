@@ -13,7 +13,7 @@
 - Refer to the organization as SecureBio Detection (formerly the Nucleic Acid Observatory) in documentation and config comments, point stale `naobservatory` GitHub links to `securebio`, and fix a broken test-dataset link in `docs/batch.md`. (#1061)
 - Push the rust-tools image with a dedicated AWS role that only pushes to `dev`, `main` and `stable` can assume, and remove the no-op `build-containers.yml` stub, whose implementation was abandoned. (#1072)
 - Mark `*.config` files as Nextflow in a new `.gitattributes`, so GitHub highlights them. (#1066)
-- Pin pandas to 2.3.3 for development and CI, matching the production pipeline's containers. (#1083)
+- Pin pandas to 2.3.3 for development and CI, matching the production pipeline's containers. Run pytest when `pyproject.toml` changes. (#1083)
 
 # v3.4.0.1
 
