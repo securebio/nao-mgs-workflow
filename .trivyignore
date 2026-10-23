@@ -123,17 +123,25 @@ CVE-2026-14456 exp:2026-10-31
 # that carries it.
 CVE-2026-54369 exp:2026-08-31
 
-# ── urllib3 2.6.3 transitive via awscli=2.34.9 in blast, bowtie2_samtools,
-# kraken2, minimap2_samtools ──
-# Our awscli usage is `update_blastdb.pl --source aws` and equivalents — HTTPS
-# to known NCBI/AWS endpoints, no proxy, no attacker-controlled compressed
-# streams; neither CVE is reachable. Fix exists in urllib3>=2.7.0 but every
-# current conda-forge awscli build pins urllib3<=2.6.3; re-eval when the
-# feedstock relaxes the cap.
-# CVE-2026-44431 (HIGH): cross-origin header leak in proxied low-level redirects.
-CVE-2026-44431 exp:2026-09-30
-# CVE-2026-44432 (HIGH): decompression-bomb safeguard bypass in streaming reads.
-CVE-2026-44432 exp:2026-09-30
+# ── urllib3 < 2.8.0: via awscli in blast, bowtie2_samtools, kraken2,
+# minimap2_samtools; vendored by pip in pysam_biopython ──
+# Our awscli usage is `update_blastdb.pl --source aws` in the BLAST container —
+# HTTPS to known NCBI/AWS endpoints, no proxy, no attacker-controlled compressed
+# streams. No module script invokes awscli in the other three containers, and
+# nothing runs pip at run time. Every conda-forge awscli build through 2.38.1 pins
+# urllib3<=2.6.3, and pip 26.2.2 (the newest) vendors urllib3 2.7.0, so no pin
+# reaches the 2.8.0 fix. Re-eval when the awscli feedstock relaxes the cap and pip
+# re-vendors urllib3 >= 2.8.0.
+# CVE-2026-44431 (HIGH, awscli only): cross-origin header leak in proxied low-level redirects.
+CVE-2026-44431 exp:2026-12-15
+# CVE-2026-44432 (HIGH, awscli only): decompression-bomb safeguard bypass in streaming reads.
+CVE-2026-44432 exp:2026-12-15
+# CVE-2026-97687 (HIGH): HTTPS-proxy connections inherit target-server TLS settings such
+# as CERT_NONE; needs an HTTPS proxy, and no task configures one.
+CVE-2026-97687 exp:2026-12-15
+# CVE-2026-97689 (HIGH): unbounded memory in the chunked-response parser; needs a
+# malicious server, and the worst case is an out-of-memory task.
+CVE-2026-97689 exp:2026-12-15
 
 # ── perl-base (Debian trixie 5.40.1-6): no fixed version available as of 2026-06-04 ──
 # The pipeline's only perl invocation is `update_blastdb.pl` in the maintainer-run
@@ -187,7 +195,7 @@ CVE-2026-53614 exp:2026-10-31
 # msgpack out-of-bounds read on Unpacker reuse after a caught error, and a setuptools
 # PackageIndex path traversal (both HIGH). Neither is our dependency: they are reported
 # from pip's own vendored bundle at site-packages/pip/_vendor (vendor.txt / bom.cdx.json),
-# not from the conda environment, which does not install either package. pip 26.2.1 is
+# not from the conda environment, which does not install either package. pip 26.2.2 is
 # already the newest release and still vendors msgpack 1.1.2, so no pin can reach it;
 # the setuptools entry is SBOM metadata only, with no setuptools code under _vendor at all.
 # pip's vendored msgpack is used by cachecontrol to serialise pip's HTTP cache, reached
