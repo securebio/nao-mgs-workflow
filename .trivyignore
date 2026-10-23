@@ -133,16 +133,17 @@ CVE-2026-78410 exp:2026-12-15
 
 # ── urllib3 < 2.8.0: via awscli in blast, bowtie2_samtools, kraken2,
 # minimap2_samtools; vendored by pip in pysam_biopython ──
-# Our awscli usage is `update_blastdb.pl --source aws` in the BLAST container —
-# HTTPS to known NCBI/AWS endpoints, no proxy, no attacker-controlled compressed
-# streams. No module script invokes awscli in the other three containers, and
-# nothing runs pip at run time. Every conda-forge awscli build through 2.38.1 pins
-# urllib3<=2.6.3, and pip 26.2.2 (the newest) vendors urllib3 2.7.0, so no pin
-# reaches the 2.8.0 fix. Re-eval when the awscli feedstock relaxes the cap and pip
-# re-vendors urllib3 >= 2.8.0.
-# CVE-2026-44431 (HIGH, awscli only): cross-origin header leak in proxied low-level redirects.
+# awscli runs in all four containers, fetching reference databases over HTTPS from
+# our own S3 buckets and NCBI's BLAST databases from AWS. Both peers are trusted and
+# no task configures a proxy. Nothing runs pip at run time. No pin reaches the 2.8.0
+# fix: conda-forge's awscli builds pin urllib3<=2.6.3, and the newest pip vendors
+# urllib3 2.7.0 (both checked 2026-10-23). Re-eval when the awscli feedstock relaxes
+# the cap and pip re-vendors urllib3 >= 2.8.0.
+# CVE-2026-44431 (HIGH, awscli only): cross-origin header leak in proxied low-level
+# redirects; needs a proxy.
 CVE-2026-44431 exp:2026-12-15
-# CVE-2026-44432 (HIGH, awscli only): decompression-bomb safeguard bypass in streaming reads.
+# CVE-2026-44432 (HIGH, awscli only): decompression-bomb safeguard bypass in streaming
+# reads; needs a malicious server, and the worst case is an out-of-memory task.
 CVE-2026-44432 exp:2026-12-15
 # CVE-2026-97687 (HIGH): HTTPS-proxy connections inherit target-server TLS settings such
 # as CERT_NONE; needs an HTTPS proxy, and no task configures one.
