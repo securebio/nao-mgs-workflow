@@ -97,6 +97,7 @@ These checks run unconditionally (no path filtering) to ensure version consisten
 |----------|-------------|----------|
 | `check-version.yml` | Runs `bin/check_version.py` to verify version numbers are consistent | all |
 | `check-nextflow-version.yml` | Runs `bin/check_nextflow_version.py` to ensure Nextflow version is current | all |
+| `check-rust-tools-pin.yml` | Runs `bin/build_rust_tools_container.py --check` to verify the rust-tools pin matches the Rust sources, and checks the pinned image is published | all |
 | `check-changelog.yml` | Requires `CHANGELOG.md` update if non-documentation files changed | `dev`, `ci-test` only |
 
 The Nextflow version check compares the version pinned in `configs/profiles.config` against the highest-semver Nextflow release on GitHub, after filtering out any releases listed in `.nextflowignore` at the repo root. To suppress a specific upstream release (for example, a broken release we never want to pin to, or a major bump we are deferring until tooling catches up), add an entry to `.nextflowignore`:
@@ -112,16 +113,7 @@ These tests run on PRs to `main`, `stable`, and `ci-test`. They are slower or mo
 
 ### Rust container handling
 
-Release tests use Wave/Fusion for container orchestration. The `setup-rust-container` composite action (`.github/actions/setup-rust-container/`) handles Rust container setup:
-
-- If Rust code matches `origin/main` → use ECR `:main` container
-- If Rust code matches `origin/dev` → use ECR `:dev` container
-- Otherwise → build the container locally (with GitHub Actions caching by content hash)
-
-This approach avoids complex sequencing between workflows while ensuring tests always run against the correct Rust code.
-
-> [!NOTE]
-> There is a rare edge case: if you merge Rust changes to `dev` and immediately open a PR to `main` before `rust-tools.yml` finishes pushing to ECR, the PR could use a stale `:dev` container. To avoid this, check the [Actions tab](https://github.com/securebio/nao-mgs-workflow/actions/workflows/rust-tools.yml) and wait for the "Rust Tools CI" workflow triggered by your merge to complete before opening release PRs with Rust changes.
+Workflows use the rust-tools image pinned in `configs/containers.config`, which `check-rust-tools-pin.yml` requires to match the Rust sources and to be published. The nf-test workflows' `setup-rust-container` action still builds a local container and runs with the `rust_dev` profile when Rust code differs from `origin/main` and `origin/dev`; with the pin, this is redundant and is due to be removed.
 
 ### Integration test (`test-chained.yml`)
 
