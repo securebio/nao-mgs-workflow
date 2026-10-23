@@ -3,6 +3,7 @@
 
 import subprocess
 import sys
+from collections.abc import Callable
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -47,6 +48,12 @@ def repo(tmp_path: Path) -> Path:
         (tmp_path / path).write_text(content)
     subprocess.run(["git", "add", "rust-tools/Cargo.toml"], cwd=tmp_path, check=True)
     return tmp_path
+
+
+@pytest.fixture
+def repo_sources(repo: Path) -> dict[str, bytes]:
+    """Sources read before any test patches subprocess.run."""
+    return read_sources(repo)
 
 
 def write_config(path: Path, tag: str) -> Path:
@@ -131,32 +138,49 @@ class TestCheckPin:
             check_pin(repo, config)
 
 
+def record_build_context(
+    contexts: list[dict[str, bytes]],
+) -> Callable[..., MagicMock]:
+    """Make a subprocess.run stand-in that records the build context's files."""
+
+    def run(cmd: list[str], **kwargs: object) -> MagicMock:
+        context = Path(cmd[-1])
+        contexts.append(
+            {
+                str(p.relative_to(context)): p.read_bytes()
+                for p in sorted(context.rglob("*"))
+                if p.is_file()
+            }
+        )
+        return MagicMock()
+
+    return run
+
+
 class TestBuildImage:
     @patch("build_rust_tools_container.subprocess.run")
     def test_builds_from_hashed_files_only(self, mock_run: MagicMock) -> None:
-        contexts: list[list[str]] = []
-
-        def record_context(cmd: list[str], **kwargs: object) -> MagicMock:
-            context = Path(cmd[-1])
-            contexts.append(
-                sorted(
-                    str(p.relative_to(context))
-                    for p in context.rglob("*")
-                    if p.is_file()
-                )
-            )
-            return MagicMock()
-
-        mock_run.side_effect = record_context
+        contexts: list[dict[str, bytes]] = []
+        mock_run.side_effect = record_build_context(contexts)
         sources = {
             "docker/nao-rust-tools.Dockerfile": b"FROM alpine\n",
-            "rust-tools/a/b.rs": b"",
+            "rust-tools/a/b.rs": b"fn main() {}\n",
         }
         build_image(sources, "registry/rust-tools:abc")
         cmd = mock_run.call_args.args[0]
         assert cmd[:4] == ["docker", "build", "--platform", "linux/amd64"]
         assert cmd[cmd.index("-t") + 1] == "registry/rust-tools:abc"
-        assert contexts == [list(sources)]
+        assert contexts == [sources]
+
+    @patch("build_rust_tools_container.subprocess.run")
+    def test_builds_the_snapshot_not_later_edits(
+        self, mock_run: MagicMock, repo: Path, repo_sources: dict[str, bytes]
+    ) -> None:
+        contexts: list[dict[str, bytes]] = []
+        mock_run.side_effect = record_build_context(contexts)
+        (repo / "rust-tools/tool/src/main.rs").write_text("edited after hashing\n")
+        build_image(repo_sources, "registry/rust-tools:abc")
+        assert contexts[0]["rust-tools/tool/src/main.rs"] == b"fn main() {}\n"
 
 
 @patch("build_rust_tools_container.update_containers_config")

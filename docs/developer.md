@@ -110,6 +110,8 @@ docker push public.ecr.aws/q0n1c7g8/nao-mgs-workflow/rust-tools:dev-$(whoami)
 nextflow run main.nf --rust_tools_version dev-$(whoami) -profile batch ...
 ```
 
+**Pinned images:** `bin/build_rust_tools_container.py` hashes `rust-tools/` and `docker/nao-rust-tools.Dockerfile`, builds the image for `linux/amd64` (under emulation on ARM machines), pushes `rust-tools:<hash>` to ECR Public if it doesn't already exist, and rewrites the `rust_tools` line in `configs/containers.config` to point at it. Like `bin/build_ecr_container.py`, it needs Docker and credentials that can push to ECR Public. `bin/build_rust_tools_container.py --check` only verifies that the pinned tag matches the sources, and needs neither.
+
 **Note:** The container is automatically rebuilt by GitHub Actions when Rust source files change on `dev`, `main`, or `stable`, and is published to ECR under a tag matching the branch name (`rust-tools:dev`, `rust-tools:main`, `rust-tools:stable`). Use `--rust_tools_version dev` to test against the dev branch build.
 
 ## Containers
