@@ -8,11 +8,12 @@
 ## Cleanup and best practice
 
 - Add a note to the top of the README about moving development to a private repository. (#1068)
-- Bump the minimum Nextflow version from 26.04.6 to 26.04.7, and defer 26.10.x until nao-mgs-orchestrator supports its stderr output. (#1073)
+- Bump the minimum Nextflow version from 26.04.6 to 26.04.9, and defer 26.10.x until nao-mgs-orchestrator supports its stderr output. (#1073, #1083)
 - Raise `process.maxRetries` from 1 to 2, so a task survives a second instance reclamation before it is ignored. (#1065)
 - Refer to the organization as SecureBio Detection (formerly the Nucleic Acid Observatory) in documentation and config comments, point stale `naobservatory` GitHub links to `securebio`, and fix a broken test-dataset link in `docs/batch.md`. (#1061)
 - Push the rust-tools image with a dedicated AWS role that only pushes to `dev`, `main` and `stable` can assume, and remove the no-op `build-containers.yml` stub, whose implementation was abandoned. (#1072)
 - Mark `*.config` files as Nextflow in a new `.gitattributes`, so GitHub highlights them. (#1066)
+- Pin pandas to 2.3.3 for development and CI, matching the production pipeline's containers. Run pytest when `pyproject.toml` changes. (#1083)
 
 # v3.4.0.1
 

@@ -21,6 +21,7 @@ jobs:
           filters: |
             python:
               - '**/*.py'
+              - 'pyproject.toml'
               - '.github/workflows/pytest.yml'
 
       - name: Setup Python environment
