@@ -106,15 +106,6 @@ CVE-2026-97031 exp:2026-12-15
 # Our containers never invoke infocmp. Fix only in sid (6.6+).
 CVE-2025-69720 exp:2026-08-31
 
-# openssl (libssl3t64, openssl-provider-legacy): unbounded memory growth in the QUIC
-# server path -- Initial packets for unknown connection IDs allocate channel objects
-# that queue unbounded until SSL_accept() drains them (HIGH). Debian marks it postponed
-# ("minor issue, fix along with future update") and deb13u2 is still vulnerable, so no
-# fix is reachable. Our containers run no QUIC or TLS server of any kind; openssl is
-# linked only for outbound TLS to known NCBI/AWS endpoints via curl/python.
-# Re-eval: Debian ships a fixed openssl for trixie.
-CVE-2026-14456 exp:2026-10-31
-
 # acl (libacl1): symlink-traversal local privilege escalation in the acl_*_file()
 # functions (HIGH). Fixed only in Debian sid (acl 2.4.0-1); trixie awaits a point
 # release, so no base-image digest carries the fix yet. The pipeline never invokes
@@ -153,43 +144,6 @@ CVE-2026-97689 exp:2026-12-15
 # perl path that processes untrusted tar/regex/glob input.
 # Archive::Tar unbounded allocation -> memory-exhaustion DoS (HIGH); trusted tarballs, worst case ephemeral OOM.
 CVE-2026-9538 exp:2026-08-31
-# Three further perl CVEs surfaced 2026-08-18. trixie is still on 5.40.1-6 and the
-# latest published micromamba digest ships that same version, so no fix is reachable
-# via the permitted base-image bump. Same exposure as above: the only perl invocation
-# is update_blastdb.pl against official NCBI/AWS BLAST databases.
-# Perl_study_chunk 16-bit overflow silently miscompiles regexes with >65535 fixed-string
-# alternation branches (CRITICAL); no pipeline regex is attacker-supplied or that large.
-CVE-2026-13221 exp:2026-10-31
-# pack/unpack S_measure_struct integer overflow -> OOB heap read (HIGH); the pipeline
-# builds no pack templates from untrusted input.
-CVE-2026-57432 exp:2026-10-31
-# Storable retrieve_hook_common signed overflow aborts thaw()/retrieve() on a crafted
-# SX_HOOK blob (CRITICAL); the pipeline deserializes no Storable data at all.
-CVE-2026-57433 exp:2026-10-31
-
-# ── util-linux (Debian trixie 2.41-5): fix exists but is not reachable ──
-# libblkid integer overflow in the DOS partition-table parser (libblkid/src/partitions/
-# dos.c) reached by probing a crafted disk image or partition table (HIGH). Debian fixed
-# it in 2.41.5-0+deb13u1, but the latest published micromamba digest still ships 2.41-5
-# and the container Dockerfiles install only `procps` (no `apt upgrade`), so the fix is
-# not reachable via the permitted base-image bump. The pipeline never probes block
-# devices or parses disk images: util-linux/libblkid are present only as base-layer
-# dependencies of mount/login, which nothing in the workflow invokes.
-# Re-eval: a micromamba rebuild carrying 2.41.5-0+deb13u1 (bump the digest and drop this).
-CVE-2026-53615 exp:2026-10-31
-
-# Same util-linux 2.41-5, same unreachable fix (2.41.5-0+deb13u1): three mount(8) flaws.
-# Two TOCTOU races in mount applying post-mount ownership/mode changes and in resolving
-# the target path via an ancestor-directory swap, plus a nosuid/noexec bypass through
-# LIBMOUNT_FORCE_MOUNT2 (all HIGH). All three require executing mount(8); the pipeline
-# never does, and Nextflow/Fusion perform their mounts on the host outside the container.
-# mount is SUID root in the base image, so these remain a local privilege-escalation
-# surface for an attacker who already has code execution inside a container - defence in
-# depth rather than unreachable, which is why the expiry is short.
-# Re-eval: a micromamba rebuild carrying 2.41.5-0+deb13u1 (bump the digest and drop these).
-CVE-2026-53612 exp:2026-10-31
-CVE-2026-53613 exp:2026-10-31
-CVE-2026-53614 exp:2026-10-31
 
 # ── pip's vendored dependencies (pysam_biopython) ──
 # msgpack out-of-bounds read on Unpacker reuse after a caught error, and a setuptools
@@ -203,19 +157,3 @@ CVE-2026-53614 exp:2026-10-31
 # Re-eval: a pip release that re-vendors msgpack >= 1.2.1 (then drop these two).
 GHSA-6v7p-g79w-8964 exp:2026-11-30
 CVE-2025-47273 exp:2026-11-30
-
-# ── SQLite FTS5 memory corruption (all containers) ──
-# Two HIGH flaws in SQLite's FTS5 full-text extension: an out-of-bounds read in
-# fts5LeafSeek() and a heap buffer overflow in fts5ChunkIterate() via an integer
-# underflow on a crafted continuation page. Both require executing an FTS5 MATCH
-# query against an attacker-supplied database. Nothing in the pipeline opens a
-# SQLite database at all -- no Nextflow process, bin/ script or container entrypoint
-# uses sqlite3, and the only "db" inputs (taxonomy, viral genomes) are TSV and FASTA.
-# libsqlite3-0 is not a dependency of any containers/*.yml; it is base-layer state
-# from the micromamba image, which is why all 25 images report it.
-# Fixed upstream in SQLite 3.53.2 and in sid (3.53.4-2), but trixie ships
-# 3.46.1-7+deb13u1 and marks both <no-dsa> (minor issue), so no yml pin or
-# base-digest bump within trixie can reach the fix.
-# Re-eval: a micromamba rebuild carrying sqlite3 >= 3.53.2 (then drop these two).
-CVE-2026-11822 exp:2026-11-15
-CVE-2026-11824 exp:2026-11-15
