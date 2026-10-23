@@ -61,7 +61,7 @@ These guidelines represent best practices to implement in new code, though some 
 - New scripts should be in Rust (preferred) or Python (acceptable if performance is not critical).  We have a few legacy scripts in R but discourage adding new R scripts.
 - Organization:
     - Python and R scripts for a module go in `resources/usr/bin/`
-    - Rust source code lives in the centralized `rust-tools/` directory at the repository root, organized as a Cargo workspace. Compiled binaries are NOT stored in the repository; they are built into the `nao-rust-tools` container via CI.
+    - Rust source code lives in the centralized `rust-tools/` directory at the repository root, organized as a Cargo workspace. Compiled binaries are NOT stored in the repository; they are built into the `rust-tools` container with `bin/build_rust_tools_container.py` (see [Rust](#rust)).
 - Rely on the standard library as much as possible. 
     - Widely used 3rd-party libraries (e.g. `pandas` or `boto3`) are OK on a case-by-case basis if they allow for much cleaner or more performant code. Please flag use of these libraries in PR comments so the reviewer can assess.
     - Avoid third-party libraries that are not widely used, or that bring in a ton of dependencies of their own.
