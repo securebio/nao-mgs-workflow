@@ -1,6 +1,6 @@
 # v3.4.0.3-dev
 
-- Add `bin/build_rust_tools_container.py`, which builds the rust-tools container, pushes it under a tag derived from its sources, and pins that tag in `configs/containers.config`, as `bin/build_ecr_container.py` does for the other containers. Its `--check` mode verifies the pin.
+- Add `bin/build_rust_tools_container.py`, which builds the rust-tools container, pushes it under a tag derived from its sources, and pins that tag in `configs/containers.config`, as `bin/build_ecr_container.py` does for the other containers. Its `--check` mode verifies the pin. (#1084)
 
 # v3.4.0.2
 
