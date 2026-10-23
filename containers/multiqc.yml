@@ -5,6 +5,6 @@ channels:
   - bioconda
 dependencies:
   - bioconda::multiqc=1.33
-  # Not direct multiqc deps; pinned explicitly to pick up security fixes.
+  # Pinned above what multiqc requires, to pick up security fixes.
   - conda-forge::urllib3=2.8.0
   - conda-forge::pillow=13.0.0
