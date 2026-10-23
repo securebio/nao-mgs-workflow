@@ -12,6 +12,7 @@
 - Raise `process.maxRetries` from 1 to 2, so a task survives a second instance reclamation before it is ignored. (#1065)
 - Refer to the organization as SecureBio Detection (formerly the Nucleic Acid Observatory) in documentation and config comments, point stale `naobservatory` GitHub links to `securebio`, and fix a broken test-dataset link in `docs/batch.md`. (#1061)
 - Push the rust-tools image with a dedicated AWS role that only pushes to `dev`, `main` and `stable` can assume, and remove the no-op `build-containers.yml` stub, whose implementation was abandoned. (#1072)
+- Bump the container base image, as well as Pillow and urllib3 in the multiqc container, to fix HIGH and CRITICAL vulnerabilities flagged by Trivy. Re-triage the remaining findings in `.trivyignore` and remove stale entries. (#1082)
 - Mark `*.config` files as Nextflow in a new `.gitattributes`, so GitHub highlights them. (#1066)
 
 # v3.4.0.1
