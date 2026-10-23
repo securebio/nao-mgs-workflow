@@ -12,79 +12,88 @@ GHSA-4w2j-m93h-cj5j exp:2026-11-15
 
 # ── Go stdlib v1.23.4 in ncbi-datasets-cli 18.21.0 (ncbi_datasets container) ──
 # The NCBI datasets/dataformat binaries are pre-compiled Go executables distributed
-# via conda-forge. They ship Go stdlib v1.23.4.
-# Go ~= 1.25.11 or ~= 1.26.4 is required to address all vulnerabilities.
-# We cannot rebuild these — only NCBI can, by updating their Go toolchain.
+# via conda-forge. They ship Go stdlib v1.23.4; fixing everything below needs
+# Go 1.26.10+ or 1.27.3+. We cannot rebuild these — only NCBI can, by updating
+# their Go toolchain.
 #
-# Risk assessment: these binaries run in an isolated container that only downloads
-# genome metadata from NCBI's API and writes local files. They do not serve TLS,
-# connect to Postgres, or process untrusted archives — so the practical attack
-# surface for these CVEs is minimal in our pipeline context.
+# Risk assessment: these binaries run in an isolated container that downloads
+# genome metadata and sequences from NCBI over HTTPS and writes local files. They
+# do not serve TLS or HTTP, connect to Postgres, or process untrusted archives — so
+# the practical attack surface for these CVEs is minimal in our pipeline context.
 #
 # TODO: Remove these ignores when a newer ncbi-datasets-cli is available on
-# conda-forge built with Go ~= 1.25.11 or ~= 1.26.4. Check with:
+# conda-forge built with Go 1.26.10+ or 1.27.3+. Check with:
 #   conda search -c conda-forge ncbi-datasets-cli
 #   strings $(conda run -n <env> which datasets) | grep '^go1\.'
-# Verified 2026-08-18: the latest conda-forge build (18.35.0) still ships Go stdlib
+# Verified 2026-10-23: the latest conda-forge build (18.39.0) still ships Go stdlib
 # go1.23.4 — identical to the pinned 18.21.0 — so bumping the pin fixes none of these.
 # Confirmed by unpacking the conda package and running `strings` on datasets/dataformat.
 #
-# crypto/tls: unexpected session resumption (CRITICAL)
-CVE-2025-68121 exp:2026-09-30
+# crypto/tls: resumed sessions skip certificate re-validation if the program mutates
+# RootCAs/ClientCAs between handshakes (CRITICAL); exploiting it needs both that and a
+# network attacker between the task and NCBI.
+CVE-2025-68121 exp:2026-12-15
 # net/url: memory exhaustion in query parameter parsing (HIGH)
-CVE-2025-61726 exp:2026-09-30
+CVE-2025-61726 exp:2026-12-15
 # crypto/x509: DoS via crafted certificate (HIGH)
-CVE-2025-61729 exp:2026-09-30
+CVE-2025-61729 exp:2026-12-15
 # net/url: incorrect parsing of IPv6 host literals (HIGH)
-CVE-2026-25679 exp:2026-09-30
+CVE-2026-25679 exp:2026-12-15
 # crypto/x509: DoS via excessive processing of DNS SAN entries in a crafted
 # certificate (HIGH); these binaries validate only NCBI/AWS server certs.
-CVE-2026-27145 exp:2026-09-30
+CVE-2026-27145 exp:2026-12-15
 # crypto/x509: excessive CPU in certificate chain building (HIGH)
-CVE-2026-32280 exp:2026-09-30
+CVE-2026-32280 exp:2026-12-15
 # crypto/x509: DoS via inefficient certificate chain validation (HIGH)
-CVE-2026-32281 exp:2026-09-30
+CVE-2026-32281 exp:2026-12-15
 # crypto/tls: TLS 1.3 post-handshake key-update deadlock DoS (HIGH)
-CVE-2026-32283 exp:2026-09-30
+CVE-2026-32283 exp:2026-12-15
 # net (cgo resolver): LookupCNAME mishandling of overlong CNAME responses (HIGH)
-CVE-2026-33811 exp:2026-09-30
+CVE-2026-33811 exp:2026-12-15
 # net/http: HTTP/2 transport infinite loop on crafted SETTINGS frames (HIGH)
-CVE-2026-33814 exp:2026-09-30
+CVE-2026-33814 exp:2026-12-15
 # net/mail: DoS via crafted ParseAddress/ParseAddressList/ParseDate inputs (HIGH)
-CVE-2026-39820 exp:2026-09-30
+CVE-2026-39820 exp:2026-12-15
 # net: panic in Dial/LookupPort when handling NUL byte (HIGH)
-CVE-2026-39836 exp:2026-09-30
+CVE-2026-39836 exp:2026-12-15
 # net/mail: DoS via pathological consumePhrase inputs (HIGH)
-CVE-2026-42499 exp:2026-09-30
+CVE-2026-42499 exp:2026-12-15
 # mime/net-mail: excessive CPU decoding crafted MIME headers with many invalid
 # encoded-words (HIGH); these CLIs fetch JSON from NCBI's API, never parse email/MIME.
-CVE-2026-42504 exp:2026-09-30
-# Eight further Go stdlib CVEs surfaced 2026-08-18; same binaries, same assessment, and
-# the upstream check above shows no newer build to move to.
+CVE-2026-42504 exp:2026-12-15
 # encoding/asn1: DoS via excessive recursion in Unmarshal (HIGH); ASN.1 parsing here is
 # limited to NCBI/AWS server certificates.
-CVE-2026-33818 exp:2026-11-15
+CVE-2026-33818 exp:2026-12-15
 # golang.org/x/net/idna: privilege escalation via incorrect Punycode label processing
 # (HIGH); hostnames are the hardcoded NCBI/AWS endpoints, not attacker-supplied.
-CVE-2026-39821 exp:2026-11-15
+CVE-2026-39821 exp:2026-12-15
 # os.Root: symlink following allows directory traversal (HIGH); these binaries write to
 # the workflow's own task directory, with no untrusted symlink sources.
-CVE-2026-39822 exp:2026-11-15
+CVE-2026-39822 exp:2026-12-15
 # net/http: unencrypted HTTP/2 connections vulnerable to DoS (HIGH); all traffic is
 # client-side HTTPS to NCBI/AWS.
-CVE-2026-56853 exp:2026-11-15
+CVE-2026-56853 exp:2026-12-15
 # html/template: XSS via pathological input (HIGH); no server-side templating in these
 # client-only CLI tools.
-CVE-2026-56858 exp:2026-11-15
+CVE-2026-56858 exp:2026-12-15
 # encoding/xml: DoS via XML decoding recursion depth (HIGH); these CLIs consume JSON
 # from NCBI's API, not XML.
-CVE-2026-56859 exp:2026-11-15
+CVE-2026-56859 exp:2026-12-15
 # net/url: DoS from quadratic complexity in path resolution (HIGH); URLs are constructed
 # by the tools themselves against known endpoints.
-CVE-2026-56860 exp:2026-11-15
+CVE-2026-56860 exp:2026-12-15
 # crypto/tls: DoS via indefinite KeyUpdate messages (HIGH); requires a hostile TLS peer,
 # and these binaries talk only to NCBI/AWS.
-CVE-2026-56862 exp:2026-11-15
+CVE-2026-56862 exp:2026-12-15
+# net/http: CPU DoS via crafted Range headers in FileServer/ServeContent (HIGH);
+# server-side only, and these binaries serve no HTTP.
+CVE-2026-78667 exp:2026-12-15
+# net/http2: CPU DoS from a hostile HTTP/2 peer flooding SETTINGS frames (HIGH); needs
+# a malicious NCBI endpoint or network attacker, and the worst case is a failed task.
+CVE-2026-78669 exp:2026-12-15
+# crypto/tls: server memory exhaustion via repeated ECH outer-extension references
+# (HIGH); server-side only.
+CVE-2026-97031 exp:2026-12-15
 
 # ── Debian trixie base image (mambaorg/micromamba): no fixes reachable ──
 # The base-image knob (container-base-image in pyproject.toml) is the only
