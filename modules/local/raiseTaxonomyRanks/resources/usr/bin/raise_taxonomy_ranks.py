@@ -186,7 +186,16 @@ def main() -> None:
     logger.info(f"Columns: {taxonomy_db.columns.tolist()}")
     # Write output
     logger.info("Writing output.")
-    taxonomy_db.to_csv(args.output_db, sep="\t", index=False, na_rep="NA", header=True)
+    taxonomy_db.to_csv(
+        args.output_db,
+        sep="\t",
+        index=False,
+        na_rep="NA",
+        header=True,
+        # INDEX output is downloaded many more times than it's written, so
+        # use the highest compression level.
+        compression={"method": "infer", "compresslevel": 9},
+    )
     logger.info("Script complete.")
 
 

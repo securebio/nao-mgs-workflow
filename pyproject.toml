@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "mgs-workflow"
-version = "3.4.0.1"
+version = "3.4.0.2"
 requires-python = ">=3.12"
 dependencies = [
     "biopython>=1.85",
@@ -12,11 +12,11 @@ dependencies = [
     "frictionless>=5.18.0",
     "jsonschema>=4.20.0",
     "mypy>=1.18.1",
-    "pandas-stubs",
+    "pandas-stubs~=2.3.0",
     "types-PyYAML",
     "types-jsonschema",
     "packaging>=24.0",
-    "pandas>=2.3.2",
+    "pandas==2.3.3",
     "pysam>=0.23.3",
     "pytest>=8.4.2",
     "ruff>=0.13.0",
@@ -80,7 +80,7 @@ target-version = "py312"
 
 [tool.mgs-workflow]
 # Base image digest (amd64) for container builds — update this to pick up OS-level security patches
-container-base-image = "mambaorg/micromamba@sha256:b62ed0c54940e3c801642d72ba7d2462f06356c378eba92d603d39f2ce5e4a0d"
+container-base-image = "mambaorg/micromamba@sha256:b61105e17d910735a6cc3db188d349c67623306560328495424ddac551785599"
 # Minimum pipeline version required to use indexes built with this pipeline version
 index-min-pipeline-version = "2.8.1.2"
 # Minimum index version required by this pipeline version

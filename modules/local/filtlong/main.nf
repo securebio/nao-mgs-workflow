@@ -15,6 +15,6 @@ process FILTLONG {
         def i = reads[0]
         """
         set -euo pipefail
-        filtlong --min_length ${min_length} --max_length ${max_length} --min_mean_q ${min_mean_q} --verbose ${i} | gzip > ${o}
+        filtlong --min_length ${min_length} --max_length ${max_length} --min_mean_q ${min_mean_q} ${i} | pigz -p ${task.cpus} > ${o}
         """
 }

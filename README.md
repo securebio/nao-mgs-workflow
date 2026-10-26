@@ -1,6 +1,9 @@
-# Nucleic Acid Observatory Viral Metagenomics Pipeline
+# SecureBio Detection Viral Metagenomics Pipeline
 
-This Nextflow pipeline is designed to process metagenomic sequencing data, characterize overall taxonomic composition, and identify and quantify reads mapping to viruses infecting certain host taxa of interest. It was developed as part of the [Nucleic Acid Observatory](https://naobservatory.org/) project.
+> [!IMPORTANT]
+> As described in more detail in our [blog post](https://securebio.org/blog/taking-our-core-computational-pipeline-private/) on October 15, 2026, we are in the process of moving development of this pipeline to a private repository. In the future, this repository will be archived but will continue to remain public. All referenced test data and ECR images will also be preserved.
+
+This Nextflow pipeline is designed to process metagenomic sequencing data, characterize overall taxonomic composition, and identify and quantify reads mapping to viruses infecting certain host taxa of interest. It was developed by [SecureBio Detection](https://securebio.org/detection/) (formerly the Nucleic Acid Observatory).
 
 The pipeline currently consists of three workflows:
 
