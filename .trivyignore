@@ -85,6 +85,13 @@ CVE-2026-78669 exp:2026-12-15
 # crypto/tls: server memory exhaustion via repeated ECH outer-extension references
 # (HIGH); server-side only.
 CVE-2026-97031 exp:2026-12-15
+# crypto/x509: no denylist for the compromised eMudhra intermediate CAs (HIGH). Unlike
+# the rest of this group, this is reachable: these binaries verify NCBI's TLS
+# certificates, so someone who can intercept traffic to NCBI and holds a certificate
+# issued under one of those intermediates could feed an index build tampered genome
+# data. Accepted for lack of a fix; the expiry is shorter than the group's because the
+# risk is real. Re-eval: an NCBI build with Go 1.26.10+ or 1.27.3+.
+CVE-2026-111943 exp:2026-11-30
 
 # ── Debian trixie base image (mambaorg/micromamba): no fixes reachable ──
 # The base-image knob (container-base-image in pyproject.toml) is the only
