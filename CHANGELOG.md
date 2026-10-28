@@ -1,4 +1,4 @@
-# v3.4.0.3-dev
+# v3.4.0.3
 
 - Defer Nextflow 26.10.4 with the other 26.10.x releases until nao-mgs-orchestrator supports their stderr output. (#1093)
 - Update the README notice to say development has moved to a private repository and this repository is archived. (#1089)
