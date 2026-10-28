@@ -1,3 +1,7 @@
+# v3.4.0.3-dev
+
+- Defer Nextflow 26.10.4 with the other 26.10.x releases until nao-mgs-orchestrator supports their stderr output. (#PR)
+
 # v3.4.0.2
 
 ## Performance
